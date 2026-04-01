@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { X, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react'
 import { useCart } from '@/lib/cart-context'
 
@@ -26,6 +27,7 @@ function priceUnitLabel(unit: string) {
 }
 
 export default function CartSidebar() {
+  const router = useRouter()
   const { items, removeItem, updateQuantity, clearCart, cartTotal, isCartOpen, setIsCartOpen } =
     useCart()
 
@@ -128,7 +130,13 @@ export default function CartSidebar() {
                   {formatPrice(cartTotal)}
                 </span>
               </div>
-              <button className="w-full py-2.5 rounded-xl bg-brand-dark text-white text-sm font-semibold hover:bg-brand-dark/90 transition-colors">
+              <button
+                onClick={() => {
+                  setIsCartOpen(false)
+                  router.push('/dashboard/orders/checkout')
+                }}
+                className="w-full py-2.5 rounded-xl bg-brand-dark text-white text-sm font-semibold hover:bg-brand-dark/90 transition-colors"
+              >
                 Proceed to Checkout
               </button>
               <button
