@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
+import html2canvas from 'html2canvas'
 import {
   X, Loader2, Sparkles, Save, Check, Download, RefreshCw,
   Lightbulb, BarChart3, Zap, ArrowLeftRight, Award, Camera, Pencil,
@@ -273,6 +274,61 @@ export default function PostGenerator({
     )
   }
 
+  /* ── PNG Export ──────────────────────────────────────────────────── */
+
+  const [exporting, setExporting] = useState(false)
+
+  async function handleDownloadPng() {
+    const html = editingHtml ? htmlEditor : generatedHtml
+    if (!html) return
+    setExporting(true)
+
+    try {
+      // Render HTML in a hidden container at full resolution
+      const container = document.createElement('div')
+      container.style.cssText = `position:fixed;left:-9999px;top:0;width:${sizeConfig.w}px;height:${sizeConfig.h}px;overflow:hidden;`
+      document.body.appendChild(container)
+
+      // Create an iframe to render the HTML
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = `width:${sizeConfig.w}px;height:${sizeConfig.h}px;border:none;`
+      container.appendChild(iframe)
+
+      // Write HTML to iframe
+      const doc = iframe.contentDocument
+      if (doc) {
+        doc.open()
+        doc.write(html)
+        doc.close()
+
+        // Wait for fonts and images to load
+        await new Promise(resolve => setTimeout(resolve, 2000))
+
+        // Use html2canvas on the iframe body
+        const canvas = await html2canvas(doc.body, {
+          width: sizeConfig.w,
+          height: sizeConfig.h,
+          scale: 1,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+        })
+
+        // Download
+        const link = document.createElement('a')
+        link.download = `post-${templateType}-${sizeConfig.w}x${sizeConfig.h}.png`
+        link.href = canvas.toDataURL('image/png')
+        link.click()
+      }
+
+      document.body.removeChild(container)
+    } catch (err) {
+      console.error('PNG export failed:', err)
+    }
+
+    setExporting(false)
+  }
+
   /* ── Render ─────────────────────────────────────────────────────── */
 
   return (
@@ -450,14 +506,24 @@ export default function PostGenerator({
         {/* ── Footer actions ──────────────────────────────────────── */}
         {generatedHtml && (
           <div className="px-5 py-3 border-t border-ink-6 flex items-center justify-between flex-shrink-0">
-            <button
-              onClick={handleSaveDraft}
-              disabled={saving}
-              className="text-sm font-medium text-ink-3 hover:text-ink flex items-center gap-1.5 transition-colors disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Save as Draft
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSaveDraft}
+                disabled={saving}
+                className="text-sm font-medium text-ink-3 hover:text-ink flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save as Draft
+              </button>
+              <button
+                onClick={handleDownloadPng}
+                disabled={exporting}
+                className="text-sm font-medium text-ink-3 hover:text-ink flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                Download PNG
+              </button>
+            </div>
             <button
               onClick={handleApproveAndSave}
               disabled={saving}
