@@ -1,0 +1,3389 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-03-26",
+  "currency": "USD",
+  "categories": [
+    {
+      "id": "marketing",
+      "name": "Marketing",
+      "icon": "\ud83d\udcf1",
+      "order": 1
+    },
+    {
+      "id": "websites",
+      "name": "Websites",
+      "icon": "\ud83c\udf10",
+      "order": 2
+    },
+    {
+      "id": "seo",
+      "name": "Local SEO",
+      "icon": "\ud83d\udccd",
+      "order": 3
+    },
+    {
+      "id": "creative",
+      "name": "Creative",
+      "icon": "\ud83c\udfa8",
+      "order": 5
+    },
+    {
+      "id": "automation",
+      "name": "Automations",
+      "icon": "\ud83e\udd16",
+      "order": 6
+    },
+    {
+      "id": "strategy",
+      "name": "Strategy",
+      "icon": "\ud83d\udcac",
+      "order": 7
+    }
+  ],
+  "services": [
+    {
+      "id": "social-media",
+      "name": "Social Media Management",
+      "category": "marketing",
+      "icon": "\ud83d\udcf1",
+      "shortDesc": "Strategic social media content and community management across all platforms",
+      "type": "recurring",
+      "internalRoute": "social-team",
+      "tiers": [
+        {
+          "id": "social-essentials",
+          "name": "Essentials",
+          "monthly": 199,
+          "annual": 166,
+          "popular": false,
+          "deliverables": [
+            {
+              "id": "ig-fb-management",
+              "name": "IG & FB Management",
+              "description": "Content posted to Instagram and Facebook",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "platforms managed",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 2
+            },
+            {
+              "id": "ai-captions",
+              "name": "AI Captions",
+              "description": "AI-generated captions optimized for engagement",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "batch per month",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "content-calendar-essentials",
+              "name": "Content Calendar",
+              "description": "Monthly content calendar with scheduled posts",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "calendar per month",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 2
+            },
+            {
+              "id": "basic-engagement",
+              "name": "Basic Community Engagement",
+              "description": "Basic community engagement including replies and interactions",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "engagement cycle",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "monthly-report-essentials",
+              "name": "Monthly Performance Report",
+              "description": "Performance metrics and insights report",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "report",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 1
+            }
+          ],
+          "features": [
+            "AI captions",
+            "Content calendar",
+            "Basic engagement",
+            "Monthly report"
+          ],
+          "includes": [
+            "12 feed posts/month (IG + FB)",
+            "AI-optimized captions",
+            "Branded templates",
+            "Content calendar with scheduling",
+            "Basic comment/DM responses",
+            "Monthly analytics report"
+          ],
+          "finalDeliverable": "Content posted to your Instagram and Facebook accounts. Monthly performance report (PDF).",
+          "tags": [
+            "marketing"
+          ]
+        },
+        {
+          "id": "social-starter",
+          "name": "Starter",
+          "monthly": 299,
+          "annual": 249,
+          "popular": false,
+          "deliverables": [
+            {
+              "id": "ig-fb-tiktok-management",
+              "name": "IG, FB & TikTok Management",
+              "description": "Content posted to Instagram, Facebook, and TikTok",
+              "taskType": "recurring-monthly",
+              "quantity": 3,
+              "unit": "platforms managed",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "basic-social-strategy",
+              "name": "Basic Social Strategy",
+              "description": "Monthly social strategy and content direction",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "strategy document",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 2
+            },
+            {
+              "id": "active-engagement",
+              "name": "Active Community Engagement",
+              "description": "Active community engagement with proactive interactions",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "engagement cycle",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "consistent-branding",
+              "name": "Consistent Branding",
+              "description": "Brand consistency across all social platforms",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "brand audit",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "ai-captions-starter",
+              "name": "AI Captions",
+              "description": "AI-generated captions optimized for engagement",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "batch per month",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "content-calendar-starter",
+              "name": "Content Calendar",
+              "description": "Monthly content calendar with scheduled posts",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "calendar per month",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 2
+            },
+            {
+              "id": "monthly-report-starter",
+              "name": "Monthly Performance Report",
+              "description": "Performance metrics and insights report",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "report",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 1
+            }
+          ],
+          "features": [
+            "IG + FB + TikTok",
+            "AI captions",
+            "Content calendar",
+            "Basic social strategy",
+            "Active community engagement",
+            "Consistent branding",
+            "Monthly report"
+          ],
+          "includes": [
+            "16 feed posts/month (IG + FB + TikTok)",
+            "AI-optimized captions",
+            "Custom branded templates",
+            "Monthly content calendar",
+            "Active community engagement (comments, DMs, replies)",
+            "Hashtag research & optimization",
+            "Monthly analytics report with insights"
+          ],
+          "finalDeliverable": "Content posted to your Instagram, Facebook, and TikTok accounts. Monthly performance report with recommendations.",
+          "tags": [
+            "marketing"
+          ]
+        },
+        {
+          "id": "social-growth",
+          "name": "Growth",
+          "monthly": 449,
+          "annual": 374,
+          "popular": true,
+          "deliverables": [
+            {
+              "id": "full-platform-management",
+              "name": "Full Platform Management",
+              "description": "Content posted to Instagram, Facebook, and TikTok with full strategy",
+              "taskType": "recurring-monthly",
+              "quantity": 3,
+              "unit": "platforms managed",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "full-social-strategy",
+              "name": "Full Social Strategy",
+              "description": "Comprehensive social media strategy with goals and KPIs",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "strategy document",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "daily-stories",
+              "name": "Daily Stories",
+              "description": "Story content published 7 days per week",
+              "taskType": "recurring-monthly",
+              "quantity": 30,
+              "unit": "stories per month",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 1
+            },
+            {
+              "id": "dedicated-account-contact",
+              "name": "Dedicated Account Contact",
+              "description": "Single point of contact for all social media needs",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "account manager",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 0
+            },
+            {
+              "id": "ai-trend-monitoring",
+              "name": "AI Trend Monitoring",
+              "description": "AI-powered monitoring of trending topics and hashtags",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "monitoring service",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "competitor-tracking",
+              "name": "Competitor Tracking",
+              "description": "Monthly competitor analysis and benchmarking",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "analysis report",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 2
+            },
+            {
+              "id": "visibility-intelligence-report",
+              "name": "Monthly Visibility Intelligence Report",
+              "description": "Comprehensive monthly report with visibility metrics, competitor insights, and strategic recommendations",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "report",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 3
+            }
+          ],
+          "features": [
+            "IG + FB + TikTok",
+            "Full social strategy",
+            "Daily stories 7 days/week",
+            "Dedicated account contact",
+            "AI trend monitoring",
+            "Competitor tracking",
+            "Monthly Visibility Intelligence Report"
+          ],
+          "includes": [
+            "20 feed posts/month across all platforms",
+            "Daily stories (7 days/week)",
+            "Full social strategy with goals & KPIs",
+            "Dedicated account manager",
+            "AI trend monitoring & content suggestions",
+            "Competitor tracking & benchmarking",
+            "Proactive community engagement",
+            "Monthly Visibility Intelligence Report"
+          ],
+          "finalDeliverable": "Full social media presence managed across all platforms. Daily stories posted. Monthly strategy report with competitive insights.",
+          "tags": [
+            "marketing"
+          ]
+        },
+        {
+          "id": "social-enterprise",
+          "name": "Enterprise",
+          "monthly": null,
+          "annual": null,
+          "isCustom": true,
+          "popular": false,
+          "deliverables": [
+            {
+              "id": "dedicated-team",
+              "name": "Dedicated Team",
+              "description": "Full dedicated team for social media management",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "team",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 0
+            },
+            {
+              "id": "custom-kpi-framework",
+              "name": "Custom KPI Framework",
+              "description": "Custom key performance indicator framework tailored to business goals",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "framework",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "advanced-competitor-intelligence",
+              "name": "Advanced Competitor Intelligence",
+              "description": "Deep competitor analysis with strategic recommendations",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "intelligence report",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "quarterly-strategy-sessions",
+              "name": "Quarterly Strategy Sessions",
+              "description": "In-depth quarterly strategy review and planning sessions",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "session per quarter",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 2
+            },
+            {
+              "id": "priority-support",
+              "name": "Priority Support",
+              "description": "Priority response times and dedicated support channel",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "support tier",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 0
+            }
+          ],
+          "features": [
+            "Dedicated team",
+            "Custom KPI framework",
+            "Advanced competitor intelligence",
+            "Quarterly strategy sessions",
+            "Priority support"
+          ],
+          "includes": [
+            "Unlimited posts",
+            "Dedicated social media team",
+            "Custom KPI framework",
+            "Advanced competitor intelligence",
+            "Quarterly strategy sessions with leadership",
+            "Priority support & same-day responses",
+            "Custom reporting dashboard",
+            "A/B testing on content"
+          ],
+          "finalDeliverable": "Fully managed social presence with dedicated team. Custom reporting dashboard. Quarterly strategy presentations.",
+          "tags": [
+            "marketing"
+          ]
+        }
+      ],
+      "addOns": [],
+      "items": [
+        {
+          "id": "single-feed-post",
+          "name": "Single Feed Post",
+          "pricePerUnit": 25,
+          "unit": "post",
+          "description": "One professionally designed social media feed post",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 2,
+          "tags": [
+            "marketing",
+            "creative"
+          ],
+          "includes": [
+            "Custom graphic design",
+            "Brand-consistent styling",
+            "AI-optimized caption",
+            "Hashtag research",
+            "1 round of revisions"
+          ],
+          "finalDeliverable": "Designed post image + caption. Posted to your account if you have a Social Media Management plan.",
+          "note": "Add a Social Media Management plan to have posts scheduled and published for you."
+        },
+        {
+          "id": "story-graphic",
+          "name": "Story Graphic",
+          "pricePerUnit": 15,
+          "unit": "story",
+          "description": "One branded story graphic for Instagram or Facebook",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 1,
+          "tags": [
+            "marketing",
+            "creative"
+          ],
+          "includes": [
+            "Custom story design (9:16 format)",
+            "Brand-consistent styling",
+            "Text overlays and stickers",
+            "1 round of revisions"
+          ],
+          "finalDeliverable": "Story graphic file in 9:16 format. Posted if you have a Social Media Management plan.",
+          "note": "Stories are included in Starter tier and above."
+        },
+        {
+          "id": "carousel-post",
+          "name": "Carousel Post",
+          "pricePerUnit": 45,
+          "unit": "carousel",
+          "description": "Multi-slide carousel post (up to 5 slides)",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 3,
+          "tags": [
+            "marketing",
+            "creative"
+          ],
+          "includes": [
+            "Up to 5 designed slides",
+            "Swipe-through storytelling flow",
+            "Brand-consistent styling",
+            "AI-optimized caption",
+            "2 rounds of revisions"
+          ],
+          "finalDeliverable": "5-slide carousel images + caption. Posted to your account if you have a Social Media Management plan.",
+          "note": "Great for educational content, product showcases, and tips."
+        },
+        {
+          "id": "infographic-post",
+          "name": "Infographic",
+          "pricePerUnit": 95,
+          "unit": "infographic",
+          "description": "Custom infographic for social media or website",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 4,
+          "tags": [
+            "marketing",
+            "creative"
+          ],
+          "includes": [
+            "Custom data visualization",
+            "Brand-consistent design",
+            "Multiple format sizes (feed + story)",
+            "Source file included",
+            "2 rounds of revisions"
+          ],
+          "finalDeliverable": "Infographic in feed and story formats. Source file included. Posted if you have a Social Media Management plan.",
+          "note": "Add to your content mix for higher engagement and saves."
+        },
+        {
+          "id": "basic-product-video",
+          "name": "Basic Product Video",
+          "pricePerUnit": 100,
+          "unit": "video",
+          "description": "Simple product showcase video for social media",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 3,
+          "includes": [
+            "Script and storyboard",
+            "Professional shooting",
+            "Basic editing and music",
+            "Optimized for IG/TikTok",
+            "1 revision round"
+          ],
+          "finalDeliverable": "MP4 video file",
+          "tags": [
+            "video",
+            "social",
+            "content"
+          ]
+        },
+        {
+          "id": "trend-video-no-people",
+          "name": "Trend Video (No People)",
+          "pricePerUnit": 125,
+          "unit": "video",
+          "description": "Trending format video without talent",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 3,
+          "includes": [
+            "Trend research and concept",
+            "Professional shooting",
+            "Editing with trending audio",
+            "Captions and text overlays",
+            "1 revision round"
+          ],
+          "finalDeliverable": "MP4 video file",
+          "tags": [
+            "video",
+            "social",
+            "trend"
+          ]
+        },
+        {
+          "id": "trend-video-with-people",
+          "name": "Trend Video (With People)",
+          "pricePerUnit": 199,
+          "unit": "video",
+          "description": "Trending format video with on-screen talent",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 4,
+          "includes": [
+            "Trend research and concept",
+            "Talent coordination",
+            "Professional shooting",
+            "Editing with trending audio",
+            "Captions and text overlays",
+            "1 revision round"
+          ],
+          "finalDeliverable": "MP4 video file",
+          "tags": [
+            "video",
+            "social",
+            "trend"
+          ]
+        },
+        {
+          "id": "ad-creative-video",
+          "name": "Ad Creative",
+          "pricePerUnit": 299,
+          "unit": "video",
+          "description": "Video ad creative for paid campaigns",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": false,
+          "estimatedDays": 5,
+          "includes": [
+            "Ad strategy and hook",
+            "Professional shooting",
+            "Multiple aspect ratios (9:16, 1:1, 16:9)",
+            "CTA overlays",
+            "2 revision rounds"
+          ],
+          "finalDeliverable": "MP4 video files (multiple formats)",
+          "tags": [
+            "video",
+            "ads",
+            "paid"
+          ]
+        },
+        {
+          "id": "polished-reel",
+          "name": "Polished Reel (15-30s)",
+          "pricePerUnit": 499,
+          "unit": "video",
+          "description": "High-quality polished reel for Instagram or TikTok",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 7,
+          "popular": true,
+          "includes": [
+            "Creative direction and scripting",
+            "Professional videography",
+            "Advanced editing and color grading",
+            "Licensed music",
+            "Motion graphics and text",
+            "2 revision rounds"
+          ],
+          "finalDeliverable": "MP4 video file",
+          "tags": [
+            "video",
+            "social",
+            "premium"
+          ]
+        },
+        {
+          "id": "cinematic-reel",
+          "name": "Cinematic Reel (40-60s)",
+          "pricePerUnit": 699,
+          "unit": "video",
+          "description": "Cinematic brand video for social media",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 10,
+          "includes": [
+            "Full creative direction",
+            "Professional videography (half day)",
+            "Cinematic editing and color grading",
+            "Licensed music and sound design",
+            "Motion graphics",
+            "3 revision rounds"
+          ],
+          "finalDeliverable": "MP4 video file",
+          "tags": [
+            "video",
+            "social",
+            "cinematic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "websites",
+      "name": "Website Design & Development",
+      "category": "websites",
+      "icon": "\ud83c\udf10",
+      "shortDesc": "Custom-designed, mobile-responsive websites built to convert",
+      "type": "one-time",
+      "internalRoute": "web-dev-team",
+      "tiers": [
+        {
+          "id": "web-basic",
+          "name": "Basic",
+          "oneTimePrice": 699,
+          "popular": false,
+          "timeline": "2-3 weeks",
+          "deliverables": [
+            {
+              "id": "custom-design-basic",
+              "name": "Custom Design (5 Pages)",
+              "description": "Custom website design with up to 5 pages",
+              "taskType": "one-time",
+              "quantity": 5,
+              "unit": "pages",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 10
+            },
+            {
+              "id": "mobile-responsive",
+              "name": "Mobile-Responsive Build",
+              "description": "Fully responsive design across all devices",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "build",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 5
+            },
+            {
+              "id": "contact-form-maps",
+              "name": "Contact Form & Google Maps",
+              "description": "Contact form integration with embedded Google Maps",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "integration",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "basic-on-page-seo",
+              "name": "Basic On-Page SEO",
+              "description": "Basic meta tags, title tags, and image optimization",
+              "taskType": "one-time",
+              "quantity": 5,
+              "unit": "pages optimized",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 2
+            },
+            {
+              "id": "launch-support",
+              "name": "Launch Support",
+              "description": "Launch day support and post-launch check",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "launch",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 1
+            }
+          ],
+          "features": [
+            "Custom design (5 pages)",
+            "Mobile-responsive",
+            "Contact form + Google Maps",
+            "Basic on-page SEO",
+            "Launch support"
+          ],
+          "includes": [
+            "Custom design (not a template)",
+            "Mobile-responsive layout",
+            "Contact form with Google Maps",
+            "Basic on-page SEO (titles, meta descriptions)",
+            "SSL certificate",
+            "2 rounds of revisions",
+            "1-week post-launch support"
+          ],
+          "finalDeliverable": "Live 5-page website on your domain. All source files and login credentials transferred to you. You own everything.",
+          "tags": [
+            "websites"
+          ]
+        },
+        {
+          "id": "web-standard",
+          "name": "Standard",
+          "oneTimePrice": 1299,
+          "popular": true,
+          "timeline": "3-4 weeks",
+          "deliverables": [
+            {
+              "id": "custom-design-standard",
+              "name": "Custom Design (10 Pages)",
+              "description": "Custom website design with up to 10 pages",
+              "taskType": "one-time",
+              "quantity": 10,
+              "unit": "pages",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 15
+            },
+            {
+              "id": "blog-cms",
+              "name": "Blog / CMS",
+              "description": "Blog or content management system integration",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "system",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 3
+            },
+            {
+              "id": "service-sub-pages",
+              "name": "Service Sub-Pages",
+              "description": "Individual pages for each service offering",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "page set",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 5
+            },
+            {
+              "id": "full-on-page-seo",
+              "name": "Full On-Page SEO",
+              "description": "Comprehensive on-page SEO for all pages",
+              "taskType": "one-time",
+              "quantity": 10,
+              "unit": "pages optimized",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 3
+            },
+            {
+              "id": "analytics-conversion",
+              "name": "Analytics & Conversion Tracking",
+              "description": "GA4 analytics and conversion tracking setup",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "setup",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 2
+            },
+            {
+              "id": "professional-copywriting",
+              "name": "Professional Copywriting",
+              "description": "Professional copywriting for all pages",
+              "taskType": "one-time",
+              "quantity": 10,
+              "unit": "pages written",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            }
+          ],
+          "features": [
+            "Custom design (10 pages)",
+            "Blog / CMS",
+            "Service sub-pages",
+            "Full on-page SEO",
+            "Analytics & conversion tracking",
+            "Professional copywriting"
+          ],
+          "includes": [
+            "Everything in Basic",
+            "Blog/CMS system",
+            "Service sub-pages",
+            "Full on-page SEO (all pages)",
+            "Google Analytics & conversion tracking",
+            "Professional copywriting for all pages",
+            "3 rounds of revisions",
+            "2-week post-launch support"
+          ],
+          "finalDeliverable": "Live 10-page website with blog and analytics. All source files, CMS access, and credentials. You own everything.",
+          "tags": [
+            "websites"
+          ]
+        },
+        {
+          "id": "web-advanced",
+          "name": "Advanced",
+          "oneTimePrice": 1999,
+          "popular": false,
+          "timeline": "4-6 weeks",
+          "deliverables": [
+            {
+              "id": "custom-design-advanced",
+              "name": "Custom Design (20 Pages)",
+              "description": "Custom website design with up to 20 pages",
+              "taskType": "one-time",
+              "quantity": 20,
+              "unit": "pages",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 25
+            },
+            {
+              "id": "location-pages",
+              "name": "Location Pages",
+              "description": "Location-specific landing pages for multi-location businesses",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "page set",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "advanced-conversion-flows",
+              "name": "Advanced Conversion Flows",
+              "description": "Advanced conversion funnels and user journey optimization",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "flow set",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 5
+            },
+            {
+              "id": "custom-integrations",
+              "name": "Custom Integrations",
+              "description": "Custom third-party integrations and API connections",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "integration set",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 5
+            },
+            {
+              "id": "blog-cms-advanced",
+              "name": "Blog / CMS",
+              "description": "Blog or content management system integration",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "system",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 3
+            },
+            {
+              "id": "full-on-page-seo-advanced",
+              "name": "Full On-Page SEO",
+              "description": "Comprehensive on-page SEO for all pages",
+              "taskType": "one-time",
+              "quantity": 20,
+              "unit": "pages optimized",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 5
+            },
+            {
+              "id": "analytics-conversion-advanced",
+              "name": "Analytics & Conversion Tracking",
+              "description": "GA4 analytics and conversion tracking setup",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "setup",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 2
+            },
+            {
+              "id": "professional-copywriting-advanced",
+              "name": "Professional Copywriting",
+              "description": "Professional copywriting for all pages",
+              "taskType": "one-time",
+              "quantity": 20,
+              "unit": "pages written",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 7
+            }
+          ],
+          "features": [
+            "Custom design (20 pages)",
+            "Location pages",
+            "Advanced conversion flows",
+            "Custom integrations",
+            "Blog / CMS",
+            "Full on-page SEO",
+            "Analytics & conversion tracking",
+            "Professional copywriting"
+          ],
+          "includes": [
+            "Everything in Standard",
+            "Up to 20 custom pages",
+            "Location-specific landing pages",
+            "Advanced conversion flows (multi-step forms, lead funnels)",
+            "Custom integrations (CRM, booking, etc.)",
+            "Speed optimization",
+            "4 rounds of revisions",
+            "30-day post-launch support"
+          ],
+          "finalDeliverable": "Live 20-page website with advanced features. All source files, integrations, and credentials. You own everything.",
+          "tags": [
+            "websites"
+          ]
+        }
+      ],
+      "addOns": [
+        {
+          "id": "addon-booking",
+          "name": "Booking Integration",
+          "oneTimePrice": 199,
+          "type": "one-time",
+          "description": "Online booking and scheduling integration",
+          "estimatedDays": 2,
+          "includes": [
+            "Calendar integration",
+            "Automated confirmations",
+            "Timezone handling",
+            "Syncs with Google Calendar"
+          ],
+          "finalDeliverable": "Booking system integrated into your website with automated email confirmations.",
+          "tags": [
+            "websites"
+          ]
+        },
+        {
+          "id": "addon-blog-cms",
+          "name": "Blog / CMS",
+          "oneTimePrice": 249,
+          "type": "one-time",
+          "description": "Blog or content management system add-on",
+          "estimatedDays": 3,
+          "includes": [
+            "Full CMS with categories/tags",
+            "SEO-friendly URLs",
+            "Media library",
+            "Draft/publish workflow"
+          ],
+          "finalDeliverable": "Blog/CMS system added to your website. You can create, edit, and publish posts yourself.",
+          "tags": [
+            "websites"
+          ]
+        },
+        {
+          "id": "addon-seo-setup",
+          "name": "SEO Setup",
+          "oneTimePrice": 149,
+          "type": "one-time",
+          "description": "On-page SEO setup and optimization",
+          "estimatedDays": 2,
+          "includes": [
+            "Keyword research",
+            "Meta tags",
+            "Schema markup",
+            "Sitemap submission",
+            "Google Search Console setup"
+          ],
+          "finalDeliverable": "SEO foundation set up across your site. Google Search Console configured and sitemap submitted.",
+          "tags": [
+            "websites",
+            "seo"
+          ]
+        },
+        {
+          "id": "addon-analytics",
+          "name": "Analytics Setup",
+          "oneTimePrice": 99,
+          "type": "one-time",
+          "description": "GA4 analytics and tracking setup",
+          "estimatedDays": 1,
+          "includes": [
+            "GA4 setup",
+            "Conversion goals",
+            "Event tracking",
+            "Custom dashboard"
+          ],
+          "finalDeliverable": "Google Analytics 4 installed with conversion tracking and a custom dashboard.",
+          "tags": [
+            "websites",
+            "automation"
+          ]
+        },
+        {
+          "id": "addon-membership",
+          "name": "Membership Area",
+          "oneTimePrice": 399,
+          "type": "one-time",
+          "description": "Members-only area with gated content",
+          "estimatedDays": 5,
+          "includes": [
+            "User registration/login",
+            "Gated content areas",
+            "Member profiles",
+            "Password recovery"
+          ],
+          "finalDeliverable": "Membership area added to your website with login, registration, and gated content.",
+          "tags": [
+            "websites"
+          ]
+        },
+        {
+          "id": "addon-ecommerce",
+          "name": "E-Commerce",
+          "oneTimePrice": 199,
+          "type": "one-time",
+          "description": "E-commerce functionality with product listings and checkout",
+          "estimatedDays": 5,
+          "includes": [
+            "Product listings",
+            "Shopping cart",
+            "Stripe/Square checkout",
+            "Order notifications"
+          ],
+          "finalDeliverable": "E-commerce functionality added with product pages, cart, and secure checkout.",
+          "tags": [
+            "websites"
+          ]
+        },
+        {
+          "id": "addon-copywriting",
+          "name": "Copywriting",
+          "oneTimePrice": 99,
+          "type": "per-unit",
+          "unit": "page",
+          "description": "Professional copywriting per page",
+          "estimatedDays": 2,
+          "includes": [
+            "SEO-optimized copy",
+            "Brand voice matching",
+            "Headline variations",
+            "Call-to-action"
+          ],
+          "finalDeliverable": "SEO-optimized website copy for each page purchased.",
+          "tags": [
+            "websites",
+            "creative"
+          ]
+        },
+        {
+          "id": "addon-extra-pages",
+          "name": "Extra Pages",
+          "oneTimePrice": 99,
+          "type": "per-unit",
+          "unit": "page",
+          "description": "Additional pages beyond tier limit",
+          "estimatedDays": 3,
+          "includes": [
+            "Same quality as tier pages",
+            "Full design and copy"
+          ],
+          "finalDeliverable": "Additional pages built to match the quality and style of your tier pages.",
+          "tags": [
+            "websites"
+          ]
+        },
+        {
+          "id": "addon-location-pages",
+          "name": "Location Pages",
+          "oneTimePrice": 149,
+          "type": "per-unit",
+          "unit": "page",
+          "description": "Location-specific landing pages",
+          "estimatedDays": 3,
+          "includes": [
+            "Location-specific content",
+            "Local SEO optimized",
+            "Google Maps embed",
+            "Local schema markup"
+          ],
+          "finalDeliverable": "Location-specific landing pages optimized for local search with Google Maps integration.",
+          "tags": [
+            "websites"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hosting-care",
+      "name": "Website Hosting & Care",
+      "category": "websites",
+      "icon": "\ud83d\udee1\ufe0f",
+      "shortDesc": "Reliable hosting, maintenance, and ongoing website care",
+      "type": "recurring",
+      "internalRoute": "web-dev-team",
+      "tiers": [
+        {
+          "id": "hosting-basic",
+          "name": "Basic",
+          "monthly": 49,
+          "annual": null,
+          "popular": false,
+          "deliverables": [
+            {
+              "id": "basic-hosting",
+              "name": "Website Hosting",
+              "description": "Reliable website hosting with uptime monitoring",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "hosting service",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 0
+            },
+            {
+              "id": "basic-maintenance",
+              "name": "Basic Maintenance",
+              "description": "Software updates and basic website maintenance",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "maintenance cycle",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 1
+            }
+          ],
+          "features": [
+            "Reliable hosting",
+            "Software updates",
+            "Basic maintenance",
+            "Uptime monitoring"
+          ],
+          "includes": [
+            "Secure hosting with SSL",
+            "Daily backups",
+            "Uptime monitoring",
+            "Security patches",
+            "Email support"
+          ],
+          "finalDeliverable": "Your website stays live, secure, and backed up. Monthly uptime report.",
+          "tags": [
+            "websites"
+          ]
+        },
+        {
+          "id": "hosting-growth",
+          "name": "Growth",
+          "monthly": 125,
+          "annual": null,
+          "popular": true,
+          "deliverables": [
+            {
+              "id": "growth-hosting",
+              "name": "Website Hosting",
+              "description": "Premium hosting with enhanced performance",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "hosting service",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 0
+            },
+            {
+              "id": "growth-maintenance",
+              "name": "Enhanced Maintenance",
+              "description": "Priority updates, security scans, and performance optimization",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "maintenance cycle",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 2
+            }
+          ],
+          "features": [
+            "Premium hosting",
+            "Priority updates",
+            "Security scans",
+            "Performance optimization",
+            "Monthly backups"
+          ],
+          "includes": [
+            "Everything in Basic",
+            "1 SEO blog post/month",
+            "Monthly performance report",
+            "30 min of site edits/month",
+            "Priority support"
+          ],
+          "finalDeliverable": "Hosted website with monthly blog content and small updates included. Monthly analytics report.",
+          "tags": [
+            "websites"
+          ]
+        },
+        {
+          "id": "hosting-pro",
+          "name": "Pro",
+          "monthly": 249,
+          "annual": null,
+          "popular": false,
+          "deliverables": [
+            {
+              "id": "pro-hosting",
+              "name": "Website Hosting",
+              "description": "Enterprise-grade hosting with maximum performance",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "hosting service",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 0
+            },
+            {
+              "id": "pro-maintenance",
+              "name": "Full Maintenance & Care",
+              "description": "Complete website maintenance, updates, and proactive care",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "maintenance cycle",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 3
+            }
+          ],
+          "features": [
+            "Enterprise-grade hosting",
+            "Full maintenance & care",
+            "Daily backups",
+            "Advanced security",
+            "Priority support",
+            "Content updates"
+          ],
+          "includes": [
+            "Everything in Growth",
+            "2 SEO blog posts/month",
+            "Quarterly site review & recommendations",
+            "1 hour of site edits/month",
+            "Priority phone support",
+            "Quarterly strategy call"
+          ],
+          "finalDeliverable": "Fully maintained website with ongoing content, updates, and quarterly strategy review.",
+          "tags": [
+            "websites"
+          ]
+        }
+      ],
+      "addOns": []
+    },
+    {
+      "id": "local-seo",
+      "name": "Local SEO",
+      "category": "seo",
+      "icon": "\ud83d\udccd",
+      "shortDesc": "Dominate local search results and Google Maps for your area",
+      "type": "recurring",
+      "internalRoute": "seo-team",
+      "tiers": [
+        {
+          "id": "seo-starter",
+          "name": "Starter",
+          "monthly": 149,
+          "annual": 124,
+          "popular": false,
+          "deliverables": [
+            {
+              "id": "gbp-setup-optimization",
+              "name": "GBP Setup & Optimization",
+              "description": "Google Business Profile setup and full optimization",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "profile",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "keyword-tracking-10",
+              "name": "Keyword Tracking (10)",
+              "description": "Tracking and reporting on 10 target keywords",
+              "taskType": "recurring-monthly",
+              "quantity": 10,
+              "unit": "keywords tracked",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "basic-citation-audit",
+              "name": "Basic Citation Audit",
+              "description": "Citation audit across 20 directories",
+              "taskType": "recurring-monthly",
+              "quantity": 20,
+              "unit": "directories audited",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 2
+            },
+            {
+              "id": "monthly-rank-report",
+              "name": "Monthly Rank Report",
+              "description": "Monthly keyword ranking and local visibility report",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "report",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 1
+            }
+          ],
+          "features": [
+            "GBP setup & optimization",
+            "10 keywords tracked",
+            "Basic citation audit (20 dirs)",
+            "Monthly rank report"
+          ],
+          "includes": [
+            "Google Business Profile setup & optimization",
+            "10 keywords tracked with ranking reports",
+            "Basic citation audit (20 directories)",
+            "Monthly rank tracking report",
+            "GBP post (1x/week)"
+          ],
+          "finalDeliverable": "Optimized Google Business Profile. Monthly ranking report showing your positions for 10 keywords.",
+          "tags": [
+            "seo"
+          ]
+        },
+        {
+          "id": "seo-growth",
+          "name": "Growth",
+          "monthly": 299,
+          "annual": 249,
+          "popular": true,
+          "deliverables": [
+            {
+              "id": "gbp-optimization-growth",
+              "name": "GBP Setup & Optimization",
+              "description": "Google Business Profile setup and ongoing optimization",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "profile",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "keyword-tracking-25",
+              "name": "Keyword Tracking (25)",
+              "description": "Tracking and reporting on 25 target keywords",
+              "taskType": "recurring-monthly",
+              "quantity": 25,
+              "unit": "keywords tracked",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "citation-building-50",
+              "name": "Citation Building (50 Directories)",
+              "description": "Citation building and management across 50 directories",
+              "taskType": "recurring-monthly",
+              "quantity": 50,
+              "unit": "directories managed",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 5
+            },
+            {
+              "id": "competitor-gap-analysis",
+              "name": "Monthly Competitor Gap Analysis",
+              "description": "Monthly analysis of competitor SEO strategies and gaps",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "analysis report",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 2
+            },
+            {
+              "id": "gbp-posts-2x",
+              "name": "GBP Posts (2x/week)",
+              "description": "Google Business Profile posts published twice per week",
+              "taskType": "recurring-monthly",
+              "quantity": 8,
+              "unit": "posts per month",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 2
+            },
+            {
+              "id": "review-response",
+              "name": "Review Response Management",
+              "description": "Professional responses to Google reviews",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "management service",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "ai-gbp-content",
+              "name": "AI-Generated GBP Content",
+              "description": "AI-powered content creation for Google Business Profile",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "content batch",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 1
+            }
+          ],
+          "features": [
+            "GBP setup & optimization",
+            "25 keywords tracked",
+            "Citation building (50 dirs)",
+            "Monthly competitor gap analysis",
+            "2x weekly GBP posts",
+            "Review response management",
+            "AI-generated GBP content"
+          ],
+          "includes": [
+            "Everything in Starter",
+            "25 keywords tracked",
+            "Citation building (50 directories)",
+            "Monthly competitor gap analysis",
+            "2x weekly GBP posts",
+            "Review response management (we reply to all reviews)",
+            "AI-generated GBP content",
+            "Quarterly strategy adjustment"
+          ],
+          "finalDeliverable": "Active GBP with regular posts. Citation presence across 50 directories. Monthly ranking + competitor report.",
+          "tags": [
+            "seo"
+          ]
+        },
+        {
+          "id": "seo-authority",
+          "name": "Authority",
+          "monthly": 499,
+          "annual": 416,
+          "popular": false,
+          "deliverables": [
+            {
+              "id": "gbp-optimization-authority",
+              "name": "GBP Setup & Optimization",
+              "description": "Google Business Profile setup and daily monitoring",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "profile",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "keyword-tracking-50",
+              "name": "Keyword Tracking (50)",
+              "description": "Tracking and reporting on 50 target keywords",
+              "taskType": "recurring-monthly",
+              "quantity": 50,
+              "unit": "keywords tracked",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 2
+            },
+            {
+              "id": "local-link-building",
+              "name": "Local Link Building Outreach",
+              "description": "Active outreach for local backlinks and partnerships",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "outreach campaign",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "daily-gbp-monitoring",
+              "name": "Daily GBP Monitoring",
+              "description": "Daily monitoring of Google Business Profile for changes and issues",
+              "taskType": "recurring-monthly",
+              "quantity": 30,
+              "unit": "daily checks",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "location-pages-seo",
+              "name": "Location Pages (Up to 5)",
+              "description": "SEO-optimized location-specific landing pages",
+              "taskType": "one-time",
+              "quantity": 5,
+              "unit": "location pages",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 10
+            },
+            {
+              "id": "priority-support-strategy",
+              "name": "Priority Support + Strategy Calls",
+              "description": "Priority support access and regular strategy calls",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "support tier",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 0
+            },
+            {
+              "id": "ai-local-content-strategy",
+              "name": "AI-Powered Local Content Strategy",
+              "description": "AI-driven content strategy for local search dominance",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "strategy document",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            }
+          ],
+          "features": [
+            "GBP setup & optimization",
+            "50 keywords tracked",
+            "Local link building outreach",
+            "Daily GBP monitoring",
+            "Up to 5 location pages",
+            "Priority support + strategy calls",
+            "AI-powered local content strategy"
+          ],
+          "includes": [
+            "Everything in Growth",
+            "50 keywords tracked",
+            "Local link building outreach",
+            "Daily GBP monitoring & posting",
+            "Up to 5 location pages built",
+            "Priority support + monthly strategy calls",
+            "AI-powered local content strategy",
+            "Review generation campaigns"
+          ],
+          "finalDeliverable": "Dominant local presence with 50 tracked keywords. 5 location pages. Monthly strategy call with ranking report and action items.",
+          "tags": [
+            "seo"
+          ]
+        }
+      ],
+      "addOns": [
+        {
+          "id": "addon-additional-location",
+          "name": "Additional Location",
+          "monthly": 75,
+          "monthlyMax": 100,
+          "type": "recurring",
+          "unit": "location",
+          "description": "Additional location management (+$75-$100/mo per location)",
+          "estimatedDays": 3,
+          "includes": [
+            "Additional GBP management",
+            "Location-specific optimization",
+            "Separate ranking reports"
+          ],
+          "finalDeliverable": "Additional location managed with its own GBP optimization and ranking reports.",
+          "tags": [
+            "seo"
+          ]
+        },
+        {
+          "id": "addon-seo-audit",
+          "name": "SEO Audit",
+          "oneTimePrice": 199,
+          "type": "one-time",
+          "description": "Comprehensive SEO audit with actionable recommendations",
+          "estimatedDays": 5,
+          "includes": [
+            "Full technical audit",
+            "Citation inconsistencies",
+            "Competitor analysis",
+            "Prioritized action plan (PDF report)"
+          ],
+          "finalDeliverable": "Comprehensive SEO audit report (PDF) with prioritized action items.",
+          "tags": [
+            "seo"
+          ]
+        },
+        {
+          "id": "addon-gbp-setup",
+          "name": "GBP Setup",
+          "oneTimePrice": 249,
+          "type": "one-time",
+          "description": "Full Google Business Profile setup and optimization",
+          "estimatedDays": 3,
+          "includes": [
+            "Profile creation/claiming",
+            "Full optimization",
+            "Photos",
+            "Business description",
+            "Categories",
+            "Q&A setup"
+          ],
+          "finalDeliverable": "Fully optimized Google Business Profile ready to attract local customers.",
+          "tags": [
+            "seo"
+          ]
+        },
+        {
+          "id": "addon-citations",
+          "name": "Citation Building",
+          "oneTimePrice": 249,
+          "type": "one-time",
+          "description": "One-time citation building across major directories",
+          "estimatedDays": 7,
+          "includes": [
+            "Manual submission to 50 high-authority directories",
+            "NAP consistency check",
+            "Confirmation report"
+          ],
+          "finalDeliverable": "Citations built across 50 directories with confirmation report.",
+          "tags": [
+            "seo"
+          ]
+        },
+        {
+          "id": "addon-on-page-seo",
+          "name": "On-Page SEO",
+          "oneTimePrice": 299,
+          "type": "one-time",
+          "description": "Full on-page SEO optimization for existing website",
+          "estimatedDays": 5,
+          "includes": [
+            "Title tags",
+            "Meta descriptions",
+            "Header structure",
+            "Internal linking",
+            "Schema markup",
+            "Image optimization for all existing pages"
+          ],
+          "finalDeliverable": "Full on-page SEO applied to all existing pages on your website.",
+          "tags": [
+            "seo"
+          ]
+        },
+        {
+          "id": "addon-review-system",
+          "name": "Review System",
+          "oneTimePrice": 149,
+          "monthly": 99,
+          "type": "one-time-plus-recurring",
+          "description": "Review generation and management system ($149 setup + $99/mo)",
+          "estimatedDays": 3,
+          "includes": [
+            "Review request automation (email + SMS)",
+            "Review monitoring dashboard",
+            "Response templates",
+            "Monthly review report"
+          ],
+          "finalDeliverable": "Automated review generation system with monitoring dashboard and monthly report.",
+          "tags": [
+            "seo",
+            "marketing"
+          ]
+        },
+        {
+          "id": "addon-reputation-recovery",
+          "name": "Reputation Recovery",
+          "oneTimePrice": 399,
+          "type": "one-time",
+          "description": "Reputation repair and recovery strategy",
+          "estimatedDays": 14,
+          "includes": [
+            "Negative review strategy",
+            "Response drafting",
+            "Positive review campaign",
+            "Monitoring for 60 days"
+          ],
+          "finalDeliverable": "Reputation recovery plan executed with 60 days of monitoring and positive review campaigns.",
+          "tags": [
+            "seo",
+            "marketing"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "email-sms",
+      "name": "Email & SMS Marketing",
+      "category": "marketing",
+      "icon": "\ud83d\udce7",
+      "shortDesc": "Automated email and SMS campaigns that drive retention and revenue",
+      "type": "recurring",
+      "internalRoute": "email-team",
+      "tiers": [
+        {
+          "id": "email-starter",
+          "name": "Starter",
+          "monthly": 199,
+          "annual": 166,
+          "popular": false,
+          "deliverables": [
+            {
+              "id": "platform-setup-migration",
+              "name": "Platform Setup & Migration",
+              "description": "Email platform setup and data migration from existing provider",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "setup",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "email-campaigns-2",
+              "name": "Email Campaigns (2/mo)",
+              "description": "Two professionally designed email campaigns per month",
+              "taskType": "recurring-monthly",
+              "quantity": 2,
+              "unit": "campaigns per month",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "list-segmentation",
+              "name": "List Segmentation",
+              "description": "Audience segmentation for targeted messaging",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "segmentation setup",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 2
+            },
+            {
+              "id": "welcome-automation",
+              "name": "Welcome Automation",
+              "description": "Automated welcome email sequence for new subscribers",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "automation sequence",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "ai-subject-lines",
+              "name": "AI Subject Line Optimization",
+              "description": "AI-optimized subject lines for maximum open rates",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "optimization service",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 1
+            }
+          ],
+          "features": [
+            "Platform setup & migration",
+            "2 campaigns/mo",
+            "List segmentation",
+            "Welcome automation",
+            "AI subject line optimization"
+          ],
+          "includes": [
+            "Email platform setup & migration",
+            "2 designed email campaigns/month (copy + design)",
+            "List segmentation setup",
+            "Welcome automation flow (3-5 emails)",
+            "AI subject line optimization",
+            "Unsubscribe/compliance handling"
+          ],
+          "finalDeliverable": "2 email campaigns sent per month. Welcome flow running automatically. Monthly open/click report.",
+          "tags": [
+            "marketing"
+          ]
+        },
+        {
+          "id": "email-growth",
+          "name": "Growth",
+          "monthly": 299,
+          "annual": 249,
+          "popular": true,
+          "deliverables": [
+            {
+              "id": "platform-setup-migration-growth",
+              "name": "Platform Setup & Migration",
+              "description": "Email platform setup and data migration",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "setup",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "email-campaigns-4",
+              "name": "Email Campaigns (4/mo)",
+              "description": "Four professionally designed email campaigns per month",
+              "taskType": "recurring-monthly",
+              "quantity": 4,
+              "unit": "campaigns per month",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "sms-platform-setup",
+              "name": "SMS Platform Setup",
+              "description": "SMS marketing platform configuration and integration",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "setup",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "sms-sends-2",
+              "name": "SMS Sends (2/mo)",
+              "description": "Two SMS marketing sends per month",
+              "taskType": "recurring-monthly",
+              "quantity": 2,
+              "unit": "SMS sends per month",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 1
+            },
+            {
+              "id": "re-engagement-automation",
+              "name": "Re-Engagement Automation",
+              "description": "Automated re-engagement sequence for inactive subscribers",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "automation sequence",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "monthly-revenue-report",
+              "name": "Monthly Revenue Report",
+              "description": "Monthly report on email and SMS revenue attribution",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "report",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 1
+            },
+            {
+              "id": "ai-send-time",
+              "name": "AI Send-Time Optimization",
+              "description": "AI-powered send-time optimization for maximum engagement",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "optimization service",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 1
+            }
+          ],
+          "features": [
+            "Platform setup & migration",
+            "4 campaigns/mo",
+            "SMS platform setup",
+            "2 SMS sends/mo",
+            "Re-engagement automation",
+            "Monthly revenue report",
+            "AI send-time optimization"
+          ],
+          "includes": [
+            "Everything in Starter",
+            "4 email campaigns/month",
+            "SMS platform setup",
+            "2 SMS campaigns/month",
+            "Re-engagement automation flow",
+            "Monthly revenue attribution report",
+            "AI send-time optimization",
+            "A/B subject line testing"
+          ],
+          "finalDeliverable": "4 emails + 2 SMS campaigns sent monthly. Automation flows running. Monthly report with revenue attribution.",
+          "tags": [
+            "marketing"
+          ]
+        },
+        {
+          "id": "email-full-retention",
+          "name": "Full Retention",
+          "monthly": 599,
+          "annual": 499,
+          "popular": false,
+          "deliverables": [
+            {
+              "id": "platform-setup-full",
+              "name": "Platform Setup & Migration",
+              "description": "Full platform setup with advanced configuration",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "setup",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 7
+            },
+            {
+              "id": "email-campaigns-8",
+              "name": "Email Campaigns (8/mo)",
+              "description": "Eight professionally designed email campaigns per month",
+              "taskType": "recurring-monthly",
+              "quantity": 8,
+              "unit": "campaigns per month",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 8
+            },
+            {
+              "id": "unlimited-sms",
+              "name": "Unlimited SMS",
+              "description": "Unlimited SMS marketing sends",
+              "taskType": "recurring-monthly",
+              "quantity": null,
+              "unit": "unlimited sends",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 2
+            },
+            {
+              "id": "full-automation-library",
+              "name": "Full Automation Library",
+              "description": "Complete library of email and SMS automations",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "automation library",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 10
+            },
+            {
+              "id": "list-growth-strategy",
+              "name": "List Growth Strategy",
+              "description": "Strategic plan to grow subscriber and contact lists",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "strategy",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "ab-testing",
+              "name": "A/B Testing",
+              "description": "Systematic A/B testing of subject lines, content, and send times",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "testing program",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 2
+            },
+            {
+              "id": "predictive-churn-detection",
+              "name": "Predictive Churn Detection",
+              "description": "AI-powered churn prediction and prevention triggers",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "detection service",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 2
+            }
+          ],
+          "features": [
+            "Platform setup & migration",
+            "8 campaigns/mo",
+            "Unlimited SMS",
+            "Full automation library",
+            "List growth strategy",
+            "A/B testing",
+            "Predictive churn detection"
+          ],
+          "includes": [
+            "Everything in Growth",
+            "8 email campaigns/month",
+            "Unlimited SMS sends",
+            "Full automation library (welcome, abandon cart, win-back, birthday, VIP)",
+            "List growth strategy & lead magnets",
+            "Advanced A/B testing",
+            "Predictive churn detection & prevention"
+          ],
+          "finalDeliverable": "Complete email + SMS program with 8 campaigns, unlimited SMS, and full automation suite. Monthly report with churn analysis.",
+          "tags": [
+            "marketing"
+          ]
+        }
+      ],
+      "addOns": [
+        {
+          "id": "addon-email-platform-setup",
+          "name": "Platform Setup",
+          "oneTimePrice": 199,
+          "type": "one-time",
+          "description": "Email platform setup and configuration",
+          "estimatedDays": 3,
+          "includes": [
+            "Full migration",
+            "List import",
+            "Domain authentication",
+            "Template setup",
+            "Compliance configuration"
+          ],
+          "finalDeliverable": "Email platform fully set up with your lists imported and domain authenticated.",
+          "tags": [
+            "marketing"
+          ]
+        },
+        {
+          "id": "addon-automation-build",
+          "name": "Automation Build",
+          "oneTimePrice": 399,
+          "type": "one-time",
+          "description": "Custom automation sequence build",
+          "estimatedDays": 7,
+          "includes": [
+            "Custom automation flow (up to 10 steps)",
+            "Trigger setup",
+            "Segmentation logic",
+            "Testing & QA"
+          ],
+          "finalDeliverable": "Custom automation flow built, tested, and live in your email platform.",
+          "tags": [
+            "marketing"
+          ]
+        },
+        {
+          "id": "addon-sms-setup",
+          "name": "SMS Setup",
+          "oneTimePrice": 149,
+          "type": "one-time",
+          "description": "SMS platform setup and integration",
+          "estimatedDays": 3,
+          "includes": [
+            "SMS platform config",
+            "Number provisioning",
+            "Opt-in flow",
+            "Compliance setup"
+          ],
+          "finalDeliverable": "SMS platform configured with your number, opt-in flow, and compliance ready to send.",
+          "tags": [
+            "marketing"
+          ]
+        },
+        {
+          "id": "addon-list-strategy",
+          "name": "List Strategy",
+          "oneTimePrice": 249,
+          "type": "one-time",
+          "description": "Comprehensive list growth and segmentation strategy",
+          "estimatedDays": 5,
+          "includes": [
+            "Audience analysis",
+            "Segmentation plan",
+            "List cleaning",
+            "Growth tactics document"
+          ],
+          "finalDeliverable": "List strategy document with segmentation plan, cleaning report, and growth tactics.",
+          "tags": [
+            "marketing"
+          ]
+        },
+        {
+          "id": "addon-template-design",
+          "name": "Template Design",
+          "oneTimePrice": 199,
+          "type": "one-time",
+          "description": "Custom email template design",
+          "estimatedDays": 5,
+          "includes": [
+            "2 custom email templates (branded, mobile-responsive, reusable)"
+          ],
+          "finalDeliverable": "2 branded, mobile-responsive email templates ready to use in your platform.",
+          "tags": [
+            "marketing",
+            "creative"
+          ]
+        },
+        {
+          "id": "addon-email-audit",
+          "name": "Email Audit",
+          "oneTimePrice": 149,
+          "type": "one-time",
+          "description": "Full audit of existing email marketing performance",
+          "estimatedDays": 3,
+          "includes": [
+            "Full email program review",
+            "Deliverability check",
+            "Automation audit",
+            "Recommendations report"
+          ],
+          "finalDeliverable": "Email audit report with deliverability assessment and prioritized recommendations.",
+          "tags": [
+            "marketing"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai-automations",
+      "name": "AI Automations",
+      "category": "automation",
+      "icon": "\ud83e\udd16",
+      "shortDesc": "Smart automations that capture leads, report data, and nurture customers",
+      "type": "recurring",
+      "internalRoute": "tech-team",
+      "tiers": [
+        {
+          "id": "ai-lead-response",
+          "name": "Lead Response",
+          "setupFee": 499,
+          "monthly": 99,
+          "annual": null,
+          "popular": false,
+          "deliverables": [
+            {
+              "id": "instant-lead-response",
+              "name": "Instant Lead Response (SMS + Email)",
+              "description": "Automated instant response to new leads via SMS and email",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "automation",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "nurture-sequences",
+              "name": "Nurture Sequences",
+              "description": "Automated lead nurture sequences",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "sequence set",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "appointment-booking",
+              "name": "Appointment Booking",
+              "description": "Automated appointment booking integration",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "integration",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "crm-integration",
+              "name": "CRM Integration",
+              "description": "Integration with existing CRM system",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "integration",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 3
+            },
+            {
+              "id": "lead-source-attribution",
+              "name": "Lead Source Attribution",
+              "description": "Tracking and attribution of lead sources",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "tracking setup",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 2
+            }
+          ],
+          "features": [
+            "Instant lead response (SMS + email)",
+            "Nurture sequences",
+            "Appointment booking",
+            "CRM integration",
+            "Lead source attribution"
+          ],
+          "includes": [
+            "Instant lead response (SMS + email within 60 seconds)",
+            "Multi-step nurture sequence (5-7 messages)",
+            "Automated appointment booking",
+            "CRM integration & lead tracking",
+            "Lead source attribution",
+            "Monthly lead report"
+          ],
+          "finalDeliverable": "Automated lead response system running 24/7. Leads get instant replies and nurture sequences. Monthly lead performance report.",
+          "tags": [
+            "automation"
+          ]
+        },
+        {
+          "id": "ai-reporting",
+          "name": "Reporting",
+          "monthly": 99,
+          "annual": null,
+          "popular": false,
+          "deliverables": [
+            {
+              "id": "custom-dashboard",
+              "name": "Custom Dashboard",
+              "description": "Custom reporting dashboard with key metrics",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "dashboard",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "automated-monthly-reports",
+              "name": "Automated Monthly Reports",
+              "description": "Automated generation and delivery of monthly performance reports",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "report",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 1
+            },
+            {
+              "id": "ga4-search-console",
+              "name": "GA4 + Search Console Integration",
+              "description": "Google Analytics 4 and Search Console data integration",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "integration",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 2
+            },
+            {
+              "id": "revenue-attribution",
+              "name": "Revenue Attribution",
+              "description": "Revenue attribution tracking across marketing channels",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "tracking setup",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 3
+            },
+            {
+              "id": "trend-alerts",
+              "name": "Trend Alerts",
+              "description": "Automated alerts for significant metric changes and trends",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "alert service",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 2
+            }
+          ],
+          "features": [
+            "Custom dashboard",
+            "Automated monthly reports",
+            "GA4 + Search Console",
+            "Revenue attribution",
+            "Trend alerts"
+          ],
+          "includes": [
+            "Custom reporting dashboard",
+            "Automated monthly report delivery (PDF + dashboard)",
+            "Google Analytics 4 + Search Console integration",
+            "Revenue & lead attribution",
+            "Trend analysis & anomaly alerts",
+            "Competitor tracking"
+          ],
+          "finalDeliverable": "Live reporting dashboard accessible anytime. Automated monthly PDF report emailed to you.",
+          "tags": [
+            "automation",
+            "strategy"
+          ]
+        },
+        {
+          "id": "ai-full-journey",
+          "name": "Full Journey",
+          "setupFee": 1299,
+          "monthly": 149,
+          "annual": null,
+          "popular": true,
+          "deliverables": [
+            {
+              "id": "customer-journey-mapping",
+              "name": "Full Customer Journey Mapping",
+              "description": "Complete customer journey mapping from lead to repeat customer",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "journey map",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 7
+            },
+            {
+              "id": "lead-to-sale-automation",
+              "name": "Lead-to-Sale Automation",
+              "description": "Full automated pipeline from lead capture to sale conversion",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "automation pipeline",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 10
+            },
+            {
+              "id": "review-loyalty-automation",
+              "name": "Review & Loyalty Automation",
+              "description": "Automated review requests and loyalty program triggers",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "automation set",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "re-engagement-flows",
+              "name": "Re-Engagement Flows",
+              "description": "Automated flows to re-engage dormant customers",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "flow set",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "ongoing-optimization",
+              "name": "Ongoing Optimization",
+              "description": "Monthly optimization of all automation flows",
+              "taskType": "recurring-monthly",
+              "quantity": 1,
+              "unit": "optimization cycle",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 3
+            }
+          ],
+          "features": [
+            "Full customer journey mapping",
+            "Lead-to-sale automation",
+            "Review & loyalty automation",
+            "Re-engagement flows",
+            "Ongoing optimization"
+          ],
+          "includes": [
+            "Full customer journey mapping",
+            "Lead-to-sale automation (capture, nurture, close)",
+            "Review & loyalty automation (post-purchase follow-up)",
+            "Re-engagement & win-back flows",
+            "Ongoing monitoring & optimization",
+            "Quarterly strategy review"
+          ],
+          "finalDeliverable": "Complete automated customer journey from first contact to repeat purchase. Quarterly optimization review.",
+          "tags": [
+            "automation"
+          ]
+        }
+      ],
+      "addOns": []
+    },
+    {
+      "id": "branding",
+      "name": "Branding",
+      "category": "creative",
+      "icon": "\u2728",
+      "shortDesc": "Professional brand identity, strategy, and complete launch packages",
+      "type": "one-time",
+      "internalRoute": "design-team",
+      "tiers": [
+        {
+          "id": "brand-logo",
+          "name": "Logo & Visual Identity",
+          "oneTimePrice": 499,
+          "popular": false,
+          "timeline": "1-2 weeks",
+          "deliverables": [
+            {
+              "id": "logo-concepts",
+              "name": "Logo Concepts (3)",
+              "description": "Three unique logo design concepts to choose from",
+              "taskType": "one-time",
+              "quantity": 3,
+              "unit": "concepts",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "color-palette",
+              "name": "Color Palette",
+              "description": "Custom color palette with primary, secondary, and accent colors",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "palette",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 2
+            },
+            {
+              "id": "typography-selection",
+              "name": "Typography",
+              "description": "Curated typography selection for headings and body",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "type system",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "logo-file-formats",
+              "name": "All File Formats",
+              "description": "Logo delivered in all standard file formats (SVG, PNG, PDF, EPS)",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "file package",
+              "requiresApproval": false,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "unlimited-revisions-logo",
+              "name": "Unlimited Revisions",
+              "description": "Unlimited revisions until you are fully satisfied",
+              "taskType": "one-time",
+              "quantity": null,
+              "unit": "unlimited",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 3
+            }
+          ],
+          "features": [
+            "3 logo concepts",
+            "Color palette",
+            "Typography",
+            "All file formats",
+            "Unlimited revisions"
+          ],
+          "includes": [
+            "3 unique logo concepts",
+            "Color palette (primary + secondary + accent)",
+            "Typography selection (2-3 fonts)",
+            "Logo in all formats (AI, SVG, PNG, PDF, EPS)",
+            "Favicon + social profile versions",
+            "Unlimited revisions until approved"
+          ],
+          "finalDeliverable": "Complete logo package with all file formats. Color palette and typography guide. Brand assets folder you own forever.",
+          "tags": [
+            "creative"
+          ]
+        },
+        {
+          "id": "brand-strategy",
+          "name": "Brand Strategy & Identity",
+          "oneTimePrice": 1499,
+          "popular": true,
+          "timeline": "3-4 weeks",
+          "deliverables": [
+            {
+              "id": "logo-concepts-strategy",
+              "name": "Logo Concepts (3)",
+              "description": "Three unique logo design concepts to choose from",
+              "taskType": "one-time",
+              "quantity": 3,
+              "unit": "concepts",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "color-palette-strategy",
+              "name": "Color Palette",
+              "description": "Custom color palette with primary, secondary, and accent colors",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "palette",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 2
+            },
+            {
+              "id": "typography-strategy",
+              "name": "Typography",
+              "description": "Curated typography selection for headings and body",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "type system",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "brand-positioning",
+              "name": "Brand Positioning & Messaging",
+              "description": "Brand positioning statement, key messages, and value propositions",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "positioning document",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "voice-tone-guide",
+              "name": "Voice & Tone Guide",
+              "description": "Brand voice and tone guidelines for consistent communication",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "guide",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 3
+            },
+            {
+              "id": "brand-guidelines-pdf",
+              "name": "Full Guidelines PDF",
+              "description": "Comprehensive brand guidelines document in PDF format",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "PDF document",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "application-examples",
+              "name": "Application Examples",
+              "description": "Examples of brand applied to mockups and real-world scenarios",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "example set",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 3
+            },
+            {
+              "id": "unlimited-revisions-strategy",
+              "name": "Unlimited Revisions",
+              "description": "Unlimited revisions until you are fully satisfied",
+              "taskType": "one-time",
+              "quantity": null,
+              "unit": "unlimited",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 3
+            }
+          ],
+          "features": [
+            "3 logo concepts",
+            "Color palette",
+            "Typography",
+            "Brand positioning & messaging",
+            "Voice & tone guide",
+            "Full guidelines PDF",
+            "Application examples",
+            "Unlimited revisions"
+          ],
+          "includes": [
+            "Everything in Logo",
+            "Brand positioning statement",
+            "Target audience personas (2-3)",
+            "Brand voice & tone guide",
+            "Competitive positioning map",
+            "Full brand guidelines PDF (20+ pages)",
+            "Brand application examples (business card, letterhead, social)"
+          ],
+          "finalDeliverable": "Complete brand identity with strategy document. Brand guidelines PDF. All design files. You own everything.",
+          "tags": [
+            "creative"
+          ]
+        },
+        {
+          "id": "brand-complete",
+          "name": "Complete Brand & Launch",
+          "oneTimePrice": 2999,
+          "popular": false,
+          "timeline": "5-7 weeks",
+          "deliverables": [
+            {
+              "id": "logo-concepts-complete",
+              "name": "Logo Concepts (3)",
+              "description": "Three unique logo design concepts to choose from",
+              "taskType": "one-time",
+              "quantity": 3,
+              "unit": "concepts",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "color-palette-complete",
+              "name": "Color Palette",
+              "description": "Custom color palette with primary, secondary, and accent colors",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "palette",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 2
+            },
+            {
+              "id": "typography-complete",
+              "name": "Typography",
+              "description": "Curated typography selection for headings and body",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "type system",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 1
+            },
+            {
+              "id": "brand-positioning-complete",
+              "name": "Brand Positioning & Messaging",
+              "description": "Brand positioning statement, key messages, and value propositions",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "positioning document",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "voice-tone-complete",
+              "name": "Voice & Tone Guide",
+              "description": "Brand voice and tone guidelines",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "guide",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 3
+            },
+            {
+              "id": "brand-guidelines-complete",
+              "name": "Full Guidelines PDF",
+              "description": "Comprehensive brand guidelines document",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "PDF document",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "social-templates",
+              "name": "Social Media Templates",
+              "description": "Branded social media post templates",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "template set",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 5
+            },
+            {
+              "id": "email-template-design",
+              "name": "Email Template Design",
+              "description": "Branded email marketing template",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "template",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "business-card-print",
+              "name": "Business Card & Print Design",
+              "description": "Business card design and print-ready files",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "design set",
+              "requiresApproval": true,
+              "calendarItem": true,
+              "estimatedDays": 3
+            },
+            {
+              "id": "brand-implementation-review",
+              "name": "Brand Implementation Review",
+              "description": "Review and audit of brand implementation across all touchpoints",
+              "taskType": "one-time",
+              "quantity": 1,
+              "unit": "review",
+              "requiresApproval": false,
+              "calendarItem": true,
+              "estimatedDays": 2
+            },
+            {
+              "id": "unlimited-revisions-complete",
+              "name": "Unlimited Revisions",
+              "description": "Unlimited revisions until you are fully satisfied",
+              "taskType": "one-time",
+              "quantity": null,
+              "unit": "unlimited",
+              "requiresApproval": true,
+              "calendarItem": false,
+              "estimatedDays": 5
+            }
+          ],
+          "features": [
+            "3 logo concepts",
+            "Color palette",
+            "Typography",
+            "Brand positioning & messaging",
+            "Voice & tone guide",
+            "Full guidelines PDF",
+            "Social media templates",
+            "Email template design",
+            "Business card & print design",
+            "Brand implementation review",
+            "Unlimited revisions"
+          ],
+          "includes": [
+            "Everything in Strategy",
+            "Social media brand templates (10+ templates)",
+            "Email template design (2 templates)",
+            "Business card & letterhead design",
+            "Print-ready files for signage/merch",
+            "Brand launch checklist",
+            "Brand implementation review (30-day check-in)"
+          ],
+          "finalDeliverable": "Full brand system ready to use everywhere. Social templates, email templates, print files, and guidelines. 30-day implementation support.",
+          "tags": [
+            "creative"
+          ]
+        }
+      ],
+      "addOns": [],
+      "items": [
+        {
+          "id": "business-card-design",
+          "name": "Business Card Design",
+          "pricePerUnit": 99,
+          "unit": "design",
+          "description": "Professional business card design, front and back",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": false,
+          "estimatedDays": 3,
+          "tags": [
+            "creative"
+          ],
+          "includes": [
+            "Front and back design",
+            "Brand-consistent styling",
+            "Print-ready files (PDF, AI)",
+            "Digital version for sharing",
+            "2 rounds of revisions"
+          ],
+          "finalDeliverable": "Print-ready business card files (PDF + AI) with digital version."
+        },
+        {
+          "id": "packaging-design",
+          "name": "Packaging Design",
+          "pricePerUnit": 399,
+          "unit": "package",
+          "description": "Custom product packaging design",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": false,
+          "estimatedDays": 10,
+          "tags": [
+            "creative"
+          ],
+          "includes": [
+            "Custom packaging layout",
+            "Die-cut template creation",
+            "Brand-consistent design",
+            "Print-ready files with bleed",
+            "3D mockup preview",
+            "2 rounds of revisions"
+          ],
+          "finalDeliverable": "Print-ready packaging files with die-cut template. 3D mockup previews included."
+        },
+        {
+          "id": "letterhead-design",
+          "name": "Letterhead Design",
+          "pricePerUnit": 75,
+          "unit": "design",
+          "description": "Professional branded letterhead template",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": false,
+          "estimatedDays": 2,
+          "tags": [
+            "creative"
+          ],
+          "includes": [
+            "Custom letterhead layout",
+            "Brand-consistent header and footer",
+            "Editable Word/Google Docs version",
+            "Print-ready PDF",
+            "1 round of revisions"
+          ],
+          "finalDeliverable": "Editable letterhead template (Word + Google Docs) and print-ready PDF."
+        }
+      ]
+    },
+    {
+      "id": "photography",
+      "name": "Photography",
+      "category": "creative",
+      "icon": "\ud83d\udcf8",
+      "shortDesc": "Professional photography for products, events, lifestyle, and real estate",
+      "type": "per-unit",
+      "internalRoute": "photo-video-team",
+      "minimumHours": 2,
+      "tiers": [],
+      "items": [
+        {
+          "id": "photo-product",
+          "name": "Product Photography",
+          "pricePerUnit": 115,
+          "unit": "hour",
+          "description": "Professional product photography with styling and editing",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 3,
+          "includes": [
+            "Professional studio or on-location shooting",
+            "Styling and props coordination",
+            "Professional editing & retouching",
+            "High-res files (web + print ready)",
+            "Up to 15 edited photos per hour"
+          ],
+          "finalDeliverable": "Edited high-resolution photos delivered via shared drive. Web-optimized versions included.",
+          "note": "Add Social Media Management to have these posted for you.",
+          "tags": [
+            "creative",
+            "marketing"
+          ]
+        },
+        {
+          "id": "photo-lifestyle",
+          "name": "Lifestyle Photography",
+          "pricePerUnit": 130,
+          "unit": "hour",
+          "description": "Lifestyle and brand photography with creative direction",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 3,
+          "includes": [
+            "On-location shooting with lifestyle staging",
+            "Model direction (if applicable)",
+            "Professional editing & color grading",
+            "High-res files (web + print ready)",
+            "Up to 12 edited photos per hour"
+          ],
+          "finalDeliverable": "Edited lifestyle photos delivered via shared drive. Web-optimized versions included.",
+          "note": "Add Social Media Management to have these posted for you.",
+          "tags": [
+            "creative",
+            "marketing"
+          ]
+        },
+        {
+          "id": "photo-event",
+          "name": "Event Photography",
+          "pricePerUnit": 115,
+          "unit": "hour",
+          "description": "Professional event photography and coverage",
+          "taskType": "per-unit",
+          "requiresApproval": false,
+          "calendarItem": true,
+          "estimatedDays": 5,
+          "includes": [
+            "On-site event coverage",
+            "Candid + posed shots",
+            "Same-day preview (5-10 photos)",
+            "Full edited gallery within 5 business days",
+            "Up to 50 edited photos per hour"
+          ],
+          "finalDeliverable": "Full edited photo gallery delivered via shared drive within 5 business days.",
+          "note": "Add Social Media Management to have highlights posted for you.",
+          "tags": [
+            "creative"
+          ]
+        },
+        {
+          "id": "photo-real-estate",
+          "name": "Real Estate Photography",
+          "pricePerUnit": 95,
+          "unit": "hour",
+          "description": "Real estate and property photography",
+          "taskType": "per-unit",
+          "requiresApproval": false,
+          "calendarItem": true,
+          "estimatedDays": 3,
+          "includes": [
+            "Interior + exterior shots",
+            "Wide-angle lens coverage",
+            "HDR editing for optimal lighting",
+            "Virtual tour-ready photos",
+            "Up to 25 edited photos per hour"
+          ],
+          "finalDeliverable": "HDR-edited property photos delivered via shared drive. MLS-ready formats included.",
+          "note": "Add Website services to feature on your property listings.",
+          "tags": [
+            "creative"
+          ]
+        }
+      ],
+      "addOns": []
+    },
+    {
+      "id": "video-production",
+      "name": "Video Production",
+      "category": "creative",
+      "icon": "\ud83c\udfac",
+      "shortDesc": "Professional videography at $100/hour. Shooting, editing, and final delivery included.",
+      "type": "per-unit",
+      "internalRoute": "photo-video-team",
+      "tiers": [],
+      "items": [
+        {
+          "id": "video-hourly",
+          "name": "Videography",
+          "pricePerUnit": 100,
+          "unit": "hour",
+          "description": "Professional videography including shooting, basic editing, and delivery of final files",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 5,
+          "includes": [
+            "Professional videographer on location",
+            "Equipment (camera, lighting, audio)",
+            "Basic editing and color correction",
+            "Music licensing (royalty-free)",
+            "High-res final files delivered",
+            "Up to 2 revision rounds"
+          ],
+          "finalDeliverable": "Edited video files (MP4)",
+          "note": "Minimum 2 hours per booking",
+          "tags": [
+            "video",
+            "production",
+            "content"
+          ]
+        }
+      ],
+      "addOns": []
+    },
+    {
+      "id": "graphic-design",
+      "name": "Graphic Design",
+      "category": "creative",
+      "icon": "\ud83c\udfa8",
+      "shortDesc": "Custom graphic design for menus, flyers, decks, signage, and more",
+      "type": "per-unit",
+      "internalRoute": "design-team",
+      "tiers": [],
+      "items": [
+        {
+          "id": "design-menu",
+          "name": "Menu Design",
+          "pricePerUnit": 149,
+          "unit": "menu",
+          "description": "Professional menu design for restaurants and food businesses",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 5,
+          "includes": [
+            "Custom layout design",
+            "Food/drink categorization",
+            "Brand-consistent styling",
+            "Print-ready file (PDF + AI)",
+            "Digital version for website/social",
+            "2 rounds of revisions"
+          ],
+          "finalDeliverable": "Print-ready menu file (PDF) and digital version. Source files included.",
+          "note": "Add Website services to feature your menu online with ordering integration.",
+          "tags": [
+            "creative"
+          ]
+        },
+        {
+          "id": "design-flyer",
+          "name": "Flyer Design",
+          "pricePerUnit": 75,
+          "unit": "flyer",
+          "description": "Eye-catching flyer design for events and promotions",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 3,
+          "includes": [
+            "Custom promotional design",
+            "Brand-consistent styling",
+            "Print-ready file (PDF, 300dpi)",
+            "Digital version (web-optimized)",
+            "1 round of revisions"
+          ],
+          "finalDeliverable": "Print-ready flyer (PDF) and digital version for social/web.",
+          "note": "Add Social Media Management to have this promoted across your channels.",
+          "tags": [
+            "creative",
+            "marketing"
+          ]
+        },
+        {
+          "id": "design-pitch-deck",
+          "name": "Pitch Deck",
+          "pricePerUnit": 210,
+          "unit": "deck",
+          "description": "Professional pitch deck or presentation design",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 7,
+          "includes": [
+            "Up to 12 slides",
+            "Custom layout & data visualization",
+            "Brand-consistent design",
+            "PowerPoint + PDF versions",
+            "2 rounds of revisions"
+          ],
+          "finalDeliverable": "Editable PowerPoint deck and PDF version. Up to 12 designed slides.",
+          "tags": [
+            "creative",
+            "strategy"
+          ]
+        },
+        {
+          "id": "design-signage",
+          "name": "Signage Design",
+          "pricePerUnit": 105,
+          "unit": "sign",
+          "description": "Indoor or outdoor signage design",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 5,
+          "includes": [
+            "Custom signage layout",
+            "Print specifications for vendor",
+            "Brand-consistent design",
+            "Print-ready file (PDF + AI)",
+            "1 round of revisions"
+          ],
+          "finalDeliverable": "Print-ready signage file with vendor specifications. Source files included.",
+          "tags": [
+            "creative"
+          ]
+        },
+        {
+          "id": "design-merch",
+          "name": "Merch Design",
+          "pricePerUnit": 75,
+          "unit": "design",
+          "description": "Merchandise and apparel design",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 3,
+          "includes": [
+            "Custom merchandise artwork",
+            "Mockup previews on product",
+            "Print-ready files for manufacturer",
+            "1 round of revisions"
+          ],
+          "finalDeliverable": "Print-ready artwork files with manufacturer specifications. Mockup previews.",
+          "tags": [
+            "creative"
+          ]
+        },
+        {
+          "id": "design-custom",
+          "name": "Custom Design",
+          "pricePerUnit": 60,
+          "unit": "hour",
+          "description": "Custom graphic design work billed hourly",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 3,
+          "includes": [
+            "Custom graphic design work billed hourly",
+            "Brand-consistent output",
+            "Source files included",
+            "Revisions included within billed hours"
+          ],
+          "finalDeliverable": "Finished design files in requested formats. Source files included.",
+          "tags": [
+            "creative"
+          ]
+        }
+      ],
+      "addOns": []
+    },
+    {
+      "id": "copywriting",
+      "name": "Copywriting",
+      "category": "creative",
+      "icon": "\u270d\ufe0f",
+      "shortDesc": "Professional copywriting for scripts, blogs, ads, and email sequences",
+      "type": "per-unit",
+      "internalRoute": "content-team",
+      "tiers": [],
+      "items": [
+        {
+          "id": "copy-video-script",
+          "name": "Video Script",
+          "pricePerUnit": 75,
+          "unit": "script",
+          "description": "Video script writing for social media and ads",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 3,
+          "includes": [
+            "Script for 30-60 second video",
+            "Hook + body + CTA structure",
+            "1 round of revisions",
+            "Formatted for teleprompter or talent"
+          ],
+          "finalDeliverable": "Formatted video script document (Google Doc/PDF).",
+          "note": "Pair with Video Production for end-to-end video creation.",
+          "tags": [
+            "creative"
+          ]
+        },
+        {
+          "id": "copy-blog-article",
+          "name": "Blog Article",
+          "pricePerUnit": 105,
+          "unit": "article",
+          "description": "SEO-optimized blog article writing",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 5,
+          "includes": [
+            "800-1,200 words",
+            "SEO-optimized (keyword research, meta description, headers)",
+            "1 featured image suggestion",
+            "Internal linking recommendations",
+            "1 round of revisions"
+          ],
+          "finalDeliverable": "SEO-optimized blog article ready to publish. Includes meta description and keyword targets.",
+          "note": "Add Website Hosting (Growth/Pro) to have this published to your blog monthly.",
+          "tags": [
+            "creative",
+            "seo"
+          ]
+        },
+        {
+          "id": "copy-ad-copy",
+          "name": "Ad Copy",
+          "pricePerUnit": 70,
+          "unit": "ad set",
+          "description": "Advertising copy for social media and search ads",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 2,
+          "includes": [
+            "3-5 headline variations",
+            "2-3 description variations",
+            "Primary text variations",
+            "Formatted for platform (Meta, Google, etc.)",
+            "1 round of revisions"
+          ],
+          "finalDeliverable": "Ad copy document with multiple variations formatted per platform.",
+          "note": "Can be paired with paid ad management (coming soon).",
+          "tags": [
+            "creative",
+            "marketing"
+          ]
+        },
+        {
+          "id": "copy-email-sequence",
+          "name": "Email Sequence",
+          "pricePerUnit": 140,
+          "unit": "sequence",
+          "description": "Multi-email sequence writing for nurture or sales",
+          "taskType": "per-unit",
+          "requiresApproval": true,
+          "calendarItem": true,
+          "estimatedDays": 5,
+          "includes": [
+            "3-5 email sequence",
+            "Subject lines with A/B options",
+            "Body copy with CTAs",
+            "Segmentation recommendations",
+            "1 round of revisions"
+          ],
+          "finalDeliverable": "Complete email sequence ready to load into your platform.",
+          "note": "Add Email & SMS Marketing to have these built and automated for you.",
+          "tags": [
+            "creative",
+            "marketing"
+          ]
+        }
+      ],
+      "addOns": []
+    },
+    {
+      "id": "consulting",
+      "name": "Consulting",
+      "category": "strategy",
+      "icon": "\ud83d\udcac",
+      "shortDesc": "Expert strategy sessions for marketing, content, branding, and growth",
+      "type": "per-unit",
+      "internalRoute": "strategy-team",
+      "tiers": [],
+      "items": [
+        {
+          "id": "consult-marketing-strategy",
+          "name": "Marketing Strategy",
+          "pricePerUnit": 120,
+          "unit": "hour",
+          "description": "One-on-one marketing strategy consultation",
+          "taskType": "per-unit",
+          "requiresApproval": false,
+          "calendarItem": true,
+          "estimatedDays": 1,
+          "includes": [
+            "Full marketing audit",
+            "Competitive analysis",
+            "90-day action roadmap",
+            "Channel recommendations",
+            "Budget allocation guidance"
+          ],
+          "finalDeliverable": "Marketing strategy document with 90-day roadmap (PDF). Recording of session.",
+          "tags": [
+            "strategy"
+          ]
+        },
+        {
+          "id": "consult-content-planning",
+          "name": "Content Planning",
+          "pricePerUnit": 100,
+          "unit": "hour",
+          "description": "Content strategy and planning session",
+          "taskType": "per-unit",
+          "requiresApproval": false,
+          "calendarItem": true,
+          "estimatedDays": 1,
+          "includes": [
+            "Content audit of current channels",
+            "Content calendar framework",
+            "Topic ideation (30+ ideas)",
+            "Platform-specific recommendations"
+          ],
+          "finalDeliverable": "Content planning document with calendar framework and 30+ topic ideas. Recording of session.",
+          "tags": [
+            "strategy"
+          ]
+        },
+        {
+          "id": "consult-brand-review",
+          "name": "Brand Review",
+          "pricePerUnit": 120,
+          "unit": "hour",
+          "description": "Brand audit and review session with recommendations",
+          "taskType": "per-unit",
+          "requiresApproval": false,
+          "calendarItem": true,
+          "estimatedDays": 1,
+          "includes": [
+            "Brand perception audit",
+            "Visual identity assessment",
+            "Messaging evaluation",
+            "Competitor brand comparison",
+            "Improvement recommendations"
+          ],
+          "finalDeliverable": "Brand review report with prioritized recommendations (PDF). Recording of session.",
+          "tags": [
+            "strategy"
+          ]
+        },
+        {
+          "id": "consult-executive-session",
+          "name": "Executive Session",
+          "pricePerUnit": 299,
+          "unit": "session",
+          "description": "Deep-dive executive strategy session",
+          "taskType": "per-unit",
+          "requiresApproval": false,
+          "calendarItem": true,
+          "estimatedDays": 1,
+          "includes": [
+            "90-minute session with senior strategist",
+            "Pre-session business review",
+            "Custom presentation",
+            "Strategic roadmap",
+            "30-day follow-up email"
+          ],
+          "finalDeliverable": "Custom strategic roadmap document. Presentation deck. 30-day follow-up with progress check.",
+          "tags": [
+            "strategy"
+          ]
+        }
+      ],
+      "addOns": []
+    }
+  ]
+}

@@ -1,88 +1,52 @@
 'use client'
 
-import { useState, Fragment } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
-  ShoppingCart,
-  Sparkles,
-  Search,
-  Package,
-  Clock,
-  CheckCircle2,
-  Eye,
-  XCircle,
-  X,
-  ChevronRight,
-  Zap,
-  ArrowRight,
-  Star,
-  Plus,
-  RotateCcw,
-  Filter,
+  ShoppingCart, Search, Package, Clock, CheckCircle2,
+  X, ChevronRight, ChevronDown, Zap, Plus, Minus,
+  RotateCcw, Loader2, Trash2,
 } from 'lucide-react'
-import { services, categories, type Service, type ServiceCategory } from '@/lib/services-data'
+import { categories, type ServiceCategory } from '@/lib/services-data'
+import websiteData from '@/data/services-data.json'
 import { useCart } from '@/lib/cart-context'
+import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import CartSidebar from './cart'
 
-// ── Helpers ──────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────
 
-function fmt(price: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(price)
-}
-
-function priceLabel(price: number, unit: string) {
-  switch (unit) {
-    case 'per_month': return `${fmt(price)}/mo`
-    case 'per_hour': return `${fmt(price)}/hr`
-    default: return fmt(price)
-  }
-}
-
-function unitLabel(unit: string) {
-  switch (unit) { case 'per_month': return 'per month'; case 'per_item': return 'per item'; case 'per_hour': return 'per hour'; case 'one_time': return 'one-time'; default: return '' }
-}
-
-function priceColor(unit: string) {
-  switch (unit) { case 'per_month': return 'text-emerald-600'; case 'one_time': return 'text-blue-600'; default: return 'text-amber-600' }
-}
-
-// ── Mock data ────────────────────────────────────────────────────────
-
-const activeSubscriptions = [
-  { id: 'social-media-growth', name: 'Social Media Growth', price: 449, since: 'Jan 15, 2026' },
-  { id: 'local-seo-starter', name: 'Local SEO Starter', price: 149, since: 'Feb 1, 2026' },
-  { id: 'hosting-basic', name: 'Hosting Basic', price: 49, since: 'Dec 15, 2025' },
-]
-
-const recommendations = [
-  { id: 'email-sms-growth', reason: 'Your email list has potential. Email marketing delivers $42 ROI per $1 spent.' },
-  { id: 'polished-reel', reason: 'Video content gets 3x more reach. Your competitors post 2 videos/week.' },
-  { id: 'brand-guidelines', reason: 'Consistent branding increases revenue by 23%. You don\'t have guidelines yet.' },
-  { id: 'product-photography', reason: 'Professional photos get 2x more engagement than phone shots.' },
-]
-
-const smTiers = ['social-media-essentials', 'social-media-starter', 'social-media-growth'] as const
-const smRows: { label: string; values: [string, string, string, string] }[] = [
-  { label: 'Platforms', values: ['2', '3', '4+', 'Unlimited'] },
-  { label: 'Feed posts/mo', values: ['8', '12', '20', 'Custom'] },
-  { label: 'AI Captions', values: ['\u2713', '\u2713', '\u2713', '\u2713'] },
-  { label: 'Stories', values: ['Basic', 'Regular', 'Daily', 'Daily'] },
-  { label: 'Strategy', values: ['\u2014', 'Basic', 'Full', 'Enterprise'] },
-  { label: 'Dedicated contact', values: ['\u2014', '\u2014', '\u2713', '\u2713'] },
-]
-
-const quickAddIds = ['single-feed-posts', 'story-graphics', 'carousel-posts', 'polished-reel']
-
+interface Subscription { id: string; plan_name: string; plan_price: number; started_at: string }
+interface DbOrder { id: string; type: string; service_id: string | null; service_name: string; quantity: number; unit_price: number; total_price: number; status: string; created_at: string }
 type OrderStatus = 'active' | 'completed' | 'pending'
 interface Order { id: string; date: string; serviceName: string; serviceId: string; status: OrderStatus; amount: string }
-const mockOrders: Order[] = [
-  { id: 'ORD-001', date: '2026-03-15', serviceName: 'Social Media Growth', serviceId: 'social-media-growth', status: 'active', amount: '$449/mo' },
-  { id: 'ORD-002', date: '2026-03-10', serviceName: '4x Instagram Feed Posts', serviceId: 'single-feed-posts', status: 'completed', amount: '$140' },
-  { id: 'ORD-003', date: '2026-02-20', serviceName: 'Standard Website', serviceId: 'standard-website', status: 'completed', amount: '$1,299' },
-  { id: 'ORD-004', date: '2026-02-01', serviceName: 'Local SEO Starter', serviceId: 'local-seo-starter', status: 'active', amount: '$149/mo' },
-  { id: 'ORD-005', date: '2026-01-08', serviceName: 'Logo & Visual Identity', serviceId: 'logo-visual-identity', status: 'completed', amount: '$499' },
-  { id: 'ORD-006', date: '2025-12-15', serviceName: 'Hosting Basic', serviceId: 'hosting-basic', status: 'active', amount: '$49/mo' },
-]
+
+// Selected item in the plan builder
+interface SelectedItem {
+  name: string
+  monthly: number
+  setup: number
+  qty: number
+  billing?: 'monthly' | 'onetime'
+  moPr?: number
+  otPr?: number
+}
+
+// Tab definition matching the website
+interface TabSection {
+  label: string
+  note?: string
+  mode: 'radio' | 'qty' | 'toggle'
+  svcId: string
+  show: 'tiers' | 'items' | 'addons'
+  filter?: string[]
+  oneTimeOnly?: boolean
+}
+interface TabDef { name: string; icon: string; sections: TabSection[] }
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function fmt(n: number) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n) }
+function mapOrderStatus(s: string): OrderStatus { if (s === 'active' || s === 'in_progress') return 'active'; if (s === 'completed' || s === 'delivered') return 'completed'; return 'pending' }
 
 const statusStyles: Record<OrderStatus, { label: string; cls: string; Icon: typeof Clock }> = {
   active: { label: 'Active', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', Icon: CheckCircle2 },
@@ -90,39 +54,185 @@ const statusStyles: Record<OrderStatus, { label: string; cls: string; Icon: type
   pending: { label: 'Pending', cls: 'bg-amber-50 text-amber-700 border-amber-200', Icon: Clock },
 }
 
-type PriceType = 'All' | 'Monthly' | 'One-Time' | 'Per Item'
+// ── Tab definitions (matching website's build.html exactly) ─────────
+
+const TABS: TabDef[] = [
+  { name: 'Social Media', icon: '📱', sections: [
+    { label: 'Management plans', note: 'pick one', mode: 'radio', svcId: 'social-media', show: 'tiers' },
+    { label: 'Static posts', note: 'add individually', mode: 'qty', svcId: 'social-media', show: 'items', filter: ['single-feed-post', 'story-graphic', 'carousel-post', 'infographic-post'] },
+    { label: 'Short-form video', note: 'add individually', mode: 'qty', svcId: 'social-media', show: 'items', filter: ['basic-product-video', 'trend-video-no-people', 'trend-video-with-people', 'ad-creative-video', 'polished-reel', 'cinematic-reel'] },
+  ]},
+  { name: 'Websites', icon: '🌐', sections: [
+    { label: 'Website design', note: 'pick one', mode: 'radio', svcId: 'websites', show: 'tiers' },
+    { label: 'Hosting & care', note: 'keeps it running', mode: 'radio', svcId: 'hosting-care', show: 'tiers' },
+    { label: 'Website extras', mode: 'toggle', svcId: 'websites', show: 'addons' },
+  ]},
+  { name: 'Local SEO', icon: '📍', sections: [
+    { label: 'SEO plans', note: 'pick one', mode: 'radio', svcId: 'local-seo', show: 'tiers' },
+    { label: 'SEO extras', mode: 'toggle', svcId: 'local-seo', show: 'addons' },
+  ]},
+  { name: 'Email & SMS', icon: '✉️', sections: [
+    { label: 'Email plans', note: 'pick one', mode: 'radio', svcId: 'email-sms', show: 'tiers' },
+    { label: 'Email extras', mode: 'toggle', svcId: 'email-sms', show: 'addons' },
+  ]},
+  { name: 'Automations', icon: '🤖', sections: [
+    { label: 'Automation plans', note: 'pick one', mode: 'radio', svcId: 'ai-automations', show: 'tiers' },
+  ]},
+  { name: 'Branding', icon: '🎨', sections: [
+    { label: 'Brand packages', note: 'pick one', mode: 'radio', svcId: 'branding', show: 'tiers' },
+    { label: 'Brand items', note: 'add as needed', mode: 'qty', svcId: 'branding', show: 'items', oneTimeOnly: true },
+  ]},
+  { name: 'Photo & Video', icon: '📸', sections: [
+    { label: 'Photography', note: 'add shoots', mode: 'qty', svcId: 'photography', show: 'items', oneTimeOnly: true },
+    { label: 'Video production', note: 'add videos', mode: 'qty', svcId: 'video-production', show: 'items', oneTimeOnly: true },
+  ]},
+  { name: 'Design & Copy', icon: '✏️', sections: [
+    { label: 'Graphic design', note: 'add as needed', mode: 'qty', svcId: 'graphic-design', show: 'items', oneTimeOnly: true },
+    { label: 'Copywriting', note: 'add as needed', mode: 'qty', svcId: 'copywriting', show: 'items', oneTimeOnly: true },
+  ]},
+  { name: 'Strategy', icon: '💡', sections: [
+    { label: 'Consulting', note: 'add sessions', mode: 'qty', svcId: 'consulting', show: 'items', oneTimeOnly: true },
+  ]},
+]
 
 // ── Component ────────────────────────────────────────────────────────
 
 export default function OrdersPage() {
-  const [tab, setTab] = useState<'recommended' | 'all' | 'orders'>('recommended')
-  const [search, setSearch] = useState('')
-  const [catFilter, setCatFilter] = useState<ServiceCategory | 'All'>('All')
-  const [priceType, setPriceType] = useState<PriceType>('All')
-  const [modal, setModal] = useState<Service | null>(null)
+  const [view, setView] = useState<'build' | 'orders'>('build')
+  const [activeTab, setActiveTab] = useState(0)
+  const [selected, setSelected] = useState<Record<string, SelectedItem>>({})
+  const [expandedInc, setExpandedInc] = useState<Set<string>>(new Set())
+  const [showMobileCalc, setShowMobileCalc] = useState(false)
+
+  // Orders data
+  const [activeSubscriptions, setActiveSubscriptions] = useState<{ id: string; name: string; price: number; since: string }[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loadingSubs, setLoadingSubs] = useState(true)
+  const [loadingOrders, setLoadingOrders] = useState(true)
   const [orderFilter, setOrderFilter] = useState<OrderStatus | 'all'>('all')
+
   const { addItem, cartCount, setIsCartOpen } = useCart()
 
-  const svcMap = Object.fromEntries(services.map(s => [s.id, s]))
+  // Fetch real data
+  useEffect(() => {
+    let cancelled = false
+    const supabase = createClient()
+    async function fetchData() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || cancelled) { setLoadingSubs(false); setLoadingOrders(false); return }
+      const { data: business } = await supabase.from('businesses').select('id').eq('owner_id', user.id).single()
+      if (!business || cancelled) { setLoadingSubs(false); setLoadingOrders(false); return }
 
-  const addToCart = (s: Service) => addItem({ id: s.id, name: s.name, price: s.price, priceUnit: s.priceUnit })
+      const { data: subs } = await supabase.from('subscriptions').select('*').eq('business_id', business.id).eq('status', 'active').order('started_at', { ascending: false })
+      if (!cancelled) {
+        setActiveSubscriptions((subs as Subscription[] || []).map(s => ({
+          id: s.id, name: s.plan_name, price: s.plan_price,
+          since: new Date(s.started_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        })))
+        setLoadingSubs(false)
+      }
 
-  const filtered = services.filter(s => {
-    if (catFilter !== 'All' && s.category !== catFilter) return false
-    if (priceType === 'Monthly' && s.priceUnit !== 'per_month') return false
-    if (priceType === 'One-Time' && s.priceUnit !== 'one_time') return false
-    if (priceType === 'Per Item' && s.priceUnit !== 'per_item' && s.priceUnit !== 'per_hour') return false
-    if (search && !s.name.toLowerCase().includes(search.toLowerCase()) && !s.shortDescription.toLowerCase().includes(search.toLowerCase())) return false
-    return true
-  })
+      const { data: dbOrders } = await supabase.from('orders').select('*').eq('business_id', business.id).order('created_at', { ascending: false })
+      if (!cancelled) {
+        setOrders((dbOrders as DbOrder[] || []).map(o => ({
+          id: o.id, date: o.created_at, serviceName: o.service_name, serviceId: o.service_id || '',
+          status: mapOrderStatus(o.status),
+          amount: (o.type === 'subscription' || o.type === 'recurring') ? `${fmt(o.total_price)}/mo` : fmt(o.total_price),
+        })))
+        setLoadingOrders(false)
+      }
+    }
+    fetchData()
+    return () => { cancelled = true }
+  }, [])
 
-  const filteredOrders = mockOrders.filter(o => orderFilter === 'all' || o.status === orderFilter)
+  // ── Builder state actions ──────────────────────────────────────────
 
-  const tabs: { key: typeof tab; label: string }[] = [
-    { key: 'recommended', label: 'Recommended' },
-    { key: 'all', label: 'All Services' },
-    { key: 'orders', label: 'My Orders' },
-  ]
+  const pickTier = useCallback((key: string, name: string, monthly: number, setup: number, radioGroup: string) => {
+    setSelected(prev => {
+      const next = { ...prev }
+      // Deselect others in same radio group
+      Object.keys(next).forEach(k => { if (k.startsWith(radioGroup + '_t')) delete next[k] })
+      // Toggle this one
+      if (prev[key]) { delete next[key] } else { next[key] = { name, monthly, setup, qty: 1 } }
+      return next
+    })
+  }, [])
+
+  const changeQty = useCallback((key: string, name: string, moPr: number, otPr: number, delta: number) => {
+    setSelected(prev => {
+      const next = { ...prev }
+      const existing = next[key]
+      const currentQty = existing?.qty || 0
+      const newQty = Math.max(0, currentQty + delta)
+      if (newQty === 0) { delete next[key]; return next }
+      const billing = existing?.billing || 'monthly'
+      next[key] = {
+        name, qty: newQty, moPr, otPr,
+        billing,
+        monthly: billing === 'monthly' ? moPr : 0,
+        setup: billing === 'onetime' ? otPr * newQty : 0,
+      }
+      return next
+    })
+  }, [])
+
+  const setBilling = useCallback((key: string, billing: 'monthly' | 'onetime') => {
+    setSelected(prev => {
+      const next = { ...prev }
+      const item = next[key]
+      if (!item) return prev
+      next[key] = {
+        ...item, billing,
+        monthly: billing === 'monthly' ? (item.moPr || 0) : 0,
+        setup: billing === 'onetime' ? (item.otPr || 0) * item.qty : 0,
+      }
+      return next
+    })
+  }, [])
+
+  const toggleAddon = useCallback((key: string, name: string, monthly: number, setup: number) => {
+    setSelected(prev => {
+      const next = { ...prev }
+      if (next[key]) { delete next[key] } else { next[key] = { name, monthly, setup, qty: 1 } }
+      return next
+    })
+  }, [])
+
+  const removeItem = useCallback((key: string) => {
+    setSelected(prev => { const next = { ...prev }; delete next[key]; return next })
+  }, [])
+
+  const toggleIncludes = useCallback((id: string) => {
+    setExpandedInc(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  }, [])
+
+  // ── Totals ─────────────────────────────────────────────────────────
+
+  const entries = Object.entries(selected)
+  const totalMonthly = entries.reduce((s, [, x]) => s + (x.monthly || 0) * (x.qty || 1), 0)
+  const totalSetup = entries.reduce((s, [, x]) => s + (x.setup || 0), 0)
+  const itemCount = entries.length
+
+  // ── Add plan to cart ───────────────────────────────────────────────
+
+  const addPlanToCart = () => {
+    entries.forEach(([, item]) => {
+      const q = item.qty || 1
+      if (item.monthly > 0) {
+        addItem({ id: item.name.replace(/\W/g, '-').toLowerCase(), name: item.name + (q > 1 ? ` x${q}` : ''), price: item.monthly * q, priceUnit: 'per_month' })
+      } else if (item.setup > 0) {
+        addItem({ id: item.name.replace(/\W/g, '-').toLowerCase(), name: item.name + (q > 1 ? ` x${q}` : ''), price: item.setup, priceUnit: 'one_time' })
+      }
+    })
+    setIsCartOpen(true)
+  }
+
+  // ── Render tab content ─────────────────────────────────────────────
+
+  const currentTab = TABS[activeTab]
+
+  const filteredOrders = orders.filter(o => orderFilter === 'all' || o.status === orderFilter)
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -130,258 +240,309 @@ export default function OrdersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Services &amp; Orders</h1>
-          <p className="text-ink-3 text-sm mt-1">Build your marketing stack</p>
+          <p className="text-ink-3 text-sm mt-1">Pick what your business actually needs.</p>
         </div>
-        <button onClick={() => setIsCartOpen(true)} className="relative flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-dark text-white text-sm font-semibold hover:bg-brand-dark/90 transition-colors">
-          <ShoppingCart className="w-4 h-4" />
-          Cart
-          {cartCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white text-brand-dark text-[10px] font-bold flex items-center justify-center border-2 border-brand-dark">{cartCount}</span>
-          )}
-        </button>
-      </div>
-
-      {/* Tab Nav */}
-      <div className="flex gap-1 bg-bg-2 rounded-xl p-1 w-fit">
-        {tabs.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t.key ? 'bg-white text-ink shadow-sm' : 'text-ink-3 hover:text-ink'}`}>
-            {t.label}
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1 bg-bg-2 rounded-lg p-0.5">
+            <button onClick={() => setView('build')} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${view === 'build' ? 'bg-white text-ink shadow-sm' : 'text-ink-3'}`}>Build Plan</button>
+            <button onClick={() => setView('orders')} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${view === 'orders' ? 'bg-white text-ink shadow-sm' : 'text-ink-3'}`}>My Orders</button>
+          </div>
+          <button onClick={() => setIsCartOpen(true)} className="relative flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-dark text-white text-sm font-semibold hover:bg-brand-dark/90 transition-colors">
+            <ShoppingCart className="w-4 h-4" /> Cart
+            {cartCount > 0 && <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white text-brand-dark text-[10px] font-bold flex items-center justify-center border-2 border-brand-dark">{cartCount}</span>}
           </button>
-        ))}
+        </div>
       </div>
 
-      {/* ── TAB 1: RECOMMENDED ────────────────────────────────────── */}
-      {tab === 'recommended' && (
-        <div className="space-y-8">
-          {/* Section A: Current Plan */}
-          <section className="bg-white rounded-2xl border border-ink-6 p-6">
-            <h2 className="font-[family-name:var(--font-display)] text-lg text-ink mb-4 flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-brand" />
-              Your Active Services
-            </h2>
-            <div className="space-y-3">
-              {activeSubscriptions.map(sub => (
-                <div key={sub.id} className="flex items-center justify-between py-2 border-b border-ink-6 last:border-0">
-                  <span className="text-sm text-ink-2">{sub.name}</span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-ink">{fmt(sub.price)}/mo</span>
-                    <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Active</span>
+      {/* ── BUILD VIEW ────────────────────────────────────────────── */}
+      {view === 'build' && (
+        <>
+          {/* Category Tabs */}
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+            {TABS.map((t, i) => (
+              <button key={t.name} onClick={() => setActiveTab(i)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${activeTab === i ? 'bg-brand-tint text-brand-dark border border-brand/20 shadow-sm' : 'bg-white/60 border border-transparent text-ink-3 hover:text-ink hover:bg-white'}`}>
+                <span>{t.icon}</span> {t.name}
+              </button>
+            ))}
+          </div>
+
+          {/* 2-Column Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
+            {/* LEFT: Service Panels */}
+            <div className="space-y-6">
+              {currentTab.sections.map((sec, si) => {
+                const svc = websiteData.services.find((s: Record<string, unknown>) => s.id === sec.svcId)
+                if (!svc) return null
+
+                return (
+                  <div key={si} className="space-y-3">
+                    {/* Section Label */}
+                    <div>
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-4">{sec.label}</span>
+                      {sec.note && <span className="text-[11px] text-ink-5 ml-2">{sec.note}</span>}
+                    </div>
+
+                    {/* TIERS (radio) */}
+                    {sec.show === 'tiers' && (svc as unknown as { tiers?: Record<string, unknown>[] }).tiers?.map((tier: Record<string, unknown>, ti: number) => {
+                      if (tier.isCustom) return null
+                      const key = `${svc.id}_t${ti}`
+                      const mo = (tier.monthly as number) || 0
+                      const su = ((tier.setupFee as number) || 0) + ((tier.oneTimePrice as number) || 0)
+                      const isSelected = !!selected[key]
+                      const includes = (tier.includes || tier.features || []) as string[]
+                      const incId = `inc_${svc.id}_t${ti}`
+
+                      return (
+                        <button key={ti} onClick={() => pickTier(key, `${svc.name} (${tier.name})`, mo, su, svc.id)}
+                          className={`w-full text-left p-4 rounded-2xl border backdrop-blur-sm transition-all ${isSelected ? 'border-brand bg-brand-tint/30 shadow-sm' : 'border-white/60 bg-white/45 hover:border-brand/20 hover:bg-white/65'}`}>
+                          <div className="flex items-start gap-3">
+                            {/* Radio dot */}
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 flex-shrink-0 transition-colors ${isSelected ? 'border-brand bg-brand' : 'border-ink-5'}`}>
+                              {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-[family-name:var(--font-display)] text-base text-ink">{tier.name as string}</span>
+                                {Boolean(tier.popular) && <span className="text-[9px] font-bold uppercase tracking-wider bg-brand text-white px-2 py-0.5 rounded-full">Popular</span>}
+                              </div>
+                              {includes.length > 0 && (
+                                <p className="text-xs text-ink-4 mt-0.5 line-clamp-1">{includes.slice(0, 2).join(' · ')}</p>
+                              )}
+                              {includes.length > 2 && (
+                                <>
+                                  <button onClick={e => { e.stopPropagation(); toggleIncludes(incId) }}
+                                    className="text-xs font-medium text-brand-dark mt-1 flex items-center gap-1 hover:opacity-70">
+                                    <ChevronDown className={`w-3 h-3 transition-transform ${expandedInc.has(incId) ? 'rotate-180' : ''}`} />
+                                    {expandedInc.has(incId) ? 'Hide details' : 'See all'}
+                                  </button>
+                                  {expandedInc.has(incId) && (
+                                    <ul className="mt-2 space-y-1">
+                                      {includes.map((inc: string, ii: number) => (
+                                        <li key={ii} className="flex items-start gap-1.5 text-xs text-ink-3">
+                                          <CheckCircle2 className="w-3 h-3 text-brand mt-0.5 flex-shrink-0" /> {inc}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                            <span className="font-[family-name:var(--font-display)] text-base text-brand-dark flex-shrink-0">
+                              {mo > 0 ? `$${mo}/mo` : su > 0 ? `$${su.toLocaleString()}` : 'Custom'}
+                            </span>
+                          </div>
+                        </button>
+                      )
+                    })}
+
+                    {/* ITEMS (qty) */}
+                    {sec.show === 'items' && (() => {
+                      let items = ((svc as unknown as { items?: Record<string, unknown>[] }).items || [])
+                      if (sec.filter) items = items.filter((it: Record<string, unknown>) => sec.filter!.includes(it.id as string))
+                      return items.map((item: Record<string, unknown>, ii: number) => {
+                        const key = `${svc.id}_i_${item.id}`
+                        const pr = (item.pricePerUnit as number) || 0
+                        const otPr = Math.round(pr * 1.35)
+                        const qty = selected[key]?.qty || 0
+                        const billing = sec.oneTimeOnly ? 'onetime' : (selected[key]?.billing || 'monthly')
+                        const includes = (item.includes || []) as string[]
+                        const incId = `inc_${key}`
+
+                        return (
+                          <div key={ii} className={`p-4 rounded-2xl border backdrop-blur-sm transition-all ${qty > 0 ? 'border-brand/20 bg-brand-tint/20' : 'border-white/60 bg-white/40'}`}>
+                            <div className="flex items-start gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-[family-name:var(--font-display)] text-base text-ink">{item.name as string}</span>
+                                  {Boolean((item as Record<string, unknown>).popular) && <span className="text-[9px] font-bold uppercase bg-brand text-white px-2 py-0.5 rounded-full">Popular</span>}
+                                </div>
+                                {/* Billing toggle */}
+                                {!sec.oneTimeOnly && (
+                                  <div className="flex mt-1.5 rounded-lg overflow-hidden border border-ink-6 w-fit">
+                                    <button onClick={() => setBilling(key, 'monthly')}
+                                      className={`px-3 py-1 text-[11px] font-medium transition-colors ${billing === 'monthly' ? 'bg-brand text-white' : 'text-ink-4'}`}>Monthly</button>
+                                    <button onClick={() => setBilling(key, 'onetime')}
+                                      className={`px-3 py-1 text-[11px] font-medium transition-colors ${billing === 'onetime' ? 'bg-brand text-white' : 'text-ink-4'}`}>One-time</button>
+                                  </div>
+                                )}
+                                {includes.length > 0 && (
+                                  <>
+                                    <button onClick={() => toggleIncludes(incId)}
+                                      className="text-xs font-medium text-brand-dark mt-1.5 flex items-center gap-1 hover:opacity-70">
+                                      <ChevronDown className={`w-3 h-3 transition-transform ${expandedInc.has(incId) ? 'rotate-180' : ''}`} />
+                                      What&apos;s included
+                                    </button>
+                                    {expandedInc.has(incId) && (
+                                      <ul className="mt-2 space-y-1">
+                                        {includes.map((inc: string, idx: number) => (
+                                          <li key={idx} className="flex items-start gap-1.5 text-xs text-ink-3">
+                                            <CheckCircle2 className="w-3 h-3 text-brand mt-0.5 flex-shrink-0" /> {inc}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                              {/* Price + Qty */}
+                              <div className="flex items-center gap-3 flex-shrink-0">
+                                <span className="font-[family-name:var(--font-display)] text-sm text-brand-dark text-right">
+                                  {sec.oneTimeOnly
+                                    ? <><strong>${pr}</strong><span className="text-xs text-ink-4">/{item.unit as string}</span></>
+                                    : billing === 'monthly'
+                                      ? <><strong>${pr}</strong><span className="text-xs text-ink-4">/{item.unit as string}/mo</span></>
+                                      : <><strong>${otPr}</strong><span className="text-xs text-ink-4">/{item.unit as string}</span></>
+                                  }
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button onClick={() => changeQty(key, item.name as string, sec.oneTimeOnly ? 0 : pr, sec.oneTimeOnly ? pr : otPr, -1)}
+                                    className="w-8 h-8 rounded-lg border border-ink-6 bg-white/50 flex items-center justify-center text-ink-3 hover:border-brand hover:text-brand-dark transition-colors">
+                                    <Minus className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span className="text-base font-semibold text-ink w-5 text-center">{qty}</span>
+                                  <button onClick={() => changeQty(key, item.name as string, sec.oneTimeOnly ? 0 : pr, sec.oneTimeOnly ? pr : otPr, 1)}
+                                    className="w-8 h-8 rounded-lg border border-ink-6 bg-white/50 flex items-center justify-center text-ink-3 hover:border-brand hover:text-brand-dark transition-colors">
+                                    <Plus className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })
+                    })()}
+
+                    {/* ADDONS (toggle) */}
+                    {sec.show === 'addons' && ((svc as unknown as { addOns?: Record<string, unknown>[] }).addOns || []).map((addon: Record<string, unknown>, ai: number) => {
+                      const key = `${svc.id}_a${ai}`
+                      const mo = (addon.monthly as number) || 0
+                      const su = (addon.oneTimePrice as number) || 0
+                      const isOn = !!selected[key]
+
+                      return (
+                        <button key={ai} onClick={() => toggleAddon(key, addon.name as string, mo, su)}
+                          className={`w-full text-left p-3.5 rounded-xl border flex items-center gap-3 transition-all ${isOn ? 'border-brand bg-brand-tint/20' : 'border-ink-6 bg-white/35 hover:border-brand/20 hover:bg-white/50'}`}>
+                          <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-colors ${isOn ? 'bg-brand border border-brand' : 'border border-ink-5'}`}>
+                            {isOn && <CheckCircle2 className="w-2.5 h-2.5 text-white" />}
+                          </div>
+                          <span className="text-sm font-medium text-ink flex-1">{addon.name as string}</span>
+                          <span className="text-sm font-semibold text-brand-dark">{mo > 0 ? `$${mo}/mo` : `$${su}`}</span>
+                        </button>
+                      )
+                    })}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
-            <div className="mt-4 pt-4 border-t border-ink-6 flex items-center justify-between">
-              <span className="text-sm text-ink-3">Monthly total: <span className="font-semibold text-ink">{fmt(activeSubscriptions.reduce((s, x) => s + x.price, 0))}/mo</span></span>
-              <button onClick={() => setTab('orders')} className="text-sm font-medium text-brand-dark hover:text-brand-dark/80 flex items-center gap-1 transition-colors">
-                Manage Plans <ChevronRight className="w-4 h-4" />
+
+            {/* RIGHT: Calculator (sticky) */}
+            <div className="hidden lg:block sticky top-20">
+              <div className="rounded-3xl bg-white/55 backdrop-blur-xl border border-white/70 shadow-lg p-6">
+                <h3 className="font-[family-name:var(--font-display)] text-base text-ink mb-4">Your plan</h3>
+
+                {entries.length === 0 ? (
+                  <p className="text-sm text-ink-4 py-4">Pick services from the left to start building your plan.</p>
+                ) : (
+                  <>
+                    <div className="space-y-2 max-h-80 overflow-y-auto mb-4">
+                      {entries.map(([key, item]) => {
+                        const q = item.qty || 1
+                        const price = item.monthly > 0 ? `$${(item.monthly * q).toLocaleString()}/mo` : item.setup > 0 ? `$${item.setup.toLocaleString()}` : ''
+                        return (
+                          <div key={key} className="flex items-start justify-between gap-2 text-sm pb-2 border-b border-ink-6 last:border-0">
+                            <div className="flex-1 min-w-0">
+                              <span className="text-ink-2">{item.name}</span>
+                              {q > 1 && <span className="text-ink-4 text-xs block">x{q}</span>}
+                              {item.billing === 'onetime' && <span className="text-ink-4 text-xs block">one-time</span>}
+                            </div>
+                            <span className="text-brand-dark font-semibold whitespace-nowrap">{price}</span>
+                            <button onClick={() => removeItem(key)} className="text-ink-4 hover:text-red-500 transition-colors p-0.5">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <div className="h-px bg-ink-5 mb-3" />
+
+                    {totalMonthly > 0 && (
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-ink-3">Monthly</span>
+                        <span className="font-semibold text-ink">${totalMonthly.toLocaleString()}/mo</span>
+                      </div>
+                    )}
+                    {totalSetup > 0 && (
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-ink-3">One-time</span>
+                        <span className="font-semibold text-ink">${totalSetup.toLocaleString()}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-baseline mt-3 pt-3 border-t border-ink-5">
+                      <span className="font-[family-name:var(--font-display)] text-base text-ink">Total</span>
+                      <div className="text-right">
+                        <span className="font-[family-name:var(--font-display)] text-2xl text-brand-dark">${totalMonthly.toLocaleString()}</span>
+                        <span className="text-sm text-ink-4">/mo</span>
+                      </div>
+                    </div>
+
+                    <button onClick={addPlanToCart}
+                      className="w-full mt-4 py-3.5 rounded-full bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors shadow-md shadow-brand/20">
+                      Add plan to cart →
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile: Floating total bar */}
+          {entries.length > 0 && (
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-xl border-t border-ink-6 px-4 py-3 flex items-center justify-between safe-area-bottom">
+              <div>
+                <span className="text-xs text-ink-3">{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+                <div className="font-[family-name:var(--font-display)] text-lg text-brand-dark">${totalMonthly.toLocaleString()}<span className="text-xs text-ink-4">/mo</span></div>
+              </div>
+              <button onClick={addPlanToCart}
+                className="px-6 py-2.5 rounded-full bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors">
+                Add to cart →
               </button>
             </div>
-          </section>
-
-          {/* Section B: Recommended For You */}
-          <section>
-            <div className="mb-4">
-              <h2 className="font-[family-name:var(--font-display)] text-lg text-ink flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-500" />
-                Recommended for You
-              </h2>
-              <p className="text-sm text-ink-3 mt-1">Based on your restaurant business and current growth, we recommend:</p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {recommendations.map(rec => {
-                const svc = svcMap[rec.id]
-                if (!svc) return null
-                return (
-                  <div key={rec.id} className="bg-white rounded-xl border border-ink-6 p-5 hover:shadow-md hover:border-ink-5 transition-all flex flex-col">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 bg-bg-2 px-2 py-0.5 rounded">{svc.category}</span>
-                    </div>
-                    <h3 className="font-[family-name:var(--font-display)] text-base text-ink">{svc.name}</h3>
-                    <p className="text-xs text-ink-3 mt-1.5 leading-relaxed flex-1">{rec.reason}</p>
-                    <div className="mt-4 pt-3 border-t border-ink-6 flex items-end justify-between">
-                      <span className={`font-[family-name:var(--font-display)] text-lg ${priceColor(svc.priceUnit)}`}>{priceLabel(svc.price, svc.priceUnit)}</span>
-                      <div className="flex gap-2">
-                        <button onClick={() => setModal(svc)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-ink-3 border border-ink-6 hover:border-ink-5 hover:text-ink transition-colors">Learn More</button>
-                        <button onClick={() => addToCart(svc)} className="px-3 py-1.5 rounded-lg bg-brand-dark text-white text-xs font-semibold hover:bg-brand-dark/90 transition-colors">Add to Cart</button>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-
-          {/* Section C: Upgrade Comparison */}
-          <section className="bg-white rounded-2xl border border-ink-6 p-6 overflow-x-auto">
-            <h2 className="font-[family-name:var(--font-display)] text-lg text-ink mb-1">Upgrade Your Social Media</h2>
-            <p className="text-sm text-ink-3 mb-5">Compare plans and find the right fit for your brand.</p>
-            <table className="w-full min-w-[600px] text-sm">
-              <thead>
-                <tr className="border-b border-ink-6">
-                  <th className="text-left py-3 pr-4 text-ink-4 font-medium text-xs"></th>
-                  {(['Essentials', 'Starter', 'Growth', 'Enterprise'] as const).map((tier, i) => (
-                    <th key={tier} className="text-center py-3 px-3">
-                      <div className="font-[family-name:var(--font-display)] text-ink text-base flex items-center justify-center gap-1">
-                        {tier}
-                        {tier === 'Growth' && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />}
-                      </div>
-                      <div className={`text-xs mt-0.5 ${i === 2 ? 'text-brand-dark font-semibold' : 'text-ink-3'}`}>
-                        {i < 3 ? `${fmt([199, 299, 449][i])}/mo` : 'Custom'}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {smRows.map(row => (
-                  <tr key={row.label} className="border-b border-ink-6 last:border-0">
-                    <td className="py-2.5 pr-4 text-ink-3 text-xs font-medium">{row.label}</td>
-                    {row.values.map((v, i) => (
-                      <td key={i} className={`text-center py-2.5 px-3 text-xs ${v === '\u2713' ? 'text-brand-dark font-bold text-sm' : v === '\u2014' ? 'text-ink-5' : 'text-ink-2'}`}>{v}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td></td>
-                  {smTiers.map((id, i) => {
-                    const s = svcMap[id]
-                    const isCurrent = id === 'social-media-growth'
-                    return (
-                      <td key={id} className="text-center py-4 px-3">
-                        {isCurrent ? (
-                          <span className="inline-block px-4 py-1.5 rounded-lg text-xs font-semibold text-brand-dark bg-brand-tint border border-brand/20">Current Plan</span>
-                        ) : (
-                          <button onClick={() => s && addToCart(s)} className="px-4 py-1.5 rounded-lg text-xs font-semibold text-brand-dark border border-brand/30 hover:bg-brand-tint transition-colors">Select</button>
-                        )}
-                      </td>
-                    )
-                  })}
-                  <td className="text-center py-4 px-3">
-                    <Link href="/dashboard/contact" className="px-4 py-1.5 rounded-lg text-xs font-semibold text-ink-3 border border-ink-6 hover:border-ink-5 hover:text-ink transition-colors inline-block">Contact Us</Link>
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </section>
-
-          {/* Section D: Quick Add */}
-          <section>
-            <h2 className="font-[family-name:var(--font-display)] text-lg text-ink mb-1 flex items-center gap-2">
-              <Zap className="w-5 h-5 text-amber-500" />
-              Quick Add — A La Carte
-            </h2>
-            <p className="text-sm text-ink-3 mb-4">Popular add-ons you can order anytime.</p>
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-              {quickAddIds.map(id => {
-                const s = svcMap[id]
-                if (!s) return null
-                return (
-                  <div key={id} className="flex-shrink-0 w-44 bg-white rounded-xl border border-ink-6 p-4 hover:shadow-md hover:border-ink-5 transition-all">
-                    <h4 className="font-[family-name:var(--font-display)] text-sm text-ink leading-snug">{s.name}</h4>
-                    <p className={`text-lg font-semibold mt-1 ${priceColor(s.priceUnit)}`}>{priceLabel(s.price, s.priceUnit)}</p>
-                    <p className="text-[10px] text-ink-4 mb-3">{unitLabel(s.priceUnit)}</p>
-                    <button onClick={() => addToCart(s)} className="w-full flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-brand-tint text-brand-dark text-xs font-semibold border border-brand/15 hover:bg-brand/15 transition-colors">
-                      <Plus className="w-3 h-3" /> Add
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-        </div>
-      )}
-
-      {/* ── TAB 2: ALL SERVICES ───────────────────────────────────── */}
-      {tab === 'all' && (
-        <div className="space-y-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-4" />
-            <input type="text" placeholder="Search all services..." value={search} onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-ink-6 bg-white text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-colors" />
-          </div>
-
-          {/* Filters row */}
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Category */}
-            <div className="flex flex-wrap gap-1.5">
-              {(['All', ...categories] as const).map(c => (
-                <button key={c} onClick={() => setCatFilter(c as ServiceCategory | 'All')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${catFilter === c ? 'bg-brand-dark text-white' : 'bg-white border border-ink-6 text-ink-3 hover:text-ink hover:border-ink-5'}`}>{c}</button>
-              ))}
-            </div>
-            {/* Price type */}
-            <div className="flex gap-1.5 ml-auto">
-              {(['All', 'Monthly', 'One-Time', 'Per Item'] as PriceType[]).map(p => (
-                <button key={p} onClick={() => setPriceType(p)}
-                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors ${priceType === p ? 'bg-ink text-white' : 'bg-white border border-ink-6 text-ink-4 hover:text-ink hover:border-ink-5'}`}>{p}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Grid */}
-          {filtered.length === 0 ? (
-            <div className="text-center py-16">
-              <Filter className="w-10 h-10 text-ink-4 mx-auto mb-3" />
-              <p className="text-ink-2 font-medium">No services found</p>
-              <p className="text-sm text-ink-4 mt-1">Try adjusting your search or filters.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filtered.map(s => (
-                <button key={s.id} onClick={() => setModal(s)} className="text-left bg-white rounded-xl border border-ink-6 p-5 hover:shadow-md hover:border-ink-5 transition-all flex flex-col group">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 bg-bg-2 px-2 py-0.5 rounded">{s.category}</span>
-                    {s.popular && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded flex items-center gap-1">
-                        <Zap className="w-2.5 h-2.5" /> Most Popular
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="font-[family-name:var(--font-display)] text-base text-ink leading-snug group-hover:text-brand-dark transition-colors">{s.name}</h3>
-                  <p className="text-xs text-ink-3 mt-1.5 leading-relaxed flex-1">{s.shortDescription}</p>
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {s.features.slice(0, 3).map(f => <span key={f} className="text-[10px] text-ink-4 bg-bg-2 px-1.5 py-0.5 rounded">{f}</span>)}
-                    {s.features.length > 3 && <span className="text-[10px] text-ink-4 px-1.5 py-0.5">+{s.features.length - 3} more</span>}
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-ink-6 flex items-end justify-between">
-                    <div>
-                      <span className={`font-[family-name:var(--font-display)] text-xl ${priceColor(s.priceUnit)}`}>{priceLabel(s.price, s.priceUnit)}</span>
-                      <span className="block text-[10px] text-ink-4 mt-0.5">{unitLabel(s.priceUnit)}</span>
-                    </div>
-                    <span onClick={e => { e.stopPropagation(); addToCart(s) }}
-                      className="px-3.5 py-2 rounded-lg bg-brand-tint text-brand-dark text-xs font-semibold border border-brand/15 hover:bg-brand/15 transition-colors cursor-pointer">
-                      Add to Cart
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
           )}
-        </div>
+        </>
       )}
 
-      {/* ── TAB 3: MY ORDERS ──────────────────────────────────────── */}
-      {tab === 'orders' && (
+      {/* ── ORDERS VIEW ───────────────────────────────────────────── */}
+      {view === 'orders' && (
         <div className="space-y-8">
           {/* Active Subscriptions */}
           <section>
             <h2 className="font-[family-name:var(--font-display)] text-lg text-ink mb-4">Active Subscriptions</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {activeSubscriptions.map(sub => (
-                <div key={sub.id} className="bg-white rounded-xl border border-ink-6 p-5">
-                  <div className="flex items-center justify-between mb-3">
+            {loadingSubs ? (
+              <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 text-ink-4 animate-spin" /><span className="ml-2 text-sm text-ink-4">Loading...</span></div>
+            ) : activeSubscriptions.length === 0 ? (
+              <div className="text-center py-8 bg-white rounded-xl border border-ink-6">
+                <Package className="w-10 h-10 text-ink-4 mx-auto mb-3" />
+                <p className="text-ink-2 font-medium">No active subscriptions</p>
+                <p className="text-sm text-ink-4 mt-1">Build a plan to get started.</p>
+                <button onClick={() => setView('build')} className="mt-4 px-5 py-2 text-sm font-medium text-brand-dark border border-brand/30 rounded-lg hover:bg-brand-tint transition-colors">
+                  Build Your Plan
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {activeSubscriptions.map(sub => (
+                  <div key={sub.id} className="bg-white rounded-xl border border-ink-6 p-5">
                     <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Active</span>
+                    <h3 className="font-[family-name:var(--font-display)] text-base text-ink mt-2">{sub.name}</h3>
+                    <p className="text-lg font-semibold text-emerald-600 mt-1">{fmt(sub.price)}/mo</p>
+                    <p className="text-[11px] text-ink-4 mt-1">Since {sub.since}</p>
                   </div>
-                  <h3 className="font-[family-name:var(--font-display)] text-base text-ink">{sub.name}</h3>
-                  <p className="text-lg font-semibold text-emerald-600 mt-1">{fmt(sub.price)}/mo</p>
-                  <p className="text-[11px] text-ink-4 mt-1">Active since {sub.since}</p>
-                  <button className="mt-4 w-full py-1.5 rounded-lg text-xs font-medium text-ink-3 border border-ink-6 hover:border-ink-5 hover:text-ink transition-colors">Manage</button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Order History */}
@@ -391,20 +552,19 @@ export default function OrdersPage() {
               <div className="flex gap-1.5">
                 {(['all', 'active', 'completed', 'pending'] as const).map(f => (
                   <button key={f} onClick={() => setOrderFilter(f)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors capitalize ${orderFilter === f ? 'bg-ink text-white' : 'bg-white border border-ink-6 text-ink-4 hover:text-ink'}`}>
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium capitalize transition-colors ${orderFilter === f ? 'bg-ink text-white' : 'bg-white border border-ink-6 text-ink-4 hover:text-ink'}`}>
                     {f === 'all' ? 'All' : f}
                   </button>
                 ))}
               </div>
             </div>
-            {filteredOrders.length === 0 ? (
+            {loadingOrders ? (
+              <div className="flex items-center justify-center py-16 bg-white rounded-xl border border-ink-6"><Loader2 className="w-5 h-5 text-ink-4 animate-spin" /><span className="ml-2 text-sm text-ink-4">Loading...</span></div>
+            ) : filteredOrders.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-xl border border-ink-6">
                 <Package className="w-10 h-10 text-ink-4 mx-auto mb-3" />
                 <p className="text-ink-2 font-medium">No orders yet</p>
-                <p className="text-sm text-ink-4 mt-1">Browse services to get started.</p>
-                <button onClick={() => setTab('recommended')} className="mt-4 px-5 py-2 text-sm font-medium text-brand-dark border border-brand/30 rounded-lg hover:bg-brand-tint transition-colors">
-                  View Recommendations
-                </button>
+                <button onClick={() => setView('build')} className="mt-4 px-5 py-2 text-sm font-medium text-brand-dark border border-brand/30 rounded-lg hover:bg-brand-tint transition-colors">Build Your Plan</button>
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
@@ -416,21 +576,13 @@ export default function OrdersPage() {
                     const st = statusStyles[o.status]
                     return (
                       <div key={o.id} className="px-5 py-4 md:grid md:grid-cols-[1fr_1.2fr_110px_100px_80px] md:items-center gap-4 space-y-2 md:space-y-0 hover:bg-bg-2/50 transition-colors">
-                        <div>
-                          <p className="text-sm text-ink">{new Date(o.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                          <p className="text-[11px] text-ink-4 md:hidden">{o.serviceName}</p>
-                        </div>
-                        <p className="text-sm text-ink-2 hidden md:block">{o.serviceName}</p>
-                        <div>
-                          <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full border ${st.cls}`}>
-                            <st.Icon className="w-3 h-3" />{st.label}
-                          </span>
-                        </div>
+                        <p className="text-sm text-ink">{new Date(o.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                        <p className="text-sm text-ink-2">{o.serviceName}</p>
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full border ${st.cls}`}><st.Icon className="w-3 h-3" />{st.label}</span>
                         <p className="text-sm font-medium text-ink text-right">{o.amount}</p>
                         <div className="text-right">
                           {o.status === 'completed' && (
-                            <button onClick={() => { const s = svcMap[o.serviceId]; if (s) addToCart(s) }}
-                              className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-dark hover:text-brand-dark/80 transition-colors">
+                            <button className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-dark hover:text-brand-dark/80 transition-colors">
                               <RotateCcw className="w-3 h-3" /> Reorder
                             </button>
                           )}
@@ -442,69 +594,6 @@ export default function OrdersPage() {
               </div>
             )}
           </section>
-        </div>
-      )}
-
-      {/* ── SERVICE DETAIL MODAL ──────────────────────────────────── */}
-      {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setModal(null)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div onClick={e => e.stopPropagation()} className="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6">
-            <button onClick={() => setModal(null)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-bg-2 flex items-center justify-center text-ink-3 hover:text-ink hover:bg-ink-6 transition-colors">
-              <X className="w-4 h-4" />
-            </button>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 bg-bg-2 px-2 py-0.5 rounded">{modal.category}</span>
-              {modal.popular && (
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded flex items-center gap-1">
-                  <Zap className="w-2.5 h-2.5" /> Most Popular
-                </span>
-              )}
-            </div>
-            <h2 className="font-[family-name:var(--font-display)] text-xl text-ink">{modal.name}</h2>
-            <p className="text-sm text-ink-3 mt-2 leading-relaxed">{modal.description}</p>
-
-            <div className="mt-5 p-4 bg-bg-2 rounded-xl">
-              <div className="flex items-baseline gap-2">
-                <span className={`font-[family-name:var(--font-display)] text-2xl ${priceColor(modal.priceUnit)}`}>{priceLabel(modal.price, modal.priceUnit)}</span>
-                <span className="text-xs text-ink-4">{unitLabel(modal.priceUnit)}</span>
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <h3 className="text-sm font-semibold text-ink mb-2">What&apos;s included</h3>
-              <ul className="space-y-2">
-                {modal.features.map(f => (
-                  <li key={f} className="flex items-start gap-2 text-sm text-ink-2">
-                    <CheckCircle2 className="w-4 h-4 text-brand mt-0.5 flex-shrink-0" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="mt-5">
-              <h3 className="text-sm font-semibold text-ink mb-1">Perfect for</h3>
-              <p className="text-sm text-ink-3">
-                {modal.isSubscription
-                  ? 'Businesses looking for ongoing, consistent results with a dedicated service partner.'
-                  : 'Brands needing a high-quality, one-time deliverable to elevate their presence.'}
-              </p>
-            </div>
-
-            <div className="mt-6 flex gap-3">
-              <button onClick={() => { addToCart(modal); setModal(null) }}
-                className="flex-1 py-2.5 rounded-xl bg-brand-dark text-white text-sm font-semibold hover:bg-brand-dark/90 transition-colors flex items-center justify-center gap-2">
-                <ShoppingCart className="w-4 h-4" /> Add to Cart
-              </button>
-              {modal.price > 500 && (
-                <Link href="/dashboard/contact" onClick={() => setModal(null)}
-                  className="py-2.5 px-4 rounded-xl text-sm font-medium text-ink-3 border border-ink-6 hover:border-ink-5 hover:text-ink transition-colors text-center">
-                  Request Quote
-                </Link>
-              )}
-            </div>
-          </div>
         </div>
       )}
 

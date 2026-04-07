@@ -26,6 +26,22 @@ export default function LoginPage() {
       return
     }
 
+    // Check user role to route admins to admin portal
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    if (authUser) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', authUser.id)
+        .single()
+
+      if (profile?.role === 'admin') {
+        router.push('/admin')
+        router.refresh()
+        return
+      }
+    }
+
     router.push('/dashboard')
     router.refresh()
   }

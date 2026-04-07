@@ -1,130 +1,316 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import {
-  Search, Plus, Send, Paperclip, MessageSquare, FileText, ChevronRight,
+  Search, Plus, Send, Paperclip, MessageSquare, FileText, ChevronRight, Loader2,
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { sendMessage } from '@/lib/actions'
 
 // ── Types ────────────────────────────────────────────────────────────
 
-interface Message {
+interface ThreadRow {
   id: string
-  sender: 'client' | 'team'
-  senderName: string
-  text: string
-  timestamp: string
-  attachment?: { name: string; size: string }
-}
-
-interface Thread {
-  id: string
+  business_id: string
   subject: string
-  lastMessage: string
-  lastTimestamp: string
-  unread: boolean
-  relatedOrder?: string
-  messages: Message[]
+  order_id: string | null
+  last_message_at: string
+  created_at: string
 }
 
-// ── Mock Data ────────────────────────────────────────────────────────
+interface MessageRow {
+  id: string
+  business_id: string
+  thread_id: string
+  sender_id: string
+  sender_name: string
+  sender_role: 'client' | 'admin' | 'team_member'
+  content: string
+  attachments: { name: string; size: string; url?: string }[]
+  read_at: string | null
+  created_at: string
+}
 
-const mockThreads: Thread[] = [
-  {
-    id: '1',
-    subject: 'March content calendar review',
-    lastMessage: 'Looks great! Just one small tweak on the St. Patrick\'s post.',
-    lastTimestamp: '2h ago',
-    unread: true,
-    messages: [
-      { id: '1a', sender: 'team', senderName: 'Sarah K.', text: 'Hi Matt! We\'ve finalized the content calendar for March. You can preview everything in the Calendar tab. Let us know if you\'d like any changes!', timestamp: 'Mar 18, 10:30 AM' },
-      { id: '1b', sender: 'client', senderName: 'Matt Butler', text: 'Thanks Sarah! I\'ll take a look this afternoon. Quick question — are we doing a St. Patrick\'s Day promo this year?', timestamp: 'Mar 18, 2:15 PM' },
-      { id: '1c', sender: 'team', senderName: 'Sarah K.', text: 'Absolutely! We have a themed post + story series planned for the 14th through 17th. Green-themed cocktails and a special menu highlight. I\'ll send you the mockups shortly.', timestamp: 'Mar 18, 3:00 PM' },
-      { id: '1d', sender: 'client', senderName: 'Matt Butler', text: 'Looks great! Just one small tweak on the St. Patrick\'s post. Can we change the caption to emphasize the live music angle? We booked a band for that night.', timestamp: 'Mar 19, 9:45 AM' },
-      { id: '1e', sender: 'team', senderName: 'Sarah K.', text: 'Awesome, love that addition! I\'ll update the caption and resubmit for your approval. Should be in the Approvals tab within the hour.', timestamp: 'Mar 19, 10:12 AM' },
-    ],
-  },
-  {
-    id: '2',
-    subject: 'Website redesign update',
-    lastMessage: 'The new homepage mockup is attached for your review.',
-    lastTimestamp: '1d ago',
-    unread: true,
-    relatedOrder: 'ORD-005',
-    messages: [
-      { id: '2a', sender: 'team', senderName: 'Jason R.', text: 'Hey Matt, quick update on the website redesign. We\'ve completed the wireframes and are moving into the visual design phase.', timestamp: 'Mar 15, 11:00 AM' },
-      { id: '2b', sender: 'client', senderName: 'Matt Butler', text: 'Exciting! Can\'t wait to see it. Are we still on track for the end of March launch?', timestamp: 'Mar 15, 1:30 PM' },
-      { id: '2c', sender: 'team', senderName: 'Jason R.', text: 'We\'re looking good for an April 1st soft launch. The new homepage mockup is attached for your review.', timestamp: 'Mar 17, 9:00 AM', attachment: { name: 'Homepage_V2_Mockup.pdf', size: '2.4 MB' } },
-    ],
-  },
-  {
-    id: '3',
-    subject: 'Invoice question',
-    lastMessage: 'That makes sense, thank you for clarifying!',
-    lastTimestamp: '3d ago',
-    unread: false,
-    messages: [
-      { id: '3a', sender: 'client', senderName: 'Matt Butler', text: 'Hi, I noticed an extra charge on the February invoice — $200 for "Brand Identity Add-on". Can you clarify what that covers?', timestamp: 'Mar 12, 10:00 AM' },
-      { id: '3b', sender: 'team', senderName: 'Lisa M.', text: 'Good catch, Matt! That\'s for the additional logo variations and brand color palette expansion you requested on Feb 8th. It was a one-time add-on to the Brand Strategy package.', timestamp: 'Mar 12, 11:30 AM' },
-      { id: '3c', sender: 'client', senderName: 'Matt Butler', text: 'That makes sense, thank you for clarifying!', timestamp: 'Mar 12, 12:15 PM' },
-    ],
-  },
-  {
-    id: '4',
-    subject: 'New social strategy proposal',
-    lastMessage: 'We recommend adding TikTok to the mix for Q2.',
-    lastTimestamp: '5d ago',
-    unread: false,
-    messages: [
-      { id: '4a', sender: 'team', senderName: 'Sarah K.', text: 'Hey Matt! After reviewing your Q1 performance, we\'d like to propose some changes for Q2. The analytics are looking strong on Instagram but we think there\'s an opportunity on TikTok.', timestamp: 'Mar 8, 2:00 PM' },
-      { id: '4b', sender: 'client', senderName: 'Matt Butler', text: 'I\'ve been thinking the same thing. What would the strategy look like?', timestamp: 'Mar 9, 9:00 AM' },
-      { id: '4c', sender: 'team', senderName: 'Sarah K.', text: 'We recommend adding TikTok to the mix for Q2. We\'d do 3 short-form videos per week — behind the scenes, recipe tips, and trending audio remixes. The engagement potential is huge for restaurants right now.', timestamp: 'Mar 9, 11:00 AM' },
-      { id: '4d', sender: 'team', senderName: 'Sarah K.', text: 'I\'ve attached a full proposal doc with benchmarks and content examples.', timestamp: 'Mar 9, 11:02 AM', attachment: { name: 'Q2_TikTok_Proposal.pdf', size: '1.8 MB' } },
-      { id: '4e', sender: 'client', senderName: 'Matt Butler', text: 'This looks solid. Let me review the proposal over the weekend and I\'ll get back to you Monday.', timestamp: 'Mar 9, 3:30 PM' },
-      { id: '4f', sender: 'team', senderName: 'Sarah K.', text: 'Sounds great, no rush! Let us know if you have any questions.', timestamp: 'Mar 9, 3:45 PM' },
-    ],
-  },
-  {
-    id: '5',
-    subject: 'Photo shoot scheduling',
-    lastMessage: 'Thursday at 2 PM works perfectly for us!',
-    lastTimestamp: '1w ago',
-    unread: false,
-    messages: [
-      { id: '5a', sender: 'team', senderName: 'Jason R.', text: 'Hi Matt! We need to schedule a product photo shoot for the new spring menu items. When works best for you this week?', timestamp: 'Mar 3, 10:00 AM' },
-      { id: '5b', sender: 'client', senderName: 'Matt Butler', text: 'How about Thursday afternoon? The restaurant is quieter between 2-5 PM.', timestamp: 'Mar 3, 12:00 PM' },
-      { id: '5c', sender: 'team', senderName: 'Jason R.', text: 'Thursday at 2 PM works perfectly for us! We\'ll bring the full setup — expect about 2 hours. We\'ll also need the new dishes plated and ready. Sound good?', timestamp: 'Mar 3, 1:15 PM' },
-    ],
-  },
-]
+interface ThreadWithPreview extends ThreadRow {
+  lastMessageContent: string | null
+  unread: boolean
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function formatTimestamp(iso: string): string {
+  const date = new Date(iso)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHr = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMin < 1) return 'Just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  if (diffHr < 24) return `${diffHr}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function formatMessageTime(iso: string): string {
+  const date = new Date(iso)
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
 
 // ── Component ────────────────────────────────────────────────────────
 
 export default function MessagesPage() {
-  const [threads] = useState(mockThreads)
+  const supabase = createClient()
+
+  const [userId, setUserId] = useState<string | null>(null)
+  const [businessId, setBusinessId] = useState<string | null>(null)
+  const [threads, setThreads] = useState<ThreadWithPreview[]>([])
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<MessageRow[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [newMessage, setNewMessage] = useState('')
   const [mobileShowThread, setMobileShowThread] = useState(false)
+  const [loadingThreads, setLoadingThreads] = useState(true)
+  const [loadingMessages, setLoadingMessages] = useState(false)
+  const [sending, setSending] = useState(false)
 
-  const activeThread = threads.find((t) => t.id === activeThreadId) ?? null
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
 
-  const filteredThreads = threads.filter(
-    (t) =>
-      searchQuery === '' ||
-      t.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.lastMessage.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  // Scroll to bottom of messages
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
+
+  // ── Fetch user + business ──────────────────────────────────────────
+
+  useEffect(() => {
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      setUserId(user.id)
+
+      const { data: business } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('owner_id', user.id)
+        .single()
+
+      if (business) {
+        setBusinessId(business.id)
+      } else {
+        setLoadingThreads(false)
+      }
+    }
+
+    init()
+  }, [supabase])
+
+  // ── Fetch threads ──────────────────────────────────────────────────
+
+  const fetchThreads = useCallback(async () => {
+    if (!businessId || !userId) return
+
+    const { data: threadRows, error } = await supabase
+      .from('message_threads')
+      .select('*')
+      .eq('business_id', businessId)
+      .order('last_message_at', { ascending: false })
+
+    if (error || !threadRows) {
+      setLoadingThreads(false)
+      return
+    }
+
+    // For each thread, get the latest message + unread status
+    const enriched: ThreadWithPreview[] = await Promise.all(
+      threadRows.map(async (thread: ThreadRow) => {
+        // Get last message content
+        const { data: lastMsg } = await supabase
+          .from('messages')
+          .select('content')
+          .eq('thread_id', thread.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        // Check for unread messages (messages not sent by me, with no read_at)
+        const { count } = await supabase
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('thread_id', thread.id)
+          .neq('sender_id', userId)
+          .is('read_at', null)
+
+        return {
+          ...thread,
+          lastMessageContent: lastMsg?.content ?? null,
+          unread: (count ?? 0) > 0,
+        }
+      })
+    )
+
+    setThreads(enriched)
+    setLoadingThreads(false)
+  }, [businessId, userId, supabase])
+
+  useEffect(() => {
+    fetchThreads()
+  }, [fetchThreads])
+
+  // ── Fetch messages for active thread ───────────────────────────────
+
+  const fetchMessages = useCallback(async (threadId: string) => {
+    if (!businessId || !userId) return
+
+    setLoadingMessages(true)
+
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('thread_id', threadId)
+      .order('created_at', { ascending: true })
+
+    if (!error && data) {
+      setMessages(data)
+
+      // Mark unread messages as read
+      const unreadIds = data
+        .filter((m: MessageRow) => m.sender_id !== userId && !m.read_at)
+        .map((m: MessageRow) => m.id)
+
+      if (unreadIds.length > 0) {
+        await supabase
+          .from('messages')
+          .update({ read_at: new Date().toISOString() })
+          .in('id', unreadIds)
+
+        // Update thread unread status locally
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === threadId ? { ...t, unread: false } : t
+          )
+        )
+      }
+    }
+
+    setLoadingMessages(false)
+  }, [businessId, userId, supabase])
+
+  useEffect(() => {
+    if (activeThreadId) {
+      fetchMessages(activeThreadId)
+    }
+  }, [activeThreadId, fetchMessages])
+
+  // Auto-scroll when messages change
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, scrollToBottom])
+
+  // ── Realtime subscription ──────────────────────────────────────────
+
+  useEffect(() => {
+    if (!businessId) return
+
+    const channel = supabase
+      .channel('messages-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `business_id=eq.${businessId}`,
+        },
+        (payload) => {
+          const newMsg = payload.new as MessageRow
+
+          // If message is in the active thread, add it to messages
+          if (newMsg.thread_id === activeThreadId) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev
+              return [...prev, newMsg]
+            })
+
+            // Mark as read if it's from someone else
+            if (newMsg.sender_id !== userId && !newMsg.read_at) {
+              supabase
+                .from('messages')
+                .update({ read_at: new Date().toISOString() })
+                .eq('id', newMsg.id)
+                .then()
+            }
+          }
+
+          // Update thread list preview and order
+          setThreads((prev) => {
+            const updated = prev.map((t) => {
+              if (t.id !== newMsg.thread_id) return t
+              return {
+                ...t,
+                lastMessageContent: newMsg.content,
+                last_message_at: newMsg.created_at,
+                unread: newMsg.thread_id !== activeThreadId && newMsg.sender_id !== userId,
+              }
+            })
+            // Re-sort by last_message_at descending
+            return updated.sort(
+              (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+            )
+          })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [businessId, activeThreadId, userId, supabase])
+
+  // ── Handlers ───────────────────────────────────────────────────────
 
   function selectThread(id: string) {
     setActiveThreadId(id)
     setMobileShowThread(true)
   }
 
-  function handleSend() {
-    if (!newMessage.trim()) return
-    // In production this would POST to an API
+  async function handleSend() {
+    if (!newMessage.trim() || !activeThreadId || sending) return
+
+    const messageContent = newMessage.trim()
     setNewMessage('')
+    setSending(true)
+
+    const result = await sendMessage(activeThreadId, messageContent)
+
+    if (!result.success) {
+      // Restore message on failure
+      setNewMessage(messageContent)
+    }
+
+    setSending(false)
   }
+
+  // ── Filtered threads ───────────────────────────────────────────────
+
+  const filteredThreads = threads.filter(
+    (t) =>
+      searchQuery === '' ||
+      t.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.lastMessageContent ?? '').toLowerCase().includes(searchQuery.toLowerCase()),
+  )
+
+  const activeThread = threads.find((t) => t.id === activeThreadId) ?? null
+
+  // ── Render ─────────────────────────────────────────────────────────
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -137,7 +323,7 @@ export default function MessagesPage() {
       {/* Main container */}
       <div className="bg-white rounded-xl border border-ink-6 overflow-hidden flex" style={{ height: 'calc(100vh - 220px)', minHeight: '500px' }}>
 
-        {/* Left column — Thread list */}
+        {/* Left column -- Thread list */}
         <div className={`w-full lg:w-[35%] border-r border-ink-6 flex flex-col ${mobileShowThread ? 'hidden lg:flex' : 'flex'}`}>
           {/* Search + New */}
           <div className="p-3 border-b border-ink-6 space-y-2">
@@ -160,9 +346,21 @@ export default function MessagesPage() {
 
           {/* Thread list */}
           <div className="flex-1 overflow-y-auto">
-            {filteredThreads.length === 0 ? (
+            {loadingThreads ? (
+              <div className="p-6 flex justify-center">
+                <Loader2 className="w-5 h-5 text-ink-4 animate-spin" />
+              </div>
+            ) : filteredThreads.length === 0 ? (
               <div className="p-6 text-center">
-                <p className="text-sm text-ink-4">No conversations found.</p>
+                <div className="w-12 h-12 rounded-xl bg-bg-2 flex items-center justify-center mx-auto mb-3">
+                  <MessageSquare className="w-5 h-5 text-ink-4" />
+                </div>
+                <p className="text-sm font-medium text-ink-2">
+                  {searchQuery ? 'No conversations found.' : 'No messages yet.'}
+                </p>
+                <p className="text-xs text-ink-4 mt-1">
+                  {searchQuery ? 'Try a different search.' : 'Your Apnosh team will reach out soon.'}
+                </p>
               </div>
             ) : (
               filteredThreads.map((thread) => (
@@ -187,13 +385,17 @@ export default function MessagesPage() {
                         <h3 className={`text-sm truncate ${thread.unread ? 'font-semibold text-ink' : 'font-medium text-ink-2'}`}>
                           {thread.subject}
                         </h3>
-                        <span className="text-[10px] text-ink-4 flex-shrink-0">{thread.lastTimestamp}</span>
+                        <span className="text-[10px] text-ink-4 flex-shrink-0">
+                          {formatTimestamp(thread.last_message_at)}
+                        </span>
                       </div>
-                      <p className="text-xs text-ink-4 mt-0.5 truncate">{thread.lastMessage}</p>
-                      {thread.relatedOrder && (
+                      <p className="text-xs text-ink-4 mt-0.5 truncate">
+                        {thread.lastMessageContent ?? 'No messages yet'}
+                      </p>
+                      {thread.order_id && (
                         <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
                           <FileText className="w-2.5 h-2.5" />
-                          {thread.relatedOrder}
+                          {thread.order_id}
                         </span>
                       )}
                     </div>
@@ -204,7 +406,7 @@ export default function MessagesPage() {
           </div>
         </div>
 
-        {/* Right column — Active thread */}
+        {/* Right column -- Active thread */}
         <div className={`flex-1 flex flex-col ${!mobileShowThread ? 'hidden lg:flex' : 'flex'}`}>
           {activeThread ? (
             <>
@@ -219,52 +421,70 @@ export default function MessagesPage() {
                 <div className="flex-1 min-w-0">
                   <h2 className="text-sm font-semibold text-ink truncate">{activeThread.subject}</h2>
                   <p className="text-[11px] text-ink-4">
-                    Matt Butler, Apnosh Team
+                    {messages.length > 0
+                      ? [...new Set(messages.map((m) => m.sender_name))].join(', ')
+                      : 'Loading...'}
                   </p>
                 </div>
-                {activeThread.relatedOrder && (
+                {activeThread.order_id && (
                   <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
                     <FileText className="w-2.5 h-2.5" />
-                    {activeThread.relatedOrder}
+                    {activeThread.order_id}
                   </span>
                 )}
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 lg:p-5 space-y-4">
-                {activeThread.messages.map((msg) => {
-                  const isClient = msg.sender === 'client'
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`flex ${isClient ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div className={`max-w-[80%] lg:max-w-[70%] ${isClient ? 'order-1' : ''}`}>
-                        <div
-                          className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                            isClient
-                              ? 'bg-brand-tint text-ink rounded-br-md'
-                              : 'bg-bg-2 text-ink rounded-bl-md'
-                          }`}
-                        >
-                          {msg.text}
-                        </div>
-                        {msg.attachment && (
-                          <div className={`mt-1.5 ${isClient ? 'text-right' : 'text-left'}`}>
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-ink-6 text-xs text-ink-2 hover:bg-bg-2 transition-colors cursor-pointer">
-                              <Paperclip className="w-3 h-3 text-ink-4" />
-                              {msg.attachment.name}
-                              <span className="text-ink-4">({msg.attachment.size})</span>
-                            </span>
+              <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 lg:p-5 space-y-4">
+                {loadingMessages ? (
+                  <div className="flex-1 flex justify-center items-center py-12">
+                    <Loader2 className="w-5 h-5 text-ink-4 animate-spin" />
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center py-12">
+                    <p className="text-sm text-ink-4">No messages in this thread yet.</p>
+                  </div>
+                ) : (
+                  messages.map((msg) => {
+                    const isClient = msg.sender_role === 'client'
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`flex ${isClient ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div className={`max-w-[80%] lg:max-w-[70%] ${isClient ? 'order-1' : ''}`}>
+                          <div
+                            className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                              isClient
+                                ? 'bg-brand-tint text-ink rounded-br-md'
+                                : 'bg-bg-2 text-ink rounded-bl-md'
+                            }`}
+                          >
+                            {msg.content}
                           </div>
-                        )}
-                        <div className={`mt-1 text-[10px] text-ink-4 ${isClient ? 'text-right' : 'text-left'}`}>
-                          {msg.senderName} &middot; {msg.timestamp}
+                          {msg.attachments && msg.attachments.length > 0 && (
+                            <div className={`mt-1.5 ${isClient ? 'text-right' : 'text-left'}`}>
+                              {msg.attachments.map((att, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-ink-6 text-xs text-ink-2 hover:bg-bg-2 transition-colors cursor-pointer mr-1.5 mb-1"
+                                >
+                                  <Paperclip className="w-3 h-3 text-ink-4" />
+                                  {att.name}
+                                  {att.size && <span className="text-ink-4">({att.size})</span>}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className={`mt-1 text-[10px] text-ink-4 ${isClient ? 'text-right' : 'text-left'}`}>
+                            {msg.sender_name} &middot; {formatMessageTime(msg.created_at)}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                )}
+                <div ref={messagesEndRef} />
               </div>
 
               {/* Message input */}
@@ -285,16 +505,20 @@ export default function MessagesPage() {
                   />
                   <button
                     onClick={handleSend}
-                    disabled={!newMessage.trim()}
+                    disabled={!newMessage.trim() || sending}
                     className="w-9 h-9 rounded-lg bg-brand-dark text-white flex items-center justify-center hover:bg-brand-dark/90 transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <Send className="w-4 h-4" />
+                    {sending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </div>
             </>
           ) : (
-            /* Empty state */
+            /* Empty state -- no thread selected */
             <div className="flex-1 flex flex-col items-center justify-center p-6">
               <div className="w-16 h-16 rounded-2xl bg-bg-2 flex items-center justify-center mb-4">
                 <MessageSquare className="w-7 h-7 text-ink-4" />

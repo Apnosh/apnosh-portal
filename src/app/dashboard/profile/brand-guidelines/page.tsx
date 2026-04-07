@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   BookOpen, Sparkles, Palette, MessageCircle, Users, Swords, FileText,
   Loader2, Download, Upload, RotateCcw, MapPin, Target, Quote,
@@ -12,6 +12,8 @@ import { useBrandGuidelines } from '@/hooks/useBrandGuidelines'
 import GuidelineSection from '@/components/brand-guidelines/GuidelineSection'
 import ColorSwatches from '@/components/brand-guidelines/ColorSwatches'
 import VoiceWordCard from '@/components/brand-guidelines/VoiceWordCard'
+import UploadReviewScreen from '@/components/brand-guidelines/UploadReviewScreen'
+import RevisionRequestModal from '@/components/brand-guidelines/RevisionRequestModal'
 import type {
   BrandGuideline, BrandOverviewSection, VisualIdentitySection,
   VoiceAndToneSection, AudienceProfileSection,
@@ -31,6 +33,7 @@ function sectionComplete(data: any): boolean {
 }
 
 type EditingSection = 'brand_overview' | 'visual_identity' | 'voice_and_tone' | 'audience_profile' | 'competitive_positioning' | 'content_guidelines' | null
+type UploadStep = 'idle' | 'uploading' | 'parsing' | 'reviewing' | 'saving'
 
 // ── Page ────────────────────────────────────────────────────────────
 
@@ -49,6 +52,15 @@ export default function BrandGuidelinesPage() {
   const [draftAudience, setDraftAudience] = useState<AudienceProfileSection>({})
   const [draftPositioning, setDraftPositioning] = useState<CompetitivePositioningSection>({})
   const [draftContent, setDraftContent] = useState<ContentGuidelinesSection>({})
+
+  // Upload flow state
+  const [uploadStep, setUploadStep] = useState<UploadStep>('idle')
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [extractedData, setExtractedData] = useState<Record<string, unknown> | null>(null)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
+
+  // Revision modal state
+  const [revisionOpen, setRevisionOpen] = useState(false)
 
   // ── Generate guidelines ───────────────────────────────────────────
 

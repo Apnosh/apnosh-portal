@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   ChevronLeft, ChevronRight, X, Camera, Globe, Video, Mail,
   Clock, User, AlertCircle, CheckCircle2, Clapperboard, Aperture,
@@ -8,6 +8,8 @@ import {
   Calendar as CalendarIcon, ExternalLink, Filter,
 } from 'lucide-react'
 import { type Platform } from '@/lib/mock-deliverables'
+import { createClient } from '@/lib/supabase/client'
+import { useBusiness } from '@/lib/supabase/hooks'
 import Link from 'next/link'
 
 /* ------------------------------------------------------------------ */
@@ -153,14 +155,73 @@ function needsAttention(s: EventStatus) { return ['changes_requested','needs_app
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+function mapCalendarEntry(c: any): TimelineEvent {
+  const scheduled = c.scheduled_at ? new Date(c.scheduled_at) : null
+  const day = scheduled ? scheduled.getDate() : 1
+  const time = scheduled ? scheduled.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : undefined
+
+  const platformCategoryMap: Record<string, EventCategory> = {
+    instagram: 'social', facebook: 'social', tiktok: 'social',
+    linkedin: 'social', twitter: 'social', youtube: 'social',
+    email: 'email', website: 'website', google_business: 'seo',
+  }
+  const statusMap: Record<string, EventStatus> = {
+    draft: 'pending', scheduled: 'scheduled', published: 'published', failed: 'needs_approval',
+  }
+
+  return {
+    id: c.id,
+    title: c.title || 'Untitled',
+    category: platformCategoryMap[c.platform] || 'social',
+    date: day,
+    time,
+    status: statusMap[c.status] || 'scheduled',
+    platforms: c.platform ? [c.platform as Platform] : [],
+    caption: c.caption || undefined,
+  }
+}
+
 export default function MarketingTimeline() {
+  const { data: business } = useBusiness()
+  const [events, setEvents] = useState<TimelineEvent[]>([])
+  const [dataLoading, setDataLoading] = useState(true)
   const [view, setView] = useState<'month' | 'agenda'>('month')
   const [filterCat, setFilterCat] = useState<FilterCategory>('all')
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null)
 
+  // Load real calendar entries from Supabase
+  useEffect(() => {
+    if (!business?.id) {
+      setDataLoading(false)
+      return
+    }
+    const supabase = createClient()
+
+    async function fetchCalendar() {
+      const now = new Date()
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+
+      const { data } = await supabase
+        .from('content_calendar')
+        .select('id, platform, title, caption, scheduled_at, status')
+        .eq('business_id', business!.id)
+        .gte('scheduled_at', monthStart)
+        .lte('scheduled_at', monthEnd)
+        .order('scheduled_at', { ascending: true })
+
+      setEvents(data && data.length > 0 ? data.map(mapCalendarEntry) : [])
+      setDataLoading(false)
+    }
+
+    fetchCalendar()
+  }, [business?.id])
+
   const filtered = useMemo(() => {
-    let list = EVENTS
+    let list = events
     const tab = FILTER_TABS.find(t => t.key === filterCat)
     if (tab && tab.cats.length > 0) list = list.filter(e => tab.cats.includes(e.category))
     if (filterStatus === 'completed') list = list.filter(e => isCompleted(e.status))
@@ -170,21 +231,21 @@ export default function MarketingTimeline() {
   }, [filterCat, filterStatus])
 
   const tabCounts = useMemo(() => {
-    const counts: Record<FilterCategory, number> = { all: EVENTS.length, social: 0, 'video-photo': 0, strategy: 0, email: 0, seo: 0, reports: 0, milestones: 0 }
-    EVENTS.forEach(e => {
+    const counts: Record<FilterCategory, number> = { all: events.length, social: 0, 'video-photo': 0, strategy: 0, email: 0, seo: 0, reports: 0, milestones: 0 }
+    events.forEach(e => {
       FILTER_TABS.forEach(t => { if (t.cats.includes(e.category)) counts[t.key]++ })
     })
     return counts
-  }, [])
+  }, [events])
 
   const summaryLine = useMemo(() => {
-    const social = EVENTS.filter(e => e.category === 'social').length
-    const shoots = EVENTS.filter(e => e.category === 'video-shoot' || e.category === 'photo-shoot').length
-    const calls = EVENTS.filter(e => e.category === 'strategy').length
-    const reports = EVENTS.filter(e => e.category === 'report').length
-    const attention = EVENTS.filter(e => needsAttention(e.status) || (e.status === 'pending' && e.date >= TODAY)).length
-    return { total: EVENTS.length, social, shoots, calls, reports, attention }
-  }, [])
+    const social = events.filter(e => e.category === 'social').length
+    const shoots = events.filter(e => e.category === 'video-shoot' || e.category === 'photo-shoot').length
+    const calls = events.filter(e => e.category === 'strategy').length
+    const reports = events.filter(e => e.category === 'report').length
+    const attention = events.filter(e => needsAttention(e.status) || (e.status === 'pending' && e.date >= TODAY)).length
+    return { total: events.length, social, shoots, calls, reports, attention }
+  }, [events])
 
   // Build calendar grid
   const daysInMonth = 31
@@ -195,6 +256,33 @@ export default function MarketingTimeline() {
   while (cells.length % 7 !== 0) cells.push(null)
 
   const eventsForDay = (day: number) => filtered.filter(e => e.date === day)
+
+  if (dataLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-8 w-56 bg-ink-6 rounded animate-pulse" />
+        <div className="h-64 bg-ink-6 rounded-xl animate-pulse" />
+      </div>
+    )
+  }
+
+  if (events.length === 0) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold font-[family-name:var(--font-display)] text-[#1d1d1f] tracking-tight">Marketing Timeline</h1>
+          <p className="text-sm text-[#6e6e73] mt-1">Everything we&rsquo;re doing for your business, all in one place</p>
+        </div>
+        <div className="bg-white rounded-xl border border-ink-6 p-12 text-center">
+          <CalendarIcon className="w-10 h-10 text-ink-4 mx-auto mb-3" />
+          <h2 className="text-lg font-[family-name:var(--font-display)] text-ink mb-1">No content scheduled yet</h2>
+          <p className="text-ink-3 text-sm max-w-md mx-auto">
+            Your content calendar will populate once your Apnosh team starts scheduling posts, shoots, and campaigns for your business.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-full">

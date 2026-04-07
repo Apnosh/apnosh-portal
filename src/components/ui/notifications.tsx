@@ -1,92 +1,45 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Bell, CheckCircle, Package, BarChart3, CreditCard, MessageSquare, X
 } from 'lucide-react'
+import { useNotifications } from '@/lib/supabase/hooks'
+import { markNotificationRead } from '@/lib/actions'
+import { useRealtimeRefresh } from '@/lib/realtime'
 
-interface Notification {
-  id: string
-  type: 'approval' | 'deliverable' | 'report' | 'payment' | 'message'
-  title: string
-  body: string
-  time: string
-  read: boolean
-}
-
-const iconMap = {
-  approval: { icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
-  deliverable: { icon: Package, color: 'bg-blue-50 text-blue-600' },
-  report: { icon: BarChart3, color: 'bg-purple-50 text-purple-600' },
+const iconMap: Record<string, { icon: typeof CheckCircle; color: string }> = {
+  approval_needed: { icon: CheckCircle, color: 'bg-emerald-50 text-emerald-600' },
+  deliverable_ready: { icon: Package, color: 'bg-blue-50 text-blue-600' },
+  report_ready: { icon: BarChart3, color: 'bg-purple-50 text-purple-600' },
   payment: { icon: CreditCard, color: 'bg-amber-50 text-amber-600' },
   message: { icon: MessageSquare, color: 'bg-brand-tint text-brand-dark' },
+  order_confirmed: { icon: Package, color: 'bg-blue-50 text-blue-600' },
+  system: { icon: Bell, color: 'bg-gray-50 text-gray-600' },
 }
 
-const initialNotifications: Notification[] = [
-  {
-    id: '1',
-    type: 'approval',
-    title: 'Content ready for approval',
-    body: 'March Instagram carousel — 5 slides awaiting your review.',
-    time: '2h ago',
-    read: false,
-  },
-  {
-    id: '2',
-    type: 'message',
-    title: 'New message from your strategist',
-    body: 'Hey! Just wanted to check in on the Q2 campaign direction.',
-    time: '4h ago',
-    read: false,
-  },
-  {
-    id: '3',
-    type: 'deliverable',
-    title: 'Deliverable uploaded',
-    body: 'Brand guidelines PDF v2 is ready to download.',
-    time: '6h ago',
-    read: false,
-  },
-  {
-    id: '4',
-    type: 'report',
-    title: 'Weekly analytics report',
-    body: 'Your Instagram engagement increased 12% this week.',
-    time: 'Yesterday',
-    read: true,
-  },
-  {
-    id: '5',
-    type: 'payment',
-    title: 'Invoice paid',
-    body: 'Payment of $647.00 for March services was processed.',
-    time: 'Yesterday',
-    read: true,
-  },
-  {
-    id: '6',
-    type: 'approval',
-    title: 'Revision submitted',
-    body: 'Updated Facebook ad copy based on your feedback.',
-    time: '2 days ago',
-    read: true,
-  },
-  {
-    id: '7',
-    type: 'message',
-    title: 'Team update',
-    body: 'Your account has been assigned a new project manager.',
-    time: '3 days ago',
-    read: true,
-  },
-]
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return 'Yesterday'
+  return `${days} days ago`
+}
 
 export default function Notifications() {
   const [open, setOpen] = useState(false)
-  const [notifications, setNotifications] = useState(initialNotifications)
+  const { data: notifications, refetch } = useNotifications({ limit: 20 })
   const ref = useRef<HTMLDivElement>(null)
 
-  const unreadCount = notifications.filter((n) => !n.read).length
+  const items = notifications || []
+  const unreadCount = items.filter((n) => !n.read_at).length
+
+  // Auto-refresh when new notifications arrive via realtime
+  const stableRefetch = useCallback(() => refetch(), [refetch])
+  useRealtimeRefresh(['notifications'], stableRefetch)
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -98,14 +51,16 @@ export default function Notifications() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const markAsRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    )
+  const handleMarkRead = async (id: string) => {
+    await markNotificationRead(id)
+    refetch()
   }
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+  const handleMarkAllRead = async () => {
+    for (const n of items.filter((n) => !n.read_at)) {
+      await markNotificationRead(n.id)
+    }
+    refetch()
   }
 
   return (
@@ -130,7 +85,7 @@ export default function Notifications() {
             <div className="flex items-center gap-3">
               {unreadCount > 0 && (
                 <button
-                  onClick={markAllRead}
+                  onClick={handleMarkAllRead}
                   className="text-[11px] font-medium text-brand-dark hover:underline"
                 >
                   Mark all read
@@ -147,39 +102,45 @@ export default function Notifications() {
 
           {/* Notification list */}
           <div className="flex-1 overflow-y-auto divide-y divide-ink-6">
-            {notifications.map((n) => {
-              const { icon: Icon, color } = iconMap[n.type]
-              return (
-                <button
-                  key={n.id}
-                  onClick={() => markAsRead(n.id)}
-                  className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-bg-2 transition-colors ${
-                    !n.read ? 'bg-brand-tint/30' : ''
-                  }`}
-                >
-                  {/* Unread dot */}
-                  <div className="flex-shrink-0 w-2 pt-2">
-                    {!n.read && (
-                      <span className="block w-2 h-2 bg-brand rounded-full" />
-                    )}
-                  </div>
+            {items.length === 0 ? (
+              <div className="p-6 text-center text-sm text-ink-4">No notifications yet.</div>
+            ) : (
+              items.map((n) => {
+                const mapping = iconMap[n.type] || iconMap.system
+                const Icon = mapping.icon
+                const color = mapping.color
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => !n.read_at && handleMarkRead(n.id)}
+                    className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-bg-2 transition-colors ${
+                      !n.read_at ? 'bg-brand-tint/30' : ''
+                    }`}
+                  >
+                    {/* Unread dot */}
+                    <div className="flex-shrink-0 w-2 pt-2">
+                      {!n.read_at && (
+                        <span className="block w-2 h-2 bg-brand rounded-full" />
+                      )}
+                    </div>
 
-                  {/* Icon */}
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-lg ${color} flex items-center justify-center`}>
-                    <Icon className="w-4 h-4" />
-                  </div>
+                    {/* Icon */}
+                    <div className={`flex-shrink-0 w-8 h-8 rounded-lg ${color} flex items-center justify-center`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
 
-                  {/* Text */}
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm leading-tight ${!n.read ? 'font-medium text-ink' : 'text-ink-2'}`}>
-                      {n.title}
-                    </p>
-                    <p className="text-[12px] text-ink-4 mt-0.5 truncate">{n.body}</p>
-                    <p className="text-[11px] text-ink-4 mt-1">{n.time}</p>
-                  </div>
-                </button>
-              )
-            })}
+                    {/* Text */}
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm leading-tight ${!n.read_at ? 'font-medium text-ink' : 'text-ink-2'}`}>
+                        {n.title}
+                      </p>
+                      <p className="text-[12px] text-ink-4 mt-0.5 truncate">{n.body}</p>
+                      <p className="text-[11px] text-ink-4 mt-1">{timeAgo(n.created_at)}</p>
+                    </div>
+                  </button>
+                )
+              })
+            )}
           </div>
 
           {/* Footer */}

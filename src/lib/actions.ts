@@ -8,6 +8,15 @@ import {
   createBillingPortalSession,
   stripe,
 } from '@/lib/stripe'
+import {
+  notifyAgreementSent,
+  notifyAgreementSigned,
+  notifyInvoiceCreated,
+  notifyNewMessage,
+  notifyDeliverableApproved,
+  notifyOrderCreated,
+  getAdminUserIds,
+} from '@/lib/notify'
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -96,6 +105,11 @@ export async function createOrder(orderData: CreateOrderData): Promise<ActionRes
 
   if (error) return { success: false, error: error.message }
 
+  // Notify admins about new order
+  const { data: biz } = await supabase.from('businesses').select('name').eq('id', business.id).single()
+  const adminIds = await getAdminUserIds(supabase)
+  await notifyOrderCreated(supabase, adminIds, biz?.name || 'Client', orderData.service_name)
+
   revalidatePath('/dashboard/orders')
   return { success: true }
 }
@@ -173,7 +187,7 @@ export async function createStripeCheckout(
   // Create pending orders in Supabase
   const sessionId = `cs_${Date.now()}`
   for (const item of items) {
-    await supabase.from('orders').insert({
+    const { error: orderErr } = await supabase.from('orders').insert({
       business_id: business.id,
       type: item.isSubscription ? 'subscription' : 'one_time',
       service_id: item.id,
@@ -186,6 +200,9 @@ export async function createStripeCheckout(
       deadline: item.deadline || null,
       stripe_checkout_session_id: sessionId,
     })
+    if (orderErr) {
+      console.error('Failed to create order:', orderErr.message, 'for item:', item.id)
+    }
   }
 
   try {
@@ -255,6 +272,13 @@ export async function approveDeliverable(id: string): Promise<ActionResult> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
+  // Get deliverable info before updating
+  const { data: deliverable } = await supabase
+    .from('deliverables')
+    .select('title, business_id')
+    .eq('id', id)
+    .single()
+
   const { error } = await supabase
     .from('deliverables')
     .update({
@@ -265,6 +289,13 @@ export async function approveDeliverable(id: string): Promise<ActionResult> {
     .eq('id', id)
 
   if (error) return { success: false, error: error.message }
+
+  // Notify admins
+  if (deliverable) {
+    const { data: biz } = await supabase.from('businesses').select('name').eq('id', deliverable.business_id).single()
+    const adminIds = await getAdminUserIds(supabase)
+    await notifyDeliverableApproved(supabase, adminIds, biz?.name || 'Client', deliverable.title)
+  }
 
   revalidatePath('/dashboard/approvals')
   return { success: true }
@@ -332,6 +363,30 @@ export async function sendMessage(threadId: string, content: string): Promise<Ac
     .from('message_threads')
     .update({ last_message_at: new Date().toISOString() })
     .eq('id', threadId)
+
+  // Notify the other side
+  const { data: threadInfo } = await supabase
+    .from('message_threads')
+    .select('subject, business_id, businesses(owner_id)')
+    .eq('id', threadId)
+    .single()
+
+  if (threadInfo) {
+    if (profile.role === 'admin' || profile.role === 'team_member') {
+      // Admin sent message → notify client
+      const biz = Array.isArray(threadInfo.businesses) ? threadInfo.businesses[0] : threadInfo.businesses
+      const ownerId = (biz as Record<string, unknown>)?.owner_id as string | undefined
+      if (ownerId) {
+        await notifyNewMessage(supabase, ownerId, profile.full_name, threadInfo.subject)
+      }
+    } else {
+      // Client sent message → notify all admins
+      const adminIds = await getAdminUserIds(supabase)
+      for (const adminId of adminIds) {
+        await notifyNewMessage(supabase, adminId, profile.full_name, threadInfo.subject)
+      }
+    }
+  }
 
   revalidatePath('/dashboard/messages')
   return { success: true }
@@ -447,6 +502,321 @@ export async function adminCreateSubscription(
     const message = err instanceof Error ? err.message : 'Failed to create subscription'
     return { success: false, error: message }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Agreement & Contract Actions
+// ---------------------------------------------------------------------------
+
+export async function getAgreementTemplates(): Promise<{ success: boolean; data?: unknown[]; error?: string }> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('agreement_templates')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) return { success: false, error: error.message }
+  return { success: true, data: data || [] }
+}
+
+export async function saveAgreementTemplate(
+  template: { id?: string; name: string; type: string; content: string; is_active: boolean }
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  if (template.id) {
+    // Update: increment version
+    const { data: existing } = await supabase
+      .from('agreement_templates')
+      .select('version')
+      .eq('id', template.id)
+      .single()
+
+    const { error } = await supabase
+      .from('agreement_templates')
+      .update({
+        name: template.name,
+        type: template.type,
+        content: template.content,
+        is_active: template.is_active,
+        version: (existing?.version || 0) + 1,
+      })
+      .eq('id', template.id)
+    if (error) return { success: false, error: error.message }
+  } else {
+    // If setting as active, deactivate others of same type
+    if (template.is_active) {
+      await supabase
+        .from('agreement_templates')
+        .update({ is_active: false })
+        .eq('type', template.type)
+    }
+    const { error } = await supabase
+      .from('agreement_templates')
+      .insert({ ...template, created_by: user.id })
+    if (error) return { success: false, error: error.message }
+  }
+
+  revalidatePath('/admin/agreements')
+  return { success: true }
+}
+
+export async function createAgreement(
+  businessId: string,
+  templateId: string,
+  customFields: Record<string, string>
+): Promise<{ success: boolean; agreementId?: string; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  // Get template
+  const { data: template } = await supabase
+    .from('agreement_templates')
+    .select('*')
+    .eq('id', templateId)
+    .single()
+  if (!template) return { success: false, error: 'Template not found' }
+
+  // Render content by replacing placeholders
+  let rendered = template.content as string
+  for (const [key, value] of Object.entries(customFields)) {
+    rendered = rendered.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value)
+  }
+
+  const { data: agreement, error } = await supabase
+    .from('agreements')
+    .insert({
+      business_id: businessId,
+      agreement_type: template.type,
+      template_id: templateId,
+      version_number: template.version,
+      custom_fields: customFields,
+      rendered_content: rendered,
+      status: 'draft',
+    })
+    .select('id')
+    .single()
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath(`/admin/clients/${businessId}`)
+  return { success: true, agreementId: agreement.id }
+}
+
+export async function sendAgreement(agreementId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { data: agreement } = await supabase
+    .from('agreements')
+    .select('*, business:businesses(id, name, owner_id, client_status)')
+    .eq('id', agreementId)
+    .single()
+
+  if (!agreement) return { success: false, error: 'Agreement not found' }
+
+  // Update agreement status
+  const { error } = await supabase
+    .from('agreements')
+    .update({ status: 'sent', sent_at: new Date().toISOString() })
+    .eq('id', agreementId)
+  if (error) return { success: false, error: error.message }
+
+  // Update client status
+  await supabase
+    .from('businesses')
+    .update({ client_status: 'agreement_sent' })
+    .eq('id', agreement.business_id)
+
+  // Log activity
+  await supabase.from('client_activity_log').insert({
+    business_id: agreement.business_id,
+    action_type: 'agreement_sent',
+    description: 'Service agreement sent for review and signature',
+    performed_by: user.id,
+  })
+
+  // Notify client
+  const biz = agreement.business as Record<string, unknown> | null
+  if (biz?.owner_id) {
+    await notifyAgreementSent(supabase, biz.owner_id as string, (biz.name as string) || 'your business')
+  }
+
+  revalidatePath(`/admin/clients/${agreement.business_id}`)
+  return { success: true }
+}
+
+export async function signAgreement(
+  agreementId: string,
+  signerName: string,
+  signerEmail: string,
+  signerIp: string
+): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const now = new Date().toISOString()
+
+  const { error } = await supabase
+    .from('agreements')
+    .update({
+      status: 'signed',
+      signed_at: now,
+      signed_by_name: signerName,
+      signed_by_email: signerEmail,
+      signed_by_ip: signerIp,
+    })
+    .eq('id', agreementId)
+
+  if (error) return { success: false, error: error.message }
+
+  // Get agreement to find business
+  const { data: agreement } = await supabase
+    .from('agreements')
+    .select('business_id')
+    .eq('id', agreementId)
+    .single()
+
+  if (agreement) {
+    // Update client status
+    await supabase
+      .from('businesses')
+      .update({ client_status: 'agreement_signed' })
+      .eq('id', agreement.business_id)
+
+    // Log activity
+    await supabase.from('client_activity_log').insert({
+      business_id: agreement.business_id,
+      action_type: 'agreement_signed',
+      description: `Agreement signed by ${signerName} (${signerEmail})`,
+      metadata: { signer_ip: signerIp },
+    })
+
+    // Notify admins
+    const { data: biz } = await supabase.from('businesses').select('name').eq('id', agreement.business_id).single()
+    const adminIds = await getAdminUserIds(supabase)
+    await notifyAgreementSigned(supabase, adminIds, biz?.name || 'Client', signerName)
+  }
+
+  revalidatePath('/dashboard')
+  return { success: true }
+}
+
+export async function addClientNote(
+  businessId: string,
+  content: string
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', user.id)
+    .single()
+
+  const { error } = await supabase.from('client_notes').insert({
+    business_id: businessId,
+    author_id: user.id,
+    author_name: profile?.full_name || 'Admin',
+    content,
+  })
+
+  if (error) return { success: false, error: error.message }
+
+  // Log activity
+  await supabase.from('client_activity_log').insert({
+    business_id: businessId,
+    action_type: 'note_added',
+    description: 'Internal note added',
+    performed_by: user.id,
+  })
+
+  revalidatePath(`/admin/clients/${businessId}`)
+  return { success: true }
+}
+
+export async function updateClientStatus(
+  businessId: string,
+  newStatus: string
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { data: business } = await supabase
+    .from('businesses')
+    .select('client_status')
+    .eq('id', businessId)
+    .single()
+
+  const { error } = await supabase
+    .from('businesses')
+    .update({ client_status: newStatus })
+    .eq('id', businessId)
+
+  if (error) return { success: false, error: error.message }
+
+  await supabase.from('client_activity_log').insert({
+    business_id: businessId,
+    action_type: 'status_change',
+    description: `Status changed from ${business?.client_status || 'unknown'} to ${newStatus}`,
+    performed_by: user.id,
+    metadata: { old_status: business?.client_status, new_status: newStatus },
+  })
+
+  revalidatePath(`/admin/clients/${businessId}`)
+  return { success: true }
+}
+
+export async function adminCreateManualInvoice(
+  businessId: string,
+  lineItems: { description: string; quantity: number; unit_price: number }[],
+  dueDate: string,
+  notes?: string,
+  agreementId?: string
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const items = lineItems.map((li) => ({ ...li, total: li.quantity * li.unit_price }))
+  const amount = items.reduce((sum, li) => sum + li.total, 0)
+
+  const { data: invoice, error } = await supabase.from('invoices').insert({
+    business_id: businessId,
+    agreement_id: agreementId || null,
+    amount,
+    tax_amount: 0,
+    total: amount,
+    status: 'draft',
+    description: items.map((li) => li.description).join(', '),
+    due_date: dueDate,
+    line_items: items,
+    notes: notes || null,
+  }).select('invoice_number').single()
+
+  if (error) return { success: false, error: error.message }
+
+  // Notify client
+  const { data: biz } = await supabase.from('businesses').select('owner_id').eq('id', businessId).single()
+  if (biz?.owner_id) {
+    await notifyInvoiceCreated(supabase, biz.owner_id, amount, invoice?.invoice_number || undefined)
+  }
+
+  // Log activity
+  await supabase.from('client_activity_log').insert({
+    business_id: businessId,
+    action_type: 'invoice_sent',
+    description: `Invoice created for $${amount.toFixed(2)}`,
+    performed_by: user.id,
+  })
+
+  revalidatePath(`/admin/clients/${businessId}`)
+  return { success: true }
 }
 
 export async function adminCreateInvoice(

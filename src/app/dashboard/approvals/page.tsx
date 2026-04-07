@@ -12,6 +12,8 @@ import {
   initialDeliverables, platformIcon, platformLabel, platformColor,
   urgencyColor, urgencyBadge,
 } from '@/lib/mock-deliverables'
+import { createClient } from '@/lib/supabase/client'
+import { useBusiness } from '@/lib/supabase/hooks'
 
 /* ------------------------------------------------------------------ */
 /*  Local types                                                        */
@@ -57,10 +59,80 @@ function Toast({ message, onUndo, onDismiss }: { message: string; onUndo: () => 
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+function mapDbToDeliverable(d: any): Deliverable {
+  const content = d.content || {}
+  const platform = (content.platform || 'instagram') as Platform
+  const now = new Date()
+  const created = new Date(d.created_at)
+  const deadlineDate = new Date(created.getTime() + 48 * 60 * 60 * 1000)
+  const hoursLeft = (deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60)
+  const deadlineUrgency: 'overdue' | 'today' | 'soon' | 'normal' | 'none' =
+    hoursLeft <= 0 ? 'overdue' : hoursLeft <= 12 ? 'today' : hoursLeft <= 36 ? 'soon' : 'normal'
+  const deadlineLabel =
+    hoursLeft <= 0 ? 'Overdue' : hoursLeft <= 12 ? 'Due today' : hoursLeft <= 36 ? 'Due tomorrow' : `Due ${deadlineDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
+
+  const statusMap: Record<string, DeliverableStatus> = {
+    client_review: 'pending',
+    approved: 'approved',
+    revision_requested: 'changes_requested',
+    scheduled: 'scheduled',
+    published: 'approved',
+  }
+
+  return {
+    id: d.id,
+    title: d.title || 'Untitled',
+    platform,
+    platforms: [{ platform, contentType: 'Feed Post' as any, scheduledFor: content.scheduled_time || null }],
+    contentType: 'Feed Post',
+    caption: content.caption || '',
+    hashtags: content.hashtags || [],
+    submittedDate: created.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    deadline: deadlineDate.toISOString(),
+    deadlineLabel,
+    deadlineUrgency,
+    scheduledFor: content.scheduled_time || null,
+    version: d.version || 1,
+    status: statusMap[d.status] || 'pending',
+    previewColor: 'bg-blue-50',
+    createdBy: 'Apnosh Team',
+    createdByRole: 'Creative',
+  }
+}
+
 export default function ApprovalsPage() {
+  const { data: business } = useBusiness()
+
   /* ---------- state ---------- */
-  const [deliverables, setDeliverables] = useState<Deliverable[]>(initialDeliverables)
+  const [deliverables, setDeliverables] = useState<Deliverable[]>([])
+  const [dataLoading, setDataLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
+
+  // Load real deliverables from Supabase
+  useEffect(() => {
+    if (!business?.id) {
+      setDataLoading(false)
+      return
+    }
+    const supabase = createClient()
+
+    async function fetchDeliverables() {
+      const { data } = await supabase
+        .from('deliverables')
+        .select('id, title, type, status, version, content, created_at, approved_at, client_feedback')
+        .eq('business_id', business!.id)
+        .in('status', ['client_review', 'approved', 'revision_requested', 'scheduled', 'published'])
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      setDeliverables(data && data.length > 0 ? data.map(mapDbToDeliverable) : [])
+      setDataLoading(false)
+    }
+
+    fetchDeliverables()
+  }, [business?.id])
   const [viewMode, setViewMode] = useState<ViewMode>('compact')
   const [sortMode, setSortMode] = useState<SortMode>('urgency')
   const [searchQuery, setSearchQuery] = useState('')
@@ -218,6 +290,33 @@ export default function ApprovalsPage() {
   const fbCategories = ['Caption', 'Image', 'Colors', 'Timing', 'Hashtags', 'Other']
 
   /* ---------- render ---------- */
+
+  if (dataLoading) {
+    return (
+      <div className="max-w-5xl mx-auto space-y-4">
+        <div className="h-8 w-48 bg-ink-6 rounded animate-pulse" />
+        <div className="h-12 bg-ink-6 rounded-xl animate-pulse" />
+        <div className="h-32 bg-ink-6 rounded-xl animate-pulse" />
+        <div className="h-32 bg-ink-6 rounded-xl animate-pulse" />
+      </div>
+    )
+  }
+
+  if (deliverables.length === 0) {
+    return (
+      <div className="max-w-5xl mx-auto space-y-5">
+        <h1 className="text-xl font-[family-name:var(--font-display)] text-ink">Approvals</h1>
+        <div className="bg-white rounded-xl border border-ink-6 p-12 text-center">
+          <CheckCircle className="w-10 h-10 text-green-500 mx-auto mb-3" />
+          <h2 className="text-lg font-[family-name:var(--font-display)] text-ink mb-1">No content to review yet</h2>
+          <p className="text-ink-3 text-sm max-w-md mx-auto">
+            Once your Apnosh team starts creating content for your business, it will appear here for your review and approval.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-5xl mx-auto space-y-5">
       {/* ========= HEADER ========= */}

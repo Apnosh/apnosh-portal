@@ -1,0 +1,447 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-03-28",
+  "annualDiscount": "2 months free",
+  "industries": [
+    {
+      "id": "restaurant",
+      "name": "Restaurant / Food",
+      "icon": "🍽️",
+      "packages": [
+        {
+          "name": "The First Table",
+          "stage": "Just Started",
+          "popular": false,
+          "monthly": 847,
+          "setup": 898,
+          "services": [
+            "Basic Website (5 pages)",
+            "Google Business Profile Setup",
+            "Local SEO Starter",
+            "Social Media Essentials",
+            "Basic Hosting & Care",
+            "Review Monitoring"
+          ],
+          "content": ["8 feed posts/mo", "4 stories/mo", "1 reel/mo"]
+        },
+        {
+          "name": "Full House",
+          "stage": "Growing",
+          "popular": false,
+          "monthly": 1616,
+          "setup": 1747,
+          "services": [
+            "Standard Website + Menu Design",
+            "Local SEO Growth",
+            "Social Media Growth (IG + FB + TikTok)",
+            "Review Generation System",
+            "Growth Hosting & Care",
+            "Google Business Optimization"
+          ],
+          "content": ["16 feed posts/mo", "8 stories/mo", "4 reels/mo", "1 carousel/mo"]
+        },
+        {
+          "name": "The Packed House",
+          "stage": "Scaling",
+          "popular": true,
+          "monthly": 3142,
+          "setup": 2747,
+          "services": [
+            "Standard Website + Menu Design",
+            "Local SEO Authority",
+            "Social Media Growth",
+            "Email Marketing Starter",
+            "Review Automation",
+            "Growth Hosting & Care",
+            "Monthly Analytics Report"
+          ],
+          "content": ["24 feed posts/mo", "12 stories/mo", "8 reels/mo", "2 carousels/mo"]
+        },
+        {
+          "name": "The Empire",
+          "stage": "Established",
+          "popular": false,
+          "monthly": 5934,
+          "setup": 5497,
+          "services": [
+            "Advanced Website (20 pages)",
+            "Complete Brand & Launch",
+            "Local SEO Authority + Citations",
+            "Social Media Pro",
+            "Email & SMS Marketing",
+            "AI Chatbot",
+            "Lead & CRM Automation",
+            "Pro Hosting & Care"
+          ],
+          "content": ["Daily posts", "Stories 7x/week", "12 reels/mo", "4 carousels/mo", "Video production"]
+        }
+      ]
+    },
+    {
+      "id": "service",
+      "name": "Home Services",
+      "icon": "🔧",
+      "packages": [
+        {
+          "name": "The First Call",
+          "stage": "Just Started",
+          "popular": false,
+          "monthly": 797,
+          "setup": 898,
+          "services": [
+            "Basic Website (5 pages)",
+            "Google Business Profile Setup",
+            "Local SEO Starter",
+            "Social Media Essentials",
+            "Basic Hosting & Care"
+          ],
+          "content": ["8 feed posts/mo", "4 stories/mo", "1 reel/mo"]
+        },
+        {
+          "name": "More Leads",
+          "stage": "Growing",
+          "popular": false,
+          "monthly": 1667,
+          "setup": 1897,
+          "services": [
+            "Standard Website + Lead Forms",
+            "Local SEO Growth",
+            "Social Media Growth",
+            "Review Generation System",
+            "Growth Hosting & Care",
+            "Basic Automation (Follow-ups)"
+          ],
+          "content": ["16 feed posts/mo", "8 stories/mo", "4 reels/mo"]
+        },
+        {
+          "name": "The Lead Machine",
+          "stage": "Scaling",
+          "popular": true,
+          "monthly": 3141,
+          "setup": 2997,
+          "services": [
+            "Standard Website + Booking",
+            "Local SEO Authority",
+            "Social Media Growth",
+            "Email Marketing Starter",
+            "Lead Response Automation",
+            "Review Automation",
+            "Growth Hosting & Care"
+          ],
+          "content": ["24 feed posts/mo", "12 stories/mo", "8 reels/mo", "2 carousels/mo"]
+        },
+        {
+          "name": "The Full Operation",
+          "stage": "Established",
+          "popular": false,
+          "monthly": 5934,
+          "setup": 5997,
+          "services": [
+            "Advanced Website",
+            "Complete Brand & Launch",
+            "Local SEO Authority",
+            "Social Media Pro",
+            "Email & SMS Marketing",
+            "Full Journey Automation",
+            "Pro Hosting & Care",
+            "Monthly Strategy Call"
+          ],
+          "content": ["Daily posts", "Stories 7x/week", "12 reels/mo", "4 carousels/mo"]
+        }
+      ]
+    },
+    {
+      "id": "professional",
+      "name": "Professional / Legal",
+      "icon": "⚖️",
+      "packages": [
+        {
+          "name": "The Practice Launch",
+          "stage": "Just Started",
+          "popular": false,
+          "monthly": 773,
+          "setup": 1299,
+          "services": [
+            "Standard Website (10 pages)",
+            "Google Business Profile Setup",
+            "Local SEO Starter",
+            "Social Media Essentials",
+            "Basic Hosting & Care"
+          ],
+          "content": ["8 feed posts/mo", "4 stories/mo"]
+        },
+        {
+          "name": "The Authority Builder",
+          "stage": "Growing",
+          "popular": false,
+          "monthly": 1617,
+          "setup": 1997,
+          "services": [
+            "Standard Website + Blog",
+            "Local SEO Growth",
+            "Social Media Growth",
+            "Content Strategy",
+            "Growth Hosting & Care",
+            "Review Management"
+          ],
+          "content": ["16 feed posts/mo", "8 stories/mo", "2 blog articles/mo"]
+        },
+        {
+          "name": "The Thought Leader",
+          "stage": "Scaling",
+          "popular": true,
+          "monthly": 3216,
+          "setup": 3297,
+          "services": [
+            "Advanced Website",
+            "Local SEO Authority",
+            "Social Media Growth",
+            "Email Marketing Starter",
+            "Blog & Thought Leadership",
+            "Growth Hosting & Care",
+            "Monthly Analytics"
+          ],
+          "content": ["24 feed posts/mo", "12 stories/mo", "4 reels/mo", "4 blog articles/mo"]
+        },
+        {
+          "name": "The Firm",
+          "stage": "Established",
+          "popular": false,
+          "monthly": 6034,
+          "setup": 6497,
+          "services": [
+            "Advanced Website (20+ pages)",
+            "Complete Brand & Launch",
+            "Local SEO Authority",
+            "Social Media Pro",
+            "Email & SMS Marketing",
+            "Lead Automation",
+            "Pro Hosting & Care",
+            "Monthly Strategy Call"
+          ],
+          "content": ["Daily posts", "Stories 7x/week", "8 reels/mo", "4 blog articles/mo"]
+        }
+      ]
+    },
+    {
+      "id": "wellness",
+      "name": "Health / Wellness",
+      "icon": "💖",
+      "packages": [
+        {
+          "name": "Open for Business",
+          "stage": "Just Started",
+          "popular": false,
+          "monthly": 797,
+          "setup": 1047,
+          "services": [
+            "Basic Website + Booking",
+            "Google Business Profile Setup",
+            "Local SEO Starter",
+            "Social Media Essentials",
+            "Basic Hosting & Care"
+          ],
+          "content": ["8 feed posts/mo", "4 stories/mo", "1 reel/mo"]
+        },
+        {
+          "name": "Fully Booked",
+          "stage": "Growing",
+          "popular": false,
+          "monthly": 1667,
+          "setup": 1897,
+          "services": [
+            "Standard Website + Booking",
+            "Local SEO Growth",
+            "Social Media Growth",
+            "Review Generation",
+            "Growth Hosting & Care",
+            "Appointment Reminders"
+          ],
+          "content": ["16 feed posts/mo", "8 stories/mo", "4 reels/mo"]
+        },
+        {
+          "name": "The Wellness Brand",
+          "stage": "Scaling",
+          "popular": true,
+          "monthly": 3142,
+          "setup": 2997,
+          "services": [
+            "Standard Website + Booking",
+            "Local SEO Authority",
+            "Social Media Growth",
+            "Email Marketing Starter",
+            "Review Automation",
+            "Growth Hosting & Care",
+            "Monthly Analytics"
+          ],
+          "content": ["24 feed posts/mo", "12 stories/mo", "8 reels/mo", "2 carousels/mo"]
+        },
+        {
+          "name": "The Destination",
+          "stage": "Established",
+          "popular": false,
+          "monthly": 5934,
+          "setup": 5997,
+          "services": [
+            "Advanced Website",
+            "Complete Brand & Launch",
+            "Local SEO Authority",
+            "Social Media Pro",
+            "Email & SMS Marketing",
+            "Full Journey Automation",
+            "Pro Hosting & Care",
+            "Professional Photography"
+          ],
+          "content": ["Daily posts", "Stories 7x/week", "12 reels/mo", "4 carousels/mo"]
+        }
+      ]
+    },
+    {
+      "id": "realestate",
+      "name": "Real Estate",
+      "icon": "🏠",
+      "packages": [
+        {
+          "name": "The Listing",
+          "stage": "Just Started",
+          "popular": false,
+          "monthly": 773,
+          "setup": 1299,
+          "services": [
+            "Standard Website + IDX",
+            "Google Business Profile Setup",
+            "Local SEO Starter",
+            "Social Media Essentials",
+            "Basic Hosting & Care"
+          ],
+          "content": ["8 feed posts/mo", "4 stories/mo", "Listing posts"]
+        },
+        {
+          "name": "The Agent",
+          "stage": "Growing",
+          "popular": false,
+          "monthly": 1667,
+          "setup": 2197,
+          "services": [
+            "Standard Website + IDX + Lead Capture",
+            "Local SEO Growth",
+            "Social Media Growth",
+            "Property Photography (2 shoots/mo)",
+            "Growth Hosting & Care",
+            "Review Management"
+          ],
+          "content": ["16 feed posts/mo", "8 stories/mo", "4 reels/mo", "Listing marketing"]
+        },
+        {
+          "name": "The Top Producer",
+          "stage": "Scaling",
+          "popular": true,
+          "monthly": 3266,
+          "setup": 3997,
+          "services": [
+            "Advanced Website + IDX",
+            "Local SEO Authority",
+            "Social Media Growth",
+            "Email Drip Campaigns",
+            "Property Photography (4 shoots/mo)",
+            "Video Tours",
+            "Growth Hosting & Care"
+          ],
+          "content": ["24 feed posts/mo", "12 stories/mo", "8 reels/mo", "Listing videos"]
+        },
+        {
+          "name": "The Brokerage",
+          "stage": "Established",
+          "popular": false,
+          "monthly": 6192,
+          "setup": 7497,
+          "services": [
+            "Advanced Website (Multi-agent)",
+            "Complete Brand & Launch",
+            "Local SEO Authority (Multi-location)",
+            "Social Media Pro",
+            "Email & SMS Marketing",
+            "Full Journey Automation",
+            "Pro Hosting & Care",
+            "Professional Photography & Video"
+          ],
+          "content": ["Daily posts", "Stories 7x/week", "12 reels/mo", "Cinematic listing videos"]
+        }
+      ]
+    },
+    {
+      "id": "general",
+      "name": "General / Other",
+      "icon": "✨",
+      "packages": [
+        {
+          "name": "The Digital Launchpad",
+          "stage": "Just Started",
+          "popular": false,
+          "monthly": 847,
+          "setup": 898,
+          "services": [
+            "Basic Website (5 pages)",
+            "Google Business Profile Setup",
+            "Local SEO Starter",
+            "Social Media Essentials",
+            "Basic Hosting & Care",
+            "Brand Identity (Logo)"
+          ],
+          "content": ["8 feed posts/mo", "4 stories/mo", "1 reel/mo"]
+        },
+        {
+          "name": "The Growth Starter",
+          "stage": "Growing",
+          "popular": false,
+          "monthly": 1692,
+          "setup": 1797,
+          "services": [
+            "Standard Website",
+            "Local SEO Growth",
+            "Social Media Growth",
+            "Email Marketing Starter",
+            "Growth Hosting & Care",
+            "Review Management"
+          ],
+          "content": ["16 feed posts/mo", "8 stories/mo", "4 reels/mo", "1 carousel/mo"]
+        },
+        {
+          "name": "The Digital Overhaul",
+          "stage": "Scaling",
+          "popular": true,
+          "monthly": 3191,
+          "setup": 3497,
+          "services": [
+            "Advanced Website",
+            "Local SEO Authority",
+            "Social Media Growth",
+            "Email & SMS Marketing",
+            "Lead Automation",
+            "Growth Hosting & Care",
+            "Monthly Analytics"
+          ],
+          "content": ["24 feed posts/mo", "12 stories/mo", "8 reels/mo", "2 carousels/mo"]
+        },
+        {
+          "name": "The Growth Engine",
+          "stage": "Established",
+          "popular": false,
+          "monthly": 5934,
+          "setup": 6497,
+          "services": [
+            "Advanced Website",
+            "Complete Brand & Launch",
+            "Local SEO Authority",
+            "Social Media Pro",
+            "Email & SMS Marketing",
+            "Full Journey Automation",
+            "Pro Hosting & Care",
+            "Monthly Strategy Call"
+          ],
+          "content": ["Daily posts", "Stories 7x/week", "12 reels/mo", "4 carousels/mo"]
+        }
+      ]
+    }
+  ]
+}

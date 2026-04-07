@@ -1,89 +1,172 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 import {
   ShoppingBag, Clock, Loader2, CheckCircle2, Search,
-  ArrowUpDown, UserPlus, Eye
+  ArrowUpDown, Eye
 } from 'lucide-react'
 
-type OrderStatus = 'Pending' | 'In Progress' | 'Client Review' | 'Completed' | 'Cancelled'
-type OrderType = 'Subscription' | 'One-Time' | 'A La Carte'
+type DBStatus = 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
+type OrderType = 'subscription' | 'one_time' | 'a_la_carte'
 
-interface Order {
+interface OrderRow {
   id: string
-  orderNumber: string
-  client: string
-  service: string
+  business_id: string
   type: OrderType
-  status: OrderStatus
-  amount: string
-  date: string
-  sortDate: number
+  service_name: string
+  quantity: number
+  unit_price: number
+  total_price: number
+  status: DBStatus
+  created_at: string
+  businesses: { name: string } | null
 }
 
-const orders: Order[] = [
-  { id: '1', orderNumber: 'APN-2024-001', client: 'Casa Priya', service: 'Social Media Growth Package', type: 'Subscription', status: 'In Progress', amount: '$449/mo', date: 'Mar 22, 2024', sortDate: 20240322 },
-  { id: '2', orderNumber: 'APN-2024-002', client: 'Vesta Bakery', service: '4x Instagram Feed Posts', type: 'A La Carte', status: 'Pending', amount: '$140', date: 'Mar 21, 2024', sortDate: 20240321 },
-  { id: '3', orderNumber: 'APN-2024-003', client: 'Lumina Boutique', service: 'Website Redesign', type: 'One-Time', status: 'Client Review', amount: '$1,299', date: 'Mar 20, 2024', sortDate: 20240320 },
-  { id: '4', orderNumber: 'APN-2024-004', client: 'Peak Fitness', service: 'Email Campaign Setup', type: 'One-Time', status: 'Completed', amount: '$199', date: 'Mar 19, 2024', sortDate: 20240319 },
-  { id: '5', orderNumber: 'APN-2024-005', client: 'Golden Wok', service: 'Logo & Brand Identity', type: 'One-Time', status: 'In Progress', amount: '$499', date: 'Mar 18, 2024', sortDate: 20240318 },
-  { id: '6', orderNumber: 'APN-2024-006', client: 'Bloom & Gather', service: 'Content Calendar (Monthly)', type: 'Subscription', status: 'In Progress', amount: '$299/mo', date: 'Mar 17, 2024', sortDate: 20240317 },
-  { id: '7', orderNumber: 'APN-2024-007', client: 'Zara Legal', service: 'LinkedIn Thought Leadership', type: 'Subscription', status: 'Pending', amount: '$349/mo', date: 'Mar 16, 2024', sortDate: 20240316 },
-  { id: '8', orderNumber: 'APN-2024-008', client: 'TrueNorth Realty', service: '2x Listing Videos', type: 'A La Carte', status: 'Completed', amount: '$320', date: 'Mar 15, 2024', sortDate: 20240315 },
-  { id: '9', orderNumber: 'APN-2024-009', client: 'Kin & Dough', service: 'Brand Refresh Package', type: 'One-Time', status: 'Client Review', amount: '$699', date: 'Mar 14, 2024', sortDate: 20240314 },
-  { id: '10', orderNumber: 'APN-2024-010', client: 'Solstice Yoga', service: 'Social Media Starter', type: 'Subscription', status: 'Pending', amount: '$199/mo', date: 'Mar 13, 2024', sortDate: 20240313 },
-  { id: '11', orderNumber: 'APN-2024-011', client: 'Nourish Kitchen', service: '6x Story Templates', type: 'A La Carte', status: 'Cancelled', amount: '$90', date: 'Mar 12, 2024', sortDate: 20240312 },
-  { id: '12', orderNumber: 'APN-2024-012', client: 'Atlas Consulting', service: 'Quarterly Strategy Session', type: 'One-Time', status: 'Completed', amount: '$250', date: 'Mar 11, 2024', sortDate: 20240311 },
+type FilterTab = 'all' | 'pending' | 'in_progress' | 'client_review' | 'completed'
+
+const STATUS_LABEL: Record<DBStatus, string> = {
+  pending: 'Pending',
+  confirmed: 'In Progress',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+}
+
+const STATUS_BADGE: Record<DBStatus, string> = {
+  pending: 'bg-amber-50 text-amber-700',
+  confirmed: 'bg-blue-50 text-blue-700',
+  in_progress: 'bg-blue-50 text-blue-700',
+  completed: 'bg-emerald-50 text-emerald-700',
+  cancelled: 'bg-red-50 text-red-700',
+}
+
+const TYPE_LABEL: Record<OrderType, string> = {
+  subscription: 'Subscription',
+  one_time: 'One-Time',
+  a_la_carte: 'A La Carte',
+}
+
+const TYPE_COLOR: Record<OrderType, string> = {
+  subscription: 'text-brand-dark',
+  one_time: 'text-ink-3',
+  a_la_carte: 'text-violet-600',
+}
+
+const tabs: Array<{ label: string; filter: FilterTab }> = [
+  { label: 'All', filter: 'all' },
+  { label: 'Pending', filter: 'pending' },
+  { label: 'In Progress', filter: 'in_progress' },
+  { label: 'Client Review', filter: 'client_review' },
+  { label: 'Completed', filter: 'completed' },
 ]
 
-const statusColors: Record<OrderStatus, string> = {
-  'Pending': 'bg-amber-50 text-amber-700 border-amber-200',
-  'In Progress': 'bg-blue-50 text-blue-700 border-blue-200',
-  'Client Review': 'bg-purple-50 text-purple-700 border-purple-200',
-  'Completed': 'bg-green-50 text-green-700 border-green-200',
-  'Cancelled': 'bg-red-50 text-red-700 border-red-200',
+function filterMatches(status: DBStatus, tab: FilterTab): boolean {
+  if (tab === 'all') return true
+  if (tab === 'pending') return status === 'pending'
+  if (tab === 'in_progress') return status === 'in_progress' || status === 'confirmed'
+  if (tab === 'client_review') return false // extend when client_review status exists
+  if (tab === 'completed') return status === 'completed'
+  return true
 }
 
-const typeColors: Record<OrderType, string> = {
-  'Subscription': 'text-brand-dark',
-  'One-Time': 'text-ink-3',
-  'A La Carte': 'text-violet-600',
+function formatCurrency(cents: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents)
 }
 
-const tabs: Array<{ label: string; filter: OrderStatus | 'All' }> = [
-  { label: 'All', filter: 'All' },
-  { label: 'Pending', filter: 'Pending' },
-  { label: 'In Progress', filter: 'In Progress' },
-  { label: 'Client Review', filter: 'Client Review' },
-  { label: 'Completed', filter: 'Completed' },
-]
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function SkeletonRow() {
+  return (
+    <tr className="border-b border-ink-6 last:border-0">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <td key={i} className="px-4 py-3">
+          <div className="h-4 bg-bg-2 rounded animate-pulse w-20" />
+        </td>
+      ))}
+    </tr>
+  )
+}
+
+function SkeletonCard() {
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 p-5">
+      <div className="w-8 h-8 rounded-lg bg-bg-2 animate-pulse mb-3" />
+      <div className="h-7 w-12 bg-bg-2 rounded animate-pulse mb-1" />
+      <div className="h-3 w-20 bg-bg-2 rounded animate-pulse" />
+    </div>
+  )
+}
 
 export default function AdminOrdersPage() {
-  const [activeTab, setActiveTab] = useState<OrderStatus | 'All'>('All')
+  const [orders, setOrders] = useState<OrderRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<FilterTab>('all')
   const [search, setSearch] = useState('')
   const [sortAsc, setSortAsc] = useState(false)
 
-  const filtered = orders
-    .filter((o) => activeTab === 'All' || o.status === activeTab)
-    .filter((o) => {
-      if (!search) return true
-      const q = search.toLowerCase()
-      return o.client.toLowerCase().includes(q) || o.service.toLowerCase().includes(q)
-    })
-    .sort((a, b) => sortAsc ? a.sortDate - b.sortDate : b.sortDate - a.sortDate)
+  useEffect(() => {
+    async function fetchOrders() {
+      setLoading(true)
+      setError(null)
 
+      const supabase = createClient()
+      const { data, error: fetchError } = await supabase
+        .from('orders')
+        .select('id, business_id, type, service_name, quantity, unit_price, total_price, status, created_at, businesses(name)')
+        .order('created_at', { ascending: false })
+
+      if (fetchError) {
+        setError(fetchError.message)
+        setLoading(false)
+        return
+      }
+
+      setOrders((data as unknown as OrderRow[]) ?? [])
+      setLoading(false)
+    }
+
+    fetchOrders()
+  }, [])
+
+  // Summary counts
   const totalOrders = orders.length
-  const pending = orders.filter((o) => o.status === 'Pending').length
-  const inProgress = orders.filter((o) => o.status === 'In Progress').length
-  const completedThisWeek = orders.filter((o) => o.status === 'Completed').length
+  const pendingCount = orders.filter((o) => o.status === 'pending').length
+  const inProgressCount = orders.filter((o) => o.status === 'in_progress' || o.status === 'confirmed').length
+  const completedCount = orders.filter((o) => o.status === 'completed').length
 
   const stats = [
     { label: 'Total Orders', value: totalOrders, icon: ShoppingBag, color: 'bg-brand-tint text-brand-dark' },
-    { label: 'Pending', value: pending, icon: Clock, color: 'bg-amber-50 text-amber-600' },
-    { label: 'In Progress', value: inProgress, icon: Loader2, color: 'bg-blue-50 text-blue-600' },
-    { label: 'Completed (this week)', value: completedThisWeek, icon: CheckCircle2, color: 'bg-green-50 text-green-600' },
+    { label: 'Pending', value: pendingCount, icon: Clock, color: 'bg-amber-50 text-amber-600' },
+    { label: 'In Progress', value: inProgressCount, icon: Loader2, color: 'bg-blue-50 text-blue-600' },
+    { label: 'Completed', value: completedCount, icon: CheckCircle2, color: 'bg-emerald-50 text-emerald-600' },
   ]
+
+  // Filter, search, sort
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase()
+    return orders
+      .filter((o) => filterMatches(o.status, activeTab))
+      .filter((o) => {
+        if (!q) return true
+        const clientName = o.businesses?.name?.toLowerCase() ?? ''
+        const serviceName = o.service_name?.toLowerCase() ?? ''
+        return clientName.includes(q) || serviceName.includes(q)
+      })
+      .sort((a, b) => {
+        const da = new Date(a.created_at).getTime()
+        const db = new Date(b.created_at).getTime()
+        return sortAsc ? da - db : db - da
+      })
+  }, [orders, activeTab, search, sortAsc])
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -92,20 +175,29 @@ export default function AdminOrdersPage() {
         <p className="text-ink-3 text-sm mt-1">Manage and track all client orders.</p>
       </div>
 
-      {/* Stats Bar */}
+      {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {stats.map((stat) => (
-          <div key={stat.label} className="bg-white rounded-xl border border-ink-6 p-4">
-            <div className={`w-8 h-8 rounded-lg ${stat.color} flex items-center justify-center mb-3`}>
-              <stat.icon className="w-4 h-4" />
-            </div>
-            <div className="font-[family-name:var(--font-display)] text-2xl text-ink">{stat.value}</div>
-            <div className="text-xs text-ink-4 mt-0.5">{stat.label}</div>
-          </div>
-        ))}
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
+          : stats.map((stat) => (
+              <div key={stat.label} className="bg-white rounded-xl border border-ink-6 p-5">
+                <div className={`w-8 h-8 rounded-lg ${stat.color} flex items-center justify-center mb-3`}>
+                  <stat.icon className="w-4 h-4" />
+                </div>
+                <div className="font-[family-name:var(--font-display)] text-2xl text-ink">{stat.value}</div>
+                <div className="text-xs text-ink-4 mt-0.5">{stat.label}</div>
+              </div>
+            ))}
       </div>
 
-      {/* Filters + Search */}
+      {/* Error */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm">
+          Failed to load orders: {error}
+        </div>
+      )}
+
+      {/* Filters + Search + Table */}
       <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-5 border-b border-ink-6">
           <div className="flex items-center gap-1 overflow-x-auto">
@@ -113,9 +205,9 @@ export default function AdminOrdersPage() {
               <button
                 key={tab.filter}
                 onClick={() => setActiveTab(tab.filter)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-colors ${
                   activeTab === tab.filter
-                    ? 'bg-ink text-white'
+                    ? 'bg-brand-tint text-brand-dark font-medium'
                     : 'text-ink-3 hover:bg-bg-2'
                 }`}
               >
@@ -139,64 +231,70 @@ export default function AdminOrdersPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-ink-6">
-                <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Order #</th>
-                <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Client</th>
-                <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Service</th>
-                <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Type</th>
-                <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Status</th>
-                <th className="text-right font-medium text-ink-4 text-xs px-5 py-3">Amount</th>
-                <th className="text-right font-medium text-ink-4 text-xs px-5 py-3">
+              <tr className="bg-bg-2 border-b border-ink-6">
+                <th className="text-left px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide">Order #</th>
+                <th className="text-left px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide">Client</th>
+                <th className="text-left px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide">Service</th>
+                <th className="text-left px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide">Type</th>
+                <th className="text-left px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide">Status</th>
+                <th className="text-right px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide">Amount</th>
+                <th className="text-right px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide">
                   <button onClick={() => setSortAsc(!sortAsc)} className="inline-flex items-center gap-1 hover:text-ink-2">
                     Date <ArrowUpDown className="w-3 h-3" />
                   </button>
                 </th>
-                <th className="text-right font-medium text-ink-4 text-xs px-5 py-3">Actions</th>
+                <th className="text-right px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((order) => (
-                <tr key={order.id} className="border-b border-ink-6 last:border-0 hover:bg-bg-2 transition-colors">
-                  <td className="px-5 py-3">
-                    <Link href={`/admin/orders/${order.id}`} className="font-mono text-xs text-ink-3 hover:text-brand-dark">
-                      {order.orderNumber}
-                    </Link>
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center text-ink-4 text-sm">
+                    No orders found matching your criteria.
                   </td>
-                  <td className="px-5 py-3 font-medium text-ink">{order.client}</td>
-                  <td className="px-5 py-3 text-ink-3 max-w-[200px] truncate">{order.service}</td>
-                  <td className="px-5 py-3">
-                    <span className={`text-xs font-medium ${typeColors[order.type]}`}>{order.type}</span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${statusColors[order.status]}`}>
-                      {order.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-right text-ink-2 font-medium">{order.amount}</td>
-                  <td className="px-5 py-3 text-right text-ink-4">{order.date}</td>
-                  <td className="px-5 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {order.status === 'Pending' && (
-                        <button className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-dark bg-brand-tint px-2 py-1 rounded-md hover:bg-brand/20 transition-colors">
-                          <UserPlus className="w-3 h-3" /> Assign
-                        </button>
-                      )}
+                </tr>
+              ) : (
+                filtered.map((order) => (
+                  <tr key={order.id} className="border-b border-ink-6 last:border-0 hover:bg-bg-2 transition-colors">
+                    <td className="px-4 py-3">
+                      <Link href={`/admin/orders/${order.id}`} className="font-mono text-xs text-ink-3 hover:text-brand-dark">
+                        {order.id.slice(0, 8).toUpperCase()}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 font-medium text-ink">
+                      {order.businesses?.name ?? 'Unknown'}
+                    </td>
+                    <td className="px-4 py-3 text-ink-3 max-w-[200px] truncate">
+                      {order.service_name}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-medium ${TYPE_COLOR[order.type] ?? 'text-ink-3'}`}>
+                        {TYPE_LABEL[order.type] ?? order.type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[order.status] ?? 'bg-gray-50 text-gray-700'}`}>
+                        {STATUS_LABEL[order.status] ?? order.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-ink-2 font-medium">
+                      {formatCurrency(order.total_price)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-ink-4">
+                      {formatDate(order.created_at)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
                       <Link
                         href={`/admin/orders/${order.id}`}
                         className="inline-flex items-center gap-1 text-[11px] font-medium text-ink-3 bg-bg-2 px-2 py-1 rounded-md hover:bg-ink-6 transition-colors"
                       >
                         <Eye className="w-3 h-3" /> View
                       </Link>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-ink-4 text-sm">
-                    No orders found matching your criteria.
-                  </td>
-                </tr>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>

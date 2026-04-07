@@ -1,257 +1,369 @@
 'use client'
 
-import {
-  TrendingUp, TrendingDown, DollarSign, UserMinus, Heart, UserCheck,
-  Star,
-} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { DollarSign, Users, TrendingUp, Calculator } from 'lucide-react'
 
-// ── Revenue Stats ────────────────────────────────────────────────────
+// ── Types ───────────────────────────────────────────────────────────
 
-const revenueStats = [
-  { label: 'MRR', value: '$12,840', change: '+8.3%', up: true, icon: DollarSign, color: 'bg-brand-tint text-brand-dark' },
-  { label: 'Churn Rate', value: '4.2%', change: '-1.1%', up: true, icon: UserMinus, color: 'bg-red-50 text-red-600' },
-  { label: 'Avg LTV', value: '$3,420', change: '+12%', up: true, icon: Heart, color: 'bg-purple-50 text-purple-600' },
-  { label: 'ARPU', value: '$535', change: '+3.7%', up: true, icon: UserCheck, color: 'bg-blue-50 text-blue-600' },
-]
+interface RevenueStats {
+  mrr: number
+  totalRevenue: number
+  activeClients: number
+  avgRevenuePerClient: number
+}
 
-// ── Client Health ────────────────────────────────────────────────────
-
-interface ClientHealth {
+interface ClientRow {
+  id: string
   name: string
-  plan: string
-  monthlyValue: string
-  approvalSpeed: string
-  engagement: string
-  healthScore: number
+  client_status: string
+  mrr: number
+  agreementStatus: string
+  invoicesPaid: number
+  invoicesTotal: number
+  health: 'green' | 'yellow' | 'red'
 }
 
-const clientHealth: ClientHealth[] = [
-  { name: 'Casa Priya', plan: 'Social Media Growth', monthlyValue: '$449', approvalSpeed: '4h', engagement: '5.2%', healthScore: 9 },
-  { name: 'Lumina Boutique', plan: 'Website + Social', monthlyValue: '$599', approvalSpeed: '8h', engagement: '4.1%', healthScore: 8 },
-  { name: 'Golden Wok', plan: 'Brand Identity', monthlyValue: '$499', approvalSpeed: '6h', engagement: '4.8%', healthScore: 8 },
-  { name: 'Peak Fitness', plan: 'Email Starter', monthlyValue: '$199', approvalSpeed: '12h', engagement: '3.4%', healthScore: 7 },
-  { name: 'Bloom & Gather', plan: 'Content Calendar', monthlyValue: '$299', approvalSpeed: '18h', engagement: '3.9%', healthScore: 7 },
-  { name: 'Zara Legal', plan: 'LinkedIn Growth', monthlyValue: '$349', approvalSpeed: '24h', engagement: '2.8%', healthScore: 6 },
-  { name: 'Vesta Bakery', plan: 'A La Carte', monthlyValue: '$140', approvalSpeed: '36h', engagement: '2.1%', healthScore: 5 },
-  { name: 'Solstice Yoga', plan: 'Social Media Starter', monthlyValue: '$199', approvalSpeed: '48h', engagement: '1.9%', healthScore: 4 },
-  { name: 'TrueNorth Realty', plan: 'A La Carte', monthlyValue: '$320', approvalSpeed: '72h', engagement: '1.2%', healthScore: 3 },
-  { name: 'Atlas Consulting', plan: 'Strategy Only', monthlyValue: '$250', approvalSpeed: '96h', engagement: '0.8%', healthScore: 2 },
-]
-
-// ── Service Popularity ──────────────────────────────────────────────
-
-const services = [
-  { name: 'Social Media', percent: 42 },
-  { name: 'Websites', percent: 18 },
-  { name: 'Local SEO', percent: 15 },
-  { name: 'Email', percent: 12 },
-  { name: 'Branding', percent: 8 },
-  { name: 'Other', percent: 5 },
-]
-
-// ── Team Performance ────────────────────────────────────────────────
-
-interface TeamPerf {
+interface ServiceCount {
   name: string
-  initials: string
-  color: string
-  deliverables: number
-  onTimeRate: string
-  revisionRate: string
-  avgRating: number
+  count: number
 }
 
-const teamPerformance: TeamPerf[] = [
-  { name: 'Sarah K.', initials: 'SK', color: 'bg-rose-100 text-rose-700', deliverables: 24, onTimeRate: '96%', revisionRate: '12%', avgRating: 4.8 },
-  { name: 'Mike R.', initials: 'MR', color: 'bg-blue-100 text-blue-700', deliverables: 18, onTimeRate: '92%', revisionRate: '18%', avgRating: 4.6 },
-  { name: 'Alex T.', initials: 'AT', color: 'bg-violet-100 text-violet-700', deliverables: 21, onTimeRate: '95%', revisionRate: '8%', avgRating: 4.9 },
-  { name: 'Jordan L.', initials: 'JL', color: 'bg-amber-100 text-amber-700', deliverables: 14, onTimeRate: '93%', revisionRate: '15%', avgRating: 4.7 },
-]
-
-// ── Helpers ──────────────────────────────────────────────────────────
-
-function healthColor(score: number) {
-  if (score >= 7) return { bg: 'bg-green-100', text: 'text-green-700' }
-  if (score >= 4) return { bg: 'bg-amber-100', text: 'text-amber-700' }
-  return { bg: 'bg-red-100', text: 'text-red-700' }
+interface MonthlyRevenue {
+  month: string
+  total: number
 }
 
-function ratingStars(rating: number) {
-  const full = Math.floor(rating)
-  const half = rating % 1 >= 0.5
-  return { full, half, empty: 5 - full - (half ? 1 : 0) }
+// ── Helpers ─────────────────────────────────────────────────────────
+
+function fmt(n: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n)
 }
 
-// ── Component ────────────────────────────────────────────────────────
+function healthDot(h: 'green' | 'yellow' | 'red') {
+  const color = h === 'green' ? 'bg-emerald-500' : h === 'yellow' ? 'bg-amber-500' : 'bg-red-500'
+  return <span className={`inline-block w-2 h-2 rounded-full ${color}`} />
+}
+
+function healthOrder(h: 'green' | 'yellow' | 'red') {
+  return h === 'red' ? 0 : h === 'yellow' ? 1 : 2
+}
+
+// ── Skeleton helpers ────────────────────────────────────────────────
+
+function SkeletonCard() {
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 p-5 animate-pulse">
+      <div className="w-8 h-8 rounded-lg bg-ink-6 mb-3" />
+      <div className="h-7 w-24 bg-ink-6 rounded mb-1" />
+      <div className="h-4 w-16 bg-ink-6 rounded" />
+    </div>
+  )
+}
+
+function SkeletonTable() {
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 overflow-hidden animate-pulse">
+      <div className="h-10 bg-bg-2 border-b border-ink-6" />
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="flex gap-4 px-4 py-3 border-b border-ink-6 last:border-0">
+          <div className="h-4 w-32 bg-ink-6 rounded" />
+          <div className="h-4 w-20 bg-ink-6 rounded" />
+          <div className="h-4 w-16 bg-ink-6 rounded" />
+          <div className="h-4 w-16 bg-ink-6 rounded" />
+          <div className="h-4 w-16 bg-ink-6 rounded" />
+          <div className="h-4 w-10 bg-ink-6 rounded" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function SkeletonBars() {
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 p-5 space-y-4 animate-pulse">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-4">
+          <div className="w-28 h-4 bg-ink-6 rounded" />
+          <div className="flex-1 h-2 bg-ink-6 rounded-full" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Component ───────────────────────────────────────────────────────
 
 export default function ReportsPage() {
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState<RevenueStats | null>(null)
+  const [clients, setClients] = useState<ClientRow[]>([])
+  const [services, setServices] = useState<ServiceCount[]>([])
+  const [monthly, setMonthly] = useState<MonthlyRevenue[]>([])
+
+  useEffect(() => {
+    const supabase = createClient()
+
+    async function load() {
+      setLoading(true)
+
+      const [
+        { data: activeSubs },
+        { data: paidInvoices },
+        { data: allInvoices },
+        { data: businesses },
+        { data: agreements },
+        { data: orders },
+      ] = await Promise.all([
+        supabase.from('subscriptions').select('business_id, plan_price').eq('status', 'active'),
+        supabase.from('invoices').select('business_id, amount, created_at').eq('status', 'paid'),
+        supabase.from('invoices').select('business_id, status, due_date'),
+        supabase.from('businesses').select('id, name, client_status').in('client_status', ['active', 'paused', 'agreement_sent', 'agreement_signed', 'offboarded']).order('name'),
+        supabase.from('agreements').select('business_id, status').order('created_at', { ascending: false }),
+        supabase.from('orders').select('service_name'),
+      ])
+
+      // ── Revenue Stats ──────────────────────────────────────────
+      const mrr = (activeSubs ?? []).reduce((sum, s) => sum + (Number(s.plan_price) || 0), 0)
+      const totalRevenue = (paidInvoices ?? []).reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0)
+      const activeCount = (businesses ?? []).filter(b => b.client_status === 'active').length
+      const avgRevenue = activeCount > 0 ? totalRevenue / activeCount : 0
+
+      setStats({ mrr, totalRevenue, activeClients: activeCount, avgRevenuePerClient: avgRevenue })
+
+      // ── Client Health ──────────────────────────────────────────
+      const bizList = businesses ?? []
+
+      // Build lookup: latest agreement status per business
+      const agreementMap = new Map<string, string>()
+      for (const a of agreements ?? []) {
+        if (!agreementMap.has(a.business_id)) {
+          agreementMap.set(a.business_id, a.status)
+        }
+      }
+
+      // Build lookup: MRR per business
+      const mrrMap = new Map<string, number>()
+      for (const s of activeSubs ?? []) {
+        mrrMap.set(s.business_id, (mrrMap.get(s.business_id) || 0) + (Number(s.plan_price) || 0))
+      }
+
+      // Build lookup: invoices per business
+      const invoicePaidMap = new Map<string, number>()
+      const invoiceTotalMap = new Map<string, number>()
+      const overdueSet = new Set<string>()
+      const now = new Date().toISOString()
+
+      for (const inv of allInvoices ?? []) {
+        invoiceTotalMap.set(inv.business_id, (invoiceTotalMap.get(inv.business_id) || 0) + 1)
+        if (inv.status === 'paid') {
+          invoicePaidMap.set(inv.business_id, (invoicePaidMap.get(inv.business_id) || 0) + 1)
+        }
+        if ((inv.status === 'pending' || inv.status === 'failed') && inv.due_date && inv.due_date < now) {
+          overdueSet.add(inv.business_id)
+        }
+      }
+
+      const clientRows: ClientRow[] = bizList.map(b => {
+        const latestAgreement = agreementMap.get(b.id) || 'none'
+        const hasOverdue = overdueSet.has(b.id)
+        const agreementSigned = latestAgreement === 'signed' || latestAgreement === 'active'
+        const isOffboarded = b.client_status === 'offboarded'
+
+        let health: 'green' | 'yellow' | 'red' = 'green'
+        if (hasOverdue || isOffboarded) {
+          health = 'red'
+        } else if (!agreementSigned || b.client_status === 'paused') {
+          health = 'yellow'
+        }
+
+        return {
+          id: b.id,
+          name: b.name,
+          client_status: b.client_status,
+          mrr: mrrMap.get(b.id) || 0,
+          agreementStatus: latestAgreement,
+          invoicesPaid: invoicePaidMap.get(b.id) || 0,
+          invoicesTotal: invoiceTotalMap.get(b.id) || 0,
+          health,
+        }
+      })
+
+      clientRows.sort((a, b) => healthOrder(a.health) - healthOrder(b.health))
+      setClients(clientRows)
+
+      // ── Service Popularity ────────────────────────────────────
+      const serviceCounts = new Map<string, number>()
+      for (const o of orders ?? []) {
+        if (o.service_name) {
+          serviceCounts.set(o.service_name, (serviceCounts.get(o.service_name) || 0) + 1)
+        }
+      }
+      const sortedServices = Array.from(serviceCounts.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8)
+      setServices(sortedServices)
+
+      // ── Monthly Revenue Breakdown ─────────────────────────────
+      const monthMap = new Map<string, number>()
+      for (const inv of paidInvoices ?? []) {
+        const d = new Date(inv.created_at)
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        monthMap.set(key, (monthMap.get(key) || 0) + (Number(inv.amount) || 0))
+      }
+      const sortedMonths = Array.from(monthMap.entries())
+        .map(([month, total]) => ({ month, total }))
+        .sort((a, b) => a.month.localeCompare(b.month))
+      setMonthly(sortedMonths)
+
+      setLoading(false)
+    }
+
+    load()
+  }, [])
+
+  const maxServiceCount = services.length > 0 ? Math.max(...services.map(s => s.count)) : 1
+  const maxMonthly = monthly.length > 0 ? Math.max(...monthly.map(m => m.total)) : 1
+
+  const statCards = stats
+    ? [
+        { label: 'MRR', value: fmt(stats.mrr), icon: DollarSign, color: 'bg-brand-tint text-brand-dark' },
+        { label: 'Total Revenue', value: fmt(stats.totalRevenue), icon: TrendingUp, color: 'bg-emerald-50 text-emerald-600' },
+        { label: 'Active Clients', value: String(stats.activeClients), icon: Users, color: 'bg-blue-50 text-blue-600' },
+        { label: 'Avg Revenue / Client', value: fmt(stats.avgRevenuePerClient), icon: Calculator, color: 'bg-purple-50 text-purple-600' },
+      ]
+    : []
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div>
         <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Reports</h1>
-        <p className="text-ink-3 text-sm mt-1">Business analytics and team performance overview.</p>
+        <p className="text-ink-3 text-sm mt-1">Revenue, client health, and service analytics.</p>
       </div>
 
       {/* Revenue Stats */}
       <div>
-        <h2 className="font-[family-name:var(--font-display)] text-lg text-ink mb-3">Revenue</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {revenueStats.map((stat) => (
-            <div key={stat.label} className="bg-white rounded-xl border border-ink-6 p-4 hover:shadow-sm transition-shadow">
-              <div className={`w-8 h-8 rounded-lg ${stat.color} flex items-center justify-center mb-3`}>
-                <stat.icon className="w-4 h-4" />
+        <h2 className="text-sm font-semibold text-ink mb-3">Revenue</h2>
+        {loading ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {statCards.map(card => (
+              <div key={card.label} className="bg-white rounded-xl border border-ink-6 p-5">
+                <div className={`w-8 h-8 rounded-lg ${card.color} flex items-center justify-center mb-3`}>
+                  <card.icon className="w-4 h-4" />
+                </div>
+                <div className="font-[family-name:var(--font-display)] text-2xl text-ink">{card.value}</div>
+                <div className="text-ink-3 text-sm mt-0.5">{card.label}</div>
               </div>
-              <div className="font-[family-name:var(--font-display)] text-2xl text-ink">{stat.value}</div>
-              <div className="text-xs text-ink-4 mt-0.5">{stat.label}</div>
-              <div className={`flex items-center gap-1 mt-1.5 text-xs font-medium ${stat.up ? 'text-emerald-600' : 'text-red-500'}`}>
-                {stat.up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                {stat.change} vs last month
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Client Health */}
       <div>
-        <h2 className="font-[family-name:var(--font-display)] text-lg text-ink mb-3">Client Health</h2>
-        <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-ink-6">
-                  <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Client</th>
-                  <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Plan</th>
-                  <th className="text-right font-medium text-ink-4 text-xs px-5 py-3">Monthly Value</th>
-                  <th className="text-right font-medium text-ink-4 text-xs px-5 py-3">Approval Speed</th>
-                  <th className="text-right font-medium text-ink-4 text-xs px-5 py-3">Engagement</th>
-                  <th className="text-center font-medium text-ink-4 text-xs px-5 py-3">Health Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clientHealth
-                  .sort((a, b) => b.healthScore - a.healthScore)
-                  .map((client) => {
-                    const hc = healthColor(client.healthScore)
-                    return (
-                      <tr key={client.name} className="border-b border-ink-6 last:border-0 hover:bg-bg-2 transition-colors">
-                        <td className="px-5 py-3 font-medium text-ink">{client.name}</td>
-                        <td className="px-5 py-3 text-ink-3">{client.plan}</td>
-                        <td className="px-5 py-3 text-right font-medium text-ink">{client.monthlyValue}</td>
-                        <td className="px-5 py-3 text-right text-ink-3">{client.approvalSpeed}</td>
-                        <td className="px-5 py-3 text-right text-ink-3">{client.engagement}</td>
-                        <td className="px-5 py-3 text-center">
-                          <span className={`inline-flex items-center justify-center w-8 h-8 rounded-lg text-xs font-bold ${hc.bg} ${hc.text}`}>
-                            {client.healthScore}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
-              </tbody>
-            </table>
+        <h2 className="text-sm font-semibold text-ink mb-3">Client Health</h2>
+        {loading ? (
+          <SkeletonTable />
+        ) : clients.length === 0 ? (
+          <div className="bg-white rounded-xl border border-ink-6 p-8 text-center text-ink-3 text-sm">No clients found.</div>
+        ) : (
+          <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">Client</th>
+                    <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">Status</th>
+                    <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-right">MRR</th>
+                    <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">Agreement</th>
+                    <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-right">Invoices</th>
+                    <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-center">Health</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clients.map(c => (
+                    <tr key={c.id} className="border-b border-ink-6 last:border-0 hover:bg-bg-2 transition-colors">
+                      <td className="px-4 py-3 text-sm text-ink font-medium">{c.name}</td>
+                      <td className="px-4 py-3 text-sm text-ink">
+                        <span className="capitalize">{c.client_status.replace(/_/g, ' ')}</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-ink text-right">{fmt(c.mrr)}</td>
+                      <td className="px-4 py-3 text-sm text-ink">
+                        <span className="capitalize">{c.agreementStatus === 'none' ? '-' : c.agreementStatus}</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-ink text-right">
+                        {c.invoicesTotal > 0 ? `${c.invoicesPaid}/${c.invoicesTotal}` : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="flex items-center justify-center">{healthDot(c.health)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Service Popularity */}
       <div>
-        <h2 className="font-[family-name:var(--font-display)] text-lg text-ink mb-3">Service Popularity</h2>
-        <div className="bg-white rounded-xl border border-ink-6 p-5 space-y-3">
-          {services.map((service) => (
-            <div key={service.name} className="flex items-center gap-4">
-              <div className="w-28 flex-shrink-0">
-                <span className="text-sm font-medium text-ink">{service.name}</span>
-              </div>
-              <div className="flex-1 h-6 bg-ink-6 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-brand rounded-full flex items-center justify-end pr-2 transition-all"
-                  style={{ width: `${service.percent}%`, minWidth: service.percent > 8 ? undefined : '2rem' }}
-                >
-                  {service.percent > 8 && (
-                    <span className="text-[11px] font-bold text-white">{service.percent}%</span>
-                  )}
+        <h2 className="text-sm font-semibold text-ink mb-3">Service Popularity</h2>
+        {loading ? (
+          <SkeletonBars />
+        ) : services.length === 0 ? (
+          <div className="bg-white rounded-xl border border-ink-6 p-8 text-center text-ink-3 text-sm">No orders yet.</div>
+        ) : (
+          <div className="bg-white rounded-xl border border-ink-6 p-5 space-y-3">
+            {services.map(service => (
+              <div key={service.name} className="flex items-center gap-4">
+                <div className="w-36 flex-shrink-0 truncate">
+                  <span className="text-sm font-medium text-ink">{service.name}</span>
                 </div>
+                <div className="flex-1 h-2 bg-ink-6 rounded-full overflow-hidden">
+                  <div
+                    className="bg-brand rounded-full h-2 transition-all"
+                    style={{ width: `${(service.count / maxServiceCount) * 100}%`, minWidth: '0.5rem' }}
+                  />
+                </div>
+                <span className="text-xs font-medium text-ink-3 w-8 text-right">{service.count}</span>
               </div>
-              {service.percent <= 8 && (
-                <span className="text-xs font-medium text-ink-3 w-10 text-right">{service.percent}%</span>
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Team Performance */}
-      <div>
-        <h2 className="font-[family-name:var(--font-display)] text-lg text-ink mb-3">Team Performance</h2>
-        <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-ink-6">
-                  <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Team Member</th>
-                  <th className="text-right font-medium text-ink-4 text-xs px-5 py-3">Deliverables</th>
-                  <th className="text-right font-medium text-ink-4 text-xs px-5 py-3">On-Time Rate</th>
-                  <th className="text-right font-medium text-ink-4 text-xs px-5 py-3">Revision Rate</th>
-                  <th className="text-center font-medium text-ink-4 text-xs px-5 py-3">Avg Client Rating</th>
-                </tr>
-              </thead>
-              <tbody>
-                {teamPerformance.map((member) => {
-                  const stars = ratingStars(member.avgRating)
-                  return (
-                    <tr key={member.name} className="border-b border-ink-6 last:border-0 hover:bg-bg-2 transition-colors">
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full ${member.color} flex items-center justify-center flex-shrink-0`}>
-                            <span className="text-[11px] font-bold">{member.initials}</span>
-                          </div>
-                          <span className="font-medium text-ink">{member.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <span className="font-[family-name:var(--font-display)] text-lg text-ink">{member.deliverables}</span>
-                        <span className="text-xs text-ink-4 ml-1">this month</span>
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <span className={`text-sm font-medium ${
-                          parseFloat(member.onTimeRate) >= 95 ? 'text-green-600' : parseFloat(member.onTimeRate) >= 90 ? 'text-amber-600' : 'text-red-600'
-                        }`}>
-                          {member.onTimeRate}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <span className={`text-sm font-medium ${
-                          parseFloat(member.revisionRate) <= 10 ? 'text-green-600' : parseFloat(member.revisionRate) <= 15 ? 'text-amber-600' : 'text-red-600'
-                        }`}>
-                          {member.revisionRate}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3">
-                        <div className="flex items-center justify-center gap-1">
-                          <div className="flex items-center gap-0.5">
-                            {Array.from({ length: stars.full }).map((_, i) => (
-                              <Star key={`f${i}`} className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                            ))}
-                            {stars.half && (
-                              <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400/50" />
-                            )}
-                            {Array.from({ length: stars.empty }).map((_, i) => (
-                              <Star key={`e${i}`} className="w-3.5 h-3.5 text-ink-5" />
-                            ))}
-                          </div>
-                          <span className="text-xs font-medium text-ink-3 ml-1">{member.avgRating}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+      {/* Monthly Revenue Breakdown */}
+      {!loading && monthly.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-ink mb-3">Monthly Revenue</h2>
+          <div className="bg-white rounded-xl border border-ink-6 p-5 space-y-3">
+            {monthly.map(m => {
+              const label = new Date(m.month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+              return (
+                <div key={m.month} className="flex items-center gap-4">
+                  <div className="w-20 flex-shrink-0">
+                    <span className="text-sm font-medium text-ink">{label}</span>
+                  </div>
+                  <div className="flex-1 h-2 bg-ink-6 rounded-full overflow-hidden">
+                    <div
+                      className="bg-brand rounded-full h-2 transition-all"
+                      style={{ width: `${(m.total / maxMonthly) * 100}%`, minWidth: '0.5rem' }}
+                    />
+                  </div>
+                  <span className="text-xs font-medium text-ink-3 w-16 text-right">{fmt(m.total)}</span>
+                </div>
+              )
+            })}
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

@@ -1,84 +1,459 @@
-import { Users, ShoppingBag, DollarSign, Clock, ArrowUpRight } from 'lucide-react'
+'use client'
 
-const stats = [
-  { label: 'Total Clients', value: '24', change: '+3 this month', icon: Users, color: 'bg-brand-tint text-brand-dark' },
-  { label: 'Active Orders', value: '18', change: '5 due this week', icon: ShoppingBag, color: 'bg-blue-50 text-blue-600' },
-  { label: 'Revenue (MTD)', value: '$12,840', change: '+18% vs last month', icon: DollarSign, color: 'bg-green-50 text-green-600' },
-  { label: 'Pending Deliverables', value: '7', change: '2 overdue', icon: Clock, color: 'bg-amber-50 text-amber-600' },
-]
+import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import {
+  Users,
+  DollarSign,
+  Clock,
+  FileSignature,
+  MessageSquare,
+  AlertTriangle,
+  ArrowUpRight,
+  FileWarning,
+  Send,
+  CalendarClock,
+} from 'lucide-react'
 
-const recentOrders = [
-  { client: 'Casa Priya', service: 'Social Media Growth', status: 'In Progress', amount: '$449/mo', date: 'Mar 22' },
-  { client: 'Vesta Bakery', service: '4x Feed Posts', status: 'Pending Review', amount: '$140', date: 'Mar 21' },
-  { client: 'Lumina Boutique', service: 'Website Redesign', status: 'Client Review', amount: '$1,299', date: 'Mar 20' },
-  { client: 'Peak Fitness', service: 'Email Setup', status: 'Completed', amount: '$199', date: 'Mar 19' },
-  { client: 'Golden Wok', service: 'Logo & Branding', status: 'In Progress', amount: '$499', date: 'Mar 18' },
-]
+interface SummaryData {
+  activeClients: number
+  mrr: number
+  pendingApprovals: number
+  overdueInvoices: number
+  unsignedAgreements: number
+  unreadMessages: number
+}
 
-const statusColors: Record<string, string> = {
-  'In Progress': 'bg-blue-50 text-blue-700 border-blue-200',
-  'Pending Review': 'bg-amber-50 text-amber-700 border-amber-200',
-  'Client Review': 'bg-purple-50 text-purple-700 border-purple-200',
-  'Completed': 'bg-green-50 text-green-700 border-green-200',
+interface ActionItem {
+  icon: typeof AlertTriangle
+  label: string
+  count: number
+  color: string
+  href: string
+}
+
+interface ActivityEntry {
+  id: string
+  action_type: string
+  description: string
+  created_at: string
+  business_name?: string
+}
+
+interface ClientHealth {
+  id: string
+  name: string
+  client_status: string
+  hasUnsignedAgreements: boolean
+  hasPendingApprovals: boolean
+  hasOverdueInvoices: boolean
+}
+
+const actionTypeLabels: Record<string, string> = {
+  agreement_sent: 'Agreement sent',
+  agreement_viewed: 'Agreement viewed',
+  agreement_signed: 'Agreement signed',
+  invoice_sent: 'Invoice sent',
+  invoice_paid: 'Invoice paid',
+  invoice_overdue: 'Invoice overdue',
+  scope_change: 'Scope changed',
+  note_added: 'Note added',
+  status_change: 'Status changed',
+  client_created: 'Client created',
+  onboarding_completed: 'Onboarding completed',
+}
+
+function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`animate-pulse bg-ink-6 rounded ${className}`} />
+}
+
+function SummaryCardSkeleton() {
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 p-5">
+      <Skeleton className="w-9 h-9 rounded-lg mb-3" />
+      <Skeleton className="w-16 h-7 mb-1.5" />
+      <Skeleton className="w-24 h-3" />
+    </div>
+  )
+}
+
+function formatCurrency(cents: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(cents)
+}
+
+function timeAgo(dateStr: string): string {
+  const now = new Date()
+  const date = new Date(dateStr)
+  const diffMs = now.getTime() - date.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+  const diffDays = Math.floor(diffHr / 24)
+  if (diffDays === 1) return 'yesterday'
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function getHealthStatus(client: ClientHealth): { label: string; color: string } {
+  if (client.hasOverdueInvoices || client.client_status === 'offboarded') {
+    return { label: 'At risk', color: 'bg-red-50 text-red-700' }
+  }
+  if (client.hasUnsignedAgreements || client.hasPendingApprovals) {
+    return { label: 'Needs attention', color: 'bg-amber-50 text-amber-700' }
+  }
+  if (client.client_status === 'active') {
+    return { label: 'Healthy', color: 'bg-emerald-50 text-emerald-700' }
+  }
+  return { label: client.client_status.replace(/_/g, ' '), color: 'bg-ink-6 text-ink-3' }
 }
 
 export default function AdminDashboard() {
+  const [summary, setSummary] = useState<SummaryData | null>(null)
+  const [actions, setActions] = useState<ActionItem[]>([])
+  const [activity, setActivity] = useState<ActivityEntry[]>([])
+  const [clients, setClients] = useState<ClientHealth[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchData() {
+      const supabase = createClient()
+
+      const [
+        { count: activeClients },
+        { data: activeSubs },
+        { count: pendingApprovals },
+        { count: overdueInvoices },
+        { count: unsignedAgreements },
+        { count: unreadMessages },
+        { data: overdueDeliverables },
+        { data: draftInvoices },
+        { data: expiringAgreements },
+        { data: activityLog },
+        { data: allBusinesses },
+      ] = await Promise.all([
+        // Active clients
+        supabase
+          .from('businesses')
+          .select('*', { count: 'exact', head: true })
+          .eq('client_status', 'active'),
+
+        // Active subscriptions for MRR
+        supabase
+          .from('subscriptions')
+          .select('plan_price')
+          .eq('status', 'active'),
+
+        // Pending approvals (deliverables in client_review)
+        supabase
+          .from('deliverables')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'client_review'),
+
+        // Overdue invoices (pending + past due date)
+        supabase
+          .from('invoices')
+          .select('*', { count: 'exact', head: true })
+          .in('status', ['pending', 'failed'])
+          .lt('due_date', new Date().toISOString()),
+
+        // Unsigned agreements (status = sent)
+        supabase
+          .from('agreements')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'sent'),
+
+        // Unread messages (admin-facing: messages from clients without read_at)
+        supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('sender_role', 'client')
+          .is('read_at', null),
+
+        // Action items: overdue deliverables (in_progress past deadline)
+        supabase
+          .from('deliverables')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['draft', 'internal_review', 'in_progress'])
+          .not('updated_at', 'is', null)
+          .lt('updated_at', new Date(Date.now() - 7 * 86400000).toISOString()),
+
+        // Action items: draft invoices to send
+        supabase
+          .from('invoices')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'draft'),
+
+        // Action items: agreements expiring within 7 days
+        supabase
+          .from('agreements')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'sent')
+          .lt('expires_at', new Date(Date.now() + 7 * 86400000).toISOString())
+          .gt('expires_at', new Date().toISOString()),
+
+        // Recent activity
+        supabase
+          .from('client_activity_log')
+          .select('id, action_type, description, created_at, business_id, businesses(name)')
+          .order('created_at', { ascending: false })
+          .limit(15),
+
+        // All businesses for client health
+        supabase
+          .from('businesses')
+          .select('id, name, client_status')
+          .in('client_status', ['active', 'paused', 'agreement_sent', 'agreement_signed', 'offboarded'])
+          .order('name'),
+      ])
+
+      // Calculate MRR
+      const mrr = (activeSubs ?? []).reduce((sum, s) => sum + (Number(s.plan_price) || 0), 0)
+
+      setSummary({
+        activeClients: activeClients ?? 0,
+        mrr,
+        pendingApprovals: pendingApprovals ?? 0,
+        overdueInvoices: overdueInvoices ?? 0,
+        unsignedAgreements: unsignedAgreements ?? 0,
+        unreadMessages: unreadMessages ?? 0,
+      })
+
+      // Build action items
+      const actionItems: ActionItem[] = []
+      const staleCount = overdueDeliverables?.length ?? 0
+      const draftCount = draftInvoices?.length ?? 0
+      const expiringCount = expiringAgreements?.length ?? 0
+
+      if (staleCount > 0) {
+        actionItems.push({
+          icon: FileWarning,
+          label: 'Stale deliverables (no update in 7+ days)',
+          count: staleCount,
+          color: 'text-red-600',
+          href: '/admin/deliverables',
+        })
+      }
+      if (draftCount > 0) {
+        actionItems.push({
+          icon: Send,
+          label: 'Draft invoices to send',
+          count: draftCount,
+          color: 'text-amber-600',
+          href: '/admin/invoices',
+        })
+      }
+      if (expiringCount > 0) {
+        actionItems.push({
+          icon: CalendarClock,
+          label: 'Agreements expiring within 7 days',
+          count: expiringCount,
+          color: 'text-amber-600',
+          href: '/admin/agreements',
+        })
+      }
+      setActions(actionItems)
+
+      // Map activity log with business names
+      const mappedActivity: ActivityEntry[] = (activityLog ?? []).map((entry: Record<string, unknown>) => ({
+        id: entry.id as string,
+        action_type: entry.action_type as string,
+        description: entry.description as string,
+        created_at: entry.created_at as string,
+        business_name: (entry.businesses as { name: string } | null)?.name ?? 'Unknown',
+      }))
+      setActivity(mappedActivity)
+
+      // Client health: check unsigned agreements and pending approvals per business
+      if (allBusinesses && allBusinesses.length > 0) {
+        const businessIds = allBusinesses.map((b) => b.id)
+
+        const [{ data: unsignedByBiz }, { data: pendingByBiz }, { data: overdueByBiz }] =
+          await Promise.all([
+            supabase
+              .from('agreements')
+              .select('business_id')
+              .eq('status', 'sent')
+              .in('business_id', businessIds),
+            supabase
+              .from('deliverables')
+              .select('business_id')
+              .eq('status', 'client_review')
+              .in('business_id', businessIds),
+            supabase
+              .from('invoices')
+              .select('business_id')
+              .in('status', ['pending', 'failed'])
+              .lt('due_date', new Date().toISOString())
+              .in('business_id', businessIds),
+          ])
+
+        const unsignedSet = new Set((unsignedByBiz ?? []).map((a) => a.business_id))
+        const pendingSet = new Set((pendingByBiz ?? []).map((d) => d.business_id))
+        const overdueSet = new Set((overdueByBiz ?? []).map((i) => i.business_id))
+
+        const healthList: ClientHealth[] = allBusinesses.map((b) => ({
+          id: b.id,
+          name: b.name,
+          client_status: b.client_status,
+          hasUnsignedAgreements: unsignedSet.has(b.id),
+          hasPendingApprovals: pendingSet.has(b.id),
+          hasOverdueInvoices: overdueSet.has(b.id),
+        }))
+
+        // Sort: red first, then yellow, then green
+        healthList.sort((a, b) => {
+          const scoreA = a.hasOverdueInvoices || a.client_status === 'offboarded' ? 0 : a.hasUnsignedAgreements || a.hasPendingApprovals ? 1 : 2
+          const scoreB = b.hasOverdueInvoices || b.client_status === 'offboarded' ? 0 : b.hasUnsignedAgreements || b.hasPendingApprovals ? 1 : 2
+          return scoreA - scoreB
+        })
+
+        setClients(healthList)
+      }
+
+      setLoading(false)
+    }
+
+    fetchData()
+  }, [])
+
+  const summaryCards = summary
+    ? [
+        { label: 'Active Clients', value: summary.activeClients.toString(), icon: Users, color: 'bg-brand-tint text-brand-dark' },
+        { label: 'Monthly Recurring', value: formatCurrency(summary.mrr), icon: DollarSign, color: 'bg-emerald-50 text-emerald-700' },
+        { label: 'Pending Approvals', value: summary.pendingApprovals.toString(), icon: Clock, color: 'bg-amber-50 text-amber-700' },
+        { label: 'Overdue Invoices', value: summary.overdueInvoices.toString(), icon: AlertTriangle, color: 'bg-red-50 text-red-700' },
+        { label: 'Unsigned Agreements', value: summary.unsignedAgreements.toString(), icon: FileSignature, color: 'bg-purple-50 text-purple-700' },
+        { label: 'Unread Messages', value: summary.unreadMessages.toString(), icon: MessageSquare, color: 'bg-blue-50 text-blue-700' },
+      ]
+    : []
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
-        <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Admin Dashboard</h1>
-        <p className="text-ink-3 text-sm mt-1">Overview of all client activity and team workload.</p>
+        <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Dashboard</h1>
+        <p className="text-ink-3 text-sm mt-1">Your business at a glance.</p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {stats.map((stat) => (
-          <div key={stat.label} className="bg-white rounded-xl border border-ink-6 p-4">
-            <div className={`w-8 h-8 rounded-lg ${stat.color} flex items-center justify-center mb-3`}>
-              <stat.icon className="w-4 h-4" />
-            </div>
-            <div className="font-[family-name:var(--font-display)] text-2xl text-ink">{stat.value}</div>
-            <div className="text-xs text-ink-4 mt-0.5">{stat.label}</div>
-            <div className="text-[10px] text-brand-dark mt-1">{stat.change}</div>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        {loading
+          ? Array.from({ length: 6 }).map((_, i) => <SummaryCardSkeleton key={i} />)
+          : summaryCards.map((card) => (
+              <div key={card.label} className="bg-white rounded-xl border border-ink-6 p-5">
+                <div className={`w-9 h-9 rounded-lg ${card.color} flex items-center justify-center mb-3`}>
+                  <card.icon className="w-4 h-4" />
+                </div>
+                <div className="font-[family-name:var(--font-display)] text-2xl text-ink">{card.value}</div>
+                <div className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mt-1">{card.label}</div>
+              </div>
+            ))}
+      </div>
+
+      {/* Action Items */}
+      {!loading && actions.length > 0 && (
+        <div className="bg-white rounded-xl border border-ink-6 p-5">
+          <h2 className="font-[family-name:var(--font-display)] text-lg text-ink mb-4">Needs Attention</h2>
+          <div className="space-y-3">
+            {actions.map((item, i) => (
+              <a
+                key={i}
+                href={item.href}
+                className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-bg-2 transition-colors group"
+              >
+                <div className="flex items-center gap-3">
+                  <item.icon className={`w-4 h-4 ${item.color}`} />
+                  <span className="text-sm text-ink">{item.label}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-medium ${item.color}`}>{item.count}</span>
+                  <ArrowUpRight className="w-3.5 h-3.5 text-ink-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </a>
+            ))}
           </div>
-        ))}
-      </div>
-
-      {/* Recent Orders Table */}
-      <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
-        <div className="flex items-center justify-between p-5 border-b border-ink-6">
-          <h2 className="font-[family-name:var(--font-display)] text-lg text-ink">Recent Orders</h2>
-          <a href="/admin/orders" className="text-xs text-brand-dark font-medium hover:underline flex items-center gap-1">
-            View all <ArrowUpRight className="w-3 h-3" />
-          </a>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-ink-6">
-                <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Client</th>
-                <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Service</th>
-                <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Status</th>
-                <th className="text-right font-medium text-ink-4 text-xs px-5 py-3">Amount</th>
-                <th className="text-right font-medium text-ink-4 text-xs px-5 py-3">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentOrders.map((order, i) => (
-                <tr key={i} className="border-b border-ink-6 last:border-0 hover:bg-bg-2 transition-colors cursor-pointer">
-                  <td className="px-5 py-3 font-medium text-ink">{order.client}</td>
-                  <td className="px-5 py-3 text-ink-3">{order.service}</td>
-                  <td className="px-5 py-3">
-                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${statusColors[order.status] || ''}`}>
-                      {order.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-right text-ink-2 font-medium">{order.amount}</td>
-                  <td className="px-5 py-3 text-right text-ink-4">{order.date}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      )}
+
+      <div className="grid lg:grid-cols-2 gap-3">
+        {/* Recent Activity */}
+        <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
+          <div className="p-5 border-b border-ink-6">
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-ink">Recent Activity</h2>
+          </div>
+          <div className="divide-y divide-ink-6">
+            {loading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="px-5 py-3.5 flex items-start gap-3">
+                    <Skeleton className="w-2 h-2 rounded-full mt-1.5 shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <Skeleton className="w-3/4 h-3.5" />
+                      <Skeleton className="w-1/2 h-3" />
+                    </div>
+                  </div>
+                ))
+              : activity.length === 0
+                ? (
+                    <div className="px-5 py-8 text-center text-ink-4 text-sm">No recent activity</div>
+                  )
+                : activity.map((entry) => (
+                    <div key={entry.id} className="px-5 py-3.5 flex items-start gap-3">
+                      <div className="w-2 h-2 rounded-full bg-brand-dark mt-1.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-ink truncate">
+                          <span className="font-medium">{entry.business_name}</span>
+                          {' -- '}
+                          {entry.description || actionTypeLabels[entry.action_type] || entry.action_type}
+                        </p>
+                        <p className="text-xs text-ink-4 mt-0.5">{timeAgo(entry.created_at)}</p>
+                      </div>
+                    </div>
+                  ))}
+          </div>
+        </div>
+
+        {/* Client Health */}
+        <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
+          <div className="flex items-center justify-between p-5 border-b border-ink-6">
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-ink">Client Health</h2>
+            <a href="/admin/clients" className="text-xs text-brand-dark font-medium hover:underline flex items-center gap-1">
+              View all <ArrowUpRight className="w-3 h-3" />
+            </a>
+          </div>
+          <div className="divide-y divide-ink-6">
+            {loading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="px-5 py-3.5 flex items-center justify-between">
+                    <Skeleton className="w-32 h-4" />
+                    <Skeleton className="w-20 h-5 rounded-full" />
+                  </div>
+                ))
+              : clients.length === 0
+                ? (
+                    <div className="px-5 py-8 text-center text-ink-4 text-sm">No clients yet</div>
+                  )
+                : clients.slice(0, 10).map((client) => {
+                    const health = getHealthStatus(client)
+                    return (
+                      <a
+                        key={client.id}
+                        href={`/admin/clients/${client.id}`}
+                        className="px-5 py-3.5 flex items-center justify-between hover:bg-bg-2 transition-colors"
+                      >
+                        <span className="text-sm text-ink font-medium truncate">{client.name}</span>
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${health.color}`}>
+                          {health.label}
+                        </span>
+                      </a>
+                    )
+                  })}
+          </div>
         </div>
       </div>
     </div>

@@ -1,118 +1,181 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import {
   ChevronLeft, ChevronRight, LayoutGrid, List, Filter,
-  Clock, AlertTriangle, Calendar, User, X
+  Clock, AlertTriangle, Calendar, X, Loader2
 } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type Status = 'new' | 'in_progress' | 'internal_review' | 'client_review' | 'approved' | 'scheduled'
-type Priority = 'Normal' | 'High' | 'Urgent'
-type ServiceType = 'Social Media' | 'Video' | 'Website' | 'Email' | 'Branding' | 'SEO'
+type DeliverableStatus =
+  | 'draft'
+  | 'in_progress'
+  | 'internal_review'
+  | 'client_review'
+  | 'revision_requested'
+  | 'approved'
+  | 'scheduled'
+  | 'published'
 
-interface Card {
+type DeliverableType =
+  | 'graphic'
+  | 'video'
+  | 'caption'
+  | 'email'
+  | 'website_page'
+  | 'seo'
+  | 'branding'
+  | 'photography'
+  | 'other'
+
+interface Deliverable {
   id: string
+  work_brief_id: string | null
+  business_id: string | null
+  type: DeliverableType
   title: string
-  client: string
-  service: ServiceType
-  assignee: { name: string; initials: string; color: string }
-  due: string          // ISO date string
-  priority: Priority
-  status: Status
+  description: string | null
+  status: DeliverableStatus
+  version: number
+  created_at: string
+  updated_at: string
+  businesses: { name: string } | null
+  work_briefs: { deadline: string | null } | null
 }
 
 /* ------------------------------------------------------------------ */
 /*  Column config                                                      */
 /* ------------------------------------------------------------------ */
 
-const columns: { key: Status; label: string; dot: string; bg: string }[] = [
-  { key: 'new',             label: 'New',             dot: 'bg-amber-400',  bg: 'bg-amber-50' },
-  { key: 'in_progress',     label: 'In Progress',     dot: 'bg-blue-500',   bg: 'bg-blue-50' },
-  { key: 'internal_review', label: 'Internal Review',  dot: 'bg-purple-500', bg: 'bg-purple-50' },
-  { key: 'client_review',   label: 'Client Review',   dot: 'bg-orange-500', bg: 'bg-orange-50' },
-  { key: 'approved',        label: 'Approved',        dot: 'bg-green-500',  bg: 'bg-green-50' },
-  { key: 'scheduled',       label: 'Scheduled',       dot: 'bg-teal-500',   bg: 'bg-teal-50' },
+const columns: { key: DeliverableStatus; label: string; dot: string }[] = [
+  { key: 'draft',           label: 'Backlog',            dot: 'bg-ink-4' },
+  { key: 'in_progress',     label: 'In Production',      dot: 'bg-blue-500' },
+  { key: 'internal_review', label: 'Internal Review',    dot: 'bg-purple-500' },
+  { key: 'client_review',   label: 'Client Review',      dot: 'bg-orange-500' },
+  { key: 'approved',        label: 'Approved',           dot: 'bg-green-500' },
+  { key: 'scheduled',       label: 'Scheduled / Published', dot: 'bg-teal-500' },
 ]
 
-/* ------------------------------------------------------------------ */
-/*  Team members                                                       */
-/* ------------------------------------------------------------------ */
+/** Statuses that belong in the last combined column */
+const lastColumnStatuses: DeliverableStatus[] = ['scheduled', 'published']
 
-const team = [
-  { name: 'Sarah K.',  initials: 'SK', color: 'bg-rose-100 text-rose-700' },
-  { name: 'Mike R.',   initials: 'MR', color: 'bg-blue-100 text-blue-700' },
-  { name: 'Alex T.',   initials: 'AT', color: 'bg-violet-100 text-violet-700' },
-  { name: 'Jordan L.', initials: 'JL', color: 'bg-amber-100 text-amber-700' },
-]
-
-/* ------------------------------------------------------------------ */
-/*  Mock data (15 cards)                                               */
-/* ------------------------------------------------------------------ */
-
-const initialCards: Card[] = [
-  // New (3)
-  { id: 'c1',  title: '4x Instagram Feed Posts',        client: 'Casa Priya',       service: 'Social Media', assignee: team[0], due: '2026-03-26', priority: 'Normal',  status: 'new' },
-  { id: 'c2',  title: 'Brand Guidelines PDF',           client: 'Vesta Bakery',     service: 'Branding',     assignee: team[2], due: '2026-03-28', priority: 'High',    status: 'new' },
-  { id: 'c3',  title: 'Google Ads Setup',               client: 'Peak Fitness',     service: 'SEO',          assignee: team[1], due: '2026-03-25', priority: 'Urgent',  status: 'new' },
-
-  // In Progress (3)
-  { id: 'c4',  title: 'Promo Video 30s Cut',            client: 'Lumina Boutique',  service: 'Video',        assignee: team[1], due: '2026-03-22', priority: 'High',    status: 'in_progress' },
-  { id: 'c5',  title: 'Weekly Story Templates',         client: 'Golden Wok',       service: 'Social Media', assignee: team[0], due: '2026-03-27', priority: 'Normal',  status: 'in_progress' },
-  { id: 'c6',  title: 'Landing Page Redesign',          client: 'Peak Fitness',     service: 'Website',      assignee: team[2], due: '2026-03-24', priority: 'High',    status: 'in_progress' },
-
-  // Internal Review (3)
-  { id: 'c7',  title: 'March Newsletter',               client: 'Casa Priya',       service: 'Email',        assignee: team[3], due: '2026-03-23', priority: 'Normal',  status: 'internal_review' },
-  { id: 'c8',  title: 'Logo Concepts v2',               client: 'Bloom Studio',     service: 'Branding',     assignee: team[2], due: '2026-03-25', priority: 'Normal',  status: 'internal_review' },
-  { id: 'c9',  title: 'TikTok Reel Batch',              client: 'Vesta Bakery',     service: 'Video',        assignee: team[1], due: '2026-03-21', priority: 'Urgent',  status: 'internal_review' },
-
-  // Client Review (2)
-  { id: 'c10', title: 'Homepage Mockup',                client: 'Lumina Boutique',  service: 'Website',      assignee: team[2], due: '2026-03-24', priority: 'High',    status: 'client_review' },
-  { id: 'c11', title: '8x Carousel Posts',              client: 'Golden Wok',       service: 'Social Media', assignee: team[0], due: '2026-03-29', priority: 'Normal',  status: 'client_review' },
-
-  // Approved (2)
-  { id: 'c12', title: 'SEO Audit Report',               client: 'Peak Fitness',     service: 'SEO',          assignee: team[3], due: '2026-03-26', priority: 'Normal',  status: 'approved' },
-  { id: 'c13', title: 'Welcome Email Sequence',         client: 'Bloom Studio',     service: 'Email',        assignee: team[3], due: '2026-03-25', priority: 'High',    status: 'approved' },
-
-  // Scheduled (2)
-  { id: 'c14', title: 'Product Launch Video',           client: 'Casa Priya',       service: 'Video',        assignee: team[1], due: '2026-03-30', priority: 'Normal',  status: 'scheduled' },
-  { id: 'c15', title: 'Spring Campaign Posts',          client: 'Lumina Boutique',  service: 'Social Media', assignee: team[0], due: '2026-03-31', priority: 'Normal',  status: 'scheduled' },
-  { id: 'c16', title: 'Blog SEO Optimization',          client: 'Vesta Bakery',     service: 'SEO',          assignee: team[3], due: '2026-04-01', priority: 'Normal',  status: 'scheduled' },
-]
+function columnForStatus(s: DeliverableStatus): string {
+  if (lastColumnStatuses.includes(s)) return 'scheduled'
+  if (s === 'revision_requested') return 'client_review' // show revision_requested in client review
+  return s
+}
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-const serviceColors: Record<ServiceType, string> = {
-  'Social Media': 'bg-pink-50 text-pink-700 border-pink-200',
-  'Video':        'bg-indigo-50 text-indigo-700 border-indigo-200',
-  'Website':      'bg-cyan-50 text-cyan-700 border-cyan-200',
-  'Email':        'bg-yellow-50 text-yellow-700 border-yellow-200',
-  'Branding':     'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',
-  'SEO':          'bg-lime-50 text-lime-700 border-lime-200',
+const typeLabels: Record<DeliverableType, string> = {
+  graphic: 'Graphic',
+  video: 'Video',
+  caption: 'Caption',
+  email: 'Email',
+  website_page: 'Website',
+  seo: 'SEO',
+  branding: 'Branding',
+  photography: 'Photo',
+  other: 'Other',
 }
 
-const priorityBadge: Record<Priority, string | null> = {
-  'Normal': null,
-  'High':   'bg-orange-100 text-orange-700 border-orange-300',
-  'Urgent': 'bg-red-100 text-red-700 border-red-300',
+const typeBadgeColors: Record<DeliverableType, string> = {
+  graphic:      'bg-purple-50 text-purple-700',
+  video:        'bg-blue-50 text-blue-700',
+  caption:      'bg-amber-50 text-amber-700',
+  email:        'bg-emerald-50 text-emerald-700',
+  website_page: 'bg-cyan-50 text-cyan-700',
+  seo:          'bg-lime-50 text-lime-700',
+  branding:     'bg-fuchsia-50 text-fuchsia-700',
+  photography:  'bg-rose-50 text-rose-700',
+  other:        'bg-ink-6 text-ink-3',
 }
 
-function dueInfo(dateStr: string) {
-  const today = new Date(); today.setHours(0,0,0,0)
-  const due = new Date(dateStr); due.setHours(0,0,0,0)
+function dueInfo(dateStr: string | null | undefined) {
+  if (!dateStr) return { label: 'No due date', cls: 'text-ink-4', icon: 'none' as const }
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const due = new Date(dateStr); due.setHours(0, 0, 0, 0)
   const diff = Math.round((due.getTime() - today.getTime()) / 86_400_000)
-  if (diff < 0)  return { label: `${Math.abs(diff)}d overdue`, cls: 'text-red-600',   icon: 'overdue' as const }
-  if (diff === 0) return { label: 'Due today',                  cls: 'text-amber-600', icon: 'today' as const }
-  return            { label: `Due in ${diff}d`,                 cls: 'text-ink-4',     icon: 'upcoming' as const }
+  if (diff < 0)   return { label: `${Math.abs(diff)}d overdue`, cls: 'text-red-600 text-xs font-medium', icon: 'overdue' as const }
+  if (diff === 0)  return { label: 'Due today',                  cls: 'text-amber-600',                   icon: 'today' as const }
+  return             { label: `Due in ${diff}d`,                 cls: 'text-ink-4',                        icon: 'upcoming' as const }
 }
 
-function statusLabel(s: Status) {
+function statusLabel(s: DeliverableStatus) {
+  if (s === 'published') return 'Published'
+  if (s === 'revision_requested') return 'Revision Requested'
   return columns.find(c => c.key === s)?.label ?? s
+}
+
+/* ------------------------------------------------------------------ */
+/*  Skeleton components                                                */
+/* ------------------------------------------------------------------ */
+
+function CardSkeleton() {
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 p-3 space-y-2.5 animate-pulse">
+      <div className="flex items-center gap-1.5">
+        <div className="h-4 w-14 bg-ink-6 rounded-full" />
+      </div>
+      <div className="h-4 w-3/4 bg-ink-6 rounded" />
+      <div className="h-3 w-1/2 bg-ink-6 rounded" />
+      <div className="flex items-center justify-between pt-1 border-t border-ink-6">
+        <div className="h-3 w-16 bg-ink-6 rounded" />
+        <div className="h-3 w-20 bg-ink-6 rounded" />
+      </div>
+    </div>
+  )
+}
+
+function BoardSkeleton() {
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 lg:-mx-6 lg:px-6">
+      {columns.map(col => (
+        <div key={col.key} className="flex-shrink-0 w-[280px] lg:w-[calc((100%-60px)/6)] min-w-[240px]">
+          <div className="bg-bg-2 rounded-xl p-3 space-y-2">
+            <div className="h-4 w-24 bg-ink-6 rounded animate-pulse" />
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ListSkeleton() {
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-ink-6">
+              {['Title', 'Client', 'Type', 'Status', 'Due Date'].map(h => (
+                <th key={h} className="text-left font-medium text-ink-4 text-xs px-5 py-3">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <tr key={i} className="border-b border-ink-6 animate-pulse">
+                <td className="px-5 py-3"><div className="h-4 w-40 bg-ink-6 rounded" /></td>
+                <td className="px-5 py-3"><div className="h-4 w-24 bg-ink-6 rounded" /></td>
+                <td className="px-5 py-3"><div className="h-4 w-16 bg-ink-6 rounded" /></td>
+                <td className="px-5 py-3"><div className="h-4 w-24 bg-ink-6 rounded" /></td>
+                <td className="px-5 py-3"><div className="h-4 w-20 bg-ink-6 rounded" /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -120,35 +183,127 @@ function statusLabel(s: Status) {
 /* ------------------------------------------------------------------ */
 
 export default function PipelinePage() {
-  const [cards, setCards] = useState<Card[]>(initialCards)
+  const [deliverables, setDeliverables] = useState<Deliverable[]>([])
+  const [loading, setLoading] = useState(true)
+  const [movingId, setMovingId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [view, setView] = useState<'board' | 'list'>('board')
-  const [teamFilter, setTeamFilter] = useState('All')
-  const [serviceFilter, setServiceFilter] = useState('All')
 
-  /* Filter logic */
-  const filtered = cards.filter(c => {
-    if (teamFilter !== 'All' && c.assignee.name !== teamFilter) return false
-    if (serviceFilter !== 'All' && c.service !== serviceFilter) return false
+  // Filters
+  const [clientFilter, setClientFilter] = useState('All')
+  const [typeFilter, setTypeFilter] = useState('All')
+  const [statusFilter, setStatusFilter] = useState('All')
+  const [dueDateFilter, setDueDateFilter] = useState('All')
+
+  const supabase = createClient()
+
+  /* ---------------------------------------------------------------- */
+  /*  Fetch deliverables                                               */
+  /* ---------------------------------------------------------------- */
+
+  const fetchDeliverables = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('deliverables')
+      .select('id, work_brief_id, business_id, type, title, description, status, version, created_at, updated_at, businesses(name), work_briefs(deadline)')
+      .order('updated_at', { ascending: false })
+
+    if (error) {
+      console.error('Failed to fetch deliverables:', error)
+      return
+    }
+    const mapped = (data ?? []).map((d: Record<string, unknown>) => ({
+      ...d,
+      businesses: Array.isArray(d.businesses) ? d.businesses[0] ?? null : d.businesses ?? null,
+      work_briefs: Array.isArray(d.work_briefs) ? d.work_briefs[0] ?? null : d.work_briefs ?? null,
+    })) as Deliverable[]
+    setDeliverables(mapped)
+    setLoading(false)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetchDeliverables()
+  }, [fetchDeliverables])
+
+  /* ---------------------------------------------------------------- */
+  /*  Derived data                                                     */
+  /* ---------------------------------------------------------------- */
+
+  const uniqueClients = Array.from(
+    new Set(deliverables.map(d => d.businesses?.name).filter(Boolean))
+  ).sort() as string[]
+
+  const allTypes = Array.from(
+    new Set(deliverables.map(d => d.type))
+  ).sort() as DeliverableType[]
+
+  /* ---------------------------------------------------------------- */
+  /*  Filters                                                          */
+  /* ---------------------------------------------------------------- */
+
+  const filtered = deliverables.filter(d => {
+    if (clientFilter !== 'All' && d.businesses?.name !== clientFilter) return false
+    if (typeFilter !== 'All' && d.type !== typeFilter) return false
+    if (statusFilter !== 'All' && d.status !== statusFilter) return false
+    if (dueDateFilter !== 'All') {
+      const deadline = d.work_briefs?.deadline
+      if (!deadline) return dueDateFilter === 'no_date'
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      const due = new Date(deadline); due.setHours(0, 0, 0, 0)
+      const diff = Math.round((due.getTime() - today.getTime()) / 86_400_000)
+      if (dueDateFilter === 'overdue' && diff >= 0) return false
+      if (dueDateFilter === 'today' && diff !== 0) return false
+      if (dueDateFilter === 'this_week' && (diff < 0 || diff > 7)) return false
+      if (dueDateFilter === 'no_date' && deadline) return false
+    }
     return true
   })
 
-  const overdueCount = filtered.filter(c => {
-    const d = new Date(c.due); d.setHours(0,0,0,0)
-    const t = new Date(); t.setHours(0,0,0,0)
-    return d < t
+  const overdueCount = filtered.filter(d => {
+    const deadline = d.work_briefs?.deadline
+    if (!deadline) return false
+    const due = new Date(deadline); due.setHours(0, 0, 0, 0)
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    return due < today
   }).length
 
-  /* Move card to adjacent column */
-  const moveCard = (id: string, direction: 'left' | 'right') => {
-    setCards(prev => prev.map(c => {
-      if (c.id !== id) return c
-      const idx = columns.findIndex(col => col.key === c.status)
-      const next = direction === 'right' ? idx + 1 : idx - 1
-      if (next < 0 || next >= columns.length) return c
-      return { ...c, status: columns[next].key }
-    }))
+  const hasFilters = clientFilter !== 'All' || typeFilter !== 'All' || statusFilter !== 'All' || dueDateFilter !== 'All'
+
+  /* ---------------------------------------------------------------- */
+  /*  Move card                                                        */
+  /* ---------------------------------------------------------------- */
+
+  const moveCard = async (id: string, direction: 'left' | 'right') => {
+    const card = deliverables.find(d => d.id === id)
+    if (!card) return
+
+    const currentColKey = columnForStatus(card.status)
+    const colIdx = columns.findIndex(c => c.key === currentColKey)
+    const nextIdx = direction === 'right' ? colIdx + 1 : colIdx - 1
+    if (nextIdx < 0 || nextIdx >= columns.length) return
+
+    const newStatus = columns[nextIdx].key
+    setMovingId(id)
+
+    // Optimistic update
+    setDeliverables(prev =>
+      prev.map(d => (d.id === id ? { ...d, status: newStatus } : d))
+    )
     setExpandedId(null)
+
+    const { error } = await supabase
+      .from('deliverables')
+      .update({ status: newStatus })
+      .eq('id', id)
+
+    if (error) {
+      console.error('Failed to move deliverable:', error)
+      // Revert on error
+      setDeliverables(prev =>
+        prev.map(d => (d.id === id ? { ...d, status: card.status } : d))
+      )
+    }
+
+    setMovingId(null)
   }
 
   /* ---------------------------------------------------------------- */
@@ -158,42 +313,49 @@ export default function PipelinePage() {
   const BoardView = () => (
     <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 lg:-mx-6 lg:px-6 snap-x">
       {columns.map(col => {
-        const colCards = filtered.filter(c => c.status === col.key)
+        const colCards = filtered.filter(d => {
+          if (col.key === 'scheduled') return lastColumnStatuses.includes(d.status)
+          if (col.key === 'client_review') return d.status === 'client_review' || d.status === 'revision_requested'
+          return d.status === col.key
+        })
         return (
-          <div key={col.key} className="flex-shrink-0 w-[280px] lg:w-[calc((100%-60px)/6)] min-w-[260px] flex flex-col snap-start">
+          <div key={col.key} className="flex-shrink-0 w-[280px] lg:w-[calc((100%-60px)/6)] min-w-[240px] flex flex-col snap-start">
             {/* Column header */}
-            <div className={`rounded-t-xl ${col.bg} px-3 py-2.5 flex items-center gap-2`}>
-              <span className={`w-2.5 h-2.5 rounded-full ${col.dot}`} />
-              <span className="text-sm font-semibold text-ink">{col.label}</span>
+            <div className="bg-bg-2 rounded-t-xl px-3 py-2.5 flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${col.dot}`} />
+              <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide">{col.label}</span>
               <span className="ml-auto text-xs font-medium text-ink-4 bg-white/70 rounded-full px-2 py-0.5">{colCards.length}</span>
             </div>
 
             {/* Card list */}
-            <div className="flex-1 bg-ink-6/50 rounded-b-xl p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-260px)] min-h-[200px]">
+            <div className="flex-1 bg-bg-2 rounded-b-xl p-3 space-y-2 overflow-y-auto max-h-[calc(100vh-260px)] min-h-[200px]">
               {colCards.length === 0 && (
                 <div className="text-center text-xs text-ink-4 py-8">No items</div>
               )}
               {colCards.map(card => {
-                const due = dueInfo(card.due)
+                const deadline = card.work_briefs?.deadline
+                const due = dueInfo(deadline)
                 const isExpanded = expandedId === card.id
-                const colIdx = columns.findIndex(c => c.key === card.status)
+                const currentColKey = columnForStatus(card.status)
+                const colIdx = columns.findIndex(c => c.key === currentColKey)
+                const isMoving = movingId === card.id
                 return (
                   <div
                     key={card.id}
-                    className={`bg-white rounded-lg border transition-all cursor-pointer ${
+                    className={`bg-white rounded-xl border transition-all cursor-pointer ${
                       isExpanded ? 'border-brand shadow-md' : 'border-ink-6 hover:border-ink-5 hover:shadow-sm'
-                    }`}
+                    } ${isMoving ? 'opacity-50' : ''}`}
                     onClick={() => setExpandedId(isExpanded ? null : card.id)}
                   >
                     <div className="p-3 space-y-2.5">
-                      {/* Service tag + priority */}
+                      {/* Type badge + revision flag */}
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${serviceColors[card.service]}`}>
-                          {card.service}
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${typeBadgeColors[card.type]}`}>
+                          {typeLabels[card.type]}
                         </span>
-                        {priorityBadge[card.priority] && (
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${priorityBadge[card.priority]}`}>
-                            {card.priority}
+                        {card.status === 'revision_requested' && (
+                          <span className="rounded-full px-2 py-0.5 text-[10px] font-medium bg-red-50 text-red-700">
+                            Revision
                           </span>
                         )}
                       </div>
@@ -202,16 +364,10 @@ export default function PipelinePage() {
                       <div className="text-sm font-medium text-ink leading-snug">{card.title}</div>
 
                       {/* Client */}
-                      <div className="text-xs text-ink-3">{card.client}</div>
+                      <div className="text-xs text-ink-3">{card.businesses?.name ?? 'No client'}</div>
 
-                      {/* Assignee + due */}
+                      {/* Due date */}
                       <div className="flex items-center justify-between pt-1 border-t border-ink-6">
-                        <div className="flex items-center gap-1.5">
-                          <div className={`w-5 h-5 rounded-full ${card.assignee.color} flex items-center justify-center text-[8px] font-bold`}>
-                            {card.assignee.initials}
-                          </div>
-                          <span className="text-[11px] text-ink-3">{card.assignee.name}</span>
-                        </div>
                         <div className={`flex items-center gap-1 text-[11px] font-medium ${due.cls}`}>
                           {due.icon === 'overdue' && <AlertTriangle className="w-3 h-3" />}
                           {due.icon === 'today' && <Clock className="w-3 h-3" />}
@@ -223,20 +379,21 @@ export default function PipelinePage() {
 
                     {/* Expanded: move buttons */}
                     {isExpanded && (
-                      <div className="border-t border-ink-6 px-3 py-2 flex items-center justify-between bg-bg-2 rounded-b-lg">
+                      <div className="border-t border-ink-6 px-3 py-2 flex items-center justify-between bg-bg-2 rounded-b-xl">
                         <button
-                          disabled={colIdx === 0}
+                          disabled={colIdx === 0 || isMoving}
                           onClick={e => { e.stopPropagation(); moveCard(card.id, 'left') }}
                           className="flex items-center gap-1 text-xs font-medium text-ink-3 hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                         >
-                          <ChevronLeft className="w-3.5 h-3.5" /> Move Left
+                          <ChevronLeft className="w-3.5 h-3.5" /> Move Back
                         </button>
+                        {isMoving && <Loader2 className="w-3.5 h-3.5 animate-spin text-ink-4" />}
                         <button
-                          disabled={colIdx === columns.length - 1}
+                          disabled={colIdx === columns.length - 1 || isMoving}
                           onClick={e => { e.stopPropagation(); moveCard(card.id, 'right') }}
                           className="flex items-center gap-1 text-xs font-medium text-brand-dark hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                         >
-                          Move Right <ChevronRight className="w-3.5 h-3.5" />
+                          Move Forward <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     )}
@@ -254,9 +411,15 @@ export default function PipelinePage() {
   /*  List view                                                        */
   /* ---------------------------------------------------------------- */
 
-  const statusDot: Record<Status, string> = {
-    new: 'bg-amber-400', in_progress: 'bg-blue-500', internal_review: 'bg-purple-500',
-    client_review: 'bg-orange-500', approved: 'bg-green-500', scheduled: 'bg-teal-500',
+  const statusDot: Record<string, string> = {
+    draft: 'bg-ink-4',
+    in_progress: 'bg-blue-500',
+    internal_review: 'bg-purple-500',
+    client_review: 'bg-orange-500',
+    revision_requested: 'bg-red-500',
+    approved: 'bg-green-500',
+    scheduled: 'bg-teal-500',
+    published: 'bg-teal-500',
   }
 
   const ListView = () => (
@@ -267,39 +430,39 @@ export default function PipelinePage() {
             <tr className="border-b border-ink-6">
               <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Title</th>
               <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Client</th>
-              <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Assigned To</th>
+              <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Type</th>
               <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Status</th>
               <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Due Date</th>
-              <th className="text-left font-medium text-ink-4 text-xs px-5 py-3">Priority</th>
+              <th className="text-left font-medium text-ink-4 text-xs px-5 py-3 w-[120px]">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered
-              .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())
+              .sort((a, b) => {
+                const aDate = a.work_briefs?.deadline ?? '9999-12-31'
+                const bDate = b.work_briefs?.deadline ?? '9999-12-31'
+                return new Date(aDate).getTime() - new Date(bDate).getTime()
+              })
               .map(card => {
-                const due = dueInfo(card.due)
+                const deadline = card.work_briefs?.deadline
+                const due = dueInfo(deadline)
+                const currentColKey = columnForStatus(card.status)
+                const colIdx = columns.findIndex(c => c.key === currentColKey)
+                const isMoving = movingId === card.id
                 return (
-                  <tr key={card.id} className="border-b border-ink-6 last:border-0 hover:bg-bg-2 transition-colors">
+                  <tr key={card.id} className={`border-b border-ink-6 last:border-0 hover:bg-bg-2 transition-colors ${isMoving ? 'opacity-50' : ''}`}>
                     <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${serviceColors[card.service]}`}>
-                          {card.service}
-                        </span>
-                        <span className="font-medium text-ink">{card.title}</span>
-                      </div>
+                      <span className="font-medium text-ink">{card.title}</span>
                     </td>
-                    <td className="px-5 py-3 text-ink-3">{card.client}</td>
+                    <td className="px-5 py-3 text-ink-3">{card.businesses?.name ?? '-'}</td>
                     <td className="px-5 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <div className={`w-5 h-5 rounded-full ${card.assignee.color} flex items-center justify-center text-[8px] font-bold`}>
-                          {card.assignee.initials}
-                        </div>
-                        <span className="text-ink-2 text-xs">{card.assignee.name}</span>
-                      </div>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${typeBadgeColors[card.type]}`}>
+                        {typeLabels[card.type]}
+                      </span>
                     </td>
                     <td className="px-5 py-3">
                       <span className="flex items-center gap-1.5">
-                        <span className={`w-2 h-2 rounded-full ${statusDot[card.status]}`} />
+                        <span className={`w-2 h-2 rounded-full ${statusDot[card.status] ?? 'bg-ink-4'}`} />
                         <span className="text-xs font-medium text-ink-2">{statusLabel(card.status)}</span>
                       </span>
                     </td>
@@ -311,17 +474,38 @@ export default function PipelinePage() {
                       </span>
                     </td>
                     <td className="px-5 py-3">
-                      {priorityBadge[card.priority] ? (
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${priorityBadge[card.priority]}`}>
-                          {card.priority}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-ink-4">Normal</span>
-                      )}
+                      <div className="flex items-center gap-1">
+                        <button
+                          disabled={colIdx === 0 || isMoving}
+                          onClick={() => moveCard(card.id, 'left')}
+                          className="p-1 rounded hover:bg-ink-6 text-ink-4 hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          title="Move back"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        {isMoving ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-ink-4" />
+                        ) : null}
+                        <button
+                          disabled={colIdx === columns.length - 1 || isMoving}
+                          onClick={() => moveCard(card.id, 'right')}
+                          className="p-1 rounded hover:bg-ink-6 text-ink-4 hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          title="Move forward"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
               })}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-5 py-12 text-center text-sm text-ink-4">
+                  No deliverables found.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -338,10 +522,10 @@ export default function PipelinePage() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Production Pipeline</h1>
-          <p className="text-ink-3 text-sm mt-1">Track deliverables from order to publish.</p>
+          <p className="text-ink-3 text-sm mt-1">Track deliverables from draft to publish.</p>
         </div>
         <div className="flex items-center gap-3 text-xs">
-          <span className="text-ink-3">{filtered.length} items</span>
+          {!loading && <span className="text-ink-3">{filtered.length} items</span>}
           {overdueCount > 0 && (
             <span className="flex items-center gap-1 text-red-600 font-medium">
               <AlertTriangle className="w-3 h-3" /> {overdueCount} overdue
@@ -352,38 +536,72 @@ export default function PipelinePage() {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Team filter */}
+        {/* Client filter */}
         <div className="relative">
           <select
-            value={teamFilter}
-            onChange={e => setTeamFilter(e.target.value)}
+            value={clientFilter}
+            onChange={e => setClientFilter(e.target.value)}
             className="appearance-none bg-white border border-ink-6 rounded-lg pl-3 pr-8 py-1.5 text-xs text-ink-2 font-medium focus:outline-none focus:border-brand cursor-pointer"
           >
-            <option value="All">All Team</option>
-            {team.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
-          </select>
-          <User className="w-3 h-3 text-ink-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-        </div>
-
-        {/* Service filter */}
-        <div className="relative">
-          <select
-            value={serviceFilter}
-            onChange={e => setServiceFilter(e.target.value)}
-            className="appearance-none bg-white border border-ink-6 rounded-lg pl-3 pr-8 py-1.5 text-xs text-ink-2 font-medium focus:outline-none focus:border-brand cursor-pointer"
-          >
-            <option value="All">All Services</option>
-            {(['Social Media', 'Video', 'Website', 'Email', 'Branding', 'SEO'] as ServiceType[]).map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
+            <option value="All">All Clients</option>
+            {uniqueClients.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
           <Filter className="w-3 h-3 text-ink-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
-        {/* Active filter tags */}
-        {(teamFilter !== 'All' || serviceFilter !== 'All') && (
+        {/* Type filter */}
+        <div className="relative">
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+            className="appearance-none bg-white border border-ink-6 rounded-lg pl-3 pr-8 py-1.5 text-xs text-ink-2 font-medium focus:outline-none focus:border-brand cursor-pointer"
+          >
+            <option value="All">All Types</option>
+            {allTypes.map(t => <option key={t} value={t}>{typeLabels[t]}</option>)}
+          </select>
+          <Filter className="w-3 h-3 text-ink-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+
+        {/* Status filter */}
+        <div className="relative">
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="appearance-none bg-white border border-ink-6 rounded-lg pl-3 pr-8 py-1.5 text-xs text-ink-2 font-medium focus:outline-none focus:border-brand cursor-pointer"
+          >
+            <option value="All">All Statuses</option>
+            <option value="draft">Draft</option>
+            <option value="in_progress">In Production</option>
+            <option value="internal_review">Internal Review</option>
+            <option value="client_review">Client Review</option>
+            <option value="revision_requested">Revision Requested</option>
+            <option value="approved">Approved</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="published">Published</option>
+          </select>
+          <Filter className="w-3 h-3 text-ink-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+
+        {/* Due date filter */}
+        <div className="relative">
+          <select
+            value={dueDateFilter}
+            onChange={e => setDueDateFilter(e.target.value)}
+            className="appearance-none bg-white border border-ink-6 rounded-lg pl-3 pr-8 py-1.5 text-xs text-ink-2 font-medium focus:outline-none focus:border-brand cursor-pointer"
+          >
+            <option value="All">All Dates</option>
+            <option value="overdue">Overdue</option>
+            <option value="today">Due Today</option>
+            <option value="this_week">Due This Week</option>
+            <option value="no_date">No Due Date</option>
+          </select>
+          <Calendar className="w-3 h-3 text-ink-4 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+
+        {/* Clear filters */}
+        {hasFilters && (
           <button
-            onClick={() => { setTeamFilter('All'); setServiceFilter('All') }}
+            onClick={() => { setClientFilter('All'); setTypeFilter('All'); setStatusFilter('All'); setDueDateFilter('All') }}
             className="flex items-center gap-1 text-[11px] text-ink-4 hover:text-red-500 transition-colors"
           >
             <X className="w-3 h-3" /> Clear filters
@@ -414,7 +632,11 @@ export default function PipelinePage() {
       </div>
 
       {/* Content */}
-      {view === 'board' ? <BoardView /> : <ListView />}
+      {loading ? (
+        view === 'board' ? <BoardSkeleton /> : <ListSkeleton />
+      ) : (
+        view === 'board' ? <BoardView /> : <ListView />
+      )}
     </div>
   )
 }

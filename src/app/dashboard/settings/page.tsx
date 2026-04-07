@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   User, Shield, Bell, Link2, AlertTriangle, Eye, EyeOff,
-  Check, Upload, Trash2, Power
+  Check, Upload, Trash2, Power, Loader2
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 // ── Toggle Component ────────────────────────────────────────────────
 
@@ -52,10 +53,15 @@ function SectionCard({
 // ── Main Component ──────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
   // Profile state
-  const [fullName, setFullName] = useState('Matt Butler')
-  const [email] = useState('matt@casapriya.com')
-  const [phone, setPhone] = useState('(503) 555-0142')
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [initials, setInitials] = useState('')
 
   // Security state
   const [showCurrentPw, setShowCurrentPw] = useState(false)
@@ -64,7 +70,7 @@ export default function SettingsPage() {
   const [currentPw, setCurrentPw] = useState('')
   const [newPw, setNewPw] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
-  const [twoFactor, setTwoFactor] = useState(false)
+  const [pwSaving, setPwSaving] = useState(false)
 
   // Notification prefs
   const [emailNotifs, setEmailNotifs] = useState(true)
@@ -72,14 +78,108 @@ export default function SettingsPage() {
   const [marketingUpdates, setMarketingUpdates] = useState(true)
   const [weeklyDigest, setWeeklyDigest] = useState(true)
 
-  // Connected accounts
-  const [googleConnected] = useState(true)
+  useEffect(() => {
+    async function fetchProfile() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (profile) {
+        setFullName(profile.full_name || '')
+        setEmail(profile.email || user.email || '')
+        setPhone((profile as Record<string, unknown>).phone as string || '')
+        setInitials(
+          (profile.full_name || '')
+            .split(' ')
+            .map((n: string) => n[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2) || 'U'
+        )
+      } else {
+        setEmail(user.email || '')
+      }
+      setLoading(false)
+    }
+    fetchProfile()
+  }, [])
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message })
+    setTimeout(() => setToast(null), 4000)
+  }
+
+  const handleSaveProfile = async () => {
+    setSaving(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setSaving(false); return }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ full_name: fullName })
+      .eq('id', user.id)
+
+    if (error) {
+      showToast('error', error.message)
+    } else {
+      showToast('success', 'Profile updated.')
+      setInitials(fullName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'U')
+    }
+    setSaving(false)
+  }
+
+  const handleChangePassword = async () => {
+    if (!newPw || newPw !== confirmPw) {
+      showToast('error', 'Passwords do not match.')
+      return
+    }
+    if (newPw.length < 8) {
+      showToast('error', 'Password must be at least 8 characters.')
+      return
+    }
+    setPwSaving(true)
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({ password: newPw })
+    if (error) {
+      showToast('error', error.message)
+    } else {
+      showToast('success', 'Password updated.')
+      setCurrentPw('')
+      setNewPw('')
+      setConfirmPw('')
+    }
+    setPwSaving(false)
+  }
 
   const inputClass =
     'w-full text-sm text-ink border border-ink-6 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand'
 
+  if (loading) {
+    return (
+      <div className="max-w-3xl mx-auto flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 text-ink-4 animate-spin" />
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
+          toast.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
+        }`}>
+          {toast.message}
+        </div>
+      )}
+
       {/* Header */}
       <div>
         <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Settings</h1>
@@ -91,17 +191,11 @@ export default function SettingsPage() {
         <div className="space-y-5">
           {/* Avatar */}
           <div className="flex items-center gap-4">
-            <div className="relative group">
-              <div className="w-16 h-16 rounded-full bg-brand-tint border-2 border-brand/20 flex items-center justify-center text-brand-dark text-lg font-bold">
-                MB
-              </div>
-              <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                <Upload className="w-4 h-4 text-white" />
-              </div>
+            <div className="w-16 h-16 rounded-full bg-brand-tint border-2 border-brand/20 flex items-center justify-center text-brand-dark text-lg font-bold">
+              {initials}
             </div>
             <div>
-              <button className="text-sm font-medium text-brand-dark hover:underline">Change avatar</button>
-              <p className="text-[11px] text-ink-4 mt-0.5">JPG, PNG or GIF. Max 2MB.</p>
+              <p className="text-[11px] text-ink-4 mt-0.5">Avatar from your login provider.</p>
             </div>
           </div>
 
@@ -140,11 +234,17 @@ export default function SettingsPage() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               className={`mt-1.5 ${inputClass}`}
+              placeholder="(555) 123-4567"
             />
           </div>
 
           <div className="pt-1">
-            <button className="px-5 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors">
+            <button
+              onClick={handleSaveProfile}
+              disabled={saving}
+              className="px-5 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               Save Changes
             </button>
           </div>
@@ -154,28 +254,8 @@ export default function SettingsPage() {
       {/* ── Security ─────────────────────────────────────────────────── */}
       <SectionCard title="Security" icon={Shield}>
         <div className="space-y-6">
-          {/* Change password */}
           <div className="space-y-4">
             <h3 className="text-sm font-medium text-ink">Change Password</h3>
-
-            <div>
-              <label className="text-[11px] font-medium text-ink-4 uppercase tracking-wider">Current Password</label>
-              <div className="relative mt-1.5">
-                <input
-                  type={showCurrentPw ? 'text' : 'password'}
-                  value={currentPw}
-                  onChange={(e) => setCurrentPw(e.target.value)}
-                  className={`${inputClass} pr-10`}
-                  placeholder="Enter current password"
-                />
-                <button
-                  onClick={() => setShowCurrentPw(!showCurrentPw)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-4 hover:text-ink transition-colors"
-                >
-                  {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
 
             <div>
               <label className="text-[11px] font-medium text-ink-4 uppercase tracking-wider">New Password</label>
@@ -185,7 +265,7 @@ export default function SettingsPage() {
                   value={newPw}
                   onChange={(e) => setNewPw(e.target.value)}
                   className={`${inputClass} pr-10`}
-                  placeholder="Enter new password"
+                  placeholder="Enter new password (min 8 characters)"
                 />
                 <button
                   onClick={() => setShowNewPw(!showNewPw)}
@@ -215,22 +295,14 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <button className="px-5 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors">
+            <button
+              onClick={handleChangePassword}
+              disabled={pwSaving || !newPw}
+              className="px-5 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {pwSaving && <Loader2 className="w-4 h-4 animate-spin" />}
               Update Password
             </button>
-          </div>
-
-          <div className="h-px bg-ink-6" />
-
-          {/* 2FA */}
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-medium text-ink">Two-Factor Authentication</h3>
-              <p className="text-[12px] text-ink-4 mt-0.5">
-                Add an extra layer of security to your account by requiring a verification code on login.
-              </p>
-            </div>
-            <Toggle enabled={twoFactor} onToggle={() => setTwoFactor(!twoFactor)} />
           </div>
         </div>
       </SectionCard>
@@ -272,13 +344,13 @@ export default function SettingsPage() {
               <Toggle enabled={pref.enabled} onToggle={pref.toggle} />
             </div>
           ))}
+          <p className="text-[11px] text-ink-4">Notification preferences will apply to future notifications.</p>
         </div>
       </SectionCard>
 
       {/* ── Connected Accounts ───────────────────────────────────────── */}
       <SectionCard title="Connected Accounts" icon={Link2}>
         <div className="space-y-4">
-          {/* Google */}
           <div className="flex items-center justify-between gap-4 p-3 bg-bg-2 rounded-lg">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-white border border-ink-6 flex items-center justify-center">
@@ -291,38 +363,10 @@ export default function SettingsPage() {
               </div>
               <div>
                 <p className="text-sm font-medium text-ink">Google</p>
-                {googleConnected && (
-                  <p className="text-[11px] text-ink-4">matt@casapriya.com</p>
-                )}
+                <p className="text-[11px] text-ink-4">{email || 'Not connected'}</p>
               </div>
             </div>
-            {googleConnected ? (
-              <button className="px-3 py-1.5 rounded-lg border border-ink-6 text-[12px] font-medium text-ink-3 hover:bg-bg-2 transition-colors">
-                Disconnect
-              </button>
-            ) : (
-              <button className="px-3 py-1.5 rounded-lg bg-brand-tint text-[12px] font-medium text-brand-dark hover:bg-brand/10 transition-colors">
-                Connect
-              </button>
-            )}
-          </div>
-
-          {/* Slack */}
-          <div className="flex items-center justify-between gap-4 p-3 bg-bg-2 rounded-lg">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-white border border-ink-6 flex items-center justify-center">
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" fill="#E01E5A" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-ink">Slack</p>
-                <p className="text-[11px] text-ink-4">Not connected</p>
-              </div>
-            </div>
-            <button className="px-3 py-1.5 rounded-lg bg-brand-tint text-[12px] font-medium text-brand-dark hover:bg-brand/10 transition-colors">
-              Connect
-            </button>
+            <span className="text-[11px] text-emerald-600 font-medium">Connected</span>
           </div>
         </div>
       </SectionCard>
@@ -349,7 +393,7 @@ export default function SettingsPage() {
             <div>
               <h3 className="text-sm font-medium text-red-600">Delete Account</h3>
               <p className="text-[12px] text-ink-4 mt-0.5">
-                Permanently delete your account and all associated data. This action cannot be undone.
+                Permanently delete your account and all associated data. This cannot be undone.
               </p>
             </div>
             <button className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-50 border border-red-200 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors w-fit">

@@ -41,8 +41,10 @@ interface FormData {
 
   /* Step 5 — Current Marketing */
   socialPlatforms: string[];
+  platformLinks: Record<string, string>;
   postingFrequency: string;
   googleBusinessProfile: string;
+  googleBusinessUrl: string;
   marketingBudget: number;
   whatWorked: string;
   whatDidntWork: string;
@@ -82,8 +84,10 @@ const INITIAL_DATA: FormData = {
   differentiator: '',
 
   socialPlatforms: [],
+  platformLinks: {},
   postingFrequency: '',
   googleBusinessProfile: '',
+  googleBusinessUrl: '',
   marketingBudget: 500,
   whatWorked: '',
   whatDidntWork: '',
@@ -787,6 +791,44 @@ function Step5({
         </div>
       </div>
 
+      {/* Platform links — shown for selected platforms */}
+      {data.socialPlatforms.filter((p) => p !== 'None').length > 0 && (
+        <div>
+          <Label>Your Social Media Links</Label>
+          <p className="text-xs text-gray-400 mb-2" style={{ fontFamily: 'Inter, sans-serif' }}>
+            Share your handles or page URLs so we can manage your accounts.
+          </p>
+          <div className="space-y-2">
+            {data.socialPlatforms.filter((p) => p !== 'None').map((platform) => {
+              const placeholders: Record<string, string> = {
+                'Instagram': '@yourhandle or instagram.com/yourhandle',
+                'Facebook': 'facebook.com/yourpage',
+                'TikTok': '@yourhandle or tiktok.com/@yourhandle',
+                'LinkedIn': 'linkedin.com/company/yourcompany',
+                'Twitter/X': '@yourhandle or x.com/yourhandle',
+                'YouTube': 'youtube.com/@yourchannel',
+              };
+              return (
+                <div key={platform} className="flex items-center gap-2">
+                  <span
+                    className="text-xs font-medium text-gray-500 w-20 flex-shrink-0"
+                    style={{ fontFamily: 'Inter, sans-serif' }}
+                  >
+                    {platform}
+                  </span>
+                  <TextInput
+                    id={`link-${platform}`}
+                    value={data.platformLinks[platform] || ''}
+                    onChange={(v) => update({ platformLinks: { ...data.platformLinks, [platform]: v } })}
+                    placeholder={placeholders[platform] || 'Your profile URL or handle'}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div>
         <Label htmlFor="postingFrequency">Current Posting Frequency *</Label>
         <Select
@@ -821,6 +863,17 @@ function Step5({
             </button>
           ))}
         </div>
+        {data.googleBusinessProfile === 'Yes' && (
+          <div className="mt-2">
+            <TextInput
+              id="googleBusinessUrl"
+              value={data.googleBusinessUrl}
+              onChange={(v) => update({ googleBusinessUrl: v })}
+              placeholder="google.com/maps/place/your-business or your GBP link"
+              type="url"
+            />
+          </div>
+        )}
       </div>
 
       <div>
@@ -1056,15 +1109,128 @@ export default function OnboardingPage() {
     if (step > 0) goTo(step - 1, 'back');
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     const err = validateStep(step, data);
     if (err) {
       setError(err);
       return;
     }
-    // Log data for now — Supabase integration later
-    console.log('Onboarding complete:', JSON.stringify(data, null, 2));
-    router.push('/onboarding/complete');
+
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setError('Not authenticated. Please log in again.');
+        return;
+      }
+
+      // Check if business already exists
+      const { data: existing } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('owner_id', user.id)
+        .single();
+
+      const businessData = {
+        owner_id: user.id,
+        name: data.businessName,
+        industry: data.industry,
+        description: data.businessDescription,
+        website_url: data.websiteUrl || null,
+        phone: data.businessPhone || null,
+        locations: data.numberOfLocations ? [{ count: data.numberOfLocations }] : [],
+        brand_voice_words: data.brandWords.filter((w) => w.trim()),
+        brand_tone: data.tone || null,
+        brand_do_nots: data.neverSay || null,
+        brand_colors: { primary: data.primaryColor || null, secondary: data.secondaryColor || null },
+        target_audience: data.idealCustomer || null,
+        target_age_range: data.ageRange || null,
+        target_location: data.locationServed || null,
+        target_problem: data.problemSolved || null,
+        competitors: data.competitors.filter((c) => c.name.trim()).map((c) => ({ name: c.name, website: c.website })),
+        competitor_strengths: data.competitorStrengths || null,
+        differentiator: data.differentiator || null,
+        current_platforms: data.socialPlatforms,
+        posting_frequency: data.postingFrequency || null,
+        has_google_business: data.googleBusinessProfile === 'Yes',
+        monthly_budget: data.marketingBudget || null,
+        past_marketing_wins: data.whatWorked || null,
+        past_marketing_fails: data.whatDidntWork || null,
+        marketing_goals: data.marketingGoals,
+        content_topics: data.contentTopics || null,
+        content_avoid_topics: data.topicsToAvoid || null,
+        additional_notes: data.anythingElse || null,
+        onboarding_completed: true,
+        onboarding_step: 6,
+      };
+
+      let businessId: string;
+      if (existing) {
+        const { error: updateErr } = await supabase
+          .from('businesses')
+          .update(businessData)
+          .eq('id', existing.id);
+        if (updateErr) throw updateErr;
+        businessId = existing.id;
+      } else {
+        const { data: inserted, error: insertErr } = await supabase
+          .from('businesses')
+          .insert(businessData)
+          .select('id')
+          .single();
+        if (insertErr) throw insertErr;
+        businessId = inserted.id;
+      }
+
+      // Save platform connections (social media links + Google Business)
+      const platformMap: Record<string, string> = {
+        'Instagram': 'instagram',
+        'Facebook': 'facebook',
+        'TikTok': 'tiktok',
+        'LinkedIn': 'linkedin',
+        'Twitter/X': 'twitter',
+        'YouTube': 'youtube',
+      };
+
+      const connections = Object.entries(data.platformLinks)
+        .filter(([, url]) => url.trim())
+        .map(([platform, url]) => ({
+          business_id: businessId,
+          platform: platformMap[platform] || platform.toLowerCase(),
+          profile_url: url.trim(),
+          username: url.trim().startsWith('@') ? url.trim() : null,
+          connected_at: new Date().toISOString(),
+        }));
+
+      // Add Google Business Profile if provided
+      if (data.googleBusinessUrl?.trim()) {
+        connections.push({
+          business_id: businessId,
+          platform: 'google_business',
+          profile_url: data.googleBusinessUrl.trim(),
+          username: null,
+          connected_at: new Date().toISOString(),
+        });
+      }
+
+      if (connections.length > 0) {
+        // Delete existing connections first (upsert pattern)
+        await supabase
+          .from('platform_connections')
+          .delete()
+          .eq('business_id', businessId);
+
+        await supabase
+          .from('platform_connections')
+          .insert(connections);
+      }
+
+      router.push('/dashboard');
+    } catch (e) {
+      console.error('Onboarding save error:', e);
+      setError('Failed to save. Please try again.');
+    }
   };
 
   const handleSaveLater = () => {

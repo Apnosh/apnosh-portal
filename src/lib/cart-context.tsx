@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { PriceUnit } from './services-data'
 
 export interface CartItem {
@@ -23,10 +23,40 @@ interface CartContextValue {
   setIsCartOpen: (open: boolean) => void
 }
 
+const CART_STORAGE_KEY = 'apnosh-cart'
+
+function loadCart(): CartItem[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const stored = localStorage.getItem(CART_STORAGE_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch {
+    return []
+  }
+}
+
+function saveCart(items: CartItem[]) {
+  try {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items))
+  } catch { /* quota exceeded — ignore */ }
+}
+
 const CartContext = createContext<CartContextValue | null>(null)
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([])
+  const [hydrated, setHydrated] = useState(false)
+
+  // Load cart from localStorage on mount
+  useEffect(() => {
+    setItems(loadCart())
+    setHydrated(true)
+  }, [])
+
+  // Persist to localStorage on every change (after hydration)
+  useEffect(() => {
+    if (hydrated) saveCart(items)
+  }, [items, hydrated])
   const [isCartOpen, setIsCartOpen] = useState(false)
 
   const addItem = useCallback((item: Omit<CartItem, 'quantity'>) => {
@@ -58,6 +88,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = useCallback(() => {
     setItems([])
+    localStorage.removeItem(CART_STORAGE_KEY)
   }, [])
 
   const cartTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0)

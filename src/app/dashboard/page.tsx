@@ -1,562 +1,1386 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  TrendingUp, TrendingDown, Eye, Users, MousePointerClick, Heart,
-  CheckCircle, Clock, AlertCircle, ArrowUpRight, Calendar, Star,
-  Mail, Zap, ChevronRight, Camera, Globe, Video, Sparkles,
-  DollarSign, Target, ShoppingBag, Gift, Flame, ArrowRight,
-  CircleDot, Loader2, Package, FileCheck, MessageSquare,
-  Lightbulb, BarChart3, MapPin, Phone, ExternalLink
+  CheckCircle, ChevronRight, ArrowUpRight, ArrowDownRight,
+  Clock, Star, Sparkles, TrendingUp, Eye,
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { useUser, useBusiness } from '@/lib/supabase/hooks'
+import { LoadingSkeleton } from '@/components/ui/loading'
 
 /* ================================================================== */
-/*  MORNING BRIEFING DATA                                              */
+/*  TYPES                                                              */
 /* ================================================================== */
 
-const today = new Date()
-const dayName = today.toLocaleDateString('en-US', { weekday: 'long' })
-const dateStr = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-const hour = today.getHours()
-const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
-
-/* ── AI Morning Briefing ─────────────────────────────────────────── */
-const aiBriefing = {
-  summary: "Strong week overall. Your Instagram engagement is 42% above your industry average, and the spring collection posts are outperforming your usual content by 2.3x. Your Google Maps ranking improved to #2 — close to the top spot. One area to watch: website click-through from social dropped slightly. I'd recommend adding stronger CTAs to this week's posts.",
-  topInsight: "Your Tuesday posts consistently get 35% more engagement than other days. We've shifted more high-value content to Tuesdays.",
-  weeklyGrade: 'A-',
+interface ApprovalItem {
+  id: string
+  title: string
+  platform: string
+  platformIcon: string
+  submittedAgo: string
+  deadlineLabel: string
+  deadlineUrgency: 'today' | 'tomorrow' | 'later'
 }
 
-/* ── Revenue Impact (what they REALLY care about) ────────────────── */
-const revenueImpact = {
-  estimatedCustomers: { value: 23, change: '+8', up: true, label: 'Customers from Marketing', period: 'this month' },
-  estimatedRevenue: { value: '$4,150', change: '+22%', up: true, label: 'Estimated Revenue Impact', period: 'this month' },
-  costPerCustomer: { value: '$28', change: '-$4', up: true, label: 'Cost per Customer', period: 'vs last month' },
-  roi: { value: '6.4x', change: '+0.8x', up: true, label: 'Marketing ROI', period: 'this month' },
+interface QuickWin {
+  emoji: string
+  title: string
+  description: string
+  time: string
+  impact: 'high' | 'medium'
+  href: string
 }
 
-/* ── Performance Pulse ───────────────────────────────────────────── */
-const pulse = [
-  { label: 'People Reached', value: '48.2K', change: '+18%', up: true, icon: Eye, benchmark: 'Industry avg: 32K', aboveBenchmark: true },
-  { label: 'New Followers', value: '+342', change: '+24%', up: true, icon: Users, benchmark: '+89 this week', aboveBenchmark: true },
-  { label: 'Engagement Rate', value: '5.2%', change: '+0.8%', up: true, icon: Heart, benchmark: 'Industry avg: 3.1%', aboveBenchmark: true },
-  { label: 'Website Clicks', value: '1,247', change: '-3%', up: false, icon: MousePointerClick, benchmark: 'Goal: 1,500/mo', aboveBenchmark: false },
-  { label: 'Google Maps Views', value: '2,840', change: '+31%', up: true, icon: MapPin, benchmark: 'Rank: #2', aboveBenchmark: true },
-  { label: 'Email Open Rate', value: '42%', change: '+5%', up: true, icon: Mail, benchmark: 'Industry avg: 21%', aboveBenchmark: true },
-]
-
-/* ── Production Pipeline Status ──────────────────────────────────── */
-const pipeline = {
-  inProgress: [
-    { title: '4x Instagram Feed Posts (Week 13)', assignee: 'Sarah K.', dueIn: '2 days', type: 'Social Media' },
-    { title: 'Email Newsletter #13', assignee: 'Mike R.', dueIn: '3 days', type: 'Email' },
-    { title: 'TikTok Recipe Reel', assignee: 'Jordan L.', dueIn: '4 days', type: 'Video' },
-  ],
-  needsApproval: [
-    { title: 'Instagram Carousel — Spring Menu', platform: 'Instagram', submitted: '2 hours ago', deadline: 'Approve by noon today' },
-    { title: 'Facebook Event Banner', platform: 'Facebook', submitted: '5 hours ago', deadline: 'Approve by tomorrow' },
-    { title: 'Weekly Story Templates (5)', platform: 'Instagram', submitted: 'Yesterday', deadline: 'Approve by Wednesday' },
-  ],
-  recentlyCompleted: [
-    { title: 'March Content Calendar', completedAt: 'Today', result: 'Scheduled 24 posts across 3 platforms' },
-    { title: 'Google Business Profile Update', completedAt: 'Yesterday', result: 'Added spring hours + 12 new photos' },
-  ],
+interface RevenueCard {
+  label: string
+  value: string
+  trend: string
+  trendUp: boolean
 }
 
-/* ── Upcoming Opportunities ──────────────────────────────────────── */
-const opportunities = [
-  { date: 'Mar 28', event: 'National Mom & Pop Business Day', suggestion: 'Share your origin story — behind-the-scenes content performs 3x better', daysAway: 4, icon: '🏪' },
-  { date: 'Apr 1', event: 'April Fools\' Day', suggestion: 'Fun prank post or "fake menu item" reveal — great for engagement', daysAway: 8, icon: '🤡' },
-  { date: 'Apr 7', event: 'National Beer Day', suggestion: 'Perfect tie-in with your cocktail program — feature your craft beer selection', daysAway: 14, icon: '🍺' },
-  { date: 'Apr 22', event: 'Earth Day', suggestion: 'Highlight sustainability practices — sourcing, composting, local ingredients', daysAway: 29, icon: '🌍' },
-]
-
-/* ── Top Performing Content ──────────────────────────────────────── */
-const topContent = [
-  { rank: 1, title: 'Spring Collection Launch Carousel', platform: 'Instagram', icon: Camera, color: 'text-pink-500', reach: '4,200', engagement: '7.4%', saves: 89, insight: 'Carousels with 5+ slides get 2x more saves' },
-  { rank: 2, title: 'Behind the Scenes Kitchen Reel', platform: 'TikTok', icon: Video, color: 'text-ink', reach: '3,800', engagement: '8.2%', saves: 124, insight: 'BTS content is your highest-performing category' },
-  { rank: 3, title: 'St. Patrick\'s Day Promo', platform: 'Facebook', icon: Globe, color: 'text-blue-500', reach: '2,800', engagement: '5.1%', saves: 42, insight: 'Holiday tie-ins drive 35% more clicks' },
-]
-
-/* ── Google Reviews ──────────────────────────────────────────────── */
-const reviews = {
-  total: 127, average: 4.8, newThisWeek: 3, needsResponse: 1, goal: 150,
-  latest: { stars: 5, text: '"The best Indian food in Austin. The tasting menu was incredible and the service was outstanding..."', author: 'Michael T.', daysAgo: 1 },
+interface ActivityStat {
+  emoji: string
+  label: string
+  value: number
+  change: number
 }
 
-/* ── Quick Wins (AI-suggested micro-actions) ─────────────────────── */
-const quickWins = [
-  { id: 1, icon: '⭐', action: 'Reply to Michael T.\'s 5-star review', detail: 'A quick thank-you reply boosts your review visibility by 12%', effort: '2 min', impact: 'high', link: '#' },
-  { id: 2, icon: '📱', action: 'Share today\'s Instagram post to your personal page', detail: 'Personal shares get 3x more reach than business-only posts', effort: '30 sec', impact: 'medium', link: '#' },
-  { id: 3, icon: '📸', action: 'Take 3 behind-the-scenes photos today', detail: 'BTS is your highest-performing content category — feed the pipeline', effort: '5 min', impact: 'high', link: '#' },
-  { id: 4, icon: '🕐', action: 'Update Google Business hours for spring', detail: 'Extended hours not reflected online — you may be losing walk-ins', effort: '3 min', impact: 'high', link: '#' },
+interface RecentActivity {
+  id: string
+  initials: string
+  color: string
+  description: string
+  actionType: string
+  timeAgo: string
+}
+
+interface ScheduleItem {
+  id: string
+  time: string
+  emoji: string
+  title: string
+  needsApproval?: boolean
+}
+
+interface DeliveryItem {
+  label: string
+  delivered: number
+  total: number
+}
+
+interface ReviewData {
+  rating: number
+  count: number
+  goal: number
+  needsResponse: number
+  latest: { stars: number; text: string; author: string; timeAgo: string } | null
+}
+
+interface Opportunity {
+  emoji: string
+  name: string
+  daysAway: number
+  suggestion: string
+}
+
+interface BriefingData {
+  text: string
+  hasData: boolean
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+/* ================================================================== */
+/*  HELPERS                                                            */
+/* ================================================================== */
+
+function timeOfDayGreeting(): string {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
+function todayFormatted(): string {
+  return new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function timeAgo(dateStr: string): string {
+  const now = new Date()
+  const date = new Date(dateStr)
+  const mins = Math.floor((now.getTime() - date.getTime()) / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days === 1) return 'Yesterday'
+  if (days < 7) return `${days}d ago`
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount / 100)
+}
+
+function platformEmoji(platform: string): string {
+  const map: Record<string, string> = {
+    instagram: '\uD83D\uDCF8',
+    facebook: '\uD83C\uDF10',
+    tiktok: '\uD83C\uDFAC',
+    linkedin: '\uD83D\uDCBC',
+    twitter: '\uD83D\uDCAC',
+    youtube: '\u25B6\uFE0F',
+    google_business: '\uD83D\uDCCD',
+    website: '\uD83C\uDF10',
+    email: '\uD83D\uDCE7',
+  }
+  return map[platform] || '\uD83D\uDCCB'
+}
+
+function deadlineFromCreatedAt(createdAt: string): { label: string; urgency: 'today' | 'tomorrow' | 'later' } {
+  const created = new Date(createdAt)
+  const deadline = new Date(created.getTime() + 48 * 60 * 60 * 1000) // 48h window
+  const now = new Date()
+  const hoursLeft = (deadline.getTime() - now.getTime()) / (1000 * 60 * 60)
+
+  if (hoursLeft <= 0) return { label: 'Overdue', urgency: 'today' }
+  if (hoursLeft <= 12) return { label: 'Approve by tonight', urgency: 'today' }
+  if (hoursLeft <= 24) return { label: 'Approve by tomorrow', urgency: 'tomorrow' }
+  const day = deadline.toLocaleDateString('en-US', { weekday: 'long' })
+  return { label: `Approve by ${day}`, urgency: 'later' }
+}
+
+/* ================================================================== */
+/*  UPCOMING OPPORTUNITIES — static holidays + dynamic date math       */
+/* ================================================================== */
+
+const RESTAURANT_HOLIDAYS: { month: number; day: number; name: string; emoji: string; suggestion: string }[] = [
+  { month: 1, day: 1, name: "New Year's Day", emoji: '\uD83C\uDF89', suggestion: 'New year, new menu teaser or resolution-themed content' },
+  { month: 1, day: 24, name: 'National Compliment Day', emoji: '\uD83D\uDCAC', suggestion: 'Share your best customer compliments and reviews' },
+  { month: 2, day: 9, name: 'National Pizza Day', emoji: '\uD83C\uDF55', suggestion: 'Feature your best pizza or a special pizza deal' },
+  { month: 2, day: 14, name: "Valentine's Day", emoji: '\u2764\uFE0F', suggestion: "Promote your Valentine's dinner special or couples deal" },
+  { month: 2, day: 17, name: "Presidents' Day", emoji: '\uD83C\uDDFA\uD83C\uDDF8', suggestion: 'Holiday weekend brunch or family meal special' },
+  { month: 3, day: 1, name: 'National Peanut Butter Day', emoji: '\uD83E\uDD5C', suggestion: 'Feature a creative peanut butter dish or dessert' },
+  { month: 3, day: 17, name: "St. Patrick's Day", emoji: '\u2618\uFE0F', suggestion: 'Green-themed specials or festive drinks' },
+  { month: 3, day: 20, name: 'First Day of Spring', emoji: '\uD83C\uDF38', suggestion: 'Launch your spring menu with fresh, seasonal ingredients' },
+  { month: 4, day: 1, name: "April Fools' Day", emoji: '\uD83E\uDD21', suggestion: 'Fun prank post or "fake menu item" reveal for engagement' },
+  { month: 4, day: 7, name: 'National Beer Day', emoji: '\uD83C\uDF7A', suggestion: 'Highlight your beer selection or craft pairings' },
+  { month: 4, day: 22, name: 'Earth Day', emoji: '\uD83C\uDF0D', suggestion: 'Share your sustainability practices or farm-to-table story' },
+  { month: 5, day: 4, name: 'National Small Business Week', emoji: '\uD83D\uDED2', suggestion: 'Share your origin story \u2014 behind-the-scenes content performs 3x better' },
+  { month: 5, day: 5, name: 'Cinco de Mayo', emoji: '\uD83C\uDF2E', suggestion: 'Special menu teaser or themed cocktail post' },
+  { month: 5, day: 11, name: "Mother's Day", emoji: '\uD83D\uDC90', suggestion: "Promote Mother's Day brunch or gift cards" },
+  { month: 5, day: 26, name: 'Memorial Day', emoji: '\uD83C\uDDFA\uD83C\uDDF8', suggestion: 'BBQ specials or outdoor dining promotion' },
+  { month: 6, day: 15, name: "Father's Day", emoji: '\uD83D\uDC54', suggestion: "Father's Day dinner specials or meal combos" },
+  { month: 6, day: 20, name: 'First Day of Summer', emoji: '\u2600\uFE0F', suggestion: 'Summer menu launch, patio dining, refreshing drink features' },
+  { month: 7, day: 4, name: 'Independence Day', emoji: '\uD83C\uDF86', suggestion: 'July 4th specials, patriotic decor, or catering packages' },
+  { month: 7, day: 30, name: 'National Cheesecake Day', emoji: '\uD83C\uDF70', suggestion: 'Feature your best dessert or a cheesecake special' },
+  { month: 8, day: 13, name: 'National Filet Mignon Day', emoji: '\uD83E\uDD69', suggestion: "Highlight your steaks or chef's special cut" },
+  { month: 9, day: 1, name: 'Labor Day', emoji: '\uD83C\uDFD6\uFE0F', suggestion: 'End-of-summer celebration menu or family meal deal' },
+  { month: 9, day: 22, name: 'First Day of Fall', emoji: '\uD83C\uDF42', suggestion: 'Fall menu launch with seasonal ingredients and warm flavors' },
+  { month: 10, day: 1, name: 'National Taco Day', emoji: '\uD83C\uDF2E', suggestion: 'Taco specials, build-your-own-taco content, or taco trivia' },
+  { month: 10, day: 31, name: 'Halloween', emoji: '\uD83C\uDF83', suggestion: 'Spooky-themed menu, costume contest, or themed cocktails' },
+  { month: 11, day: 11, name: "Veterans Day", emoji: '\uD83C\uDDFA\uD83C\uDDF8', suggestion: 'Veterans meal deal or thank-you post for service members' },
+  { month: 11, day: 27, name: 'Thanksgiving', emoji: '\uD83E\uDD83', suggestion: 'Thanksgiving catering packages or gratitude post for customers' },
+  { month: 11, day: 28, name: 'Black Friday', emoji: '\uD83D\uDED2', suggestion: 'Gift card promotions or special dining deals' },
+  { month: 12, day: 1, name: 'Small Business Saturday', emoji: '\uD83C\uDFEA', suggestion: 'Shop local messaging, tell your small business story' },
+  { month: 12, day: 21, name: 'First Day of Winter', emoji: '\u2744\uFE0F', suggestion: 'Winter comfort food specials, warm drinks, cozy atmosphere' },
+  { month: 12, day: 25, name: 'Christmas Day', emoji: '\uD83C\uDF84', suggestion: 'Holiday catering, gift card push, or festive menu' },
+  { month: 12, day: 31, name: "New Year's Eve", emoji: '\uD83C\uDF7E', suggestion: "NYE dinner reservations, party packages, or chef's tasting menu" },
 ]
 
-/* ── Customer Activity (marketing → real customers) ──────────────── */
-const customerActivity = {
-  thisWeek: {
-    calls: 18,
-    callsChange: '+4',
-    directions: 42,
-    directionsChange: '+11',
-    websiteForms: 7,
-    formsChange: '+2',
-    bookings: 12,
-    bookingsChange: '+3',
-  },
-  recentLeads: [
-    { name: 'Sarah M.', source: 'Instagram DM', time: '2h ago', action: 'Asked about catering' },
-    { name: 'James R.', source: 'Google Search', time: '5h ago', action: 'Booked table for 6' },
-    { name: 'Priya K.', source: 'Email click', time: 'Yesterday', action: 'Viewed spring menu' },
+function getUpcomingOpportunities(): Opportunity[] {
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const results: (Opportunity & { date: Date })[] = []
+
+  for (const h of RESTAURANT_HOLIDAYS) {
+    // Check this year and next year
+    for (const year of [currentYear, currentYear + 1]) {
+      const date = new Date(year, h.month - 1, h.day)
+      const diffMs = date.getTime() - now.getTime()
+      const daysAway = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+      if (daysAway > 0 && daysAway <= 45) {
+        results.push({
+          emoji: h.emoji,
+          name: h.name,
+          daysAway,
+          suggestion: h.suggestion,
+          date,
+        })
+      }
+    }
+  }
+
+  results.sort((a, b) => a.date.getTime() - b.date.getTime())
+  return results.slice(0, 6)
+}
+
+/* ================================================================== */
+/*  COMPUTATION: AI Briefing from analytics_snapshots                  */
+/* ================================================================== */
+
+interface AnalyticsRow {
+  platform: string
+  date: string
+  metrics: Record<string, any>
+}
+
+function computeBriefing(snapshots: AnalyticsRow[]): BriefingData {
+  if (!snapshots || snapshots.length === 0) {
+    return { text: '', hasData: false }
+  }
+
+  const now = new Date()
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
+
+  const thisWeek = snapshots.filter((s) => new Date(s.date) >= sevenDaysAgo)
+  const lastWeek = snapshots.filter(
+    (s) => new Date(s.date) >= fourteenDaysAgo && new Date(s.date) < sevenDaysAgo
+  )
+
+  if (thisWeek.length === 0) {
+    return { text: '', hasData: false }
+  }
+
+  // Aggregate metrics by summing
+  function sumMetric(rows: AnalyticsRow[], key: string): number {
+    return rows.reduce((sum, r) => sum + (Number(r.metrics?.[key]) || 0), 0)
+  }
+
+  const metrics = ['reach', 'impressions', 'engagement_rate', 'website_clicks', 'followers_change']
+  const metricLabels: Record<string, string> = {
+    reach: 'reach',
+    impressions: 'impressions',
+    engagement_rate: 'engagement',
+    website_clicks: 'website clicks',
+    followers_change: 'new followers',
+  }
+
+  // Find biggest positive change and biggest dip
+  let bestMetric = ''
+  let bestChange = 0
+  let worstMetric = ''
+  let worstChange = Infinity
+
+  for (const m of metrics) {
+    const thisVal = sumMetric(thisWeek, m)
+    const lastVal = sumMetric(lastWeek, m)
+    if (lastVal === 0) continue
+    const pctChange = Math.round(((thisVal - lastVal) / lastVal) * 100)
+    if (pctChange > bestChange) {
+      bestChange = pctChange
+      bestMetric = m
+    }
+    if (pctChange < worstChange) {
+      worstChange = pctChange
+      worstMetric = m
+    }
+  }
+
+  // Find top platform
+  const platformReach: Record<string, number> = {}
+  for (const s of thisWeek) {
+    platformReach[s.platform] = (platformReach[s.platform] || 0) + (Number(s.metrics?.reach) || 0)
+  }
+  const topPlatform = Object.entries(platformReach).sort((a, b) => b[1] - a[1])[0]?.[0] || ''
+  const platformLabel = topPlatform.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+
+  let text = ''
+  if (bestMetric && bestChange > 0) {
+    text = `Strong week \u2014 ${metricLabels[bestMetric]} up ${bestChange}% above last week`
+    if (topPlatform) text += `, led by ${platformLabel}`
+    text += '.'
+  } else {
+    text = 'Steady week across your marketing channels.'
+  }
+
+  if (worstMetric && worstChange < -5) {
+    text += ` Area to watch: ${metricLabels[worstMetric]} dipped ${Math.abs(worstChange)}%.`
+  }
+
+  return { text, hasData: true }
+}
+
+/* ================================================================== */
+/*  COMPUTATION: Quick Wins rules engine                               */
+/* ================================================================== */
+
+function computeQuickWins(
+  reviewsUnresponded: number,
+  todaySchedule: ScheduleItem[],
+  approvedDeliverables: number,
+): QuickWin[] {
+  const wins: QuickWin[] = []
+
+  if (reviewsUnresponded > 0) {
+    wins.push({
+      emoji: '\u2B50',
+      title: `Reply to ${reviewsUnresponded} unresponded review${reviewsUnresponded > 1 ? 's' : ''}`,
+      description: 'A quick thank-you reply boosts your review visibility by 12%',
+      time: '2 min',
+      impact: 'high',
+      href: '/dashboard/tools',
+    })
+  }
+
+  if (todaySchedule.length > 0) {
+    wins.push({
+      emoji: '\uD83D\uDCF1',
+      title: "Share today\u2019s post to your personal page",
+      description: 'Personal shares get 3x more reach than business-only posts',
+      time: '30 sec',
+      impact: 'medium',
+      href: '/dashboard/tools',
+    })
+  }
+
+  if (approvedDeliverables > 0) {
+    wins.push({
+      emoji: '\uD83D\uDCF8',
+      title: 'Take 3 behind-the-scenes photos today',
+      description: 'BTS content is your highest-performing content category',
+      time: '5 min',
+      impact: 'high',
+      href: '/dashboard/tools',
+    })
+  }
+
+  // Always offer a general tip if we have fewer than 3 wins
+  if (wins.length < 3) {
+    wins.push({
+      emoji: '\uD83D\uDCA1',
+      title: 'Update your Google Business Profile hours',
+      description: 'Accurate hours improve your local search ranking',
+      time: '3 min',
+      impact: 'medium',
+      href: '/dashboard/tools',
+    })
+  }
+
+  return wins.slice(0, 3)
+}
+
+/* ================================================================== */
+/*  COMPUTATION: Revenue Impact from orders                            */
+/* ================================================================== */
+
+function computeRevenue(
+  thisMonthOrders: { total_price: number }[],
+  lastMonthOrders: { total_price: number }[],
+  monthlyCost: number,
+): RevenueCard[] | null {
+  if (thisMonthOrders.length === 0 && lastMonthOrders.length === 0) return null
+
+  const thisCount = thisMonthOrders.length
+  const lastCount = lastMonthOrders.length
+  const thisRevenue = thisMonthOrders.reduce((s, o) => s + (o.total_price || 0), 0)
+  const lastRevenue = lastMonthOrders.reduce((s, o) => s + (o.total_price || 0), 0)
+  const costPerCustomer = thisCount > 0 ? Math.round(monthlyCost / thisCount) : 0
+  const lastCostPerCustomer = lastCount > 0 ? Math.round(monthlyCost / lastCount) : 0
+  const roi = monthlyCost > 0 ? (thisRevenue / monthlyCost) : 0
+  const lastRoi = monthlyCost > 0 ? (lastRevenue / monthlyCost) : 0
+
+  function trend(curr: number, prev: number, prefix = '', suffix = ''): { str: string; up: boolean } {
+    const diff = curr - prev
+    if (prev === 0) return { str: 'new', up: true }
+    const pct = Math.round((diff / prev) * 100)
+    return {
+      str: `${diff >= 0 ? '+' : ''}${prefix}${suffix === '%' ? pct : diff}${suffix}`,
+      up: diff >= 0,
+    }
+  }
+
+  const countTrend = trend(thisCount, lastCount)
+  const revTrend = trend(thisRevenue, lastRevenue, '', '%')
+  const cpcTrend = trend(costPerCustomer, lastCostPerCustomer, '$')
+  const roiTrend = trend(roi, lastRoi, '', 'x')
+
+  return [
+    { label: 'Customers from Marketing', value: String(thisCount), trend: countTrend.str, trendUp: countTrend.up },
+    { label: 'Est. Revenue Impact', value: formatCurrency(thisRevenue), trend: revTrend.str, trendUp: revTrend.up },
+    { label: 'Cost per Customer', value: thisCount > 0 ? `$${costPerCustomer}` : '$0', trend: cpcTrend.str, trendUp: !cpcTrend.up /* lower is better */ },
+    { label: 'Marketing ROI', value: roi > 0 ? `${roi.toFixed(1)}x` : '0x', trend: roiTrend.str, trendUp: roiTrend.up },
   ]
 }
 
-/* ── Monthly Delivery Tracker ────────────────────────────────────── */
-const deliveryTracker = {
-  posts: { delivered: 14, total: 20, label: 'Social Posts' },
-  stories: { delivered: 18, total: 24, label: 'Stories' },
-  emails: { delivered: 3, total: 4, label: 'Email Campaigns' },
-  seoUpdates: { delivered: 2, total: 3, label: 'SEO Updates' },
+/* ================================================================== */
+/*  COMPUTATION: Customer Activity from analytics                      */
+/* ================================================================== */
+
+function computeActivity(
+  thisWeekSnapshots: AnalyticsRow[],
+  lastWeekSnapshots: AnalyticsRow[],
+): ActivityStat[] | null {
+  const gbpThis = thisWeekSnapshots.filter((s) => s.platform === 'google_business')
+  const gbpLast = lastWeekSnapshots.filter((s) => s.platform === 'google_business')
+
+  if (gbpThis.length === 0 && gbpLast.length === 0) return null
+
+  function sum(rows: AnalyticsRow[], key: string): number {
+    return rows.reduce((s, r) => s + (Number(r.metrics?.[key]) || 0), 0)
+  }
+
+  const stats: ActivityStat[] = [
+    { emoji: '\uD83D\uDCDE', label: 'Phone Calls', value: sum(gbpThis, 'phone_calls'), change: sum(gbpThis, 'phone_calls') - sum(gbpLast, 'phone_calls') },
+    { emoji: '\uD83D\uDCCD', label: 'Directions', value: sum(gbpThis, 'direction_requests'), change: sum(gbpThis, 'direction_requests') - sum(gbpLast, 'direction_requests') },
+    { emoji: '\uD83D\uDCC4', label: 'Website Clicks', value: sum(gbpThis, 'website_clicks'), change: sum(gbpThis, 'website_clicks') - sum(gbpLast, 'website_clicks') },
+    { emoji: '\uD83D\uDCC5', label: 'Bookings', value: sum(gbpThis, 'bookings'), change: sum(gbpThis, 'bookings') - sum(gbpLast, 'bookings') },
+  ]
+
+  // Only show if any stat has a non-zero value
+  if (stats.every((s) => s.value === 0)) return null
+  return stats
 }
 
-/* ── Today's Schedule ────────────────────────────────────────────── */
-const todaySchedule = [
-  { time: '10:00 AM', platform: 'Instagram', icon: Camera, color: 'bg-pink-50 text-pink-500', title: 'Customer Spotlight Post', status: 'scheduled' },
-  { time: '12:30 PM', platform: 'Facebook', icon: Globe, color: 'bg-blue-50 text-blue-500', title: 'Lunch Special Promo', status: 'scheduled' },
-  { time: '3:00 PM', platform: 'TikTok', icon: Video, color: 'bg-bg-2 text-ink', title: 'Recipe Tutorial Reel', status: 'pending_approval' },
-  { time: '5:00 PM', platform: 'Email', icon: Mail, color: 'bg-purple-50 text-purple-500', title: 'Weekly Newsletter Send', status: 'scheduled' },
-]
+/* ================================================================== */
+/*  COMPUTATION: Delivery Progress from deliverables                   */
+/* ================================================================== */
+
+const DELIVERABLE_TYPE_LABELS: Record<string, string> = {
+  graphic: 'Social Posts',
+  video: 'Reels & Videos',
+  caption: 'Captions',
+  email: 'Email Campaigns',
+  seo: 'SEO Updates',
+  website_page: 'Website Pages',
+  branding: 'Branding Assets',
+  photography: 'Photography',
+}
+
+// Plan allocations based on actual service tiers from services-data.json
+// Maps plan_id (from subscriptions table) to expected monthly deliverables by type
+const PLAN_ALLOCATIONS: Record<string, Record<string, number>> = {
+  // Social Media Management tiers
+  'social-essentials': { graphic: 12, email: 0, seo: 0, video: 0 },
+  'social-starter': { graphic: 16, email: 0, seo: 0, video: 0 },
+  'social-growth': { graphic: 20, video: 4, email: 0, seo: 0 },
+  'social-enterprise': { graphic: 30, video: 8, email: 0, seo: 0 },
+  // Local SEO tiers
+  'seo-essentials': { seo: 2, graphic: 0, email: 0, video: 0 },
+  'seo-growth': { seo: 4, graphic: 0, email: 0, video: 0 },
+  'seo-domination': { seo: 6, graphic: 0, email: 0, video: 0 },
+  // Email & SMS tiers
+  'email-starter': { email: 2, graphic: 0, seo: 0, video: 0 },
+  'email-growth': { email: 4, graphic: 0, seo: 0, video: 0 },
+  'email-enterprise': { email: 8, graphic: 0, seo: 0, video: 0 },
+}
+
+// Fallback for plans not in the map
+const DEFAULT_ALLOCATIONS: Record<string, number> = {
+  graphic: 12,
+  video: 2,
+  email: 2,
+  seo: 2,
+}
+
+function computeDeliveryProgress(
+  deliverables: { type: string }[],
+  subscriptions: { plan_id: string | null }[],
+): DeliveryItem[] | null {
+  if (subscriptions.length === 0) return null
+
+  // Merge allocations from all active subscriptions
+  const mergedAllocations: Record<string, number> = {}
+
+  let hasKnownPlan = false
+  for (const sub of subscriptions) {
+    const planAlloc = sub.plan_id ? PLAN_ALLOCATIONS[sub.plan_id] : null
+    if (planAlloc) {
+      hasKnownPlan = true
+      for (const [type, count] of Object.entries(planAlloc)) {
+        mergedAllocations[type] = (mergedAllocations[type] || 0) + count
+      }
+    }
+  }
+
+  // Fall back to defaults if no known plans
+  const allocations = hasKnownPlan ? mergedAllocations : DEFAULT_ALLOCATIONS
+
+  const countByType: Record<string, number> = {}
+  for (const d of deliverables) {
+    countByType[d.type] = (countByType[d.type] || 0) + 1
+  }
+
+  const items: DeliveryItem[] = []
+  for (const [type, total] of Object.entries(allocations)) {
+    if (total === 0) continue // Skip types not included in the plan
+    const delivered = countByType[type] || 0
+    items.push({
+      label: DELIVERABLE_TYPE_LABELS[type] || type,
+      delivered,
+      total,
+    })
+  }
+
+  return items.length > 0 ? items : null
+}
+
+/* ================================================================== */
+/*  COMPUTATION: Google Reviews from analytics                         */
+/* ================================================================== */
+
+function computeReviews(snapshots: AnalyticsRow[]): ReviewData | null {
+  const gbp = snapshots
+    .filter((s) => s.platform === 'google_business')
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  if (gbp.length === 0) return null
+
+  const latest = gbp[0]
+  const rating = Number(latest.metrics?.review_rating) || 0
+  const count = Number(latest.metrics?.review_count) || 0
+  const needsResponse = Number(latest.metrics?.reviews_unresponded) || 0
+
+  if (rating === 0 && count === 0) return null
+
+  // Latest review text if available in metrics
+  const latestReview = latest.metrics?.latest_review
+    ? {
+        stars: Number(latest.metrics.latest_review.stars) || 5,
+        text: String(latest.metrics.latest_review.text || ''),
+        author: String(latest.metrics.latest_review.author || 'Anonymous'),
+        timeAgo: latest.metrics.latest_review.date ? timeAgo(latest.metrics.latest_review.date) : 'Recently',
+      }
+    : null
+
+  return {
+    rating,
+    count,
+    goal: 150,
+    needsResponse,
+    latest: latestReview,
+  }
+}
+
+/* ================================================================== */
+/*  DATA HOOK — all real queries                                       */
+/* ================================================================== */
+
+interface DashboardData {
+  approvals: ApprovalItem[]
+  briefing: BriefingData
+  quickWins: QuickWin[]
+  revenue: RevenueCard[] | null
+  activity: ActivityStat[] | null
+  recentActivity: RecentActivity[]
+  schedule: ScheduleItem[]
+  delivery: DeliveryItem[] | null
+  reviews: ReviewData | null
+  opportunities: Opportunity[]
+  loading: boolean
+}
+
+function useDashboardData(businessId: string | undefined): DashboardData {
+  const [data, setData] = useState<Omit<DashboardData, 'loading' | 'opportunities'>>({
+    approvals: [],
+    briefing: { text: '', hasData: false },
+    quickWins: [],
+    revenue: null,
+    activity: null,
+    recentActivity: [],
+    schedule: [],
+    delivery: null,
+    reviews: null,
+  })
+  const [loading, setLoading] = useState(true)
+
+  const opportunities = useMemo(() => getUpcomingOpportunities(), [])
+
+  useEffect(() => {
+    if (!businessId) {
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    const supabase = createClient()
+
+    async function fetchAll() {
+      const now = new Date()
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
+      const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString()
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+      const [
+        approvalsRes,
+        analyticsRes,
+        scheduleRes,
+        monthDeliverablesRes,
+        subscriptionsRes,
+        thisMonthOrdersRes,
+        lastMonthOrdersRes,
+        activityLogRes,
+        approvedCountRes,
+      ] = await Promise.all([
+        // 1. Approvals: deliverables needing client review
+        supabase
+          .from('deliverables')
+          .select('id, title, type, created_at, content')
+          .eq('business_id', businessId)
+          .eq('status', 'client_review')
+          .order('created_at', { ascending: false })
+          .limit(5),
+
+        // 2. Analytics snapshots: last 14 days, all platforms
+        supabase
+          .from('analytics_snapshots')
+          .select('platform, date, metrics')
+          .eq('business_id', businessId)
+          .gte('date', fourteenDaysAgo)
+          .order('date', { ascending: false }),
+
+        // 3. Content calendar: today's scheduled items
+        supabase
+          .from('content_calendar')
+          .select('id, platform, title, scheduled_at, status, deliverable_id')
+          .eq('business_id', businessId)
+          .gte('scheduled_at', todayStart)
+          .lt('scheduled_at', todayEnd)
+          .order('scheduled_at', { ascending: true }),
+
+        // 4. Deliverables this month (for delivery progress)
+        supabase
+          .from('deliverables')
+          .select('type, status')
+          .eq('business_id', businessId)
+          .in('status', ['approved', 'scheduled', 'published'])
+          .gte('created_at', monthStart),
+
+        // 5. Active subscriptions
+        supabase
+          .from('subscriptions')
+          .select('id, plan_id, plan_name, plan_price, status')
+          .eq('business_id', businessId)
+          .eq('status', 'active'),
+
+        // 6. This month's orders
+        supabase
+          .from('orders')
+          .select('total_price, status')
+          .eq('business_id', businessId)
+          .in('status', ['completed', 'in_progress'])
+          .gte('created_at', monthStart),
+
+        // 7. Last month's orders (for trend comparison)
+        supabase
+          .from('orders')
+          .select('total_price, status')
+          .eq('business_id', businessId)
+          .in('status', ['completed', 'in_progress'])
+          .gte('created_at', lastMonthStart)
+          .lt('created_at', monthStart),
+
+        // 8. Recent activity log
+        supabase
+          .from('client_activity_log')
+          .select('id, action_type, description, created_at')
+          .eq('business_id', businessId)
+          .order('created_at', { ascending: false })
+          .limit(5),
+
+        // 9. Count of recently approved deliverables (for quick wins)
+        supabase
+          .from('deliverables')
+          .select('id')
+          .eq('business_id', businessId)
+          .eq('status', 'approved')
+          .gte('created_at', sevenDaysAgo),
+      ])
+
+      if (cancelled) return
+
+      // --- Process approvals ---
+      const approvals: ApprovalItem[] = (approvalsRes.data || []).map((d) => {
+        const platform = (d.content as any)?.platform
+        const plat = platform
+          ? platform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+          : d.type === 'email' ? 'Email'
+          : d.type === 'video' ? 'TikTok'
+          : 'Instagram'
+        const { label, urgency } = deadlineFromCreatedAt(d.created_at)
+        return {
+          id: d.id,
+          title: d.title,
+          platform: plat,
+          platformIcon: platformEmoji(platform || d.type || 'instagram'),
+          submittedAgo: timeAgo(d.created_at),
+          deadlineLabel: label,
+          deadlineUrgency: urgency,
+        }
+      })
+
+      // --- Process analytics ---
+      const snapshots = (analyticsRes.data || []) as AnalyticsRow[]
+      const briefing = computeBriefing(snapshots)
+
+      const thisWeekSnapshots = snapshots.filter((s) => new Date(s.date) >= new Date(sevenDaysAgo))
+      const lastWeekSnapshots = snapshots.filter(
+        (s) => new Date(s.date) >= new Date(fourteenDaysAgo) && new Date(s.date) < new Date(sevenDaysAgo)
+      )
+
+      const activity = computeActivity(thisWeekSnapshots, lastWeekSnapshots)
+      const reviews = computeReviews(snapshots)
+      const reviewsUnresponded = reviews?.needsResponse || 0
+
+      // --- Process schedule ---
+      const schedule: ScheduleItem[] = (scheduleRes.data || []).map((c) => ({
+        id: c.id,
+        time: new Date(c.scheduled_at).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        }),
+        emoji: platformEmoji(c.platform),
+        title: c.title || 'Untitled post',
+        needsApproval: c.status === 'draft',
+      }))
+
+      // --- Process delivery progress ---
+      const activeSubs = (subscriptionsRes.data || []).map((s) => ({ plan_id: s.plan_id || null }))
+      const delivery = computeDeliveryProgress(
+        monthDeliverablesRes.data || [],
+        activeSubs,
+      )
+
+      // --- Process revenue ---
+      const monthlyCost = (subscriptionsRes.data || []).reduce(
+        (s, sub) => s + (sub.plan_price || 0),
+        0
+      )
+      const revenue = computeRevenue(
+        thisMonthOrdersRes.data || [],
+        lastMonthOrdersRes.data || [],
+        monthlyCost,
+      )
+
+      // --- Process activity log as recent leads ---
+      const AVATAR_COLORS = [
+        'bg-pink-100 text-pink-700',
+        'bg-blue-100 text-blue-700',
+        'bg-amber-100 text-amber-700',
+        'bg-green-100 text-green-700',
+        'bg-purple-100 text-purple-700',
+      ]
+      const actionTypeLabel: Record<string, string> = {
+        agreement_sent: 'Agreement sent',
+        agreement_viewed: 'Agreement viewed',
+        agreement_signed: 'Agreement signed',
+        invoice_sent: 'Invoice sent',
+        invoice_paid: 'Invoice paid',
+        invoice_overdue: 'Invoice overdue',
+        scope_change: 'Scope updated',
+        note_added: 'Note added',
+        status_change: 'Status changed',
+        client_created: 'Account created',
+        onboarding_completed: 'Onboarding complete',
+      }
+      const recentActivity: RecentActivity[] = (activityLogRes.data || []).map((entry, i) => {
+        const desc = entry.description || actionTypeLabel[entry.action_type] || entry.action_type
+        const words = desc.split(' ')
+        const initials = words.length >= 2
+          ? (words[0][0] + words[1][0]).toUpperCase()
+          : desc.substring(0, 2).toUpperCase()
+        return {
+          id: entry.id,
+          initials,
+          color: AVATAR_COLORS[i % AVATAR_COLORS.length],
+          description: desc,
+          actionType: actionTypeLabel[entry.action_type] || entry.action_type.replace(/_/g, ' '),
+          timeAgo: timeAgo(entry.created_at),
+        }
+      })
+
+      // --- Quick Wins ---
+      const quickWins = computeQuickWins(
+        reviewsUnresponded,
+        schedule,
+        (approvedCountRes.data || []).length,
+      )
+
+      setData({
+        approvals,
+        briefing,
+        quickWins,
+        revenue,
+        activity,
+        recentActivity,
+        schedule,
+        delivery,
+        reviews,
+      })
+      setLoading(false)
+    }
+
+    fetchAll()
+    return () => { cancelled = true }
+  }, [businessId])
+
+  return { ...data, opportunities, loading }
+}
+
+/* ================================================================== */
+/*  SKELETON LOADER                                                    */
+/* ================================================================== */
+
+function DashboardSkeleton() {
+  return (
+    <div className="max-w-4xl mx-auto space-y-6 px-4 sm:px-6">
+      <div className="pt-2">
+        <LoadingSkeleton width="220px" height="32px" rounded="lg" />
+        <div className="mt-2">
+          <LoadingSkeleton width="160px" height="16px" rounded="md" />
+        </div>
+      </div>
+      <LoadingSkeleton width="100%" height="100px" rounded="xl" />
+      <LoadingSkeleton width="100%" height="140px" rounded="xl" />
+      <LoadingSkeleton width="100%" height="200px" rounded="xl" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[1, 2, 3, 4].map((i) => (
+          <LoadingSkeleton key={i} width="100%" height="100px" rounded="xl" />
+        ))}
+      </div>
+    </div>
+  )
+}
 
 /* ================================================================== */
 /*  COMPONENT                                                          */
 /* ================================================================== */
 
 export default function DashboardPage() {
-  const [briefingExpanded, setBriefingExpanded] = useState(false)
-  const [showAllOpportunities, setShowAllOpportunities] = useState(false)
+  const { data: user, loading: userLoading } = useUser()
+  const { data: business, loading: bizLoading } = useBusiness()
+  const {
+    approvals, briefing, quickWins, revenue, activity,
+    recentActivity, schedule, delivery, reviews, opportunities, loading: dataLoading,
+  } = useDashboardData(business?.id)
+  const [showMoreOpps, setShowMoreOpps] = useState(false)
 
-  const displayedOpportunities = showAllOpportunities ? opportunities : opportunities.slice(0, 2)
+  const loading = userLoading || bizLoading || dataLoading
+
+  const firstName = useMemo(() => {
+    if (!user?.full_name) return ''
+    return user.full_name.split(' ')[0]
+  }, [user?.full_name])
+
+  const router = useRouter()
+
+  // Redirect to onboarding if no business profile exists
+  useEffect(() => {
+    if (!loading && !business && user) {
+      router.push('/onboarding')
+    }
+  }, [loading, business, user, router])
+
+  if (loading || (!business && user)) return <DashboardSkeleton />
+
+  const monthName = new Date().toLocaleDateString('en-US', { month: 'long' })
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5">
+    <div className="max-w-4xl mx-auto space-y-8 px-4 sm:px-6 pb-24">
 
-      {/* ── GREETING + WEEKLY GRADE ──────────────────────────────── */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">
-            {greeting}, Matt
-          </h1>
-          <p className="text-ink-4 text-sm mt-0.5">{dayName}, {dateStr}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="bg-white border border-ink-6 rounded-xl px-4 py-2.5 flex items-center gap-3">
-            <div>
-              <div className="text-[10px] text-ink-4 uppercase tracking-wider font-medium">This Week</div>
-              <div className="font-[family-name:var(--font-display)] text-2xl text-brand-dark leading-none">{aiBriefing.weeklyGrade}</div>
-            </div>
-          </div>
-        </div>
+      {/* ── 1. GREETING ─────────────────────────────────────────── */}
+      <div className="pt-1">
+        <h1 className="font-[family-name:var(--font-display)] text-[28px] sm:text-3xl text-ink leading-tight">
+          {timeOfDayGreeting()}{firstName ? `, ${firstName}` : ''}
+        </h1>
+        <p className="text-ink-3 text-[15px] mt-1">{todayFormatted()}</p>
       </div>
 
-      {/* ── AI MORNING BRIEFING ──────────────────────────────────── */}
-      <div className="bg-gradient-to-br from-ink to-ink-2 rounded-xl p-5 text-white relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-brand/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-6 h-6 rounded-md bg-brand/20 flex items-center justify-center">
-              <Sparkles className="w-3.5 h-3.5 text-brand" />
-            </div>
-            <span className="text-xs font-medium text-white/50 uppercase tracking-wider">AI Marketing Briefing</span>
-          </div>
-          <p className={`text-sm text-white/80 leading-relaxed ${briefingExpanded ? '' : 'line-clamp-2'}`}>
-            {aiBriefing.summary}
-          </p>
-          <button onClick={() => setBriefingExpanded(!briefingExpanded)} className="text-xs text-brand font-medium mt-2 hover:text-brand/80 transition-colors">
-            {briefingExpanded ? 'Show less' : 'Read full briefing →'}
-          </button>
-          {briefingExpanded && (
-            <div className="mt-3 pt-3 border-t border-white/10">
-              <div className="flex items-start gap-2">
-                <Lightbulb className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-white/60"><span className="text-white/80 font-medium">Key Insight:</span> {aiBriefing.topInsight}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── REVENUE IMPACT (what actually matters) ───────────────── */}
-      <div>
+      {/* ── 2. AI MARKETING BRIEFING ────────────────────────────── */}
+      <div className="bg-[#1d1d1f] rounded-2xl p-5 sm:p-6 relative overflow-hidden">
+        <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand rounded-l-2xl" />
         <div className="flex items-center gap-2 mb-3">
-          <DollarSign className="w-4 h-4 text-green-600" />
-          <h2 className="font-[family-name:var(--font-display)] text-base text-ink">Revenue Impact</h2>
-          <span className="text-[10px] text-ink-4 bg-bg-2 px-2 py-0.5 rounded-full">This month</span>
+          <Sparkles className="w-4 h-4 text-brand" />
+          <span className="text-[11px] font-semibold tracking-widest text-brand uppercase">
+            AI Marketing Briefing
+          </span>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {Object.values(revenueImpact).map((stat) => (
-            <div key={stat.label} className="bg-white rounded-xl border border-ink-6 p-4">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[11px] text-ink-4">{stat.label}</span>
-                <span className={`text-[11px] font-medium flex items-center gap-0.5 ${stat.up ? 'text-green-600' : 'text-red-500'}`}>
-                  {stat.up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {stat.change}
-                </span>
-              </div>
-              <div className="font-[family-name:var(--font-display)] text-2xl text-ink leading-none">{stat.value}</div>
-            </div>
-          ))}
-        </div>
+        {briefing.hasData ? (
+          <>
+            <p className="text-white/90 text-[15px] leading-relaxed">{briefing.text}</p>
+            <Link
+              href="/dashboard/analytics"
+              className="inline-flex items-center gap-1 text-brand text-sm mt-3 hover:text-brand-dark transition-colors"
+            >
+              Read full briefing
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          </>
+        ) : (
+          <p className="text-white/60 text-[15px] leading-relaxed">
+            We&rsquo;re gathering your marketing data. Your first briefing will appear here soon.
+          </p>
+        )}
       </div>
 
-      {/* ── NEEDS YOUR ATTENTION ─────────────────────────────────── */}
-      {pipeline.needsApproval.length > 0 && (
-        <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
-          <div className="px-5 py-3 bg-amber-50/50 border-b border-amber-200 flex items-center justify-between">
+      {/* ── 3. NEEDS YOUR APPROVAL ──────────────────────────────── */}
+      {approvals.length > 0 ? (
+        <section>
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-500" />
-              <h2 className="font-[family-name:var(--font-display)] text-sm text-ink">Needs Your Approval</h2>
-              <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{pipeline.needsApproval.length}</span>
+              <h2 className="font-[family-name:var(--font-display)] text-base text-ink">
+                Needs Your Approval
+              </h2>
+              <span className="bg-amber-100 text-amber-700 text-[11px] font-bold px-2 py-0.5 rounded-full">
+                {approvals.length}
+              </span>
             </div>
-            <Link href="/dashboard/approvals" className="text-[11px] text-amber-700 font-medium hover:underline">Review all →</Link>
+            <Link
+              href="/dashboard/approvals"
+              className="text-sm text-brand hover:text-brand-dark transition-colors"
+            >
+              Review all &rarr;
+            </Link>
           </div>
-          <div className="divide-y divide-ink-6">
-            {pipeline.needsApproval.map((item, i) => (
-              <Link key={i} href="/dashboard/approvals" className="flex items-center gap-4 px-5 py-3 hover:bg-amber-50/30 transition-colors group">
-                <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
-                  <FileCheck className="w-4 h-4 text-amber-600" />
-                </div>
+          <div className="bg-white rounded-xl border border-ink-6 overflow-hidden divide-y divide-ink-6">
+            {approvals.map((item) => (
+              <Link
+                key={item.id}
+                href="/dashboard/approvals"
+                className="flex items-center gap-3 px-4 py-3.5 hover:bg-bg-2/50 transition-colors group border-l-[3px] border-l-amber-400"
+              >
+                <span className="text-lg flex-shrink-0">{item.platformIcon}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-ink">{item.title}</p>
-                  <p className="text-[11px] text-ink-4">{item.platform} · Submitted {item.submitted}</p>
+                  <p className="text-[15px] text-ink font-medium truncate">{item.title}</p>
+                  <p className="text-[12px] text-ink-3 mt-0.5">
+                    {item.platform} &middot; {item.submittedAgo}
+                  </p>
                 </div>
-                <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-full flex-shrink-0">{item.deadline}</span>
+                <span
+                  className={`text-[11px] font-medium px-2 py-1 rounded-full flex-shrink-0 ${
+                    item.deadlineUrgency === 'today'
+                      ? 'bg-red-50 text-red-600'
+                      : item.deadlineUrgency === 'tomorrow'
+                        ? 'bg-amber-50 text-amber-600'
+                        : 'bg-bg-2 text-ink-3'
+                  }`}
+                >
+                  {item.deadlineLabel}
+                </span>
+                <ChevronRight className="w-4 h-4 text-ink-4 group-hover:text-ink-3 transition-colors flex-shrink-0" />
               </Link>
             ))}
           </div>
-        </div>
+        </section>
+      ) : (
+        <section>
+          <h2 className="font-[family-name:var(--font-display)] text-base text-ink mb-3">
+            Needs Your Approval
+          </h2>
+          <div className="bg-white rounded-xl border border-ink-6 px-4 py-6 text-center">
+            <CheckCircle className="w-6 h-6 text-green-500 mx-auto mb-2" />
+            <p className="text-[15px] text-ink font-medium">You&rsquo;re all caught up</p>
+            <p className="text-[13px] text-ink-3 mt-0.5">
+              Nothing needs your approval right now.
+            </p>
+          </div>
+        </section>
       )}
 
-      {/* ── PERFORMANCE + PRODUCTION (side by side) ──────────────── */}
-      <div className="grid lg:grid-cols-5 gap-4">
-
-        {/* Performance Pulse */}
-        <div className="lg:col-span-3">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-brand-dark" />
-              <h2 className="font-[family-name:var(--font-display)] text-base text-ink">Performance Pulse</h2>
-            </div>
-            <Link href="/dashboard/analytics" className="text-[11px] text-brand-dark font-medium hover:underline flex items-center gap-1">
-              Full analytics <ArrowUpRight className="w-3 h-3" />
-            </Link>
+      {/* ── 4. QUICK WINS ───────────────────────────────────────── */}
+      {quickWins.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="font-[family-name:var(--font-display)] text-base text-ink">
+              Quick Wins
+            </h2>
+            <span className="text-[11px] text-ink-4 bg-bg-2 px-2 py-0.5 rounded-full">
+              AI suggested
+            </span>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-            {pulse.map((stat) => (
-              <div key={stat.label} className="bg-white rounded-xl border border-ink-6 p-3.5">
-                <div className="flex items-center justify-between mb-2">
-                  <stat.icon className="w-3.5 h-3.5 text-ink-4" />
-                  <span className={`text-[10px] font-medium flex items-center gap-0.5 ${stat.up ? 'text-green-600' : 'text-red-500'}`}>
-                    {stat.up ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
-                    {stat.change}
+          <div className="space-y-2.5">
+            {quickWins.map((win) => (
+              <Link
+                key={win.title}
+                href={win.href}
+                className="flex items-start gap-3 bg-white rounded-xl border border-ink-6 px-4 py-3.5 hover:border-ink-5 transition-colors group"
+              >
+                <span className="text-xl mt-0.5 flex-shrink-0">{win.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[15px] text-ink font-medium">{win.title}</p>
+                  <p className="text-[13px] text-ink-3 mt-0.5 leading-snug">
+                    {win.description}
+                  </p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[11px] text-ink-4 flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> {win.time}
+                    </span>
+                    <span
+                      className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                        win.impact === 'high'
+                          ? 'bg-green-50 text-green-700'
+                          : 'bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {win.impact} impact
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-ink-5 group-hover:text-ink-3 transition-colors mt-1 flex-shrink-0" />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── 5. REVENUE IMPACT ───────────────────────────────────── */}
+      {revenue ? (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-[family-name:var(--font-display)] text-base text-ink">
+              Revenue Impact
+            </h2>
+            <span className="text-[12px] text-ink-3">This month</span>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {revenue.map((card) => (
+              <Link
+                key={card.label}
+                href="/dashboard/analytics"
+                className="bg-white rounded-xl border border-ink-6 p-4 hover:border-ink-5 transition-colors group"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span
+                    className={`text-[12px] font-medium flex items-center gap-1 ${
+                      card.trendUp ? 'text-green-600' : 'text-red-500'
+                    }`}
+                  >
+                    {card.trendUp ? (
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    ) : (
+                      <ArrowDownRight className="w-3.5 h-3.5" />
+                    )}
+                    {card.trend}
                   </span>
                 </div>
-                <div className="font-[family-name:var(--font-display)] text-xl text-ink leading-none">{stat.value}</div>
-                <div className="text-[10px] text-ink-4 mt-1">{stat.label}</div>
-                <div className={`text-[9px] mt-1.5 px-1.5 py-0.5 rounded-full inline-block ${stat.aboveBenchmark ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
-                  {stat.benchmark}
+                <div className="font-[family-name:var(--font-display)] text-2xl sm:text-[28px] text-ink leading-none mt-1">
+                  {card.value}
                 </div>
-              </div>
+                <div className="text-[11px] text-ink-3 mt-1.5 leading-snug">{card.label}</div>
+              </Link>
             ))}
           </div>
+        </section>
+      ) : (
+        <section>
+          <h2 className="font-[family-name:var(--font-display)] text-base text-ink mb-3">
+            Revenue Impact
+          </h2>
+          <div className="bg-white rounded-xl border border-ink-6 px-4 py-6 text-center">
+            <TrendingUp className="w-6 h-6 text-ink-4 mx-auto mb-2" />
+            <p className="text-[13px] text-ink-3">
+              Revenue tracking starts once your first order comes in.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* ── 6. CUSTOMER ACTIVITY + RECENT ACTIVITY ──────────────── */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-[family-name:var(--font-display)] text-base text-ink">
+            Customer Activity
+          </h2>
+          <span className="text-[12px] text-ink-3">This week</span>
         </div>
 
-        {/* Production Pipeline */}
-        <div className="lg:col-span-2 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Loader2 className="w-4 h-4 text-blue-500" />
-              <h2 className="font-[family-name:var(--font-display)] text-base text-ink">In Production</h2>
-            </div>
-            <span className="text-[11px] text-ink-4">{pipeline.inProgress.length} active</span>
-          </div>
-
-          {/* In Progress */}
-          <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
-            {pipeline.inProgress.map((item, i) => (
-              <div key={i} className={`flex items-center gap-3 px-4 py-2.5 ${i > 0 ? 'border-t border-ink-6' : ''}`}>
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-ink truncate">{item.title}</p>
-                  <p className="text-[10px] text-ink-4">{item.assignee} · Due in {item.dueIn}</p>
+        {activity ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-4">
+            {activity.map((stat) => (
+              <div
+                key={stat.label}
+                className="bg-white rounded-xl border border-ink-6 px-3.5 py-3"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{stat.emoji}</span>
+                  <span className="font-[family-name:var(--font-display)] text-xl text-ink">
+                    {stat.value}
+                  </span>
+                  {stat.change !== 0 && (
+                    <span className={`text-[11px] font-medium ${stat.change > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {stat.change > 0 ? '+' : ''}{stat.change}
+                    </span>
+                  )}
                 </div>
-                <span className="text-[9px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">{item.type}</span>
+                <p className="text-[11px] text-ink-3 mt-0.5">{stat.label}</p>
               </div>
             ))}
           </div>
-
-          {/* Recently Completed */}
-          <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
-            <div className="px-4 py-2 border-b border-ink-6">
-              <span className="text-[10px] text-green-600 font-medium uppercase tracking-wider flex items-center gap-1">
-                <CheckCircle className="w-3 h-3" /> Recently Completed
-              </span>
-            </div>
-            {pipeline.recentlyCompleted.map((item, i) => (
-              <div key={i} className={`px-4 py-2.5 ${i > 0 ? 'border-t border-ink-6' : ''}`}>
-                <p className="text-xs font-medium text-ink">{item.title}</p>
-                <p className="text-[10px] text-ink-4 mt-0.5">{item.completedAt} · {item.result}</p>
-              </div>
-            ))}
+        ) : (
+          <div className="bg-white rounded-xl border border-ink-6 px-4 py-5 text-center mb-4">
+            <p className="text-[13px] text-ink-3">
+              Customer activity data appears here once your Google Business Profile is connected.
+            </p>
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* ── TOP CONTENT + TODAY'S SCHEDULE ────────────────────────── */}
-      <div className="grid lg:grid-cols-5 gap-4">
-
-        {/* Top Content This Month */}
-        <div className="lg:col-span-3 bg-white rounded-xl border border-ink-6 overflow-hidden">
-          <div className="px-5 py-3 border-b border-ink-6 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Flame className="w-4 h-4 text-orange-500" />
-              <h2 className="font-[family-name:var(--font-display)] text-sm text-ink">Top Performing Content</h2>
-            </div>
-            <Link href="/dashboard/analytics" className="text-[11px] text-brand-dark font-medium hover:underline">See all →</Link>
-          </div>
-          {topContent.map((post, i) => (
-            <div key={i} className={`flex items-center gap-3 px-5 py-3 ${i > 0 ? 'border-t border-ink-6' : ''}`}>
-              <div className="w-7 h-7 rounded-full bg-bg-2 flex items-center justify-center font-[family-name:var(--font-display)] text-xs text-ink-3 flex-shrink-0">
-                #{post.rank}
-              </div>
-              <post.icon className={`w-4 h-4 ${post.color} flex-shrink-0`} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-ink truncate">{post.title}</p>
-                <p className="text-[10px] text-ink-4 mt-0.5">
-                  <span className="text-ink-3 font-medium">{post.reach}</span> reached · <span className="text-ink-3 font-medium">{post.engagement}</span> eng · <span className="text-ink-3 font-medium">{post.saves}</span> saves
-                </p>
-              </div>
-              <div className="hidden sm:block max-w-[180px]">
-                <p className="text-[10px] text-brand-dark bg-brand-tint px-2 py-1 rounded-md leading-tight">💡 {post.insight}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Right Column */}
-        <div className="lg:col-span-2 space-y-3">
-
-          {/* Today's Schedule */}
-          <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-ink-6 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-blue-500" />
-                <h2 className="font-[family-name:var(--font-display)] text-sm text-ink">Today</h2>
-              </div>
-              <span className="text-[10px] text-ink-4">{todaySchedule.length} posts</span>
-            </div>
-            {todaySchedule.map((post, i) => (
-              <div key={i} className={`flex items-center gap-2.5 px-4 py-2 ${i > 0 ? 'border-t border-ink-6' : ''}`}>
-                <span className="text-[10px] text-ink-4 w-14 flex-shrink-0 font-mono">{post.time}</span>
-                <div className={`w-5 h-5 rounded ${post.color} flex items-center justify-center flex-shrink-0`}>
-                  <post.icon className="w-3 h-3" />
-                </div>
-                <p className="text-xs text-ink truncate flex-1">{post.title}</p>
-                {post.status === 'pending_approval' && (
-                  <span className="text-[8px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full flex-shrink-0">APPROVE</span>
-                )}
-              </div>
-            ))}
-            <Link href="/dashboard/calendar" className="block px-4 py-2 text-[10px] text-brand-dark font-medium hover:bg-bg-2/50 transition-colors border-t border-ink-6 text-center">
-              Full calendar →
-            </Link>
-          </div>
-
-          {/* Google Reviews */}
-          <div className="bg-white rounded-xl border border-ink-6 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                <h2 className="font-[family-name:var(--font-display)] text-sm text-ink">Google Reviews</h2>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="font-[family-name:var(--font-display)] text-base text-ink">{reviews.average}</span>
-                <div className="flex">{[1,2,3,4,5].map(s => <Star key={s} className={`w-2.5 h-2.5 ${s <= Math.round(reviews.average) ? 'text-amber-400 fill-amber-400' : 'text-ink-5'}`} />)}</div>
-              </div>
-            </div>
-            {/* Progress to goal */}
-            <div className="mb-3">
-              <div className="flex items-center justify-between text-[10px] text-ink-4 mb-1">
-                <span>{reviews.total} reviews</span>
-                <span>Goal: {reviews.goal}</span>
-              </div>
-              <div className="w-full h-1.5 bg-ink-6 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${(reviews.total / reviews.goal) * 100}%` }} />
-              </div>
-            </div>
-            {/* Latest review */}
-            <div className="bg-bg-2 rounded-lg p-2.5 mb-2">
-              <div className="flex items-center gap-1 mb-1">
-                {[1,2,3,4,5].map(s => <Star key={s} className={`w-2.5 h-2.5 ${s <= reviews.latest.stars ? 'text-amber-400 fill-amber-400' : 'text-ink-5'}`} />)}
-                <span className="text-[10px] text-ink-4 ml-1">{reviews.latest.daysAgo}d ago</span>
-              </div>
-              <p className="text-[11px] text-ink-3 line-clamp-2 italic">{reviews.latest.text}</p>
-              <p className="text-[10px] text-ink-4 mt-1">— {reviews.latest.author}</p>
-            </div>
-            {reviews.needsResponse > 0 && (
-              <div className="flex items-center gap-2 bg-amber-50 rounded-lg px-3 py-2">
-                <MessageSquare className="w-3 h-3 text-amber-600" />
-                <span className="text-[11px] text-amber-700 font-medium">{reviews.needsResponse} review needs your response</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── CUSTOMER ACTIVITY (marketing → real customers) ─────────── */}
-      <div className="grid lg:grid-cols-5 gap-4">
-        <div className="lg:col-span-3 bg-white rounded-xl border border-ink-6 overflow-hidden">
-          <div className="px-5 py-3 border-b border-ink-6 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Phone className="w-4 h-4 text-green-600" />
-              <h2 className="font-[family-name:var(--font-display)] text-sm text-ink">Customer Activity</h2>
-              <span className="text-[10px] text-ink-4 bg-bg-2 px-1.5 py-0.5 rounded-full">This week</span>
-            </div>
-          </div>
-          {/* Activity metrics */}
-          <div className="grid grid-cols-4 border-b border-ink-6">
-            {[
-              { label: 'Phone Calls', value: customerActivity.thisWeek.calls, change: customerActivity.thisWeek.callsChange, icon: Phone },
-              { label: 'Directions', value: customerActivity.thisWeek.directions, change: customerActivity.thisWeek.directionsChange, icon: MapPin },
-              { label: 'Form Fills', value: customerActivity.thisWeek.websiteForms, change: customerActivity.thisWeek.formsChange, icon: FileCheck },
-              { label: 'Bookings', value: customerActivity.thisWeek.bookings, change: customerActivity.thisWeek.bookingsChange, icon: Calendar },
-            ].map((m, i) => (
-              <div key={i} className={`p-3 text-center ${i > 0 ? 'border-l border-ink-6' : ''}`}>
-                <m.icon className="w-3.5 h-3.5 text-ink-4 mx-auto mb-1" />
-                <div className="font-[family-name:var(--font-display)] text-lg text-ink leading-none">{m.value}</div>
-                <div className="text-[10px] text-green-600 font-medium">{m.change}</div>
-                <div className="text-[9px] text-ink-4 mt-0.5">{m.label}</div>
-              </div>
-            ))}
-          </div>
-          {/* Recent leads */}
-          <div className="px-5 py-2 border-b border-ink-6">
-            <span className="text-[10px] text-ink-4 uppercase tracking-wider font-medium">Recent Leads</span>
-          </div>
-          {customerActivity.recentLeads.map((lead, i) => (
-            <div key={i} className={`flex items-center gap-3 px-5 py-2.5 ${i > 0 ? 'border-t border-ink-6' : ''}`}>
-              <div className="w-7 h-7 rounded-full bg-brand-tint flex items-center justify-center text-[10px] font-bold text-brand-dark flex-shrink-0">
-                {lead.name.split(' ').map(n => n[0]).join('')}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-ink">{lead.name} <span className="font-normal text-ink-4">· {lead.action}</span></p>
-                <p className="text-[10px] text-ink-4">via {lead.source} · {lead.time}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Monthly Delivery Tracker + Quick Wins */}
-        <div className="lg:col-span-2 space-y-3">
-
-          {/* What you're getting this month */}
-          <div className="bg-white rounded-xl border border-ink-6 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Package className="w-4 h-4 text-brand-dark" />
-                <h2 className="font-[family-name:var(--font-display)] text-sm text-ink">March Delivery</h2>
-              </div>
-              <span className="text-[10px] text-ink-4">What&apos;s included in your plan</span>
-            </div>
-            <div className="space-y-2.5">
-              {Object.values(deliveryTracker).map((item, i) => (
-                <div key={i}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] text-ink-2">{item.label}</span>
-                    <span className="text-[11px] font-medium text-ink">{item.delivered}/{item.total}</span>
+        {/* Recent activity */}
+        {recentActivity.length > 0 && (
+          <>
+            <h3 className="text-[13px] font-semibold text-ink-2 uppercase tracking-wide mb-2">
+              Recent Activity
+            </h3>
+            <div className="bg-white rounded-xl border border-ink-6 overflow-hidden divide-y divide-ink-6">
+              {recentActivity.map((entry) => (
+                <div key={entry.id} className="flex items-center gap-3 px-4 py-3">
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${entry.color}`}
+                  >
+                    {entry.initials}
                   </div>
-                  <div className="w-full h-1.5 bg-ink-6 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${item.delivered / item.total >= 1 ? 'bg-green-500' : item.delivered / item.total >= 0.5 ? 'bg-brand' : 'bg-amber-400'}`}
-                      style={{ width: `${(item.delivered / item.total) * 100}%` }}
-                    />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] text-ink">{entry.description}</p>
+                    <p className="text-[11px] text-ink-4 mt-0.5">
+                      {entry.actionType} &middot; {entry.timeAgo}
+                    </p>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </>
+        )}
+      </section>
 
-          {/* Quick Wins */}
-          <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-ink-6 flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-500" />
-              <h2 className="font-[family-name:var(--font-display)] text-sm text-ink">Quick Wins</h2>
-              <span className="text-[9px] text-ink-4 bg-bg-2 px-1.5 py-0.5 rounded-full">AI suggested</span>
-            </div>
-            {quickWins.slice(0, 3).map((win, i) => (
-              <div key={win.id} className={`flex items-start gap-2.5 px-4 py-2.5 hover:bg-bg-2/50 transition-colors ${i > 0 ? 'border-t border-ink-6' : ''}`}>
-                <span className="text-sm flex-shrink-0">{win.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-ink">{win.action}</p>
-                  <p className="text-[10px] text-ink-4 mt-0.5 leading-relaxed">{win.detail}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[9px] text-ink-4 bg-bg-2 px-1.5 py-0.5 rounded-full">{win.effort}</span>
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${win.impact === 'high' ? 'text-green-600 bg-green-50' : 'text-blue-600 bg-blue-50'}`}>{win.impact} impact</span>
+      {/* ── 7. TODAY'S SCHEDULE ──────────────────────────────────── */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h2 className="font-[family-name:var(--font-display)] text-base text-ink">
+              Today
+            </h2>
+            {schedule.length > 0 && (
+              <span className="text-[11px] text-ink-4 bg-bg-2 px-2 py-0.5 rounded-full">
+                {schedule.length} post{schedule.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <Link
+            href="/dashboard/calendar"
+            className="text-[12px] text-brand hover:text-brand-dark transition-colors"
+          >
+            Full calendar &rarr;
+          </Link>
+        </div>
+        {schedule.length > 0 ? (
+          <div className="bg-white rounded-xl border border-ink-6 overflow-hidden divide-y divide-ink-6">
+            {schedule.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 px-4 py-3">
+                <span className="text-[13px] text-ink-3 font-mono w-[76px] flex-shrink-0">
+                  {item.time}
+                </span>
+                <span className="text-base flex-shrink-0">{item.emoji}</span>
+                <p className="text-[14px] text-ink flex-1">{item.title}</p>
+                {item.needsApproval && (
+                  <Link
+                    href="/dashboard/approvals"
+                    className="text-[11px] font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full hover:bg-amber-100 transition-colors flex-shrink-0"
+                  >
+                    APPROVE
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-ink-6 px-4 py-5 text-center">
+            <p className="text-[13px] text-ink-3">
+              Nothing scheduled for today. Enjoy the break!
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* ── 8. DELIVERY PROGRESS ────────────────────────────────── */}
+      {delivery ? (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-[family-name:var(--font-display)] text-base text-ink">
+              {monthName} Delivery
+            </h2>
+            <span className="text-[12px] text-ink-3">What&rsquo;s included in your plan</span>
+          </div>
+          <div className="bg-white rounded-xl border border-ink-6 p-4 space-y-3.5">
+            {delivery.map((item) => {
+              const pct = item.total > 0 ? Math.round((item.delivered / item.total) * 100) : 0
+              const dayOfMonth = new Date().getDate()
+              const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
+              const expectedPct = Math.round((dayOfMonth / daysInMonth) * 100)
+              const behind = pct < expectedPct - 10
+
+              return (
+                <div key={item.label}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[13px] text-ink">{item.label}</span>
+                    <span className="text-[12px] text-ink-3 font-mono">
+                      {item.delivered}/{item.total}
+                    </span>
                   </div>
+                  <div className="h-2 bg-bg-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        behind ? 'bg-amber-400' : 'bg-brand'
+                      }`}
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {/* ── 9. GOOGLE REVIEWS ───────────────────────────────────── */}
+      {reviews ? (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <h2 className="font-[family-name:var(--font-display)] text-base text-ink">
+                Google Reviews
+              </h2>
+              <div className="flex items-center gap-1 text-amber-500">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Star
+                    key={s}
+                    className="w-3.5 h-3.5"
+                    fill={s <= Math.round(reviews.rating) ? 'currentColor' : 'none'}
+                  />
+                ))}
+              </div>
+            </div>
+            <Link
+              href="/dashboard/tools"
+              className="text-[12px] text-brand hover:text-brand-dark transition-colors"
+            >
+              See all reviews &rarr;
+            </Link>
+          </div>
+          <div className="bg-white rounded-xl border border-ink-6 p-4">
+            <div className="flex items-center gap-4 mb-3">
+              <span className="font-[family-name:var(--font-display)] text-3xl text-ink">
+                {reviews.rating.toFixed(1)}
+              </span>
+              <div>
+                <p className="text-[13px] text-ink">{reviews.count} reviews</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <div className="h-1.5 w-20 bg-bg-2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-brand rounded-full"
+                      style={{ width: `${Math.min(Math.round((reviews.count / reviews.goal) * 100), 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-[11px] text-ink-4">Goal: {reviews.goal}</span>
+                </div>
+              </div>
+            </div>
+
+            {reviews.needsResponse > 0 && (
+              <div className="bg-amber-50 rounded-lg px-3 py-2 mb-3 flex items-center gap-2">
+                <Eye className="w-3.5 h-3.5 text-amber-600" />
+                <span className="text-[12px] text-amber-700 font-medium">
+                  {reviews.needsResponse} review{reviews.needsResponse > 1 ? 's' : ''} needs your response
+                </span>
+              </div>
+            )}
+
+            {reviews.latest && (
+              <div className="border-t border-ink-6 pt-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="flex text-amber-500">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        className="w-3 h-3"
+                        fill={s <= reviews.latest!.stars ? 'currentColor' : 'none'}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-[11px] text-ink-4">
+                    {reviews.latest.author} &middot; {reviews.latest.timeAgo}
+                  </span>
+                </div>
+                <p className="text-[13px] text-ink-3 leading-snug line-clamp-2">
+                  &ldquo;{reviews.latest.text}&rdquo;
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+      ) : (
+        <section>
+          <h2 className="font-[family-name:var(--font-display)] text-base text-ink mb-3">
+            Google Reviews
+          </h2>
+          <div className="bg-white rounded-xl border border-ink-6 px-4 py-5 text-center">
+            <Star className="w-6 h-6 text-ink-4 mx-auto mb-2" />
+            <p className="text-[13px] text-ink-3">
+              Connect your Google Business Profile to see your reviews here.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* ── 10. UPCOMING OPPORTUNITIES ──────────────────────────── */}
+      {opportunities.length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="font-[family-name:var(--font-display)] text-base text-ink">
+              Upcoming Opportunities
+            </h2>
+            <span className="text-[11px] text-ink-4 bg-bg-2 px-2 py-0.5 rounded-full">
+              Holidays &amp; content moments
+            </span>
+          </div>
+          <div className="space-y-2.5">
+            {opportunities.slice(0, showMoreOpps ? undefined : 2).map((opp) => (
+              <div
+                key={opp.name}
+                className="bg-white rounded-xl border border-ink-6 px-4 py-3.5"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{opp.emoji}</span>
+                    <span className="text-[15px] text-ink font-medium">{opp.name}</span>
+                  </div>
+                  <span className="text-[12px] text-ink-3 flex-shrink-0">
+                    in {opp.daysAway} day{opp.daysAway !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="flex items-start gap-2 ml-8">
+                  <TrendingUp className="w-3.5 h-3.5 text-brand mt-0.5 flex-shrink-0" />
+                  <p className="text-[13px] text-ink-3 leading-snug">{opp.suggestion}</p>
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* ── UPCOMING OPPORTUNITIES ───────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
-        <div className="px-5 py-3 border-b border-ink-6 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Gift className="w-4 h-4 text-purple-500" />
-            <h2 className="font-[family-name:var(--font-display)] text-sm text-ink">Upcoming Opportunities</h2>
-            <span className="text-[10px] text-ink-4">Holidays & content moments</span>
-          </div>
-        </div>
-        <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-ink-6">
-          {displayedOpportunities.map((opp, i) => (
-            <div key={i} className="flex items-start gap-3 px-5 py-3">
-              <div className="text-xl flex-shrink-0 mt-0.5">{opp.icon}</div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-medium text-ink">{opp.event}</p>
-                  <span className="text-[9px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full">in {opp.daysAway} days</span>
-                </div>
-                <p className="text-xs text-ink-3 mt-1 leading-relaxed">💡 {opp.suggestion}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        {opportunities.length > 2 && (
-          <button onClick={() => setShowAllOpportunities(!showAllOpportunities)} className="w-full px-5 py-2.5 text-xs text-purple-600 font-medium hover:bg-purple-50/30 transition-colors border-t border-ink-6">
-            {showAllOpportunities ? 'Show less' : `Show ${opportunities.length - 2} more opportunities`}
-          </button>
-        )}
-      </div>
-
-      {/* ── QUICK LINKS ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {[
-          { label: 'Order Content', icon: ShoppingBag, href: '/dashboard/orders', color: 'text-brand-dark' },
-          { label: 'AI Tools', icon: Sparkles, href: '/dashboard/tools', color: 'text-purple-600' },
-          { label: 'Message Team', icon: Mail, href: '/dashboard/messages', color: 'text-pink-600' },
-          { label: 'Update Profile', icon: Target, href: '/dashboard/profile', color: 'text-blue-600' },
-        ].map((link) => (
-          <Link key={link.label} href={link.href}
-            className="flex items-center gap-2.5 bg-white rounded-xl border border-ink-6 px-4 py-3 hover:shadow-sm hover:border-brand/20 transition-all group">
-            <link.icon className={`w-4 h-4 ${link.color}`} />
-            <span className="text-xs font-medium text-ink-2 group-hover:text-ink transition-colors">{link.label}</span>
-            <ChevronRight className="w-3 h-3 text-ink-5 ml-auto group-hover:text-brand-dark transition-colors" />
-          </Link>
-        ))}
-      </div>
-
+          {opportunities.length > 2 && !showMoreOpps && (
+            <button
+              onClick={() => setShowMoreOpps(true)}
+              className="text-[13px] text-brand hover:text-brand-dark transition-colors mt-2"
+            >
+              Show {opportunities.length - 2} more opportunities
+            </button>
+          )}
+        </section>
+      )}
     </div>
   )
 }
