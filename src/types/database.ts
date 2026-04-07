@@ -585,3 +585,82 @@ export interface AiAnalysis {
 export interface GBPColumnMapping {
   [excelColumn: string]: GBPMetricField | '__skip'
 }
+
+// --- Brand Guidelines ---
+
+export type GuidelineStatus = 'current' | 'draft' | 'archived'
+export type GuidelineSource = 'auto' | 'uploaded' | 'manual' | 'revised'
+
+export interface BrandOverviewSection {
+  mission?: string
+  story?: string
+  what_we_do?: string
+  tagline?: string
+}
+
+export interface VisualIdentitySection {
+  primary_color?: string
+  secondary_color?: string
+  accent_colors?: string[]
+  fonts?: { primary?: string; secondary?: string; body?: string }
+  logo_usage_notes?: string
+  imagery_style?: string
+}
+
+export interface VoiceAndToneSection {
+  voice_words?: { word: string; description: string; examples: string[] }[]
+  tone_description?: string
+  sample_phrases?: string[]
+  sample_ctas?: string[]
+  do_nots?: string[]
+}
+
+export interface AudienceProfileSection {
+  persona?: string
+  age_range?: string
+  location?: string
+  pain_points?: string[]
+  motivations?: string[]
+  where_they_hang_out?: string
+}
+
+export interface CompetitivePositioningSection {
+  positioning_statement?: string
+  differentiators?: string[]
+  competitor_awareness?: string
+  unique_value?: string
+}
+
+export interface ContentGuidelinesSection {
+  topics?: string[]
+  avoid_topics?: string[]
+  posting_frequency?: string
+  best_platforms?: string[]
+  content_pillars?: string[]
+}
+
+export interface CustomSection {
+  id: string
+  title: string
+  content: string
+}
+
+export interface BrandGuideline {
+  id: string
+  business_id: string
+  version: number
+  status: GuidelineStatus
+  source: GuidelineSource
+  uploaded_file_url?: string | null
+  brand_overview: BrandOverviewSection
+  visual_identity: VisualIdentitySection
+  voice_and_tone: VoiceAndToneSection
+  audience_profile: AudienceProfileSection
+  competitive_positioning: CompetitivePositioningSection
+  content_guidelines: ContentGuidelinesSection
+  seasonal_calendar: Record<string, unknown>
+  custom_sections: CustomSection[]
+  ai_generated_sections: string[]
+  created_at: string
+  updated_at: string
+}

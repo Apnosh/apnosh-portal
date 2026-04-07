@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, CheckCircle, Calendar, ShoppingBag, BarChart3,
   MessageSquare, Wrench, Building2, CreditCard, FileText, HelpCircle, Settings,
-  Menu, X, ChevronDown
+  Menu, X, ChevronDown, BookOpen
 } from 'lucide-react'
 import { CartProvider } from '@/lib/cart-context'
 import { ToastProvider } from '@/components/ui/toast'
@@ -30,6 +30,7 @@ const navItems = [
 const bottomItems = [
   { label: 'Agreements', href: '/dashboard/agreements', icon: FileText },
   { label: 'Business Profile', href: '/dashboard/profile', icon: Building2 },
+  { label: 'Brand Guidelines', href: '/dashboard/profile/brand-guidelines', icon: BookOpen },
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
   { label: 'Help', href: '/dashboard/help', icon: HelpCircle },
