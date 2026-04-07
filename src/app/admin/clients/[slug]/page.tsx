@@ -8,6 +8,7 @@ import {
   Globe, MapPin, Mail, Phone, User, X, Check,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import BrandTab from './tabs/brand-tab'
 import type {
   Client, ClientBrand, ClientPattern, ClientUser,
   ClientBillingStatus, ClientTier, ClientUserRole, ClientUserStatus,
@@ -231,7 +232,12 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
       )}
 
       {activeTab === 'brand' && (
-        <PlaceholderTab label="Brand System" description="Brand markdown editor, color swatches, font preview, and auto-generation." />
+        <BrandTab
+          clientId={client.id}
+          clientName={client.name}
+          brand={brand}
+          onBrandUpdate={setBrand}
+        />
       )}
 
       {activeTab === 'assets' && (
