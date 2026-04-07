@@ -83,30 +83,36 @@ function businessToDraft(b: Business): ProfileDraft {
     website_url: b.website_url || '',
     phone: b.phone || '',
     hours: b.hours || '',
-    locations: b.locations?.length ? b.locations : [{ address: '', city: '', state: '', zip: '', is_primary: true }],
-    brand_voice_words: b.brand_voice_words?.length ? b.brand_voice_words : [],
+    locations: Array.isArray(b.locations) && b.locations.length ? b.locations : [{ address: '', city: '', state: '', zip: '', is_primary: true }],
+    brand_voice_words: Array.isArray(b.brand_voice_words) ? b.brand_voice_words : (typeof (b.brand_voice_words as unknown) === 'string' && b.brand_voice_words ? String(b.brand_voice_words).split(',').map((s: string) => s.trim()) : []),
     brand_tone: b.brand_tone || '',
     brand_do_nots: b.brand_do_nots || '',
-    brand_colors: {
-      primary: b.brand_colors?.primary || '',
-      secondary: b.brand_colors?.secondary || '',
-    },
+    brand_colors: (() => {
+      const c = b.brand_colors
+      if (!c) return { primary: '', secondary: '' }
+      if (typeof c === 'object' && !Array.isArray(c) && c.primary !== undefined) return { primary: c.primary || '', secondary: c.secondary || '' }
+      if (Array.isArray(c)) return { primary: c[0] || '', secondary: c[1] || '' }
+      if (typeof c === 'string') {
+        try { const arr = JSON.parse(c); return { primary: arr[0] || '', secondary: arr[1] || '' } } catch { return { primary: '', secondary: '' } }
+      }
+      return { primary: '', secondary: '' }
+    })(),
     fonts: b.fonts || '',
     style_notes: b.style_notes || '',
     target_audience: b.target_audience || '',
     target_age_range: b.target_age_range || '',
     target_location: b.target_location || '',
     target_problem: b.target_problem || '',
-    competitors: b.competitors?.length ? b.competitors : [],
+    competitors: Array.isArray(b.competitors) ? b.competitors : [],
     competitor_strengths: b.competitor_strengths || '',
     differentiator: b.differentiator || '',
-    current_platforms: b.current_platforms?.length ? b.current_platforms : [],
+    current_platforms: Array.isArray(b.current_platforms) ? b.current_platforms : (typeof b.current_platforms === 'string' ? JSON.parse(b.current_platforms || '[]') : []),
     posting_frequency: b.posting_frequency || '',
     has_google_business: b.has_google_business ?? false,
     monthly_budget: b.monthly_budget != null ? String(b.monthly_budget) : '',
     past_marketing_wins: b.past_marketing_wins || '',
     past_marketing_fails: b.past_marketing_fails || '',
-    marketing_goals: b.marketing_goals?.length ? b.marketing_goals : [],
+    marketing_goals: Array.isArray(b.marketing_goals) ? b.marketing_goals : (typeof b.marketing_goals === 'string' ? JSON.parse(b.marketing_goals || '[]') : []),
     content_topics: b.content_topics || '',
     content_avoid_topics: b.content_avoid_topics || '',
     additional_notes: b.additional_notes || '',
