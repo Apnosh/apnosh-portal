@@ -15,7 +15,18 @@ export async function POST(request: NextRequest) {
     safeZoneRules,
   } = body
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  // Read API key - prefer .env.local value over shell env (which may be empty from Claude Code)
+  let apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    try {
+      const fs = await import('fs')
+      const path = await import('path')
+      const envPath = path.join(process.cwd(), '.env.local')
+      const envContent = fs.readFileSync(envPath, 'utf8')
+      const match = envContent.match(/^ANTHROPIC_API_KEY=(.+)$/m)
+      if (match) apiKey = match[1].trim()
+    } catch { /* ignore */ }
+  }
   if (!apiKey) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
   }
