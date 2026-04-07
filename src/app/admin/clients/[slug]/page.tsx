@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client'
 import BrandTab from './tabs/brand-tab'
 import AssetsTab from './tabs/assets-tab'
 import StyleLibraryTab from './tabs/style-library-tab'
+import QueueTab from './tabs/queue-tab'
 import type {
   Client, ClientBrand, ClientPattern, ClientUser,
   ClientBillingStatus, ClientTier, ClientUserRole, ClientUserStatus,
@@ -251,7 +252,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
       )}
 
       {activeTab === 'queue' && (
-        <PlaceholderTab label="Content Queue" description="Content queue with post generator and status workflow." />
+        <QueueTab clientId={client.id} clientSlug={client.slug} />
       )}
     </div>
   )
