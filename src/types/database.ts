@@ -853,3 +853,168 @@ export interface QAChecklist {
   reviewed_at: string | null
   created_at: string
 }
+
+// ============================================================
+// Client Management + Social Post Generator
+// ============================================================
+
+export type ClientTier = 'Basic' | 'Standard' | 'Pro' | 'Internal'
+export type ClientBillingStatus = 'active' | 'paused' | 'cancelled' | 'past_due'
+export type ClientUserRole = 'owner' | 'manager' | 'contributor'
+export type ClientUserStatus = 'invited' | 'active' | 'disabled'
+export type AssetUploadedBy = 'admin' | 'client'
+export type AssetQuality = 'hero' | 'good' | 'filler'
+export type AssetOrientation = 'landscape' | 'portrait' | 'square'
+export type AssetMood = 'moody_warm' | 'bright_airy' | 'dramatic' | 'casual' | 'minimal'
+export type VisualStyle = 'glass_morphism' | 'clean_minimal' | 'bold_colorful' | 'photo_forward' | 'custom'
+export type TextureOverlay = 'none' | 'grain' | 'paper' | 'noise'
+export type DepthStyle = 'flat' | 'glass_morphism' | 'layered_shadows' | '3d_inspired'
+export type EdgeTreatment = 'clean' | 'iridescent' | 'gradient_border' | 'none'
+export type TemplateType = 'insight' | 'stat' | 'tip' | 'compare' | 'result' | 'photo' | 'custom'
+export type PostPlatform = 'instagram' | 'tiktok' | 'linkedin'
+export type PostSize = 'feed' | 'square' | 'story'
+export type QueueStatus = 'new' | 'drafting' | 'in_review' | 'approved' | 'scheduled' | 'posted'
+export type QueueRequestType = 'client_request' | 'internal'
+export type FeedbackType = 'approval' | 'revision' | 'comment'
+export type StyleLibraryStatus = 'approved' | 'archived'
+export type ClientAssetType = 'logo' | 'photo' | 'graphic' | 'social_proof' | 'other'
+
+export interface Client {
+  id: string
+  name: string
+  slug: string
+  industry: string | null
+  location: string | null
+  website: string | null
+  primary_contact: string | null
+  email: string | null
+  phone: string | null
+  socials: {
+    instagram?: string
+    tiktok?: string
+    linkedin?: string
+    facebook?: string
+    gbp?: string
+  }
+  services_active: string[]
+  tier: ClientTier | null
+  monthly_rate: number | null
+  billing_status: ClientBillingStatus
+  onboarding_date: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ClientUser {
+  id: string
+  client_id: string
+  email: string
+  name: string | null
+  role: ClientUserRole
+  invited_at: string
+  last_login: string | null
+  status: ClientUserStatus
+}
+
+export interface ClientBrand {
+  id: string
+  client_id: string
+  brand_md: string | null
+  primary_color: string | null
+  secondary_color: string | null
+  accent_color: string | null
+  font_display: string | null
+  font_body: string | null
+  logo_url: string | null
+  voice_notes: string | null
+  photo_style: string | null
+  visual_style: VisualStyle | null
+  texture_overlay: TextureOverlay
+  depth_style: DepthStyle | null
+  edge_treatment: EdgeTreatment | null
+  client_editable_fields: string[]
+  updated_at: string
+}
+
+export interface ClientPattern {
+  id: string
+  client_id: string
+  patterns_md: string | null
+  updated_at: string
+}
+
+export interface ClientAssetRow {
+  id: string
+  client_id: string
+  type: ClientAssetType
+  file_url: string
+  thumbnail_url: string | null
+  filename: string | null
+  tags: string[]
+  description: string | null
+  quality_rating: AssetQuality | null
+  orientation: AssetOrientation | null
+  mood: AssetMood | null
+  usage_history: string[]
+  uploaded_by: AssetUploadedBy
+  uploaded_by_user_id: string | null
+  uploaded_at: string
+}
+
+export interface StyleLibraryEntry {
+  id: string
+  client_id: string
+  post_code: string
+  image_url: string | null
+  html_source: string | null
+  template_type: TemplateType | null
+  platform: PostPlatform | null
+  size: PostSize | null
+  caption: string | null
+  hashtags: string | null
+  alt_text: string | null
+  performance_notes: string | null
+  style_notes: string | null
+  client_visible: boolean
+  status: StyleLibraryStatus
+  approved_at: string
+}
+
+export interface ContentQueueDraft {
+  image_url: string
+  html_source: string
+  caption: string
+  hashtags: string
+}
+
+export interface ContentQueueItem {
+  id: string
+  client_id: string
+  request_type: QueueRequestType
+  submitted_by: AssetUploadedBy
+  submitted_by_user_id: string | null
+  input_text: string | null
+  input_photo_url: string | null
+  template_type: TemplateType | null
+  platform: PostPlatform | null
+  size: PostSize
+  drafts: ContentQueueDraft[]
+  selected_draft: number | null
+  designer_notes: string | null
+  status: QueueStatus
+  scheduled_for: string | null
+  created_at: string
+  updated_at: string
+  // Joined
+  client?: Client
+}
+
+export interface ClientFeedbackEntry {
+  id: string
+  content_queue_id: string
+  user_id: string | null
+  feedback_type: FeedbackType
+  message: string | null
+  created_at: string
+}
