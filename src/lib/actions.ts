@@ -869,3 +869,87 @@ export async function adminCreateInvoice(
     return { success: false, error: message }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Content Calendar Actions
+// ---------------------------------------------------------------------------
+
+export async function createCalendarEntry(data: {
+  businessId: string
+  platform: string
+  title: string
+  caption?: string
+  scheduledAt: string
+  deliverableId?: string
+}): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  if (!data.title || !data.platform || !data.scheduledAt) {
+    return { success: false, error: 'Title, platform, and scheduled date are required' }
+  }
+
+  const { error } = await supabase.from('content_calendar').insert({
+    business_id: data.businessId,
+    platform: data.platform,
+    title: data.title,
+    caption: data.caption || null,
+    scheduled_at: data.scheduledAt,
+    deliverable_id: data.deliverableId || null,
+    status: 'scheduled',
+  })
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/dashboard/calendar')
+  revalidatePath('/admin/calendar')
+  return { success: true }
+}
+
+export async function updateCalendarEntry(id: string, data: {
+  platform?: string
+  title?: string
+  caption?: string
+  scheduledAt?: string
+  status?: string
+}): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const updateData: Record<string, unknown> = {}
+  if (data.platform !== undefined) updateData.platform = data.platform
+  if (data.title !== undefined) updateData.title = data.title
+  if (data.caption !== undefined) updateData.caption = data.caption
+  if (data.scheduledAt !== undefined) updateData.scheduled_at = data.scheduledAt
+  if (data.status !== undefined) updateData.status = data.status
+
+  const { error } = await supabase
+    .from('content_calendar')
+    .update(updateData)
+    .eq('id', id)
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/dashboard/calendar')
+  revalidatePath('/admin/calendar')
+  return { success: true }
+}
+
+export async function deleteCalendarEntry(id: string): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('content_calendar')
+    .delete()
+    .eq('id', id)
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/dashboard/calendar')
+  revalidatePath('/admin/calendar')
+  return { success: true }
+}
