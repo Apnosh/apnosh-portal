@@ -8,7 +8,7 @@ import {
   FileText, CreditCard, MessageSquare, Settings, Menu, X, ChevronDown, Shield, Plus,
   BarChart3,
 } from 'lucide-react'
-import { useUser } from '@/lib/supabase/hooks'
+import { useUser, signOut } from '@/lib/supabase/hooks'
 import { ToastProvider } from '@/components/ui/toast'
 import { RealtimeProvider } from '@/lib/realtime'
 import GlobalSearch from '@/components/ui/global-search'
@@ -59,7 +59,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
-  const { data: user } = useUser()
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const { data: user, loading: userLoading } = useUser()
   const displayName = user?.full_name || 'Admin'
   const initials = displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 
@@ -118,17 +119,37 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           ))}
         </nav>
 
-        <div className="p-3 border-t border-white/8">
-          <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors min-h-[44px]">
-            <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-bold">
-              {initials}
-            </div>
+        <div className="p-3 border-t border-white/8 relative">
+          <button onClick={() => setUserMenuOpen(!userMenuOpen)} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors min-h-[44px]">
+            {userLoading ? (
+              <div className="w-8 h-8 rounded-full bg-white/10 animate-pulse" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-bold">
+                {initials}
+              </div>
+            )}
             <div className="flex-1 text-left">
-              <div className="text-sm font-medium text-white/80 truncate">{displayName}</div>
-              <div className="text-[10px] text-white/30">Admin</div>
+              {userLoading ? (
+                <div className="h-4 w-20 bg-white/10 rounded animate-pulse" />
+              ) : (
+                <>
+                  <div className="text-sm font-medium text-white/80 truncate">{displayName}</div>
+                  <div className="text-[10px] text-white/30">Admin</div>
+                </>
+              )}
             </div>
-            <ChevronDown className="w-4 h-4 text-white/30" />
+            <ChevronDown className={`w-4 h-4 text-white/30 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
           </button>
+          {userMenuOpen && (
+            <div className="absolute bottom-full left-3 right-3 mb-1 bg-ink rounded-xl border border-white/10 shadow-lg overflow-hidden z-50">
+              <a href="/admin/settings" className="block px-4 py-2.5 text-sm text-white/60 hover:bg-white/5 transition-colors">Settings</a>
+              <a href="/dashboard" className="block px-4 py-2.5 text-sm text-white/60 hover:bg-white/5 transition-colors">Client View</a>
+              <div className="border-t border-white/8" />
+              <button onClick={signOut} className="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
