@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import BrandTab from './tabs/brand-tab'
+import AssetsTab from './tabs/assets-tab'
+import StyleLibraryTab from './tabs/style-library-tab'
 import type {
   Client, ClientBrand, ClientPattern, ClientUser,
   ClientBillingStatus, ClientTier, ClientUserRole, ClientUserStatus,
@@ -241,11 +243,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
       )}
 
       {activeTab === 'assets' && (
-        <PlaceholderTab label="Assets" description="Asset grid with upload, filtering, and metadata editing." />
+        <AssetsTab clientId={client.id} />
       )}
 
       {activeTab === 'style_library' && (
-        <PlaceholderTab label="Style Library" description="Approved post catalog with filtering and detail view." />
+        <StyleLibraryTab clientId={client.id} />
       )}
 
       {activeTab === 'queue' && (
