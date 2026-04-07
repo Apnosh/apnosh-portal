@@ -934,6 +934,8 @@ export interface ClientBrand {
   depth_style: DepthStyle | null
   edge_treatment: EdgeTreatment | null
   client_editable_fields: string[]
+  style_guide_html: string | null
+  reference_images: ReferenceImage[]
   updated_at: string
 }
 
@@ -978,7 +980,14 @@ export interface StyleLibraryEntry {
   style_notes: string | null
   client_visible: boolean
   status: StyleLibraryStatus
+  is_golden: boolean
   approved_at: string
+}
+
+export interface ReferenceImage {
+  url: string
+  description: string
+  template_type: TemplateType | null
 }
 
 export interface ContentQueueDraft {

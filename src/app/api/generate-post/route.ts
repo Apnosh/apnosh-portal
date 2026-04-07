@@ -7,6 +7,10 @@ export async function POST(request: NextRequest) {
     brandMd,
     patternsMd,
     styleNotes,
+    styleGuideHtml,
+    goldenExamples,
+    referenceImageUrls,
+    logoUrl,
     templateType,
     width,
     height,
@@ -15,7 +19,7 @@ export async function POST(request: NextRequest) {
     safeZoneRules,
   } = body
 
-  // Read API key - prefer .env.local value over shell env (which may be empty from Claude Code)
+  // Read API key
   let apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     try {
@@ -31,30 +35,93 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
   }
 
+  // Build golden examples section
+  let goldenSection = ''
+  if (goldenExamples && goldenExamples.length > 0) {
+    goldenSection = `\n\nGOLDEN EXAMPLES FOR ${templateType.toUpperCase()} POSTS:
+These are approved reference posts. Use them as the structural and visual starting point. Adapt the content but preserve the CSS patterns, layout structure, and visual treatment exactly.
+
+${goldenExamples.map((g: { post_code: string; style_notes: string; html_source: string }, i: number) =>
+  `--- Example ${i + 1}: ${g.post_code} ---
+Notes: ${g.style_notes || 'No notes'}
+HTML:
+${g.html_source}
+`).join('\n')}`
+  }
+
+  // Build style guide section
+  let styleGuideSection = ''
+  if (styleGuideHtml) {
+    // Extract just the <style> and key structural elements, limit to ~4KB
+    const styleMatch = styleGuideHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/gi)
+    if (styleMatch) {
+      const css = styleMatch.map((m: string) => m.replace(/<\/?style[^>]*>/gi, '').trim()).join('\n')
+      styleGuideSection = `\n\nCLIENT STYLE GUIDE CSS:
+Use these exact CSS values. They are from the client's official style guide.
+
+${css.slice(0, 4000)}
+`
+    }
+  }
+
+  // Logo instruction
+  const logoInstruction = logoUrl
+    ? `\n- Client logo: <img src="${logoUrl}" style="height:28px;"> placed at bottom center with 24px padding from edges.`
+    : ''
+
   const systemPrompt = `You are a social media graphic generator. You create branded social media graphics as standalone HTML files at exact pixel dimensions.
 
-RULES:
+CRITICAL RULES:
 - Output ONLY the complete HTML starting with <!DOCTYPE html>. No explanation, no markdown fences, no commentary.
 - Body must be exactly ${width}x${height}px with margin:0, padding:0, overflow:hidden.
-- Include Google Fonts <link> in <head>.
-- All styles inline or in <style>. No external CSS.
-- Client logo at bottom per brand spec.
+- Include Google Fonts <link> tags in <head> for all fonts referenced.
+- All styles inline or in <style>. No external CSS files.
+- Never invent color values. Use ONLY the documented color tokens from the brand system.
+- Glass morphism rgba values, blur amounts, and border-radius must match the brand specs exactly.
+- Background gradient must use the documented body background CSS.${logoInstruction}
 - Safe zones: ${safeZoneRules}
 - Scale text for social: headlines 48-72px, body 20-26px, tags 13-15px.
 - Key content must be visible in center 1:1 crop for grid thumbnail.
+${goldenExamples && goldenExamples.length > 0
+  ? '- GOLDEN EXAMPLES are provided below. Use them as the structural template. Match their CSS, layout, and visual treatment. Only change the content.'
+  : '- Follow the CSS Design System specs exactly as documented in CLIENT BRAND.'}
 
 CLIENT BRAND:
 ${brandMd}
+${styleGuideSection}
+${goldenSection}
 
 CONTENT STRATEGY:
 ${patternsMd}
 
-STYLE REFERENCES (last 10 approved posts):
+STYLE REFERENCES (recent approved posts):
 ${styleNotes || 'No previous posts yet.'}`
 
-  const userMessage = `Generate a ${templateType} at ${width}x${height} for ${platform}.
+  // Build message content - text + optional reference images via vision
+  const messageContent: Array<{ type: string; text?: string; source?: { type: string; media_type: string; data?: string; url?: string } }> = []
 
-${contentFields}`
+  // Add reference images if any (via URL for vision)
+  const refUrls = (referenceImageUrls || []) as string[]
+  if (refUrls.length > 0) {
+    messageContent.push({
+      type: 'text',
+      text: `Here are reference design images to match the visual style of. Study these and replicate their layout, color usage, typography, and overall feel:\n`,
+    })
+    for (const url of refUrls.slice(0, 3)) {
+      messageContent.push({
+        type: 'image' as string,
+        source: { type: 'url', media_type: 'image/png', url },
+      } as typeof messageContent[number])
+    }
+  }
+
+  // Add the actual generation request
+  messageContent.push({
+    type: 'text',
+    text: `Generate a ${templateType} post at ${width}x${height} for ${platform}.
+
+${contentFields}`,
+  })
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -66,9 +133,12 @@ ${contentFields}`
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
+        max_tokens: 8192,
         system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
+        messages: [{
+          role: 'user',
+          content: messageContent.length === 1 ? messageContent[0].text : messageContent,
+        }],
       }),
     })
 

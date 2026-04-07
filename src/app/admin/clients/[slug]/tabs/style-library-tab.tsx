@@ -78,6 +78,16 @@ export default function StyleLibraryTab({ clientId }: { clientId: string }) {
     setExpandedId(null)
   }
 
+  async function toggleGolden(id: string, current: boolean) {
+    await supabase.from('style_library').update({ is_golden: !current }).eq('id', id)
+    setEntries(prev => prev.map(e => e.id === id ? { ...e, is_golden: !current } : e))
+  }
+
+  async function saveStyleNotes(id: string, notes: string) {
+    await supabase.from('style_library').update({ style_notes: notes || null }).eq('id', id)
+    setEntries(prev => prev.map(e => e.id === id ? { ...e, style_notes: notes || null } : e))
+  }
+
   async function duplicateToQueue(entry: StyleLibraryEntry) {
     await supabase.from('content_queue').insert({
       client_id: clientId,
@@ -136,7 +146,7 @@ export default function StyleLibraryTab({ clientId }: { clientId: string }) {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {filtered.map(entry => (
-            <div key={entry.id} className="bg-white rounded-xl border border-ink-6 overflow-hidden group">
+            <div key={entry.id} className={`bg-white rounded-xl border overflow-hidden group ${entry.is_golden ? 'border-amber-300 ring-1 ring-amber-200' : 'border-ink-6'}`}>
               {/* Thumbnail */}
               <button
                 onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
@@ -200,12 +210,16 @@ export default function StyleLibraryTab({ clientId }: { clientId: string }) {
                       <p className="text-xs text-ink-2 mt-0.5">{entry.performance_notes}</p>
                     </div>
                   )}
-                  {entry.style_notes && (
-                    <div>
-                      <span className="text-[10px] text-ink-4 font-medium uppercase tracking-wide">Style Notes</span>
-                      <p className="text-xs text-ink-2 mt-0.5">{entry.style_notes}</p>
-                    </div>
-                  )}
+                  <div>
+                    <span className="text-[10px] text-ink-4 font-medium uppercase tracking-wide">Style Notes</span>
+                    <textarea
+                      defaultValue={entry.style_notes ?? ''}
+                      onBlur={e => saveStyleNotes(entry.id, e.target.value)}
+                      placeholder="Describe what works about this post's design..."
+                      rows={2}
+                      className="w-full mt-1 border border-ink-6 rounded-lg px-2.5 py-1.5 text-xs text-ink-2 placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/20 resize-none"
+                    />
+                  </div>
                   {entry.html_source && (
                     <details className="text-xs">
                       <summary className="text-ink-4 cursor-pointer flex items-center gap-1 hover:text-ink-2">
@@ -219,6 +233,14 @@ export default function StyleLibraryTab({ clientId }: { clientId: string }) {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 pt-2 border-t border-ink-6">
+                    <button
+                      onClick={() => toggleGolden(entry.id, entry.is_golden)}
+                      className={`text-[10px] font-medium transition-colors flex items-center gap-1 ${
+                        entry.is_golden ? 'text-amber-600 hover:text-amber-700' : 'text-ink-4 hover:text-amber-500'
+                      }`}
+                    >
+                      {entry.is_golden ? '\u2605' : '\u2606'} {entry.is_golden ? 'Golden Example' : 'Mark Golden'}
+                    </button>
                     <button
                       onClick={() => duplicateToQueue(entry)}
                       className="text-[10px] font-medium text-brand hover:text-brand-dark transition-colors flex items-center gap-1"

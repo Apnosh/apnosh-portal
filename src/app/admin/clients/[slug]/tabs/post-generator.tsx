@@ -109,17 +109,24 @@ export default function PostGenerator({
     setGenerating(true)
     setGeneratedHtml(null)
 
-    // Fetch brand + patterns + recent style notes
-    const [brandRes, patternsRes, styleRes] = await Promise.all([
-      supabase.from('client_brands').select('brand_md').eq('client_id', clientId).single(),
+    // Fetch brand + patterns + style notes + golden examples
+    const [brandRes, patternsRes, styleRes, goldenRes] = await Promise.all([
+      supabase.from('client_brands').select('brand_md, style_guide_html, reference_images, logo_url').eq('client_id', clientId).single(),
       supabase.from('client_patterns').select('patterns_md').eq('client_id', clientId).single(),
       supabase.from('style_library').select('post_code, template_type, platform, style_notes')
         .eq('client_id', clientId).eq('status', 'approved')
         .order('approved_at', { ascending: false }).limit(10),
+      supabase.from('style_library').select('post_code, template_type, html_source, style_notes')
+        .eq('client_id', clientId).eq('status', 'approved').eq('is_golden', true)
+        .order('approved_at', { ascending: false }).limit(3),
     ])
 
     const brandMd = brandRes.data?.brand_md ?? ''
+    const styleGuideHtml = brandRes.data?.style_guide_html ?? ''
+    const referenceImages = (brandRes.data?.reference_images ?? []) as { url: string; description: string; template_type: string | null }[]
+    const logoUrl = brandRes.data?.logo_url ?? ''
     const patternsMd = patternsRes.data?.patterns_md ?? ''
+
     const styleNotes = (styleRes.data ?? [])
       .filter((s: { style_notes: string | null }) => s.style_notes)
       .map((s: { post_code: string; template_type: string | null; platform: string | null; style_notes: string | null }) =>
@@ -127,10 +134,22 @@ export default function PostGenerator({
       )
       .join('\n')
 
+    // Filter golden examples: prefer same template type
+    const allGolden = (goldenRes.data ?? []) as { post_code: string; template_type: string | null; html_source: string | null; style_notes: string | null }[]
+    const goldenExamples = allGolden
+      .filter(g => g.html_source)
+      .sort((a, b) => (a.template_type === templateType ? -1 : 0) - (b.template_type === templateType ? -1 : 0))
+      .slice(0, 3)
+
+    // Filter reference images: prefer matching template type
+    const referenceImageUrls = referenceImages
+      .sort((a, b) => (a.template_type === templateType ? -1 : 0) - (b.template_type === templateType ? -1 : 0))
+      .slice(0, 3)
+      .map(r => r.url)
+
     const contentFields = buildContentFields()
     const { w, h } = sizeConfig
 
-    // Safe zone rules per platform
     const safeZones: Record<PostPlatform, string> = {
       instagram: 'Keep key content within center 900x900px area. Bottom 120px reserved for logo. Top 60px clear for IG UI overlay on stories.',
       tiktok: 'Keep key content within center 800x800px area. Bottom 200px reserved for TikTok UI. Right edge 80px clear for buttons.',
@@ -145,6 +164,10 @@ export default function PostGenerator({
           brandMd,
           patternsMd,
           styleNotes,
+          styleGuideHtml,
+          goldenExamples,
+          referenceImageUrls,
+          logoUrl,
           templateType,
           width: w,
           height: h,
