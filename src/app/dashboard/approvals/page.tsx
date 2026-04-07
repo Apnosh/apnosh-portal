@@ -14,6 +14,7 @@ import {
 } from '@/lib/mock-deliverables'
 import { createClient } from '@/lib/supabase/client'
 import { useBusiness } from '@/lib/supabase/hooks'
+import { approveDeliverable, requestRevision } from '@/lib/actions'
 
 /* ------------------------------------------------------------------ */
 /*  Local types                                                        */
@@ -199,38 +200,88 @@ export default function ApprovalsPage() {
 
   const pendingItems = useMemo(() => filtered.filter(d => d.status === 'pending'), [filtered])
 
+  /* ---------- refetch helper ---------- */
+  const refetchDeliverables = useCallback(async () => {
+    if (!business?.id) return
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('deliverables')
+      .select('id, title, type, status, version, content, created_at, approved_at, client_feedback')
+      .eq('business_id', business.id)
+      .in('status', ['client_review', 'approved', 'revision_requested', 'scheduled', 'published'])
+      .order('created_at', { ascending: false })
+      .limit(50)
+    setDeliverables(data && data.length > 0 ? data.map(mapDbToDeliverable) : [])
+  }, [business?.id])
+
   /* ---------- actions ---------- */
-  const approveOne = useCallback((id: string) => {
-    const prev = deliverables.map(d => ({ ...d }))
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  const approveOne = useCallback(async (id: string) => {
     const item = deliverables.find(d => d.id === id)
     if (!item) return
+    setActionLoading(id)
+    // Optimistic update
     setDeliverables(ds => ds.map(d => d.id === id ? { ...d, status: 'approved' as const, approvedAt: 'just now' } : d))
     setSelected(s => { const n = new Set(s); n.delete(id); return n })
-    setToast({
-      message: `${item.title} approved!${item.scheduledFor ? ` Posting ${item.scheduledFor}` : ''}`,
-      undoFn: () => setDeliverables(prev),
-    })
-  }, [deliverables])
 
-  const batchApprove = useCallback(() => {
-    const ids = new Set(selected)
-    const prev = deliverables.map(d => ({ ...d }))
-    setDeliverables(ds => ds.map(d => ids.has(d.id) ? { ...d, status: 'approved' as const, approvedAt: 'just now' } : d))
+    const result = await approveDeliverable(id)
+    if (result.success) {
+      setToast({
+        message: `${item.title} approved!${item.scheduledFor ? ` Posting ${item.scheduledFor}` : ''}`,
+        undoFn: () => refetchDeliverables(),
+      })
+    } else {
+      // Revert on error
+      await refetchDeliverables()
+      setToast({ message: `Failed: ${result.error}`, undoFn: () => {} })
+    }
+    setActionLoading(null)
+  }, [deliverables, refetchDeliverables])
+
+  const batchApprove = useCallback(async () => {
+    const ids = Array.from(selected)
+    // Optimistic update
+    setDeliverables(ds => ds.map(d => selected.has(d.id) ? { ...d, status: 'approved' as const, approvedAt: 'just now' } : d))
     setSelected(new Set())
     setBatchConfirmOpen(false)
-    setToast({
-      message: `${ids.size} item${ids.size > 1 ? 's' : ''} approved!`,
-      undoFn: () => setDeliverables(prev),
-    })
-  }, [selected, deliverables])
 
-  const requestChanges = useCallback((id: string) => {
+    const results = await Promise.all(ids.map(id => approveDeliverable(id)))
+    const failures = results.filter(r => !r.success)
+    if (failures.length > 0) {
+      await refetchDeliverables()
+      setToast({ message: `${ids.length - failures.length} approved, ${failures.length} failed`, undoFn: () => {} })
+    } else {
+      setToast({
+        message: `${ids.length} item${ids.length > 1 ? 's' : ''} approved!`,
+        undoFn: () => refetchDeliverables(),
+      })
+    }
+  }, [selected, refetchDeliverables])
+
+  const requestChanges = useCallback(async (id: string) => {
+    const categories = Array.from(feedbackCategories)
+    const fullFeedback = [
+      categories.length > 0 ? `[${categories.join(', ')}]` : '',
+      feedbackPriority === 'urgent' ? '[URGENT]' : '',
+      feedbackText,
+    ].filter(Boolean).join(' ')
+
+    // Optimistic update
     setDeliverables(ds => ds.map(d => d.id === id ? { ...d, status: 'changes_requested' as const, feedbackSummary: feedbackText } : d))
     setFeedbackOpen(null)
     setFeedbackText('')
     setFeedbackCategories(new Set())
     setFeedbackPriority('normal')
-  }, [feedbackText])
+
+    const result = await requestRevision(id, fullFeedback)
+    if (!result.success) {
+      await refetchDeliverables()
+      setToast({ message: `Failed: ${result.error}`, undoFn: () => {} })
+    } else {
+      await refetchDeliverables()
+    }
+  }, [feedbackText, feedbackCategories, feedbackPriority, refetchDeliverables])
 
   const saveAndApprove = useCallback((id: string) => {
     setDeliverables(ds => ds.map(d => d.id === id ? { ...d, status: 'approved' as const, caption: editCaption || d.caption, approvedAt: 'just now' } : d))

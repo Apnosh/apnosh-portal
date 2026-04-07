@@ -272,6 +272,16 @@ export default function PipelinePage() {
   /*  Move card                                                        */
   /* ---------------------------------------------------------------- */
 
+  // Toast state for auto-approve notifications
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (toastMessage) {
+      const t = setTimeout(() => setToastMessage(null), 4000)
+      return () => clearTimeout(t)
+    }
+  }, [toastMessage])
+
   const moveCard = async (id: string, direction: 'left' | 'right') => {
     const card = deliverables.find(d => d.id === id)
     if (!card) return
@@ -281,8 +291,31 @@ export default function PipelinePage() {
     const nextIdx = direction === 'right' ? colIdx + 1 : colIdx - 1
     if (nextIdx < 0 || nextIdx >= columns.length) return
 
-    const newStatus = columns[nextIdx].key
+    let newStatus = columns[nextIdx].key
     setMovingId(id)
+
+    // Auto-approve check: when moving to client_review, check business preferences
+    let autoApproved = false
+    if (newStatus === 'client_review' && card.business_id) {
+      try {
+        const { data: biz } = await supabase
+          .from('businesses')
+          .select('approval_preferences')
+          .eq('id', card.business_id)
+          .single()
+
+        if (biz?.approval_preferences) {
+          const prefs = biz.approval_preferences as { auto_approve?: boolean; types?: Record<string, boolean> }
+          const typeAutoApprove = prefs.types?.[card.type] === true
+          if (prefs.auto_approve || typeAutoApprove) {
+            newStatus = 'approved' as DeliverableStatus
+            autoApproved = true
+          }
+        }
+      } catch {
+        // If lookup fails, proceed with client_review
+      }
+    }
 
     // Optimistic update
     setDeliverables(prev =>
@@ -290,9 +323,14 @@ export default function PipelinePage() {
     )
     setExpandedId(null)
 
+    const updatePayload: Record<string, unknown> = { status: newStatus }
+    if (autoApproved) {
+      updatePayload.approved_at = new Date().toISOString()
+    }
+
     const { error } = await supabase
       .from('deliverables')
-      .update({ status: newStatus })
+      .update(updatePayload)
       .eq('id', id)
 
     if (error) {
@@ -301,6 +339,8 @@ export default function PipelinePage() {
       setDeliverables(prev =>
         prev.map(d => (d.id === id ? { ...d, status: card.status } : d))
       )
+    } else if (autoApproved) {
+      setToastMessage(`Auto-approved: ${card.title} (client has auto-approve enabled for this content type)`)
     }
 
     setMovingId(null)
@@ -636,6 +676,14 @@ export default function PipelinePage() {
         view === 'board' ? <BoardSkeleton /> : <ListSkeleton />
       ) : (
         view === 'board' ? <BoardView /> : <ListView />
+      )}
+
+      {/* Auto-approve toast */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-emerald-700 text-white px-5 py-3 rounded-xl shadow-xl flex items-center gap-2 text-sm max-w-lg">
+          <span className="w-2 h-2 rounded-full bg-emerald-300 flex-shrink-0" />
+          {toastMessage}
+        </div>
       )}
     </div>
   )

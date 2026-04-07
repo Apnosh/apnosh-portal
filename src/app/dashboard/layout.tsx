@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -8,6 +8,7 @@ import {
   MessageSquare, Wrench, Building2, CreditCard, FileText, HelpCircle, Settings,
   Menu, X, ChevronDown, BookOpen
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { CartProvider } from '@/lib/cart-context'
 import { ToastProvider } from '@/components/ui/toast'
 import { RealtimeProvider } from '@/lib/realtime'
@@ -41,6 +42,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { data: user, loading: userLoading } = useUser()
+  const [approvalCount, setApprovalCount] = useState(0)
+
+  // Fetch pending approval count
+  useEffect(() => {
+    async function fetchApprovalCount() {
+      const supabase = createClient()
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) return
+
+      const { data: biz } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('owner_id', authUser.id)
+        .single()
+
+      if (!biz) return
+
+      const { count } = await supabase
+        .from('deliverables')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', biz.id)
+        .eq('status', 'client_review')
+
+      setApprovalCount(count || 0)
+    }
+    fetchApprovalCount()
+
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchApprovalCount, 30_000)
+    return () => clearInterval(interval)
+  }, [])
 
   const displayName = user?.full_name || 'User'
   const initials = displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -51,20 +83,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return pathname.startsWith(href)
   }
 
-  const NavLink = ({ item }: { item: { label: string; href: string; icon: typeof LayoutDashboard } }) => (
-    <Link
-      href={item.href}
-      onClick={() => setSidebarOpen(false)}
-      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
-        isActive(item.href)
-          ? 'bg-brand-tint text-brand-dark'
-          : 'text-ink-3 hover:bg-bg-2 hover:text-ink'
-      }`}
-    >
-      <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
-      <span className="flex-1">{item.label}</span>
-    </Link>
-  )
+  const NavLink = ({ item }: { item: { label: string; href: string; icon: typeof LayoutDashboard } }) => {
+    const showBadge = item.label === 'Approvals' && approvalCount > 0
+    return (
+      <Link
+        href={item.href}
+        onClick={() => setSidebarOpen(false)}
+        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
+          isActive(item.href)
+            ? 'bg-brand-tint text-brand-dark'
+            : 'text-ink-3 hover:bg-bg-2 hover:text-ink'
+        }`}
+      >
+        <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
+        <span className="flex-1">{item.label}</span>
+        {showBadge && (
+          <span className="min-w-[20px] h-5 flex items-center justify-center rounded-full bg-brand text-white text-[11px] font-bold px-1.5">
+            {approvalCount}
+          </span>
+        )}
+      </Link>
+    )
+  }
 
   return (
     <CartProvider>

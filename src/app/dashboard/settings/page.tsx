@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   User, Shield, Bell, Link2, AlertTriangle, Eye, EyeOff,
-  Check, Upload, Trash2, Power, Loader2
+  Check, Upload, Trash2, Power, Loader2, CheckCircle
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -78,6 +78,17 @@ export default function SettingsPage() {
   const [marketingUpdates, setMarketingUpdates] = useState(true)
   const [weeklyDigest, setWeeklyDigest] = useState(true)
 
+  // Approval preferences
+  const [approvalGlobal, setApprovalGlobal] = useState(false)
+  const [approvalTypes, setApprovalTypes] = useState<Record<string, boolean>>({
+    graphic: false,
+    caption: false,
+    video: false,
+    email: false,
+    branding: false,
+  })
+  const [approvalSaving, setApprovalSaving] = useState(false)
+
   useEffect(() => {
     async function fetchProfile() {
       const supabase = createClient()
@@ -105,6 +116,22 @@ export default function SettingsPage() {
       } else {
         setEmail(user.email || '')
       }
+
+      // Load approval preferences
+      const { data: biz } = await supabase
+        .from('businesses')
+        .select('approval_preferences')
+        .eq('owner_id', user.id)
+        .single()
+
+      if (biz?.approval_preferences) {
+        const prefs = biz.approval_preferences as Record<string, unknown>
+        if (typeof prefs.auto_approve === 'boolean') setApprovalGlobal(prefs.auto_approve)
+        if (prefs.types && typeof prefs.types === 'object') {
+          setApprovalTypes(prev => ({ ...prev, ...(prefs.types as Record<string, boolean>) }))
+        }
+      }
+
       setLoading(false)
     }
     fetchProfile()
@@ -156,6 +183,26 @@ export default function SettingsPage() {
       setConfirmPw('')
     }
     setPwSaving(false)
+  }
+
+  const handleSaveApprovalPrefs = async () => {
+    setApprovalSaving(true)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setApprovalSaving(false); return }
+
+    const prefs = { auto_approve: approvalGlobal, types: approvalTypes }
+    const { error } = await supabase
+      .from('businesses')
+      .update({ approval_preferences: prefs })
+      .eq('owner_id', user.id)
+
+    if (error) {
+      showToast('error', error.message)
+    } else {
+      showToast('success', 'Approval preferences saved.')
+    }
+    setApprovalSaving(false)
   }
 
   const inputClass =
@@ -345,6 +392,66 @@ export default function SettingsPage() {
             </div>
           ))}
           <p className="text-[11px] text-ink-4">Notification preferences will apply to future notifications.</p>
+        </div>
+      </SectionCard>
+
+      {/* ── Content Approvals ──────────────────────────────────────── */}
+      <SectionCard title="Content Approvals" icon={CheckCircle}>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-ink">Auto-Approve All Content</p>
+              <p className="text-[12px] text-ink-4 mt-0.5">Skip review for all deliverables. Your team posts directly.</p>
+            </div>
+            <Toggle enabled={approvalGlobal} onToggle={() => setApprovalGlobal(!approvalGlobal)} />
+          </div>
+
+          <div className="h-px bg-ink-6" />
+
+          <div>
+            <p className="text-[11px] font-medium text-ink-4 uppercase tracking-wider mb-3">Auto-Approve by Content Type</p>
+            <div className="space-y-3">
+              {[
+                { key: 'graphic', label: 'Social Posts (Graphics)', desc: 'Feed posts, carousels, and story graphics' },
+                { key: 'caption', label: 'Blog Posts (Captions)', desc: 'Written content and blog articles' },
+                { key: 'video', label: 'Video Content', desc: 'Reels, TikToks, and video edits' },
+                { key: 'email', label: 'Email Campaigns', desc: 'Newsletters and email sequences' },
+                { key: 'branding', label: 'Branding Assets', desc: 'Logos, brand materials, and design assets' },
+              ].map(item => (
+                <div key={item.key} className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-ink">{item.label}</p>
+                    <p className="text-[12px] text-ink-4 mt-0.5">{item.desc}</p>
+                  </div>
+                  <Toggle
+                    enabled={approvalGlobal || approvalTypes[item.key]}
+                    onToggle={() => {
+                      if (!approvalGlobal) {
+                        setApprovalTypes(prev => ({ ...prev, [item.key]: !prev[item.key] }))
+                      }
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {approvalGlobal && (
+            <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+              Global auto-approve is on. All content types will be approved automatically.
+            </p>
+          )}
+
+          <div className="pt-1">
+            <button
+              onClick={handleSaveApprovalPrefs}
+              disabled={approvalSaving}
+              className="px-5 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {approvalSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Save Preferences
+            </button>
+          </div>
         </div>
       </SectionCard>
 
