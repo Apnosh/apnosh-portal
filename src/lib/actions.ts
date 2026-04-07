@@ -212,7 +212,7 @@ export async function createStripeCheckout(
       payment_method_types: ['card', 'us_bank_account'],
       line_items: lineItems,
       mode: hasSubscription ? 'subscription' : 'payment',
-      success_url: `${appUrl}/dashboard/billing?success=true`,
+      success_url: `${appUrl}/dashboard/orders/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/dashboard/orders/checkout`,
       metadata: {
         business_id: business.id,

@@ -128,6 +128,29 @@ async function handleCheckoutComplete(
     }
   }
 
+  // Auto-generate work briefs for each confirmed order
+  const { data: confirmedOrders } = await supabase
+    .from('orders')
+    .select('id, service_name, type, quantity, special_instructions, deadline')
+    .eq('stripe_checkout_session_id', session.id)
+    .eq('status', 'confirmed')
+
+  if (confirmedOrders?.length) {
+    for (const order of confirmedOrders) {
+      const { error: briefErr } = await supabase.from('work_briefs').insert({
+        business_id: businessId,
+        order_id: order.id,
+        title: `Brief: ${order.service_name}`,
+        description: order.special_instructions || `Work brief for ${order.service_name}`,
+        status: 'pending',
+        deadline: order.deadline || null,
+      })
+      if (briefErr) {
+        console.error('Failed to create work brief:', briefErr.message)
+      }
+    }
+  }
+
   // Create notification for the client
   const { data: business } = await supabase
     .from('businesses')

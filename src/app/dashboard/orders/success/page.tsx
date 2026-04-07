@@ -1,9 +1,11 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { CheckCircle, ClipboardList, FileCheck, Rocket, Send } from 'lucide-react'
+import { CheckCircle, ClipboardList, FileCheck, Rocket, Send, Package } from 'lucide-react'
 import { Suspense } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
 const steps = [
   {
@@ -28,9 +30,46 @@ const steps = [
   },
 ]
 
+interface OrderSummary {
+  id: string
+  service_name: string
+  quantity: number
+  total_price: number
+  type: string
+}
+
 function SuccessContent() {
   const searchParams = useSearchParams()
-  const orderNumber = searchParams.get('order') || `APN-${Date.now().toString(36).toUpperCase()}`
+  const sessionId = searchParams.get('session_id')
+  const fallbackOrder = searchParams.get('order')
+  const [orders, setOrders] = useState<OrderSummary[]>([])
+  const [loading, setLoading] = useState(!!sessionId)
+
+  useEffect(() => {
+    if (!sessionId) return
+
+    const supabase = createClient()
+    async function fetchOrders() {
+      const { data } = await supabase
+        .from('orders')
+        .select('id, service_name, quantity, total_price, type')
+        .eq('stripe_checkout_session_id', sessionId)
+        .order('created_at', { ascending: false })
+
+      if (data && data.length > 0) {
+        setOrders(data as OrderSummary[])
+      }
+      setLoading(false)
+    }
+    fetchOrders()
+  }, [sessionId])
+
+  const orderRef = sessionId
+    ? `APN-${sessionId.slice(-8).toUpperCase()}`
+    : fallbackOrder || `APN-${Date.now().toString(36).toUpperCase()}`
+
+  const totalAmount = orders.reduce((sum, o) => sum + (o.total_price || 0), 0)
+  const hasSubscriptions = orders.some(o => o.type === 'subscription')
 
   return (
     <div className="max-w-2xl mx-auto py-8 text-center">
@@ -41,16 +80,54 @@ function SuccessContent() {
 
       <h1 className="font-[family-name:var(--font-display)] text-3xl text-ink mb-2">Order Confirmed!</h1>
       <p className="text-ink-3 text-sm">
-        Your order <span className="font-mono font-medium text-ink-2 bg-bg-2 px-2 py-0.5 rounded">{orderNumber}</span> has been placed successfully.
+        Your order <span className="font-mono font-medium text-ink-2 bg-bg-2 px-2 py-0.5 rounded">{orderRef}</span> has been placed successfully.
       </p>
 
+      {/* Order summary */}
+      {!loading && orders.length > 0 && (
+        <div className="mt-6 bg-white rounded-xl border border-ink-6 p-5 text-left">
+          <h2 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
+            <Package className="w-4 h-4 text-ink-3" /> Order Summary
+          </h2>
+          <div className="space-y-2">
+            {orders.map(order => (
+              <div key={order.id} className="flex items-center justify-between text-sm py-1.5 border-b border-ink-6 last:border-0">
+                <div>
+                  <span className="text-ink-2">{order.service_name}</span>
+                  {order.quantity > 1 && <span className="text-ink-4 text-xs ml-1">x{order.quantity}</span>}
+                  {order.type === 'subscription' && <span className="text-[10px] text-brand-dark bg-brand-tint px-1.5 py-0.5 rounded-full ml-2">Monthly</span>}
+                </div>
+                <span className="font-medium text-ink tabular-nums">
+                  ${order.total_price?.toLocaleString() || '0'}
+                  {order.type === 'subscription' ? '/mo' : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+          {totalAmount > 0 && (
+            <div className="flex items-center justify-between text-sm font-semibold text-ink pt-3 mt-2 border-t border-ink-5">
+              <span>Total{hasSubscriptions ? ' (monthly)' : ''}</span>
+              <span>${totalAmount.toLocaleString()}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {loading && (
+        <div className="mt-6 bg-white rounded-xl border border-ink-6 p-5">
+          <div className="h-4 w-32 bg-ink-6 rounded animate-pulse mb-3" />
+          <div className="space-y-2">
+            {[1, 2].map(i => <div key={i} className="h-8 bg-ink-6 rounded animate-pulse" />)}
+          </div>
+        </div>
+      )}
+
       {/* What happens next */}
-      <div className="mt-10 bg-white rounded-xl border border-ink-6 p-6 text-left">
+      <div className="mt-8 bg-white rounded-xl border border-ink-6 p-6 text-left">
         <h2 className="font-[family-name:var(--font-display)] text-lg text-ink mb-5 text-center">What happens next</h2>
         <div className="space-y-0">
           {steps.map((step, index) => (
             <div key={index} className="flex gap-4 relative">
-              {/* Connector line */}
               {index < steps.length - 1 && (
                 <div className="absolute left-[19px] top-10 w-px h-[calc(100%-16px)] bg-ink-6" />
               )}
