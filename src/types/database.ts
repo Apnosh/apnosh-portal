@@ -46,6 +46,18 @@ export interface Business {
   phone?: string
   locations: BusinessLocation[]
   hours?: string
+  // Legal / Entity (migration 002)
+  legal_business_name?: string
+  dba_name?: string
+  entity_type?: EntityType
+  primary_contact_name?: string
+  primary_contact_email?: string
+  primary_contact_phone?: string
+  address?: string
+  city?: string
+  state?: string
+  zip?: string
+  client_status?: ClientStatus
   // Brand Identity
   brand_voice_words: string[] // 3 adjectives
   brand_tone?: string
@@ -352,4 +364,224 @@ export interface ServiceCatalog {
   is_subscription: boolean
   is_active: boolean
   sort_order: number
+}
+
+// --- Entity Types ---
+
+export type EntityType = 'llc' | 'corp' | 's_corp' | 'sole_prop' | 'partnership' | 'nonprofit' | 'other'
+export type ClientStatus = 'pending_agreement' | 'agreement_sent' | 'agreement_signed' | 'active' | 'paused' | 'offboarded'
+export type AgreementType = 'master_service_agreement' | 'scope_amendment' | 'addendum'
+export type AgreementStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'expired' | 'cancelled'
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'void'
+export type ActivityActionType =
+  | 'agreement_sent' | 'agreement_viewed' | 'agreement_signed'
+  | 'invoice_sent' | 'invoice_paid' | 'invoice_overdue'
+  | 'scope_change' | 'note_added' | 'status_change'
+  | 'client_created' | 'onboarding_completed'
+
+// --- Agreement Templates ---
+
+export interface AgreementTemplate {
+  id: string
+  name: string
+  type: AgreementType
+  version: number
+  content: string
+  is_active: boolean
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
+// --- Agreements ---
+
+export interface Agreement {
+  id: string
+  business_id: string
+  agreement_type: AgreementType
+  version_number: number
+  status: AgreementStatus
+  template_id?: string
+  custom_fields: Record<string, string>
+  rendered_content?: string
+  sent_at?: string
+  viewed_at?: string
+  signed_at?: string
+  signed_by_name?: string
+  signed_by_email?: string
+  signed_by_ip?: string
+  expires_at?: string
+  pdf_url?: string
+  docusign_envelope_id?: string
+  created_at: string
+  updated_at: string
+  // Joined fields
+  business?: Business
+}
+
+// --- Client Activity Log ---
+
+export interface ClientActivityEntry {
+  id: string
+  business_id: string
+  action_type: ActivityActionType
+  description: string
+  performed_by?: string
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
+// --- Client Notes ---
+
+export interface ClientNote {
+  id: string
+  business_id: string
+  author_id: string
+  author_name: string
+  content: string
+  created_at: string
+  updated_at: string
+}
+
+// --- Client Documents ---
+
+export interface ClientDocument {
+  id: string
+  business_id: string
+  name: string
+  file_url: string
+  file_type?: string
+  file_size?: number
+  uploaded_by?: string
+  created_at: string
+}
+
+// --- Enhanced Invoice (with line items) ---
+
+export interface InvoiceLineItem {
+  description: string
+  quantity: number
+  unit_price: number
+  total: number
+}
+
+export interface EnhancedInvoice {
+  id: string
+  business_id: string
+  agreement_id?: string
+  stripe_invoice_id?: string
+  invoice_number?: string
+  amount: number
+  tax_amount: number
+  total?: number
+  status: string
+  description?: string
+  invoice_url?: string
+  invoice_pdf?: string
+  due_date?: string
+  paid_at?: string
+  payment_method?: string
+  line_items: InvoiceLineItem[]
+  notes?: string
+  created_at: string
+  // Joined
+  business?: Business
+}
+
+// --- GBP Analytics ---
+
+export type GBPMetricField =
+  | 'search_mobile' | 'search_desktop'
+  | 'maps_mobile' | 'maps_desktop'
+  | 'calls' | 'messages' | 'bookings' | 'directions'
+  | 'website_clicks' | 'food_orders' | 'food_menu_clicks'
+  | 'hotel_bookings'
+
+export const GBP_METRIC_LABELS: Record<GBPMetricField, string> = {
+  search_mobile: 'Search (Mobile)',
+  search_desktop: 'Search (Desktop)',
+  maps_mobile: 'Maps (Mobile)',
+  maps_desktop: 'Maps (Desktop)',
+  calls: 'Phone Calls',
+  messages: 'Messages',
+  bookings: 'Bookings',
+  directions: 'Direction Requests',
+  website_clicks: 'Website Clicks',
+  food_orders: 'Food Orders',
+  food_menu_clicks: 'Menu Clicks',
+  hotel_bookings: 'Hotel Bookings',
+}
+
+export const GBP_METRIC_ICONS: Record<GBPMetricField, string> = {
+  search_mobile: '🔍',
+  search_desktop: '🖥️',
+  maps_mobile: '📱',
+  maps_desktop: '🗺️',
+  calls: '📞',
+  messages: '💬',
+  bookings: '📅',
+  directions: '📍',
+  website_clicks: '🌐',
+  food_orders: '🍽️',
+  food_menu_clicks: '📋',
+  hotel_bookings: '🏨',
+}
+
+export interface GBPMonthlyData {
+  id: string
+  business_id: string
+  month: number
+  year: number
+  search_mobile: number
+  search_desktop: number
+  maps_mobile: number
+  maps_desktop: number
+  calls: number
+  messages: number
+  bookings: number
+  directions: number
+  website_clicks: number
+  food_orders: number
+  food_menu_clicks: number
+  hotel_bookings: number
+  created_at: string
+}
+
+export interface AgencySettings {
+  id: string
+  agency_name: string
+  logo_url: string | null
+  contact_name: string | null
+  contact_email: string | null
+  website_url: string | null
+  report_defaults: {
+    showPerformanceHighlights: boolean
+    showAreasOfAttention: boolean
+    showNextSteps: boolean
+    showSeoRecommendations: boolean
+    showCharts: boolean
+  }
+  preferences: {
+    activeMetrics: GBPMetricField[]
+    defaultPeriod: number
+  }
+  created_at: string
+  updated_at: string
+}
+
+export interface AiAnalysis {
+  summary: string
+  whatsWorking: { metric: string; insight: string; action: string }[]
+  areasOfConcern: { metric: string; observation: string; possibleReasons: string; action: string }[]
+  nextSteps: { priority: string; action: string; why: string; expectedImpact: string }[]
+  anomalies: { metric: string; observation: string; likelyCause: string; recommendation: string }[]
+  benchmarkContext: string
+  seoRecommendations?: {
+    summary: string
+    items: { title: string; description: string; priority: string }[]
+  }
+}
+
+export interface GBPColumnMapping {
+  [excelColumn: string]: GBPMetricField | '__skip'
 }

@@ -5,21 +5,63 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, ShoppingBag, Kanban, UserCog, FileBarChart,
-  Menu, X, ChevronDown, Shield
+  FileText, CreditCard, MessageSquare, Settings, Menu, X, ChevronDown, Shield, Plus,
+  BarChart3,
 } from 'lucide-react'
+import { useUser } from '@/lib/supabase/hooks'
+import { ToastProvider } from '@/components/ui/toast'
+import { RealtimeProvider } from '@/lib/realtime'
+import GlobalSearch from '@/components/ui/global-search'
+import Breadcrumbs from '@/components/ui/breadcrumbs'
+import Notifications from '@/components/ui/notifications'
+import { AdminTabBar } from '@/components/ui/mobile-tab-bar'
 
-const navItems = [
-  { label: 'Overview', href: '/admin', icon: LayoutDashboard },
-  { label: 'Clients', href: '/admin/clients', icon: Users },
-  { label: 'Orders', href: '/admin/orders', icon: ShoppingBag, badge: 8 },
-  { label: 'Pipeline', href: '/admin/pipeline', icon: Kanban },
-  { label: 'Team', href: '/admin/team', icon: UserCog },
-  { label: 'Reports', href: '/admin/reports', icon: FileBarChart },
+const navSections = [
+  {
+    label: 'Clients',
+    items: [
+      { label: 'Overview', href: '/admin', icon: LayoutDashboard },
+      { label: 'Clients', href: '/admin/clients', icon: Users },
+    ],
+  },
+  {
+    label: 'Content',
+    items: [
+      { label: 'Orders', href: '/admin/orders', icon: ShoppingBag },
+      { label: 'Pipeline', href: '/admin/pipeline', icon: Kanban },
+      { label: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
+    ],
+  },
+  {
+    label: 'Revenue',
+    items: [
+      { label: 'Agreements', href: '/admin/agreements', icon: FileText },
+      { label: 'Billing', href: '/admin/billing', icon: CreditCard },
+    ],
+  },
+  {
+    label: 'Communications',
+    items: [
+      { label: 'Messages', href: '/admin/messages', icon: MessageSquare },
+      { label: 'Reports', href: '/admin/reports', icon: FileBarChart },
+    ],
+  },
+  {
+    label: 'Settings',
+    items: [
+      { label: 'Team', href: '/admin/team', icon: UserCog },
+      { label: 'Settings', href: '/admin/settings', icon: Settings },
+    ],
+  },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const { data: user } = useUser()
+  const displayName = user?.full_name || 'Admin'
+  const initials = displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === '/admin'
@@ -27,7 +69,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen bg-bg-2 flex">
+    <ToastProvider>
+    <RealtimeProvider>
+    <div className="min-h-screen bg-bg-2 flex pb-14 lg:pb-0">
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
@@ -41,42 +85,46 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <span className="bg-brand/20 text-brand text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
               <Shield className="w-2.5 h-2.5" /> ADMIN
             </span>
-            <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-white/40 hover:text-white">
+            <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-white/40 hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center">
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setSidebarOpen(false)}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isActive(item.href)
-                  ? 'bg-white/10 text-white'
-                  : 'text-white/40 hover:bg-white/5 hover:text-white/70'
-              }`}
-            >
-              <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
-              <span className="flex-1">{item.label}</span>
-              {item.badge && (
-                <span className="bg-brand text-ink text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                  {item.badge}
-                </span>
-              )}
-            </Link>
+        <nav className="flex-1 px-3 py-3 overflow-y-auto">
+          {navSections.map((section) => (
+            <div key={section.label} className="mb-3">
+              <div className="px-3 mb-1 text-[10px] font-semibold text-white/25 uppercase tracking-wider">
+                {section.label}
+              </div>
+              <div className="space-y-0.5">
+                {section.items.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[36px] ${
+                      isActive(item.href)
+                        ? 'bg-white/10 text-white'
+                        : 'text-white/40 hover:bg-white/5 hover:text-white/70'
+                    }`}
+                  >
+                    <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
+                    <span className="flex-1">{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
         <div className="p-3 border-t border-white/8">
-          <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors">
+          <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors min-h-[44px]">
             <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-bold">
-              MB
+              {initials}
             </div>
             <div className="flex-1 text-left">
-              <div className="text-sm font-medium text-white/80 truncate">Matt Butler</div>
+              <div className="text-sm font-medium text-white/80 truncate">{displayName}</div>
               <div className="text-[10px] text-white/30">Admin</div>
             </div>
             <ChevronDown className="w-4 h-4 text-white/30" />
@@ -85,17 +133,59 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       <div className="flex-1 lg:ml-[260px]">
-        <header className="h-14 bg-white border-b border-ink-6 flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
-          <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-ink-3 hover:text-ink">
+        {/* Top bar with global search, quick add, notifications */}
+        <header className="h-14 bg-white border-b border-ink-6 flex items-center gap-3 px-4 lg:px-6 sticky top-0 z-30">
+          <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-ink-3 hover:text-ink min-h-[44px] min-w-[44px] flex items-center justify-center">
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex-1" />
-          <Link href="/dashboard" className="text-xs text-ink-4 hover:text-brand-dark transition-colors">
-            Switch to Client View &rarr;
-          </Link>
+          <div className="flex-1">
+            <GlobalSearch />
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Quick Add */}
+            <div className="relative">
+              <button
+                onClick={() => setQuickAddOpen(!quickAddOpen)}
+                className="w-8 h-8 rounded-lg bg-brand hover:bg-brand-dark text-white flex items-center justify-center transition-colors"
+                title="Quick add"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              {quickAddOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setQuickAddOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl border border-ink-6 shadow-lg shadow-black/8 z-50 py-1.5">
+                    <Link href="/admin/clients" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors">
+                      <Users className="w-4 h-4 text-ink-4" /> New Client
+                    </Link>
+                    <Link href="/admin/billing" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors">
+                      <CreditCard className="w-4 h-4 text-ink-4" /> New Invoice
+                    </Link>
+                    <Link href="/admin/agreements/send" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors">
+                      <FileText className="w-4 h-4 text-ink-4" /> New Agreement
+                    </Link>
+                    <Link href="/admin/messages" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors">
+                      <MessageSquare className="w-4 h-4 text-ink-4" /> New Message
+                    </Link>
+                  </div>
+                </>
+              )}
+            </div>
+            <Notifications />
+            <Link href="/dashboard" className="text-xs text-ink-4 hover:text-brand-dark transition-colors hidden sm:block">
+              Client View &rarr;
+            </Link>
+          </div>
         </header>
-        <main className="p-4 lg:p-6">{children}</main>
+
+        <main className="p-4 lg:p-6">
+          <Breadcrumbs />
+          {children}
+        </main>
       </div>
+      <AdminTabBar />
     </div>
+    </RealtimeProvider>
+    </ToastProvider>
   )
 }
