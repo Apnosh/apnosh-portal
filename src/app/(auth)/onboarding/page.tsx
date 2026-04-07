@@ -1,1416 +1,372 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+
+import StepWelcome from './steps/StepWelcome';
+import StepBusinessBasics from './steps/StepBusinessBasics';
+import StepBrandIdentity from './steps/StepBrandIdentity';
+import StepGoalsAudience from './steps/StepGoalsAudience';
+import StepConnectAccounts from './steps/StepConnectAccounts';
+import StepConfirmation from './steps/StepConfirmation';
 
 /* ------------------------------------------------------------------ */
-/*  Types                                                              */
+/*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
-interface Competitor {
-  name: string;
-  website: string;
-}
+const STEPS = [
+  { label: 'Welcome' },
+  { label: 'Business Basics' },
+  { label: 'Brand Identity' },
+  { label: 'Goals & Audience' },
+  { label: 'Connect Accounts' },
+  { label: 'Confirmation' },
+] as const;
+
+const BUDGET_MAP: Record<string, number> = {
+  '$0 - $200': 200,
+  '$200 - $500': 500,
+  '$500 - $1,000': 1000,
+  '$1,000 - $2,000': 2000,
+  '$2,000+': 5000,
+};
+
+const BUDGET_REVERSE: Record<number, string> = {
+  200: '$0 - $200',
+  500: '$200 - $500',
+  1000: '$500 - $1,000',
+  2000: '$1,000 - $2,000',
+  5000: '$2,000+',
+};
+
+/* ------------------------------------------------------------------ */
+/*  Form data shape                                                    */
+/* ------------------------------------------------------------------ */
 
 interface FormData {
-  /* Step 1 — Business Basics */
+  // Step 2
   businessName: string;
   industry: string;
-  businessDescription: string;
   websiteUrl: string;
-  numberOfLocations: number;
-  businessPhone: string;
-
-  /* Step 2 — Brand Identity */
-  brandWords: [string, string, string];
-  tone: string;
-  neverSay: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  // Step 3
+  brandWords: string[];
+  brandTone: string;
   primaryColor: string;
   secondaryColor: string;
-
-  /* Step 3 — Target Audience */
-  idealCustomer: string;
-  ageRange: string;
-  locationServed: string;
-  problemSolved: string;
-
-  /* Step 4 — Competitors & Market */
-  competitors: [Competitor, Competitor, Competitor];
-  competitorStrengths: string;
-  differentiator: string;
-
-  /* Step 5 — Current Marketing */
-  socialPlatforms: string[];
-  platformLinks: Record<string, string>;
-  postingFrequency: string;
-  googleBusinessProfile: string;
-  googleBusinessUrl: string;
-  marketingBudget: number;
-  whatWorked: string;
-  whatDidntWork: string;
-
-  /* Step 6 — Goals & Preferences */
+  // Step 4
   marketingGoals: string[];
-  contentTopics: string;
-  topicsToAvoid: string;
-  anythingElse: string;
+  targetAudience: string;
+  monthlyBudget: string;
+  // Step 5
+  connectedPlatforms: string[];
 }
 
 const INITIAL_DATA: FormData = {
   businessName: '',
   industry: '',
-  businessDescription: '',
   websiteUrl: '',
-  numberOfLocations: 1,
-  businessPhone: '',
-
-  brandWords: ['', '', ''],
-  tone: '',
-  neverSay: '',
+  phone: '',
+  address: '',
+  city: '',
+  state: '',
+  zip: '',
+  brandWords: [],
+  brandTone: '',
   primaryColor: '#4abd98',
   secondaryColor: '#2e9a78',
-
-  idealCustomer: '',
-  ageRange: '',
-  locationServed: '',
-  problemSolved: '',
-
-  competitors: [
-    { name: '', website: '' },
-    { name: '', website: '' },
-    { name: '', website: '' },
-  ],
-  competitorStrengths: '',
-  differentiator: '',
-
-  socialPlatforms: [],
-  platformLinks: {},
-  postingFrequency: '',
-  googleBusinessProfile: '',
-  googleBusinessUrl: '',
-  marketingBudget: 500,
-  whatWorked: '',
-  whatDidntWork: '',
-
   marketingGoals: [],
-  contentTopics: '',
-  topicsToAvoid: '',
-  anythingElse: '',
+  targetAudience: '',
+  monthlyBudget: '',
+  connectedPlatforms: [],
 };
 
 /* ------------------------------------------------------------------ */
-/*  Step metadata                                                      */
-/* ------------------------------------------------------------------ */
-
-const STEPS = [
-  { label: 'Business Basics', icon: '1' },
-  { label: 'Brand Identity', icon: '2' },
-  { label: 'Target Audience', icon: '3' },
-  { label: 'Competitors', icon: '4' },
-  { label: 'Marketing', icon: '5' },
-  { label: 'Goals', icon: '6' },
-] as const;
-
-const INDUSTRIES = [
-  'Restaurant',
-  'Retail',
-  'Professional Services',
-  'Health & Wellness',
-  'Real Estate',
-  'Home Services',
-  'Beauty & Salon',
-  'Automotive',
-  'Education',
-  'Other',
-];
-
-const TONES = [
-  'Professional',
-  'Friendly & Casual',
-  'Luxury & Premium',
-  'Fun & Playful',
-  'Bold & Direct',
-  'Warm & Welcoming',
-];
-
-const AGE_RANGES = ['18-24', '25-34', '35-44', '45-54', '55+', 'All ages'];
-
-const SOCIAL_PLATFORMS = [
-  'Instagram',
-  'Facebook',
-  'TikTok',
-  'LinkedIn',
-  'Twitter/X',
-  'YouTube',
-  'None',
-];
-
-const POSTING_FREQUENCIES = [
-  'Daily',
-  'Few times/week',
-  'Weekly',
-  'Rarely',
-  'Never',
-];
-
-const MARKETING_GOALS = [
-  'More customers',
-  'Brand awareness',
-  'Social media growth',
-  'Better online reviews',
-  'Website traffic',
-  'Email list growth',
-  'Local SEO',
-  'Content creation',
-];
-
-const BUDGET_MARKS = [0, 500, 1000, 2000, 5000];
-
-/* ------------------------------------------------------------------ */
-/*  Reusable UI primitives                                             */
-/* ------------------------------------------------------------------ */
-
-function Label({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
-  return (
-    <label
-      htmlFor={htmlFor}
-      className="block text-sm font-medium mb-1.5"
-      style={{ color: '#1d1d1f', fontFamily: 'Inter, sans-serif' }}
-    >
-      {children}
-    </label>
-  );
-}
-
-function TextInput({
-  id,
-  value,
-  onChange,
-  placeholder,
-  type = 'text',
-  required,
-}: {
-  id: string;
-  value: string | number;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  type?: string;
-  required?: boolean;
-}) {
-  return (
-    <input
-      id={id}
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      required={required}
-      className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none transition-all
-                 focus:border-[#4abd98] focus:ring-2 focus:ring-[#4abd98]/20
-                 placeholder:text-gray-400"
-      style={{ fontFamily: 'Inter, sans-serif', color: '#1d1d1f' }}
-    />
-  );
-}
-
-function Select({
-  id,
-  value,
-  onChange,
-  options,
-  placeholder,
-  required,
-}: {
-  id: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-  placeholder?: string;
-  required?: boolean;
-}) {
-  return (
-    <select
-      id={id}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      required={required}
-      className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none transition-all
-                 focus:border-[#4abd98] focus:ring-2 focus:ring-[#4abd98]/20
-                 appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%23424245%22%20d%3D%22M6%208L1%203h10z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:12px] bg-[right_12px_center] bg-no-repeat"
-      style={{ fontFamily: 'Inter, sans-serif', color: value ? '#1d1d1f' : '#9ca3af' }}
-    >
-      {placeholder && (
-        <option value="" disabled>
-          {placeholder}
-        </option>
-      )}
-      {options.map((opt) => (
-        <option key={opt} value={opt} style={{ color: '#1d1d1f' }}>
-          {opt}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function Textarea({
-  id,
-  value,
-  onChange,
-  placeholder,
-  rows = 3,
-  required,
-}: {
-  id: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  rows?: number;
-  required?: boolean;
-}) {
-  return (
-    <textarea
-      id={id}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      rows={rows}
-      required={required}
-      className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none transition-all resize-none
-                 focus:border-[#4abd98] focus:ring-2 focus:ring-[#4abd98]/20
-                 placeholder:text-gray-400"
-      style={{ fontFamily: 'Inter, sans-serif', color: '#1d1d1f' }}
-    />
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Progress / step indicator                                          */
-/* ------------------------------------------------------------------ */
-
-function ProgressBar({ current, total }: { current: number; total: number }) {
-  const pct = ((current + 1) / total) * 100;
-  return (
-    <div className="mb-2">
-      <div className="flex items-center justify-between mb-1">
-        <span
-          className="text-xs font-medium"
-          style={{ color: '#424245', fontFamily: 'Inter, sans-serif' }}
-        >
-          Step {current + 1} of {total}
-        </span>
-        <span
-          className="text-xs font-medium"
-          style={{ color: '#4abd98', fontFamily: 'Inter, sans-serif' }}
-        >
-          {Math.round(pct)}%
-        </span>
-      </div>
-      <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500 ease-out"
-          style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #4abd98, #2e9a78)' }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function StepIndicator({ current, total }: { current: number; total: number }) {
-  return (
-    <div className="flex items-center justify-between relative mb-8">
-      {/* Connecting line */}
-      <div className="absolute top-4 left-0 right-0 h-px bg-gray-200 z-0" />
-      <div
-        className="absolute top-4 left-0 h-px z-0 transition-all duration-500 ease-out"
-        style={{
-          width: `${(current / (total - 1)) * 100}%`,
-          background: 'linear-gradient(90deg, #4abd98, #2e9a78)',
-        }}
-      />
-
-      {STEPS.map((step, i) => {
-        const isCompleted = i < current;
-        const isActive = i === current;
-        return (
-          <div key={step.label} className="flex flex-col items-center z-10 relative">
-            <div
-              className={`
-                w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold
-                transition-all duration-300 border-2
-                ${
-                  isCompleted
-                    ? 'bg-[#4abd98] border-[#4abd98] text-white'
-                    : isActive
-                      ? 'bg-white border-[#4abd98] text-[#4abd98]'
-                      : 'bg-white border-gray-200 text-gray-400'
-                }
-              `}
-              style={{ fontFamily: 'Inter, sans-serif' }}
-            >
-              {isCompleted ? (
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <path
-                    d="M3 7.5L5.5 10L11 4"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              ) : (
-                i + 1
-              )}
-            </div>
-            <span
-              className={`mt-1.5 text-[10px] font-medium whitespace-nowrap hidden sm:block ${
-                isActive ? 'text-[#1d1d1f]' : isCompleted ? 'text-[#4abd98]' : 'text-gray-400'
-              }`}
-              style={{ fontFamily: 'Inter, sans-serif' }}
-            >
-              {step.label}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Validation per step                                                */
-/* ------------------------------------------------------------------ */
-
-function validateStep(step: number, data: FormData): string | null {
-  switch (step) {
-    case 0:
-      if (!data.businessName.trim()) return 'Please enter your business name.';
-      if (!data.industry) return 'Please select an industry.';
-      if (!data.businessDescription.trim()) return 'Please provide a brief business description.';
-      if (!data.businessPhone.trim()) return 'Please enter a business phone number.';
-      return null;
-
-    case 1:
-      if (data.brandWords.some((w) => !w.trim()))
-        return 'Please enter all 3 brand words.';
-      if (!data.tone) return 'Please select a brand tone.';
-      return null;
-
-    case 2:
-      if (!data.idealCustomer.trim()) return 'Please describe your ideal customer.';
-      if (!data.ageRange) return 'Please select an age range.';
-      if (!data.locationServed.trim()) return 'Please enter the area you serve.';
-      if (!data.problemSolved.trim()) return 'Please describe the problem you solve.';
-      return null;
-
-    case 3:
-      if (!data.competitors[0].name.trim())
-        return 'Please enter at least one competitor name.';
-      if (!data.differentiator.trim())
-        return 'Please describe what makes you different.';
-      return null;
-
-    case 4:
-      if (data.socialPlatforms.length === 0)
-        return 'Please select at least one social media option.';
-      if (!data.postingFrequency) return 'Please select a posting frequency.';
-      if (!data.googleBusinessProfile)
-        return 'Please indicate if you have a Google Business Profile.';
-      return null;
-
-    case 5:
-      if (data.marketingGoals.length === 0)
-        return 'Please select at least one marketing goal.';
-      return null;
-
-    default:
-      return null;
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/*  Step content components                                            */
-/* ------------------------------------------------------------------ */
-
-function Step1({
-  data,
-  update,
-}: {
-  data: FormData;
-  update: (patch: Partial<FormData>) => void;
-}) {
-  return (
-    <div className="space-y-5">
-      <div>
-        <Label htmlFor="businessName">Business Name *</Label>
-        <TextInput
-          id="businessName"
-          value={data.businessName}
-          onChange={(v) => update({ businessName: v })}
-          placeholder="e.g. Sunrise Cafe"
-          required
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="industry">Industry *</Label>
-        <Select
-          id="industry"
-          value={data.industry}
-          onChange={(v) => update({ industry: v })}
-          options={INDUSTRIES}
-          placeholder="Select your industry"
-          required
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="businessDescription">Business Description *</Label>
-        <Textarea
-          id="businessDescription"
-          value={data.businessDescription}
-          onChange={(v) => update({ businessDescription: v })}
-          placeholder="Tell us about your business in 2-3 sentences..."
-          required
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="websiteUrl">Website URL (optional)</Label>
-        <TextInput
-          id="websiteUrl"
-          value={data.websiteUrl}
-          onChange={(v) => update({ websiteUrl: v })}
-          placeholder="https://www.example.com"
-          type="url"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="numberOfLocations">Number of Locations *</Label>
-          <TextInput
-            id="numberOfLocations"
-            value={data.numberOfLocations}
-            onChange={(v) => update({ numberOfLocations: parseInt(v) || 1 })}
-            type="number"
-          />
-        </div>
-        <div>
-          <Label htmlFor="businessPhone">Business Phone *</Label>
-          <TextInput
-            id="businessPhone"
-            value={data.businessPhone}
-            onChange={(v) => update({ businessPhone: v })}
-            placeholder="(555) 123-4567"
-            type="tel"
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Step2({
-  data,
-  update,
-}: {
-  data: FormData;
-  update: (patch: Partial<FormData>) => void;
-}) {
-  const updateBrandWord = (index: number, value: string) => {
-    const next = [...data.brandWords] as [string, string, string];
-    next[index] = value;
-    update({ brandWords: next });
-  };
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <Label>Describe your brand in 3 words *</Label>
-        <div className="grid grid-cols-3 gap-3">
-          {[0, 1, 2].map((i) => (
-            <TextInput
-              key={i}
-              id={`brandWord${i}`}
-              value={data.brandWords[i]}
-              onChange={(v) => updateBrandWord(i, v)}
-              placeholder={`Word ${i + 1}`}
-              required
-            />
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <Label htmlFor="tone">Brand Tone *</Label>
-        <Select
-          id="tone"
-          value={data.tone}
-          onChange={(v) => update({ tone: v })}
-          options={TONES}
-          placeholder="Select a tone"
-          required
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="neverSay">We never say... (things to avoid)</Label>
-        <Textarea
-          id="neverSay"
-          value={data.neverSay}
-          onChange={(v) => update({ neverSay: v })}
-          placeholder="Words, phrases, or topics your brand avoids..."
-        />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="primaryColor">Primary Brand Color</Label>
-          <div className="flex items-center gap-3">
-            <input
-              id="primaryColor"
-              type="color"
-              value={data.primaryColor}
-              onChange={(e) => update({ primaryColor: e.target.value })}
-              className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5"
-            />
-            <span className="text-sm text-gray-500 font-mono">{data.primaryColor}</span>
-          </div>
-        </div>
-        <div>
-          <Label htmlFor="secondaryColor">Secondary Brand Color</Label>
-          <div className="flex items-center gap-3">
-            <input
-              id="secondaryColor"
-              type="color"
-              value={data.secondaryColor}
-              onChange={(e) => update({ secondaryColor: e.target.value })}
-              className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5"
-            />
-            <span className="text-sm text-gray-500 font-mono">{data.secondaryColor}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Step3({
-  data,
-  update,
-}: {
-  data: FormData;
-  update: (patch: Partial<FormData>) => void;
-}) {
-  return (
-    <div className="space-y-5">
-      <div>
-        <Label htmlFor="idealCustomer">Who is your ideal customer? *</Label>
-        <Textarea
-          id="idealCustomer"
-          value={data.idealCustomer}
-          onChange={(v) => update({ idealCustomer: v })}
-          placeholder="Describe your perfect customer — demographics, interests, behaviors..."
-          required
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="ageRange">Age Range *</Label>
-        <Select
-          id="ageRange"
-          value={data.ageRange}
-          onChange={(v) => update({ ageRange: v })}
-          options={AGE_RANGES}
-          placeholder="Select an age range"
-          required
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="locationServed">Location / Area Served *</Label>
-        <TextInput
-          id="locationServed"
-          value={data.locationServed}
-          onChange={(v) => update({ locationServed: v })}
-          placeholder="e.g. Downtown Austin, TX"
-          required
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="problemSolved">What problem do you solve for them? *</Label>
-        <Textarea
-          id="problemSolved"
-          value={data.problemSolved}
-          onChange={(v) => update({ problemSolved: v })}
-          placeholder="What pain point or need does your business address?"
-          required
-        />
-      </div>
-    </div>
-  );
-}
-
-function Step4({
-  data,
-  update,
-}: {
-  data: FormData;
-  update: (patch: Partial<FormData>) => void;
-}) {
-  const updateCompetitor = (index: number, field: keyof Competitor, value: string) => {
-    const next = [...data.competitors] as [Competitor, Competitor, Competitor];
-    next[index] = { ...next[index], [field]: value };
-    update({ competitors: next });
-  };
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <Label>Top 3 Competitors *</Label>
-        <div className="space-y-3">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <TextInput
-                id={`compName${i}`}
-                value={data.competitors[i].name}
-                onChange={(v) => updateCompetitor(i, 'name', v)}
-                placeholder={`Competitor ${i + 1} name`}
-                required={i === 0}
-              />
-              <TextInput
-                id={`compUrl${i}`}
-                value={data.competitors[i].website}
-                onChange={(v) => updateCompetitor(i, 'website', v)}
-                placeholder="Website URL"
-                type="url"
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <Label htmlFor="competitorStrengths">What do they do well?</Label>
-        <Textarea
-          id="competitorStrengths"
-          value={data.competitorStrengths}
-          onChange={(v) => update({ competitorStrengths: v })}
-          placeholder="What are your competitors' strengths?"
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="differentiator">What makes you different? *</Label>
-        <Textarea
-          id="differentiator"
-          value={data.differentiator}
-          onChange={(v) => update({ differentiator: v })}
-          placeholder="Your unique value proposition — why should someone choose you?"
-          required
-        />
-      </div>
-    </div>
-  );
-}
-
-function Step5({
-  data,
-  update,
-}: {
-  data: FormData;
-  update: (patch: Partial<FormData>) => void;
-}) {
-  const togglePlatform = (platform: string) => {
-    if (platform === 'None') {
-      update({ socialPlatforms: data.socialPlatforms.includes('None') ? [] : ['None'] });
-      return;
-    }
-    const without = data.socialPlatforms.filter((p) => p !== 'None');
-    update({
-      socialPlatforms: without.includes(platform)
-        ? without.filter((p) => p !== platform)
-        : [...without, platform],
-    });
-  };
-
-  const budgetLabel = (v: number) => {
-    if (v >= 5000) return '$5,000+';
-    return `$${v.toLocaleString()}`;
-  };
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <Label>Current Social Media Platforms *</Label>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1">
-          {SOCIAL_PLATFORMS.map((platform) => {
-            const checked = data.socialPlatforms.includes(platform);
-            return (
-              <label
-                key={platform}
-                className={`
-                  flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm cursor-pointer transition-all
-                  ${
-                    checked
-                      ? 'border-[#4abd98] bg-[#eaf7f3] text-[#1d1d1f]'
-                      : 'border-gray-200 bg-white text-[#424245] hover:border-gray-300'
-                  }
-                `}
-                style={{ fontFamily: 'Inter, sans-serif' }}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => togglePlatform(platform)}
-                  className="sr-only"
-                />
-                <div
-                  className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
-                    checked ? 'bg-[#4abd98] border-[#4abd98]' : 'border-gray-300'
-                  }`}
-                >
-                  {checked && (
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                      <path
-                        d="M2 5.5L4 7.5L8 3"
-                        stroke="white"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  )}
-                </div>
-                {platform}
-              </label>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Platform links — shown for selected platforms */}
-      {data.socialPlatforms.filter((p) => p !== 'None').length > 0 && (
-        <div>
-          <Label>Your Social Media Links</Label>
-          <p className="text-xs text-gray-400 mb-2" style={{ fontFamily: 'Inter, sans-serif' }}>
-            Share your handles or page URLs so we can manage your accounts.
-          </p>
-          <div className="space-y-2">
-            {data.socialPlatforms.filter((p) => p !== 'None').map((platform) => {
-              const placeholders: Record<string, string> = {
-                'Instagram': '@yourhandle or instagram.com/yourhandle',
-                'Facebook': 'facebook.com/yourpage',
-                'TikTok': '@yourhandle or tiktok.com/@yourhandle',
-                'LinkedIn': 'linkedin.com/company/yourcompany',
-                'Twitter/X': '@yourhandle or x.com/yourhandle',
-                'YouTube': 'youtube.com/@yourchannel',
-              };
-              return (
-                <div key={platform} className="flex items-center gap-2">
-                  <span
-                    className="text-xs font-medium text-gray-500 w-20 flex-shrink-0"
-                    style={{ fontFamily: 'Inter, sans-serif' }}
-                  >
-                    {platform}
-                  </span>
-                  <TextInput
-                    id={`link-${platform}`}
-                    value={data.platformLinks[platform] || ''}
-                    onChange={(v) => update({ platformLinks: { ...data.platformLinks, [platform]: v } })}
-                    placeholder={placeholders[platform] || 'Your profile URL or handle'}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div>
-        <Label htmlFor="postingFrequency">Current Posting Frequency *</Label>
-        <Select
-          id="postingFrequency"
-          value={data.postingFrequency}
-          onChange={(v) => update({ postingFrequency: v })}
-          options={POSTING_FREQUENCIES}
-          placeholder="How often do you post?"
-          required
-        />
-      </div>
-
-      <div>
-        <Label>Do you have a Google Business Profile? *</Label>
-        <div className="flex gap-3 mt-1">
-          {['Yes', 'No'].map((opt) => (
-            <button
-              type="button"
-              key={opt}
-              onClick={() => update({ googleBusinessProfile: opt })}
-              className={`
-                px-6 py-2.5 rounded-lg text-sm font-medium border transition-all
-                ${
-                  data.googleBusinessProfile === opt
-                    ? 'border-[#4abd98] bg-[#eaf7f3] text-[#1d1d1f]'
-                    : 'border-gray-200 bg-white text-[#424245] hover:border-gray-300'
-                }
-              `}
-              style={{ fontFamily: 'Inter, sans-serif' }}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-        {data.googleBusinessProfile === 'Yes' && (
-          <div className="mt-2">
-            <TextInput
-              id="googleBusinessUrl"
-              value={data.googleBusinessUrl}
-              onChange={(v) => update({ googleBusinessUrl: v })}
-              placeholder="google.com/maps/place/your-business or your GBP link"
-              type="url"
-            />
-          </div>
-        )}
-      </div>
-
-      <div>
-        <Label htmlFor="marketingBudget">
-          Current Marketing Budget: {budgetLabel(data.marketingBudget)}
-        </Label>
-        <div className="mt-2">
-          <input
-            id="marketingBudget"
-            type="range"
-            min={0}
-            max={5000}
-            step={100}
-            value={data.marketingBudget}
-            onChange={(e) => update({ marketingBudget: parseInt(e.target.value) })}
-            className="w-full h-2 rounded-full appearance-none cursor-pointer"
-            style={{
-              background: `linear-gradient(to right, #4abd98 ${(data.marketingBudget / 5000) * 100}%, #e5e7eb ${(data.marketingBudget / 5000) * 100}%)`,
-            }}
-          />
-          <div className="flex justify-between mt-1">
-            {BUDGET_MARKS.map((m) => (
-              <span
-                key={m}
-                className="text-[10px] text-gray-400"
-                style={{ fontFamily: 'Inter, sans-serif' }}
-              >
-                {m === 5000 ? '$5k+' : `$${m}`}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <Label htmlFor="whatWorked">What&apos;s worked in the past?</Label>
-        <Textarea
-          id="whatWorked"
-          value={data.whatWorked}
-          onChange={(v) => update({ whatWorked: v })}
-          placeholder="Marketing efforts that drove results..."
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="whatDidntWork">What hasn&apos;t worked?</Label>
-        <Textarea
-          id="whatDidntWork"
-          value={data.whatDidntWork}
-          onChange={(v) => update({ whatDidntWork: v })}
-          placeholder="Things you tried that didn't deliver..."
-        />
-      </div>
-    </div>
-  );
-}
-
-function Step6({
-  data,
-  update,
-}: {
-  data: FormData;
-  update: (patch: Partial<FormData>) => void;
-}) {
-  const toggleGoal = (goal: string) => {
-    update({
-      marketingGoals: data.marketingGoals.includes(goal)
-        ? data.marketingGoals.filter((g) => g !== goal)
-        : [...data.marketingGoals, goal],
-    });
-  };
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <Label>Top Marketing Goals * (select up to 3)</Label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-          {MARKETING_GOALS.map((goal) => {
-            const checked = data.marketingGoals.includes(goal);
-            const disabled = !checked && data.marketingGoals.length >= 3;
-            return (
-              <label
-                key={goal}
-                className={`
-                  flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-all
-                  ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                  ${
-                    checked
-                      ? 'border-[#4abd98] bg-[#eaf7f3] text-[#1d1d1f]'
-                      : 'border-gray-200 bg-white text-[#424245] hover:border-gray-300'
-                  }
-                `}
-                style={{ fontFamily: 'Inter, sans-serif' }}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={disabled}
-                  onChange={() => !disabled && toggleGoal(goal)}
-                  className="sr-only"
-                />
-                <div
-                  className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
-                    checked ? 'bg-[#4abd98] border-[#4abd98]' : 'border-gray-300'
-                  }`}
-                >
-                  {checked && (
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                      <path
-                        d="M2 5.5L4 7.5L8 3"
-                        stroke="white"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  )}
-                </div>
-                {goal}
-              </label>
-            );
-          })}
-        </div>
-      </div>
-
-      <div>
-        <Label htmlFor="contentTopics">Content topics you want to cover</Label>
-        <Textarea
-          id="contentTopics"
-          value={data.contentTopics}
-          onChange={(v) => update({ contentTopics: v })}
-          placeholder="e.g. Behind the scenes, customer stories, industry tips..."
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="topicsToAvoid">Topics to avoid</Label>
-        <Textarea
-          id="topicsToAvoid"
-          value={data.topicsToAvoid}
-          onChange={(v) => update({ topicsToAvoid: v })}
-          placeholder="Subjects or themes you don't want in your content..."
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="anythingElse">Anything else we should know?</Label>
-        <Textarea
-          id="anythingElse"
-          value={data.anythingElse}
-          onChange={(v) => update({ anythingElse: v })}
-          placeholder="Additional context, upcoming events, seasonal notes..."
-          rows={4}
-        />
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Step titles + subtitles                                            */
-/* ------------------------------------------------------------------ */
-
-const STEP_META: { title: string; subtitle: string }[] = [
-  {
-    title: 'Business Basics',
-    subtitle: 'Let\u2019s start with the essentials about your business.',
-  },
-  {
-    title: 'Brand Identity',
-    subtitle: 'Help us understand how your brand looks and sounds.',
-  },
-  {
-    title: 'Target Audience',
-    subtitle: 'Tell us about the people you\u2019re trying to reach.',
-  },
-  {
-    title: 'Competitors & Market',
-    subtitle: 'Who else is in your space and what sets you apart?',
-  },
-  {
-    title: 'Current Marketing',
-    subtitle: 'Where are you today with your marketing efforts?',
-  },
-  {
-    title: 'Goals & Preferences',
-    subtitle: 'What do you want to achieve and how should we get there?',
-  },
-];
-
-/* ------------------------------------------------------------------ */
-/*  Main wizard                                                        */
+/*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const supabase = createClient();
+
   const [step, setStep] = useState(0);
   const [data, setData] = useState<FormData>(INITIAL_DATA);
-  const [error, setError] = useState<string | null>(null);
-  const [direction, setDirection] = useState<'forward' | 'back'>('forward');
-  const [isAnimating, setIsAnimating] = useState(false);
+  const [businessId, setBusinessId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const update = useCallback(
-    (patch: Partial<FormData>) => setData((prev) => ({ ...prev, ...patch })),
-    [],
-  );
-
-  const goTo = useCallback(
-    (next: number, dir: 'forward' | 'back') => {
-      setDirection(dir);
-      setIsAnimating(true);
-      setTimeout(() => {
-        setStep(next);
-        setError(null);
-        setIsAnimating(false);
-      }, 200);
-    },
-    [],
-  );
-
-  const handleContinue = () => {
-    const err = validateStep(step, data);
-    if (err) {
-      setError(err);
-      return;
-    }
-    if (step < STEPS.length - 1) {
-      goTo(step + 1, 'forward');
-    }
-  };
-
-  const handleBack = () => {
-    if (step > 0) goTo(step - 1, 'back');
-  };
-
-  const handleComplete = async () => {
-    const err = validateStep(step, data);
-    if (err) {
-      setError(err);
-      return;
-    }
-
-    try {
-      const { createClient } = await import('@/lib/supabase/client');
-      const supabase = createClient();
+  /* ── Load existing business data on mount ── */
+  useEffect(() => {
+    async function load() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setError('Not authenticated. Please log in again.');
-        return;
-      }
+      if (!user) { router.push('/login'); return; }
+      setUserId(user.id);
 
-      // Check if business already exists
-      const { data: existing } = await supabase
+      const { data: biz } = await supabase
         .from('businesses')
-        .select('id')
+        .select('*')
         .eq('owner_id', user.id)
         .single();
 
-      const businessData = {
-        owner_id: user.id,
-        name: data.businessName,
-        industry: data.industry,
-        description: data.businessDescription,
-        website_url: data.websiteUrl || null,
-        phone: data.businessPhone || null,
-        locations: data.numberOfLocations ? [{ count: data.numberOfLocations }] : [],
-        brand_voice_words: data.brandWords.filter((w) => w.trim()),
-        brand_tone: data.tone || null,
-        brand_do_nots: data.neverSay || null,
-        brand_colors: { primary: data.primaryColor || null, secondary: data.secondaryColor || null },
-        target_audience: data.idealCustomer || null,
-        target_age_range: data.ageRange || null,
-        target_location: data.locationServed || null,
-        target_problem: data.problemSolved || null,
-        competitors: data.competitors.filter((c) => c.name.trim()).map((c) => ({ name: c.name, website: c.website })),
-        competitor_strengths: data.competitorStrengths || null,
-        differentiator: data.differentiator || null,
-        current_platforms: data.socialPlatforms,
-        posting_frequency: data.postingFrequency || null,
-        has_google_business: data.googleBusinessProfile === 'Yes',
-        monthly_budget: data.marketingBudget || null,
-        past_marketing_wins: data.whatWorked || null,
-        past_marketing_fails: data.whatDidntWork || null,
-        marketing_goals: data.marketingGoals,
-        content_topics: data.contentTopics || null,
-        content_avoid_topics: data.topicsToAvoid || null,
-        additional_notes: data.anythingElse || null,
-        onboarding_completed: true,
-        onboarding_step: 6,
-      };
+      if (biz) {
+        setBusinessId(biz.id);
+        const loc = Array.isArray(biz.locations) && biz.locations.length > 0
+          ? biz.locations[0] as { address?: string; city?: string; state?: string; zip?: string }
+          : {};
+        const colors = (biz.brand_colors || {}) as { primary?: string; secondary?: string };
 
-      let businessId: string;
-      if (existing) {
-        const { error: updateErr } = await supabase
-          .from('businesses')
-          .update(businessData)
-          .eq('id', existing.id);
-        if (updateErr) throw updateErr;
-        businessId = existing.id;
-      } else {
-        const { data: inserted, error: insertErr } = await supabase
-          .from('businesses')
-          .insert(businessData)
-          .select('id')
-          .single();
-        if (insertErr) throw insertErr;
-        businessId = inserted.id;
-      }
-
-      // Save platform connections (social media links + Google Business)
-      const platformMap: Record<string, string> = {
-        'Instagram': 'instagram',
-        'Facebook': 'facebook',
-        'TikTok': 'tiktok',
-        'LinkedIn': 'linkedin',
-        'Twitter/X': 'twitter',
-        'YouTube': 'youtube',
-      };
-
-      const connections = Object.entries(data.platformLinks)
-        .filter(([, url]) => url.trim())
-        .map(([platform, url]) => ({
-          business_id: businessId,
-          platform: platformMap[platform] || platform.toLowerCase(),
-          profile_url: url.trim(),
-          username: url.trim().startsWith('@') ? url.trim() : null,
-          connected_at: new Date().toISOString(),
-        }));
-
-      // Add Google Business Profile if provided
-      if (data.googleBusinessUrl?.trim()) {
-        connections.push({
-          business_id: businessId,
-          platform: 'google_business',
-          profile_url: data.googleBusinessUrl.trim(),
-          username: null,
-          connected_at: new Date().toISOString(),
+        setData({
+          businessName: biz.name || '',
+          industry: biz.industry || '',
+          websiteUrl: biz.website_url || '',
+          phone: biz.phone || '',
+          address: loc.address || '',
+          city: loc.city || '',
+          state: loc.state || '',
+          zip: loc.zip || '',
+          brandWords: Array.isArray(biz.brand_voice_words) ? biz.brand_voice_words as string[] : [],
+          brandTone: biz.brand_tone || '',
+          primaryColor: colors.primary || '#4abd98',
+          secondaryColor: colors.secondary || '#2e9a78',
+          marketingGoals: Array.isArray(biz.marketing_goals) ? biz.marketing_goals as string[] : [],
+          targetAudience: biz.target_audience || '',
+          monthlyBudget: biz.monthly_budget ? (BUDGET_REVERSE[biz.monthly_budget] || '') : '',
+          connectedPlatforms: Array.isArray(biz.current_platforms) ? biz.current_platforms as string[] : [],
         });
+
+        // Resume from saved step
+        if (biz.onboarding_step > 0 && !biz.onboarding_completed) {
+          setStep(biz.onboarding_step);
+        }
       }
 
-      if (connections.length > 0) {
-        // Delete existing connections first (upsert pattern)
-        await supabase
-          .from('platform_connections')
-          .delete()
-          .eq('business_id', businessId);
-
-        await supabase
-          .from('platform_connections')
-          .insert(connections);
-      }
-
-      router.push('/dashboard');
-    } catch (e) {
-      console.error('Onboarding save error:', e);
-      setError('Failed to save. Please try again.');
+      setLoading(false);
     }
-  };
+    load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const handleSaveLater = () => {
-    console.log('Saved for later:', JSON.stringify(data, null, 2));
-    // TODO: persist to Supabase draft
-    alert('Your progress has been saved. You can pick up where you left off anytime.');
-  };
+  /* ── Field updater ── */
+  const updateField = useCallback((field: string, value: string | string[]) => {
+    setData((prev) => ({ ...prev, [field]: value }));
+  }, []);
 
-  const isLastStep = step === STEPS.length - 1;
+  /* ── Per-step save to Supabase ── */
+  async function saveStepData(nextStep: number) {
+    if (!userId) return;
+    setSaving(true);
 
-  const stepContent = [
-    <Step1 key={0} data={data} update={update} />,
-    <Step2 key={1} data={data} update={update} />,
-    <Step3 key={2} data={data} update={update} />,
-    <Step4 key={3} data={data} update={update} />,
-    <Step5 key={4} data={data} update={update} />,
-    <Step6 key={5} data={data} update={update} />,
-  ];
+    const location = {
+      address: data.address,
+      city: data.city,
+      state: data.state,
+      zip: data.zip,
+      is_primary: true,
+    };
 
+    const payload: Record<string, unknown> = {
+      name: data.businessName || 'My Business',
+      industry: data.industry,
+      website_url: data.websiteUrl,
+      phone: data.phone,
+      locations: [location],
+      brand_voice_words: data.brandWords,
+      brand_tone: data.brandTone,
+      brand_colors: { primary: data.primaryColor, secondary: data.secondaryColor },
+      marketing_goals: data.marketingGoals,
+      target_audience: data.targetAudience,
+      monthly_budget: data.monthlyBudget ? (BUDGET_MAP[data.monthlyBudget] ?? null) : null,
+      current_platforms: data.connectedPlatforms,
+      onboarding_step: nextStep,
+    };
+
+    if (businessId) {
+      // Update existing
+      await supabase.from('businesses').update(payload).eq('id', businessId);
+    } else {
+      // Create new business record
+      const { data: newBiz } = await supabase
+        .from('businesses')
+        .insert({ ...payload, owner_id: userId })
+        .select('id')
+        .single();
+      if (newBiz) setBusinessId(newBiz.id);
+    }
+
+    setSaving(false);
+  }
+
+  /* ── Logo upload ── */
+  async function handleLogoUpload(file: File) {
+    if (!businessId) return;
+    const path = `${businessId}/logo`;
+    await supabase.storage.from('brand-assets').upload(path, file, { upsert: true });
+  }
+
+  /* ── Navigation ── */
+  async function goNext() {
+    const nextStep = step + 1;
+    // Save on steps 1-4 (welcome step has no data)
+    if (step >= 1) {
+      await saveStepData(nextStep);
+    }
+    setStep(nextStep);
+  }
+
+  function goBack() {
+    if (step > 0) setStep(step - 1);
+  }
+
+  async function handleComplete() {
+    if (!businessId) return;
+    setSaving(true);
+    await supabase
+      .from('businesses')
+      .update({ onboarding_completed: true, onboarding_step: 6 })
+      .eq('id', businessId);
+    setSaving(false);
+    router.push('/dashboard');
+  }
+
+  /* ── Loading state ── */
+  if (loading) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: 'linear-gradient(180deg, #f8fafb 0%, #eaf7f3 100%)' }}
+      >
+        <div className="animate-pulse text-sm text-gray-400">Loading...</div>
+      </div>
+    );
+  }
+
+  /* ── Render ── */
   return (
     <div
-      className="min-h-screen py-8 px-4 sm:px-6"
+      className="min-h-screen flex items-center justify-center px-4 py-12"
       style={{ background: 'linear-gradient(180deg, #f8fafb 0%, #eaf7f3 100%)' }}
     >
-      <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1
-            className="text-2xl sm:text-3xl font-bold mb-1"
-            style={{ fontFamily: 'Playfair Display, serif', color: '#1d1d1f' }}
-          >
-            Set Up Your Profile
-          </h1>
-          <p
-            className="text-sm"
-            style={{ fontFamily: 'Inter, sans-serif', color: '#424245' }}
-          >
-            This helps us create a tailored marketing strategy just for you.
-          </p>
-        </div>
-
-        {/* Progress */}
-        <ProgressBar current={step} total={STEPS.length} />
-        <StepIndicator current={step} total={STEPS.length} />
+      <div className="w-full max-w-[600px]">
+        {/* Progress indicator */}
+        {step > 0 && step < 5 && (
+          <div className="flex items-center justify-center gap-2 mb-8">
+            {STEPS.map((s, i) => (
+              <div key={s.label} className="flex items-center gap-2">
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
+                    i < step
+                      ? 'bg-[#4abd98] text-white'
+                      : i === step
+                        ? 'bg-[#4abd98] text-white ring-4 ring-[#4abd98]/20'
+                        : 'bg-gray-200 text-gray-400'
+                  }`}
+                >
+                  {i < step ? (
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M3 7L5.5 9.5L11 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    i + 1
+                  )}
+                </div>
+                {i < STEPS.length - 1 && (
+                  <div className={`w-6 h-0.5 ${i < step ? 'bg-[#4abd98]' : 'bg-gray-200'}`} />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          {/* Step header */}
-          <div className="px-6 sm:px-8 pt-6 pb-4 border-b border-gray-50">
-            <h2
-              className="text-lg sm:text-xl font-semibold"
-              style={{ fontFamily: 'Playfair Display, serif', color: '#1d1d1f' }}
-            >
-              {STEP_META[step].title}
-            </h2>
-            <p
-              className="text-sm mt-0.5"
-              style={{ fontFamily: 'Inter, sans-serif', color: '#424245' }}
-            >
-              {STEP_META[step].subtitle}
-            </p>
-          </div>
-
-          {/* Step body */}
-          <div className="px-6 sm:px-8 py-6">
-            <div
-              className={`transition-all duration-200 ease-in-out ${
-                isAnimating
-                  ? direction === 'forward'
-                    ? 'opacity-0 translate-x-4'
-                    : 'opacity-0 -translate-x-4'
-                  : 'opacity-100 translate-x-0'
-              }`}
-            >
-              {stepContent[step]}
-            </div>
-
-            {/* Error */}
-            {error && (
-              <div
-                className="mt-4 flex items-center gap-2 rounded-lg bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-700"
-                style={{ fontFamily: 'Inter, sans-serif' }}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
+          {/* Step title */}
+          {step > 0 && step < 5 && (
+            <div className="mb-6">
+              <p className="text-xs font-semibold text-[#4abd98] uppercase tracking-wider mb-1">
+                Step {step} of 6
+              </p>
+              <h2
+                className="text-xl font-bold"
+                style={{ fontFamily: 'Playfair Display, serif', color: '#1d1d1f' }}
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0">
-                  <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M8 4.5V8.5M8 10.5V11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                {error}
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="px-6 sm:px-8 py-4 border-t border-gray-50 flex items-center justify-between">
-            <div>
-              {step > 0 && (
-                <button
-                  type="button"
-                  onClick={handleBack}
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-[#424245] hover:text-[#1d1d1f] transition-colors"
-                  style={{ fontFamily: 'Inter, sans-serif' }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M10 12L6 8L10 4"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  Back
-                </button>
-              )}
+                {STEPS[step].label}
+              </h2>
             </div>
+          )}
 
-            <div className="flex items-center gap-3">
+          {/* Step content */}
+          {step === 0 && <StepWelcome onNext={goNext} />}
+
+          {step === 1 && (
+            <StepBusinessBasics data={data} onChange={updateField} />
+          )}
+
+          {step === 2 && (
+            <StepBrandIdentity
+              data={data}
+              onChange={updateField}
+              businessId={businessId}
+              onLogoUpload={handleLogoUpload}
+            />
+          )}
+
+          {step === 3 && (
+            <StepGoalsAudience data={data} onChange={updateField} />
+          )}
+
+          {step === 4 && (
+            <StepConnectAccounts
+              connectedPlatforms={data.connectedPlatforms}
+              onToggle={(id) => {
+                const current = data.connectedPlatforms;
+                if (current.includes(id)) {
+                  updateField('connectedPlatforms', current.filter((p) => p !== id));
+                } else {
+                  updateField('connectedPlatforms', [...current, id]);
+                }
+              }}
+              onSkip={goNext}
+            />
+          )}
+
+          {step === 5 && (
+            <StepConfirmation
+              businessName={data.businessName}
+              industry={data.industry}
+              goalsCount={data.marketingGoals.length}
+              platformsCount={data.connectedPlatforms.length}
+              onComplete={handleComplete}
+            />
+          )}
+
+          {/* Navigation buttons (steps 1-4) */}
+          {step >= 1 && step <= 4 && (
+            <div className="flex justify-between mt-8 pt-6 border-t border-gray-100">
               <button
                 type="button"
-                onClick={handleSaveLater}
-                className="text-sm font-medium text-[#424245] hover:text-[#1d1d1f] transition-colors"
-                style={{ fontFamily: 'Inter, sans-serif' }}
+                onClick={goBack}
+                className="rounded-lg px-5 py-2.5 text-sm font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors"
               >
-                Save &amp; finish later
+                Back
               </button>
-
-              {isLastStep ? (
-                <button
-                  type="button"
-                  onClick={handleComplete}
-                  className="inline-flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg hover:shadow-[#4abd98]/25 active:scale-[0.98]"
-                  style={{
-                    background: 'linear-gradient(135deg, #4abd98, #2e9a78)',
-                    fontFamily: 'Inter, sans-serif',
-                  }}
-                >
-                  Complete Setup
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M3 8H13M13 8L9 4M13 8L9 12"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleContinue}
-                  className="inline-flex items-center gap-2 rounded-lg px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg hover:shadow-[#4abd98]/25 active:scale-[0.98]"
-                  style={{
-                    background: 'linear-gradient(135deg, #4abd98, #2e9a78)',
-                    fontFamily: 'Inter, sans-serif',
-                  }}
-                >
-                  Continue
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path
-                      d="M5 3L9 7L5 11"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={saving || (step === 1 && !data.businessName.trim())}
+                className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg hover:shadow-[#4abd98]/25 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background: 'linear-gradient(135deg, #4abd98, #2e9a78)' }}
+              >
+                {saving ? 'Saving...' : 'Next'}
+              </button>
             </div>
-          </div>
+          )}
         </div>
-
-        {/* Footer text */}
-        <p
-          className="text-center text-xs mt-6"
-          style={{ fontFamily: 'Inter, sans-serif', color: '#9ca3af' }}
-        >
-          Your information is private and only used to personalize your marketing strategy.
-        </p>
       </div>
     </div>
   );

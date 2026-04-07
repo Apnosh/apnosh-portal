@@ -67,6 +67,21 @@ export async function updateSession(request: NextRequest) {
       url.pathname = '/dashboard'
       return NextResponse.redirect(url)
     }
+
+    // ── Onboarding enforcement for client/team_member on /dashboard ──
+    if (isDashboard && (role === 'client' || role === 'team_member')) {
+      const { data: business } = await supabase
+        .from('businesses')
+        .select('onboarding_completed')
+        .eq('owner_id', user.id)
+        .single()
+
+      if (!business || !business.onboarding_completed) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/onboarding'
+        return NextResponse.redirect(url)
+      }
+    }
   }
 
   // ── Authenticated on auth pages: redirect to portal ──
