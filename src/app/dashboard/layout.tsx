@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, CheckCircle, Calendar, ShoppingBag, BarChart3,
   MessageSquare, Wrench, Building2, CreditCard, FileText, HelpCircle, Settings,
-  Menu, X, ChevronDown, BookOpen
+  Menu, X, ChevronDown, BookOpen, FileBarChart
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { CartProvider } from '@/lib/cart-context'
@@ -24,6 +24,7 @@ const navItems = [
   { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
   { label: 'Orders', href: '/dashboard/orders', icon: ShoppingBag },
   { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
+  { label: 'Reports', href: '/dashboard/reports', icon: FileBarChart },
   { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare },
   { label: 'Tools', href: '/dashboard/tools', icon: Wrench },
 ]

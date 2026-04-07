@@ -323,6 +323,75 @@ export async function requestRevision(id: string, feedback: string): Promise<Act
 }
 
 // ---------------------------------------------------------------------------
+// createThread
+// ---------------------------------------------------------------------------
+
+export async function createThread(
+  subject: string,
+  firstMessage: string,
+  orderId?: string,
+): Promise<ActionResult & { threadId?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  // Get the user's business
+  const { data: business } = await supabase
+    .from('businesses')
+    .select('id')
+    .eq('owner_id', user.id)
+    .single()
+
+  if (!business) return { success: false, error: 'Business not found' }
+
+  // Create the thread
+  const { data: thread, error: threadError } = await supabase
+    .from('message_threads')
+    .insert({
+      business_id: business.id,
+      subject: subject.trim(),
+      order_id: orderId || null,
+      last_message_at: new Date().toISOString(),
+    })
+    .select()
+    .single()
+
+  if (threadError || !thread) {
+    return { success: false, error: threadError?.message || 'Failed to create thread' }
+  }
+
+  // Send the first message via the sendMessage action path
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name, role')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile) return { success: false, error: 'Profile not found' }
+
+  const { error: msgError } = await supabase.from('messages').insert({
+    business_id: business.id,
+    thread_id: thread.id,
+    sender_id: user.id,
+    sender_name: profile.full_name,
+    sender_role: profile.role,
+    content: firstMessage.trim(),
+    attachments: [],
+  })
+
+  if (msgError) return { success: false, error: msgError.message }
+
+  // Notify admins
+  const adminIds = await getAdminUserIds(supabase)
+  for (const adminId of adminIds) {
+    await notifyNewMessage(supabase, adminId, profile.full_name, subject)
+  }
+
+  revalidatePath('/dashboard/messages')
+  return { success: true, threadId: thread.id }
+}
+
+// ---------------------------------------------------------------------------
 // sendMessage
 // ---------------------------------------------------------------------------
 
@@ -951,5 +1020,217 @@ export async function deleteCalendarEntry(id: string): Promise<ActionResult> {
 
   revalidatePath('/dashboard/calendar')
   revalidatePath('/admin/calendar')
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// Monthly Reports
+// ---------------------------------------------------------------------------
+
+export async function generateMonthlyReport(
+  businessId: string,
+  month: number,
+  year: number,
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  // Get business name
+  const { data: business } = await supabase
+    .from('businesses')
+    .select('name')
+    .eq('id', businessId)
+    .single()
+
+  if (!business) return { success: false, error: 'Business not found' }
+
+  // Get GBP data for this month and previous month
+  const { data: gbpCurrent } = await supabase
+    .from('gbp_monthly_data')
+    .select('*')
+    .eq('business_id', businessId)
+    .eq('month', month)
+    .eq('year', year)
+    .single()
+
+  const prevMonth = month === 1 ? 12 : month - 1
+  const prevYear = month === 1 ? year - 1 : year
+
+  const { data: gbpPrev } = await supabase
+    .from('gbp_monthly_data')
+    .select('*')
+    .eq('business_id', businessId)
+    .eq('month', prevMonth)
+    .eq('year', prevYear)
+    .single()
+
+  // Build GBP highlights
+  const gbpHighlights: Array<{
+    metric: string
+    current: number
+    previous: number
+    change_pct: number
+    insight: string
+  }> = []
+
+  if (gbpCurrent) {
+    const metricsToReport = [
+      { key: 'search_mobile', label: 'Search (Mobile)' },
+      { key: 'search_desktop', label: 'Search (Desktop)' },
+      { key: 'maps_mobile', label: 'Maps (Mobile)' },
+      { key: 'maps_desktop', label: 'Maps (Desktop)' },
+      { key: 'calls', label: 'Phone Calls' },
+      { key: 'website_clicks', label: 'Website Clicks' },
+      { key: 'directions', label: 'Direction Requests' },
+    ] as const
+
+    for (const m of metricsToReport) {
+      const current = Number((gbpCurrent as Record<string, unknown>)[m.key]) || 0
+      const previous = gbpPrev ? Number((gbpPrev as Record<string, unknown>)[m.key]) || 0 : 0
+
+      if (current > 0 || previous > 0) {
+        const changePct = previous > 0 ? ((current - previous) / previous) * 100 : 0
+        gbpHighlights.push({
+          metric: m.label,
+          current,
+          previous,
+          change_pct: Math.round(changePct * 10) / 10,
+          insight: changePct > 10
+            ? 'Strong growth this month.'
+            : changePct < -10
+            ? 'Dip compared to last month.'
+            : 'Holding steady.',
+        })
+      }
+    }
+  }
+
+  // Get deliverable stats for the month
+  const startDate = new Date(year, month - 1, 1).toISOString()
+  const endDate = new Date(year, month, 0, 23, 59, 59).toISOString()
+
+  const { data: deliverables } = await supabase
+    .from('deliverables')
+    .select('status, created_at, approved_at')
+    .eq('business_id', businessId)
+    .gte('created_at', startDate)
+    .lte('created_at', endDate)
+
+  const delivered = deliverables?.length || 0
+  const approved = deliverables?.filter(d => ['approved', 'scheduled', 'published'].includes(d.status)).length || 0
+  const published = deliverables?.filter(d => d.status === 'published').length || 0
+  const revisioned = deliverables?.filter(d => d.status === 'revision_requested').length || 0
+  const revisionRate = delivered > 0 ? Math.round((revisioned / delivered) * 100) : 0
+
+  // Calculate avg turnaround
+  let avgTurnaround = 0
+  if (deliverables && deliverables.length > 0) {
+    const turnarounds = deliverables
+      .filter(d => d.approved_at)
+      .map(d => {
+        const created = new Date(d.created_at).getTime()
+        const approvedAt = new Date(d.approved_at!).getTime()
+        return Math.round((approvedAt - created) / (1000 * 60 * 60 * 24))
+      })
+    if (turnarounds.length > 0) {
+      avgTurnaround = Math.round(turnarounds.reduce((a, b) => a + b, 0) / turnarounds.length)
+    }
+  }
+
+  const contentStats = {
+    delivered,
+    approved,
+    published,
+    revision_rate: revisionRate,
+    avg_turnaround_days: avgTurnaround,
+  }
+
+  // Build title
+  const monthName = new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long' })
+  const title = `${monthName} ${year} Performance Report`
+
+  // Upsert the report (unique on business_id + month + year)
+  const { error } = await supabase
+    .from('monthly_reports')
+    .upsert(
+      {
+        business_id: businessId,
+        month,
+        year,
+        title,
+        status: 'draft',
+        summary: `Here's a look at how ${business.name} performed in ${monthName} ${year}.`,
+        gbp_highlights: gbpHighlights,
+        content_stats: contentStats,
+        top_performing: [],
+        recommendations: [],
+        generated_by: user.id,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'business_id,month,year' }
+    )
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/admin/reports/client')
+  return { success: true }
+}
+
+export async function publishReport(reportId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('monthly_reports')
+    .update({
+      status: 'published',
+      published_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', reportId)
+
+  if (error) return { success: false, error: error.message }
+
+  // Notify the client
+  const { data: report } = await supabase
+    .from('monthly_reports')
+    .select('business_id, title, businesses(owner_id)')
+    .eq('id', reportId)
+    .single()
+
+  if (report) {
+    const biz = Array.isArray(report.businesses) ? report.businesses[0] : report.businesses
+    const ownerId = (biz as Record<string, unknown>)?.owner_id as string | undefined
+    if (ownerId) {
+      await supabase.from('notifications').insert({
+        user_id: ownerId,
+        type: 'report_ready',
+        title: 'New Monthly Report',
+        body: `Your ${report.title} is ready to view.`,
+        link: '/dashboard/reports',
+      })
+    }
+  }
+
+  revalidatePath('/admin/reports/client')
+  revalidatePath('/dashboard/reports')
+  return { success: true }
+}
+
+export async function deleteReport(reportId: string): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('monthly_reports')
+    .delete()
+    .eq('id', reportId)
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/admin/reports/client')
   return { success: true }
 }

@@ -5,7 +5,7 @@ import {
   Search, Plus, Send, Paperclip, MessageSquare, FileText, ChevronRight, Loader2,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { sendMessage } from '@/lib/actions'
+import { sendMessage, createThread } from '@/lib/actions'
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -79,6 +79,12 @@ export default function MessagesPage() {
   const [loadingThreads, setLoadingThreads] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [sending, setSending] = useState(false)
+
+  // Compose state
+  const [showCompose, setShowCompose] = useState(false)
+  const [composeSubject, setComposeSubject] = useState('')
+  const [composeContent, setComposeContent] = useState('')
+  const [composeSending, setComposeSending] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -299,6 +305,24 @@ export default function MessagesPage() {
     setSending(false)
   }
 
+  async function handleCompose() {
+    if (!composeSubject.trim() || !composeContent.trim() || composeSending) return
+
+    setComposeSending(true)
+    const result = await createThread(composeSubject.trim(), composeContent.trim())
+
+    if (result.success && result.threadId) {
+      setShowCompose(false)
+      setComposeSubject('')
+      setComposeContent('')
+      await fetchThreads()
+      setActiveThreadId(result.threadId)
+      setMobileShowThread(true)
+    }
+
+    setComposeSending(false)
+  }
+
   // ── Filtered threads ───────────────────────────────────────────────
 
   const filteredThreads = threads.filter(
@@ -338,7 +362,14 @@ export default function MessagesPage() {
                   className="w-full pl-9 pr-4 py-2 rounded-lg border border-ink-6 bg-white text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-colors"
                 />
               </div>
-              <button className="w-9 h-9 rounded-lg bg-brand-dark text-white flex items-center justify-center hover:bg-brand-dark/90 transition-colors flex-shrink-0">
+              <button
+                onClick={() => {
+                  setShowCompose(true)
+                  setActiveThreadId(null)
+                  setMobileShowThread(true)
+                }}
+                className="w-9 h-9 rounded-lg bg-brand-dark text-white flex items-center justify-center hover:bg-brand-dark/90 transition-colors flex-shrink-0"
+              >
                 <Plus className="w-4 h-4" />
               </button>
             </div>
@@ -408,7 +439,62 @@ export default function MessagesPage() {
 
         {/* Right column -- Active thread */}
         <div className={`flex-1 flex flex-col ${!mobileShowThread ? 'hidden lg:flex' : 'flex'}`}>
-          {activeThread ? (
+          {showCompose ? (
+            /* ── Compose new thread ─────────────────────────────── */
+            <div className="flex-1 flex flex-col">
+              <div className="px-4 lg:px-5 py-3 border-b border-ink-6 flex items-center gap-3">
+                <button
+                  onClick={() => { setShowCompose(false); setMobileShowThread(false) }}
+                  className="lg:hidden text-ink-3 hover:text-ink"
+                >
+                  <ChevronRight className="w-5 h-5 rotate-180" />
+                </button>
+                <h2 className="text-sm font-semibold text-ink">New Message</h2>
+              </div>
+              <div className="flex-1 p-4 lg:p-5 space-y-4">
+                <div>
+                  <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">Subject</label>
+                  <input
+                    type="text"
+                    value={composeSubject}
+                    onChange={(e) => setComposeSubject(e.target.value)}
+                    placeholder="What can we help with?"
+                    className="w-full border border-ink-6 rounded-lg px-3 py-2.5 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-colors"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">Message</label>
+                  <textarea
+                    value={composeContent}
+                    onChange={(e) => setComposeContent(e.target.value)}
+                    placeholder="Type your message..."
+                    rows={6}
+                    className="w-full border border-ink-6 rounded-lg px-3 py-2.5 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-colors resize-none"
+                  />
+                </div>
+              </div>
+              <div className="p-3 lg:p-4 border-t border-ink-6 flex items-center justify-between">
+                <button
+                  onClick={() => { setShowCompose(false); setMobileShowThread(false) }}
+                  className="text-sm text-ink-3 hover:text-ink transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCompose}
+                  disabled={!composeSubject.trim() || !composeContent.trim() || composeSending}
+                  className="bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 flex items-center gap-2 hover:bg-brand-dark/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {composeSending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                  Send
+                </button>
+              </div>
+            </div>
+          ) : activeThread ? (
             <>
               {/* Thread header */}
               <div className="px-4 lg:px-5 py-3 border-b border-ink-6 flex items-center gap-3">

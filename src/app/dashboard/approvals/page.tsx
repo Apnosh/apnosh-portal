@@ -387,7 +387,7 @@ export default function ApprovalsPage() {
               placeholder="Search..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-sm bg-white border border-ink-6 rounded-lg w-48 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+              className="pl-8 pr-3 py-1.5 text-sm bg-white border border-ink-6 rounded-lg w-full sm:w-48 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
             />
           </div>
           {/* View toggle */}
@@ -778,7 +778,7 @@ export default function ApprovalsPage() {
                       Currently scheduled: <span className="font-medium text-ink-2">{d.scheduledFor}</span>
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <label className="text-xs text-ink-4 mb-1 block">New Date *</label>
                       <input

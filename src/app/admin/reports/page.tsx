@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { DollarSign, Users, TrendingUp, Calculator } from 'lucide-react'
+import { DollarSign, Users, TrendingUp, Calculator, FileBarChart, ChevronRight } from 'lucide-react'
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -238,9 +239,19 @@ export default function ReportsPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Reports</h1>
-        <p className="text-ink-3 text-sm mt-1">Revenue, client health, and service analytics.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Reports</h1>
+          <p className="text-ink-3 text-sm mt-1">Revenue, client health, and service analytics.</p>
+        </div>
+        <Link
+          href="/admin/reports/client"
+          className="inline-flex items-center gap-2 text-sm font-medium text-brand hover:text-brand-dark transition-colors"
+        >
+          <FileBarChart className="w-4 h-4" />
+          Client Reports
+          <ChevronRight className="w-4 h-4" />
+        </Link>
       </div>
 
       {/* Revenue Stats */}

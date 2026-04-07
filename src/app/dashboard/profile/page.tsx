@@ -706,7 +706,7 @@ export default function ProfilePage() {
           <Field label="Primary Contact Email" value={d.primary_contact_email} onChange={(v) => setDraft({ ...d, primary_contact_email: v })} />
           <Field label="Primary Contact Phone" value={d.primary_contact_phone} onChange={(v) => setDraft({ ...d, primary_contact_phone: v })} />
           <Field label="Address" value={d.address} onChange={(v) => setDraft({ ...d, address: v })} />
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <Field label="City" value={d.city} onChange={(v) => setDraft({ ...d, city: v })} />
             <Field label="State" value={d.state} onChange={(v) => setDraft({ ...d, state: v })} />
             <Field label="ZIP" value={d.zip} onChange={(v) => setDraft({ ...d, zip: v })} />

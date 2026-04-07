@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import {
   ChevronLeft, ChevronRight, LayoutGrid, List, Filter,
-  Clock, AlertTriangle, Calendar, X, Loader2
+  Clock, AlertTriangle, Calendar, X, Loader2,
+  Brain, Lightbulb, FileText as FileTextIcon,
 } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
@@ -572,6 +574,24 @@ export default function PipelinePage() {
             </span>
           )}
         </div>
+      </div>
+
+      {/* Pipeline phase links */}
+      <div className="flex flex-wrap gap-2">
+        {[
+          { href: '/admin/pipeline/intelligence', label: 'Intelligence', icon: Brain, color: 'bg-purple-50 text-purple-700 border-purple-200' },
+          { href: '/admin/pipeline/concepts', label: 'Concepts', icon: Lightbulb, color: 'bg-amber-50 text-amber-700 border-amber-200' },
+          { href: '/admin/pipeline/briefs', label: 'Briefs', icon: FileTextIcon, color: 'bg-blue-50 text-blue-700 border-blue-200' },
+        ].map(phase => (
+          <Link
+            key={phase.href}
+            href={phase.href}
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors hover:opacity-80 ${phase.color}`}
+          >
+            <phase.icon className="w-3.5 h-3.5" />
+            {phase.label}
+          </Link>
+        ))}
       </div>
 
       {/* Toolbar */}

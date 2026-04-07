@@ -664,3 +664,192 @@ export interface BrandGuideline {
   created_at: string
   updated_at: string
 }
+
+// --- Monthly Reports ---
+
+export type ReportStatus = 'draft' | 'published'
+
+export interface GBPHighlight {
+  metric: string
+  current: number
+  previous: number
+  change_pct: number
+  insight: string
+}
+
+export interface ContentStats {
+  delivered: number
+  approved: number
+  published: number
+  revision_rate: number
+  avg_turnaround_days: number
+}
+
+export interface TopPerformingContent {
+  title: string
+  platform: string
+  metric_label: string
+  metric_value: number
+}
+
+export interface ReportRecommendation {
+  title: string
+  description: string
+  priority: 'high' | 'medium' | 'low'
+}
+
+export interface MonthlyReport {
+  id: string
+  business_id: string
+  month: number
+  year: number
+  title: string
+  status: ReportStatus
+  summary: string | null
+  gbp_highlights: GBPHighlight[]
+  content_stats: ContentStats
+  top_performing: TopPerformingContent[]
+  recommendations: ReportRecommendation[]
+  custom_notes: string | null
+  generated_by: string | null
+  published_at: string | null
+  viewed_at: string | null
+  created_at: string
+  updated_at: string
+  // Joined
+  business?: Business
+}
+
+// --- Content Production Pipeline ---
+
+export type ContentType =
+  | 'reel_storytelling' | 'reel_showcase' | 'reel_promo' | 'reel_general_ad'
+  | 'carousel_premium' | 'carousel_standard' | 'carousel_basic'
+  | 'static_post' | 'story' | 'blog' | 'email' | 'gbp_post'
+
+export type ConceptStatus = 'idea' | 'selected' | 'briefed' | 'archived'
+export type ConceptSource = 'ai' | 'manual' | 'client'
+export type BriefPipelineStatus = 'draft' | 'approved' | 'in_production' | 'completed'
+export type ShootStatus = 'planned' | 'confirmed' | 'completed' | 'cancelled'
+export type PerformanceTier = 'top' | 'average' | 'below'
+
+export interface ClientIntelligence {
+  id: string
+  business_id: string
+  week_start: string
+  trending_content: { topic: string; platform: string; relevance: string }[]
+  competitor_activity: { competitor: string; action: string; notes: string }[]
+  performance_insights: { metric: string; observation: string; suggestion: string }[]
+  audience_signals: { signal: string; source: string; implication: string }[]
+  generated_at: string
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_at: string
+}
+
+export interface ContentPillar {
+  id: string
+  business_id: string
+  name: string
+  description: string | null
+  example_topics: string[]
+  sort_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ContentConcept {
+  id: string
+  business_id: string
+  pillar_id: string | null
+  title: string
+  description: string | null
+  content_type: ContentType
+  platform: string | null
+  status: ConceptStatus
+  source: ConceptSource
+  score: number | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+  // Joined
+  pillar?: ContentPillar
+}
+
+export interface ContentBrief {
+  id: string
+  business_id: string
+  concept_id: string | null
+  deliverable_id: string | null
+  content_type: string
+  title: string
+  objective: string | null
+  target_audience: string | null
+  key_message: string | null
+  hook: string | null
+  call_to_action: string | null
+  visual_direction: string | null
+  copy_direction: string | null
+  hashtags: string[]
+  references: { url: string; description: string }[]
+  technical_specs: Record<string, unknown>
+  status: BriefPipelineStatus
+  assigned_to: string | null
+  due_date: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ShootPlan {
+  id: string
+  business_id: string
+  shoot_date: string
+  location: string | null
+  duration_minutes: number
+  shots: { brief_id: string; description: string; type: string; setup_notes: string }[]
+  equipment_notes: string | null
+  talent_notes: string | null
+  status: ShootStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface ContentPerformance {
+  id: string
+  business_id: string
+  deliverable_id: string | null
+  calendar_entry_id: string | null
+  platform: string
+  impressions: number
+  reach: number
+  engagement: number
+  saves: number
+  shares: number
+  comments: number
+  clicks: number
+  engagement_rate: number | null
+  performance_tier: PerformanceTier | null
+  insights: string | null
+  recorded_at: string
+  created_at: string
+}
+
+export interface QAChecklist {
+  id: string
+  deliverable_id: string
+  brand_voice_pass: boolean | null
+  brand_voice_notes: string | null
+  technical_specs_pass: boolean | null
+  technical_specs_notes: string | null
+  strategic_alignment_pass: boolean | null
+  strategic_alignment_notes: string | null
+  copy_accuracy_pass: boolean | null
+  copy_accuracy_notes: string | null
+  visual_quality_pass: boolean | null
+  visual_quality_notes: string | null
+  overall_pass: boolean | null
+  reviewer_id: string | null
+  reviewed_at: string | null
+  created_at: string
+}
