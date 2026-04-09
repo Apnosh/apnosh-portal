@@ -33,33 +33,45 @@ export default function LocalSeoComingSoonPage() {
             View GBP Analytics
           </Link>
           <Link
-            href="/dashboard/messages"
+            href="/dashboard/local-seo/reviews"
             className="inline-flex items-center gap-2 bg-white border border-ink-6 hover:border-ink-4 text-ink text-sm font-medium rounded-lg px-4 py-2 transition-colors"
           >
-            <Plus className="w-4 h-4" />
-            Request Update
+            <Star className="w-4 h-4" />
+            View Reviews
           </Link>
         </div>
       </div>
 
-      {/* What's coming */}
-      <div>
-        <h3 className="text-sm font-semibold text-ink mb-3">What will be here</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {[
-            { icon: Star, label: 'Review management', desc: 'Respond to reviews, request new ones' },
-            { icon: Search, label: 'Keyword rankings', desc: 'Track local search positions' },
-            { icon: MapPin, label: 'GBP updates', desc: 'Update info, photos, Q&A, posts' },
-          ].map(item => (
-            <div key={item.label} className="bg-white rounded-xl border border-ink-6 p-4">
-              <div className="w-8 h-8 rounded-lg bg-bg-2 flex items-center justify-center mb-2">
-                <item.icon className="w-4 h-4 text-ink-4" />
-              </div>
-              <div className="text-sm font-medium text-ink">{item.label}</div>
-              <div className="text-xs text-ink-3 mt-0.5">{item.desc}</div>
+      {/* Quick links to real features */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Link
+          href="/dashboard/analytics"
+          className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-bg-2 flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-ink-3" />
             </div>
-          ))}
-        </div>
+            <div>
+              <div className="text-sm font-medium text-ink">GBP Analytics</div>
+              <div className="text-xs text-ink-4">Impressions, calls, directions</div>
+            </div>
+          </div>
+        </Link>
+        <Link
+          href="/dashboard/local-seo/reviews"
+          className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-bg-2 flex items-center justify-center">
+              <Star className="w-5 h-5 text-ink-3" />
+            </div>
+            <div>
+              <div className="text-sm font-medium text-ink">Reviews</div>
+              <div className="text-xs text-ink-4">Google, Yelp, and more</div>
+            </div>
+          </div>
+        </Link>
       </div>
     </div>
   )

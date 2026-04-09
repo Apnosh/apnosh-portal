@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import {
   Bell, CheckCircle, Package, BarChart3, CreditCard, MessageSquare, X
 } from 'lucide-react'
@@ -145,9 +146,13 @@ export default function Notifications() {
 
           {/* Footer */}
           <div className="border-t border-ink-6 px-4 py-2.5 text-center">
-            <button className="text-xs font-medium text-brand-dark hover:underline">
+            <Link
+              href="/dashboard/notifications"
+              onClick={() => setOpen(false)}
+              className="text-xs font-medium text-brand-dark hover:underline"
+            >
               View all notifications
-            </button>
+            </Link>
           </div>
         </div>
       )}

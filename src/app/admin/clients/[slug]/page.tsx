@@ -6,12 +6,15 @@ import {
   ArrowLeft, Loader2, Save, ExternalLink, Plus, Trash2,
   Building2, Palette, Image, BookOpen, ListTodo,
   Globe, MapPin, Mail, Phone, User, X, Check,
+  BarChart3, Star,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import BrandTab from './tabs/brand-tab'
 import AssetsTab from './tabs/assets-tab'
 import StyleLibraryTab from './tabs/style-library-tab'
 import QueueTab from './tabs/queue-tab'
+import MetricsTab from './tabs/metrics-tab'
+import ReviewsTab from './tabs/reviews-tab'
 import type {
   Client, ClientBrand, ClientPattern, ClientUser, ClientAllotments,
   ClientBillingStatus, ClientTier, ClientUserRole, ClientUserStatus,
@@ -21,7 +24,7 @@ import type {
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type Tab = 'overview' | 'brand' | 'assets' | 'style_library' | 'queue'
+type Tab = 'overview' | 'brand' | 'assets' | 'style_library' | 'queue' | 'metrics' | 'reviews'
 
 const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
   { key: 'overview', label: 'Overview', icon: Building2 },
@@ -29,6 +32,8 @@ const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
   { key: 'assets', label: 'Assets', icon: Image },
   { key: 'style_library', label: 'Style Library', icon: BookOpen },
   { key: 'queue', label: 'Content Queue', icon: ListTodo },
+  { key: 'metrics', label: 'Social Metrics', icon: BarChart3 },
+  { key: 'reviews', label: 'Reviews', icon: Star },
 ]
 
 /* ------------------------------------------------------------------ */
@@ -253,6 +258,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
 
       {activeTab === 'queue' && (
         <QueueTab clientId={client.id} clientSlug={client.slug} />
+      )}
+
+      {activeTab === 'metrics' && (
+        <MetricsTab clientId={client.id} />
+      )}
+
+      {activeTab === 'reviews' && (
+        <ReviewsTab clientId={client.id} />
       )}
     </div>
   )
