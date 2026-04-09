@@ -13,7 +13,7 @@ import AssetsTab from './tabs/assets-tab'
 import StyleLibraryTab from './tabs/style-library-tab'
 import QueueTab from './tabs/queue-tab'
 import type {
-  Client, ClientBrand, ClientPattern, ClientUser,
+  Client, ClientBrand, ClientPattern, ClientUser, ClientAllotments,
   ClientBillingStatus, ClientTier, ClientUserRole, ClientUserStatus,
 } from '@/types/database'
 
@@ -668,6 +668,12 @@ function OverviewTab({
           </div>
         </Card>
 
+        {/* Service Allotments */}
+        <ServiceAllotmentsCard
+          clientId={client.id}
+          initialAllotments={draft.allotments ?? {}}
+        />
+
         {/* Brand Quick View */}
         {brand && (
           <Card title="Brand Quick View">
@@ -786,5 +792,78 @@ function InlineField({
         className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
       />
     </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Service Allotments Card                                            */
+/* ------------------------------------------------------------------ */
+
+function ServiceAllotmentsCard({
+  clientId,
+  initialAllotments,
+}: {
+  clientId: string
+  initialAllotments: ClientAllotments
+}) {
+  const [draft, setDraft] = useState<ClientAllotments>(initialAllotments)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  function update(key: keyof ClientAllotments, value: string) {
+    const num = value === '' ? undefined : parseInt(value, 10)
+    setDraft(prev => ({ ...prev, [key]: Number.isNaN(num) ? undefined : num }))
+    setSaved(false)
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    const { updateClientAllotments } = await import('@/lib/client-portal-actions')
+    const result = await updateClientAllotments(clientId, draft)
+    setSaving(false)
+    if (result.success) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    }
+  }
+
+  const fields: { key: keyof ClientAllotments; label: string; unit: string }[] = [
+    { key: 'social_posts_per_month', label: 'Social Posts', unit: 'posts/mo' },
+    { key: 'website_changes_per_month', label: 'Website Changes', unit: 'changes/mo' },
+    { key: 'seo_updates_per_month', label: 'SEO Updates', unit: 'updates/mo' },
+    { key: 'email_campaigns_per_month', label: 'Email Campaigns', unit: 'campaigns/mo' },
+  ]
+
+  return (
+    <Card title="Service Allotments">
+      <div className="space-y-3">
+        <p className="text-[11px] text-ink-4">Monthly limits shown to the client as usage bars.</p>
+        {fields.map(f => (
+          <div key={f.key} className="flex items-center gap-2">
+            <label className="text-xs text-ink-2 flex-1">{f.label}</label>
+            <input
+              type="number"
+              min="0"
+              value={draft[f.key] ?? ''}
+              onChange={e => update(f.key, e.target.value)}
+              placeholder="0"
+              className="w-16 border border-ink-6 rounded-lg px-2 py-1 text-sm text-ink text-right focus:outline-none focus:ring-2 focus:ring-brand/20"
+            />
+            <span className="text-[10px] text-ink-4 w-20">{f.unit}</span>
+          </div>
+        ))}
+        <div className="pt-2 border-t border-ink-6 flex items-center justify-end gap-2">
+          {saved && <span className="text-[10px] text-emerald-600 font-medium">Saved</span>}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-brand hover:bg-brand-dark text-white text-xs font-medium rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            Save
+          </button>
+        </div>
+      </div>
+    </Card>
   )
 }

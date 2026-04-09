@@ -3,7 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { ClientUserRole, TemplateType, PostPlatform, PostSize, FeedbackType } from '@/types/database'
+import type {
+  ClientUserRole, TemplateType, PostPlatform, PostSize, FeedbackType,
+  ServiceArea, ContentFormat, ClientAllotments,
+} from '@/types/database'
 
 type ActionResult<T = undefined> = { success: true; data?: T } | { success: false; error: string }
 
@@ -92,6 +95,8 @@ export async function inviteClientUser(
 
 export async function submitContentRequest(data: {
   description: string
+  serviceArea?: ServiceArea
+  contentFormat?: ContentFormat | null
   templateType?: TemplateType | null
   platform?: PostPlatform | null
   size?: PostSize | null
@@ -153,6 +158,8 @@ export async function submitContentRequest(data: {
       submitted_by_user_id: clientUserId,
       input_text: data.description.trim(),
       input_photo_url: data.photoUrl || null,
+      service_area: data.serviceArea || 'social',
+      content_format: data.contentFormat || null,
       template_type: data.templateType || null,
       platform: data.platform || null,
       size: data.size || 'feed',
@@ -435,6 +442,112 @@ export async function submitClientFeedback(
   }
 
   revalidatePath(`/dashboard/requests`)
+  revalidatePath(`/dashboard/social`)
   revalidatePath(`/admin/queue`)
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// getAllotmentUsage — returns counts per service area for the current month
+// ---------------------------------------------------------------------------
+
+export async function getAllotmentUsage(): Promise<
+  ActionResult<{
+    clientId: string
+    allotments: ClientAllotments
+    usage: Record<ServiceArea, number>
+  }>
+> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  // Resolve client_id via business link
+  let clientId: string | null = null
+
+  const { data: clientUser } = await supabase
+    .from('client_users')
+    .select('client_id')
+    .eq('auth_user_id', user.id)
+    .maybeSingle()
+
+  if (clientUser) {
+    clientId = clientUser.client_id
+  } else {
+    const { data: business } = await supabase
+      .from('businesses')
+      .select('client_id')
+      .eq('owner_id', user.id)
+      .maybeSingle()
+    if (business?.client_id) clientId = business.client_id
+  }
+
+  if (!clientId) return { success: false, error: 'No client linked' }
+
+  // Fetch allotments
+  const { data: client } = await supabase
+    .from('clients')
+    .select('allotments')
+    .eq('id', clientId)
+    .single()
+
+  const allotments = (client?.allotments ?? {}) as ClientAllotments
+
+  // Count requests this month per service_area
+  const now = new Date()
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+
+  const { data: rows } = await supabase
+    .from('content_queue')
+    .select('service_area')
+    .eq('client_id', clientId)
+    .gte('created_at', startOfMonth)
+
+  const usage: Record<ServiceArea, number> = {
+    social: 0,
+    website: 0,
+    local_seo: 0,
+    email_sms: 0,
+  }
+  for (const r of rows ?? []) {
+    const sa = (r as { service_area: ServiceArea }).service_area
+    if (sa && usage[sa] != null) usage[sa]++
+  }
+
+  return { success: true, data: { clientId, allotments, usage } }
+}
+
+// ---------------------------------------------------------------------------
+// updateClientAllotments — admin-only: set monthly allotments per client
+// ---------------------------------------------------------------------------
+
+export async function updateClientAllotments(
+  clientId: string,
+  allotments: ClientAllotments,
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  if (profile?.role !== 'admin') {
+    return { success: false, error: 'Admin access required' }
+  }
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('clients')
+    .update({ allotments })
+    .eq('id', clientId)
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath(`/admin/clients`)
+  revalidatePath(`/dashboard`)
   return { success: true }
 }

@@ -902,9 +902,26 @@ export interface Client {
   billing_status: ClientBillingStatus
   onboarding_date: string | null
   notes: string | null
+  allotments: ClientAllotments
   created_at: string
   updated_at: string
 }
+
+export type ServiceArea = 'social' | 'website' | 'local_seo' | 'email_sms'
+
+export interface ClientAllotments {
+  social_posts_per_month?: number
+  website_changes_per_month?: number
+  seo_updates_per_month?: number
+  email_campaigns_per_month?: number
+}
+
+export type ContentFormat =
+  | 'feed_post' | 'reel' | 'carousel' | 'story'
+  | 'blog_post' | 'page_update' | 'bug_fix'
+  | 'gbp_post' | 'review_response' | 'citation_update'
+  | 'email_campaign' | 'sms_blast' | 'newsletter'
+  | 'custom'
 
 export interface ClientUser {
   id: string
@@ -954,6 +971,7 @@ export interface ClientAssetRow {
   file_url: string
   thumbnail_url: string | null
   filename: string | null
+  folder: string | null
   tags: string[]
   description: string | null
   quality_rating: AssetQuality | null
@@ -1006,6 +1024,8 @@ export interface ContentQueueItem {
   submitted_by_user_id: string | null
   input_text: string | null
   input_photo_url: string | null
+  service_area: ServiceArea
+  content_format: ContentFormat | null
   template_type: TemplateType | null
   platform: PostPlatform | null
   size: PostSize

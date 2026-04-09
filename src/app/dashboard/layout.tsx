@@ -7,6 +7,7 @@ import {
   LayoutDashboard, CheckCircle, Calendar, ShoppingBag, BarChart3,
   MessageSquare, Wrench, Building2, CreditCard, FileText, HelpCircle, Settings,
   Menu, X, ChevronDown, BookOpen, FileBarChart, ListTodo,
+  Share2, Globe, MapPin, Mail, Image as ImageIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { CartProvider } from '@/lib/cart-context'
@@ -18,22 +19,41 @@ import { ClientTabBar } from '@/components/ui/mobile-tab-bar'
 import QuickRequest from '@/components/ui/quick-request'
 import { useUser, signOut } from '@/lib/supabase/hooks'
 
-const navItems = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Requests', href: '/dashboard/requests', icon: ListTodo },
-  { label: 'Approvals', href: '/dashboard/approvals', icon: CheckCircle },
-  { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
-  { label: 'Orders', href: '/dashboard/orders', icon: ShoppingBag },
-  { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-  { label: 'Reports', href: '/dashboard/reports', icon: FileBarChart },
-  { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare },
-  { label: 'Tools', href: '/dashboard/tools', icon: Wrench },
+const navSections = [
+  {
+    label: null,
+    items: [
+      { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
+    ],
+  },
+  {
+    label: 'Services',
+    items: [
+      { label: 'Social Media', href: '/dashboard/social', icon: Share2, exact: false },
+      { label: 'Website', href: '/dashboard/website', icon: Globe, exact: false },
+      { label: 'Local SEO', href: '/dashboard/local-seo', icon: MapPin, exact: false },
+      { label: 'Email & SMS', href: '/dashboard/email-sms', icon: Mail, exact: false },
+    ],
+  },
+  {
+    label: 'Brand',
+    items: [
+      { label: 'Assets', href: '/dashboard/assets', icon: ImageIcon, exact: false },
+    ],
+  },
+  {
+    label: 'Communication',
+    items: [
+      { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, exact: false },
+      { label: 'Reports', href: '/dashboard/reports', icon: FileBarChart, exact: false },
+    ],
+  },
 ]
 
 const bottomItems = [
-  { label: 'Agreements', href: '/dashboard/agreements', icon: FileText },
   { label: 'Business Profile', href: '/dashboard/profile', icon: Building2 },
   { label: 'Brand Guidelines', href: '/dashboard/profile/brand-guidelines', icon: BookOpen },
+  { label: 'Agreements', href: '/dashboard/agreements', icon: FileText },
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
   { label: 'Help', href: '/dashboard/help', icon: HelpCircle },
@@ -85,7 +105,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return pathname.startsWith(href)
   }
 
-  const NavLink = ({ item }: { item: { label: string; href: string; icon: typeof LayoutDashboard } }) => {
+  const NavLink = ({ item }: { item: { label: string; href: string; icon: typeof LayoutDashboard; exact?: boolean } }) => {
     const showBadge = item.label === 'Approvals' && approvalCount > 0
     return (
       <Link
@@ -131,10 +151,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => <NavLink key={item.href} item={item} />)}
-          <div className="h-px bg-ink-6 my-3" />
-          {bottomItems.map((item) => <NavLink key={item.href} item={item} />)}
+        <nav className="flex-1 px-3 py-4 overflow-y-auto">
+          {navSections.map((section, idx) => (
+            <div key={idx} className={idx > 0 ? 'mt-4' : ''}>
+              {section.label && (
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 px-3 mb-1.5">
+                  {section.label}
+                </div>
+              )}
+              <div className="space-y-0.5">
+                {section.items.map((item) => <NavLink key={item.href} item={item} />)}
+              </div>
+            </div>
+          ))}
+          <div className="h-px bg-ink-6 my-4" />
+          <div className="space-y-0.5">
+            {bottomItems.map((item) => <NavLink key={item.href} item={item} />)}
+          </div>
         </nav>
 
         {/* User */}

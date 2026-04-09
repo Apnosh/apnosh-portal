@@ -1,0 +1,66 @@
+'use client'
+
+import Link from 'next/link'
+import { MapPin, Plus, Star, TrendingUp, Search } from 'lucide-react'
+
+export default function LocalSeoComingSoonPage() {
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div>
+        <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink flex items-center gap-3">
+          <MapPin className="w-7 h-7 text-ink-4" />
+          Local Business & SEO
+        </h1>
+        <p className="text-ink-3 text-sm mt-1">
+          Google Business Profile, local rankings, review management, and citations.
+        </p>
+      </div>
+
+      <div className="bg-white rounded-xl border border-ink-6 p-8 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-bg-2 flex items-center justify-center mx-auto mb-4">
+          <MapPin className="w-6 h-6 text-ink-4" />
+        </div>
+        <h2 className="font-[family-name:var(--font-display)] text-lg text-ink">Coming Soon</h2>
+        <p className="text-sm text-ink-3 mt-1 max-w-md mx-auto">
+          Full Local SEO management coming soon. Your GBP analytics are already available under Reports.
+        </p>
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <Link
+            href="/dashboard/analytics"
+            className="inline-flex items-center gap-2 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+          >
+            <TrendingUp className="w-4 h-4" />
+            View GBP Analytics
+          </Link>
+          <Link
+            href="/dashboard/messages"
+            className="inline-flex items-center gap-2 bg-white border border-ink-6 hover:border-ink-4 text-ink text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Request Update
+          </Link>
+        </div>
+      </div>
+
+      {/* What's coming */}
+      <div>
+        <h3 className="text-sm font-semibold text-ink mb-3">What will be here</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            { icon: Star, label: 'Review management', desc: 'Respond to reviews, request new ones' },
+            { icon: Search, label: 'Keyword rankings', desc: 'Track local search positions' },
+            { icon: MapPin, label: 'GBP updates', desc: 'Update info, photos, Q&A, posts' },
+          ].map(item => (
+            <div key={item.label} className="bg-white rounded-xl border border-ink-6 p-4">
+              <div className="w-8 h-8 rounded-lg bg-bg-2 flex items-center justify-center mb-2">
+                <item.icon className="w-4 h-4 text-ink-4" />
+              </div>
+              <div className="text-sm font-medium text-ink">{item.label}</div>
+              <div className="text-xs text-ink-3 mt-0.5">{item.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
