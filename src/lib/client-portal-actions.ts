@@ -102,15 +102,39 @@ export async function submitContentRequest(data: {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
-  // Look up the client_user for this auth user
+  // Resolve client_id: first try client_users (new portal), then via business (dashboard portal)
+  let clientId: string | null = null
+  let clientUserId: string | null = null
+  let slug: string | undefined
+
   const { data: clientUser } = await supabase
     .from('client_users')
     .select('id, client_id, clients(slug)')
     .eq('auth_user_id', user.id)
     .maybeSingle()
 
-  if (!clientUser) {
-    return { success: false, error: 'No client account linked to this user' }
+  if (clientUser) {
+    clientId = clientUser.client_id
+    clientUserId = clientUser.id
+    const biz = Array.isArray(clientUser.clients) ? clientUser.clients[0] : clientUser.clients
+    slug = (biz as { slug?: string } | null)?.slug
+  } else {
+    // Dashboard user path: find their business and its linked client
+    const { data: business } = await supabase
+      .from('businesses')
+      .select('client_id, clients(slug)')
+      .eq('owner_id', user.id)
+      .maybeSingle()
+
+    if (business?.client_id) {
+      clientId = business.client_id
+      const biz = Array.isArray(business.clients) ? business.clients[0] : business.clients
+      slug = (biz as { slug?: string } | null)?.slug
+    }
+  }
+
+  if (!clientId) {
+    return { success: false, error: 'No client linked to your account. Contact support.' }
   }
 
   if (!data.description.trim()) {
@@ -123,10 +147,10 @@ export async function submitContentRequest(data: {
   const { data: inserted, error } = await admin
     .from('content_queue')
     .insert({
-      client_id: clientUser.client_id,
+      client_id: clientId,
       request_type: 'client_request',
       submitted_by: 'client',
-      submitted_by_user_id: clientUser.id,
+      submitted_by_user_id: clientUserId,
       input_text: data.description.trim(),
       input_photo_url: data.photoUrl || null,
       template_type: data.templateType || null,
@@ -149,9 +173,6 @@ export async function submitContentRequest(data: {
     .eq('role', 'admin')
 
   if (admins && admins.length > 0) {
-    const biz = Array.isArray(clientUser.clients) ? clientUser.clients[0] : clientUser.clients
-    const slug = (biz as { slug?: string } | null)?.slug
-
     await admin.from('notifications').insert(
       admins.map(a => ({
         user_id: a.id,
@@ -273,26 +294,37 @@ export async function sendForReview(queueId: string): Promise<ActionResult> {
   if (error) return { success: false, error: error.message }
 
   // Notify all client_users for this client
+  // Notify client_users (new portal) + businesses linked to this client (dashboard portal)
+  const recipientIds = new Set<string>()
+
   const { data: clientUsers } = await admin
     .from('client_users')
     .select('auth_user_id')
     .eq('client_id', queueItem.client_id)
     .not('auth_user_id', 'is', null)
 
-  if (clientUsers && clientUsers.length > 0) {
-    const biz = Array.isArray(queueItem.clients) ? queueItem.clients[0] : queueItem.clients
-    const slug = (biz as { slug?: string } | null)?.slug
+  for (const u of clientUsers ?? []) {
+    if (u.auth_user_id) recipientIds.add(u.auth_user_id)
+  }
 
+  const { data: linkedBusinesses } = await admin
+    .from('businesses')
+    .select('owner_id')
+    .eq('client_id', queueItem.client_id)
+
+  for (const b of linkedBusinesses ?? []) {
+    if (b.owner_id) recipientIds.add(b.owner_id)
+  }
+
+  if (recipientIds.size > 0) {
     await admin.from('notifications').insert(
-      clientUsers
-        .filter(u => u.auth_user_id)
-        .map(u => ({
-          user_id: u.auth_user_id!,
-          type: 'content_ready',
-          title: 'Content ready for review',
-          body: (queueItem.input_text || 'A new draft is ready for your review').slice(0, 120),
-          link: `/client/${slug}/requests/${queueId}`,
-        }))
+      Array.from(recipientIds).map(uid => ({
+        user_id: uid,
+        type: 'content_ready',
+        title: 'Content ready for review',
+        body: (queueItem.input_text || 'A new draft is ready for your review').slice(0, 120),
+        link: `/dashboard/requests/${queueId}`,
+      }))
     )
   }
 
@@ -315,15 +347,32 @@ export async function submitClientFeedback(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
-  // Resolve client_user
+  // Resolve client_id: try client_users first, then fall back to business link
+  let clientId: string | null = null
+  let clientUserId: string | null = null
+
   const { data: clientUser } = await supabase
     .from('client_users')
     .select('id, client_id')
     .eq('auth_user_id', user.id)
     .maybeSingle()
 
-  if (!clientUser) {
-    return { success: false, error: 'No client account linked to this user' }
+  if (clientUser) {
+    clientId = clientUser.client_id
+    clientUserId = clientUser.id
+  } else {
+    const { data: business } = await supabase
+      .from('businesses')
+      .select('client_id')
+      .eq('owner_id', user.id)
+      .maybeSingle()
+    if (business?.client_id) {
+      clientId = business.client_id
+    }
+  }
+
+  if (!clientId) {
+    return { success: false, error: 'No client linked to your account' }
   }
 
   const admin = createAdminClient()
@@ -335,14 +384,14 @@ export async function submitClientFeedback(
     .eq('id', queueId)
     .single()
 
-  if (!queueItem || queueItem.client_id !== clientUser.client_id) {
+  if (!queueItem || queueItem.client_id !== clientId) {
     return { success: false, error: 'Request not found' }
   }
 
   // Insert feedback
   const { error: feedbackError } = await admin.from('client_feedback').insert({
     content_queue_id: queueId,
-    user_id: clientUser.id,
+    user_id: clientUserId,
     feedback_type: feedbackType,
     message: message?.trim() || null,
   })
@@ -385,7 +434,7 @@ export async function submitClientFeedback(
     )
   }
 
-  revalidatePath(`/client`)
+  revalidatePath(`/dashboard/requests`)
   revalidatePath(`/admin/queue`)
   return { success: true }
 }
