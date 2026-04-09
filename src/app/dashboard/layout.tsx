@@ -22,12 +22,19 @@ import { useUser, signOut } from '@/lib/supabase/hooks'
 
 import type { ServiceArea } from '@/types/database'
 
+interface NavChildItem {
+  label: string
+  href: string
+  exact?: boolean
+}
+
 interface NavItem {
   label: string
   href: string
   icon: typeof LayoutDashboard
   exact: boolean
   serviceArea?: ServiceArea
+  children?: NavChildItem[]
 }
 
 interface NavSection {
@@ -45,10 +52,45 @@ const navSections: NavSection[] = [
   {
     label: 'Services',
     items: [
-      { label: 'Social Media', href: '/dashboard/social', icon: Share2, exact: false, serviceArea: 'social' },
-      { label: 'Website', href: '/dashboard/website', icon: Globe, exact: false, serviceArea: 'website' },
-      { label: 'Local SEO', href: '/dashboard/local-seo', icon: MapPin, exact: false, serviceArea: 'local_seo' },
-      { label: 'Email & SMS', href: '/dashboard/email-sms', icon: Mail, exact: false, serviceArea: 'email_sms' },
+      {
+        label: 'Social Media',
+        href: '/dashboard/social',
+        icon: Share2,
+        exact: false,
+        serviceArea: 'social',
+        children: [
+          { label: 'Overview', href: '/dashboard/social', exact: true },
+          { label: 'Requests', href: '/dashboard/social/requests' },
+          { label: 'Performance', href: '/dashboard/social/performance' },
+          { label: 'Calendar', href: '/dashboard/social/calendar' },
+        ],
+      },
+      {
+        label: 'Website',
+        href: '/dashboard/website',
+        icon: Globe,
+        exact: false,
+        serviceArea: 'website',
+      },
+      {
+        label: 'Local SEO',
+        href: '/dashboard/local-seo',
+        icon: MapPin,
+        exact: false,
+        serviceArea: 'local_seo',
+        children: [
+          { label: 'Overview', href: '/dashboard/local-seo', exact: true },
+          { label: 'Reviews', href: '/dashboard/local-seo/reviews' },
+          { label: 'GBP Analytics', href: '/dashboard/analytics' },
+        ],
+      },
+      {
+        label: 'Email & SMS',
+        href: '/dashboard/email-sms',
+        icon: Mail,
+        exact: false,
+        serviceArea: 'email_sms',
+      },
     ],
   },
   {
@@ -60,8 +102,18 @@ const navSections: NavSection[] = [
   {
     label: 'Communication',
     items: [
-      { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, exact: false },
-      { label: 'Reports', href: '/dashboard/reports', icon: FileBarChart, exact: false },
+      {
+        label: 'Messages',
+        href: '/dashboard/messages',
+        icon: MessageSquare,
+        exact: false,
+      },
+      {
+        label: 'Reports',
+        href: '/dashboard/reports',
+        icon: FileBarChart,
+        exact: false,
+      },
     ],
   },
 ]
@@ -131,19 +183,108 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   const initials = displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
   const roleLabel = user?.role === 'admin' ? 'Admin' : 'Client'
 
-  const isActive = (href: string) => {
-    if (href === '/dashboard') return pathname === '/dashboard'
-    return pathname.startsWith(href)
+  const isActive = (href: string, exact?: boolean) => {
+    if (exact || href === '/dashboard') return pathname === href
+    return pathname === href || pathname.startsWith(href + '/')
   }
 
-  const NavLink = ({ item }: { item: { label: string; href: string; icon: typeof LayoutDashboard; exact?: boolean } }) => {
+  // Track which expandable nav items are open. Auto-open based on current path.
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(() => {
+    const initial = new Set<string>()
+    for (const section of navSections) {
+      for (const item of section.items) {
+        if (item.children && pathname.startsWith(item.href)) {
+          initial.add(item.href)
+        }
+      }
+    }
+    return initial
+  })
+
+  // Auto-open when pathname changes to a sub-page
+  useEffect(() => {
+    setExpandedItems(prev => {
+      const next = new Set(prev)
+      for (const section of navSections) {
+        for (const item of section.items) {
+          if (item.children && pathname.startsWith(item.href)) {
+            next.add(item.href)
+          }
+        }
+      }
+      return next
+    })
+  }, [pathname])
+
+  function toggleExpanded(href: string) {
+    setExpandedItems(prev => {
+      const next = new Set(prev)
+      if (next.has(href)) next.delete(href)
+      else next.add(href)
+      return next
+    })
+  }
+
+  const NavLink = ({ item }: { item: NavItem | { label: string; href: string; icon: typeof LayoutDashboard; exact?: boolean; serviceArea?: ServiceArea; children?: NavChildItem[] } }) => {
     const showBadge = item.label === 'Approvals' && approvalCount > 0
+    const hasChildren = 'children' in item && item.children && item.children.length > 0
+    const isExpanded = hasChildren && expandedItems.has(item.href)
+    const active = isActive(item.href, item.exact)
+
+    // For items with children, render an expandable dropdown
+    if (hasChildren) {
+      return (
+        <div>
+          <div className={`flex items-center rounded-lg transition-colors ${
+            active ? 'bg-brand-tint text-brand-dark' : 'text-ink-3 hover:bg-bg-2 hover:text-ink'
+          }`}>
+            <Link
+              href={item.href}
+              onClick={() => setSidebarOpen(false)}
+              className="flex items-center gap-3 px-3 py-2 flex-1 min-h-[44px] text-sm font-medium rounded-l-lg"
+            >
+              <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
+              <span className="flex-1">{item.label}</span>
+            </Link>
+            <button
+              onClick={e => { e.preventDefault(); toggleExpanded(item.href) }}
+              className="px-2 py-2 min-h-[44px] flex items-center justify-center rounded-r-lg hover:bg-black/5 transition-colors"
+              aria-label={isExpanded ? 'Collapse' : 'Expand'}
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+          {isExpanded && 'children' in item && item.children && (
+            <div className="ml-4 mt-0.5 space-y-0.5 border-l border-ink-6 pl-3">
+              {item.children.map(child => {
+                const childActive = isActive(child.href, child.exact)
+                return (
+                  <Link
+                    key={child.href}
+                    href={child.href}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`block px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors min-h-[36px] flex items-center ${
+                      childActive
+                        ? 'bg-brand-tint/60 text-brand-dark'
+                        : 'text-ink-3 hover:bg-bg-2 hover:text-ink'
+                    }`}
+                  >
+                    {child.label}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )
+    }
+
     return (
       <Link
         href={item.href}
         onClick={() => setSidebarOpen(false)}
         className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
-          isActive(item.href)
+          active
             ? 'bg-brand-tint text-brand-dark'
             : 'text-ink-3 hover:bg-bg-2 hover:text-ink'
         }`}
