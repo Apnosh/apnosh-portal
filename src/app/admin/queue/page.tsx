@@ -7,6 +7,7 @@ import {
   ListTodo, Search, ExternalLink,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { useRealtimeRefresh } from '@/lib/realtime'
 import type { ContentQueueItem, QueueStatus, TemplateType, PostPlatform, Client } from '@/types/database'
 
 /* ------------------------------------------------------------------ */
@@ -84,6 +85,8 @@ export default function GlobalQueuePage() {
     fetchQueue()
   }, [fetchQueue])
 
+  useRealtimeRefresh(['content_queue', 'client_feedback'], fetchQueue)
+
   const uniqueClients = useMemo(() => {
     const map = new Map<string, string>()
     items.forEach(i => map.set(i.client_id, i.client_name))
@@ -114,6 +117,10 @@ export default function GlobalQueuePage() {
     return acc
   }, {})
 
+  const newClientRequestCount = items.filter(
+    i => i.submitted_by === 'client' && i.status === 'new'
+  ).length
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
@@ -124,6 +131,12 @@ export default function GlobalQueuePage() {
 
       {/* Counter badges */}
       <div className="flex flex-wrap gap-2 text-xs">
+        {newClientRequestCount > 0 && (
+          <span className="font-medium text-cyan-700 bg-cyan-50 border border-cyan-200 px-2.5 py-1 rounded-full flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
+            {newClientRequestCount} new client request{newClientRequestCount === 1 ? '' : 's'}
+          </span>
+        )}
         {counts.new ? <span className="font-medium text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">{counts.new} new</span> : null}
         {counts.in_review ? <span className="font-medium text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">{counts.in_review} in review</span> : null}
         {counts.drafting ? <span className="font-medium text-purple-600 bg-purple-50 px-2.5 py-1 rounded-full">{counts.drafting} drafting</span> : null}

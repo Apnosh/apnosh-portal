@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Plus, Loader2, ChevronDown, Send, Check, Eye, Clock, Pencil,
-  ListTodo, MessageSquare, X, Play, Archive,
+  ListTodo, MessageSquare, X, Play, Archive, Upload, Image as ImageIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { useRealtimeRefresh } from '@/lib/realtime'
+import { uploadDraftContent, sendForReview as sendForReviewAction } from '@/lib/client-portal-actions'
 import PostGenerator from './post-generator'
 import type {
   ContentQueueItem, ContentQueueDraft, QueueStatus, TemplateType, PostPlatform,
@@ -64,6 +66,8 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
     fetchQueue()
   }, [fetchQueue])
 
+  useRealtimeRefresh(['content_queue', 'client_feedback'], fetchQueue)
+
   // Fetch feedback for expanded item
   async function loadFeedback(queueId: string) {
     if (feedback.has(queueId)) return
@@ -88,6 +92,14 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
 
   async function updateStatus(id: string, newStatus: QueueStatus) {
     setUpdatingId(id)
+
+    // Use server action for in_review so the client gets notified
+    if (newStatus === 'in_review') {
+      await sendForReviewAction(id)
+      await fetchQueue()
+      setUpdatingId(null)
+      return
+    }
 
     const updates: Record<string, unknown> = { status: newStatus }
 
@@ -197,9 +209,15 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
             const isExpanded = expandedId === item.id
             const statusCfg = STATUS_CONFIG[item.status]
             const StatusIcon = statusCfg.icon
+            const isNewClientRequest = item.submitted_by === 'client' && item.status === 'new'
 
             return (
-              <div key={item.id} className="bg-white rounded-xl border border-ink-6 overflow-hidden">
+              <div
+                key={item.id}
+                className={`bg-white rounded-xl border overflow-hidden ${
+                  isNewClientRequest ? 'border-cyan-300 ring-1 ring-cyan-200' : 'border-ink-6'
+                }`}
+              >
                 {/* Row header */}
                 <button
                   onClick={() => handleExpand(item.id)}
@@ -277,6 +295,11 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
                           ))}
                         </div>
                       </div>
+                    )}
+
+                    {/* Upload Draft UI - shown when drafting */}
+                    {item.status === 'drafting' && (
+                      <UploadDraftForm queueId={item.id} clientId={clientId} onUploaded={fetchQueue} />
                     )}
 
                     {/* Designer notes */}
@@ -390,5 +413,170 @@ function StatusButton({
       {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Icon className="w-3.5 h-3.5" />}
       {label}
     </button>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Upload Draft Form                                                  */
+/* ------------------------------------------------------------------ */
+
+function UploadDraftForm({
+  queueId,
+  clientId,
+  onUploaded,
+}: {
+  queueId: string
+  clientId: string
+  onUploaded: () => void
+}) {
+  const supabase = createClient()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [caption, setCaption] = useState('')
+  const [hashtags, setHashtags] = useState('')
+  const [designerNotes, setDesignerNotes] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    setFile(f)
+    const reader = new FileReader()
+    reader.onload = ev => setPreview(ev.target?.result as string)
+    reader.readAsDataURL(f)
+  }
+
+  function clearFile() {
+    setFile(null)
+    setPreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  async function handleUpload() {
+    if (!file) {
+      setError('Please select an image')
+      return
+    }
+    setUploading(true)
+    setError(null)
+
+    // Upload file to Supabase Storage
+    const ext = file.name.split('.').pop()
+    const path = `${clientId}/drafts/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const { error: uploadErr } = await supabase.storage
+      .from('post-drafts')
+      .upload(path, file, { upsert: false })
+
+    if (uploadErr) {
+      setError(`Upload failed: ${uploadErr.message}`)
+      setUploading(false)
+      return
+    }
+
+    const { data: urlData } = supabase.storage.from('post-drafts').getPublicUrl(path)
+
+    // Attach to queue
+    const result = await uploadDraftContent(queueId, {
+      imageUrl: urlData.publicUrl,
+      caption,
+      hashtags,
+      designerNotes: designerNotes || undefined,
+    })
+
+    if (result.success) {
+      clearFile()
+      setCaption('')
+      setHashtags('')
+      setDesignerNotes('')
+      onUploaded()
+    } else {
+      setError(result.error)
+    }
+
+    setUploading(false)
+  }
+
+  return (
+    <div className="border border-brand/20 bg-brand-tint/20 rounded-lg p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Upload className="w-4 h-4 text-brand-dark" />
+        <h4 className="text-xs font-semibold text-ink">Upload Draft</h4>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-3">
+        {/* Image upload */}
+        <div>
+          {preview ? (
+            <div className="relative">
+              <img src={preview} alt="" className="w-40 h-40 object-cover rounded-lg border border-ink-6" />
+              <button
+                onClick={clearFile}
+                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-ink text-white flex items-center justify-center hover:bg-red-500"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-40 h-40 rounded-lg border-2 border-dashed border-ink-5 hover:border-brand/50 flex flex-col items-center justify-center gap-1.5 text-ink-4 hover:text-brand-dark transition-colors"
+            >
+              <ImageIcon className="w-5 h-5" />
+              <span className="text-[10px] font-medium">Choose image</span>
+            </button>
+          )}
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+        </div>
+
+        {/* Caption + hashtags */}
+        <div className="space-y-2">
+          <div>
+            <label className="text-[10px] text-ink-4 font-medium uppercase tracking-wide mb-0.5 block">Caption</label>
+            <textarea
+              value={caption}
+              onChange={e => setCaption(e.target.value)}
+              placeholder="Post caption..."
+              rows={3}
+              className="w-full border border-ink-6 rounded-lg px-2.5 py-1.5 text-xs text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/20 resize-none bg-white"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-ink-4 font-medium uppercase tracking-wide mb-0.5 block">Hashtags</label>
+            <input
+              type="text"
+              value={hashtags}
+              onChange={e => setHashtags(e.target.value)}
+              placeholder="#hashtag #another"
+              className="w-full border border-ink-6 rounded-lg px-2.5 py-1.5 text-xs text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-ink-4 font-medium uppercase tracking-wide mb-0.5 block">Designer Notes (internal)</label>
+            <input
+              type="text"
+              value={designerNotes}
+              onChange={e => setDesignerNotes(e.target.value)}
+              placeholder="Optional internal notes..."
+              className="w-full border border-ink-6 rounded-lg px-2.5 py-1.5 text-xs text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/20 bg-white"
+            />
+          </div>
+        </div>
+      </div>
+
+      {error && <p className="text-xs text-red-600">{error}</p>}
+
+      <div className="flex items-center justify-end gap-2 pt-2 border-t border-brand/10">
+        <button
+          onClick={handleUpload}
+          disabled={uploading || !file}
+          className="bg-brand hover:bg-brand-dark text-white text-xs font-medium rounded-lg px-4 py-1.5 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+        >
+          {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+          Save Draft
+        </button>
+      </div>
+    </div>
   )
 }

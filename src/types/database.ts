@@ -915,6 +915,7 @@ export interface ClientUser {
   invited_at: string
   last_login: string | null
   status: ClientUserStatus
+  auth_user_id: string | null
 }
 
 export interface ClientBrand {

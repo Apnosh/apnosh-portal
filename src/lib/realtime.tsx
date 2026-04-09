@@ -19,6 +19,8 @@ type TableName =
   | 'client_activity_log'
   | 'message_threads'
   | 'businesses'
+  | 'content_queue'
+  | 'client_feedback'
 
 type EventType = 'INSERT' | 'UPDATE' | 'DELETE'
 
@@ -100,6 +102,8 @@ const TRACKED_TABLES: TableName[] = [
   'client_activity_log',
   'message_threads',
   'businesses',
+  'content_queue',
+  'client_feedback',
 ]
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {

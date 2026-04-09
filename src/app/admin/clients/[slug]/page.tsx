@@ -380,27 +380,42 @@ function OverviewTab({
     if (!inviteEmail.trim()) return
     setInviting(true)
 
-    const { data, error } = await supabase
-      .from('client_users')
-      .insert({
-        client_id: client.id,
-        email: inviteEmail.trim(),
-        name: inviteName.trim() || null,
-        role: inviteRole,
-        status: 'invited',
-      })
-      .select()
-      .single()
+    const { inviteClientUser } = await import('@/lib/client-portal-actions')
+    const result = await inviteClientUser(
+      client.id,
+      inviteEmail.trim(),
+      inviteName.trim(),
+      inviteRole,
+    )
 
-    if (!error && data) {
-      setUsers([data as ClientUser, ...users])
+    if (result.success) {
+      // Refetch users
+      const { data } = await supabase
+        .from('client_users')
+        .select('*')
+        .eq('client_id', client.id)
+        .order('invited_at', { ascending: false })
+      if (data) setUsers(data as ClientUser[])
+
       setShowInvite(false)
       setInviteEmail('')
       setInviteName('')
       setInviteRole('contributor')
+    } else {
+      alert(`Failed to send invitation: ${result.error}`)
     }
 
     setInviting(false)
+  }
+
+  async function resendMagicLink(user: ClientUser) {
+    const { inviteClientUser } = await import('@/lib/client-portal-actions')
+    const result = await inviteClientUser(client.id, user.email, user.name || '', user.role)
+    if (result.success) {
+      alert(`Magic link sent to ${user.email}`)
+    } else {
+      alert(`Failed: ${result.error}`)
+    }
   }
 
   async function removeUser(userId: string) {
@@ -577,12 +592,21 @@ function OverviewTab({
                         </span>
                       </td>
                       <td className="py-2.5 text-right">
-                        <button
-                          onClick={() => removeUser(u.id)}
-                          className="text-ink-4 hover:text-red-500 transition-colors p-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => resendMagicLink(u)}
+                            className="text-[10px] font-medium text-brand hover:text-brand-dark transition-colors"
+                            title="Send magic link"
+                          >
+                            Send Link
+                          </button>
+                          <button
+                            onClick={() => removeUser(u.id)}
+                            className="text-ink-4 hover:text-red-500 transition-colors p-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
