@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apnosh - Client Results</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            width: 1080px;
+            height: 1350px;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #f1faf7 0%, #f5f5f7 35%, #e9f7f3 65%, #f5f5f7 100%);
+            font-family: 'Inter', sans-serif;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .aurora-1 {
+            position: absolute;
+            width: 60%;
+            height: 60%;
+            background: radial-gradient(circle, rgba(74, 189, 152, 0.25), transparent 60%);
+            filter: blur(60px);
+            top: 10%;
+            left: 15%;
+        }
+
+        .aurora-2 {
+            position: absolute;
+            width: 50%;
+            height: 50%;
+            background: radial-gradient(circle, rgba(46, 154, 120, 0.2), transparent 60%);
+            filter: blur(60px);
+            bottom: 10%;
+            right: 10%;
+        }
+
+        .aurora-3 {
+            position: absolute;
+            width: 40%;
+            height: 40%;
+            background: radial-gradient(circle, rgba(147,51,234,0.12), transparent 50%);
+            filter: blur(60px);
+            top: 5%;
+            right: 20%;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+            border-radius: 24px;
+            padding: 48px;
+            text-align: center;
+            max-width: 600px;
+            margin: 0 90px;
+            position: relative;
+            z-index: 10;
+        }
+
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: inherit;
+            background: linear-gradient(135deg, rgba(236,72,153,0.15), rgba(59,130,246,0.15), rgba(74, 189, 152, 0.15), rgba(251,146,60,0.1));
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
+            -webkit-mask-composite: xor;
+            padding: 1px;
+            pointer-events: none;
+        }
+
+        .tag {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #2e9a78;
+            margin-bottom: 32px;
+        }
+
+        .big-number {
+            font-family: 'Playfair Display', serif;
+            font-size: 80px;
+            font-weight: 700;
+            color: #4abd98;
+            line-height: 0.9;
+            margin-bottom: 16px;
+        }
+
+        .metric-label {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 24px;
+            line-height: 1.2;
+        }
+
+        .context {
+            font-size: 20px;
+            font-weight: 400;
+            color: #424245;
+            line-height: 1.4;
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Playfair Display', serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: #2e9a78;
+            z-index: 20;
+        }
+    </style>
+</head>
+<body>
+    <div class="aurora-1"></div>
+    <div class="aurora-2"></div>
+    <div class="aurora-3"></div>
+    
+    <div class="glass-card">
+        <div class="tag">Client Results</div>
+        <div class="big-number">312%</div>
+        <div class="metric-label">increase in Google Maps views</div>
+        <div class="context">Average result for restaurants in their first 90 days with Apnosh</div>
+    </div>
+    
+    <div class="logo">Apnosh</div>
+</body>
+</html>

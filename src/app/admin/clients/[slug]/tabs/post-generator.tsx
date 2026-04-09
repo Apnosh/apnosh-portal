@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import html2canvas from 'html2canvas'
 import {
-  X, Loader2, Sparkles, Save, Check, Download, RefreshCw,
+  X, Loader2, Sparkles, Save, Check, Download, RefreshCw, ArrowLeft,
   Lightbulb, BarChart3, Zap, ArrowLeftRight, Award, Camera, Pencil,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -79,6 +79,7 @@ export default function PostGenerator({
   const [editingHtml, setEditingHtml] = useState(false)
   const [htmlEditor, setHtmlEditor] = useState('')
   const [saving, setSaving] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
 
   const sizeConfig = SIZES.find(s => s.value === size)!
 
@@ -181,6 +182,7 @@ export default function PostGenerator({
       if (data.html) {
         setGeneratedHtml(data.html)
         setHtmlEditor(data.html)
+        setShowPreview(true)
       }
     } catch (err) {
       console.error('Generation failed:', err)
@@ -357,14 +359,31 @@ export default function PostGenerator({
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative ml-auto bg-white w-full max-w-2xl h-full flex flex-col shadow-2xl overflow-hidden">
+      <div className={`relative ml-auto bg-white w-full ${showPreview ? 'max-w-4xl' : 'max-w-2xl'} h-full flex flex-col shadow-2xl overflow-hidden transition-all`}>
         {/* Header */}
         <div className="px-5 py-3 border-b border-ink-6 flex items-center justify-between flex-shrink-0">
-          <h2 className="font-[family-name:var(--font-display)] text-lg text-ink">Post Generator</h2>
-          <button onClick={onClose} className="text-ink-4 hover:text-ink"><X className="w-5 h-5" /></button>
+          <div className="flex items-center gap-3">
+            {showPreview && (
+              <button
+                onClick={() => setShowPreview(false)}
+                className="text-ink-3 hover:text-ink flex items-center gap-1.5 text-sm font-medium transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Edit
+              </button>
+            )}
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-ink">
+              {showPreview ? 'Preview' : 'Post Generator'}
+            </h2>
+          </div>
+          <button onClick={onClose} className="text-ink-4 hover:text-ink flex items-center gap-1.5 text-sm transition-colors">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {!showPreview && (
+          <>
           {/* ── Config section ────────────────────────────────────── */}
           <div className="space-y-4">
             {/* Template picker */}
@@ -486,27 +505,27 @@ export default function PostGenerator({
               <><Sparkles className="w-4 h-4" /> Generate Post</>
             )}
           </button>
+          </>
+          )}
 
           {/* ── Preview section ───────────────────────────────────── */}
-          {generatedHtml && (
+          {showPreview && generatedHtml && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-ink">Preview</span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleGenerate}
-                    disabled={generating}
-                    className="text-xs font-medium text-ink-3 hover:text-ink flex items-center gap-1 transition-colors"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> Regenerate
-                  </button>
-                  <button
-                    onClick={() => { setEditingHtml(!editingHtml); setHtmlEditor(generatedHtml) }}
-                    className="text-xs font-medium text-ink-3 hover:text-ink flex items-center gap-1 transition-colors"
-                  >
-                    <Pencil className="w-3.5 h-3.5" /> {editingHtml ? 'Preview' : 'Edit HTML'}
-                  </button>
-                </div>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={handleGenerate}
+                  disabled={generating}
+                  className="text-xs font-medium text-ink-3 hover:text-ink flex items-center gap-1 transition-colors"
+                >
+                  {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Regenerate
+                </button>
+                <button
+                  onClick={() => { setEditingHtml(!editingHtml); setHtmlEditor(generatedHtml) }}
+                  className="text-xs font-medium text-ink-3 hover:text-ink flex items-center gap-1 transition-colors"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> {editingHtml ? 'Preview' : 'Edit HTML'}
+                </button>
               </div>
 
               {editingHtml ? (
@@ -514,7 +533,7 @@ export default function PostGenerator({
                   value={htmlEditor}
                   onChange={e => setHtmlEditor(e.target.value)}
                   className="w-full border border-ink-6 rounded-lg px-3 py-2 text-xs font-mono text-ink leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand/20 resize-none"
-                  rows={15}
+                  rows={20}
                   spellCheck={false}
                 />
               ) : (
@@ -527,7 +546,7 @@ export default function PostGenerator({
         </div>
 
         {/* ── Footer actions ──────────────────────────────────────── */}
-        {generatedHtml && (
+        {showPreview && generatedHtml && (
           <div className="px-5 py-3 border-t border-ink-6 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
               <button
