@@ -1048,3 +1048,103 @@ export interface ClientFeedbackEntry {
   message: string | null
   created_at: string
 }
+
+// ============================================================
+// Priority 1: Social metrics, Reviews, Notifications, Onboarding
+// ============================================================
+
+export type SocialPlatform = 'instagram' | 'facebook' | 'tiktok' | 'linkedin' | 'google_business' | 'youtube' | 'twitter'
+
+export interface SocialMetricsRow {
+  id: string
+  client_id: string
+  platform: SocialPlatform
+  month: number
+  year: number
+  posts_published: number
+  posts_planned: number
+  total_reach: number
+  total_impressions: number
+  total_engagement: number
+  likes: number
+  comments: number
+  shares: number
+  saves: number
+  followers_count: number
+  followers_change: number
+  top_post_url: string | null
+  top_post_caption: string | null
+  top_post_engagement: number | null
+  top_post_image_url: string | null
+  notes: string | null
+  recorded_at: string
+  created_at: string
+  updated_at: string
+}
+
+export type ReviewSource = 'google' | 'yelp' | 'facebook' | 'tripadvisor' | 'other'
+
+export interface Review {
+  id: string
+  client_id: string
+  source: ReviewSource
+  external_id: string | null
+  rating: number
+  author_name: string | null
+  author_avatar_url: string | null
+  review_text: string | null
+  review_url: string | null
+  response_text: string | null
+  responded_at: string | null
+  responded_by: string | null
+  flagged: boolean
+  flag_reason: string | null
+  posted_at: string
+  created_at: string
+  updated_at: string
+}
+
+export type EmailDigestFrequency = 'immediate' | 'daily' | 'weekly' | 'off'
+
+export interface NotificationPreferences {
+  user_id: string
+  email_enabled: boolean
+  email_digest_frequency: EmailDigestFrequency
+  notify_approvals: boolean
+  notify_content_ready: boolean
+  notify_reviews: boolean
+  notify_messages: boolean
+  notify_reports: boolean
+  notify_billing: boolean
+  notify_system: boolean
+  updated_at: string
+}
+
+export type OnboardingStepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped'
+
+export interface OnboardingStep {
+  id: string
+  client_id: string
+  step_key: string
+  step_label: string
+  step_description: string | null
+  sort_order: number
+  status: OnboardingStepStatus
+  completed_at: string | null
+  completed_by: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface NotificationRow {
+  id: string
+  user_id: string
+  type: string
+  category: string | null
+  title: string
+  body: string
+  link: string | null
+  read_at: string | null
+  created_at: string
+}

@@ -13,13 +13,29 @@ import { createClient } from '@/lib/supabase/client'
 import { CartProvider } from '@/lib/cart-context'
 import { ToastProvider } from '@/components/ui/toast'
 import { RealtimeProvider } from '@/lib/realtime'
+import { ClientProvider, useClient } from '@/lib/client-context'
 import Notifications from '@/components/ui/notifications'
 import Breadcrumbs from '@/components/ui/breadcrumbs'
 import { ClientTabBar } from '@/components/ui/mobile-tab-bar'
 import QuickRequest from '@/components/ui/quick-request'
 import { useUser, signOut } from '@/lib/supabase/hooks'
 
-const navSections = [
+import type { ServiceArea } from '@/types/database'
+
+interface NavItem {
+  label: string
+  href: string
+  icon: typeof LayoutDashboard
+  exact: boolean
+  serviceArea?: ServiceArea
+}
+
+interface NavSection {
+  label: string | null
+  items: NavItem[]
+}
+
+const navSections: NavSection[] = [
   {
     label: null,
     items: [
@@ -29,10 +45,10 @@ const navSections = [
   {
     label: 'Services',
     items: [
-      { label: 'Social Media', href: '/dashboard/social', icon: Share2, exact: false },
-      { label: 'Website', href: '/dashboard/website', icon: Globe, exact: false },
-      { label: 'Local SEO', href: '/dashboard/local-seo', icon: MapPin, exact: false },
-      { label: 'Email & SMS', href: '/dashboard/email-sms', icon: Mail, exact: false },
+      { label: 'Social Media', href: '/dashboard/social', icon: Share2, exact: false, serviceArea: 'social' },
+      { label: 'Website', href: '/dashboard/website', icon: Globe, exact: false, serviceArea: 'website' },
+      { label: 'Local SEO', href: '/dashboard/local-seo', icon: MapPin, exact: false, serviceArea: 'local_seo' },
+      { label: 'Email & SMS', href: '/dashboard/email-sms', icon: Mail, exact: false, serviceArea: 'email_sms' },
     ],
   },
   {
@@ -60,10 +76,25 @@ const bottomItems = [
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <CartProvider>
+      <ToastProvider>
+        <RealtimeProvider>
+          <ClientProvider>
+            <DashboardShell>{children}</DashboardShell>
+          </ClientProvider>
+        </RealtimeProvider>
+      </ToastProvider>
+    </CartProvider>
+  )
+}
+
+function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { data: user, loading: userLoading } = useUser()
+  const { enrolledServices, loading: clientLoading } = useClient()
   const [approvalCount, setApprovalCount] = useState(0)
 
   // Fetch pending approval count
@@ -129,9 +160,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <CartProvider>
-    <ToastProvider>
-    <RealtimeProvider>
     <div className="min-h-screen bg-bg-2 flex pb-14 lg:pb-0">
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -152,18 +180,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
-          {navSections.map((section, idx) => (
-            <div key={idx} className={idx > 0 ? 'mt-4' : ''}>
-              {section.label && (
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 px-3 mb-1.5">
-                  {section.label}
+          {navSections.map((section, idx) => {
+            // Filter service-gated items based on enrollment
+            const visibleItems = section.items.filter(item =>
+              !item.serviceArea || clientLoading || enrolledServices.has(item.serviceArea)
+            )
+            if (visibleItems.length === 0) return null
+            return (
+              <div key={idx} className={idx > 0 ? 'mt-4' : ''}>
+                {section.label && (
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 px-3 mb-1.5">
+                    {section.label}
+                  </div>
+                )}
+                <div className="space-y-0.5">
+                  {visibleItems.map((item) => <NavLink key={item.href} item={item} />)}
                 </div>
-              )}
-              <div className="space-y-0.5">
-                {section.items.map((item) => <NavLink key={item.href} item={item} />)}
               </div>
-            </div>
-          ))}
+            )
+          })}
           <div className="h-px bg-ink-6 my-4" />
           <div className="space-y-0.5">
             {bottomItems.map((item) => <NavLink key={item.href} item={item} />)}
@@ -230,8 +265,5 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <QuickRequest />
       <ClientTabBar />
     </div>
-    </RealtimeProvider>
-    </ToastProvider>
-    </CartProvider>
   )
 }
