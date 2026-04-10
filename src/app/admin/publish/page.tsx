@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   ArrowLeft, Send, Clock, Loader2, Check, X, Upload, Plus,
@@ -20,7 +20,15 @@ const PLATFORMS: { id: string; label: string; icon: typeof Camera; gradient: str
   { id: 'linkedin', label: 'LinkedIn', icon: Briefcase, gradient: 'from-blue-700 to-blue-600', charLimit: 3000 },
 ]
 
-export default function AdminPublishPage() {
+export default function AdminPublishPageWrapper() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-ink-4 animate-spin" /></div>}>
+      <AdminPublishPage />
+    </Suspense>
+  )
+}
+
+function AdminPublishPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
