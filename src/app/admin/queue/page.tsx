@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import {
   Loader2, Plus, Pencil, Eye, Check, Send, Clock, ChevronRight,
-  ListTodo, Search, ExternalLink,
+  ListTodo, Search, ExternalLink, X,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from '@/lib/realtime'
@@ -15,12 +15,14 @@ import type { ContentQueueItem, QueueStatus, TemplateType, PostPlatform, Client 
 /* ------------------------------------------------------------------ */
 
 const STATUS_CONFIG: Record<QueueStatus, { label: string; color: string; icon: typeof ListTodo }> = {
-  new: { label: 'New', color: 'bg-blue-50 text-blue-700', icon: Plus },
-  drafting: { label: 'Drafting', color: 'bg-purple-50 text-purple-700', icon: Pencil },
-  in_review: { label: 'In Review', color: 'bg-amber-50 text-amber-700', icon: Eye },
+  new: { label: 'Awaiting Confirmation', color: 'bg-cyan-50 text-cyan-700', icon: Eye },
+  confirmed: { label: 'Confirmed', color: 'bg-blue-50 text-blue-700', icon: Check },
+  drafting: { label: 'In Production', color: 'bg-purple-50 text-purple-700', icon: Pencil },
+  in_review: { label: 'Client Reviewing', color: 'bg-amber-50 text-amber-700', icon: Eye },
   approved: { label: 'Approved', color: 'bg-emerald-50 text-emerald-700', icon: Check },
   scheduled: { label: 'Scheduled', color: 'bg-indigo-50 text-indigo-700', icon: Clock },
   posted: { label: 'Posted', color: 'bg-green-50 text-green-700', icon: Send },
+  cancelled: { label: 'Cancelled', color: 'bg-ink-6 text-ink-3', icon: X },
 }
 
 const TEMPLATE_LABELS: Record<TemplateType, string> = {

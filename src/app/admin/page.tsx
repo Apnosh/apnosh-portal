@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { ScheduledPostsPanel } from '@/components/admin/scheduled-posts-panel'
 import {
   Users,
   DollarSign,
@@ -355,6 +356,9 @@ export default function AdminDashboard() {
               </div>
             ))}
       </div>
+
+      {/* Scheduled posts panel — what needs to ship and when */}
+      <ScheduledPostsPanel />
 
       {/* Action Items */}
       {!loading && actions.length > 0 && (

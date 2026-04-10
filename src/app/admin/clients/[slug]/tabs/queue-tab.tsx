@@ -4,14 +4,21 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Plus, Loader2, ChevronDown, Send, Check, Eye, Clock, Pencil,
   ListTodo, MessageSquare, X, Play, Archive, Upload, Image as ImageIcon,
+  FileText, Sparkles, Activity, Film, ExternalLink,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from '@/lib/realtime'
-import { uploadDraftContent, sendForReview as sendForReviewAction } from '@/lib/client-portal-actions'
+import {
+  uploadDraftContent,
+  sendForReview as sendForReviewAction,
+  confirmContentRequest,
+} from '@/lib/client-portal-actions'
+import { GraphicBriefView } from '@/components/dashboard/graphic-brief-view'
+import { VideoBriefView } from '@/components/dashboard/video-brief-view'
 import PostGenerator from './post-generator'
 import type {
   ContentQueueItem, ContentQueueDraft, QueueStatus, TemplateType, PostPlatform,
-  ClientFeedbackEntry,
+  ClientFeedbackEntry, ContentFormat,
 } from '@/types/database'
 
 /* ------------------------------------------------------------------ */
@@ -19,12 +26,14 @@ import type {
 /* ------------------------------------------------------------------ */
 
 const STATUS_CONFIG: Record<QueueStatus, { label: string; color: string; icon: typeof ListTodo }> = {
-  new: { label: 'New', color: 'bg-blue-50 text-blue-700', icon: Plus },
-  drafting: { label: 'Drafting', color: 'bg-purple-50 text-purple-700', icon: Pencil },
-  in_review: { label: 'In Review', color: 'bg-amber-50 text-amber-700', icon: Eye },
+  new: { label: 'Awaiting Confirmation', color: 'bg-cyan-50 text-cyan-700', icon: Eye },
+  confirmed: { label: 'Confirmed', color: 'bg-blue-50 text-blue-700', icon: Check },
+  drafting: { label: 'In Production', color: 'bg-purple-50 text-purple-700', icon: Pencil },
+  in_review: { label: 'Client Reviewing', color: 'bg-amber-50 text-amber-700', icon: Eye },
   approved: { label: 'Approved', color: 'bg-emerald-50 text-emerald-700', icon: Check },
   scheduled: { label: 'Scheduled', color: 'bg-indigo-50 text-indigo-700', icon: Clock },
   posted: { label: 'Posted', color: 'bg-green-50 text-green-700', icon: Send },
+  cancelled: { label: 'Cancelled', color: 'bg-ink-6 text-ink-3', icon: X },
 }
 
 const TEMPLATE_LABELS: Record<TemplateType, string> = {
@@ -46,9 +55,19 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
   const [items, setItems] = useState<ContentQueueItem[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'brief' | 'deliver' | 'activity'>('brief')
   const [feedback, setFeedback] = useState<Map<string, ClientFeedbackEntry[]>>(new Map())
   const [showGenerator, setShowGenerator] = useState(false)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+
+  // Pick the most useful tab to land on based on the request's status.
+  function defaultTabForStatus(status: QueueStatus): 'brief' | 'deliver' | 'activity' {
+    if (status === 'new') return 'brief'          // read + confirm
+    if (status === 'confirmed') return 'deliver'  // ready to start uploading
+    if (status === 'drafting') return 'deliver'   // upload work
+    if (status === 'in_review') return 'activity' // wait for client
+    return 'brief'
+  }
 
   const fetchQueue = useCallback(async () => {
     setLoading(true)
@@ -85,13 +104,25 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
   function handleExpand(id: string) {
     const isOpen = expandedId === id
     setExpandedId(isOpen ? null : id)
-    if (!isOpen) loadFeedback(id)
+    if (!isOpen) {
+      loadFeedback(id)
+      const item = items.find(i => i.id === id)
+      if (item) setActiveTab(defaultTabForStatus(item.status))
+    }
   }
 
   /* ── Status transitions ─────────────────────────────────────────── */
 
   async function updateStatus(id: string, newStatus: QueueStatus) {
     setUpdatingId(id)
+
+    // Use server action for confirmed so the client gets notified
+    if (newStatus === 'confirmed') {
+      await confirmContentRequest(id)
+      await fetchQueue()
+      setUpdatingId(null)
+      return
+    }
 
     // Use server action for in_review so the client gets notified
     if (newStatus === 'in_review') {
@@ -255,113 +286,176 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
                   <ChevronDown className={`w-4 h-4 text-ink-4 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
                 </button>
 
-                {/* Expanded detail */}
+                {/* Expanded detail with tabs */}
                 {isExpanded && (
-                  <div className="border-t border-ink-6 p-4 space-y-4">
-                    {/* Input text */}
-                    {item.input_text && (
-                      <div>
-                        <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide">Request</span>
-                        <p className="text-sm text-ink-2 mt-1 whitespace-pre-line">{item.input_text}</p>
+                  <div className="border-t border-ink-6">
+                    {/* Tab bar — sticky-feeling header */}
+                    <div className="bg-bg-2 px-4 pt-3 flex items-center gap-1 border-b border-ink-6">
+                      <TabBtn
+                        active={activeTab === 'brief'}
+                        onClick={() => setActiveTab('brief')}
+                        icon={Sparkles}
+                        label="Brief"
+                      />
+                      <TabBtn
+                        active={activeTab === 'deliver'}
+                        onClick={() => setActiveTab('deliver')}
+                        icon={Upload}
+                        label="Deliver"
+                        badge={item.drafts.length > 0 ? item.drafts.length : undefined}
+                      />
+                      <TabBtn
+                        active={activeTab === 'activity'}
+                        onClick={() => setActiveTab('activity')}
+                        icon={Activity}
+                        label="Activity"
+                        badge={feedback.get(item.id)?.length || undefined}
+                      />
+
+                      {/* Quick action — always visible in tab bar header */}
+                      <div className="ml-auto pb-2">
+                        <PrimaryAction
+                          status={item.status}
+                          loading={updatingId === item.id}
+                          onChange={s => updateStatus(item.id, s)}
+                        />
                       </div>
-                    )}
+                    </div>
 
-                    {/* Drafts thumbnails */}
-                    {item.drafts.length > 0 && (
-                      <div>
-                        <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide">Drafts</span>
-                        <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
-                          {item.drafts.map((draft, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => selectDraft(item.id, idx)}
-                              className={`relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-colors ${
-                                item.selected_draft === idx ? 'border-brand' : 'border-ink-6 hover:border-ink-4'
-                              }`}
-                            >
-                              {draft.image_url ? (
-                                <img src={draft.image_url} alt="" className="w-full h-full object-cover" />
-                              ) : (
-                                <div className="w-full h-full bg-bg-2 flex items-center justify-center text-[10px] text-ink-4">
-                                  Draft {idx + 1}
-                                </div>
-                              )}
-                              {item.selected_draft === idx && (
-                                <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-brand flex items-center justify-center">
-                                  <Check className="w-2.5 h-2.5 text-white" />
-                                </div>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    {/* Tab body */}
+                    <div className="p-4 space-y-4">
+                      {/* ── BRIEF ── */}
+                      {activeTab === 'brief' && (
+                        <>
+                          {item.content_format === 'graphic' && (
+                            <GraphicBriefView contentQueueId={item.id} isAdmin />
+                          )}
+                          {item.content_format === 'short_form_video' && (
+                            <VideoBriefView contentQueueId={item.id} isAdmin />
+                          )}
 
-                    {/* Upload Draft UI - shown when drafting */}
-                    {item.status === 'drafting' && (
-                      <UploadDraftForm queueId={item.id} clientId={clientId} onUploaded={fetchQueue} />
-                    )}
-
-                    {/* Designer notes */}
-                    {item.designer_notes && (
-                      <div>
-                        <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide">Designer Notes</span>
-                        <p className="text-sm text-ink-2 mt-1">{item.designer_notes}</p>
-                      </div>
-                    )}
-
-                    {/* Feedback */}
-                    {feedback.get(item.id) && feedback.get(item.id)!.length > 0 && (
-                      <div>
-                        <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide flex items-center gap-1">
-                          <MessageSquare className="w-3 h-3" /> Feedback
-                        </span>
-                        <div className="mt-2 space-y-2">
-                          {feedback.get(item.id)!.map(fb => (
-                            <div key={fb.id} className="bg-bg-2 rounded-lg p-3">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full ${
-                                  fb.feedback_type === 'approval' ? 'bg-emerald-50 text-emerald-700' :
-                                  fb.feedback_type === 'revision' ? 'bg-amber-50 text-amber-700' :
-                                  'bg-ink-6 text-ink-3'
-                                }`}>
-                                  {fb.feedback_type}
-                                </span>
-                                <span className="text-[10px] text-ink-4">
-                                  {new Date(fb.created_at).toLocaleDateString()}
-                                </span>
-                              </div>
-                              {fb.message && <p className="text-xs text-ink-2">{fb.message}</p>}
+                          {item.input_text && (
+                            <div className="bg-white rounded-xl border border-ink-6 p-4">
+                              <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide flex items-center gap-1">
+                                <FileText className="w-3 h-3" />
+                                {(item.content_format === 'graphic' || item.content_format === 'short_form_video') ? 'Summary' : 'Request'}
+                              </span>
+                              <p className="text-sm text-ink-2 mt-2 whitespace-pre-line leading-relaxed">{item.input_text}</p>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                          )}
 
-                    {/* Status actions */}
-                    <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-ink-6">
-                      {item.status === 'new' && (
-                        <>
-                          <StatusButton label="Start Drafting" onClick={() => updateStatus(item.id, 'drafting')} loading={updatingId === item.id} icon={Pencil} />
+                          {item.designer_notes && (
+                            <div className="bg-white rounded-xl border border-ink-6 p-4">
+                              <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide">
+                                Internal designer notes
+                              </span>
+                              <p className="text-sm text-ink-2 mt-2 whitespace-pre-line">{item.designer_notes}</p>
+                            </div>
+                          )}
                         </>
                       )}
-                      {item.status === 'drafting' && (
-                        <StatusButton label="Send for Review" onClick={() => updateStatus(item.id, 'in_review')} loading={updatingId === item.id} icon={Send} />
-                      )}
-                      {item.status === 'in_review' && (
+
+                      {/* ── DELIVER ── */}
+                      {activeTab === 'deliver' && (
                         <>
-                          <StatusButton label="Approve" onClick={() => updateStatus(item.id, 'approved')} loading={updatingId === item.id} icon={Check} color="emerald" />
-                          <StatusButton label="Request Revision" onClick={() => updateStatus(item.id, 'drafting')} loading={updatingId === item.id} icon={Pencil} color="amber" />
+                          {/* Existing drafts strip (only if any exist) */}
+                          {item.drafts.length > 0 && (
+                            <div className="bg-white rounded-xl border border-ink-6 p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide">
+                                  Drafts ({item.drafts.length})
+                                </span>
+                                {item.selected_draft != null && (
+                                  <span className="text-[10px] text-emerald-700 font-medium">
+                                    Draft {item.selected_draft + 1} selected for client
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex gap-2 overflow-x-auto pb-1">
+                                {item.drafts.map((draft, idx) => (
+                                  <button
+                                    key={idx}
+                                    onClick={() => selectDraft(item.id, idx)}
+                                    className={`relative flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden border-2 transition-colors ${
+                                      item.selected_draft === idx ? 'border-brand' : 'border-ink-6 hover:border-ink-4'
+                                    }`}
+                                  >
+                                    {draft.image_url ? (
+                                      <img src={draft.image_url} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full bg-bg-2 flex items-center justify-center text-[10px] text-ink-4">
+                                        Draft {idx + 1}
+                                      </div>
+                                    )}
+                                    {item.selected_draft === idx && (
+                                      <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-brand flex items-center justify-center">
+                                        <Check className="w-2.5 h-2.5 text-white" />
+                                      </div>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Upload form */}
+                          <UploadDraftForm queueId={item.id} clientId={clientId} contentFormat={item.content_format} onUploaded={fetchQueue} />
+
+                          {/* Status banner if not yet drafting */}
+                          {item.status === 'new' && (
+                            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
+                                <Pencil className="w-4 h-4 text-blue-600" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-blue-900">Click &ldquo;Start Drafting&rdquo; above to begin</p>
+                                <p className="text-[11px] text-blue-700">Once drafting, you can upload the graphic and send it for review.</p>
+                              </div>
+                            </div>
+                          )}
                         </>
                       )}
-                      {item.status === 'approved' && (
-                        <>
-                          <StatusButton label="Mark Posted" onClick={() => updateStatus(item.id, 'posted')} loading={updatingId === item.id} icon={Check} color="emerald" />
-                          <StatusButton label="Schedule" onClick={() => updateStatus(item.id, 'scheduled')} loading={updatingId === item.id} icon={Clock} />
-                        </>
-                      )}
-                      {item.status === 'scheduled' && (
-                        <StatusButton label="Mark Posted" onClick={() => updateStatus(item.id, 'posted')} loading={updatingId === item.id} icon={Check} color="emerald" />
+
+                      {/* ── ACTIVITY ── */}
+                      {activeTab === 'activity' && (
+                        <div className="bg-white rounded-xl border border-ink-6 p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide flex items-center gap-1">
+                              <MessageSquare className="w-3 h-3" /> Client feedback & history
+                            </span>
+                            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                              item.revision_count >= item.revision_limit
+                                ? 'bg-red-50 text-red-700'
+                                : 'bg-bg-2 text-ink-3'
+                            }`}>
+                              Revisions {item.revision_count} / {item.revision_limit}
+                            </span>
+                          </div>
+
+                          {feedback.get(item.id) && feedback.get(item.id)!.length > 0 ? (
+                            <div className="space-y-2">
+                              {feedback.get(item.id)!.map(fb => (
+                                <div key={fb.id} className="bg-bg-2 rounded-lg p-3">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                                      fb.feedback_type === 'approval' ? 'bg-emerald-50 text-emerald-700' :
+                                      fb.feedback_type === 'revision' ? 'bg-amber-50 text-amber-700' :
+                                      'bg-ink-6 text-ink-3'
+                                    }`}>
+                                      {fb.feedback_type}
+                                    </span>
+                                    <span className="text-[10px] text-ink-4">
+                                      {new Date(fb.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                  {fb.message && <p className="text-xs text-ink-2 mt-1">{fb.message}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-ink-4 italic py-2">No feedback yet. Once the client reviews the draft, it&apos;ll appear here.</p>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -381,6 +475,102 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
         />
       )}
     </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tab button                                                         */
+/* ------------------------------------------------------------------ */
+
+function TabBtn({
+  active, onClick, icon: Icon, label, badge,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: typeof Check
+  label: string
+  badge?: number
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-2 text-xs font-medium transition-colors flex items-center gap-1.5 border-b-2 -mb-px ${
+        active
+          ? 'border-brand text-brand-dark'
+          : 'border-transparent text-ink-4 hover:text-ink-2'
+      }`}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+      {badge != null && badge > 0 && (
+        <span className={`ml-0.5 min-w-[16px] h-4 rounded-full text-[9px] font-bold flex items-center justify-center px-1 ${
+          active ? 'bg-brand text-white' : 'bg-ink-6 text-ink-3'
+        }`}>
+          {badge}
+        </span>
+      )}
+    </button>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Primary action button — context-aware "next step"                  */
+/* ------------------------------------------------------------------ */
+
+function PrimaryAction({
+  status, loading, onChange,
+}: {
+  status: QueueStatus
+  loading: boolean
+  onChange: (s: QueueStatus) => void
+}) {
+  // Pick the single most useful next action for the current status.
+  let label = ''
+  let next: QueueStatus | null = null
+  let Icon: typeof Check = Pencil
+  let bg = 'bg-brand hover:bg-brand-dark'
+
+  switch (status) {
+    case 'new':
+      label = 'Confirm Request'; next = 'confirmed'; Icon = Check
+      break
+    case 'confirmed':
+      label = 'Start Drafting'; next = 'drafting'; Icon = Pencil
+      break
+    case 'drafting':
+      label = 'Send for Review'; next = 'in_review'; Icon = Send
+      break
+    case 'in_review':
+      label = 'Approve'; next = 'approved'; Icon = Check
+      bg = 'bg-emerald-600 hover:bg-emerald-700'
+      break
+    case 'approved':
+      label = 'Mark Posted'; next = 'posted'; Icon = Check
+      bg = 'bg-emerald-600 hover:bg-emerald-700'
+      break
+    case 'scheduled':
+      label = 'Mark Posted'; next = 'posted'; Icon = Check
+      bg = 'bg-emerald-600 hover:bg-emerald-700'
+      break
+    case 'posted':
+      return (
+        <span className="text-[11px] font-medium text-emerald-700 flex items-center gap-1">
+          <Check className="w-3.5 h-3.5" /> Posted
+        </span>
+      )
+  }
+
+  if (!next) return null
+
+  return (
+    <button
+      onClick={() => onChange(next!)}
+      disabled={loading}
+      className={`${bg} text-white text-xs font-semibold rounded-lg px-3 py-1.5 flex items-center gap-1.5 transition-colors disabled:opacity-50`}
+    >
+      {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Icon className="w-3.5 h-3.5" />}
+      {label}
+    </button>
   )
 }
 
@@ -423,16 +613,28 @@ function StatusButton({
 function UploadDraftForm({
   queueId,
   clientId,
+  contentFormat,
   onUploaded,
 }: {
   queueId: string
   clientId: string
+  contentFormat: ContentFormat | null
   onUploaded: () => void
 }) {
   const supabase = createClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const isVideo = contentFormat === 'short_form_video'
+  const bucket = isVideo ? 'video-drafts' : 'post-drafts'
+  const acceptedTypes = isVideo
+    ? 'video/mp4,video/quicktime,video/webm,video/x-matroska'
+    : 'image/*'
+
+  // Two modes: "file" (direct upload) or "link" (paste a URL)
+  const [mode, setMode] = useState<'file' | 'link'>(isVideo ? 'link' : 'file')
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  const [externalUrl, setExternalUrl] = useState('')
   const [caption, setCaption] = useState('')
   const [hashtags, setHashtags] = useState('')
   const [designerNotes, setDesignerNotes] = useState('')
@@ -442,6 +644,11 @@ function UploadDraftForm({
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
     if (!f) return
+    setError(null)
+    if (f.size > 50 * 1024 * 1024) {
+      setError(`File is ${(f.size / 1024 / 1024).toFixed(0)} MB — exceeds the 50 MB limit. Use the "Paste link" option instead (Google Drive, Dropbox, etc).`)
+      return
+    }
     setFile(f)
     const reader = new FileReader()
     reader.onload = ev => setPreview(ev.target?.result as string)
@@ -451,35 +658,52 @@ function UploadDraftForm({
   function clearFile() {
     setFile(null)
     setPreview(null)
+    setError(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  async function handleUpload() {
-    if (!file) {
-      setError('Please select an image')
-      return
+  async function handleSave() {
+    // Determine the deliverable URL
+    let deliverableUrl: string | null = null
+
+    if (mode === 'link') {
+      if (!externalUrl.trim()) {
+        setError('Please paste a link to the file')
+        return
+      }
+      deliverableUrl = externalUrl.trim()
+    } else {
+      if (!file) {
+        setError(`Please select a ${isVideo ? 'video' : 'image'}`)
+        return
+      }
+      setUploading(true)
+      setError(null)
+
+      const ext = file.name.split('.').pop()
+      const subfolder = isVideo ? 'video-drafts' : 'drafts'
+      const path = `${clientId}/${subfolder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+      const { error: uploadErr } = await supabase.storage
+        .from(bucket)
+        .upload(path, file, { upsert: false, contentType: file.type })
+
+      if (uploadErr) {
+        setError(`Upload failed: ${uploadErr.message}`)
+        setUploading(false)
+        return
+      }
+
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(path)
+      deliverableUrl = urlData.publicUrl
     }
+
+    if (!deliverableUrl) return
+
     setUploading(true)
     setError(null)
 
-    // Upload file to Supabase Storage
-    const ext = file.name.split('.').pop()
-    const path = `${clientId}/drafts/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
-    const { error: uploadErr } = await supabase.storage
-      .from('post-drafts')
-      .upload(path, file, { upsert: false })
-
-    if (uploadErr) {
-      setError(`Upload failed: ${uploadErr.message}`)
-      setUploading(false)
-      return
-    }
-
-    const { data: urlData } = supabase.storage.from('post-drafts').getPublicUrl(path)
-
-    // Attach to queue
     const result = await uploadDraftContent(queueId, {
-      imageUrl: urlData.publicUrl,
+      imageUrl: deliverableUrl,
       caption,
       hashtags,
       designerNotes: designerNotes || undefined,
@@ -487,6 +711,7 @@ function UploadDraftForm({
 
     if (result.success) {
       clearFile()
+      setExternalUrl('')
       setCaption('')
       setHashtags('')
       setDesignerNotes('')
@@ -498,39 +723,96 @@ function UploadDraftForm({
     setUploading(false)
   }
 
+  const hasContent = mode === 'link' ? !!externalUrl.trim() : !!file
+
   return (
-    <div className="border border-brand/20 bg-brand-tint/20 rounded-lg p-4 space-y-3">
+    <div className="bg-white rounded-xl border border-ink-6 p-4 space-y-3">
       <div className="flex items-center gap-2">
-        <Upload className="w-4 h-4 text-brand-dark" />
-        <h4 className="text-xs font-semibold text-ink">Upload Draft</h4>
+        <div className="w-6 h-6 rounded bg-brand-tint flex items-center justify-center">
+          <Upload className="w-3.5 h-3.5 text-brand-dark" />
+        </div>
+        <h4 className="text-sm font-semibold text-ink">Upload a draft</h4>
+      </div>
+
+      {/* Mode toggle */}
+      <div className="flex gap-1 bg-bg-2 rounded-lg p-1 w-fit">
+        {([
+          { id: 'file' as const, label: 'Upload file', hint: isVideo ? '< 50 MB' : '' },
+          { id: 'link' as const, label: 'Paste link', hint: 'Drive, Dropbox, etc' },
+        ]).map(m => (
+          <button
+            key={m.id}
+            onClick={() => { setMode(m.id); setError(null) }}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              mode === m.id ? 'bg-white text-ink shadow-sm' : 'text-ink-3 hover:text-ink'
+            }`}
+          >
+            {m.label}
+            {m.hint && <span className="text-[9px] text-ink-4 ml-1">{m.hint}</span>}
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-3">
-        {/* Image upload */}
+        {/* Left: file picker OR link input */}
         <div>
-          {preview ? (
-            <div className="relative">
-              <img src={preview} alt="" className="w-40 h-40 object-cover rounded-lg border border-ink-6" />
-              <button
-                onClick={clearFile}
-                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-ink text-white flex items-center justify-center hover:bg-red-500"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
+          {mode === 'file' ? (
+            <>
+              {preview ? (
+                <div className="relative">
+                  {isVideo ? (
+                    <video
+                      src={preview}
+                      controls
+                      className="w-40 h-40 object-cover rounded-lg border border-ink-6 bg-black"
+                    />
+                  ) : (
+                    <img src={preview} alt="" className="w-40 h-40 object-cover rounded-lg border border-ink-6" />
+                  )}
+                  <button
+                    onClick={clearFile}
+                    className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-ink text-white flex items-center justify-center hover:bg-red-500"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-40 h-40 rounded-lg border-2 border-dashed border-ink-5 hover:border-brand/50 flex flex-col items-center justify-center gap-1.5 text-ink-4 hover:text-brand-dark transition-colors"
+                >
+                  {isVideo ? <Film className="w-5 h-5" /> : <ImageIcon className="w-5 h-5" />}
+                  <span className="text-[10px] font-medium">
+                    {isVideo ? 'Choose video' : 'Choose image'}
+                  </span>
+                  <span className="text-[9px] text-ink-4">
+                    {isVideo ? 'MP4 · MOV · < 50 MB' : 'JPG · PNG · WebP'}
+                  </span>
+                </button>
+              )}
+              <input ref={fileInputRef} type="file" accept={acceptedTypes} className="hidden" onChange={handleFile} />
+            </>
           ) : (
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-40 h-40 rounded-lg border-2 border-dashed border-ink-5 hover:border-brand/50 flex flex-col items-center justify-center gap-1.5 text-ink-4 hover:text-brand-dark transition-colors"
-            >
-              <ImageIcon className="w-5 h-5" />
-              <span className="text-[10px] font-medium">Choose image</span>
-            </button>
+            <div className="w-40 h-40 rounded-lg border border-ink-6 bg-bg-2 p-3 flex flex-col gap-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <ExternalLink className="w-3.5 h-3.5 text-ink-4" />
+                <span className="text-[10px] font-semibold text-ink-3 uppercase tracking-wide">Link</span>
+              </div>
+              <input
+                type="url"
+                value={externalUrl}
+                onChange={e => setExternalUrl(e.target.value)}
+                placeholder="https://drive.google.com/..."
+                className="w-full border border-ink-6 rounded px-2 py-1.5 text-[11px] text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand bg-white"
+              />
+              <p className="text-[9px] text-ink-4 leading-tight">
+                Google Drive, Dropbox, WeTransfer, or any public URL
+              </p>
+            </div>
           )}
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
         </div>
 
-        {/* Caption + hashtags */}
+        {/* Right: caption + hashtags + notes */}
         <div className="space-y-2">
           <div>
             <label className="text-[10px] text-ink-4 font-medium uppercase tracking-wide mb-0.5 block">Caption</label>
@@ -567,10 +849,10 @@ function UploadDraftForm({
 
       {error && <p className="text-xs text-red-600">{error}</p>}
 
-      <div className="flex items-center justify-end gap-2 pt-2 border-t border-brand/10">
+      <div className="flex items-center justify-end gap-2 pt-2 border-t border-ink-6">
         <button
-          onClick={handleUpload}
-          disabled={uploading || !file}
+          onClick={handleSave}
+          disabled={uploading || !hasContent}
           className="bg-brand hover:bg-brand-dark text-white text-xs font-medium rounded-lg px-4 py-1.5 flex items-center gap-1.5 transition-colors disabled:opacity-50"
         >
           {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}

@@ -60,9 +60,10 @@ const navSections: NavSection[] = [
         serviceArea: 'social',
         children: [
           { label: 'Overview', href: '/dashboard/social', exact: true },
-          { label: 'Requests', href: '/dashboard/social/requests' },
-          { label: 'Performance', href: '/dashboard/social/performance' },
+          { label: 'Action needed', href: '/dashboard/social/action-needed' },
           { label: 'Calendar', href: '/dashboard/social/calendar' },
+          { label: 'My requests', href: '/dashboard/social/requests' },
+          { label: 'Results', href: '/dashboard/social/results' },
         ],
       },
       {
@@ -71,6 +72,12 @@ const navSections: NavSection[] = [
         icon: Globe,
         exact: false,
         serviceArea: 'website',
+        children: [
+          { label: 'Overview', href: '/dashboard/website', exact: true },
+          { label: 'Site Health', href: '/dashboard/website/health' },
+          { label: 'Change Requests', href: '/dashboard/website/requests' },
+          { label: 'Traffic', href: '/dashboard/website/traffic' },
+        ],
       },
       {
         label: 'Local SEO',
@@ -83,6 +90,7 @@ const navSections: NavSection[] = [
           { label: 'Reviews', href: '/dashboard/local-seo/reviews' },
           { label: 'GBP Analytics', href: '/dashboard/analytics' },
         ],
+        // Note: Reviews + Analytics are display/perf tabs, kept after Overview.
       },
       {
         label: 'Email & SMS',
@@ -90,6 +98,12 @@ const navSections: NavSection[] = [
         icon: Mail,
         exact: false,
         serviceArea: 'email_sms',
+        children: [
+          { label: 'Overview', href: '/dashboard/email-sms', exact: true },
+          { label: 'Campaigns', href: '/dashboard/email-sms/campaigns' },
+          { label: 'List & Audience', href: '/dashboard/email-sms/list' },
+          { label: 'Performance', href: '/dashboard/email-sms/performance' },
+        ],
       },
     ],
   },
@@ -322,9 +336,11 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           {navSections.map((section, idx) => {
-            // Filter service-gated items based on enrollment
+            // Filter service-gated items based on enrollment.
+            // While loading, hide service-gated items to avoid flicker — they
+            // appear once enrollment resolves.
             const visibleItems = section.items.filter(item =>
-              !item.serviceArea || clientLoading || enrolledServices.has(item.serviceArea)
+              !item.serviceArea || (!clientLoading && enrolledServices.has(item.serviceArea))
             )
             if (visibleItems.length === 0) return null
             return (

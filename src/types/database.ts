@@ -873,7 +873,15 @@ export type EdgeTreatment = 'clean' | 'iridescent' | 'gradient_border' | 'none'
 export type TemplateType = 'insight' | 'stat' | 'tip' | 'compare' | 'result' | 'photo' | 'custom'
 export type PostPlatform = 'instagram' | 'tiktok' | 'linkedin'
 export type PostSize = 'feed' | 'square' | 'story'
-export type QueueStatus = 'new' | 'drafting' | 'in_review' | 'approved' | 'scheduled' | 'posted'
+export type QueueStatus =
+  | 'new'         // Client submitted, awaiting admin confirmation
+  | 'confirmed'   // Admin confirmed; queued to start drafting
+  | 'drafting'    // Admin actively working on it
+  | 'in_review'   // Sent back to client for review
+  | 'approved'    // Client approved
+  | 'scheduled'   // Scheduled to post
+  | 'posted'      // Posted live
+  | 'cancelled'   // Cancelled (rejected / withdrawn)
 export type QueueRequestType = 'client_request' | 'internal'
 export type FeedbackType = 'approval' | 'revision' | 'comment'
 export type StyleLibraryStatus = 'approved' | 'archived'
@@ -903,6 +911,7 @@ export interface Client {
   onboarding_date: string | null
   notes: string | null
   allotments: ClientAllotments
+  goals: string[]
   created_at: string
   updated_at: string
 }
@@ -918,10 +927,167 @@ export interface ClientAllotments {
 
 export type ContentFormat =
   | 'feed_post' | 'reel' | 'carousel' | 'story'
+  | 'graphic' | 'short_form_video'
   | 'blog_post' | 'page_update' | 'bug_fix'
   | 'gbp_post' | 'review_response' | 'citation_update'
   | 'email_campaign' | 'sms_blast' | 'newsletter'
   | 'custom'
+
+// ─── Video request wizard types ────────────────────────────
+export type VideoContentType =
+  | 'promo' | 'product' | 'event' | 'seasonal'
+  | 'educational' | 'testimonial' | 'bts' | 'brand' | 'other'
+
+export type VideoLengthPreference = 'under_15' | '15_30' | '30_60' | '60_90' | 'apnosh_decides'
+export type VideoScriptOwner = 'apnosh' | 'client' | 'collab'
+export type VideoScriptStyle = 'voiceover' | 'on_screen' | 'both' | 'apnosh_decides'
+export type VideoVoiceoverTone = 'energetic' | 'calm' | 'professional' | 'fun' | 'apnosh_decides'
+export type VideoFootageSource = 'client_clips' | 'animated' | 'stock' | 'apnosh_films' | 'mix'
+export type VideoWhoOnCamera = 'just_me' | 'two_three' | 'full_team' | 'no_people' | 'apnosh_decides'
+export type VideoMusicOwner = 'apnosh' | 'client' | 'none'
+export type VideoMusicFeel = 'hype' | 'chill' | 'emotional' | 'trending' | 'corporate' | 'apnosh_decides'
+export type VideoEditingStyle = 'cinematic' | 'trendy' | 'documentary' | 'clean' | 'ugc' | 'motion' | 'slideshow' | 'apnosh_decides'
+export type VideoUrgency = 'flexible' | 'standard' | 'urgent'
+
+export interface VideoRequest {
+  id: string
+  content_queue_id: string
+  client_id: string
+  submitted_by_user_id: string | null
+  submitted_at: string
+
+  content_type: VideoContentType
+
+  is_series: boolean
+  series_episode_count: number | null
+
+  main_message: string | null
+  hook: string | null
+  call_to_action: string[]
+  length_preference: VideoLengthPreference | null
+  script_owner: VideoScriptOwner | null
+  script_style: VideoScriptStyle | null
+  voiceover_tone: VideoVoiceoverTone | null
+  footage_source: VideoFootageSource | null
+
+  shoot_location: string | null
+  shoot_date: string | null
+  shoot_flexible: boolean | null
+  shoot_subject: string | null
+  shoot_who_on_camera: VideoWhoOnCamera | null
+
+  music_owner: VideoMusicOwner | null
+  music_feel: VideoMusicFeel | null
+  mood_tags: string[]
+  editing_style: VideoEditingStyle | null
+  reference_link: string | null
+  avoid_text: string | null
+  platforms: string[]
+
+  publish_date: string | null
+  urgency: VideoUrgency | null
+
+  reference_asset_urls: string[]
+  internal_note: string | null
+
+  created_at: string
+  updated_at: string
+}
+
+// ─── Graphic request wizard types ──────────────────────────
+export type GraphicContentType =
+  | 'promo' | 'product' | 'event' | 'seasonal'
+  | 'educational' | 'testimonial' | 'bts' | 'brand' | 'other'
+
+export type GraphicPlacement =
+  | 'feed' | 'story' | 'reel-cover' | 'carousel' | 'banner' | 'custom'
+
+export type GraphicUrgency = 'flexible' | 'standard' | 'urgent'
+
+export type GraphicCustomDimMode = 'ratio' | 'px' | 'in' | 'cm'
+
+export interface GraphicRequest {
+  id: string
+  content_queue_id: string
+  client_id: string
+  submitted_by_user_id: string | null
+  submitted_at: string
+
+  content_type: GraphicContentType
+
+  // Promo
+  offer_text?: string | null
+  promo_code?: string | null
+  offer_expiry?: string | null
+  price_display?: string | null
+
+  // Product
+  product_name?: string | null
+  product_desc?: string | null
+  product_price?: string | null
+  product_status?: string | null
+
+  // Event
+  event_name?: string | null
+  event_date?: string | null
+  event_time?: string | null
+  event_location?: string | null
+  event_ticket_info?: string | null
+
+  // Seasonal
+  season_name?: string | null
+  season_message?: string | null
+  season_offer?: string | null
+
+  // Educational
+  edu_topic?: string | null
+  edu_key_points?: string | null
+
+  // Testimonial
+  testimonial_quote?: string | null
+  testimonial_name?: string | null
+  testimonial_source?: string | null
+
+  // Placement
+  placement?: GraphicPlacement | null
+  carousel_slide_count?: number | null
+  custom_dim_mode?: GraphicCustomDimMode | null
+  custom_ratio?: string | null
+  custom_width?: number | null
+  custom_height?: number | null
+  custom_unit?: string | null
+  custom_dpi?: number | null
+
+  // Timing
+  publish_date?: string | null
+  urgency?: GraphicUrgency | null
+
+  // Message
+  main_message?: string | null
+  headline_text?: string | null
+  call_to_action?: string[] | null
+  post_caption?: string | null
+
+  // Visuals
+  uploaded_asset_urls: string[]
+  source_stock_photo: boolean
+  include_logo: boolean
+
+  // Style
+  mood_tags: string[]
+  color_preference?: string | null
+  reference_link?: string | null
+  reference_asset_urls: string[]
+
+  // Avoid
+  avoid_colors?: string | null
+  avoid_styles?: string | null
+  designer_notes?: string | null
+  internal_note?: string | null
+
+  created_at: string
+  updated_at: string
+}
 
 export interface ClientUser {
   id: string
@@ -1034,6 +1200,14 @@ export interface ContentQueueItem {
   designer_notes: string | null
   status: QueueStatus
   scheduled_for: string | null
+  confirmed_at: string | null
+  cancelled_at: string | null
+  cancelled_reason: string | null
+  failed_reason: string | null
+  post_type: PostType | null
+  platform_post_id: string | null
+  revision_count: number
+  revision_limit: number
   created_at: string
   updated_at: string
   // Joined
@@ -1077,9 +1251,17 @@ export interface SocialMetricsRow {
   top_post_engagement: number | null
   top_post_image_url: string | null
   notes: string | null
+  demographics: SocialDemographics | null
   recorded_at: string
   created_at: string
   updated_at: string
+}
+
+export interface SocialDemographics {
+  cities?: { name: string; count: number }[]
+  countries?: { name: string; count: number }[]
+  ages?: { range: string; count: number }[]
+  gender?: { type: string; count: number }[]
 }
 
 export type ReviewSource = 'google' | 'yelp' | 'facebook' | 'tripadvisor' | 'other'
@@ -1148,3 +1330,252 @@ export interface NotificationRow {
   read_at: string | null
   created_at: string
 }
+
+// ============================================================
+// Website + Email tables
+// ============================================================
+
+export type UptimeStatus = 'up' | 'down' | 'degraded' | 'unknown'
+
+export interface WebsiteHealth {
+  client_id: string
+  uptime_status: UptimeStatus
+  uptime_pct_30d: number | null
+  pagespeed_mobile: number | null
+  pagespeed_desktop: number | null
+  ssl_valid: boolean | null
+  ssl_expires_at: string | null
+  last_content_update_at: string | null
+  notes: string | null
+  updated_at: string
+}
+
+export interface TrafficSources {
+  direct?: number
+  search?: number
+  social?: number
+  referral?: number
+  email?: number
+  paid?: number
+  [key: string]: number | undefined
+}
+
+export interface TopPage {
+  path: string
+  title?: string
+  pageviews: number
+}
+
+export interface WebsiteTraffic {
+  id: string
+  client_id: string
+  month: number
+  year: number
+  visitors: number
+  pageviews: number
+  sessions: number
+  bounce_rate: number | null
+  avg_session_seconds: number | null
+  traffic_sources: TrafficSources
+  top_pages: TopPage[]
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type EmailCampaignStatus =
+  | 'draft' | 'in_review' | 'approved' | 'scheduled' | 'sending' | 'sent' | 'cancelled'
+
+export interface EmailCampaign {
+  id: string
+  client_id: string
+  name: string
+  subject: string
+  preview_text: string | null
+  preview_url: string | null
+  preview_image_url: string | null
+  body_html: string | null
+  status: EmailCampaignStatus
+  scheduled_for: string | null
+  sent_at: string | null
+  recipient_count: number
+  segment_name: string | null
+  opens: number
+  clicks: number
+  unsubscribes: number
+  bounces: number
+  revenue: number | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface EmailListSegment {
+  name: string
+  count: number
+}
+
+export interface EmailListSnapshot {
+  id: string
+  client_id: string
+  month: number
+  year: number
+  total_subscribers: number
+  active_subscribers: number
+  new_subscribers: number
+  unsubscribes: number
+  segments: EmailListSegment[]
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+// ─── Social Final Build types (migration 020) ─────────────
+
+export type TeamMemberRole = 'account_manager' | 'designer' | 'editor' | 'admin'
+
+export interface TeamMember {
+  id: string
+  auth_user_id: string | null
+  name: string
+  email: string
+  avatar_url: string | null
+  role: TeamMemberRole
+  is_active: boolean
+  created_at: string
+}
+
+export interface AmClientNote {
+  id: string
+  client_id: string
+  note_text: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  // Joined
+  team_member?: TeamMember
+}
+
+export interface CalendarNote {
+  id: string
+  client_id: string
+  note_date: string
+  note_text: string
+  created_by: string | null
+  created_at: string
+  // Joined
+  team_member?: TeamMember
+}
+
+export interface CampaignTag {
+  id: string
+  client_id: string
+  name: string
+  color: string
+  is_active: boolean
+  created_at: string
+}
+
+export interface OptimalSendTime {
+  id: string
+  client_id: string
+  platform: string
+  day_of_week: number
+  hour_of_day: number
+  confidence: number
+  calculated_at: string
+}
+
+export interface CalendarShareLink {
+  id: string
+  client_id: string
+  token: string
+  created_by_user: string | null
+  revoked: boolean
+  created_at: string
+}
+
+export interface AssetFolder {
+  id: string
+  client_id: string
+  name: string
+  parent_folder_id: string | null
+  created_by_client: boolean
+  created_at: string
+}
+
+export type GlobalAssetType = 'image' | 'video' | 'text' | 'document'
+
+export interface Asset {
+  id: string
+  client_id: string
+  name: string
+  type: GlobalAssetType
+  file_url: string | null
+  file_size: number | null
+  mime_type: string | null
+  dimensions: string | null
+  content: string | null
+  folder_id: string | null
+  tags: string[]
+  uploaded_by_client: boolean
+  uploaded_by_client_user: string | null
+  uploaded_by_team_member: string | null
+  created_at: string
+  // Joined
+  folder?: AssetFolder
+}
+
+export type PostType = 'graphic' | 'reel' | 'carousel' | 'story' | 'text'
+
+// ─── Scheduled posts for multi-platform publishing ─────────
+
+export type ScheduledPostStatus = 'draft' | 'scheduled' | 'publishing' | 'published' | 'partially_failed' | 'failed'
+
+export interface PlatformPublishResult {
+  status: 'published' | 'failed' | 'pending' | 'not_connected'
+  post_id?: string
+  published_at?: string
+  error?: string
+}
+
+export interface ScheduledPost {
+  id: string
+  client_id: string
+  created_by: string | null
+  text: string
+  media_urls: string[]
+  media_type: 'image' | 'video' | 'carousel' | null
+  link_url: string | null
+  platforms: string[]
+  scheduled_for: string | null
+  status: ScheduledPostStatus
+  platform_results: Record<string, PlatformPublishResult>
+  content_queue_id: string | null
+  campaign_tag_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+// Extended monthly report with client-portal fields (migration 020 additions)
+export interface ClientMonthlyReport {
+  id: string
+  business_id: string | null
+  client_id: string | null
+  month: number
+  year: number
+  title: string | null
+  status: 'draft' | 'published'
+  summary: string | null
+  what_worked: string[] | null
+  next_month_plan: string[] | null
+  metrics_snapshot: Record<string, unknown> | null
+  top_post_data: Record<string, unknown> | null
+  pdf_url: string | null
+  created_by_team_member: string | null
+  published_at: string | null
+  created_at: string
+  // Joined
+  team_member?: TeamMember
+}
+

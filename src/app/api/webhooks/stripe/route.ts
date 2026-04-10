@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+import {
+  ensureClientForStripeCustomer,
+  grantFromCatalogItem,
+  revokeFromCatalogItem,
+} from '@/lib/billing-grants'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-02-24.acacia',
@@ -110,6 +115,11 @@ async function handleCheckoutComplete(
     })
 
     // Create subscription record(s) in Supabase
+    const customerId =
+      typeof subscription.customer === 'string'
+        ? subscription.customer
+        : subscription.customer.id
+
     for (const item of subscription.items.data) {
       const product = item.price.product as Stripe.Product
 
@@ -121,10 +131,54 @@ async function handleCheckoutComplete(
         billing_interval: item.price.recurring?.interval === 'year' ? 'annually' : 'monthly',
         status: subscription.status === 'active' ? 'active' : 'trialing',
         stripe_subscription_id: subscription.id,
-        stripe_customer_id: typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id,
+        stripe_customer_id: customerId,
         current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
         current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
       })
+    }
+
+    // ── Grant service-area access on the matching client ──
+    const clientId = await ensureClientForStripeCustomer(supabase, {
+      stripeCustomerId: customerId,
+      email: session.customer_details?.email ?? session.customer_email ?? null,
+      name: session.customer_details?.name ?? null,
+    })
+    if (clientId) {
+      for (const item of subscription.items.data) {
+        const product = item.price.product as Stripe.Product
+        const catalogId = product.metadata?.service_id
+        if (catalogId) {
+          await grantFromCatalogItem(supabase, clientId, catalogId)
+        }
+      }
+    }
+  }
+
+  // ── One-time / non-subscription purchases also grant access ──
+  if (session.mode !== 'subscription') {
+    const customerId =
+      typeof session.customer === 'string'
+        ? session.customer
+        : session.customer?.id
+    if (customerId) {
+      const clientId = await ensureClientForStripeCustomer(supabase, {
+        stripeCustomerId: customerId,
+        email: session.customer_details?.email ?? session.customer_email ?? null,
+        name: session.customer_details?.name ?? null,
+      })
+      if (clientId) {
+        // Pull line items to find catalog ids
+        const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
+          expand: ['data.price.product'],
+        })
+        for (const li of lineItems.data) {
+          const product = li.price?.product as Stripe.Product | undefined
+          const catalogId = product?.metadata?.service_id
+          if (catalogId) {
+            await grantFromCatalogItem(supabase, clientId, catalogId)
+          }
+        }
+      }
     }
   }
 
@@ -333,7 +387,7 @@ async function handleSubscriptionDeleted(
 
   const { data: business } = await supabase
     .from('businesses')
-    .select('owner_id')
+    .select('owner_id, client_id')
     .eq('stripe_customer_id', customerId)
     .single()
 
@@ -345,5 +399,26 @@ async function handleSubscriptionDeleted(
       body: 'Your subscription has been cancelled. You can resubscribe anytime from the Orders page.',
       link: '/dashboard/orders',
     })
+  }
+
+  // ── Revoke service-area access for whatever was on the cancelled sub ──
+  const clientId = business?.client_id
+    ?? (await ensureClientForStripeCustomer(supabase, { stripeCustomerId: customerId }))
+  if (clientId) {
+    // Pull the cancelled subscription's line items so we know what to revoke
+    try {
+      const fullSub = await stripe.subscriptions.retrieve(subscription.id, {
+        expand: ['items.data.price.product'],
+      })
+      for (const item of fullSub.items.data) {
+        const product = item.price.product as Stripe.Product
+        const catalogId = product.metadata?.service_id
+        if (catalogId) {
+          await revokeFromCatalogItem(supabase, clientId, catalogId)
+        }
+      }
+    } catch (err) {
+      console.error('[stripe webhook] revoke lookup failed:', err)
+    }
   }
 }

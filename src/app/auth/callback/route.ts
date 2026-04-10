@@ -45,11 +45,10 @@ export async function GET(request: Request) {
               .eq('id', clientUser.id)
           }
 
-          const biz = Array.isArray(clientUser.clients) ? clientUser.clients[0] : clientUser.clients
-          const slug = (biz as { slug?: string } | null)?.slug
-          if (slug) {
-            return NextResponse.redirect(`${origin}/client/${slug}`)
-          }
+          // Client portal users go to the full /dashboard now (the legacy
+          // /client/[slug] simplified portal is deprecated). The dashboard
+          // resolves their client via client_users.auth_user_id.
+          return NextResponse.redirect(`${origin}/dashboard`)
         }
 
         // 2. Regular admin/dashboard user

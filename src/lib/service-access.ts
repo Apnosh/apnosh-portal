@@ -37,27 +37,19 @@ const SERVICE_NAME_TO_AREA: Record<string, ServiceArea> = {
  * Determine which service areas a client is enrolled in based on services_active.
  * Returns a Set<ServiceArea> for fast lookup.
  *
- * If services_active is empty, returns ALL services (default open for legacy clients
- * that haven't had their services configured yet).
+ * Strict gating: a client only sees a service area tab if that service is
+ * explicitly listed in services_active. Admin manages enrollment from
+ * /admin/clients/[slug] → Profile tab → Services.
  */
 export function resolveEnrolledServices(servicesActive: string[] | null | undefined): Set<ServiceArea> {
-  if (!servicesActive || servicesActive.length === 0) {
-    return new Set<ServiceArea>(['social', 'website', 'local_seo', 'email_sms'])
-  }
-
   const enrolled = new Set<ServiceArea>()
+  if (!servicesActive || servicesActive.length === 0) return enrolled
+
   for (const name of servicesActive) {
     const key = name.trim().toLowerCase()
     const area = SERVICE_NAME_TO_AREA[key]
     if (area) enrolled.add(area)
   }
-
-  // If nothing matched (client has services set but none map), fall back to open
-  // so the portal is still usable. Admin can fix by updating services_active.
-  if (enrolled.size === 0) {
-    return new Set<ServiceArea>(['social', 'website', 'local_seo', 'email_sms'])
-  }
-
   return enrolled
 }
 

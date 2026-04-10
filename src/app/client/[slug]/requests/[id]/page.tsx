@@ -13,20 +13,24 @@ import type { ContentQueueItem, ClientFeedbackEntry, QueueStatus, ContentQueueDr
 
 const STATUS_LABEL: Record<QueueStatus, string> = {
   new: 'Submitted',
+  confirmed: 'Confirmed',
   drafting: 'In Production',
   in_review: 'Ready for Your Review',
   approved: 'Approved',
   scheduled: 'Scheduled',
   posted: 'Posted',
+  cancelled: 'Cancelled',
 }
 
 const STATUS_COLOR: Record<QueueStatus, string> = {
   new: 'bg-blue-50 text-blue-700 border-blue-200',
+  confirmed: 'bg-blue-50 text-blue-700',
   drafting: 'bg-purple-50 text-purple-700 border-purple-200',
   in_review: 'bg-amber-50 text-amber-700 border-amber-200',
   approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   scheduled: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   posted: 'bg-green-50 text-green-700 border-green-200',
+  cancelled: 'bg-ink-6 text-ink-3',
 }
 
 export default function ClientRequestDetailPage({

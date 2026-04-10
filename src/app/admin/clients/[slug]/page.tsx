@@ -6,7 +6,7 @@ import {
   ArrowLeft, Loader2, Save, ExternalLink, Plus, Trash2,
   Building2, Palette, Image, BookOpen, ListTodo,
   Globe, MapPin, Mail, Phone, User, X, Check,
-  BarChart3, Star,
+  BarChart3, Star, MessageSquare,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import BrandTab from './tabs/brand-tab'
@@ -15,6 +15,8 @@ import StyleLibraryTab from './tabs/style-library-tab'
 import QueueTab from './tabs/queue-tab'
 import MetricsTab from './tabs/metrics-tab'
 import ReviewsTab from './tabs/reviews-tab'
+import NotesTab from './tabs/notes-tab'
+import ConnectionsTab from './tabs/connections-tab'
 import type {
   Client, ClientBrand, ClientPattern, ClientUser, ClientAllotments,
   ClientBillingStatus, ClientTier, ClientUserRole, ClientUserStatus,
@@ -24,7 +26,7 @@ import type {
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type Tab = 'overview' | 'brand' | 'assets' | 'style_library' | 'queue' | 'metrics' | 'reviews'
+type Tab = 'overview' | 'brand' | 'assets' | 'style_library' | 'queue' | 'metrics' | 'reviews' | 'notes' | 'connections'
 
 const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
   { key: 'overview', label: 'Overview', icon: Building2 },
@@ -34,6 +36,8 @@ const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
   { key: 'queue', label: 'Content Queue', icon: ListTodo },
   { key: 'metrics', label: 'Social Metrics', icon: BarChart3 },
   { key: 'reviews', label: 'Reviews', icon: Star },
+  { key: 'notes', label: 'AM Notes', icon: MessageSquare },
+  { key: 'connections', label: 'Connections', icon: Globe },
 ]
 
 /* ------------------------------------------------------------------ */
@@ -85,9 +89,12 @@ function socialUrl(platform: string, handle: string): string {
   return map[platform] || handle
 }
 
+// The first four are CORE service areas — each one unlocks the matching tab
+// in the client dashboard sidebar (Social Media, Website, Local SEO, Email & SMS).
+// The remaining options are add-ons that don't have their own dashboard tab.
 const SERVICE_OPTIONS = [
-  'Social Media', 'Content', 'Brand', 'SEO', 'Paid Ads', 'Email',
-  'Website', 'Photography', 'Video', 'Strategy', 'GBP Management',
+  'Social Media', 'Website', 'Local SEO', 'Email & SMS',
+  'Content', 'Brand', 'Paid Ads', 'Photography', 'Video', 'Strategy', 'GBP Management',
 ]
 
 /* ------------------------------------------------------------------ */
@@ -266,6 +273,12 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
 
       {activeTab === 'reviews' && (
         <ReviewsTab clientId={client.id} />
+      )}
+      {activeTab === 'notes' && (
+        <NotesTab clientId={client.id} />
+      )}
+      {activeTab === 'connections' && (
+        <ConnectionsTab clientId={client.id} />
       )}
     </div>
   )
@@ -500,6 +513,9 @@ function OverviewTab({
 
         {/* Services */}
         <Card title="Active Services">
+          <p className="text-[11px] text-ink-4 mb-3">
+            The first four control which tabs the client sees in their portal sidebar. Add-ons below don&apos;t unlock tabs.
+          </p>
           <div className="flex flex-wrap gap-2">
             {SERVICE_OPTIONS.map(s => (
               <button

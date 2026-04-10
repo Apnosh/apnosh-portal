@@ -23,6 +23,10 @@ type TableName =
   | 'client_feedback'
   | 'social_metrics'
   | 'reviews'
+  | 'website_health'
+  | 'website_traffic'
+  | 'email_campaigns'
+  | 'email_list_snapshot'
 
 type EventType = 'INSERT' | 'UPDATE' | 'DELETE'
 
@@ -62,14 +66,24 @@ export function useRealtime() {
 export function useRealtimeRefresh(tables: TableName[], refetch: () => void) {
   const { subscribe } = useRealtime()
 
+  // Stash the latest refetch in a ref so the effect doesn't re-run when the
+  // caller passes a new closure each render. The listener always reads the
+  // freshest refetch when an event arrives.
+  const refetchRef = useRef(refetch)
+  useEffect(() => { refetchRef.current = refetch }, [refetch])
+
+  // Stable key from the tables array so we only re-subscribe when the SET of
+  // tables actually changes (not on every render).
+  const tablesKey = tables.join(',')
+
   useEffect(() => {
-    const unsubs = tables.map((table) =>
-      subscribe(table, () => {
-        refetch()
+    const unsubs = tablesKey.split(',').filter(Boolean).map((table) =>
+      subscribe(table as TableName, () => {
+        refetchRef.current()
       })
     )
     return () => unsubs.forEach((u) => u())
-  }, [tables, subscribe, refetch])
+  }, [tablesKey, subscribe])
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +122,10 @@ const TRACKED_TABLES: TableName[] = [
   'client_feedback',
   'social_metrics',
   'reviews',
+  'website_health',
+  'website_traffic',
+  'email_campaigns',
+  'email_list_snapshot',
 ]
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {

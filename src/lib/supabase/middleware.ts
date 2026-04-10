@@ -50,40 +50,29 @@ export async function updateSession(request: NextRequest) {
     // Check client_user linkage by auth_user_id
     const { data: clientUser } = await supabase
       .from('client_users')
-      .select('id, client_id, clients(slug)')
+      .select('id, client_id')
       .eq('auth_user_id', user.id)
       .maybeSingle()
 
     if (clientUser) {
-      // This user is a client portal user. They can ONLY access /client/[their-slug]
-      const biz = Array.isArray(clientUser.clients) ? clientUser.clients[0] : clientUser.clients
-      const mySlug = (biz as { slug?: string } | null)?.slug
-
-      if (!mySlug) {
-        // Data integrity issue - fall through to login
-        const url = request.nextUrl.clone()
-        url.pathname = '/login'
-        return NextResponse.redirect(url)
-      }
-
-      // Block /admin and /dashboard for client_users
-      if (isAdminRoute || isDashboard) {
-        const url = request.nextUrl.clone()
-        url.pathname = `/client/${mySlug}`
-        return NextResponse.redirect(url)
-      }
-
-      // Enforce slug match on /client/* routes
+      // Client portal users use the full /dashboard experience.
+      // The legacy /client/[slug] simplified portal is deprecated — redirect
+      // any access there back to /dashboard.
       if (isClientRoute) {
-        const urlSlug = path.split('/')[2]
-        if (!urlSlug || urlSlug !== mySlug) {
-          const url = request.nextUrl.clone()
-          url.pathname = `/client/${mySlug}`
-          return NextResponse.redirect(url)
-        }
-        // Slug matches - allow through
-        return supabaseResponse
+        const url = request.nextUrl.clone()
+        url.pathname = '/dashboard'
+        return NextResponse.redirect(url)
       }
+
+      // Block /admin for client portal users (admin-only area).
+      if (isAdminRoute) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/dashboard'
+        return NextResponse.redirect(url)
+      }
+
+      // /dashboard is allowed — fall through to supabaseResponse below.
+      return supabaseResponse
     }
 
     // Not a client_user: follow existing admin/dashboard logic
@@ -111,14 +100,16 @@ export async function updateSession(request: NextRequest) {
       }
 
       // ── Onboarding enforcement for client/team_member on /dashboard ──
+      // Only for users that actually have a businesses row (legacy SaaS flow).
+      // Client portal users (linked via client_users only) skip onboarding.
       if (isDashboard && (role === 'client' || role === 'team_member')) {
         const { data: business } = await supabase
           .from('businesses')
           .select('onboarding_completed')
           .eq('owner_id', user.id)
-          .single()
+          .maybeSingle()
 
-        if (!business || !business.onboarding_completed) {
+        if (business && !business.onboarding_completed) {
           const url = request.nextUrl.clone()
           url.pathname = '/onboarding'
           return NextResponse.redirect(url)
@@ -146,22 +137,18 @@ export async function updateSession(request: NextRequest) {
 
   // ── Authenticated on auth pages: redirect to portal ──
   if (user && isAuthPage) {
-    // Check client_user first
+    // Client portal users go to /dashboard (legacy /client/[slug] is deprecated).
     const { data: clientUser } = await supabase
       .from('client_users')
-      .select('clients(slug)')
+      .select('id')
       .eq('auth_user_id', user.id)
       .maybeSingle()
 
     if (clientUser) {
-      const biz = Array.isArray(clientUser.clients) ? clientUser.clients[0] : clientUser.clients
-      const mySlug = (biz as { slug?: string } | null)?.slug
-      if (mySlug) {
-        const url = request.nextUrl.clone()
-        url.pathname = `/client/${mySlug}`
-        url.search = ''
-        return NextResponse.redirect(url)
-      }
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard'
+      url.search = ''
+      return NextResponse.redirect(url)
     }
 
     const { data: profile } = await supabase
