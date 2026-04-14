@@ -26,6 +26,19 @@ const ICONS: Record<InsightIcon, React.ReactNode> = {
       <circle cx="8" cy="6" r="1.5" />
     </svg>
   ),
+  trending: (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12l4-4 3 3 5-5" />
+      <path d="M10 6h4v4" />
+    </svg>
+  ),
+  alert: (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 5v3" />
+      <circle cx="8" cy="11" r="0.5" fill="currentColor" />
+    </svg>
+  ),
 }
 
 export default function InsightCard({ icon, title, subtitle }: InsightCardProps) {

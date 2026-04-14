@@ -6,7 +6,7 @@ import {
   ArrowLeft, Loader2, Save, ExternalLink, Plus, Trash2,
   Building2, Palette, Image, BookOpen, ListTodo,
   Globe, MapPin, Mail, Phone, User, X, Check,
-  BarChart3, Star, MessageSquare,
+  BarChart3, Star, MessageSquare, RefreshCw, FileText,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import BrandTab from './tabs/brand-tab'
@@ -17,6 +17,8 @@ import MetricsTab from './tabs/metrics-tab'
 import ReviewsTab from './tabs/reviews-tab'
 import NotesTab from './tabs/notes-tab'
 import ConnectionsTab from './tabs/connections-tab'
+import DashboardNotesTab from './tabs/dashboard-notes-tab'
+import SyncControls from './tabs/sync-controls'
 import type {
   Client, ClientBrand, ClientPattern, ClientUser, ClientAllotments,
   ClientBillingStatus, ClientTier, ClientUserRole, ClientUserStatus,
@@ -26,7 +28,7 @@ import type {
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type Tab = 'overview' | 'brand' | 'assets' | 'style_library' | 'queue' | 'metrics' | 'reviews' | 'notes' | 'connections'
+type Tab = 'overview' | 'brand' | 'assets' | 'style_library' | 'queue' | 'metrics' | 'reviews' | 'notes' | 'connections' | 'dashboard_notes' | 'data_sync'
 
 const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
   { key: 'overview', label: 'Overview', icon: Building2 },
@@ -38,6 +40,8 @@ const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
   { key: 'reviews', label: 'Reviews', icon: Star },
   { key: 'notes', label: 'AM Notes', icon: MessageSquare },
   { key: 'connections', label: 'Connections', icon: Globe },
+  { key: 'dashboard_notes', label: 'Dashboard Notes', icon: FileText },
+  { key: 'data_sync', label: 'Data Sync', icon: RefreshCw },
 ]
 
 /* ------------------------------------------------------------------ */
@@ -279,6 +283,23 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
       )}
       {activeTab === 'connections' && (
         <ConnectionsTab clientId={client.id} />
+      )}
+      {activeTab === 'dashboard_notes' && (
+        <DashboardNotesTab clientId={client.id} />
+      )}
+      {activeTab === 'data_sync' && (
+        <div className="space-y-8">
+          <SyncControls clientId={client.id} />
+          <div>
+            <h3 className="text-sm font-bold text-ink mb-2">GBP Data Import</h3>
+            <Link
+              href={`/admin/clients/${client.slug}/import-gbp`}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-ink-5 hover:bg-bg-2 transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Import GBP CSV
+            </Link>
+          </div>
+        </div>
       )}
     </div>
   )
