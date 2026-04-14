@@ -1,6 +1,6 @@
 export type ViewType = 'visibility' | 'foot_traffic'
 export type TimeRange = '1W' | '1M' | '3M' | '6M' | '1Y'
-export type InsightIcon = 'star' | 'clock' | 'map'
+export type InsightIcon = 'star' | 'clock' | 'map' | 'trending' | 'alert'
 
 export interface DashboardMetric {
   label: string
