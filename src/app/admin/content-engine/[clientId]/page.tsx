@@ -161,29 +161,7 @@ export default function ContentEngineWorkspace({
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-ink">{clientName}</h1>
-          <div className="flex items-center gap-2 mt-1">
-            <button
-              onClick={() => {
-                const d = new Date(selectedMonth + 'T12:00:00')
-                d.setMonth(d.getMonth() - 1)
-                setSelectedMonth(d.toISOString().split('T')[0])
-              }}
-              className="p-0.5 text-ink-4 hover:text-ink rounded transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-sm font-medium text-ink min-w-[130px] text-center">{monthLabel}</span>
-            <button
-              onClick={() => {
-                const d = new Date(selectedMonth + 'T12:00:00')
-                d.setMonth(d.getMonth() + 1)
-                setSelectedMonth(d.toISOString().split('T')[0])
-              }}
-              className="p-0.5 text-ink-4 hover:text-ink rounded transition-colors"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+          <p className="text-sm text-ink-3 mt-0.5">{monthLabel} content plan</p>
         </div>
         {cycle && (
           <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-ink-6 text-ink-3">
@@ -259,6 +237,7 @@ export default function ContentEngineWorkspace({
           context={context}
           strategyNotes={strategyNotes}
           targetMonth={currentMonth}
+          onMonthChange={setSelectedMonth}
           onCycleCreated={(id) => setCycle((prev) => prev ? { ...prev, id } : { id, status: 'calendar_draft', strategy_notes: strategyNotes, deliverables: null, context_snapshot: null })}
           onStatusChange={(status) => setCycle((prev) => prev ? { ...prev, status } : null)}
         />

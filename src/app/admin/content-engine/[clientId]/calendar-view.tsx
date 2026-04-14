@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Sparkles, Loader2, RefreshCw, Check, ChevronDown,
+  Sparkles, Loader2, RefreshCw, Check, ChevronDown, ChevronLeft, ChevronRight,
   CalendarDays, LayoutList, BarChart3,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -27,12 +27,13 @@ interface CalendarViewProps {
   context: ClientContext | null
   strategyNotes: string
   targetMonth: string // YYYY-MM-DD
+  onMonthChange: (month: string) => void
   onCycleCreated: (id: string) => void
   onStatusChange: (status: string) => void
 }
 
 export default function CalendarView({
-  clientId, cycleId, context, strategyNotes, targetMonth, onCycleCreated, onStatusChange,
+  clientId, cycleId, context, strategyNotes, targetMonth, onMonthChange, onCycleCreated, onStatusChange,
 }: CalendarViewProps) {
   const supabase = createClient()
   const { toast } = useToast()
@@ -292,6 +293,17 @@ export default function CalendarView({
   // Empty state — no items for this month yet
   if (items.length === 0 && !generating) {
     return (
+      <div>
+        {/* Month selector */}
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <button onClick={() => { const d = new Date(targetMonth + 'T12:00:00'); d.setMonth(d.getMonth() - 1); onMonthChange(d.toISOString().split('T')[0]) }} className="p-1 text-ink-4 hover:text-ink rounded transition-colors">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <h2 className="text-base font-bold text-ink min-w-[160px] text-center">{targetMonthLabel}</h2>
+          <button onClick={() => { const d = new Date(targetMonth + 'T12:00:00'); d.setMonth(d.getMonth() + 1); onMonthChange(d.toISOString().split('T')[0]) }} className="p-1 text-ink-4 hover:text-ink rounded transition-colors">
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
       <div className="text-center py-16">
         <Sparkles className="w-10 h-10 text-ink-4 mx-auto mb-4" />
         <h2 className="text-lg font-bold text-ink mb-2">No content for {targetMonthLabel}</h2>
@@ -302,6 +314,7 @@ export default function CalendarView({
         <button onClick={() => { setRegenMode('all'); handleGenerate() }} disabled={generating} className="inline-flex items-center gap-2 px-6 py-3 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors disabled:opacity-50">
           {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><Sparkles className="w-4 h-4" /> Generate {targetMonthLabel} Calendar</>}
         </button>
+      </div>
       </div>
     )
   }
@@ -316,8 +329,30 @@ export default function CalendarView({
     )
   }
 
+  const prevMonth = () => {
+    const d = new Date(targetMonth + 'T12:00:00')
+    d.setMonth(d.getMonth() - 1)
+    onMonthChange(d.toISOString().split('T')[0])
+  }
+  const nextMonth = () => {
+    const d = new Date(targetMonth + 'T12:00:00')
+    d.setMonth(d.getMonth() + 1)
+    onMonthChange(d.toISOString().split('T')[0])
+  }
+
   return (
     <div className="space-y-4">
+      {/* Month selector */}
+      <div className="flex items-center justify-center gap-3">
+        <button onClick={prevMonth} className="p-1 text-ink-4 hover:text-ink rounded transition-colors">
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <h2 className="text-base font-bold text-ink min-w-[160px] text-center">{targetMonthLabel}</h2>
+        <button onClick={nextMonth} className="p-1 text-ink-4 hover:text-ink rounded transition-colors">
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      </div>
+
       {/* Header bar */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         {/* Approval progress */}
