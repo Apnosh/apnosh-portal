@@ -100,7 +100,7 @@ FROM generate_series(
   CURRENT_DATE - INTERVAL '1 day',
   INTERVAL '1 day'
 ) AS d
-ON CONFLICT (client_id, COALESCE(location_id, 'default'), date) DO NOTHING;
+ON CONFLICT (client_id, location_id, date) DO NOTHING;
 
 -- ============================================================
 -- Benchmarks

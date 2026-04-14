@@ -57,7 +57,7 @@ CREATE TABLE gbp_metrics (
   photo_views integer DEFAULT 0,
   raw_data jsonb,
   created_at timestamptz DEFAULT now(),
-  UNIQUE(client_id, COALESCE(location_id, 'default'), date)
+  UNIQUE(client_id, location_id, date)
 );
 
 CREATE INDEX idx_gbp_metrics_client_date ON gbp_metrics(client_id, date);
@@ -175,15 +175,11 @@ ALTER TABLE gbp_connections ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Clients read own social_metrics" ON social_metrics FOR SELECT
   USING (client_id IN (
     SELECT cu.client_id FROM client_users cu WHERE cu.auth_user_id = auth.uid()
-    UNION
-    SELECT b.client_id FROM businesses b WHERE b.owner_id = auth.uid() AND b.client_id IS NOT NULL
   ));
 
 CREATE POLICY "Clients read own gbp_metrics" ON gbp_metrics FOR SELECT
   USING (client_id IN (
     SELECT cu.client_id FROM client_users cu WHERE cu.auth_user_id = auth.uid()
-    UNION
-    SELECT b.client_id FROM businesses b WHERE b.owner_id = auth.uid() AND b.client_id IS NOT NULL
   ));
 
 CREATE POLICY "Anyone can read benchmarks" ON benchmarks FOR SELECT
@@ -192,30 +188,22 @@ CREATE POLICY "Anyone can read benchmarks" ON benchmarks FOR SELECT
 CREATE POLICY "Clients read own insights" ON insights FOR SELECT
   USING (client_id IN (
     SELECT cu.client_id FROM client_users cu WHERE cu.auth_user_id = auth.uid()
-    UNION
-    SELECT b.client_id FROM businesses b WHERE b.owner_id = auth.uid() AND b.client_id IS NOT NULL
   ));
 
 CREATE POLICY "Clients read own am_notes" ON am_notes FOR SELECT
   USING (client_id IN (
     SELECT cu.client_id FROM client_users cu WHERE cu.auth_user_id = auth.uid()
-    UNION
-    SELECT b.client_id FROM businesses b WHERE b.owner_id = auth.uid() AND b.client_id IS NOT NULL
   ));
 
 -- social_connections: clients can read own BUT never see tokens
 CREATE POLICY "Clients read own social_connections" ON social_connections FOR SELECT
   USING (client_id IN (
     SELECT cu.client_id FROM client_users cu WHERE cu.auth_user_id = auth.uid()
-    UNION
-    SELECT b.client_id FROM businesses b WHERE b.owner_id = auth.uid() AND b.client_id IS NOT NULL
   ));
 
 CREATE POLICY "Clients read own gbp_connections" ON gbp_connections FOR SELECT
   USING (client_id IN (
     SELECT cu.client_id FROM client_users cu WHERE cu.auth_user_id = auth.uid()
-    UNION
-    SELECT b.client_id FROM businesses b WHERE b.owner_id = auth.uid() AND b.client_id IS NOT NULL
   ));
 
 -- Admin full access on all tables
