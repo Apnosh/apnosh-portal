@@ -22,7 +22,7 @@ const ROLE_TABS: Array<{ key: RoleTab; label: string; icon: typeof Camera }> = [
   { key: 'overview', label: 'Overview', icon: BarChart3 },
 ]
 
-export default function ProductionView({ cycleId, clientId }: { cycleId: string; clientId: string }) {
+export default function ProductionView({ cycleId, clientId, onGoToCalendar }: { cycleId: string; clientId: string; onGoToCalendar?: () => void }) {
   const supabase = createClient()
   const [items, setItems] = useState<ContentItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -52,7 +52,7 @@ export default function ProductionView({ cycleId, clientId }: { cycleId: string;
   const designItems = items.filter((i) => ['feed_post', 'static_post', 'carousel'].includes(i.content_type as string) || !!(i.cover_frame))
   const roleCounts: Record<string, number> = {
     all: items.length,
-    videographer: videoItems.filter((i) => ['apnosh_films', 'ugc_style'].includes(i.footage_source as string ?? '')).length,
+    videographer: videoItems.filter((i) => !['client_provides', 'animation', 'stock'].includes((i.footage_source as string) ?? '')).length,
     editor: videoItems.length,
     designer: designItems.length,
     copywriter: items.length,
@@ -100,6 +100,16 @@ export default function ProductionView({ cycleId, clientId }: { cycleId: string;
 
       {activeRole === 'overview' && (
         <OverviewDashboard items={items} />
+      )}
+
+      {/* Transition CTA */}
+      {items.length > 0 && onGoToCalendar && (
+        <div className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between">
+          <span className="text-xs text-ink-2">{items.length} items ready for scheduling</span>
+          <button onClick={onGoToCalendar} className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-ink text-white rounded-lg hover:bg-ink-2 transition-colors">
+            Schedule content →
+          </button>
+        </div>
       )}
     </div>
   )

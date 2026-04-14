@@ -1,15 +1,42 @@
 'use client'
 
+import { useState } from 'react'
+import { ChevronRight, ChevronDown } from 'lucide-react'
+
 // Shared form components used by reel, feed post, carousel, and story forms
 
-export function FormSection({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+export function FormSection({ title, subtitle, children, collapsible, defaultOpen = true, summary }: {
+  title: string; subtitle?: string; children: React.ReactNode; collapsible?: boolean; defaultOpen?: boolean; summary?: string
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
+  if (!collapsible) {
+    return (
+      <div className="border-b border-ink-6 pb-5 last:border-0 last:pb-0">
+        <div className="mb-3">
+          <h3 className="text-[11px] font-bold text-ink uppercase tracking-wider">{title}</h3>
+          {subtitle && <p className="text-[9px] text-ink-4 mt-0.5">{subtitle}</p>}
+        </div>
+        <div className="space-y-3">{children}</div>
+      </div>
+    )
+  }
+
   return (
     <div className="border-b border-ink-6 pb-5 last:border-0 last:pb-0">
-      <div className="mb-3">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 mb-3 group text-left"
+      >
+        {open
+          ? <ChevronDown className="w-3 h-3 text-ink-4 flex-shrink-0" />
+          : <ChevronRight className="w-3 h-3 text-ink-4 flex-shrink-0" />
+        }
         <h3 className="text-[11px] font-bold text-ink uppercase tracking-wider">{title}</h3>
-        {subtitle && <p className="text-[9px] text-ink-4 mt-0.5">{subtitle}</p>}
-      </div>
-      <div className="space-y-3">{children}</div>
+        {!open && summary && <span className="text-[10px] text-ink-4 font-normal normal-case tracking-normal truncate">{summary}</span>}
+      </button>
+      {subtitle && open && <p className="text-[9px] text-ink-4 mt-0.5 mb-3 ml-5">{subtitle}</p>}
+      {open && <div className="space-y-3">{children}</div>}
     </div>
   )
 }

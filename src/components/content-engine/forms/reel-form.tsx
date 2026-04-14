@@ -85,7 +85,7 @@ export default function ReelForm({ data, onSave, defaults }: ReelFormProps) {
       </FormSection>
 
       {/* CREATIVE DIRECTION */}
-      <FormSection title="Creative Direction" subtitle="The emotional and strategic intent">
+      <FormSection title="Creative Direction" subtitle="The emotional and strategic intent" collapsible defaultOpen={!!(s('emotional_target') || s('target_audience_specific') || s('strategic_context'))} summary={s('emotional_target') ? s('emotional_target').slice(0, 60) + '...' : 'Not set'}>
         <Field label="How should the viewer feel after watching?" value={s('emotional_target')} onChange={(v) => onSave('emotional_target', v)} placeholder="The gut reaction — e.g., 'I need to try this before summer's over'" multiline rows={2} />
         <Field label="Who is this video specifically for?" value={s('target_audience_specific')} onChange={(v) => onSave('target_audience_specific', v)} placeholder="Narrow the audience — e.g., Boba lovers 18-30 in Seattle" />
         <Field label="Why does this video matter?" value={s('strategic_context')} onChange={(v) => onSave('strategic_context', v)} placeholder="The business reason — e.g., Positions them as a drink destination" multiline rows={2} />
@@ -111,7 +111,7 @@ export default function ReelForm({ data, onSave, defaults }: ReelFormProps) {
       </FormSection>
 
       {/* FOR THE VIDEOGRAPHER */}
-      <FormSection title="For the Videographer" subtitle="Sent to filming team">
+      <FormSection title="For the Videographer" subtitle="Sent to filming team" collapsible defaultOpen={false} summary={filming ? `${[s('footage_source') && 'Source', s('location_notes') && 'Location', s('who_on_camera') && 'Camera', s('shoot_date') && 'Date'].filter(Boolean).join(' · ') || 'Not set'}` : 'Not filming'}>
         <ChipSelect label="Footage source" options={FOOTAGE.map((f) => f.l)} value={FOOTAGE.find((f) => f.v === (s('footage_source') || gd('footage_source')))?.l ?? ''} onChange={(v) => onSave('footage_source', FOOTAGE.find((f) => f.l === v)?.v ?? v)} />
         {filming && (<>
           <Field label="Props & products" value={s('props') ? (data.props as string[]).join(', ') : ''} onChange={(v) => onSave('props', v.split(',').map((x) => x.trim()).filter(Boolean))} placeholder="Items needed on set" />
@@ -129,7 +129,7 @@ export default function ReelForm({ data, onSave, defaults }: ReelFormProps) {
       </FormSection>
 
       {/* FOR THE EDITOR */}
-      <FormSection title="For the Editor" subtitle="Sent to post-production">
+      <FormSection title="For the Editor" subtitle="Sent to post-production" collapsible defaultOpen={false} summary={[s('editing_style_value')?.replace(/_/g, ' '), s('music_feel_value'), s('subtitle_style')].filter(Boolean).join(' · ') || 'Not set'}>
         <div><label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">Editing style</label><div className="flex flex-wrap gap-1.5">{EDIT_STYLES.map((e) => (<button key={e.v} onClick={() => onSave('editing_style_value', e.v)} className={`text-[11px] font-medium px-3 py-1.5 rounded-lg border transition-colors ${(s('editing_style_value') || gd('editing_style')) === e.v ? 'bg-ink text-white border-ink' : 'border-ink-6 text-ink-3 hover:border-ink-5'}`}>{e.l}</button>))}</div>{editStyle?.d && <p className="text-[10px] text-ink-4 mt-1.5">{editStyle.d}</p>}{s('editing_style_value') === 'custom' && <Field label="" value={s('editing_style_custom')} onChange={(v) => onSave('editing_style_custom', v)} placeholder="Describe style..." />}</div>
         <Field label="Transitions" value={s('transition_notes')} onChange={(v) => onSave('transition_notes', v)} placeholder="e.g., Clean cuts throughout, soft dissolve between hook and beauty shot" />
         <div>
@@ -149,12 +149,12 @@ export default function ReelForm({ data, onSave, defaults }: ReelFormProps) {
       </FormSection>
 
       {/* METADATA */}
-      <FormSection title="Metadata" subtitle="Organizational">
+      <FormSection title="Metadata" subtitle="Organizational" collapsible defaultOpen={false} summary={s('content_category') || 'Not set'}>
         <ChipSelect label="Category" options={['Promotion', 'Product', 'Event', 'Seasonal', 'Educational', 'Testimonial', 'Behind the Scenes', 'Brand', 'Other']} value={s('content_category')} onChange={(v) => onSave('content_category', v)} />
       </FormSection>
 
       {/* SCHEDULING */}
-      <FormSection title="Scheduling & Notes" subtitle="Internal">
+      <FormSection title="Scheduling & Notes" subtitle="Internal" collapsible defaultOpen={false} summary={s('scheduled_date') || 'Not scheduled'}>
         <div className="grid grid-cols-2 gap-3"><Field label="Publish date" value={s('scheduled_date')} onChange={(v) => onSave('scheduled_date', v)} type="date" /><ChipSelect label="Urgency" options={['Flexible', 'Standard', 'Urgent']} value={s('urgency') || 'Standard'} onChange={(v) => onSave('urgency', v.toLowerCase())} /></div>
         <Field label="Internal notes" value={s('internal_note')} onChange={(v) => onSave('internal_note', v)} placeholder="Notes for the team" multiline rows={2} />
         <Field label="What to avoid" value={s('avoid_text')} onChange={(v) => onSave('avoid_text', v)} placeholder="Topics, styles, or references to avoid" multiline rows={2} />
