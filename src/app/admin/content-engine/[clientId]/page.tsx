@@ -19,6 +19,7 @@ import CalendarView from './calendar-view'
 import BriefsView from './briefs-view'
 import ProductionView from './production-view'
 import ContentProfileSection from './content-profile-section'
+import DefaultsSection from './defaults-section'
 
 type WorkspaceTab = 'context' | 'calendar' | 'briefs' | 'production'
 
@@ -647,6 +648,14 @@ function ContextTab({
           </div>
         </EditableSection>
       )}
+
+      {/* Content Defaults */}
+      <DefaultsSection
+        clientId={clientId}
+        defaults={context.contentDefaults as never}
+        onUpdate={(d) => setContext({ ...context, contentDefaults: d as unknown as Record<string, unknown> })}
+        toast={toast}
+      />
 
       {/* Strategy Notes — always editable (no Edit button, direct textarea) */}
       <div className="bg-white rounded-xl border border-ink-6 p-4">

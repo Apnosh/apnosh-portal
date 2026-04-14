@@ -20,6 +20,13 @@ const TYPE_COLORS: Record<string, string> = {
   video: 'bg-indigo-100 text-indigo-800',
 }
 
+const ALL_PLATFORMS = [
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'tiktok', label: 'TikTok' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'linkedin', label: 'LinkedIn' },
+]
+
 interface ItemDetailPanelProps {
   item: CalendarItemData
   allItems: CalendarItemData[]
@@ -46,6 +53,7 @@ export default function ItemDetailPanel({
   const [date, setDate] = useState(item.scheduled_date)
   const [time, setTime] = useState(item.scheduled_time ?? '')
   const [platform, setPlatform] = useState(item.platform)
+  const [additionalPlatforms, setAdditionalPlatforms] = useState<string[]>(item.additional_platforms ?? [])
   const [contentType, setContentType] = useState(item.content_type)
   const [goal, setGoal] = useState(item.strategic_goal ?? '')
   const [batch, setBatch] = useState(item.filming_batch ?? '')
@@ -57,6 +65,7 @@ export default function ItemDetailPanel({
     setDate(item.scheduled_date)
     setTime(item.scheduled_time ?? '')
     setPlatform(item.platform)
+    setAdditionalPlatforms(item.additional_platforms ?? [])
     setContentType(item.content_type)
     setGoal(item.strategic_goal ?? '')
     setBatch(item.filming_batch ?? '')
@@ -246,39 +255,63 @@ export default function ItemDetailPanel({
             </div>
           </div>
 
-          {/* Platform + Type */}
+          {/* Platforms (multi-select toggles) */}
           <div>
             <label className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-              <Layers className="w-3 h-3" /> Content Details
+              <Layers className="w-3 h-3" /> Platforms
             </label>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] text-ink-4 block mb-0.5">Platform</label>
-                <select
-                  value={platform}
-                  onChange={(e) => { setPlatform(e.target.value); saveField('platform', e.target.value) }}
-                  className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                >
-                  <option value="instagram">Instagram</option>
-                  <option value="facebook">Facebook</option>
-                  <option value="tiktok">TikTok</option>
-                  <option value="linkedin">LinkedIn</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-ink-4 block mb-0.5">Type</label>
-                <select
-                  value={contentType}
-                  onChange={(e) => { setContentType(e.target.value); saveField('content_type', e.target.value) }}
-                  className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                >
-                  <option value="reel">Reel</option>
-                  <option value="feed_post">Feed Post</option>
-                  <option value="carousel">Carousel</option>
-                  <option value="story">Story</option>
-                </select>
-              </div>
+            <div className="flex flex-wrap gap-2">
+              {ALL_PLATFORMS.map((p) => {
+                const Icon = PLATFORM_ICONS[p.value] ?? Globe
+                const isPrimary = platform === p.value
+                const isAdditional = additionalPlatforms.includes(p.value)
+                const isActive = isPrimary || isAdditional
+                return (
+                  <button
+                    key={p.value}
+                    onClick={() => {
+                      if (isPrimary) return // Can't deselect primary
+                      if (isAdditional) {
+                        const updated = additionalPlatforms.filter((x) => x !== p.value)
+                        setAdditionalPlatforms(updated)
+                        onSave(item.id, 'additional_platforms', JSON.stringify(updated))
+                      } else {
+                        const updated = [...additionalPlatforms, p.value]
+                        setAdditionalPlatforms(updated)
+                        onSave(item.id, 'additional_platforms', JSON.stringify(updated))
+                      }
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                      isPrimary
+                        ? 'bg-ink text-white border-ink'
+                        : isActive
+                          ? 'bg-brand-tint text-brand-dark border-brand/30'
+                          : 'bg-white text-ink-3 border-ink-6 hover:border-ink-5'
+                    }`}
+                  >
+                    <Icon className="w-3 h-3" />
+                    {p.label}
+                    {isPrimary && <span className="text-[9px] opacity-70">primary</span>}
+                  </button>
+                )
+              })}
             </div>
+            <p className="text-[10px] text-ink-4 mt-1.5">Click to add platforms. Primary platform is set by the original generation.</p>
+          </div>
+
+          {/* Content Type */}
+          <div>
+            <label className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider mb-1.5">Content Type</label>
+            <select
+              value={contentType}
+              onChange={(e) => { setContentType(e.target.value); saveField('content_type', e.target.value) }}
+              className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
+            >
+              <option value="reel">Reel</option>
+              <option value="feed_post">Feed Post</option>
+              <option value="carousel">Carousel</option>
+              <option value="story">Story</option>
+            </select>
           </div>
 
           {/* Goal + Batch */}
