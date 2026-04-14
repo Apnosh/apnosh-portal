@@ -103,12 +103,6 @@ export default function BrainstormView({
     if (idea.strategic_goal) goalCounts[idea.strategic_goal] = (goalCounts[idea.strategic_goal] ?? 0) + 1
   }
 
-  // Batch summary
-  const batchCounts: Record<string, number> = {}
-  for (const idea of ideas) {
-    if (idea.filming_batch) batchCounts[idea.filming_batch] = (batchCounts[idea.filming_batch] ?? 0) + 1
-  }
-
   // Week groups
   const weekGroups = new Map<number, IdeaCard[]>()
   for (const idea of ideas) {
@@ -283,9 +277,6 @@ export default function BrainstormView({
             {Object.entries(goalCounts).length > 0 && (
               <span>{Object.entries(goalCounts).map(([g, c]) => <span key={g} className={`${GOAL_COLORS[g] ?? ''} font-medium`}>{c} {g}</span>).reduce((prev, curr, i) => i === 0 ? [curr] : [...prev, <span key={`sep-${i}`}> · </span>, curr], [] as React.ReactNode[])}</span>
             )}
-            {Object.keys(batchCounts).length > 0 && (
-              <span>{Object.keys(batchCounts).length} filming sessions</span>
-            )}
           </div>
         </div>
       )}
@@ -321,21 +312,17 @@ export default function BrainstormView({
           {[...weekGroups.entries()].sort((a, b) => a[0] - b[0]).map(([week, weekIdeas]) => (
             <div key={week}>
               <h3 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider mb-2 border-b border-ink-6 pb-1">
-                {week === 0 ? 'Unscheduled' : `Week ${week}`} — {weekIdeas.length} items
+                {week === 0 ? 'No week assigned' : `Week ${week}`} — {weekIdeas.length} items
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {weekIdeas.map((idea) => (
                   <BrainstormCard
                     key={idea.id}
                     idea={idea}
-                    onUpdateField={handleUpdateField}
-                    onUpdateTitle={handleUpdateTitle}
+                    onClick={(id) => { /* TODO: open detail panel */ toast('Click to edit in Content Details tab', 'info') }}
                     onDelete={handleDelete}
                     onRefine={handleRefine}
                     onReplace={handleReplace}
-                    onDuplicate={handleDuplicate}
-                    setLocalTitle={(id, title) => setIdeas((prev) => prev.map((i) => i.id === id ? { ...i, concept_title: title } : i))}
-                    setLocalDesc={(id, desc) => setIdeas((prev) => prev.map((i) => i.id === id ? { ...i, concept_description: desc } : i))}
                   />
                 ))}
               </div>
