@@ -1,15 +1,38 @@
 'use client'
 
-import { Sparkles } from 'lucide-react'
+import { useState } from 'react'
+
+// ---------------------------------------------------------------------------
+// Types + constants
+// ---------------------------------------------------------------------------
 
 interface ReelFormProps {
   data: Record<string, unknown>
   onSave: (field: string, value: unknown) => void
+  defaults?: Record<string, unknown>
 }
 
-const CATEGORIES = ['Promotion', 'Product', 'Event', 'Seasonal', 'Educational', 'Testimonial', 'Behind the Scenes', 'Brand', 'Other']
+const FRAMEWORKS = [
+  { value: 'behind_the_scenes', label: 'Behind the scenes', desc: 'Show the process, reveal what most people never see' },
+  { value: 'myth_buster', label: 'Myth buster', desc: 'Challenge a common belief, show why it\'s wrong' },
+  { value: 'listicle', label: 'Listicle / Tips', desc: 'X things about a topic — high save rate format' },
+  { value: 'transformation', label: 'Transformation', desc: 'Before → process → after — let the visual tell the story' },
+  { value: 'story', label: 'Story', desc: 'Start with a moment, build a narrative, land an emotional takeaway' },
+  { value: 'hot_take', label: 'Hot take', desc: 'Lead with a surprising opinion, back it up, invite debate' },
+  { value: 'tutorial', label: 'Tutorial', desc: 'How to do something step by step' },
+  { value: 'free_form', label: 'Free-form', desc: 'No template — write the script from scratch' },
+]
+
 const LENGTHS = ['15-30s', '30-45s', '45-60s', '60-90s']
 const CTAS = ['Order now', 'Visit us', 'DM to book', 'Link in bio', 'Learn more', 'Call us', 'No CTA']
+const CTA_PLACEHOLDERS: Record<string, string> = {
+  'Order now': 'e.g., Order at [website] — link in bio',
+  'Visit us': 'e.g., Come by this weekend — we\'re at [address]',
+  'DM to book': 'e.g., DM us \'BOOK\' to reserve your table',
+  'Link in bio': 'e.g., Full recipe at the link in our bio',
+  'Learn more': 'e.g., Follow for more tips like this every week',
+  'Call us': 'e.g., Call [phone] to order — we deliver',
+}
 const FOOTAGE_SOURCES = [
   { value: 'apnosh_films', label: 'We film it' },
   { value: 'client_provides', label: 'Client provides' },
@@ -26,79 +49,149 @@ const EDITING_STYLES = [
   { value: 'custom', label: 'Custom', desc: '' },
 ]
 const MUSIC_FEELS = [
-  { value: 'upbeat', label: 'Upbeat & energetic' },
-  { value: 'chill', label: 'Chill & relaxed' },
-  { value: 'trending', label: 'Trending audio' },
-  { value: 'cinematic', label: 'Cinematic / epic' },
-  { value: 'acoustic', label: 'Acoustic / warm' },
-  { value: 'electronic', label: 'Electronic / modern' },
-  { value: 'custom', label: 'Custom' },
+  'Upbeat & energetic', 'Chill & relaxed', 'Trending audio',
+  'Cinematic / epic', 'Acoustic / warm', 'Electronic / modern', 'Custom',
 ]
 const MUSIC_OWNERS = ['We pick', 'Client provides', 'No music']
+const SUBTITLE_STYLES = ['Bold centered', 'Bottom-third', 'Animated word-by-word', 'No subtitles', 'Custom']
+const ADAPT_FORMATS = [
+  { value: 'feed_4x5', label: 'Feed crop (4:5)' },
+  { value: 'square_1x1', label: 'Square (1:1)' },
+  { value: 'none', label: 'No adaptation' },
+]
 
-export default function ReelForm({ data, onSave }: ReelFormProps) {
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function ReelForm({ data, onSave, defaults }: ReelFormProps) {
   const s = (field: string) => data[field] as string ?? ''
   const a = (field: string) => (data[field] as string[]) ?? []
+  const [showBRoll, setShowBRoll] = useState(((data.b_roll as unknown[]) ?? []).length > 0)
+  const [showEquipment, setShowEquipment] = useState(!!data.equipment_notes)
+
   const showFilming = !['client_provides', 'animation', 'stock'].includes(s('footage_source'))
+  const selectedFramework = FRAMEWORKS.find((f) => f.value === s('script_framework'))
+  const isFreeForm = s('script_framework') === 'free_form'
   const selectedEditStyle = EDITING_STYLES.find((e) => e.value === s('editing_style_value'))
+  const selectedCta = a('call_to_action')[0] ?? ''
+  const beats = (data.script_beats as Array<{ beat_number: number; visual: string; audio_text: string }>) ?? []
+  const bRoll = (data.b_roll as Array<{ description: string }>) ?? []
+
+  const getDefault = (field: string): string => (defaults?.[`default_${field}`] as string) ?? ''
 
   return (
     <div className="space-y-6">
       {/* THE CONCEPT */}
       <FormSection title="The Concept">
-        <ChipSelect label="Category" options={CATEGORIES} value={s('content_category')} onChange={(v) => onSave('content_category', v)} />
         <Field label="Main message" value={s('concept_description')} onChange={(v) => onSave('concept_description', v)} placeholder="What is this reel about and why does it matter?" multiline rows={3} />
-        {/* Hook — prominent */}
+
+        {/* Framework selector */}
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider">Hook — first 3 seconds</label>
-            <span className="text-[9px] text-ink-4" title="This is what stops the scroll. Make it count.">ⓘ</span>
+          <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">Script Framework</label>
+          <div className="flex flex-wrap gap-1.5">
+            {FRAMEWORKS.map((f) => (
+              <button key={f.value} onClick={() => onSave('script_framework', f.value)} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${s('script_framework') === f.value ? 'bg-ink text-white border-ink' : 'border-ink-6 text-ink-3 hover:border-ink-5'}`}>{f.label}</button>
+            ))}
           </div>
-          <input
-            value={s('hook')}
-            onChange={(e) => onSave('hook', e.target.value)}
-            placeholder="The opening line or visual that stops the scroll"
-            className="w-full text-base font-medium text-ink border-l-[3px] border-l-brand border border-ink-6 rounded-lg px-4 py-3 bg-brand-tint/30 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-          />
+          {selectedFramework && <p className="text-[10px] text-ink-4 mt-1.5">{selectedFramework.desc}</p>}
         </div>
+
+        {/* Two-part hook */}
+        <div className="space-y-2">
+          <p className="text-[9px] text-ink-4 font-medium">The hook must land within the first 2 seconds. This is what stops the scroll.</p>
+          <div>
+            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1">Visual Hook — what they see first</label>
+            <input value={s('visual_hook')} onChange={(e) => onSave('visual_hook', e.target.value)} placeholder="e.g., Close-up of sizzling pan, steam rising" className="w-full text-base font-medium text-ink border-l-[3px] border-l-brand border border-ink-6 rounded-lg px-4 py-3 bg-brand-tint/30 focus:outline-none focus:ring-2 focus:ring-brand/30" />
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1">Text/Audio Hook — what they hear or read</label>
+            <input value={s('audio_hook') || s('hook')} onChange={(e) => onSave('audio_hook', e.target.value)} placeholder="e.g., This is what 4am looks like at our restaurant" className="w-full text-base font-medium text-ink border-l-[3px] border-l-brand border border-ink-6 rounded-lg px-4 py-3 bg-brand-tint/30 focus:outline-none focus:ring-2 focus:ring-brand/30" />
+          </div>
+        </div>
+
         <ChipSelect label="Video length" options={LENGTHS} value={s('estimated_duration')} onChange={(v) => onSave('estimated_duration', v)} />
-        <ChipMulti label="Call to action" options={CTAS} value={a('call_to_action')} onChange={(v) => onSave('call_to_action', v)} />
+
+        {/* CTA with contextual text */}
+        <div className="space-y-2">
+          <ChipMulti label="Call to action" options={CTAS} value={a('call_to_action')} onChange={(v) => onSave('call_to_action', v)} />
+          {selectedCta && selectedCta !== 'No CTA' && (
+            <Field label="CTA as it appears in the reel" value={s('cta_text')} onChange={(v) => onSave('cta_text', v)} placeholder={CTA_PLACEHOLDERS[selectedCta] ?? 'The specific CTA wording'} />
+          )}
+        </div>
+      </FormSection>
+
+      {/* THE SCRIPT */}
+      <FormSection title="The Script" subtitle="Video narrative">
+        {isFreeForm || !s('script_framework') ? (
+          <Field label="Script (free-form)" value={s('script')} onChange={(v) => onSave('script', v)} placeholder={"[HOOK]\nYour opening\n\n[BODY]\nMain content\n\n[CTA]\nWhat you want them to do"} multiline rows={10} />
+        ) : (
+          <div className="space-y-2">
+            <label className="text-[10px] text-ink-4 block">Each beat = what the viewer sees + what they hear/read</label>
+            {beats.map((beat, i) => (
+              <div key={i} className="flex items-start gap-2 group">
+                <span className="text-[10px] font-bold text-ink-3 w-5 pt-2 text-right flex-shrink-0">#{beat.beat_number}</span>
+                <input value={beat.visual} onChange={(e) => { const u = [...beats]; u[i] = { ...u[i], visual: e.target.value }; onSave('script_beats', u) }} placeholder="What the viewer sees" className="flex-1 text-sm border border-ink-6 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30" />
+                <input value={beat.audio_text} onChange={(e) => { const u = [...beats]; u[i] = { ...u[i], audio_text: e.target.value }; onSave('script_beats', u) }} placeholder="Voiceover, dialogue, or text" className="flex-1 text-sm border border-ink-6 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30" />
+                <button onClick={() => onSave('script_beats', beats.filter((_, j) => j !== i).map((b, j) => ({ ...b, beat_number: j + 1 })))} className="text-ink-4 hover:text-red-500 pt-2 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+              </div>
+            ))}
+            <button onClick={() => onSave('script_beats', [...beats, { beat_number: beats.length + 1, visual: '', audio_text: '' }])} className="text-xs font-medium text-brand hover:text-brand-dark">+ Add beat</button>
+          </div>
+        )}
       </FormSection>
 
       {/* THE CAPTION */}
       <FormSection title="The Caption" subtitle="Published with the post">
-        <Field label="Caption" value={s('caption')} onChange={(v) => onSave('caption', v)} placeholder="The caption that appears under the reel" multiline rows={4} charCount />
-        <Field label="Hashtags" value={(a('hashtags')).join(' ')} onChange={(v) => onSave('hashtags', v.split(/\s+/).filter(Boolean))} placeholder="#seattlefood #restaurantmarketing" />
+        <Field label="Caption" value={s('caption')} onChange={(v) => onSave('caption', v)} placeholder="The caption under the reel" multiline rows={4} charCount />
+        <Field label="Hashtags" value={a('hashtags').join(' ')} onChange={(v) => onSave('hashtags', v.split(/\s+/).filter(Boolean))} placeholder="#seattlefood #restaurantmarketing" />
       </FormSection>
 
       {/* FOR THE VIDEOGRAPHER */}
       <FormSection title="For the Videographer" subtitle="Sent to filming team">
-        <ChipSelect label="Footage source" options={FOOTAGE_SOURCES.map((f) => f.label)} value={FOOTAGE_SOURCES.find((f) => f.value === s('footage_source'))?.label ?? ''} onChange={(v) => onSave('footage_source', FOOTAGE_SOURCES.find((f) => f.label === v)?.value ?? v)} />
+        <ChipSelect label="Footage source" options={FOOTAGE_SOURCES.map((f) => f.label)} value={FOOTAGE_SOURCES.find((f) => f.value === (s('footage_source') || getDefault('footage_source')))?.label ?? ''} onChange={(v) => onSave('footage_source', FOOTAGE_SOURCES.find((f) => f.label === v)?.value ?? v)} />
 
         {showFilming && (
           <>
-            <div>
-              <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">Script</label>
-              <textarea
-                value={s('script')}
-                onChange={(e) => onSave('script', e.target.value)}
-                placeholder={"[HOOK]\nYour opening — what stops the scroll\n\n[BODY]\nThe main content — your key message\n\n[CTA]\nWhat you want the viewer to do next"}
-                rows={8}
-                className="w-full text-sm text-ink border border-ink-6 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-brand/30 font-mono"
-              />
-            </div>
-            <DynamicList label="Shot list" items={(data.shot_list as Array<{shot_number: number; description: string}>) ?? []} onChange={(v) => onSave('shot_list', v)} placeholder="e.g., Wide angle of kitchen, chef prepping ingredients" />
-            <Field label="Props & products" value={s('props') ? (data.props as string[]).join(', ') : ''} onChange={(v) => onSave('props', v.split(',').map((s) => s.trim()).filter(Boolean))} placeholder="Items needed on set" />
+            <Field label="Props & products" value={s('props') ? (data.props as string[]).join(', ') : ''} onChange={(v) => onSave('props', v.split(',').map((x) => x.trim()).filter(Boolean))} placeholder="Items needed on set" />
             <Field label="Location" value={s('location_notes')} onChange={(v) => onSave('location_notes', v)} placeholder="Where to film" />
             <Field label="Who's on camera?" value={s('who_on_camera')} onChange={(v) => onSave('who_on_camera', v)} placeholder="Names or roles" />
+            {s('who_on_camera') && (
+              <Field label="Wardrobe / appearance" value={s('wardrobe_notes')} onChange={(v) => onSave('wardrobe_notes', v)} placeholder="What should they wear?" />
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Field label="Shoot date" value={s('shoot_date')} onChange={(v) => onSave('shoot_date', v)} type="date" />
               <div className="flex items-center gap-2 pt-5">
                 <input type="checkbox" checked={data.shoot_flexible as boolean ?? true} onChange={(e) => onSave('shoot_flexible', e.target.checked)} className="rounded border-ink-5 text-brand focus:ring-brand/30" />
-                <span className="text-xs text-ink-2">Date is flexible</span>
+                <span className="text-xs text-ink-2">Flexible</span>
               </div>
             </div>
             <Field label="Reference link" value={s('reference_link')} onChange={(v) => onSave('reference_link', v)} placeholder="Link to inspiration video" />
+
+            {/* B-roll */}
+            {!showBRoll ? (
+              <button onClick={() => setShowBRoll(true)} className="text-xs text-brand font-medium hover:text-brand-dark">+ Add B-roll ideas</button>
+            ) : (
+              <div>
+                <label className="text-[10px] text-ink-4 block mb-1">B-roll & additional shots</label>
+                <div className="space-y-1.5">
+                  {bRoll.map((item, i) => (
+                    <div key={i} className="flex items-center gap-2 group">
+                      <input value={item.description} onChange={(e) => { const u = [...bRoll]; u[i] = { description: e.target.value }; onSave('b_roll', u) }} placeholder="Extra footage to capture" className="flex-1 text-sm border border-ink-6 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30" />
+                      <button onClick={() => onSave('b_roll', bRoll.filter((_, j) => j !== i))} className="text-ink-4 hover:text-red-500 opacity-0 group-hover:opacity-100">✕</button>
+                    </div>
+                  ))}
+                  <button onClick={() => onSave('b_roll', [...bRoll, { description: '' }])} className="text-xs font-medium text-brand hover:text-brand-dark">+ Add</button>
+                </div>
+              </div>
+            )}
+
+            {/* Equipment notes */}
+            {!showEquipment ? (
+              <button onClick={() => setShowEquipment(true)} className="text-xs text-brand font-medium hover:text-brand-dark">+ Add equipment notes</button>
+            ) : (
+              <Field label="Equipment / setup notes" value={s('equipment_notes')} onChange={(v) => onSave('equipment_notes', v)} placeholder="Special equipment needed?" />
+            )}
           </>
         )}
       </FormSection>
@@ -109,45 +202,56 @@ export default function ReelForm({ data, onSave }: ReelFormProps) {
           <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">Editing style</label>
           <div className="flex flex-wrap gap-1.5">
             {EDITING_STYLES.map((e) => (
-              <button key={e.value} onClick={() => onSave('editing_style_value', e.value)} className={`text-[11px] font-medium px-3 py-1.5 rounded-lg border transition-colors ${s('editing_style_value') === e.value ? 'bg-ink text-white border-ink' : 'border-ink-6 text-ink-3 hover:border-ink-5'}`}>
-                {e.label}
-              </button>
+              <button key={e.value} onClick={() => onSave('editing_style_value', e.value)} className={`text-[11px] font-medium px-3 py-1.5 rounded-lg border transition-colors ${(s('editing_style_value') || getDefault('editing_style')) === e.value ? 'bg-ink text-white border-ink' : 'border-ink-6 text-ink-3 hover:border-ink-5'}`}>{e.label}</button>
             ))}
           </div>
           {selectedEditStyle?.desc && <p className="text-[10px] text-ink-4 mt-1.5">{selectedEditStyle.desc}</p>}
-          {s('editing_style_value') === 'custom' && <Field label="" value={s('editing_style_custom')} onChange={(v) => onSave('editing_style_custom', v)} placeholder="Describe the editing style..." />}
+          {s('editing_style_value') === 'custom' && <Field label="" value={s('editing_style_custom')} onChange={(v) => onSave('editing_style_custom', v)} placeholder="Describe the style..." />}
         </div>
 
         <div>
           <ChipSelect label="Music" options={MUSIC_OWNERS} value={s('music_owner') || 'We pick'} onChange={(v) => onSave('music_owner', v)} />
           {s('music_owner') !== 'No music' && s('music_owner') !== 'Client provides' && (
             <div className="mt-3">
-              <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">Music feel</label>
-              <div className="flex flex-wrap gap-1.5">
-                {MUSIC_FEELS.map((m) => (
-                  <button key={m.value} onClick={() => onSave('music_feel_value', m.value)} className={`text-[11px] font-medium px-3 py-1.5 rounded-lg border transition-colors ${s('music_feel_value') === m.value ? 'bg-ink text-white border-ink' : 'border-ink-6 text-ink-3 hover:border-ink-5'}`}>
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-              {s('music_feel_value') === 'custom' && <Field label="" value={s('music_feel_custom')} onChange={(v) => onSave('music_feel_custom', v)} placeholder="Describe the music feel..." />}
+              <ChipSelect label="Music feel" options={MUSIC_FEELS} value={s('music_feel_value') || getDefault('music_feel')} onChange={(v) => onSave('music_feel_value', v)} />
+              {s('music_feel_value') === 'Custom' && <Field label="" value={s('music_feel_custom')} onChange={(v) => onSave('music_feel_custom', v)} placeholder="Describe music feel..." />}
             </div>
           )}
         </div>
 
-        <Field label="Text overlays" value={s('text_overlays')} onChange={(v) => onSave('text_overlays', v)} placeholder="Any text that appears on screen" multiline rows={2} />
-        <Field label="Pacing notes (optional)" value={s('pacing_notes')} onChange={(v) => onSave('pacing_notes', v)} placeholder="e.g., slow reveal on product shot, quick cuts during prep" multiline rows={2} />
+        <ChipSelect label="Subtitles" options={SUBTITLE_STYLES} value={s('subtitle_style') || 'Bold centered'} onChange={(v) => onSave('subtitle_style', v)} />
+
+        <div>
+          <label className="text-[10px] text-ink-4 block mb-1.5">Also adapt for</label>
+          <div className="flex flex-wrap gap-1.5">
+            {ADAPT_FORMATS.map((f) => (
+              <button key={f.value} onClick={() => {
+                const current = a('adapt_formats')
+                onSave('adapt_formats', current.includes(f.value) ? current.filter((v) => v !== f.value) : [...current, f.value])
+              }} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${a('adapt_formats').includes(f.value) ? 'bg-brand-tint border-brand/30 text-brand-dark' : 'border-ink-6 text-ink-3 hover:border-ink-5'}`}>{f.label}</button>
+            ))}
+          </div>
+          <p className="text-[9px] text-ink-4 mt-1">Editor will frame key moments with cropping in mind</p>
+        </div>
+
+        <Field label="Text overlays" value={s('text_overlays')} onChange={(v) => onSave('text_overlays', v)} placeholder="Text that appears on screen" multiline rows={2} />
+        <Field label="Pacing notes (optional)" value={s('pacing_notes')} onChange={(v) => onSave('pacing_notes', v)} placeholder="e.g., slow reveal on product, quick cuts during prep" multiline rows={2} />
+        <Field label="Cover frame" value={s('cover_frame')} onChange={(v) => onSave('cover_frame', v)} placeholder="What frame for the grid thumbnail?" />
+        <Field label="Editing reference" value={s('editing_reference_link')} onChange={(v) => onSave('editing_reference_link', v)} placeholder="Link to a video with the editing style you want" />
       </FormSection>
 
-      {/* SCHEDULING & NOTES */}
+      {/* METADATA */}
+      <FormSection title="Metadata" subtitle="Organizational">
+        <ChipSelect label="Category" options={['Promotion', 'Product', 'Event', 'Seasonal', 'Educational', 'Testimonial', 'Behind the Scenes', 'Brand', 'Other']} value={s('content_category')} onChange={(v) => onSave('content_category', v)} />
+      </FormSection>
+
+      {/* SCHEDULING */}
       <FormSection title="Scheduling & Notes" subtitle="Internal">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Publish date" value={s('scheduled_date')} onChange={(v) => onSave('scheduled_date', v)} type="date" />
-          <div>
-            <ChipSelect label="Urgency" options={['Flexible', 'Standard', 'Urgent']} value={s('urgency') || 'Standard'} onChange={(v) => onSave('urgency', v.toLowerCase())} />
-          </div>
+          <ChipSelect label="Urgency" options={['Flexible', 'Standard', 'Urgent']} value={s('urgency') || 'Standard'} onChange={(v) => onSave('urgency', v.toLowerCase())} />
         </div>
-        <Field label="Internal notes (not visible to client)" value={s('internal_note')} onChange={(v) => onSave('internal_note', v)} placeholder="Notes for the team" multiline rows={2} />
+        <Field label="Internal notes" value={s('internal_note')} onChange={(v) => onSave('internal_note', v)} placeholder="Notes for the team" multiline rows={2} />
         <Field label="What to avoid" value={s('avoid_text')} onChange={(v) => onSave('avoid_text', v)} placeholder="Topics, styles, or references to avoid" multiline rows={2} />
       </FormSection>
     </div>
@@ -155,7 +259,7 @@ export default function ReelForm({ data, onSave }: ReelFormProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Shared sub-components
+// Shared sub-components (exported for other forms)
 // ---------------------------------------------------------------------------
 
 export function FormSection({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
