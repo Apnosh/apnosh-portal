@@ -330,8 +330,18 @@ export default function CalendarView({
           )}
         </div>
 
-        {/* View toggle + actions */}
+        {/* Actions */}
         <div className="flex items-center gap-2">
+          {/* Approve All */}
+          {totalCount > 0 && approvedCount < totalCount && (
+            <button
+              onClick={handleApproveRemaining}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-brand text-white rounded-lg hover:bg-brand-dark transition-colors"
+            >
+              <Check className="w-3.5 h-3.5" /> Approve All
+            </button>
+          )}
+
           <div className="flex rounded-lg border border-ink-6 overflow-hidden">
             <button onClick={() => setViewMode('month')} className={`p-1.5 transition-colors ${viewMode === 'month' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`} title="Month view">
               <CalendarDays className="w-4 h-4" />
