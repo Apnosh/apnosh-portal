@@ -137,7 +137,7 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
     const type = item.content_type as string
     const data = item as Record<string, unknown>
     if (['reel', 'video', 'short_form_video'].includes(type)) return <ReelForm data={data} onSave={saveField} />
-    if (type === 'carousel') return <CarouselForm data={data} onSave={saveField} />
+    if (type === 'carousel') return <CarouselForm data={data} onSave={saveField} defaults={contentDefaults} />
     if (type === 'story') return <StoryForm data={data} onSave={saveField} />
     return <FeedPostForm data={data} onSave={saveField} defaults={contentDefaults} />
   }
