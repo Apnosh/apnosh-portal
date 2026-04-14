@@ -16,6 +16,7 @@ import DayDetailPanel from '@/components/content-engine/day-detail-panel'
 import BulkActionBar from '@/components/content-engine/bulk-action-bar'
 import QuickAddForm from '@/components/content-engine/quick-add-form'
 import ConfirmModal from '@/components/content-engine/confirm-modal'
+import ItemDetailPanel from '@/components/content-engine/item-detail-panel'
 import { useToast } from '@/components/ui/toast'
 
 type ViewMode = 'month' | 'list'
@@ -44,6 +45,7 @@ export default function CalendarView({
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [detailItemId, setDetailItemId] = useState<string | null>(null)
   const [quickAddDate, setQuickAddDate] = useState<string | null>(null)
   const [refiningId, setRefiningId] = useState<string | null>(null)
   const [refineText, setRefineText] = useState('')
@@ -140,7 +142,7 @@ export default function CalendarView({
   }
 
   const handleExpand = (id: string) => {
-    setExpandedId(expandedId === id ? null : id)
+    setDetailItemId(id)
   }
 
   // Bulk actions
@@ -377,7 +379,7 @@ export default function CalendarView({
             onMonthChange={setMonth}
             selectedDate={selectedDate}
             onSelectDate={(d) => setSelectedDate(selectedDate === d ? null : d)}
-            onSelectItem={(item) => { setSelectedDate(item.scheduled_date); setExpandedId(item.id) }}
+            onSelectItem={(item) => { setSelectedDate(item.scheduled_date); setDetailItemId(item.id) }}
             onQuickAdd={(d) => setQuickAddDate(d)}
             conflicts={conflicts}
           />
@@ -442,18 +444,27 @@ export default function CalendarView({
         />
       )}
 
-      {/* Refine panel */}
-      {refiningId && (
-        <div className="flex gap-2 bg-white border border-brand/30 rounded-xl p-4 shadow-sm">
-          <Sparkles className="w-4 h-4 text-brand flex-shrink-0 mt-2" />
-          <div className="flex-1">
-            <p className="text-xs text-ink-3 mb-2">Describe how to refine this item:</p>
-            <input value={refineText} onChange={(e) => setRefineText(e.target.value)} placeholder="Make it more personal, focus on the chef's story..." className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30" onKeyDown={(e) => e.key === 'Enter' && handleRefine(refiningId)} autoFocus />
-          </div>
-          <button onClick={() => handleRefine(refiningId)} className="px-4 py-2 bg-brand text-white text-xs font-semibold rounded-lg hover:bg-brand-dark self-end">Refine</button>
-          <button onClick={() => { setRefiningId(null); setRefineText('') }} className="px-3 py-2 text-xs text-ink-3 self-end">Cancel</button>
-        </div>
-      )}
+      {/* Slide-over detail panel */}
+      {detailItemId && (() => {
+        const detailItem = items.find((i) => i.id === detailItemId)
+        if (!detailItem) return null
+        return (
+          <ItemDetailPanel
+            item={detailItem}
+            allItems={items}
+            onSave={saveField}
+            onApprove={handleApproveItem}
+            onDelete={(id) => { handleDeleteItem(id); setDetailItemId(null) }}
+            onRefine={async (id, direction) => {
+              if (!context) return
+              const result = await refineCalendarItem(id, direction, context)
+              if (result.success) { await loadItems(); toast('Refined', 'success') }
+            }}
+            onNavigate={setDetailItemId}
+            onClose={() => setDetailItemId(null)}
+          />
+        )
+      })()}
 
       {/* Bulk action bar */}
       <BulkActionBar
