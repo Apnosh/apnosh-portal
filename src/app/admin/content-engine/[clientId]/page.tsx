@@ -110,8 +110,8 @@ export default function ContentEngineWorkspace({
     { key: 'strategy', label: 'Strategy', icon: FileText },
     { key: 'brainstorm', label: 'Brainstorm', icon: Lightbulb },
     { key: 'content-details', label: 'Content Details', icon: Layers },
-    { key: 'content-calendar', label: 'Content Calendar', icon: CalIcon },
     { key: 'production', label: 'Team & Production', icon: Zap },
+    { key: 'content-calendar', label: 'Content Calendar', icon: CalIcon },
   ]
 
   return (
