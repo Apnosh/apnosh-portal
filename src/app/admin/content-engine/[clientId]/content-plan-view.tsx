@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Sparkles, Loader2, RefreshCw, Check, ChevronDown, ChevronLeft, ChevronRight,
   CalendarDays, LayoutList, Camera, Scissors, Palette, Pen, Eye,
-  BarChart3, AlertCircle,
+  BarChart3, AlertCircle, Video, Globe, MessageCircle,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { generateContentPlan } from '@/lib/content-engine/generate-content-plan'
@@ -365,22 +365,34 @@ export default function ContentPlanView({
                 <div key={group.label}>
                   <h3 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider mb-1.5">{group.label} — {group.items.length} items</h3>
                   <div className="bg-white rounded-xl border border-ink-6 divide-y divide-ink-6">
-                    {group.items.map((item) => (
-                      <div key={item.id} className="flex items-center gap-2 px-3 py-2 hover:bg-bg-2 cursor-pointer transition-colors" onClick={() => setSelectedItemId(item.id)}>
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${COMPLETENESS_COLORS[getCompleteness(item)]}`} />
-                        <CalendarItemRow
-                          item={item as CalendarItemData}
-                          selected={selectedIds.has(item.id)}
-                          onSelect={handleSelect}
-                          onApprove={handleApproveItem}
-                          onDelete={handleDeleteItem}
-                          onRefine={() => {}}
-                          onSave={async () => {}}
-                          onExpand={() => setSelectedItemId(item.id)}
-                          conflict={conflicts.has(item.id)}
-                        />
-                      </div>
-                    ))}
+                    {group.items.map((item) => {
+                      const isApproved = item.status === 'approved' || item.status === 'strategist_approved'
+                      const comp = getCompleteness(item)
+                      const isSelected = selectedItemId === item.id
+                      const PlatIcon = ({ instagram: Camera, tiktok: Video, facebook: Globe, linkedin: MessageCircle } as Record<string, typeof Camera>)[item.platform] ?? Globe
+                      const tc = ({ reel: 'bg-indigo-100 text-indigo-800', feed_post: 'bg-cyan-100 text-cyan-800', carousel: 'bg-pink-100 text-pink-800', story: 'bg-amber-100 text-amber-800' } as Record<string, string>)[item.content_type] ?? 'bg-ink-6 text-ink-3'
+
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setSelectedItemId(item.id)}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                            isSelected ? 'bg-brand-tint' : 'hover:bg-bg-2'
+                          } ${isApproved ? 'opacity-60' : ''}`}
+                        >
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${COMPLETENESS_COLORS[comp]}`} />
+                          <span className="text-[11px] text-ink-3 font-medium tabular-nums w-14 flex-shrink-0">
+                            {new Date(item.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                          <PlatIcon className="w-3 h-3 text-ink-4 flex-shrink-0" />
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${tc}`}>
+                            {item.content_type.replace(/_/g, ' ')}
+                          </span>
+                          <span className="text-xs font-medium text-ink truncate flex-1">{item.concept_title}</span>
+                          {isApproved && <Check className="w-3 h-3 text-brand flex-shrink-0" />}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               ))}
