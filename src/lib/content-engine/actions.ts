@@ -130,7 +130,14 @@ export async function approveAllBriefs(
     await syncCalendarToQueue(cycleId, clientId)
   } catch (err) {
     console.error('Queue sync failed:', err)
-    // Don't fail the approval if sync fails
+  }
+
+  // Auto-generate production assignments
+  try {
+    const { generateAssignments } = await import('./generate-assignments')
+    await generateAssignments(cycleId, clientId)
+  } catch (err) {
+    console.error('Assignment generation failed:', err)
   }
 
   return { success: true }

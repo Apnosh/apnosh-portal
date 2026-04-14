@@ -1,235 +1,290 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, Camera, Scissors, ClipboardList, Clipboard, ClipboardCheck } from 'lucide-react'
+import {
+  Loader2, Camera, Scissors, Palette, Pen, ShieldCheck,
+  AlertCircle, Clock, RefreshCw,
+} from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { updateProductionField } from '@/lib/content-engine/actions'
-import EditableField from '@/components/content-engine/editable-field'
-import EditableList from '@/components/content-engine/editable-list'
+import { generateAssignments, completeAssignment } from '@/lib/content-engine/generate-assignments'
+import PipelineBoard from '@/components/content-engine/pipeline-board'
+import ProductionItemCard from '@/components/content-engine/production-item-card'
+import { useToast } from '@/components/ui/toast'
 
-interface ProductionItem {
+interface Assignment {
+  id: string
+  item_id: string
+  role: string
+  step_order: number
+  team_member_id: string | null
+  status: string
+  due_date: string | null
+  started_at: string | null
+  completed_at: string | null
+  notes: string | null
+}
+
+interface ContentItem {
   id: string
   concept_title: string
   content_type: string
   platform: string
-  filming_batch: string | null
-  script: string | null
-  hook: string | null
-  shot_list: Array<{ shot_number: number; description: string }> | null
-  props: string[] | null
-  location_notes: string | null
-  music_direction: string | null
-  estimated_duration: string | null
-  caption: string | null
-  hashtags: string[] | null
-  editor_notes: string | null
-  platform_specs: Record<string, string> | null
   scheduled_date: string
+  filming_batch: string | null
 }
 
-type ProdTab = 'filming' | 'editor' | 'props'
-
-const BATCH_COLORS: Record<string, string> = {
-  A: 'bg-blue-100 text-blue-800 border-blue-200',
-  B: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-  C: 'bg-orange-100 text-orange-800 border-orange-200',
-  D: 'bg-purple-100 text-purple-800 border-purple-200',
+interface TeamMember {
+  id: string
+  name: string
+  role: string
+  workload: number
 }
 
-function CopyButton({ text, label }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false)
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-  return (
-    <button onClick={handleCopy} className="inline-flex items-center gap-1 text-[10px] font-medium text-ink-4 hover:text-ink transition-colors" title="Copy to clipboard">
-      {copied ? <><ClipboardCheck className="w-3 h-3 text-brand" /> Copied</> : <><Clipboard className="w-3 h-3" /> {label ?? 'Copy'}</>}
-    </button>
-  )
-}
+const ROLE_ORDER = ['videographer', 'editor', 'designer', 'copywriter', 'qa']
 
 export default function ProductionView({ cycleId, clientId }: { cycleId: string; clientId: string }) {
   const supabase = createClient()
-  const [items, setItems] = useState<ProductionItem[]>([])
+  const { toast } = useToast()
+  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [items, setItems] = useState<ContentItem[]>([])
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<ProdTab>('filming')
-
-  const saveField = async (itemId: string, field: string, value: unknown) => {
-    await updateProductionField(itemId, field, value)
-    setItems((prev) => prev.map((i) => i.id === itemId ? { ...i, [field]: value } : i))
-  }
+  const [generating, setGenerating] = useState(false)
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from('content_calendar_items')
-      .select('*')
-      .eq('cycle_id', cycleId)
-      .order('filming_batch').order('sort_order')
-    setItems((data ?? []) as ProductionItem[])
+    const [{ data: assignData }, { data: itemData }, { data: teamData }] = await Promise.all([
+      supabase
+        .from('production_assignments')
+        .select('*')
+        .eq('cycle_id', cycleId)
+        .order('step_order'),
+      supabase
+        .from('content_calendar_items')
+        .select('id, concept_title, content_type, platform, scheduled_date, filming_batch')
+        .eq('cycle_id', cycleId)
+        .order('scheduled_date'),
+      supabase
+        .from('team_members')
+        .select('id, name, role')
+        .eq('is_active', true),
+    ])
+
+    // Compute workload per team member
+    const workloadMap = new Map<string, number>()
+    for (const a of (assignData ?? [])) {
+      if (a.team_member_id && a.status !== 'completed') {
+        workloadMap.set(a.team_member_id, (workloadMap.get(a.team_member_id) ?? 0) + 1)
+      }
+    }
+
+    setAssignments((assignData ?? []) as Assignment[])
+    setItems((itemData ?? []) as ContentItem[])
+    setTeamMembers(((teamData ?? []) as Array<{ id: string; name: string; role: string }>).map((m) => ({
+      ...m,
+      workload: workloadMap.get(m.id) ?? 0,
+    })))
     setLoading(false)
   }, [cycleId, supabase])
 
   useEffect(() => { load() }, [load])
 
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-ink-4" /></div>
-  if (items.length === 0) return <div className="text-center py-16 text-sm text-ink-3">No production items yet. Generate and approve briefs first.</div>
-
-  // Group by batch
-  const batches = new Map<string, ProductionItem[]>()
-  for (const item of items) {
-    const batch = item.filming_batch ?? 'Unassigned'
-    if (!batches.has(batch)) batches.set(batch, [])
-    batches.get(batch)!.push(item)
+  // Group assignments by role for pipeline board
+  const getPipelineItems = (role: string) => {
+    return assignments
+      .filter((a) => a.role === role && a.status !== 'completed')
+      .map((a) => {
+        const item = items.find((i) => i.id === a.item_id)
+        const member = a.team_member_id ? teamMembers.find((m) => m.id === a.team_member_id) : null
+        return {
+          id: a.id,
+          item_id: a.item_id,
+          concept_title: item?.concept_title ?? 'Unknown',
+          content_type: item?.content_type ?? 'feed_post',
+          platform: item?.platform ?? 'instagram',
+          team_member_name: member?.name ?? null,
+          status: a.status,
+          due_date: a.due_date,
+          filming_batch: item?.filming_batch ?? null,
+        }
+      })
   }
 
-  // Master prop list
-  const allProps = new Map<string, Set<string>>()
-  for (const item of items) {
-    if (item.props) {
-      const batch = item.filming_batch ?? 'Unassigned'
-      if (!allProps.has(batch)) allProps.set(batch, new Set())
-      for (const p of item.props) allProps.get(batch)!.add(p)
+  // Get assignments for a specific item
+  const getItemAssignments = (itemId: string) => {
+    return assignments
+      .filter((a) => a.item_id === itemId)
+      .map((a) => ({
+        ...a,
+        team_member_name: a.team_member_id ? teamMembers.find((m) => m.id === a.team_member_id)?.name : undefined,
+      }))
+  }
+
+  // Stats
+  const stats = ROLE_ORDER.map((role) => {
+    const roleAssignments = assignments.filter((a) => a.role === role)
+    const completed = roleAssignments.filter((a) => a.status === 'completed').length
+    return { role, total: roleAssignments.length, completed }
+  })
+
+  const unassigned = assignments.filter((a) => !a.team_member_id && a.status !== 'completed').length
+  const blocked = assignments.filter((a) => a.status === 'blocked').length
+  const overdue = assignments.filter((a) => a.due_date && new Date(a.due_date) < new Date() && a.status !== 'completed').length
+
+  // Handlers
+  const handleAssign = async (assignmentId: string, memberId: string | null) => {
+    await supabase
+      .from('production_assignments')
+      .update({ team_member_id: memberId, updated_at: new Date().toISOString() })
+      .eq('id', assignmentId)
+    await load()
+  }
+
+  const handleComplete = async (assignmentId: string) => {
+    await completeAssignment(assignmentId)
+    await load()
+    toast('Step completed, next step started', 'success')
+  }
+
+  const handleBlock = async (assignmentId: string) => {
+    await supabase
+      .from('production_assignments')
+      .update({ status: 'blocked', updated_at: new Date().toISOString() })
+      .eq('id', assignmentId)
+    await load()
+    toast('Marked as blocked', 'warning')
+  }
+
+  const handleGenerate = async () => {
+    setGenerating(true)
+    const result = await generateAssignments(cycleId, clientId)
+    if (result.success) {
+      toast(`${result.created} assignments created`, 'success')
+      await load()
+    } else {
+      toast(result.error ?? 'Failed', 'error')
     }
+    setGenerating(false)
   }
 
-  const videoItems = items.filter((i) => ['reel', 'video', 'short_form_video'].includes(i.content_type) && i.script)
+  const ROLE_ICONS: Record<string, typeof Camera> = {
+    videographer: Camera, editor: Scissors, designer: Palette, copywriter: Pen, qa: ShieldCheck,
+  }
 
-  const tabs: Array<{ key: ProdTab; label: string; icon: typeof Camera }> = [
-    { key: 'filming', label: 'Filming Schedule', icon: Camera },
-    { key: 'editor', label: 'Editor Packages', icon: Scissors },
-    { key: 'props', label: 'Master Prop List', icon: ClipboardList },
-  ]
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-ink-4" /></div>
+
+  // No assignments yet
+  if (assignments.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <RefreshCw className="w-10 h-10 text-ink-4 mx-auto mb-4" />
+        <h2 className="text-lg font-bold text-ink mb-2">Generate production assignments</h2>
+        <p className="text-sm text-ink-3 max-w-md mx-auto mb-6">
+          Create task assignments for each role in the production chain. Video items get filming → editing → design → copy → QA. Static items get design → copy → QA.
+        </p>
+        <button onClick={handleGenerate} disabled={generating} className="inline-flex items-center gap-2 px-6 py-3 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors disabled:opacity-50">
+          {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><RefreshCw className="w-4 h-4" /> Generate Assignments</>}
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">
-      <div className="flex gap-2">
-        {tabs.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${tab === t.key ? 'bg-ink text-white' : 'bg-bg-2 text-ink-3 hover:bg-ink-6'}`}>
-            <t.icon className="w-3.5 h-3.5" /> {t.label}
-          </button>
-        ))}
+      {/* Summary stats */}
+      <div className="flex flex-wrap gap-3">
+        {stats.filter((s) => s.total > 0).map((s) => {
+          const Icon = ROLE_ICONS[s.role] ?? ShieldCheck
+          const pct = s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0
+          return (
+            <div key={s.role} className="flex items-center gap-2 bg-white rounded-lg border border-ink-6 px-3 py-2">
+              <Icon className="w-3.5 h-3.5 text-ink-3" />
+              <span className="text-xs font-medium text-ink capitalize">{s.role === 'qa' ? 'QA' : s.role}</span>
+              <div className="w-12 h-1 bg-ink-6 rounded-full overflow-hidden">
+                <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${pct}%` }} />
+              </div>
+              <span className="text-[10px] text-ink-3">{s.completed}/{s.total}</span>
+            </div>
+          )
+        })}
       </div>
 
-      {/* Filming Schedule */}
-      {tab === 'filming' && (
-        <div className="space-y-6">
-          {[...batches.entries()].map(([batch, batchItems]) => (
-            <div key={batch}>
-              <div className="flex items-center gap-2 mb-3">
-                <span className={`text-xs font-bold px-2 py-1 rounded border ${BATCH_COLORS[batch] ?? 'bg-ink-6 text-ink-3 border-ink-5'}`}>
-                  Session {batch}
-                </span>
-                <span className="text-xs text-ink-3">{batchItems.length} items</span>
-              </div>
-              <div className="space-y-2">
-                {batchItems.map((item) => (
-                  <div key={item.id} className="bg-white rounded-xl border border-ink-6 p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-ink text-white capitalize">{item.content_type.replace('_', ' ')}</span>
-                      <span className="text-sm font-semibold text-ink">{item.concept_title}</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                      <div>
-                        <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1">Location</label>
-                        <EditableField value={item.location_notes ?? ''} onSave={(v) => saveField(item.id, 'location_notes', v)} placeholder="Set location..." />
-                      </div>
-                      <div className="flex gap-4 text-xs text-ink-3">
-                        {item.shot_list && <span>{item.shot_list.length} shots</span>}
-                        {item.estimated_duration && <span>{item.estimated_duration}</span>}
-                        {item.props && <span>{item.props.length} props</span>}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+      {/* Alerts */}
+      {(unassigned > 0 || blocked > 0 || overdue > 0) && (
+        <div className="flex flex-wrap gap-2">
+          {unassigned > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+              <AlertCircle className="w-3 h-3" /> {unassigned} unassigned
             </div>
-          ))}
+          )}
+          {blocked > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+              <AlertCircle className="w-3 h-3" /> {blocked} blocked
+            </div>
+          )}
+          {overdue > 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+              <Clock className="w-3 h-3" /> {overdue} overdue
+            </div>
+          )}
         </div>
       )}
 
-      {/* Editor Packages */}
-      {tab === 'editor' && (
-        <div className="space-y-4">
-          {videoItems.length === 0 ? (
-            <div className="text-center py-12 text-sm text-ink-3">No video content to edit.</div>
-          ) : videoItems.map((item) => (
-            <div key={item.id} className="bg-white rounded-xl border border-ink-6 p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-ink text-white capitalize">{item.content_type.replace('_', ' ')}</span>
-                <span className="text-xs text-ink-3">{item.platform} · {item.platform_specs?.aspect_ratio ?? '9:16'}</span>
-                {item.estimated_duration && <span className="text-xs text-ink-3">· {item.estimated_duration}</span>}
-              </div>
-              <h3 className="text-sm font-bold text-ink mb-3">{item.concept_title}</h3>
+      {/* Pipeline board */}
+      <PipelineBoard
+        filming={getPipelineItems('videographer')}
+        editing={getPipelineItems('editor')}
+        design={getPipelineItems('designer')}
+        copy={getPipelineItems('copywriter')}
+        qa={getPipelineItems('qa')}
+        onItemClick={(id) => setExpandedItemId(expandedItemId === id ? null : id)}
+      />
 
-              {item.script && (
-                <div className="mb-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider">Script</span>
-                    <CopyButton text={item.script} />
-                  </div>
-                  <pre className="text-xs text-ink-2 whitespace-pre-wrap mt-1 bg-bg-2 p-3 rounded-lg">{item.script}</pre>
-                </div>
-              )}
+      {/* Expanded item detail */}
+      {expandedItemId && (() => {
+        const item = items.find((i) => i.id === expandedItemId)
+        if (!item) return null
+        return (
+          <ProductionItemCard
+            itemId={item.id}
+            title={item.concept_title}
+            contentType={item.content_type}
+            platform={item.platform}
+            scheduledDate={item.scheduled_date}
+            filmingBatch={item.filming_batch}
+            assignments={getItemAssignments(item.id)}
+            teamMembers={teamMembers}
+            onAssign={handleAssign}
+            onComplete={handleComplete}
+            onBlock={handleBlock}
+            onAddNotes={() => {}}
+          />
+        )
+      })()}
 
-              {item.caption && (
-                <div className="mb-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider">Caption</span>
-                    <CopyButton text={item.caption} />
-                  </div>
-                  <pre className="text-xs text-ink-2 whitespace-pre-wrap mt-1">{item.caption}</pre>
-                </div>
-              )}
-
-              {item.hashtags && item.hashtags.length > 0 && (
-                <div className="mb-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider">Hashtags</span>
-                    <CopyButton text={item.hashtags.join(' ')} />
-                  </div>
-                  <p className="text-xs text-ink-3">{item.hashtags.join(' ')}</p>
-                </div>
-              )}
-
-              {item.music_direction && (
-                <div className="mb-3">
-                  <span className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1">Music</span>
-                  <EditableField value={item.music_direction} onSave={(v) => saveField(item.id, 'music_direction', v)} displayClassName="text-xs text-ink-2" />
-                </div>
-              )}
-
-              {item.editor_notes && (
-                <div>
-                  <span className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1">Editor Notes</span>
-                  <EditableField value={item.editor_notes} onSave={(v) => saveField(item.id, 'editor_notes', v)} type="textarea" displayClassName="text-xs text-ink-2" rows={3} />
-                </div>
-              )}
-            </div>
+      {/* All items list */}
+      <div>
+        <h3 className="text-xs font-semibold text-ink-3 uppercase tracking-wider mb-2">All Items ({items.length})</h3>
+        <div className="space-y-1.5">
+          {items.map((item) => (
+            <ProductionItemCard
+              key={item.id}
+              itemId={item.id}
+              title={item.concept_title}
+              contentType={item.content_type}
+              platform={item.platform}
+              scheduledDate={item.scheduled_date}
+              filmingBatch={item.filming_batch}
+              assignments={getItemAssignments(item.id)}
+              teamMembers={teamMembers}
+              onAssign={handleAssign}
+              onComplete={handleComplete}
+              onBlock={handleBlock}
+              onAddNotes={() => {}}
+            />
           ))}
         </div>
-      )}
-
-      {/* Master Prop List */}
-      {tab === 'props' && (
-        <div className="space-y-4">
-          {allProps.size === 0 ? (
-            <div className="text-center py-12 text-sm text-ink-3">No props listed. Add props in the Briefs tab.</div>
-          ) : [...allProps.entries()].map(([batch, props]) => (
-            <div key={batch} className="bg-white rounded-xl border border-ink-6 p-4">
-              <div className={`inline-block text-xs font-bold px-2 py-1 rounded border mb-3 ${BATCH_COLORS[batch] ?? 'bg-ink-6 text-ink-3 border-ink-5'}`}>
-                Session {batch}
-              </div>
-              <EditableList
-                items={[...props]}
-                onSave={async () => { /* Props are per-item, this is a view only */ }}
-                variant="checkboxes"
-              />
-            </div>
-          ))}
-        </div>
-      )}
+      </div>
     </div>
   )
 }
