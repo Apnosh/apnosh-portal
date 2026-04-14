@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Loader2, Check, Sparkles, ChevronUp, ChevronDown,
-  Camera, Globe, Video, MessageCircle, Image as ImageIcon, Film,
-  Pen, Layers,
+  Loader2, Check, Sparkles, ChevronUp, ChevronDown, Flag, Zap,
+  Camera, Globe, Video, MessageCircle, ListChecks,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { updateCalendarItem } from '@/lib/content-engine/actions'
@@ -14,12 +13,10 @@ import ReelForm from '@/components/content-engine/forms/reel-form'
 import FeedPostForm from '@/components/content-engine/forms/feed-post-form'
 import CarouselForm from '@/components/content-engine/forms/carousel-form'
 import StoryForm from '@/components/content-engine/forms/story-form'
+import QuickEditView from '@/components/content-engine/quick-edit-view'
 import { useToast } from '@/components/ui/toast'
 
-interface ContentItem {
-  id: string
-  [key: string]: unknown
-}
+interface ContentItem { id: string; [key: string]: unknown }
 
 const PLATFORM_ICONS: Record<string, typeof Camera> = {
   instagram: Camera, tiktok: Video, facebook: Globe, linkedin: MessageCircle,
@@ -31,23 +28,21 @@ const TYPE_COLORS: Record<string, string> = {
   static_post: 'bg-cyan-100 text-cyan-800', video: 'bg-indigo-100 text-indigo-800',
 }
 
-const COMPLETENESS_COLORS: Record<string, string> = {
-  complete: 'bg-brand', partial: 'bg-amber-400', empty: 'bg-ink-5',
-}
-
 interface ContentDetailsViewProps {
   cycleId: string
   clientId: string
   context: ClientContext | null
+  onGoToProduction?: () => void
 }
 
-export default function ContentDetailsView({ cycleId, clientId, context }: ContentDetailsViewProps) {
+export default function ContentDetailsView({ cycleId, clientId, context, onGoToProduction }: ContentDetailsViewProps) {
   const supabase = createClient()
   const { toast } = useToast()
   const [items, setItems] = useState<ContentItem[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [generatingBriefs, setGeneratingBriefs] = useState(false)
+  const [quickEditMode, setQuickEditMode] = useState(false)
 
   const loadItems = useCallback(async () => {
     const { data } = await supabase
@@ -66,19 +61,16 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
   const selectedItem = items.find((i) => i.id === selectedId) ?? null
   const currentIdx = selectedItem ? items.findIndex((i) => i.id === selectedItem.id) : -1
 
-  // Completeness
-  const getCompleteness = (item: ContentItem): string => {
-    const isVideo = ['reel', 'video', 'short_form_video'].includes(item.content_type as string)
-    const fields = [item.hook ?? item.headline_text, item.concept_description]
-    if (isVideo) fields.push(item.script)
-    if (!isVideo) fields.push(item.caption)
-    const filled = fields.filter(Boolean).length
-    if (filled === fields.length) return 'complete'
-    if (filled > 0) return 'partial'
+  // Status logic
+  const getItemStatus = (item: ContentItem): 'approved' | 'flagged' | 'partial' | 'empty' => {
+    if (item.status === 'approved' || item.status === 'strategist_approved') return 'approved'
+    if (item.status === 'flagged') return 'flagged'
+    const fields = [item.hook ?? item.headline_text, item.concept_description, item.caption]
+    if (fields.some(Boolean)) return 'partial'
     return 'empty'
   }
 
-  // Save any field directly to DB
+  // Save field
   const saveField = async (field: string, value: unknown) => {
     if (!selectedItem) return
     let parsed = value
@@ -87,11 +79,26 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
     setItems((prev) => prev.map((i) => i.id === selectedItem.id ? { ...i, [field]: parsed } : i))
   }
 
+  // Quick Edit save (takes id)
+  const saveFieldById = async (id: string, field: string, value: string) => {
+    await updateCalendarItem(id, { [field]: value })
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, [field]: value } : i))
+  }
+
   // Approve
   const handleApprove = async (id: string) => {
     const item = items.find((i) => i.id === id)
     if (!item) return
     const newStatus = (item.status === 'approved' || item.status === 'strategist_approved') ? 'draft' : 'approved'
+    await updateCalendarItem(id, { status: newStatus })
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, status: newStatus } : i))
+  }
+
+  // Flag
+  const handleFlag = async (id: string) => {
+    const item = items.find((i) => i.id === id)
+    if (!item) return
+    const newStatus = item.status === 'flagged' ? 'draft' : 'flagged'
     await updateCalendarItem(id, { status: newStatus })
     setItems((prev) => prev.map((i) => i.id === id ? { ...i, status: newStatus } : i))
   }
@@ -122,17 +129,13 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
   }
 
   const approvedCount = items.filter((i) => i.status === 'approved' || i.status === 'strategist_approved').length
+  const flaggedCount = items.filter((i) => i.status === 'flagged').length
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-ink-4" /></div>
+  if (items.length === 0) return <div className="text-center py-16 text-sm text-ink-3">No content items yet. Go to the Brainstorm tab first.</div>
 
-  if (items.length === 0) {
-    return <div className="text-center py-16 text-sm text-ink-3">No content items yet. Go to the Brainstorm tab first.</div>
-  }
-
-  // Content defaults from context
   const contentDefaults = (context?.contentDefaults ?? {}) as Record<string, unknown>
 
-  // Render the right form based on content type
   const renderForm = (item: ContentItem) => {
     const type = item.content_type as string
     const data = item as Record<string, unknown>
@@ -140,6 +143,11 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
     if (type === 'carousel') return <CarouselForm data={data} onSave={saveField} defaults={contentDefaults} />
     if (type === 'story') return <StoryForm data={data} onSave={saveField} />
     return <FeedPostForm data={data} onSave={saveField} defaults={contentDefaults} />
+  }
+
+  // Quick Edit mode
+  if (quickEditMode) {
+    return <QuickEditView items={items} onSave={saveFieldById} onApprove={handleApprove} onFlag={handleFlag} onExit={() => setQuickEditMode(false)} />
   }
 
   return (
@@ -152,10 +160,16 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
             <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${items.length > 0 ? Math.round((approvedCount / items.length) * 100) : 0}%` }} />
           </div>
           <span className="text-[10px] text-ink-3">{approvedCount}/{items.length} approved</span>
+          {flaggedCount > 0 && <span className="text-[10px] text-amber-600">{flaggedCount} flagged</span>}
         </div>
-        <button onClick={handleGenerateBriefs} disabled={generatingBriefs} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-brand bg-brand-tint rounded-lg hover:bg-brand/10 transition-colors disabled:opacity-50">
-          {generatingBriefs ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} AI Fill All
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setQuickEditMode(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-ink-2 border border-ink-6 rounded-lg hover:bg-bg-2 transition-colors">
+            <ListChecks className="w-3 h-3" /> Quick Edit
+          </button>
+          <button onClick={handleGenerateBriefs} disabled={generatingBriefs} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-brand bg-brand-tint rounded-lg hover:bg-brand/10 transition-colors disabled:opacity-50">
+            {generatingBriefs ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} AI Fill All
+          </button>
+        </div>
       </div>
 
       {/* Two-panel layout */}
@@ -164,13 +178,17 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
         <div className="w-[280px] flex-shrink-0 bg-white rounded-xl border border-ink-6 overflow-hidden flex flex-col">
           <div className="px-3 py-2 border-b border-ink-6 bg-bg-2 flex items-center justify-between">
             <span className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider">Items</span>
+            <div className="flex items-center gap-2 text-[8px] text-ink-4">
+              <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 rounded-full bg-brand" /> Approved</span>
+              <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Review</span>
+              <span className="flex items-center gap-0.5"><span className="w-1.5 h-1.5 rounded-full bg-ink-5" /> Empty</span>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto">
             {items.map((item) => {
               const PIcon = PLATFORM_ICONS[item.platform as string] ?? Globe
-              const comp = getCompleteness(item)
+              const status = getItemStatus(item)
               const isSelected = selectedId === item.id
-              const isApproved = item.status === 'approved' || item.status === 'strategist_approved'
               const tc = TYPE_COLORS[item.content_type as string] ?? 'bg-ink-6 text-ink-3'
 
               return (
@@ -179,13 +197,16 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
                   onClick={() => setSelectedId(item.id)}
                   className={`w-full text-left px-3 py-2.5 border-b border-ink-6 last:border-0 transition-colors ${
                     isSelected ? 'bg-brand-tint' : 'hover:bg-bg-2'
-                  } ${isApproved ? 'opacity-60' : ''}`}
+                  } ${status === 'approved' ? 'opacity-60' : ''}`}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${COMPLETENESS_COLORS[comp]}`} />
+                    {status === 'approved' && <span className="w-1.5 h-1.5 rounded-full bg-brand flex-shrink-0" />}
+                    {status === 'flagged' && <Flag className="w-3 h-3 text-amber-500 flex-shrink-0" />}
+                    {status === 'partial' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />}
+                    {status === 'empty' && <span className="w-1.5 h-1.5 rounded-full bg-ink-5 flex-shrink-0" />}
                     <PIcon className="w-3 h-3 text-ink-4 flex-shrink-0" />
                     <span className={`text-[9px] font-semibold px-1 py-0.5 rounded ${tc}`}>{(item.content_type as string).replace(/_/g, ' ')}</span>
-                    {isApproved && <Check className="w-3 h-3 text-brand ml-auto flex-shrink-0" />}
+                    {status === 'approved' && <Check className="w-3 h-3 text-brand ml-auto flex-shrink-0" />}
                   </div>
                   <p className="text-xs font-medium text-ink truncate">{item.concept_title as string}</p>
                 </button>
@@ -198,7 +219,6 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
         <div className="flex-1 bg-white rounded-xl border border-ink-6 overflow-hidden flex flex-col">
           {selectedItem ? (
             <>
-              {/* Item header */}
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-ink-6 bg-bg-2 flex-shrink-0">
                 <div className="flex items-center gap-2">
                   <button onClick={goPrev} disabled={currentIdx <= 0} className="p-1 text-ink-4 hover:text-ink disabled:opacity-30 rounded"><ChevronUp className="w-4 h-4" /></button>
@@ -231,8 +251,6 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
                   </button>
                 </div>
               </div>
-
-              {/* Adaptive form */}
               <div className="flex-1 overflow-y-auto px-4 py-4">
                 {renderForm(selectedItem)}
               </div>
@@ -242,6 +260,30 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
           )}
         </div>
       </div>
+
+      {/* Transition CTA */}
+      {approvedCount > 0 && onGoToProduction && (
+        <div className={`rounded-xl p-4 flex items-center justify-between ${
+          approvedCount === items.length ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'
+        }`}>
+          <div className="flex items-center gap-2 text-xs">
+            {approvedCount === items.length
+              ? <><Check className="w-4 h-4 text-emerald-600" /><span className="text-emerald-700 font-medium">All {items.length} items approved</span></>
+              : <span className="text-amber-700">{approvedCount}/{items.length} items approved — approve all before moving to production</span>
+            }
+          </div>
+          <button
+            onClick={onGoToProduction}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg transition-colors ${
+              approvedCount === items.length
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" /> Team & Production
+          </button>
+        </div>
+      )}
     </div>
   )
 }

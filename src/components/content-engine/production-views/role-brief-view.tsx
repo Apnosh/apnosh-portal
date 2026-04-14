@@ -23,7 +23,7 @@ export default function RoleBriefView({ items, role }: RoleBriefViewProps) {
   // Filter items based on role
   const filtered = items.filter((item) => {
     const type = s(item.content_type)
-    if (role === 'videographer') return ['reel', 'video', 'short_form_video'].includes(type) && ['apnosh_films', 'ugc_style'].includes(s(item.footage_source))
+    if (role === 'videographer') return ['reel', 'video', 'short_form_video'].includes(type) && !['client_provides', 'animation', 'stock'].includes(s(item.footage_source))
     if (role === 'editor') return ['reel', 'video', 'short_form_video'].includes(type)
     if (role === 'designer') return ['feed_post', 'static_post', 'carousel'].includes(type) || !!(item.cover_frame)
     if (role === 'copywriter') return true // all items need captions

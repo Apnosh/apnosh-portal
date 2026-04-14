@@ -191,7 +191,7 @@ export default function ContentEngineWorkspace({
 
       {/* Content Details Tab */}
       {activeTab === 'content-details' && cycle?.id && (
-        <ContentDetailsView cycleId={cycle.id} clientId={clientId} context={context} />
+        <ContentDetailsView cycleId={cycle.id} clientId={clientId} context={context} onGoToProduction={() => setActiveTab('production')} />
       )}
       {activeTab === 'content-details' && !cycle?.id && (
         <div className="text-center py-16 text-sm text-ink-3">Generate ideas in the Brainstorm tab first.</div>
@@ -213,7 +213,7 @@ export default function ContentEngineWorkspace({
 
       {/* Team & Production Tab */}
       {activeTab === 'production' && cycle?.id && (
-        <ProductionView cycleId={cycle.id} clientId={clientId} />
+        <ProductionView cycleId={cycle.id} clientId={clientId} onGoToCalendar={() => setActiveTab('content-calendar')} />
       )}
       {activeTab === 'production' && !cycle?.id && (
         <div className="text-center py-16 text-sm text-ink-3">

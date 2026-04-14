@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Loader2, ChevronLeft, ChevronRight, Sparkles, CalendarDays, BarChart3,
+  Loader2, ChevronLeft, ChevronRight, Sparkles, CalendarDays, BarChart3, Check,
   Camera, Video, Globe, MessageCircle,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -395,6 +395,14 @@ export default function ContentPlanView({
           </div>
         )}
       </div>
+
+      {/* Completion banner */}
+      {unscheduledItems.length === 0 && items.length > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-2">
+          <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+          <span className="text-xs font-medium text-emerald-700">{monthLabel} content plan complete — {items.length} items scheduled</span>
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex items-center justify-between">
