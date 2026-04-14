@@ -109,13 +109,10 @@ export default function BrainstormView({
     if (idea.strategic_goal) goalCounts[idea.strategic_goal] = (goalCounts[idea.strategic_goal] ?? 0) + 1
   }
 
-  // Week groups
-  const weekGroups = new Map<number, IdeaCard[]>()
-  for (const idea of ideas) {
-    const week = idea.week_number ?? 0
-    if (!weekGroups.has(week)) weekGroups.set(week, [])
-    weekGroups.get(week)!.push(idea)
-  }
+  // Generate more state
+  const [showGenerateMore, setShowGenerateMore] = useState(false)
+  const [genCount, setGenCount] = useState(3)
+  const [genDirection, setGenDirection] = useState('')
 
   // Handlers
   const handleUpdateField = async (id: string, field: string, value: unknown) => {
@@ -331,45 +328,93 @@ export default function BrainstormView({
         </div>
       )}
 
-      {/* Change 6: Week-grouped cards */}
+      {/* Flat card grid */}
       {ideas.length > 0 && (
-        <div className="space-y-6">
-          {[...weekGroups.entries()].sort((a, b) => a[0] - b[0]).map(([week, weekIdeas]) => (
-            <div key={week}>
-              <h3 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider mb-2 border-b border-ink-6 pb-1">
-                {week === 0 ? 'No week assigned' : `Week ${week}`} — {weekIdeas.length} items
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {weekIdeas.map((idea) => (
-                  <BrainstormCard
-                    key={idea.id}
-                    idea={idea}
-                    onClick={(id) => setEditPanelId(id)}
-                    onDelete={handleDelete}
-                    onRefine={handleRefine}
-                    onReplace={handleReplace}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {ideas.map((idea) => (
+              <BrainstormCard
+                key={idea.id}
+                idea={idea}
+                onClick={(id) => setEditPanelId(id)}
+              />
+            ))}
+          </div>
 
-          {/* Change 7: Generate more + add */}
+          {/* Action buttons */}
           <div className="flex items-center gap-3">
-            <button onClick={handleGenerate} disabled={generating} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-ink-5 rounded-lg hover:bg-bg-2 transition-colors">
-              <Sparkles className="w-3 h-3" /> Generate more
+            <button onClick={() => setShowGenerateMore(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-brand bg-brand-tint rounded-lg hover:bg-brand/10 transition-colors">
+              <Sparkles className="w-3 h-3" /> Generate ideas
             </button>
             <button onClick={() => setShowNewPanel(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-ink-5 rounded-lg hover:bg-bg-2 transition-colors">
               <Plus className="w-3 h-3" /> Add manually
             </button>
           </div>
+
+          {/* Generate More panel */}
+          {showGenerateMore && (
+            <div className="bg-white rounded-xl border border-brand/30 p-4 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-ink">Generate more ideas</h3>
+                <button onClick={() => setShowGenerateMore(false)} className="p-1 text-ink-4 hover:text-ink"><X className="w-4 h-4" /></button>
+              </div>
+              {/* Count selector */}
+              <div>
+                <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">How many?</label>
+                <div className="flex gap-2">
+                  {[1, 3, 5].map((n) => (
+                    <button key={n} onClick={() => setGenCount(n)} className={`w-10 h-10 text-sm font-semibold rounded-lg border transition-colors ${genCount === n ? 'bg-ink text-white border-ink' : 'border-ink-6 text-ink-3 hover:border-ink-5'}`}>
+                      {n}
+                    </button>
+                  ))}
+                  <input type="number" min={1} max={20} value={genCount} onChange={(e) => setGenCount(parseInt(e.target.value) || 3)} className="w-16 text-sm text-center border border-ink-6 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand/30" />
+                </div>
+              </div>
+              {/* Direction */}
+              <div>
+                <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">Any specific direction? <span className="font-normal text-ink-4">(optional)</span></label>
+                <input value={genDirection} onChange={(e) => setGenDirection(e.target.value)} placeholder="e.g., more educational content, something about our new menu" className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30" />
+              </div>
+              {/* Deliverables note */}
+              {counts.feed_post + counts.carousel >= targets.feed_post && counts.reel >= targets.reel && (
+                <p className="text-[10px] text-ink-4">All deliverables met — generating extra ideas for alternatives.</p>
+              )}
+              <button
+                onClick={async () => {
+                  setShowGenerateMore(false)
+                  // Use existing generate with strategy notes + direction appended
+                  const augmentedNotes = genDirection ? `${strategyNotes}\n\nAdditional direction: ${genDirection}` : strategyNotes
+                  setGenerating(true)
+                  let cId = cycleId
+                  if (!cId) {
+                    const { data } = await supabase.from('content_cycles').insert({
+                      client_id: clientId, month: targetMonth, status: 'context_ready',
+                      deliverables: context?.deliverables ?? {}, context_snapshot: context, strategy_notes: augmentedNotes || null,
+                    }).select().single()
+                    if (data) { cId = data.id; onCycleCreated(data.id) }
+                  }
+                  if (cId && context) {
+                    const result = await generateCalendar(cId, clientId, context, augmentedNotes, targetMonth)
+                    if (result.success) { onStatusChange('calendar_draft'); await loadIdeas(); toast(`${result.count} ideas generated`, 'success') }
+                    else toast(result.error ?? 'Failed', 'error')
+                  }
+                  setGenerating(false)
+                  setGenDirection('')
+                }}
+                disabled={generating}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-brand text-white text-sm font-semibold rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50"
+              >
+                {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><Sparkles className="w-4 h-4" /> Generate {genCount} ideas</>}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* New idea form */}
-      {addingNew && (
-        <div className="bg-white rounded-xl border border-brand/30 p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
+      {/* Old inline form removed — use slide-over panel instead */}
+      {false && addingNew && (
+        <div className="hidden">
+          <div>
             <h3 className="text-sm font-bold text-ink">New Content Idea</h3>
             <button onClick={() => setAddingNew(false)} className="p-1 text-ink-4 hover:text-ink"><X className="w-4 h-4" /></button>
           </div>

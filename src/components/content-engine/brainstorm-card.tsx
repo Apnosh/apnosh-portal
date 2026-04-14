@@ -1,11 +1,5 @@
 'use client'
 
-import { useState } from 'react'
-import {
-  Trash2, RefreshCw, Sparkles, Loader2, X,
-  Image, Film, Camera as CameraIcon,
-} from 'lucide-react'
-
 export interface IdeaCard {
   id: string
   concept_title: string
@@ -40,60 +34,34 @@ const GOAL_DOTS: Record<string, { label: string; dot: string; text: string }> = 
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  ai: 'AI',
-  strategist: '✎',
-  client_request: 'Client',
+  ai: 'AI', strategist: '✎', client_request: 'Client',
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
-  instagram: 'Instagram',
-  tiktok: 'TikTok',
-  facebook: 'Facebook',
-  linkedin: 'LinkedIn',
+  instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook', linkedin: 'LinkedIn',
 }
 
 interface BrainstormCardProps {
   idea: IdeaCard
   onClick: (id: string) => void
-  onDelete: (id: string) => void
-  onRefine: (id: string, direction: string) => Promise<void>
-  onReplace: (id: string) => Promise<void>
 }
 
-export default function BrainstormCard({
-  idea, onClick, onDelete, onRefine, onReplace,
-}: BrainstormCardProps) {
-  const [showRefine, setShowRefine] = useState(false)
-  const [refineText, setRefineText] = useState('')
-  const [refining, setRefining] = useState(false)
-  const [replacing, setReplacing] = useState(false)
-
+export default function BrainstormCard({ idea, onClick }: BrainstormCardProps) {
   const typeBadge = TYPE_BADGES[idea.content_type] ?? TYPE_BADGES.feed_post
   const goalInfo = idea.strategic_goal ? GOAL_DOTS[idea.strategic_goal] : null
   const sourceLabel = SOURCE_LABELS[idea.source] ?? 'AI'
   const platformLabel = PLATFORM_LABELS[idea.platform] ?? idea.platform
-  const weekLabel = idea.week_number ? `Week ${idea.week_number}` : null
 
-  const handleRefine = async () => {
-    if (!refineText.trim()) return
-    setRefining(true)
-    await onRefine(idea.id, refineText)
-    setRefineText('')
-    setRefining(false)
-    setShowRefine(false)
-  }
-
-  const handleReplace = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setReplacing(true)
-    await onReplace(idea.id)
-    setReplacing(false)
-  }
+  // Check if tied to a specific event date (scheduled_date differs from the cycle month start)
+  const hasEventDate = idea.scheduled_date && !idea.scheduled_date.endsWith('-01')
+  const eventDateLabel = hasEventDate
+    ? new Date(idea.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : null
 
   return (
     <div
-      onClick={() => !showRefine && onClick(idea.id)}
-      className="bg-white rounded-xl border border-ink-6 p-4 hover:shadow-md hover:border-ink-5 transition-all cursor-pointer group relative"
+      onClick={() => onClick(idea.id)}
+      className="bg-white rounded-xl border border-ink-6 p-4 hover:shadow-md hover:border-ink-5 transition-all cursor-pointer"
     >
       {/* Top row: type badge + goal + source */}
       <div className="flex items-center justify-between mb-3">
@@ -125,55 +93,13 @@ export default function BrainstormCard({
         </p>
       )}
 
-      {/* Bottom: week + platform */}
+      {/* Bottom: platform + optional event date */}
       <div className="text-[10px] text-ink-4">
-        {weekLabel && <span>{weekLabel}</span>}
-        {weekLabel && platformLabel && <span> · </span>}
         <span>{platformLabel}</span>
+        {eventDateLabel && (
+          <span className="ml-2 text-amber-600 font-medium">📌 {eventDateLabel}</span>
+        )}
       </div>
-
-      {/* Hover actions */}
-      <div className="absolute bottom-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={(e) => { e.stopPropagation(); setShowRefine(true) }}
-          className="px-2 py-1 text-[10px] font-medium text-brand hover:bg-brand-tint rounded transition-colors"
-        >
-          Refine
-        </button>
-        <button
-          onClick={handleReplace}
-          disabled={replacing}
-          className="px-2 py-1 text-[10px] font-medium text-ink-3 hover:bg-bg-2 rounded transition-colors"
-        >
-          {replacing ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Replace'}
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(idea.id) }}
-          className="px-1.5 py-1 text-ink-4 hover:text-red-500 rounded transition-colors"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      </div>
-
-      {/* Inline refine */}
-      {showRefine && (
-        <div className="mt-3 border-t border-ink-6 pt-3" onClick={(e) => e.stopPropagation()}>
-          <div className="flex gap-1.5">
-            <input
-              value={refineText}
-              onChange={(e) => setRefineText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
-              placeholder="How should this change?"
-              className="flex-1 text-xs border border-ink-6 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30"
-              autoFocus
-            />
-            <button onClick={handleRefine} disabled={refining || !refineText.trim()} className="px-2.5 py-1.5 bg-brand text-white text-[10px] font-semibold rounded-lg disabled:opacity-50">
-              {refining ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Go'}
-            </button>
-            <button onClick={() => { setShowRefine(false); setRefineText('') }} className="px-2 py-1.5 text-[10px] text-ink-4 hover:text-ink">✕</button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
