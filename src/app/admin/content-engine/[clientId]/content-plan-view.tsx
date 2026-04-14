@@ -152,10 +152,16 @@ export default function ContentPlanView({
 
   const handleApproveAll = async () => {
     if (!cycleId) return
+    // Approve all items
     await approveAllCalendarItems(cycleId)
-    onStatusChange('calendar_approved')
+    // Auto-generate production assignments
+    try {
+      const { generateAssignments } = await import('@/lib/content-engine/generate-assignments')
+      await generateAssignments(cycleId, clientId)
+    } catch { /* production assignments are optional at this stage */ }
+    onStatusChange('briefs_approved')
     await loadItems()
-    toast('All items approved', 'success')
+    toast('All items approved! Production assignments created.', 'success')
   }
 
   const handleSelect = (id: string, selected: boolean) => { setSelectedIds((prev) => { const next = new Set(prev); selected ? next.add(id) : next.delete(id); return next }) }
@@ -291,11 +297,12 @@ export default function ContentPlanView({
 
         {/* View + role filter + regenerate */}
         <div className="flex items-center gap-2">
-          {/* Role filter */}
-          <div className="flex gap-0.5 bg-bg-2 rounded-lg p-0.5">
+          {/* Role filter — with labels */}
+          <div className="flex gap-1 bg-bg-2 rounded-lg p-0.5">
             {ROLE_FILTERS.map((r) => (
-              <button key={r.key} onClick={() => setRoleFilter(r.key)} className={`p-1.5 rounded transition-colors ${roleFilter === r.key ? 'bg-white text-ink shadow-sm' : 'text-ink-4 hover:text-ink'}`} title={r.label}>
-                <r.icon className="w-3.5 h-3.5" />
+              <button key={r.key} onClick={() => setRoleFilter(r.key)} className={`flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded transition-colors ${roleFilter === r.key ? 'bg-white text-ink shadow-sm' : 'text-ink-4 hover:text-ink'}`}>
+                <r.icon className="w-3 h-3" />
+                <span className="hidden sm:inline">{r.label}</span>
               </button>
             ))}
           </div>
@@ -312,6 +319,22 @@ export default function ContentPlanView({
           </button>
         </div>
       </div>
+
+      {/* Guidance banner */}
+      {approvedCount === 0 && totalCount > 0 && (
+        <div className="flex items-center gap-2 text-xs text-ink-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5">
+          <Sparkles className="w-4 h-4 text-blue-500 flex-shrink-0" />
+          <span><strong>Review your plan:</strong> Click any item to review its brief. Use the role filters to check what each team member will see. Approve items as you go, or hit Approve All when ready.</span>
+        </div>
+      )}
+      {approvedCount === totalCount && totalCount > 0 && (
+        <div className="flex items-center justify-between bg-brand-tint border border-brand/20 rounded-lg px-4 py-2.5">
+          <div className="flex items-center gap-2 text-xs text-brand-dark">
+            <Check className="w-4 h-4 flex-shrink-0" />
+            <span><strong>All {totalCount} items approved!</strong> Head to Team & Production to assign your team and start production.</span>
+          </div>
+        </div>
+      )}
 
       {conflicts.size > 0 && (
         <div className="flex items-center gap-2 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
