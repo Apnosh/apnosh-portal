@@ -2,34 +2,24 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Sparkles, Loader2, RefreshCw, Check, ChevronDown, ChevronLeft, ChevronRight,
-  CalendarDays, LayoutList, Camera, Scissors, Palette, Pen, Eye,
-  BarChart3, AlertCircle, Video, Globe, MessageCircle,
+  Loader2, ChevronLeft, ChevronRight, Sparkles, CalendarDays, BarChart3,
+  Camera, Video, Globe, MessageCircle,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { generateContentPlan } from '@/lib/content-engine/generate-content-plan'
-import { refineCalendarItem } from '@/lib/content-engine/generate-calendar'
-import { refineBriefField } from '@/lib/content-engine/generate-briefs'
-import { updateCalendarItem, deleteCalendarItem, approveAllCalendarItems } from '@/lib/content-engine/actions'
+import { updateCalendarItem } from '@/lib/content-engine/actions'
 import type { ClientContext } from '@/lib/content-engine/context'
-import type { CalendarItemData } from '@/components/content-engine/calendar-item-row'
-import CalendarItemRow from '@/components/content-engine/calendar-item-row'
-import MonthGrid from '@/components/content-engine/month-grid'
-import UnifiedDetailPanel, { type ContentPlanItem, type RoleFilter } from '@/components/content-engine/unified-detail-panel'
-import BulkActionBar from '@/components/content-engine/bulk-action-bar'
-import QuickAddForm from '@/components/content-engine/quick-add-form'
-import ConfirmModal from '@/components/content-engine/confirm-modal'
+import CalendarDetailPanel from '@/components/content-engine/calendar-detail-panel'
+import { CalendarGrid, UnscheduledDock } from '@/components/content-engine/calendar-grid'
 import { useToast } from '@/components/ui/toast'
 
-type ViewMode = 'month' | 'list'
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-const ROLE_FILTERS: Array<{ key: RoleFilter; label: string; icon: typeof Eye }> = [
-  { key: 'full', label: 'Full Plan', icon: Eye },
-  { key: 'videographer', label: 'Videographer', icon: Camera },
-  { key: 'editor', label: 'Editor', icon: Scissors },
-  { key: 'designer', label: 'Designer', icon: Palette },
-  { key: 'copywriter', label: 'Copywriter', icon: Pen },
-]
+interface ContentPlanItem { id: string; [key: string]: unknown }
+
+type ViewMode = 'calendar' | 'timeline'
 
 interface ContentPlanViewProps {
   clientId: string
@@ -42,6 +32,58 @@ interface ContentPlanViewProps {
   onStatusChange: (status: string) => void
 }
 
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+const TYPE_COLORS: Record<string, string> = {
+  reel: 'bg-indigo-100 text-indigo-800',
+  feed_post: 'bg-cyan-100 text-cyan-800',
+  carousel: 'bg-pink-100 text-pink-800',
+  story: 'bg-amber-100 text-amber-800',
+  static_post: 'bg-cyan-100 text-cyan-800',
+  video: 'bg-indigo-100 text-indigo-800',
+}
+
+const PLATFORM_ICONS: Record<string, typeof Camera> = {
+  instagram: Camera, tiktok: Video, facebook: Globe, linkedin: MessageCircle,
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const s = (val: unknown): string => (val as string) ?? ''
+const toDateStr = (d: Date): string => d.toISOString().split('T')[0]
+
+function isToday(d: Date): boolean {
+  const now = new Date()
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+}
+
+function getProductionStatus(item: ContentPlanItem): 'ready' | 'in_progress' | 'blocked' | 'not_started' {
+  const stages = ['concept_status', 'script_status', 'filming_status', 'editing_status', 'design_status', 'caption_status']
+  const applicable = stages.filter((st) => s(item[st]) !== 'not_applicable')
+  if (applicable.length === 0) return 'not_started'
+  if (applicable.some((st) => s(item[st]) === 'blocked')) return 'blocked'
+  if (applicable.every((st) => ['approved', 'filmed', 'draft_ready', 'published'].includes(s(item[st])))) return 'ready'
+  if (applicable.some((st) => !['draft', 'not_started', 'not_applicable'].includes(s(item[st])))) return 'in_progress'
+  return 'not_started'
+}
+
+const STATUS_DOT: Record<string, string> = {
+  ready: 'bg-emerald-400',
+  in_progress: 'bg-amber-400',
+  blocked: 'bg-red-400',
+  not_started: 'bg-ink-5',
+}
+
+// ---------------------------------------------------------------------------
+// Main Component
+// ---------------------------------------------------------------------------
+
 export default function ContentPlanView({
   clientId, cycleId, context, strategyNotes, targetMonth,
   onMonthChange, onCycleCreated, onStatusChange,
@@ -53,14 +95,9 @@ export default function ContentPlanView({
   const [generating, setGenerating] = useState(false)
   const [genPhase, setGenPhase] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<ViewMode>('month')
+  const [viewMode, setViewMode] = useState<ViewMode>('calendar')
   const [month, setMonth] = useState(new Date(targetMonth + 'T12:00:00'))
-  const [roleFilter, setRoleFilter] = useState<RoleFilter>('full')
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [quickAddDate, setQuickAddDate] = useState<string | null>(null)
-  const [confirmRegen, setConfirmRegen] = useState(false)
 
   useEffect(() => { setMonth(new Date(targetMonth + 'T12:00:00')) }, [targetMonth])
 
@@ -77,114 +114,73 @@ export default function ContentPlanView({
 
   useEffect(() => { loadItems() }, [loadItems])
 
-  const targetMonthLabel = new Date(targetMonth + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  // Month navigation
+  const prevMonth = () => { const d = new Date(targetMonth + 'T12:00:00'); d.setMonth(d.getMonth() - 1); onMonthChange(toDateStr(d)) }
+  const nextMonth = () => { const d = new Date(targetMonth + 'T12:00:00'); d.setMonth(d.getMonth() + 1); onMonthChange(toDateStr(d)) }
+  const goToday = () => { const d = new Date(); onMonthChange(new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]) }
 
-  // Stats
-  const approvedCount = items.filter((i) => i.status === 'approved' || i.status === 'strategist_approved').length
-  const totalCount = items.length
-  const approvalPct = totalCount > 0 ? Math.round((approvedCount / totalCount) * 100) : 0
-  const hasBriefs = items.some((i) => i.hook || i.caption || i.script)
+  const monthLabel = month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
-  // Conflicts
-  const conflicts = useMemo(() => {
-    const ids = new Set<string>()
-    const slots = new Map<string, string[]>()
-    for (const item of items) {
-      const key = `${item.scheduled_date}|${item.scheduled_time}|${item.platform}`
-      if (!slots.has(key)) slots.set(key, [])
-      slots.get(key)!.push(item.id)
+  // Build calendar grid
+  const weeks = useMemo(() => {
+    const year = month.getFullYear()
+    const m = month.getMonth()
+    const firstDay = new Date(year, m, 1)
+    const lastDay = new Date(year, m + 1, 0)
+
+    const start = new Date(firstDay)
+    const dow = start.getDay()
+    start.setDate(start.getDate() - (dow === 0 ? 6 : dow - 1))
+
+    const result: Array<Array<{ date: Date; dateStr: string; inMonth: boolean; isToday: boolean }>> = []
+    const cursor = new Date(start)
+
+    while (cursor <= lastDay || result.length < 5) {
+      const week: typeof result[0] = []
+      for (let d = 0; d < 7; d++) {
+        week.push({
+          date: new Date(cursor),
+          dateStr: toDateStr(cursor),
+          inMonth: cursor.getMonth() === m,
+          isToday: isToday(cursor),
+        })
+        cursor.setDate(cursor.getDate() + 1)
+      }
+      result.push(week)
+      if (result.length >= 6) break
     }
-    for (const [, slotIds] of slots) { if (slotIds.length > 1) slotIds.forEach((id) => ids.add(id)) }
-    return ids
+    return result
+  }, [month])
+
+  // Group items by scheduled_date
+  const byDate = useMemo(() => {
+    const map = new Map<string, ContentPlanItem[]>()
+    for (const item of items) {
+      const d = s(item.scheduled_date)
+      if (!d) continue
+      if (!map.has(d)) map.set(d, [])
+      map.get(d)!.push(item)
+    }
+    return map
   }, [items])
 
-  // Completeness
-  const getCompleteness = (item: ContentPlanItem): string => {
-    const isVideo = ['reel', 'video', 'short_form_video'].includes(item.content_type)
-    const fields = [item.hook, item.caption]
-    if (isVideo) fields.push(item.script)
-    const filled = fields.filter(Boolean).length
-    if (filled === fields.length) return 'complete'
-    if (filled > 0) return 'partial'
-    return 'empty'
-  }
-
-  const COMPLETENESS_COLORS: Record<string, string> = { complete: 'bg-brand', partial: 'bg-amber-400', empty: 'bg-ink-5' }
-
-  // Week groups for list view
-  const weekGroups = useMemo(() => {
-    const groups: Array<{ label: string; items: ContentPlanItem[] }> = []
-    let currentWeek = ''; let currentItems: ContentPlanItem[] = []
-    for (const item of items) {
-      const d = new Date(item.scheduled_date + 'T12:00:00')
-      const ws = new Date(d); ws.setDate(d.getDate() - ((d.getDay() + 6) % 7))
-      const we = new Date(ws); we.setDate(ws.getDate() + 6)
-      const label = `${ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${we.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-      if (label !== currentWeek) { if (currentItems.length > 0) groups.push({ label: currentWeek, items: currentItems }); currentWeek = label; currentItems = [] }
-      currentItems.push(item)
-    }
-    if (currentItems.length > 0) groups.push({ label: currentWeek, items: currentItems })
-    return groups
+  // Quick stats
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    items.forEach((i) => { const t = s(i.content_type); counts[t] = (counts[t] ?? 0) + 1 })
+    return counts
   }, [items])
 
-  // Handlers
-  const saveField = async (id: string, field: string, value: unknown) => {
-    let parsed = value
-    if (typeof value === 'string' && value.startsWith('[')) { try { parsed = JSON.parse(value) } catch { /* keep */ } }
-    await updateCalendarItem(id, { [field]: parsed })
-    setItems((prev) => prev.map((i) => i.id === id ? { ...i, [field]: parsed } : i))
-  }
+  const statusCounts = useMemo(() => {
+    const counts = { ready: 0, in_progress: 0, blocked: 0, not_started: 0 }
+    items.forEach((i) => { counts[getProductionStatus(i)]++ })
+    return counts
+  }, [items])
 
-  const handleApproveItem = async (id: string) => {
-    const item = items.find((i) => i.id === id)
-    if (!item) return
-    const newStatus = (item.status === 'approved' || item.status === 'strategist_approved') ? 'draft' : 'approved'
-    await updateCalendarItem(id, { status: newStatus })
-    setItems((prev) => prev.map((i) => i.id === id ? { ...i, status: newStatus } : i))
-  }
-
-  const handleDeleteItem = async (id: string) => {
-    await deleteCalendarItem(id)
-    setItems((prev) => prev.filter((i) => i.id !== id))
-    if (selectedItemId === id) setSelectedItemId(null)
-    toast('Deleted', 'info')
-  }
-
-  const handleApproveAll = async () => {
-    if (!cycleId) return
-    // Approve all items
-    await approveAllCalendarItems(cycleId)
-    // Auto-generate production assignments
-    try {
-      const { generateAssignments } = await import('@/lib/content-engine/generate-assignments')
-      await generateAssignments(cycleId, clientId)
-    } catch { /* production assignments are optional at this stage */ }
-    onStatusChange('briefs_approved')
-    await loadItems()
-    toast('All items approved! Production assignments created.', 'success')
-  }
-
-  const handleSelect = (id: string, selected: boolean) => { setSelectedIds((prev) => { const next = new Set(prev); selected ? next.add(id) : next.delete(id); return next }) }
-
-  const handleRefine = async (id: string, field: string, direction: string) => {
-    if (!context) return
-    if (['concept_title', 'concept_description'].includes(field)) {
-      await refineCalendarItem(id, direction, context)
-    } else {
-      await refineBriefField(id, field, direction, context)
-    }
-    await loadItems()
-    toast('Refined', 'success')
-  }
-
-  // Generate
+  // Generate handler
   const handleGenerate = async () => {
     if (!context) return
-    setConfirmRegen(false)
-    setGenerating(true)
-    setError(null)
-    setGenPhase('Creating calendar...')
-
+    setGenerating(true); setError(null); setGenPhase('Creating calendar + briefs...')
     let cId = cycleId
     if (!cId) {
       const { data } = await supabase.from('content_cycles').insert({
@@ -194,48 +190,92 @@ export default function ContentPlanView({
       if (data) { cId = data.id; onCycleCreated(data.id) }
     }
     if (!cId) { setError('Failed to create cycle'); setGenerating(false); return }
-
-    if (items.length > 0) {
-      await supabase.from('content_calendar_items').delete().eq('cycle_id', cId)
-      setItems([])
-    }
-
-    setGenPhase('Generating calendar + briefs...')
     const result = await generateContentPlan(cId, clientId, context, strategyNotes, targetMonth)
-    if (result.success) {
-      onStatusChange('briefs_draft')
-      await loadItems()
-      toast(`${result.calendarCount} items with briefs generated`, 'success')
-    } else {
-      setError(result.error ?? 'Generation failed')
-    }
-    setGenerating(false)
-    setGenPhase('')
+    if (result.success) { onStatusChange('briefs_draft'); await loadItems(); toast(`${result.calendarCount} items generated`, 'success') }
+    else setError(result.error ?? 'Generation failed')
+    setGenerating(false); setGenPhase('')
   }
 
-  // Quick add
-  const handleQuickAdd = async (data: { date: string; time: string; platform: string; type: string; title: string; description: string }) => {
-    if (!cycleId) return
-    const { data: row } = await supabase.from('content_calendar_items').insert({
-      cycle_id: cycleId, client_id: clientId, scheduled_date: data.date, scheduled_time: data.time,
-      platform: data.platform, content_type: data.type, concept_title: data.title,
-      concept_description: data.description || null, source: 'strategist', status: 'draft', sort_order: items.length,
-    }).select().single()
-    if (row) { setItems((prev) => [...prev, row as ContentPlanItem]); setQuickAddDate(null); toast('Added', 'success') }
-  }
-
-  // Bulk
-  const handleBulkMove = async (date: string) => { for (const id of selectedIds) await updateCalendarItem(id, { scheduled_date: date }); setItems((prev) => prev.map((i) => selectedIds.has(i.id) ? { ...i, scheduled_date: date } : i)); setSelectedIds(new Set()); toast('Moved', 'success') }
-  const handleBulkPlatform = async (p: string) => { for (const id of selectedIds) await updateCalendarItem(id, { platform: p }); setItems((prev) => prev.map((i) => selectedIds.has(i.id) ? { ...i, platform: p } : i)); setSelectedIds(new Set()); toast('Updated', 'success') }
-  const handleBulkType = async (t: string) => { for (const id of selectedIds) await updateCalendarItem(id, { content_type: t }); setItems((prev) => prev.map((i) => selectedIds.has(i.id) ? { ...i, content_type: t } : i)); setSelectedIds(new Set()); toast('Updated', 'success') }
-  const handleBulkDelete = async () => { for (const id of selectedIds) await deleteCalendarItem(id); setItems((prev) => prev.filter((i) => !selectedIds.has(i.id))); toast('Deleted', 'info'); setSelectedIds(new Set()) }
-  const handleBulkApprove = async () => { for (const id of selectedIds) await updateCalendarItem(id, { status: 'approved' }); setItems((prev) => prev.map((i) => selectedIds.has(i.id) ? { ...i, status: 'approved' } : i)); setSelectedIds(new Set()); toast('Approved', 'success') }
-
-  const prevMonth = () => { const d = new Date(targetMonth + 'T12:00:00'); d.setMonth(d.getMonth() - 1); onMonthChange(d.toISOString().split('T')[0]) }
-  const nextMonth = () => { const d = new Date(targetMonth + 'T12:00:00'); d.setMonth(d.getMonth() + 1); onMonthChange(d.toISOString().split('T')[0]) }
-
+  // Selected item + detail panel handlers
   const selectedItem = selectedItemId ? items.find((i) => i.id === selectedItemId) ?? null : null
 
+  const handleSaveDate = async (id: string, field: string, value: string) => {
+    await updateCalendarItem(id, { [field]: value })
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, [field]: value } : i))
+    toast('Updated', 'success')
+  }
+
+  const handleMarkPublished = async (id: string) => {
+    await updateCalendarItem(id, { status: 'published', concept_status: 'approved', caption_status: 'approved' })
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, status: 'published', concept_status: 'approved', caption_status: 'approved' } : i))
+    toast('Marked as published', 'success')
+  }
+
+  // Unscheduled items
+  const unscheduledItems = items.filter((i) => !s(i.scheduled_date))
+
+  // Drop handler for drag-and-drop scheduling
+  const handleDropItem = async (itemId: string, dateStr: string) => {
+    await updateCalendarItem(itemId, { scheduled_date: dateStr })
+    setItems((prev) => prev.map((i) => i.id === itemId ? { ...i, scheduled_date: dateStr } : i))
+    toast('Scheduled', 'success')
+  }
+
+  // Production milestones (filming dates grouped by date)
+  const milestones = useMemo(() => {
+    const map = new Map<string, Array<{ type: string; label: string }>>()
+    for (const item of items) {
+      const shootDate = s(item.shoot_date)
+      if (shootDate) {
+        if (!map.has(shootDate)) map.set(shootDate, [])
+        map.get(shootDate)!.push({ type: 'filming', label: s(item.concept_title) })
+      }
+    }
+    // Group filming milestones
+    const result = new Map<string, Array<{ type: string; label: string }>>()
+    for (const [date, ms] of map) {
+      const count = ms.filter((m) => m.type === 'filming').length
+      result.set(date, [{ type: 'filming', label: count > 1 ? `Filming: ${count} videos` : `Filming: ${ms[0].label}` }])
+    }
+    return result
+  }, [items])
+
+  // Conflict detection
+  const conflicts = useMemo(() => {
+    const itemConflicts = new Set<string>()
+    const dayConflicts = new Set<string>() // dates with issues
+    const slots = new Map<string, string[]>()
+
+    for (const item of items) {
+      const date = s(item.scheduled_date)
+      if (!date) continue
+      const time = s(item.scheduled_time)
+      const platform = s(item.platform)
+      if (time && platform) {
+        const key = `${date}|${time}|${platform}`
+        if (!slots.has(key)) slots.set(key, [])
+        slots.get(key)!.push(item.id)
+      }
+    }
+    // Same time + platform conflicts
+    for (const [, ids] of slots) {
+      if (ids.length > 1) ids.forEach((id) => itemConflicts.add(id))
+    }
+
+    // Heavy days (>3 posts) and gaps
+    const dateItemCounts = new Map<string, number>()
+    for (const item of items) {
+      const d = s(item.scheduled_date)
+      if (d) dateItemCounts.set(d, (dateItemCounts.get(d) ?? 0) + 1)
+    }
+    for (const [date, count] of dateItemCounts) {
+      if (count > 3) dayConflicts.add(date)
+    }
+
+    return { itemConflicts, dayConflicts }
+  }, [items])
+
+  // Loading
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-ink-4" /></div>
 
   // Generating
@@ -244,7 +284,7 @@ export default function ContentPlanView({
       <div className="text-center py-16">
         <Loader2 className="w-8 h-8 animate-spin text-brand mx-auto mb-4" />
         <h2 className="text-base font-bold text-ink mb-1">{genPhase || 'Generating...'}</h2>
-        <p className="text-sm text-ink-3">This takes 30-60 seconds for calendar + briefs</p>
+        <p className="text-sm text-ink-3">This takes 30-60 seconds</p>
       </div>
     )
   }
@@ -255,16 +295,16 @@ export default function ContentPlanView({
       <div>
         <div className="flex items-center justify-center gap-3 mb-8">
           <button onClick={prevMonth} className="p-1 text-ink-4 hover:text-ink rounded"><ChevronLeft className="w-5 h-5" /></button>
-          <h2 className="text-base font-bold text-ink min-w-[160px] text-center">{targetMonthLabel}</h2>
+          <h2 className="text-base font-bold text-ink min-w-[160px] text-center">{monthLabel}</h2>
           <button onClick={nextMonth} className="p-1 text-ink-4 hover:text-ink rounded"><ChevronRight className="w-5 h-5" /></button>
         </div>
         <div className="text-center py-16">
           <Sparkles className="w-10 h-10 text-ink-4 mx-auto mb-4" />
-          <h2 className="text-lg font-bold text-ink mb-2">No content plan for {targetMonthLabel}</h2>
-          <p className="text-sm text-ink-3 max-w-md mx-auto mb-6">Generate a complete content plan with calendar scheduling and production briefs in one shot.</p>
+          <h2 className="text-lg font-bold text-ink mb-2">No content plan for {monthLabel}</h2>
+          <p className="text-sm text-ink-3 max-w-md mx-auto mb-6">Generate a complete content plan with calendar scheduling and briefs.</p>
           {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
           <button onClick={handleGenerate} className="inline-flex items-center gap-2 px-6 py-3 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors">
-            <Sparkles className="w-4 h-4" /> Generate {targetMonthLabel} Plan
+            <Sparkles className="w-4 h-4" /> Generate {monthLabel} Plan
           </button>
         </div>
       </div>
@@ -273,156 +313,110 @@ export default function ContentPlanView({
 
   return (
     <div className="space-y-4">
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        {/* Month nav */}
+        {/* Left: month nav + today */}
         <div className="flex items-center gap-2">
-          <button onClick={prevMonth} className="p-1 text-ink-4 hover:text-ink rounded"><ChevronLeft className="w-4 h-4" /></button>
-          <span className="text-sm font-bold text-ink min-w-[130px] text-center">{targetMonthLabel}</span>
-          <button onClick={nextMonth} className="p-1 text-ink-4 hover:text-ink rounded"><ChevronRight className="w-4 h-4" /></button>
+          <button onClick={prevMonth} className="p-1.5 text-ink-4 hover:text-ink rounded-lg hover:bg-bg-2"><ChevronLeft className="w-4 h-4" /></button>
+          <h2 className="text-sm font-bold text-ink min-w-[140px] text-center">{monthLabel}</h2>
+          <button onClick={nextMonth} className="p-1.5 text-ink-4 hover:text-ink rounded-lg hover:bg-bg-2"><ChevronRight className="w-4 h-4" /></button>
+          <button onClick={goToday} className="text-[10px] font-semibold text-brand px-2 py-1 rounded-lg hover:bg-brand-tint">Today</button>
         </div>
 
-        {/* Progress + actions */}
-        <div className="flex items-center gap-3">
-          <div className="w-24 h-1.5 bg-ink-6 rounded-full overflow-hidden">
-            <div className="h-full bg-brand rounded-full transition-all duration-500" style={{ width: `${approvalPct}%` }} />
-          </div>
-          <span className="text-[10px] text-ink-3">{approvedCount}/{totalCount}</span>
-          {approvedCount < totalCount && (
-            <button onClick={handleApproveAll} className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold bg-brand text-white rounded-lg hover:bg-brand-dark">
-              <Check className="w-3 h-3" /> Approve All
-            </button>
-          )}
-        </div>
-
-        {/* View + role filter + regenerate */}
-        <div className="flex items-center gap-2">
-          {/* Role filter — with labels */}
-          <div className="flex gap-1 bg-bg-2 rounded-lg p-0.5">
-            {ROLE_FILTERS.map((r) => (
-              <button key={r.key} onClick={() => setRoleFilter(r.key)} className={`flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded transition-colors ${roleFilter === r.key ? 'bg-white text-ink shadow-sm' : 'text-ink-4 hover:text-ink'}`}>
-                <r.icon className="w-3 h-3" />
-                <span className="hidden sm:inline">{r.label}</span>
-              </button>
+        {/* Right: stats + view toggle */}
+        <div className="flex items-center gap-4">
+          {/* Quick stats */}
+          <div className="hidden md:flex items-center gap-2 text-[10px] text-ink-3">
+            <span className="font-bold text-ink">{items.length} posts</span>
+            {Object.entries(typeCounts).slice(0, 4).map(([t, c]) => (
+              <span key={t} className="flex items-center gap-1">
+                <span className={`w-1.5 h-1.5 rounded-full ${TYPE_COLORS[t]?.split(' ')[0] ?? 'bg-ink-5'}`} />
+                {c} {t.replace(/_/g, ' ')}
+              </span>
             ))}
           </div>
-
+          {/* Status summary */}
+          <div className="hidden lg:flex items-center gap-2 text-[10px]">
+            {statusCounts.ready > 0 && <span className="text-emerald-600">{statusCounts.ready} ready</span>}
+            {statusCounts.in_progress > 0 && <span className="text-amber-600">{statusCounts.in_progress} in progress</span>}
+            {statusCounts.blocked > 0 && <span className="text-red-600">{statusCounts.blocked} blocked</span>}
+          </div>
           {/* View toggle */}
           <div className="flex rounded-lg border border-ink-6 overflow-hidden">
-            <button onClick={() => setViewMode('month')} className={`p-1.5 ${viewMode === 'month' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`}><CalendarDays className="w-3.5 h-3.5" /></button>
-            <button onClick={() => setViewMode('list')} className={`p-1.5 ${viewMode === 'list' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`}><LayoutList className="w-3.5 h-3.5" /></button>
+            <button onClick={() => setViewMode('calendar')} className={`flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium ${viewMode === 'calendar' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`}>
+              <CalendarDays className="w-3.5 h-3.5" /> Calendar
+            </button>
+            <button onClick={() => setViewMode('timeline')} className={`flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium ${viewMode === 'timeline' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`}>
+              <BarChart3 className="w-3.5 h-3.5" /> Timeline
+            </button>
           </div>
-
-          {/* Regenerate */}
-          <button onClick={() => setConfirmRegen(true)} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-medium border border-ink-5 rounded-lg hover:bg-bg-2">
-            <RefreshCw className="w-3 h-3" /> Regenerate
-          </button>
         </div>
       </div>
 
-      {/* Guidance banner */}
-      {approvedCount === 0 && totalCount > 0 && (
-        <div className="flex items-center gap-2 text-xs text-ink-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5">
-          <Sparkles className="w-4 h-4 text-blue-500 flex-shrink-0" />
-          <span><strong>Review your plan:</strong> Click any item to review its brief. Use the role filters to check what each team member will see. Approve items as you go, or hit Approve All when ready.</span>
-        </div>
-      )}
-      {approvedCount === totalCount && totalCount > 0 && (
-        <div className="flex items-center justify-between bg-brand-tint border border-brand/20 rounded-lg px-4 py-2.5">
-          <div className="flex items-center gap-2 text-xs text-brand-dark">
-            <Check className="w-4 h-4 flex-shrink-0" />
-            <span><strong>All {totalCount} items approved!</strong> Head to Team & Production to assign your team and start production.</span>
-          </div>
-        </div>
+      {/* ── Unscheduled items dock ── */}
+      {unscheduledItems.length > 0 && (
+        <UnscheduledDock items={unscheduledItems} onItemClick={setSelectedItemId} />
       )}
 
-      {conflicts.size > 0 && (
-        <div className="flex items-center gap-2 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
-          <AlertCircle className="w-3 h-3" /> {conflicts.size} time conflicts
-        </div>
-      )}
-
-      {error && <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{error}</p>}
-
-      {/* Two-panel layout */}
-      <div className="flex gap-4" style={{ minHeight: '500px' }}>
-        {/* Left panel: grid or list */}
-        <div className={`${selectedItem ? 'w-2/5' : 'w-full'} transition-all`}>
-          {viewMode === 'month' && (
-            <MonthGrid
-              items={items as CalendarItemData[]}
-              month={month}
-              selectedDate={selectedDate}
-              onSelectDate={(d) => setSelectedDate(selectedDate === d ? null : d)}
-              onSelectItem={(item) => setSelectedItemId(item.id)}
-              onQuickAdd={(d) => setQuickAddDate(d)}
+      {/* ── Calendar + Detail Panel layout ── */}
+      <div className="flex gap-4" style={{ minHeight: '540px' }}>
+        {/* Calendar grid */}
+        <div className={`transition-all ${selectedItem ? 'flex-1 min-w-0' : 'w-full'}`}>
+          {viewMode === 'calendar' && (
+            <CalendarGrid
+              weeks={weeks}
+              byDate={byDate}
+              milestones={milestones}
               conflicts={conflicts}
+              selectedItemId={selectedItemId}
+              onItemClick={setSelectedItemId}
+              onDropItem={handleDropItem}
             />
           )}
-          {viewMode === 'list' && (
-            <div className="space-y-3">
-              {weekGroups.map((group) => (
-                <div key={group.label}>
-                  <h3 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider mb-1.5">{group.label} — {group.items.length} items</h3>
-                  <div className="bg-white rounded-xl border border-ink-6 divide-y divide-ink-6">
-                    {group.items.map((item) => {
-                      const isApproved = item.status === 'approved' || item.status === 'strategist_approved'
-                      const comp = getCompleteness(item)
-                      const isSelected = selectedItemId === item.id
-                      const PlatIcon = ({ instagram: Camera, tiktok: Video, facebook: Globe, linkedin: MessageCircle } as Record<string, typeof Camera>)[item.platform] ?? Globe
-                      const tc = ({ reel: 'bg-indigo-100 text-indigo-800', feed_post: 'bg-cyan-100 text-cyan-800', carousel: 'bg-pink-100 text-pink-800', story: 'bg-amber-100 text-amber-800' } as Record<string, string>)[item.content_type] ?? 'bg-ink-6 text-ink-3'
 
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => setSelectedItemId(item.id)}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
-                            isSelected ? 'bg-brand-tint' : 'hover:bg-bg-2'
-                          } ${isApproved ? 'opacity-60' : ''}`}
-                        >
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${COMPLETENESS_COLORS[comp]}`} />
-                          <span className="text-[11px] text-ink-3 font-medium tabular-nums w-14 flex-shrink-0">
-                            {new Date(item.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </span>
-                          <PlatIcon className="w-3 h-3 text-ink-4 flex-shrink-0" />
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${tc}`}>
-                            {item.content_type.replace(/_/g, ' ')}
-                          </span>
-                          <span className="text-xs font-medium text-ink truncate flex-1">{item.concept_title}</span>
-                          {isApproved && <Check className="w-3 h-3 text-brand flex-shrink-0" />}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
+          {viewMode === 'timeline' && (
+            <div className="bg-white rounded-xl border border-ink-6 p-12 text-center h-full flex flex-col items-center justify-center">
+              <BarChart3 className="w-10 h-10 text-ink-4 mx-auto mb-3" />
+              <p className="text-sm text-ink-3">Timeline view coming soon.</p>
             </div>
           )}
         </div>
 
-        {/* Right panel: unified detail */}
+        {/* Detail panel (slide-over) */}
         {selectedItem && (
-          <div className="w-3/5">
-            <UnifiedDetailPanel
+          <div className="w-[380px] flex-shrink-0">
+            <CalendarDetailPanel
               item={selectedItem}
-              allItems={items}
-              roleFilter={roleFilter}
-              onSave={saveField}
-              onApprove={handleApproveItem}
-              onDelete={handleDeleteItem}
-              onRefine={handleRefine}
-              onNavigate={setSelectedItemId}
               onClose={() => setSelectedItemId(null)}
+              onSaveDate={handleSaveDate}
+              onMarkPublished={handleMarkPublished}
+              turnaroundDays={{ editing: 3, clientReview: 2, design: 2 }}
             />
           </div>
         )}
       </div>
 
-      {quickAddDate && <QuickAddForm date={quickAddDate} onAdd={handleQuickAdd} onCancel={() => setQuickAddDate(null)} />}
-
-      <BulkActionBar count={selectedIds.size} onMoveToDate={handleBulkMove} onChangePlatform={handleBulkPlatform} onChangeType={handleBulkType} onDelete={handleBulkDelete} onApprove={handleBulkApprove} onClear={() => setSelectedIds(new Set())} />
-
-      <ConfirmModal open={confirmRegen} onConfirm={handleGenerate} onCancel={() => setConfirmRegen(false)} title="Regenerate entire plan?" description={`This will replace all ${totalCount} items (calendar + briefs). This takes 30-60 seconds.`} confirmLabel="Regenerate" variant="danger" />
+      {/* Legend */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4 text-[10px] text-ink-3">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Ready</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> In progress</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Blocked</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-ink-5" /> Not started</span>
+        </div>
+        <div className="flex items-center gap-3 text-[10px] text-ink-3">
+          {[
+            { label: 'Reel', color: 'bg-indigo-400' },
+            { label: 'Feed', color: 'bg-cyan-400' },
+            { label: 'Carousel', color: 'bg-pink-400' },
+            { label: 'Story', color: 'bg-amber-400' },
+          ].map((l) => (
+            <span key={l.label} className="flex items-center gap-1">
+              <span className={`w-2 h-2 rounded-full ${l.color}`} /> {l.label}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
