@@ -12,6 +12,7 @@ export interface CalendarItemData {
   scheduled_date: string
   scheduled_time: string
   platform: string
+  additional_platforms?: string[]
   content_type: string
   concept_title: string
   concept_description: string | null
@@ -113,8 +114,14 @@ export default function CalendarItemRow({
           {item.scheduled_time?.slice(0, 5) || '—'}
         </span>
 
-        {/* Platform icon */}
-        <PlatformIcon className="w-3.5 h-3.5 text-ink-4 flex-shrink-0" />
+        {/* Platform icons */}
+        <div className="flex items-center -space-x-0.5 flex-shrink-0">
+          <PlatformIcon className="w-3.5 h-3.5 text-ink-4" />
+          {(item.additional_platforms ?? []).map((p) => {
+            const ExtraIcon = PLATFORM_ICONS[p] ?? Globe
+            return <ExtraIcon key={p} className="w-3 h-3 text-ink-5" />
+          })}
+        </div>
 
         {/* Type badge */}
         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${tc.bg} ${tc.text}`}>

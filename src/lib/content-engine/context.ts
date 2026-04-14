@@ -79,6 +79,9 @@ export interface ClientContext {
   // Offerings
   offerings: string[]
 
+  // Content defaults (persisted settings)
+  contentDefaults: Record<string, unknown>
+
   // Performance (last 60 days)
   performance: {
     bestDays: string[]
@@ -239,6 +242,7 @@ export async function assembleClientContext(clientId: string): Promise<ClientCon
     competitors,
     seasonalNotes: client?.seasonal_notes ?? null,
     offerings,
+    contentDefaults: parseJson<Record<string, unknown>>(client?.content_defaults) ?? {},
     performance,
     goldenPosts: (goldenPosts ?? []).map((p) => ({
       caption: p.caption ?? '',
