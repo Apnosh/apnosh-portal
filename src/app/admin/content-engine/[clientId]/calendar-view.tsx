@@ -26,12 +26,13 @@ interface CalendarViewProps {
   cycleId: string | null
   context: ClientContext | null
   strategyNotes: string
+  targetMonth: string // YYYY-MM-DD
   onCycleCreated: (id: string) => void
   onStatusChange: (status: string) => void
 }
 
 export default function CalendarView({
-  clientId, cycleId, context, strategyNotes, onCycleCreated, onStatusChange,
+  clientId, cycleId, context, strategyNotes, targetMonth, onCycleCreated, onStatusChange,
 }: CalendarViewProps) {
   const supabase = createClient()
   const { toast } = useToast()
@@ -41,7 +42,7 @@ export default function CalendarView({
   const [genProgress, setGenProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('month')
-  const [month, setMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
+  const [month, setMonth] = useState(new Date(targetMonth + 'T12:00:00'))
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -51,6 +52,11 @@ export default function CalendarView({
   const [refineText, setRefineText] = useState('')
   const [confirmRegen, setConfirmRegen] = useState(false)
   const [regenMode, setRegenMode] = useState<'all' | 'unapproved' | 'gaps'>('all')
+
+  // Sync month grid when targetMonth prop changes
+  useEffect(() => {
+    setMonth(new Date(targetMonth + 'T12:00:00'))
+  }, [targetMonth])
 
   const loadItems = useCallback(async () => {
     if (!cycleId) { setLoading(false); return }
@@ -281,18 +287,20 @@ export default function CalendarView({
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-ink-4" /></div>
 
-  // Empty state
+  const targetMonthLabel = new Date(targetMonth + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  // Empty state — no items for this month yet
   if (items.length === 0 && !generating) {
     return (
       <div className="text-center py-16">
         <Sparkles className="w-10 h-10 text-ink-4 mx-auto mb-4" />
-        <h2 className="text-lg font-bold text-ink mb-2">Generate your content calendar</h2>
+        <h2 className="text-lg font-bold text-ink mb-2">No content for {targetMonthLabel}</h2>
         <p className="text-sm text-ink-3 max-w-md mx-auto mb-6">
-          AI creates a full month based on the client's profile, performance data, and your strategy notes.
+          Generate a full calendar for {targetMonthLabel} based on the client's profile, performance data, and your strategy notes.
         </p>
         {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
-        <button onClick={handleGenerate} disabled={generating} className="inline-flex items-center gap-2 px-6 py-3 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors disabled:opacity-50">
-          {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><Sparkles className="w-4 h-4" /> Generate Calendar</>}
+        <button onClick={() => { setRegenMode('all'); handleGenerate() }} disabled={generating} className="inline-flex items-center gap-2 px-6 py-3 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors disabled:opacity-50">
+          {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><Sparkles className="w-4 h-4" /> Generate {targetMonthLabel} Calendar</>}
         </button>
       </div>
     )

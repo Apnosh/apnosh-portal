@@ -258,6 +258,7 @@ export default function ContentEngineWorkspace({
           cycleId={cycle?.id ?? null}
           context={context}
           strategyNotes={strategyNotes}
+          targetMonth={currentMonth}
           onCycleCreated={(id) => setCycle((prev) => prev ? { ...prev, id } : { id, status: 'calendar_draft', strategy_notes: strategyNotes, deliverables: null, context_snapshot: null })}
           onStatusChange={(status) => setCycle((prev) => prev ? { ...prev, status } : null)}
         />
