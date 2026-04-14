@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, ShoppingBag, Kanban, UserCog, FileBarChart,
   FileText, CreditCard, MessageSquare, Settings, Menu, X, ChevronDown, Shield, Plus,
-  BarChart3, Calendar, ListTodo, Send, MessageCircle,
+  BarChart3, Calendar, ListTodo, Send, MessageCircle, Sparkles,
 } from 'lucide-react'
 import { useUser, signOut } from '@/lib/supabase/hooks'
 import { ToastProvider } from '@/components/ui/toast'
@@ -27,6 +27,7 @@ const navSections = [
   {
     label: 'Content',
     items: [
+      { label: 'Content Engine', href: '/admin/content-engine', icon: Sparkles },
       { label: 'Orders', href: '/admin/orders', icon: ShoppingBag },
       { label: 'Pipeline', href: '/admin/pipeline', icon: Kanban },
       { label: 'Queue', href: '/admin/queue', icon: ListTodo },
