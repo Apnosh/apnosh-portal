@@ -74,7 +74,7 @@ export async function importGbpData(
       const chunk = upsertRows.slice(i, i + 500)
       const { error } = await supabase
         .from('gbp_metrics')
-        .upsert(chunk, { onConflict: 'client_id,coalesce(location_id,\'default\'),date' })
+        .upsert(chunk, { onConflict: 'client_id,location_id,date' })
 
       if (error) {
         return { success: false, error: `Import failed at row ${i}: ${error.message}` }
