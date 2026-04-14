@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, Sparkles, BarChart3, FileText, Clock, Users,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Save, Loader2, Check, Calendar as CalIcon,
-  Zap, Star, BookOpen, X,
+  Zap, Star, BookOpen, X, ClipboardList,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { assembleClientContext, type ClientContext } from '@/lib/content-engine/context'
@@ -17,11 +17,12 @@ import EditableSection from '@/components/content-engine/editable-section'
 import { useToast } from '@/components/ui/toast'
 import CalendarView from './calendar-view'
 import BriefsView from './briefs-view'
+import ReviewView from './review-view'
 import ProductionView from './production-view'
 import ContentProfileSection from './content-profile-section'
 import DefaultsSection from './defaults-section'
 
-type WorkspaceTab = 'context' | 'calendar' | 'briefs' | 'production'
+type WorkspaceTab = 'context' | 'calendar' | 'briefs' | 'review' | 'production'
 
 interface CycleData {
   id: string
@@ -145,6 +146,7 @@ export default function ContentEngineWorkspace({
     { key: 'context', label: 'Context', icon: FileText },
     { key: 'calendar', label: 'Calendar', icon: CalIcon },
     { key: 'briefs', label: 'Briefs', icon: BookOpen },
+    { key: 'review', label: 'Review', icon: ClipboardList },
     { key: 'production', label: 'Production', icon: Zap },
   ]
 
@@ -175,8 +177,10 @@ export default function ContentEngineWorkspace({
         {tabs.map((tab) => {
           const isCalendarApproved = cycle && ['calendar_approved', 'briefs_draft', 'briefs_approved', 'in_production', 'complete'].includes(cycle.status)
           const isBriefsApproved = cycle && ['briefs_approved', 'in_production', 'complete'].includes(cycle.status)
+          const isBriefsDraft = cycle && ['briefs_draft'].includes(cycle.status)
           const disabled =
             (tab.key === 'briefs' && !isCalendarApproved) ||
+            (tab.key === 'review' && !isBriefsDraft && !isBriefsApproved) ||
             (tab.key === 'production' && !isBriefsApproved)
 
           return (
@@ -250,6 +254,15 @@ export default function ContentEngineWorkspace({
           clientId={clientId}
           context={context}
           onStatusChange={(status) => setCycle((prev) => prev ? { ...prev, status } : null)}
+        />
+      )}
+
+      {/* Review Tab */}
+      {activeTab === 'review' && cycle?.id && (
+        <ReviewView
+          cycleId={cycle.id}
+          clientId={clientId}
+          onStatusChange={(status) => { setCycle((prev) => prev ? { ...prev, status } : null); setActiveTab('production') }}
         />
       )}
 
