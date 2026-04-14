@@ -218,28 +218,16 @@ export default function BrainstormEditPanel({
             </select>
           </div>
 
-          {/* Platform + Week */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">Platform</label>
-              <select
-                value={platform}
-                onChange={(e) => { setPlatform(e.target.value); saveField('platform', e.target.value) }}
-                className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
-              >
-                {PLATFORM_OPTIONS.map((p) => (<option key={p.value} value={p.value}>{p.label}</option>))}
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">Week</label>
-              <select
-                value={week}
-                onChange={(e) => { setWeek(parseInt(e.target.value)); saveField('week_number', parseInt(e.target.value) || null) }}
-                className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
-              >
-                {WEEK_OPTIONS.map((w) => (<option key={w.value} value={w.value}>{w.label}</option>))}
-              </select>
-            </div>
+          {/* Platform */}
+          <div>
+            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">Platform</label>
+            <select
+              value={platform}
+              onChange={(e) => { setPlatform(e.target.value); saveField('platform', e.target.value) }}
+              className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
+            >
+              {PLATFORM_OPTIONS.map((p) => (<option key={p.value} value={p.value}>{p.label}</option>))}
+            </select>
           </div>
 
           {/* Source (read-only) */}
