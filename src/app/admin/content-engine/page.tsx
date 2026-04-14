@@ -108,9 +108,12 @@ export default function ContentEnginePage() {
 
   useEffect(() => { load() }, [load])
 
+  const [search, setSearch] = useState('')
+
   const filtered = clients.filter((c) => {
     if (filter === 'mine' && user && c.assignedTo !== user.id) return false
     if (statusFilter !== 'all' && c.status !== statusFilter) return false
+    if (search && !c.clientName.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
 
@@ -131,7 +134,15 @@ export default function ContentEnginePage() {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Search + Filters */}
+      <div className="mb-4">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search clients..."
+          className="w-full max-w-xs text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand bg-white"
+        />
+      </div>
       <div className="flex items-center gap-3 mb-5">
         <div className="flex rounded-lg border border-ink-6 overflow-hidden text-sm">
           <button
@@ -204,6 +215,11 @@ export default function ContentEnginePage() {
                   </div>
                 </div>
 
+                {/* Updated time */}
+                {c.updatedAt && (
+                  <span className="text-[10px] text-ink-4">{relativeTime(c.updatedAt)}</span>
+                )}
+
                 {/* Requests badge */}
                 {requestCount > 0 && (
                   <div className="flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-full">
@@ -233,4 +249,16 @@ export default function ContentEnginePage() {
       )}
     </div>
   )
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `${days}d ago`
+  return `${Math.floor(days / 7)}w ago`
 }
