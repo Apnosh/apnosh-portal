@@ -140,27 +140,40 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
 
   return (
     <div className="space-y-4">
-      {/* Header: AI generate briefs + mode toggle */}
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <span className="text-xs text-ink-3">{items.length} items</span>
-          {!hasBriefs && (
-            <button onClick={handleGenerateBriefs} disabled={generatingBriefs} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-brand text-white rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50">
-              {generatingBriefs ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-              AI Generate All Briefs
-            </button>
-          )}
+          <span className="text-sm font-bold text-ink">{items.length} content items</span>
+          <div className="w-20 h-1.5 bg-ink-6 rounded-full overflow-hidden">
+            <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${items.length > 0 ? Math.round((approvedCount / items.length) * 100) : 0}%` }} />
+          </div>
+          <span className="text-[10px] text-ink-3">{approvedCount}/{items.length} approved</span>
         </div>
-        {/* Mode toggle */}
-        <div className="flex rounded-lg border border-ink-6 overflow-hidden">
-          <button onClick={() => setEditMode('quick-edit')} className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium transition-colors ${editMode === 'quick-edit' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`}>
-            <Pen className="w-3 h-3" /> Quick Edit
+        <div className="flex items-center gap-2">
+          {/* AI Fill All */}
+          <button onClick={handleGenerateBriefs} disabled={generatingBriefs} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-brand bg-brand-tint rounded-lg hover:bg-brand/10 transition-colors disabled:opacity-50">
+            {generatingBriefs ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+            AI Fill All
           </button>
-          <button onClick={() => setEditMode('builder')} className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium transition-colors ${editMode === 'builder' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`}>
-            <Layers className="w-3 h-3" /> Builder
-          </button>
+          {/* Mode toggle */}
+          <div className="flex rounded-lg border border-ink-6 overflow-hidden">
+            <button onClick={() => setEditMode('quick-edit')} className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium transition-colors ${editMode === 'quick-edit' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`}>
+              <Pen className="w-3 h-3" /> Quick Edit
+            </button>
+            <button onClick={() => setEditMode('builder')} className={`flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium transition-colors ${editMode === 'builder' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`}>
+              <Layers className="w-3 h-3" /> Builder
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Guidance */}
+      {!hasBriefs && (
+        <div className="flex items-center gap-2 text-xs text-ink-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5">
+          <Sparkles className="w-4 h-4 text-blue-500 flex-shrink-0" />
+          <span>Click <strong>AI Fill All</strong> to auto-generate details for every item based on your brainstorm ideas. Or fill each item manually using Quick Edit or Builder mode.</span>
+        </div>
+      )}
 
       {/* Two-panel layout */}
       <div className="flex gap-4" style={{ minHeight: '600px' }}>
@@ -208,20 +221,35 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
         <div className="flex-1 bg-white rounded-xl border border-ink-6 overflow-hidden flex flex-col">
           {selectedItem ? (
             <>
-              {/* Item header with nav */}
+              {/* Item header with nav + AI fill + approve */}
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-ink-6 bg-bg-2 flex-shrink-0">
                 <div className="flex items-center gap-2">
                   <button onClick={goPrev} disabled={currentIdx <= 0} className="p-1 text-ink-4 hover:text-ink disabled:opacity-30 rounded"><ChevronUp className="w-4 h-4" /></button>
                   <button onClick={goNext} disabled={currentIdx >= items.length - 1} className="p-1 text-ink-4 hover:text-ink disabled:opacity-30 rounded"><ChevronDown className="w-4 h-4" /></button>
                   <span className="text-[10px] text-ink-4">{currentIdx + 1} / {items.length}</span>
                 </div>
-                <button onClick={() => handleApprove(selectedItem.id)} className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
-                  (selectedItem.status === 'approved' || selectedItem.status === 'strategist_approved')
-                    ? 'bg-brand/10 text-brand border border-brand/20'
-                    : 'bg-brand text-white hover:bg-brand-dark'
-                }`}>
-                  <Check className="w-3 h-3" /> {(selectedItem.status === 'approved' || selectedItem.status === 'strategist_approved') ? 'Approved' : 'Approve'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      if (!context) return
+                      toast('Generating details for this item...', 'info')
+                      // Auto-approve so brief generation works
+                      await saveField(selectedItem.id, 'status', 'strategist_approved')
+                      const result = await generateBriefs(cycleId, clientId, context)
+                      if (result.success) { await loadItems(); toast('Details filled', 'success') }
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold text-brand bg-brand-tint rounded-lg hover:bg-brand/10 transition-colors"
+                  >
+                    <Sparkles className="w-3 h-3" /> AI Fill
+                  </button>
+                  <button onClick={() => handleApprove(selectedItem.id)} className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+                    (selectedItem.status === 'approved' || selectedItem.status === 'strategist_approved')
+                      ? 'bg-brand/10 text-brand border border-brand/20'
+                      : 'bg-brand text-white hover:bg-brand-dark'
+                  }`}>
+                    <Check className="w-3 h-3" /> {(selectedItem.status === 'approved' || selectedItem.status === 'strategist_approved') ? 'Approved' : 'Approve'}
+                  </button>
+                </div>
               </div>
 
               {/* Builder mode */}
