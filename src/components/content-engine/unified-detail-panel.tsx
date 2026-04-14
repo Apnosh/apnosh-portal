@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import EditableField from './editable-field'
 import EditableList from './editable-list'
+import ProductionBriefForm from './production-brief-form'
 import type { CalendarItemData } from './calendar-item-row'
 
 // Extended item type with all brief fields
@@ -59,6 +60,7 @@ export default function UnifiedDetailPanel({
   item, allItems, roleFilter, onSave, onApprove, onDelete, onRefine,
   onGenerateAlternativeHooks, onNavigate, onClose,
 }: UnifiedDetailPanelProps) {
+  const [detailView, setDetailView] = useState<'overview' | 'full-brief'>('overview')
   const [refiningField, setRefiningField] = useState<string | null>(null)
   const [refineText, setRefineText] = useState('')
   const [refining, setRefining] = useState(false)
@@ -169,7 +171,43 @@ export default function UnifiedDetailPanel({
         </div>
       </div>
 
-      {/* Scrollable content */}
+      {/* View toggle: Overview / Full Brief */}
+      <div className="flex border-b border-ink-6 px-3 flex-shrink-0">
+        <button onClick={() => setDetailView('overview')} className={`px-3 py-2 text-[11px] font-medium border-b-2 -mb-px transition-colors ${detailView === 'overview' ? 'border-ink text-ink' : 'border-transparent text-ink-3 hover:text-ink-2'}`}>
+          Overview
+        </button>
+        <button onClick={() => setDetailView('full-brief')} className={`px-3 py-2 text-[11px] font-medium border-b-2 -mb-px transition-colors ${detailView === 'full-brief' ? 'border-ink text-ink' : 'border-transparent text-ink-3 hover:text-ink-2'}`}>
+          Full Brief
+        </button>
+      </div>
+
+      {/* Full Brief Form */}
+      {detailView === 'full-brief' && (
+        <ProductionBriefForm
+          isVideo={isVideo}
+          conceptTitle={item.concept_title}
+          initialData={{
+            content_category: '' as never,
+            main_message: item.concept_description ?? '',
+            hook: item.hook ?? '',
+            post_caption: item.caption ?? '',
+            publish_date: item.scheduled_date ?? '',
+          }}
+          onSave={async (data) => {
+            // Save relevant fields back to the calendar item
+            if (data.main_message) await onSave(item.id, 'concept_description', data.main_message)
+            if (data.hook) await onSave(item.id, 'hook', data.hook)
+            if (data.post_caption) await onSave(item.id, 'caption', data.post_caption)
+            if (data.publish_date) await onSave(item.id, 'scheduled_date', data.publish_date)
+            if (data.mood_tags?.length) await onSave(item.id, 'music_direction', data.mood_tags.join(', '))
+            if (data.designer_notes) await onSave(item.id, 'editor_notes', data.designer_notes)
+            if (data.shoot_location) await onSave(item.id, 'location_notes', data.shoot_location)
+          }}
+        />
+      )}
+
+      {/* Overview (existing content) */}
+      {detailView === 'overview' && (
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {/* Title + Description — always visible */}
         <div>
@@ -305,6 +343,8 @@ export default function UnifiedDetailPanel({
           <span>Status: {item.status.replace(/_/g, ' ')}</span>
         </div>
       </div>
+
+      )}
 
       {/* Footer */}
       <div className="flex items-center justify-between px-4 py-2.5 border-t border-ink-6 bg-bg-2 flex-shrink-0">
