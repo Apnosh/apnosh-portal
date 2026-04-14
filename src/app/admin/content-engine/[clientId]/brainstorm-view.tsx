@@ -363,10 +363,10 @@ export default function BrainstormView({
         <div className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-ink">Ready to flesh out the details?</h3>
-            <p className="text-xs text-ink-3 mt-0.5">{ideas.length} ideas ready. Move to Content Plan to add briefs, scripts, and production details.</p>
+            <p className="text-xs text-ink-3 mt-0.5">{ideas.length} ideas ready. Add briefs, scripts, and production details for each piece.</p>
           </div>
           <button onClick={onGoToContentPlan} className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors">
-            Continue to Content Plan →
+            Continue to Content Details →
           </button>
         </div>
       )}

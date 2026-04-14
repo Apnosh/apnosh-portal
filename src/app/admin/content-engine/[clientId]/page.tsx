@@ -3,17 +3,18 @@
 import { useState, useEffect, useCallback, use } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, Sparkles, Loader2, FileText, Lightbulb, Calendar as CalIcon, Zap,
+  ArrowLeft, Sparkles, Loader2, FileText, Lightbulb, Layers, Calendar as CalIcon, Zap,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { assembleClientContext, type ClientContext } from '@/lib/content-engine/context'
 import { useToast } from '@/components/ui/toast'
 import BrainstormView from './brainstorm-view'
+import ContentDetailsView from './content-details-view'
 import ContentPlanView from './content-plan-view'
 import ProductionView from './production-view'
 import StrategyTab from './strategy-tab'
 
-type WorkspaceTab = 'strategy' | 'brainstorm' | 'content-plan' | 'production'
+type WorkspaceTab = 'strategy' | 'brainstorm' | 'content-details' | 'content-calendar' | 'production'
 
 interface CycleData {
   id: string
@@ -70,7 +71,8 @@ export default function ContentEngineWorkspace({
       const s = cycleRow.status as string
       if (['in_production', 'complete'].includes(s)) setActiveTab('production')
       else if (['calendar_draft'].includes(s)) setActiveTab('brainstorm')
-      else if (['calendar_approved', 'briefs_draft', 'briefs_approved'].includes(s)) setActiveTab('content-plan')
+      else if (['calendar_approved', 'briefs_draft'].includes(s)) setActiveTab('content-details')
+      else if (['briefs_approved'].includes(s)) setActiveTab('content-calendar')
     }
 
     setLoading(false)
@@ -107,7 +109,8 @@ export default function ContentEngineWorkspace({
   const tabs: Array<{ key: WorkspaceTab; label: string; icon: typeof Sparkles }> = [
     { key: 'strategy', label: 'Strategy', icon: FileText },
     { key: 'brainstorm', label: 'Brainstorm', icon: Lightbulb },
-    { key: 'content-plan', label: 'Content Plan', icon: CalIcon },
+    { key: 'content-details', label: 'Content Details', icon: Layers },
+    { key: 'content-calendar', label: 'Content Calendar', icon: CalIcon },
     { key: 'production', label: 'Team & Production', icon: Zap },
   ]
 
@@ -180,12 +183,20 @@ export default function ContentEngineWorkspace({
           onMonthChange={setSelectedMonth}
           onCycleCreated={(id) => setCycle((prev) => prev ? { ...prev, id } : { id, status: 'calendar_draft', strategy_notes: strategyNotes, deliverables: null, context_snapshot: null })}
           onStatusChange={(status) => setCycle((prev) => prev ? { ...prev, status } : null)}
-          onGoToContentPlan={() => setActiveTab('content-plan')}
+          onGoToContentPlan={() => setActiveTab('content-details')}
         />
       )}
 
-      {/* Content Plan Tab */}
-      {activeTab === 'content-plan' && (
+      {/* Content Details Tab */}
+      {activeTab === 'content-details' && cycle?.id && (
+        <ContentDetailsView cycleId={cycle.id} clientId={clientId} context={context} />
+      )}
+      {activeTab === 'content-details' && !cycle?.id && (
+        <div className="text-center py-16 text-sm text-ink-3">Generate ideas in the Brainstorm tab first.</div>
+      )}
+
+      {/* Content Calendar Tab */}
+      {activeTab === 'content-calendar' && (
         <ContentPlanView
           clientId={clientId}
           cycleId={cycle?.id ?? null}
