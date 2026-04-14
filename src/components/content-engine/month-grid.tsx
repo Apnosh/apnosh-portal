@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import type { CalendarItemData } from './calendar-item-row'
 
 const TYPE_CHIP_COLORS: Record<string, string> = {
@@ -20,7 +20,7 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 interface MonthGridProps {
   items: CalendarItemData[]
   month: Date // first day of the month
-  onMonthChange: (d: Date) => void
+  onMonthChange?: (d: Date) => void // kept for backward compat but unused
   selectedDate: string | null
   onSelectDate: (date: string) => void
   onSelectItem: (item: CalendarItemData) => void
@@ -81,24 +81,10 @@ export default function MonthGrid({
   const daysWithItems = [...byDate.values()].filter((d) => d.length > 0).length
   const avgPerDay = daysWithItems > 0 ? items.length / daysWithItems : 3
 
-  const prevMonth = () => onMonthChange(new Date(month.getFullYear(), month.getMonth() - 1, 1))
-  const nextMonth = () => onMonthChange(new Date(month.getFullYear(), month.getMonth() + 1, 1))
-  const goToday = () => onMonthChange(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
-
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <button onClick={prevMonth} className="p-1.5 text-ink-3 hover:text-ink hover:bg-bg-2 rounded-lg transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <h2 className="text-base font-bold text-ink min-w-[160px] text-center">{monthLabel}</h2>
-          <button onClick={nextMonth} className="p-1.5 text-ink-3 hover:text-ink hover:bg-bg-2 rounded-lg transition-colors">
-            <ChevronRight className="w-4 h-4" />
-          </button>
-          <button onClick={goToday} className="text-xs font-medium text-brand hover:text-brand-dark ml-2">Today</button>
-        </div>
+      {/* Legend only — month navigation is in the workspace header */}
+      <div className="flex items-center justify-end mb-3">
 
         {/* Legend */}
         <div className="hidden sm:flex items-center gap-3 text-[10px] text-ink-3">
