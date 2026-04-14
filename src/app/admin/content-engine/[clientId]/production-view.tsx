@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Loader2, Camera, Scissors, Palette, Pen, ShieldCheck,
-  AlertCircle, Clock, RefreshCw,
+  AlertCircle, Clock, RefreshCw, Zap,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { generateAssignments, completeAssignment } from '@/lib/content-engine/generate-assignments'
@@ -177,14 +177,20 @@ export default function ProductionView({ cycleId, clientId }: { cycleId: string;
   if (assignments.length === 0) {
     return (
       <div className="text-center py-16">
-        <RefreshCw className="w-10 h-10 text-ink-4 mx-auto mb-4" />
-        <h2 className="text-lg font-bold text-ink mb-2">Generate production assignments</h2>
-        <p className="text-sm text-ink-3 max-w-md mx-auto mb-6">
-          Create task assignments for each role in the production chain. Video items get filming → editing → design → copy → QA. Static items get design → copy → QA.
+        <Zap className="w-10 h-10 text-ink-4 mx-auto mb-4" />
+        <h2 className="text-lg font-bold text-ink mb-2">No production assignments yet</h2>
+        <p className="text-sm text-ink-3 max-w-md mx-auto mb-4">
+          Assignments are auto-created when you approve all items in the Content Plan tab. Each item gets a production chain based on its type.
         </p>
-        <button onClick={handleGenerate} disabled={generating} className="inline-flex items-center gap-2 px-6 py-3 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors disabled:opacity-50">
-          {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><RefreshCw className="w-4 h-4" /> Generate Assignments</>}
+        <div className="text-xs text-ink-3 max-w-sm mx-auto space-y-1 mb-6">
+          <p><strong>Video items:</strong> Videographer → Editor → Designer → Copywriter → QA</p>
+          <p><strong>Static items:</strong> Designer → Copywriter → QA</p>
+          <p><strong>Stories:</strong> Designer → QA</p>
+        </div>
+        <button onClick={handleGenerate} disabled={generating} className="inline-flex items-center gap-2 px-6 py-3 bg-ink text-white text-sm font-medium rounded-xl hover:bg-ink-2 transition-colors disabled:opacity-50">
+          {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</> : <><RefreshCw className="w-4 h-4" /> Generate assignments manually</>}
         </button>
+        <p className="text-[10px] text-ink-4 mt-2">Or go to Content Plan and approve all items</p>
       </div>
     )
   }
