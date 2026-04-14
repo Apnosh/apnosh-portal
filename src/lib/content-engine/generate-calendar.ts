@@ -132,17 +132,43 @@ Respond ONLY with valid JSON — no preamble, no markdown, no explanation.`,
       return { success: false, error: 'AI returned empty calendar. Try again.' }
     }
 
+    // Sanitize AI output to valid enum values
+    const VALID_TYPES = new Set(['reel', 'feed_post', 'carousel', 'story', 'static_post', 'video', 'image', 'short_form_video'])
+    const VALID_PLATFORMS = new Set(['instagram', 'facebook', 'tiktok', 'linkedin'])
+    const VALID_GOALS = new Set(['awareness', 'engagement', 'conversion', 'community'])
+
+    const normalizeType = (t: string): string => {
+      const lower = t.toLowerCase().replace(/\s+/g, '_')
+      if (VALID_TYPES.has(lower)) return lower
+      if (lower.includes('reel') || lower.includes('video') || lower.includes('short')) return 'reel'
+      if (lower.includes('carousel') || lower.includes('slide')) return 'carousel'
+      if (lower.includes('story') || lower.includes('stories')) return 'story'
+      return 'feed_post'
+    }
+
+    const normalizePlatform = (p: string): string => {
+      const lower = p.toLowerCase()
+      if (VALID_PLATFORMS.has(lower)) return lower
+      return 'instagram'
+    }
+
+    const normalizeGoal = (g: string): string => {
+      const lower = g.toLowerCase()
+      if (VALID_GOALS.has(lower)) return lower
+      return 'awareness'
+    }
+
     // Insert items
     const rows = items.map((item, i) => ({
       cycle_id: cycleId,
       client_id: clientId,
       scheduled_date: item.scheduled_date,
       scheduled_time: item.scheduled_time,
-      platform: item.platform,
-      content_type: item.content_type,
+      platform: normalizePlatform(item.platform),
+      content_type: normalizeType(item.content_type),
       concept_title: item.concept_title,
       concept_description: item.concept_description,
-      strategic_goal: item.strategic_goal,
+      strategic_goal: normalizeGoal(item.strategic_goal),
       filming_batch: item.filming_batch,
       source: item.source ?? 'ai',
       status: 'draft',
