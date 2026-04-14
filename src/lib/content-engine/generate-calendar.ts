@@ -33,27 +33,94 @@ export async function generateCalendar(
   const d = context.deliverables
   const total = d.reels + d.feed_posts + d.stories + d.carousels
 
-  const performanceBlock = context.performance
-    ? `
-PERFORMANCE DATA (last 60 days):
+  // Build rich context blocks
+  const blocks: string[] = []
+
+  blocks.push(`BUSINESS: ${context.businessName}
+TYPE: ${context.businessType ?? 'local business'}
+LOCATION: ${context.location ?? 'Unknown'}
+WEBSITE: ${context.website ?? 'N/A'}
+SOCIAL HANDLES: ${Object.entries(context.socialHandles).filter(([,v]) => v).map(([k,v]) => `${k}: ${v}`).join(', ') || 'None set'}`)
+
+  blocks.push(`GOALS: ${context.goals.join(', ') || 'general growth'}`)
+  blocks.push(`VOICE: ${context.voiceNotes ?? 'friendly, professional'}`)
+
+  if (context.targetAudience) {
+    const ta = context.targetAudience
+    blocks.push(`TARGET AUDIENCE:
+- Age: ${ta.age_range ?? 'All ages'}
+- Lifestyle: ${ta.lifestyle ?? 'General'}
+- Pain points: ${ta.pain_points?.join(', ') ?? 'None specified'}`)
+  }
+
+  if (context.offerings.length > 0) {
+    blocks.push(`KEY OFFERINGS TO HIGHLIGHT:\n${context.offerings.map((o) => `- ${o}`).join('\n')}`)
+  }
+
+  if (context.contentPillars.length > 0) {
+    blocks.push(`CONTENT PILLARS (distribute content across these themes):\n${context.contentPillars.map((p) => `- ${p}`).join('\n')}`)
+  }
+
+  if (context.contentAvoid.length > 0) {
+    blocks.push(`AVOID (never include in content):\n${context.contentAvoid.map((a) => `- ${a}`).join('\n')}`)
+  }
+
+  if (context.keyPeople.length > 0) {
+    blocks.push(`KEY PEOPLE TO FEATURE:\n${context.keyPeople.map((p) => `- ${p.name} (${p.role})${p.comfortable_on_camera ? ' — comfortable on camera' : ''}${p.notes ? ': ' + p.notes : ''}`).join('\n')}`)
+  }
+
+  if (context.filmingLocations.length > 0) {
+    blocks.push(`FILMING LOCATIONS:\n${context.filmingLocations.map((l) => `- ${l.name}${l.good_for ? ' — good for: ' + l.good_for.join(', ') : ''}${l.notes ? ' (' + l.notes + ')' : ''}`).join('\n')}`)
+  }
+
+  if (context.competitors.length > 0) {
+    blocks.push(`COMPETITORS (differentiate from):\n${context.competitors.map((c) => `- ${c.name}${c.notes ? ': ' + c.notes : ''}`).join('\n')}`)
+  }
+
+  if (context.seasonalNotes) {
+    blocks.push(`SEASONAL CONTEXT: ${context.seasonalNotes}`)
+  }
+
+  if (context.ctaPreferences.length > 0) {
+    blocks.push(`PREFERRED CTAs (use these in captions):\n${context.ctaPreferences.map((c) => `- "${c}"`).join('\n')}`)
+  }
+
+  if (context.hashtagSets) {
+    const hs = context.hashtagSets
+    const parts: string[] = []
+    if (hs.branded?.length) parts.push(`Branded: ${hs.branded.join(' ')}`)
+    if (hs.community?.length) parts.push(`Community: ${hs.community.join(' ')}`)
+    if (hs.location?.length) parts.push(`Location: ${hs.location.join(' ')}`)
+    if (parts.length) blocks.push(`HASHTAG STRATEGY:\n${parts.join('\n')}`)
+  }
+
+  if (context.performance) {
+    blocks.push(`PERFORMANCE DATA (last 60 days):
 - Reach trend: ${context.performance.reachTrend}
 - Best performing days: ${context.performance.bestDays.join(', ')}
 - Follower growth: +${context.performance.followerGrowth}
-- Top performing day: ${context.performance.topPosts[0]?.date ?? 'N/A'} (${context.performance.topPosts[0]?.reach.toLocaleString() ?? 0} reach)
-`
-    : 'No performance data available yet.'
+- Top performing day: ${context.performance.topPosts[0]?.date ?? 'N/A'} (${context.performance.topPosts[0]?.reach.toLocaleString() ?? 0} reach)`)
+  }
 
-  const historyBlock = context.recentContent.length > 0
-    ? `RECENT CONTENT (avoid repeating):\n${context.recentContent.slice(0, 15).map((c) => `- ${c.date}: ${c.title} (${c.type})`).join('\n')}`
-    : 'No recent content history.'
+  if (context.goldenPosts.length > 0) {
+    blocks.push(`TOP-PERFORMING CAPTIONS (match this style and tone):\n${context.goldenPosts.slice(0, 5).map((p) => `- [${p.platform ?? 'post'}] "${p.caption.slice(0, 150)}..."${p.performance_notes ? ' — ' + p.performance_notes : ''}`).join('\n')}`)
+  }
 
-  const templatesBlock = context.templates.length > 0
-    ? `PROVEN TEMPLATES (use where appropriate):\n${context.templates.map((t) => `- ${t.title} (${t.type}) ${t.performance ? '— ' + t.performance : ''}`).join('\n')}`
-    : ''
+  if (context.recentContent.length > 0) {
+    blocks.push(`RECENT CONTENT (avoid repeating these themes):\n${context.recentContent.slice(0, 15).map((c) => `- ${c.date}: ${c.title} (${c.type})`).join('\n')}`)
+  }
 
-  const eventsBlock = context.upcomingEvents.length > 0
-    ? `UPCOMING EVENTS:\n${context.upcomingEvents.map((e) => `- ${e}`).join('\n')}`
-    : ''
+  if (context.templates.length > 0) {
+    blocks.push(`PROVEN TEMPLATES:\n${context.templates.map((t) => `- ${t.title} (${t.type}) ${t.performance ? '— ' + t.performance : ''}`).join('\n')}`)
+  }
+
+  if (context.upcomingEvents.length > 0) {
+    blocks.push(`UPCOMING EVENTS:\n${context.upcomingEvents.map((e) => `- ${e}`).join('\n')}`)
+  }
+
+  if (strategyNotes) {
+    blocks.push(`STRATEGIST DIRECTION: ${strategyNotes}`)
+  }
 
   const userPrompt = `Create a content calendar for ${month} ${year} with exactly:
 - ${d.reels} reels
@@ -62,21 +129,7 @@ PERFORMANCE DATA (last 60 days):
 - ${d.stories} stories
 for ${context.deliverables.platforms.join(', ')}.
 
-BUSINESS: ${context.businessName}
-TYPE: ${context.businessType ?? 'local business'}
-LOCATION: ${context.location ?? 'Unknown'}
-GOALS: ${context.goals.join(', ') || 'general growth'}
-VOICE: ${context.voiceNotes ?? 'friendly, professional'}
-
-${performanceBlock}
-
-${historyBlock}
-
-${templatesBlock}
-
-${eventsBlock}
-
-${strategyNotes ? `STRATEGIST DIRECTION: ${strategyNotes}` : ''}
+${blocks.join('\n\n')}
 
 For each item, return a JSON object:
 {
@@ -92,11 +145,15 @@ For each item, return a JSON object:
 }
 
 Rules:
-- Schedule posts on best performing days at optimal times based on performance data
-- Group content that can be filmed at the same location/setup into the same filming_batch
-- Balance: awareness, engagement, conversion, community
-- Spread content types across the month — don't cluster all reels in week 1
-- ${d.carousels > 0 ? 'Include educational carousels for authority building' : ''}
+- Schedule posts on best performing days at optimal times
+- Group content filmable at the same location into the same filming_batch (use filming locations above)
+- Distribute across content pillars — balance all themes
+- Feature key people where natural (especially for reels/video)
+- Reference specific offerings/products in concepts
+- Write concept descriptions in the brand voice
+- Never include topics from the AVOID list
+- Spread content types across the month evenly
+- ${d.carousels > 0 ? 'Use carousels for educational/tip content aligned with content pillars' : ''}
 - Return EXACTLY ${total} items as a JSON array
 
 Return ONLY a valid JSON array. No markdown, no explanation.`

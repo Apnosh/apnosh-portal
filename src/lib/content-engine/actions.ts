@@ -251,3 +251,18 @@ export async function updateCycleClientRequests(
   if (error) return { success: false, error: error.message }
   return { success: true }
 }
+
+export async function updateContentProfile(
+  clientId: string,
+  fields: Record<string, unknown>
+): Promise<ActionResult> {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('clients')
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq('id', clientId)
+
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}

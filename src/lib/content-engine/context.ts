@@ -2,30 +2,93 @@
 
 import { createClient } from '@/lib/supabase/server'
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface TargetAudience {
+  age_range?: string
+  gender?: string
+  income?: string
+  lifestyle?: string
+  pain_points?: string[]
+}
+
+export interface KeyPerson {
+  name: string
+  role: string
+  comfortable_on_camera?: boolean
+  notes?: string
+}
+
+export interface FilmingLocation {
+  name: string
+  notes?: string
+  good_for?: string[]
+}
+
+export interface Competitor {
+  name: string
+  handle?: string
+  notes?: string
+}
+
+export interface GoldenPost {
+  caption: string
+  hashtags: string | null
+  platform: string | null
+  type: string | null
+  performance_notes: string | null
+  style_notes: string | null
+}
+
 export interface ClientContext {
   // Business info
   businessName: string
   businessType: string | null
   location: string | null
   website: string | null
+  socialHandles: Record<string, string>
 
   // Brand
   voiceNotes: string | null
-  toneNotes: string | null
   brandGuidelines: string | null
+  photoStyle: string | null
+  visualStyle: string | null
 
   // Audience & goals
   goals: string[]
-  targetAudience: string | null
+  targetAudience: TargetAudience | null
+
+  // Content strategy
+  contentPillars: string[]
+  contentAvoid: string[]
+  hashtagSets: { branded?: string[]; community?: string[]; location?: string[] } | null
+  ctaPreferences: string[]
+
+  // People & places
+  keyPeople: KeyPerson[]
+  filmingLocations: FilmingLocation[]
+
+  // Competitors
+  competitors: Competitor[]
+
+  // Seasonal
+  seasonalNotes: string | null
+
+  // Offerings
+  offerings: string[]
 
   // Performance (last 60 days)
   performance: {
-    topContentTypes: Array<{ type: string; avgReach: number }>
     bestDays: string[]
-    reachTrend: string // "+12% MoM" or "flat"
+    reachTrend: string
     followerGrowth: number
     topPosts: Array<{ type: string; reach: number; date: string }>
   } | null
+
+  // Golden posts (top-performing approved content with captions)
+  goldenPosts: GoldenPost[]
 
   // Recent content (last 3 months)
   recentContent: Array<{ title: string; type: string; date: string }>
@@ -46,6 +109,10 @@ export interface ClientContext {
   upcomingEvents: string[]
 }
 
+// ---------------------------------------------------------------------------
+// Main assembly function
+// ---------------------------------------------------------------------------
+
 export async function assembleClientContext(clientId: string): Promise<ClientContext> {
   const supabase = await createClient()
 
@@ -56,9 +123,10 @@ export async function assembleClientContext(clientId: string): Promise<ClientCon
     { data: socialMetrics },
     { data: recentItems },
     { data: templates },
+    { data: goldenPosts },
   ] = await Promise.all([
     supabase.from('clients').select('*').eq('id', clientId).maybeSingle(),
-    supabase.from('client_brands').select('voice_notes, brand_md').eq('client_id', clientId).maybeSingle(),
+    supabase.from('client_brands').select('voice_notes, brand_md, photo_style, visual_style').eq('client_id', clientId).maybeSingle(),
     supabase.from('client_patterns').select('patterns_md').eq('client_id', clientId).maybeSingle(),
     supabase
       .from('social_metrics')
@@ -79,17 +147,31 @@ export async function assembleClientContext(clientId: string): Promise<ClientCon
       .eq('client_id', clientId)
       .order('times_used', { ascending: false })
       .limit(10),
+    // Golden posts: approved style library entries with captions
+    supabase
+      .from('style_library')
+      .select('caption, hashtags, platform, template_type, performance_notes, style_notes')
+      .eq('client_id', clientId)
+      .eq('is_golden', true)
+      .eq('status', 'approved')
+      .limit(10),
   ])
+
+  // Parse new JSON fields from client record
+  const targetAudience = parseJson<TargetAudience>(client?.target_audience)
+  const contentPillars = parseJsonArray<string>(client?.content_pillars)
+  const contentAvoid = parseJsonArray<string>(client?.content_avoid)
+  const hashtagSets = parseJson<{ branded?: string[]; community?: string[]; location?: string[] }>(client?.hashtag_sets)
+  const ctaPreferences = parseJsonArray<string>(client?.cta_preferences)
+  const keyPeople = parseJsonArray<KeyPerson>(client?.key_people)
+  const filmingLocations = parseJsonArray<FilmingLocation>(client?.filming_locations)
+  const competitors = parseJsonArray<Competitor>(client?.competitors)
+  const offerings = parseJsonArray<string>(client?.offerings)
+  const socialHandles = (client?.socials ?? {}) as Record<string, string>
 
   // Compute performance stats
   let performance: ClientContext['performance'] = null
   if (socialMetrics && socialMetrics.length > 0) {
-    // Content type performance
-    const typeMap = new Map<string, { total: number; count: number }>()
-    // For now, we don't have per-post type data in social_metrics
-    // We'll use overall reach trends
-
-    // Best days
     const dayMap = new Map<number, { total: number; count: number }>()
     for (const row of socialMetrics) {
       const dow = new Date(row.date + 'T12:00:00').getDay()
@@ -99,12 +181,12 @@ export async function assembleClientContext(clientId: string): Promise<ClientCon
       dayMap.set(dow, entry)
     }
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-    const sortedDays = [...dayMap.entries()]
+    const bestDays = [...dayMap.entries()]
       .map(([dow, { total, count }]) => ({ dow, avg: total / count }))
       .sort((a, b) => b.avg - a.avg)
-    const bestDays = sortedDays.slice(0, 2).map((d) => dayNames[d.dow])
+      .slice(0, 2)
+      .map((d) => dayNames[d.dow])
 
-    // Reach trend MoM
     const thirtyDaysAgoDate = thirtyDaysAgo()
     const recent = socialMetrics.filter((r) => r.date >= thirtyDaysAgoDate)
     const older = socialMetrics.filter((r) => r.date < thirtyDaysAgoDate)
@@ -113,12 +195,8 @@ export async function assembleClientContext(clientId: string): Promise<ClientCon
     const pct = olderReach > 0 ? Math.round(((recentReach - olderReach) / olderReach) * 100) : 0
     const reachTrend = pct > 0 ? `+${pct}% MoM` : pct < 0 ? `${pct}% MoM` : 'flat'
 
-    // Follower growth
-    const followerGrowth = socialMetrics.reduce(
-      (acc, r) => acc + ((r.followers_gained as number) ?? 0), 0
-    )
+    const followerGrowth = socialMetrics.reduce((acc, r) => acc + ((r.followers_gained as number) ?? 0), 0)
 
-    // Top posts by reach (top 5 days)
     const dailyReach = new Map<string, number>()
     for (const row of socialMetrics) {
       dailyReach.set(row.date, (dailyReach.get(row.date) ?? 0) + ((row.reach as number) ?? 0))
@@ -128,23 +206,13 @@ export async function assembleClientContext(clientId: string): Promise<ClientCon
       .slice(0, 5)
       .map(([date, reach]) => ({ type: 'post', reach, date }))
 
-    performance = {
-      topContentTypes: [], // Would need per-post analytics
-      bestDays,
-      reachTrend,
-      followerGrowth,
-      topPosts,
-    }
+    performance = { bestDays, reachTrend, followerGrowth, topPosts }
   }
 
-  // Compute deliverables from allotments
+  // Compute deliverables
   const allotments = (client?.allotments ?? {}) as Record<string, number>
   const totalPosts = allotments.social_posts_per_month ?? 12
-  const platforms = Object.entries(client?.socials ?? {})
-    .filter(([, v]) => !!v)
-    .map(([k]) => k)
-
-  // Split total posts into types (rough heuristic)
+  const platforms = Object.entries(socialHandles).filter(([, v]) => !!v).map(([k]) => k)
   const reels = Math.round(totalPosts * 0.25)
   const stories = Math.round(totalPosts * 0.2)
   const carousels = Math.round(totalPosts * 0.15)
@@ -155,12 +223,31 @@ export async function assembleClientContext(clientId: string): Promise<ClientCon
     businessType: client?.industry ?? null,
     location: client?.location ?? null,
     website: client?.website ?? null,
+    socialHandles,
     voiceNotes: brand?.voice_notes ?? null,
-    toneNotes: null,
     brandGuidelines: patterns?.patterns_md ?? brand?.brand_md ?? null,
-    goals: client?.goals ?? [],
-    targetAudience: null,
+    photoStyle: brand?.photo_style ?? null,
+    visualStyle: brand?.visual_style ?? null,
+    goals: Array.isArray(client?.goals) ? client.goals : parseJsonArray(client?.goals),
+    targetAudience,
+    contentPillars,
+    contentAvoid,
+    hashtagSets,
+    ctaPreferences,
+    keyPeople,
+    filmingLocations,
+    competitors,
+    seasonalNotes: client?.seasonal_notes ?? null,
+    offerings,
     performance,
+    goldenPosts: (goldenPosts ?? []).map((p) => ({
+      caption: p.caption ?? '',
+      hashtags: p.hashtags,
+      platform: p.platform,
+      type: p.template_type,
+      performance_notes: p.performance_notes,
+      style_notes: p.style_notes,
+    })),
     recentContent: (recentItems ?? []).map((r) => ({
       title: r.concept_title,
       type: r.content_type,
@@ -180,22 +267,31 @@ export async function assembleClientContext(clientId: string): Promise<ClientCon
 // Helpers
 // ---------------------------------------------------------------------------
 
+function parseJson<T>(val: unknown): T | null {
+  if (!val) return null
+  if (typeof val === 'object') return val as T
+  try { return JSON.parse(val as string) as T } catch { return null }
+}
+
+function parseJsonArray<T>(val: unknown): T[] {
+  if (!val) return []
+  if (Array.isArray(val)) return val as T[]
+  try {
+    const parsed = JSON.parse(val as string)
+    return Array.isArray(parsed) ? parsed : []
+  } catch { return [] }
+}
+
 function sixtyDaysAgo(): string {
-  const d = new Date()
-  d.setDate(d.getDate() - 60)
-  return d.toISOString().split('T')[0]
+  const d = new Date(); d.setDate(d.getDate() - 60); return d.toISOString().split('T')[0]
 }
 
 function thirtyDaysAgo(): string {
-  const d = new Date()
-  d.setDate(d.getDate() - 30)
-  return d.toISOString().split('T')[0]
+  const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0]
 }
 
 function getUpcomingEvents(): string[] {
-  const now = new Date()
-  const month = now.getMonth()
-  // Basic holiday calendar — expand later
+  const month = new Date().getMonth()
   const events: Record<number, string[]> = {
     0: ['New Year\'s Day (Jan 1)', 'MLK Day (3rd Mon)'],
     1: ['Valentine\'s Day (Feb 14)', 'Presidents\' Day (3rd Mon)'],
