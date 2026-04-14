@@ -3,16 +3,17 @@
 import { useState, useEffect, useCallback, use } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, Sparkles, Loader2, FileText, Calendar as CalIcon, Zap,
+  ArrowLeft, Sparkles, Loader2, FileText, Lightbulb, Calendar as CalIcon, Zap,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { assembleClientContext, type ClientContext } from '@/lib/content-engine/context'
 import { useToast } from '@/components/ui/toast'
+import BrainstormView from './brainstorm-view'
 import ContentPlanView from './content-plan-view'
 import ProductionView from './production-view'
 import StrategyTab from './strategy-tab'
 
-type WorkspaceTab = 'strategy' | 'content-plan' | 'production'
+type WorkspaceTab = 'strategy' | 'brainstorm' | 'content-plan' | 'production'
 
 interface CycleData {
   id: string
@@ -68,7 +69,8 @@ export default function ContentEngineWorkspace({
       // Auto-select tab based on status
       const s = cycleRow.status as string
       if (['in_production', 'complete'].includes(s)) setActiveTab('production')
-      else if (['calendar_draft', 'calendar_approved', 'briefs_draft', 'briefs_approved'].includes(s)) setActiveTab('content-plan')
+      else if (['calendar_draft'].includes(s)) setActiveTab('brainstorm')
+      else if (['calendar_approved', 'briefs_draft', 'briefs_approved'].includes(s)) setActiveTab('content-plan')
     }
 
     setLoading(false)
@@ -104,6 +106,7 @@ export default function ContentEngineWorkspace({
 
   const tabs: Array<{ key: WorkspaceTab; label: string; icon: typeof Sparkles }> = [
     { key: 'strategy', label: 'Strategy', icon: FileText },
+    { key: 'brainstorm', label: 'Brainstorm', icon: Lightbulb },
     { key: 'content-plan', label: 'Content Plan', icon: CalIcon },
     { key: 'production', label: 'Team & Production', icon: Zap },
   ]
@@ -159,10 +162,25 @@ export default function ContentEngineWorkspace({
           savingNotes={savingNotes}
           notesSaved={notesSaved}
           currentMonth={currentMonth}
-          onGoToContentPlan={() => setActiveTab('content-plan')}
+          onGoToContentPlan={() => setActiveTab('brainstorm')}
           onCycleCreated={(id) => setCycle((prev) => prev ? { ...prev, id } : { id, status: 'briefs_draft', strategy_notes: strategyNotes, deliverables: null, context_snapshot: null })}
           onStatusChange={(status) => setCycle((prev) => prev ? { ...prev, status } : null)}
           toast={toast}
+        />
+      )}
+
+      {/* Brainstorm Tab */}
+      {activeTab === 'brainstorm' && (
+        <BrainstormView
+          clientId={clientId}
+          cycleId={cycle?.id ?? null}
+          context={context}
+          strategyNotes={strategyNotes}
+          targetMonth={currentMonth}
+          onMonthChange={setSelectedMonth}
+          onCycleCreated={(id) => setCycle((prev) => prev ? { ...prev, id } : { id, status: 'calendar_draft', strategy_notes: strategyNotes, deliverables: null, context_snapshot: null })}
+          onStatusChange={(status) => setCycle((prev) => prev ? { ...prev, status } : null)}
+          onGoToContentPlan={() => setActiveTab('content-plan')}
         />
       )}
 

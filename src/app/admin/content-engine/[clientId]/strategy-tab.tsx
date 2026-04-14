@@ -243,38 +243,14 @@ export default function StrategyTab({
         </div>
       </div>
 
-      {/* Generate Content Plan CTA */}
-      {genError && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <p className="text-sm text-red-600 mb-2">{genError}</p>
-          <button onClick={handleGenerate} className="text-xs font-semibold text-red-700 hover:text-red-800">Try again</button>
-        </div>
-      )}
-      {generating ? (
-        <div className="bg-white border border-ink-6 rounded-xl p-6 text-center space-y-4">
-          <Loader2 className="w-8 h-8 animate-spin text-brand mx-auto" />
-          <div>
-            <h3 className="text-sm font-bold text-ink">{genPhase || 'Generating your content plan...'}</h3>
-            <p className="text-xs text-ink-3 mt-1">The AI is reading your strategy, goals, and performance data to create a full month of content with production-ready briefs.</p>
-          </div>
-          <div className="flex justify-center gap-6 text-[10px] text-ink-4">
-            <span>1. Creating calendar</span>
-            <span>2. Writing hooks & scripts</span>
-            <span>3. Building production briefs</span>
-          </div>
-          <p className="text-[10px] text-ink-4">This takes 30-60 seconds. Don't close this page.</p>
-        </div>
-      ) : !genError && (
-        <button
-          onClick={handleGenerate}
-          className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors"
-        >
-          <Sparkles className="w-4 h-4" /> Generate Content Plan
-        </button>
-      )}
-      {!generating && !genError && (
-        <p className="text-[10px] text-ink-4 text-center -mt-2">Creates calendar + production briefs in one shot (30-60 seconds)</p>
-      )}
+      {/* Next step CTA */}
+      <button
+        onClick={onGoToContentPlan}
+        className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors"
+      >
+        <Sparkles className="w-4 h-4" /> Start Brainstorming →
+      </button>
+      <p className="text-[10px] text-ink-4 text-center -mt-2">Generate AI ideas or add your own content concepts</p>
     </div>
   )
 }
