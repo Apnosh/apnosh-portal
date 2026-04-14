@@ -10,6 +10,7 @@ import { generateCalendar, refineCalendarItem } from '@/lib/content-engine/gener
 import { updateCalendarItem, deleteCalendarItem } from '@/lib/content-engine/actions'
 import type { ClientContext } from '@/lib/content-engine/context'
 import BrainstormCard, { type IdeaCard } from '@/components/content-engine/brainstorm-card'
+import BrainstormEditPanel from '@/components/content-engine/brainstorm-edit-panel'
 import ConfirmModal from '@/components/content-engine/confirm-modal'
 import { useToast } from '@/components/ui/toast'
 
@@ -39,6 +40,8 @@ interface BrainstormViewProps {
   cycleId: string | null
   context: ClientContext | null
   strategyNotes: string
+  onStrategyNotesChange: (notes: string) => void
+  onSaveStrategyNotes: () => Promise<void>
   targetMonth: string
   onMonthChange: (month: string) => void
   onCycleCreated: (id: string) => void
@@ -47,8 +50,8 @@ interface BrainstormViewProps {
 }
 
 export default function BrainstormView({
-  clientId, cycleId, context, strategyNotes, targetMonth,
-  onMonthChange, onCycleCreated, onStatusChange, onGoToContentPlan,
+  clientId, cycleId, context, strategyNotes, onStrategyNotesChange, onSaveStrategyNotes,
+  targetMonth, onMonthChange, onCycleCreated, onStatusChange, onGoToContentPlan,
 }: BrainstormViewProps) {
   const supabase = createClient()
   const { toast } = useToast()
@@ -58,6 +61,9 @@ export default function BrainstormView({
   const [addingNew, setAddingNew] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [contextExpanded, setContextExpanded] = useState(false)
+  const [editingStrategy, setEditingStrategy] = useState(false)
+  const [editPanelId, setEditPanelId] = useState<string | null>(null)
+  const [showNewPanel, setShowNewPanel] = useState(false)
 
   // New idea form
   const [newTitle, setNewTitle] = useState('')
@@ -213,29 +219,48 @@ export default function BrainstormView({
 
   return (
     <div className="space-y-4">
-      {/* Change 1: Context bar */}
+      {/* Strategy direction — editable */}
       <div className="bg-bg-2 rounded-xl border border-ink-6 overflow-hidden">
-        <button onClick={() => setContextExpanded(!contextExpanded)} className="w-full flex items-center gap-3 px-4 py-2.5 text-left">
-          <div className="flex-1 min-w-0">
-            <span className="text-xs text-ink-2 truncate block">
-              {strategyNotes ? strategyNotes.slice(0, 100) + (strategyNotes.length > 100 ? '...' : '') : 'No strategy direction set'}
-            </span>
+        {editingStrategy ? (
+          <div className="p-4 space-y-2">
+            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider">Strategy Direction</label>
+            <textarea
+              value={strategyNotes}
+              onChange={(e) => onStrategyNotesChange(e.target.value)}
+              placeholder="What's the editorial direction this month? What should the content focus on?"
+              rows={4}
+              className="w-full text-sm text-ink border border-ink-6 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+              autoFocus
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-ink-4">This guides every AI generation</span>
+              <button
+                onClick={async () => { await onSaveStrategyNotes(); setEditingStrategy(false); toast('Strategy saved', 'success') }}
+                className="px-3 py-1.5 bg-ink text-white text-xs font-semibold rounded-lg hover:bg-ink-2 transition-colors"
+              >
+                Save
+              </button>
+            </div>
           </div>
-          {context?.performance && (
-            <span className="text-[10px] text-ink-3 flex-shrink-0 hidden sm:block">
-              {context.performance.reachTrend} · Best: {context.performance.bestDays.join(', ')}
-            </span>
-          )}
-          {contextExpanded ? <ChevronUp className="w-3.5 h-3.5 text-ink-4 flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-ink-4 flex-shrink-0" />}
-        </button>
-        {contextExpanded && (
-          <div className="px-4 pb-3 border-t border-ink-6 pt-3 space-y-2 text-xs text-ink-2">
-            {strategyNotes && <p><strong className="text-ink-3">Direction:</strong> {strategyNotes}</p>}
-            {context?.performance && <p><strong className="text-ink-3">Performance:</strong> Reach {context.performance.reachTrend}. Best days: {context.performance.bestDays.join(' & ')}. +{context.performance.followerGrowth} followers (60d).</p>}
-            {context?.upcomingEvents && context.upcomingEvents.length > 0 && <p><strong className="text-ink-3">Events:</strong> {context.upcomingEvents.join(', ')}</p>}
-            <p><strong className="text-ink-3">Deliverables:</strong> {deliverables.reels} reels, {deliverables.feed_posts} posts, {deliverables.carousels} carousels — {deliverables.platforms.join(', ')}</p>
-          </div>
+        ) : (
+          <button onClick={() => setEditingStrategy(true)} className="w-full text-left px-4 py-3 hover:bg-ink-6/50 transition-colors group">
+            {strategyNotes ? (
+              <div className="flex items-start gap-2">
+                <p className="text-xs text-ink-2 flex-1 leading-relaxed">{strategyNotes}</p>
+                <span className="text-[10px] text-ink-4 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5">Edit</span>
+              </div>
+            ) : (
+              <p className="text-xs text-ink-4 italic">Click to set this month's strategy direction...</p>
+            )}
+          </button>
         )}
+
+        {/* Reference data — always visible below */}
+        <div className="px-4 pb-2.5 flex items-center gap-3 flex-wrap text-[10px] text-ink-4 border-t border-ink-6 pt-2">
+          {context?.performance && <span>{context.performance.reachTrend} · Best: {context.performance.bestDays.join(', ')}</span>}
+          {context?.upcomingEvents && context.upcomingEvents.length > 0 && <span>Events: {context.upcomingEvents.slice(0, 2).join(', ')}</span>}
+          <span>{deliverables.reels} reels, {deliverables.feed_posts} posts, {deliverables.carousels} carousels</span>
+        </div>
       </div>
 
       {/* Month selector */}
@@ -291,7 +316,7 @@ export default function BrainstormView({
             <button onClick={handleGenerate} className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors">
               <Sparkles className="w-4 h-4" /> Generate Ideas
             </button>
-            <button onClick={() => setAddingNew(true)} className="inline-flex items-center gap-2 px-5 py-2.5 border border-ink-5 text-sm font-medium rounded-xl hover:bg-bg-2 transition-colors">
+            <button onClick={() => setShowNewPanel(true)} className="inline-flex items-center gap-2 px-5 py-2.5 border border-ink-5 text-sm font-medium rounded-xl hover:bg-bg-2 transition-colors">
               <Plus className="w-4 h-4" /> Add Manually
             </button>
           </div>
@@ -319,7 +344,7 @@ export default function BrainstormView({
                   <BrainstormCard
                     key={idea.id}
                     idea={idea}
-                    onClick={(id) => { /* TODO: open detail panel */ toast('Click to edit in Content Details tab', 'info') }}
+                    onClick={(id) => setEditPanelId(id)}
                     onDelete={handleDelete}
                     onRefine={handleRefine}
                     onReplace={handleReplace}
@@ -334,7 +359,7 @@ export default function BrainstormView({
             <button onClick={handleGenerate} disabled={generating} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-ink-5 rounded-lg hover:bg-bg-2 transition-colors">
               <Sparkles className="w-3 h-3" /> Generate more
             </button>
-            <button onClick={() => setAddingNew(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-ink-5 rounded-lg hover:bg-bg-2 transition-colors">
+            <button onClick={() => setShowNewPanel(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-ink-5 rounded-lg hover:bg-bg-2 transition-colors">
               <Plus className="w-3 h-3" /> Add manually
             </button>
           </div>
@@ -418,6 +443,39 @@ export default function BrainstormView({
             Content Details →
           </button>
         </div>
+      )}
+
+      {/* Edit panel */}
+      {(editPanelId || showNewPanel) && (
+        <BrainstormEditPanel
+          item={editPanelId ? ideas.find((i) => i.id === editPanelId) ?? null : null}
+          isNew={showNewPanel}
+          onSave={handleUpdateField}
+          onRefine={async (id, dir) => { await handleRefine(id, dir); /* reload to get updated data */ await loadIdeas() }}
+          onReplace={async (id) => { await handleReplace(id); await loadIdeas() }}
+          onDelete={(id) => { handleDelete(id); setEditPanelId(null) }}
+          onClose={() => { setEditPanelId(null); setShowNewPanel(false) }}
+          onCreateNew={async (data) => {
+            let cId = cycleId
+            if (!cId) {
+              const { data: cycleData } = await supabase.from('content_cycles').insert({
+                client_id: clientId, month: targetMonth, status: 'context_ready',
+                deliverables: context?.deliverables ?? {}, context_snapshot: context, strategy_notes: strategyNotes || null,
+              }).select().single()
+              if (cycleData) { cId = cycleData.id; onCycleCreated(cycleData.id) }
+            }
+            if (!cId) return
+            const { data: row } = await supabase.from('content_calendar_items').insert({
+              cycle_id: cId, client_id: clientId,
+              concept_title: data.concept_title, concept_description: data.concept_description,
+              content_type: data.content_type ?? 'feed_post', content_category: data.content_category,
+              strategic_goal: data.strategic_goal, platform: data.platform ?? 'instagram',
+              week_number: data.week_number, scheduled_date: targetMonth,
+              source: 'strategist', status: 'draft', sort_order: ideas.length,
+            }).select().single()
+            if (row) { setIdeas((prev) => [...prev, row as IdeaCard]); toast('Idea added', 'success') }
+          }}
+        />
       )}
 
       <ConfirmModal open={confirmClear} onConfirm={handleClearAll} onCancel={() => setConfirmClear(false)} title="Clear all?" description={`Remove all ${ideas.length} ideas for ${targetMonthLabel}.`} confirmLabel="Clear" variant="danger" />
