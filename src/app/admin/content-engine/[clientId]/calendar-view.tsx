@@ -115,8 +115,13 @@ export default function CalendarView({
 
   // Handlers
   const saveField = async (itemId: string, field: string, value: string) => {
-    await updateCalendarItem(itemId, { [field]: value })
-    setItems((prev) => prev.map((i) => i.id === itemId ? { ...i, [field]: value } : i))
+    // Handle JSON-encoded arrays (e.g., additional_platforms)
+    let parsed: unknown = value
+    if (value && value.startsWith('[')) {
+      try { parsed = JSON.parse(value) } catch { /* keep as string */ }
+    }
+    await updateCalendarItem(itemId, { [field]: parsed })
+    setItems((prev) => prev.map((i) => i.id === itemId ? { ...i, [field]: parsed } : i))
   }
 
   const handleApproveItem = async (id: string) => {
