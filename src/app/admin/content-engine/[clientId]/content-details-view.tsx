@@ -252,37 +252,38 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
                 />
               )}
 
-              {/* Quick-edit mode — all builder fields visible at once */}
+              {/* Quick-edit mode — mirrors Builder sections in one scroll */}
               {editMode === 'quick-edit' && (
-                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-                  {/* Concept */}
-                  <div>
-                    <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1">Title</label>
-                    <EditableField value={selectedItem.concept_title} onSave={(v) => saveField(selectedItem.id, 'concept_title', v)} displayClassName="text-base font-semibold text-ink" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1">Main Message</label>
-                    <EditableField value={selectedItem.concept_description ?? ''} onSave={(v) => saveField(selectedItem.id, 'concept_description', v)} type="textarea" displayClassName="text-sm text-ink-2" rows={2} placeholder="What's the core message?" />
-                  </div>
-                  {selectedItem.hook !== null && selectedItem.hook !== undefined && (
-                    <div>
-                      <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1">Hook (first 3 seconds)</label>
-                      <EditableField value={selectedItem.hook ?? ''} onSave={(v) => saveField(selectedItem.id, 'hook', v)} type="textarea" displayClassName="text-sm text-ink font-medium" rows={2} placeholder="Opening line that stops the scroll" />
-                    </div>
-                  )}
+                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
 
-                  {/* Scheduling */}
-                  <div className="border-t border-ink-6 pt-3">
-                    <h4 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider mb-2">Scheduling</h4>
-                    <div className="grid grid-cols-3 gap-3">
+                  {/* Section 1: Type */}
+                  <Section label="Type">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10px] text-ink-4 block mb-0.5">Date</label>
-                        <input type="date" value={selectedItem.scheduled_date} onChange={(e) => saveField(selectedItem.id, 'scheduled_date', e.target.value)} className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30" />
+                        <label className="text-[10px] text-ink-4 block mb-0.5">Format</label>
+                        <select value={selectedItem.content_type} onChange={(e) => saveField(selectedItem.id, 'content_type', e.target.value)} className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30">
+                          <option value="feed_post">Static Post</option>
+                          <option value="reel">Reel / Video</option>
+                          <option value="carousel">Carousel</option>
+                        </select>
                       </div>
                       <div>
-                        <label className="text-[10px] text-ink-4 block mb-0.5">Time</label>
-                        <input type="time" value={selectedItem.scheduled_time ?? ''} onChange={(e) => saveField(selectedItem.id, 'scheduled_time', e.target.value)} className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30" />
+                        <label className="text-[10px] text-ink-4 block mb-0.5">Category</label>
+                        <select defaultValue="" className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30">
+                          <option value="">Select category</option>
+                          <option value="promo">Promotion / Offer</option>
+                          <option value="product">Product / Service</option>
+                          <option value="event">Event</option>
+                          <option value="seasonal">Seasonal / Holiday</option>
+                          <option value="educational">Educational / Tips</option>
+                          <option value="testimonial">Testimonial</option>
+                          <option value="bts">Behind the Scenes</option>
+                          <option value="brand">Brand Awareness</option>
+                          <option value="other">Other</option>
+                        </select>
                       </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mt-3">
                       <div>
                         <label className="text-[10px] text-ink-4 block mb-0.5">Platform</label>
                         <select value={selectedItem.platform} onChange={(e) => saveField(selectedItem.id, 'platform', e.target.value)} className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30">
@@ -290,17 +291,6 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
                           <option value="tiktok">TikTok</option>
                           <option value="facebook">Facebook</option>
                           <option value="linkedin">LinkedIn</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 mt-3">
-                      <div>
-                        <label className="text-[10px] text-ink-4 block mb-0.5">Content Type</label>
-                        <select value={selectedItem.content_type} onChange={(e) => saveField(selectedItem.id, 'content_type', e.target.value)} className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30">
-                          <option value="feed_post">Static Post</option>
-                          <option value="reel">Reel / Video</option>
-                          <option value="carousel">Carousel</option>
-                          <option value="story">Story</option>
                         </select>
                       </div>
                       <div>
@@ -314,143 +304,184 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
                         </select>
                       </div>
                     </div>
-                  </div>
+                  </Section>
 
-                  {/* CTA */}
-                  <div className="border-t border-ink-6 pt-3">
-                    <h4 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider mb-2">Call to Action</h4>
-                    <div className="flex flex-wrap gap-1.5">
-                      {['Order now', 'Visit us', 'DM to book', 'Link in bio', 'Learn more', 'Call us', 'No CTA'].map((cta) => (
-                        <button key={cta} className="text-[11px] font-medium px-2.5 py-1 rounded-full border border-ink-6 text-ink-3 hover:border-ink-5 transition-colors">{cta}</button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Video-specific fields */}
-                  {isVideo && (
-                    <div className="border-t border-ink-6 pt-3 space-y-3">
-                      <h4 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider">Video Details</h4>
-
-                      {selectedItem.script && (
+                  {/* Section 2: Message & Copy */}
+                  <Section label="Message & Copy">
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[10px] text-ink-4 block mb-0.5">Title</label>
+                        <EditableField value={selectedItem.concept_title} onSave={(v) => saveField(selectedItem.id, 'concept_title', v)} displayClassName="text-sm font-semibold text-ink" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-ink-4 block mb-0.5">Main Message</label>
+                        <EditableField value={selectedItem.concept_description ?? ''} onSave={(v) => saveField(selectedItem.id, 'concept_description', v)} type="textarea" displayClassName="text-sm text-ink-2" rows={2} placeholder="What's the core message?" />
+                      </div>
+                      {(isVideo || selectedItem.hook) && (
+                        <div>
+                          <label className="text-[10px] text-ink-4 block mb-0.5">Hook (first 3 seconds)</label>
+                          <EditableField value={selectedItem.hook ?? ''} onSave={(v) => saveField(selectedItem.id, 'hook', v)} type="textarea" displayClassName="text-sm text-ink font-medium" rows={2} placeholder="Opening line that stops the scroll" />
+                        </div>
+                      )}
+                      <div>
+                        <label className="text-[10px] text-ink-4 block mb-1">Call to Action</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {['Order now', 'Visit us', 'DM to book', 'Link in bio', 'Learn more', 'Call us', 'No CTA'].map((cta) => (
+                            <button key={cta} className="text-[11px] font-medium px-2.5 py-1 rounded-full border border-ink-6 text-ink-3 hover:border-brand hover:text-brand-dark transition-colors">{cta}</button>
+                          ))}
+                        </div>
+                      </div>
+                      {isVideo && selectedItem.script && (
                         <div>
                           <label className="text-[10px] text-ink-4 block mb-0.5">Script</label>
                           <EditableField value={selectedItem.script} onSave={(v) => saveField(selectedItem.id, 'script', v)} type="textarea" displayClassName="text-sm text-ink-2 whitespace-pre-wrap" rows={6} />
                         </div>
                       )}
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[10px] text-ink-4 block mb-0.5">Length</label>
-                          <select defaultValue="30-45s" className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30">
-                            <option value="15-30s">15-30s</option>
-                            <option value="30-45s">30-45s</option>
-                            <option value="45-60s">45-60s</option>
-                            <option value="60-90s">60-90s</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-ink-4 block mb-0.5">Script Style</label>
-                          <select defaultValue="text_overlay" className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30">
-                            <option value="text_overlay">Text overlay</option>
-                            <option value="voiceover">Voiceover</option>
-                            <option value="both">Both</option>
-                            <option value="silent">Silent</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] text-ink-4 block mb-0.5">Footage Source</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {['We film it', 'Client provides', 'UGC style', 'Animation', 'Stock'].map((src) => (
-                            <button key={src} className="text-[11px] font-medium px-3 py-1.5 rounded-lg border border-ink-6 text-ink-3 hover:border-ink-5 transition-colors">{src}</button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] text-ink-4 block mb-0.5">Shoot Location</label>
-                        <EditableField value={selectedItem.location_notes ?? ''} onSave={(v) => saveField(selectedItem.id, 'location_notes', v)} placeholder="Where should we film?" displayClassName="text-sm text-ink-2" />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[10px] text-ink-4 block mb-0.5">Music</label>
-                          <EditableField value={selectedItem.music_direction ?? ''} onSave={(v) => saveField(selectedItem.id, 'music_direction', v)} placeholder="e.g., upbeat, trending" displayClassName="text-sm text-ink-2" />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-ink-4 block mb-0.5">Editing Style</label>
-                          <EditableField value={selectedItem.editor_notes ?? ''} onSave={(v) => saveField(selectedItem.id, 'editor_notes', v)} placeholder="e.g., fast cuts, cinematic" displayClassName="text-sm text-ink-2" />
-                        </div>
-                      </div>
-
-                      {selectedItem.shot_list && selectedItem.shot_list.length > 0 && (
-                        <div>
-                          <label className="text-[10px] text-ink-4 block mb-1">Shot List</label>
-                          <EditableList items={selectedItem.shot_list.map((s) => s.description)} onSave={(v) => saveField(selectedItem.id, 'shot_list', v.map((d, i) => ({ shot_number: i + 1, description: d })))} variant="numbered" addLabel="Add shot" />
-                        </div>
-                      )}
-                      {selectedItem.props && selectedItem.props.length > 0 && (
-                        <div>
-                          <label className="text-[10px] text-ink-4 block mb-1">Props</label>
-                          <EditableList items={selectedItem.props} onSave={(v) => saveField(selectedItem.id, 'props', v)} variant="checkboxes" addLabel="Add prop" />
-                        </div>
-                      )}
                     </div>
+                  </Section>
+
+                  {/* Section 3: Creative (different for video vs static) */}
+                  {isVideo ? (
+                    <Section label="Filming & Music">
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] text-ink-4 block mb-0.5">Video Length</label>
+                            <select defaultValue="30-45s" className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30">
+                              <option value="15-30s">15-30s</option>
+                              <option value="30-45s">30-45s</option>
+                              <option value="45-60s">45-60s</option>
+                              <option value="60-90s">60-90s</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-ink-4 block mb-0.5">Script Style</label>
+                            <select defaultValue="text_overlay" className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30">
+                              <option value="text_overlay">Text overlay</option>
+                              <option value="voiceover">Voiceover</option>
+                              <option value="both">Both</option>
+                              <option value="silent">Silent</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-ink-4 block mb-1">Footage Source</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {['We film it', 'Client provides', 'UGC style', 'Animation', 'Stock'].map((src) => (
+                              <button key={src} className="text-[11px] font-medium px-3 py-1.5 rounded-lg border border-ink-6 text-ink-3 hover:border-brand hover:text-brand-dark transition-colors">{src}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-ink-4 block mb-0.5">Shoot Location</label>
+                          <EditableField value={selectedItem.location_notes ?? ''} onSave={(v) => saveField(selectedItem.id, 'location_notes', v)} placeholder="Where should we film?" displayClassName="text-sm text-ink-2" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] text-ink-4 block mb-0.5">Who's on Camera</label>
+                            <EditableField value={''} onSave={async () => {}} placeholder="Names or roles" displayClassName="text-sm text-ink-2" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-ink-4 block mb-0.5">Filming Batch</label>
+                            <EditableField value={selectedItem.filming_batch ?? ''} onSave={(v) => saveField(selectedItem.id, 'filming_batch', v)} placeholder="A, B, C..." displayClassName="text-sm text-ink-2" />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] text-ink-4 block mb-0.5">Music Direction</label>
+                            <EditableField value={selectedItem.music_direction ?? ''} onSave={(v) => saveField(selectedItem.id, 'music_direction', v)} placeholder="e.g., upbeat, trending" displayClassName="text-sm text-ink-2" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-ink-4 block mb-0.5">Editing Style</label>
+                            <EditableField value={selectedItem.editor_notes ?? ''} onSave={(v) => saveField(selectedItem.id, 'editor_notes', v)} placeholder="e.g., fast cuts, cinematic" displayClassName="text-sm text-ink-2" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-ink-4 block mb-1">Mood</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {['Bold & energetic', 'Clean & minimal', 'Warm & inviting', 'Professional', 'Playful', 'Luxury', 'Festive'].map((m) => (
+                              <button key={m} className="text-[11px] font-medium px-2.5 py-1 rounded-full border border-ink-6 text-ink-3 hover:border-brand hover:text-brand-dark transition-colors">{m}</button>
+                            ))}
+                          </div>
+                        </div>
+                        {selectedItem.shot_list && selectedItem.shot_list.length > 0 && (
+                          <div>
+                            <label className="text-[10px] text-ink-4 block mb-1">Shot List</label>
+                            <EditableList items={selectedItem.shot_list.map((s) => s.description)} onSave={(v) => saveField(selectedItem.id, 'shot_list', v.map((d, i) => ({ shot_number: i + 1, description: d })))} variant="numbered" addLabel="Add shot" />
+                          </div>
+                        )}
+                        {selectedItem.props && selectedItem.props.length > 0 && (
+                          <div>
+                            <label className="text-[10px] text-ink-4 block mb-1">Props</label>
+                            <EditableList items={selectedItem.props} onSave={(v) => saveField(selectedItem.id, 'props', v)} variant="checkboxes" addLabel="Add prop" />
+                          </div>
+                        )}
+                      </div>
+                    </Section>
+                  ) : (
+                    <Section label="Style & Design">
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-[10px] text-ink-4 block mb-1">Placement</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {['Feed (1080×1350)', 'Carousel', 'Reel Cover', 'Banner'].map((p) => (
+                              <button key={p} className="text-[11px] font-medium px-3 py-1.5 rounded-lg border border-ink-6 text-ink-3 hover:border-brand hover:text-brand-dark transition-colors">{p}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-ink-4 block mb-1">Mood</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {['Bold & energetic', 'Clean & minimal', 'Warm & inviting', 'Professional', 'Playful', 'Luxury', 'Festive'].map((m) => (
+                              <button key={m} className="text-[11px] font-medium px-2.5 py-1 rounded-full border border-ink-6 text-ink-3 hover:border-brand hover:text-brand-dark transition-colors">{m}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-ink-4 block mb-1">Color Preference</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {['Use brand colors', 'Light & airy', 'Dark & bold', 'Seasonal'].map((c) => (
+                              <button key={c} className="text-[11px] font-medium px-3 py-1.5 rounded-lg border border-ink-6 text-ink-3 hover:border-brand hover:text-brand-dark transition-colors">{c}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-ink-4 block mb-0.5">Designer Notes</label>
+                          <EditableField value={selectedItem.editor_notes ?? ''} onSave={(v) => saveField(selectedItem.id, 'editor_notes', v)} type="textarea" placeholder="Anything specific for the designer..." displayClassName="text-sm text-ink-2" rows={2} />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-ink-4 block mb-0.5">Reference Link</label>
+                          <EditableField value={''} onSave={async () => {}} placeholder="Link to inspiration" displayClassName="text-sm text-ink-2" />
+                        </div>
+                      </div>
+                    </Section>
                   )}
 
-                  {/* Static/Graphic-specific fields */}
-                  {!isVideo && (
-                    <div className="border-t border-ink-6 pt-3 space-y-3">
-                      <h4 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider">Design Details</h4>
-
+                  {/* Section 4: Timing */}
+                  <Section label="Scheduling">
+                    <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className="text-[10px] text-ink-4 block mb-0.5">Placement</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {['Feed (1080×1350)', 'Story (1080×1920)', 'Carousel', 'Reel Cover', 'Banner'].map((p) => (
-                            <button key={p} className="text-[11px] font-medium px-3 py-1.5 rounded-lg border border-ink-6 text-ink-3 hover:border-ink-5 transition-colors">{p}</button>
-                          ))}
-                        </div>
+                        <label className="text-[10px] text-ink-4 block mb-0.5">Publish Date</label>
+                        <input type="date" value={selectedItem.scheduled_date} onChange={(e) => saveField(selectedItem.id, 'scheduled_date', e.target.value)} className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30" />
                       </div>
-
                       <div>
-                        <label className="text-[10px] text-ink-4 block mb-0.5">Mood</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {['Bold & energetic', 'Clean & minimal', 'Warm & inviting', 'Professional', 'Playful', 'Luxury', 'Festive'].map((m) => (
-                            <button key={m} className="text-[11px] font-medium px-2.5 py-1 rounded-full border border-ink-6 text-ink-3 hover:border-ink-5 transition-colors">{m}</button>
-                          ))}
-                        </div>
+                        <label className="text-[10px] text-ink-4 block mb-0.5">Time</label>
+                        <input type="time" value={selectedItem.scheduled_time ?? ''} onChange={(e) => saveField(selectedItem.id, 'scheduled_time', e.target.value)} className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30" />
                       </div>
-
                       <div>
-                        <label className="text-[10px] text-ink-4 block mb-0.5">Color Preference</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {['Use brand colors', 'Light & airy', 'Dark & bold', 'Seasonal'].map((c) => (
-                            <button key={c} className="text-[11px] font-medium px-3 py-1.5 rounded-lg border border-ink-6 text-ink-3 hover:border-ink-5 transition-colors">{c}</button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] text-ink-4 block mb-0.5">Designer Notes</label>
-                        <EditableField value={selectedItem.editor_notes ?? ''} onSave={(v) => saveField(selectedItem.id, 'editor_notes', v)} type="textarea" placeholder="Anything specific for the designer..." displayClassName="text-sm text-ink-2" rows={2} />
+                        <label className="text-[10px] text-ink-4 block mb-0.5">Urgency</label>
+                        <select defaultValue="standard" className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30">
+                          <option value="flexible">Flexible</option>
+                          <option value="standard">Standard</option>
+                          <option value="urgent">Urgent</option>
+                        </select>
                       </div>
                     </div>
-                  )}
-
-                  {/* Filming batch */}
-                  <div className="border-t border-ink-6 pt-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[10px] text-ink-4 block mb-0.5">Filming Batch</label>
-                        <EditableField value={selectedItem.filming_batch ?? ''} onSave={(v) => saveField(selectedItem.id, 'filming_batch', v)} placeholder="A, B, C..." displayClassName="text-sm text-ink-2" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-ink-4 block mb-0.5">Internal Notes</label>
-                        <EditableField value={''} onSave={async () => {}} placeholder="Notes for the team..." displayClassName="text-sm text-ink-2" />
-                      </div>
+                    <div className="mt-3">
+                      <label className="text-[10px] text-ink-4 block mb-0.5">Internal Notes</label>
+                      <EditableField value={''} onSave={async () => {}} type="textarea" placeholder="Notes for the team (not visible to client)..." displayClassName="text-sm text-ink-2" rows={2} />
                     </div>
-                  </div>
+                  </Section>
                 </div>
               )}
             </>
@@ -461,6 +492,16 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// Section wrapper for Quick Edit
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="border-b border-ink-6 pb-4 last:border-0 last:pb-0">
+      <h4 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider mb-3">{label}</h4>
+      {children}
     </div>
   )
 }

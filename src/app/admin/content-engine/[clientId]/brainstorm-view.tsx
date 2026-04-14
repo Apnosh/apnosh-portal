@@ -21,6 +21,7 @@ interface IdeaCard {
   content_category: string | null // promo | product | event | educational | testimonial | bts | brand | seasonal | other
   platform: string
   additional_platforms: string[] | null
+  concept_description: string | null
   scheduled_date: string
   strategic_goal: string | null
   status: string
@@ -31,7 +32,6 @@ const FORMAT_OPTIONS = [
   { value: 'graphic', label: 'Static Post', icon: Image, color: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
   { value: 'reel', label: 'Reel / Video', icon: Film, color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   { value: 'carousel', label: 'Carousel', icon: Camera, color: 'bg-pink-50 text-pink-700 border-pink-200' },
-  { value: 'story', label: 'Story', icon: Video, color: 'bg-amber-50 text-amber-700 border-amber-200' },
 ]
 
 const CATEGORY_OPTIONS = [
@@ -79,6 +79,7 @@ export default function BrainstormView({
 
   // New idea form state
   const [newTitle, setNewTitle] = useState('')
+  const [newDescription, setNewDescription] = useState('')
   const [newFormat, setNewFormat] = useState('graphic')
   const [newCategory, setNewCategory] = useState('')
   const [newPlatform, setNewPlatform] = useState('instagram')
@@ -90,7 +91,7 @@ export default function BrainstormView({
     if (!cycleId) { setLoading(false); return }
     const { data } = await supabase
       .from('content_calendar_items')
-      .select('id, concept_title, content_type, platform, additional_platforms, scheduled_date, strategic_goal, status, sort_order')
+      .select('id, concept_title, concept_description, content_type, platform, additional_platforms, scheduled_date, strategic_goal, status, sort_order')
       .eq('cycle_id', cycleId)
       .order('scheduled_date').order('sort_order')
     setIdeas((data ?? []) as IdeaCard[])
@@ -142,6 +143,7 @@ export default function BrainstormView({
     const { data } = await supabase.from('content_calendar_items').insert({
       cycle_id: cId, client_id: clientId,
       concept_title: newTitle.trim(),
+      concept_description: newDescription.trim() || null,
       content_type: contentType,
       platform: newPlatform,
       scheduled_date: newDate || targetMonth,
@@ -150,7 +152,7 @@ export default function BrainstormView({
 
     if (data) {
       setIdeas((prev) => [...prev, data as IdeaCard])
-      setNewTitle(''); setNewFormat('graphic'); setNewCategory(''); setNewDate('')
+      setNewTitle(''); setNewDescription(''); setNewFormat('graphic'); setNewCategory(''); setNewDate('')
       setAddingNew(false)
       toast('Idea added', 'success')
     }
@@ -286,8 +288,18 @@ export default function BrainstormView({
                   value={idea.concept_title}
                   onChange={(e) => setIdeas((prev) => prev.map((i) => i.id === idea.id ? { ...i, concept_title: e.target.value } : i))}
                   onBlur={(e) => handleUpdateTitle(idea.id, e.target.value)}
-                  className="text-sm font-medium text-ink w-full bg-transparent border-none focus:outline-none focus:ring-0 p-0 mb-2"
+                  className="text-sm font-medium text-ink w-full bg-transparent border-none focus:outline-none focus:ring-0 p-0 mb-1"
                   placeholder="What's this post about?"
+                />
+
+                {/* Description — editable */}
+                <textarea
+                  value={idea.concept_description ?? ''}
+                  onChange={(e) => setIdeas((prev) => prev.map((i) => i.id === idea.id ? { ...i, concept_description: e.target.value } : i))}
+                  onBlur={(e) => handleUpdateField(idea.id, 'concept_description', e.target.value)}
+                  className="text-xs text-ink-3 w-full bg-transparent border-none focus:outline-none focus:ring-0 p-0 mb-2 resize-none"
+                  rows={2}
+                  placeholder="Brief description of the idea..."
                 />
 
                 {/* Date */}
@@ -325,7 +337,13 @@ export default function BrainstormView({
             placeholder="What's this post about?"
             className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
             autoFocus
-            onKeyDown={(e) => e.key === 'Enter' && handleAddIdea()}
+          />
+          <textarea
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+            placeholder="Brief description — what's the idea, what should it communicate?"
+            rows={2}
+            className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
           />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div>

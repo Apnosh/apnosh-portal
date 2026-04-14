@@ -111,7 +111,6 @@ const CTA_OPTIONS = ['Order now', 'Visit us', 'DM to book', 'Link in bio', 'Lear
 const MOOD_OPTIONS = ['Bold & energetic', 'Clean & minimal', 'Warm & inviting', 'Professional', 'Playful', 'Luxury', 'Festive']
 const PLACEMENT_OPTIONS = [
   { value: 'feed', label: 'Feed (1080×1350)' },
-  { value: 'story', label: 'Story (1080×1920)' },
   { value: 'reel-cover', label: 'Reel Cover (1080×1920)' },
   { value: 'carousel', label: 'Carousel' },
   { value: 'banner', label: 'Banner (820×312)' },
