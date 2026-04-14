@@ -14,6 +14,7 @@ import FeedPostForm from '@/components/content-engine/forms/feed-post-form'
 import CarouselForm from '@/components/content-engine/forms/carousel-form'
 import StoryForm from '@/components/content-engine/forms/story-form'
 import QuickEditView from '@/components/content-engine/quick-edit-view'
+import TaskPipelinePanel from '@/components/content-engine/task-pipeline-panel'
 import { useToast } from '@/components/ui/toast'
 
 interface ContentItem { id: string; [key: string]: unknown }
@@ -43,6 +44,7 @@ export default function ContentDetailsView({ cycleId, clientId, context, onGoToP
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [generatingBriefs, setGeneratingBriefs] = useState(false)
   const [quickEditMode, setQuickEditMode] = useState(false)
+  const [viewMode, setViewMode] = useState<'form' | 'tasks'>('form')
 
   const loadItems = useCallback(async () => {
     const { data } = await supabase
@@ -229,19 +231,26 @@ export default function ContentDetailsView({ cycleId, clientId, context, onGoToP
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={async () => {
-                      if (!context) return
-                      toast('Generating...', 'info')
-                      await supabase.from('content_calendar_items').update({ status: 'strategist_approved' }).eq('id', selectedItem.id)
-                      await generateBriefs(cycleId, clientId, context)
-                      await loadItems()
-                      toast('Details filled', 'success')
-                    }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold text-brand bg-brand-tint rounded-lg hover:bg-brand/10 transition-colors"
-                  >
-                    <Sparkles className="w-3 h-3" /> AI Fill
-                  </button>
+                  {/* View toggle: Brief / Tasks */}
+                  <div className="flex rounded-lg border border-ink-6 overflow-hidden mr-1">
+                    <button onClick={() => setViewMode('form')} className={`px-2 py-1 text-[10px] font-medium ${viewMode === 'form' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`}>Brief</button>
+                    <button onClick={() => setViewMode('tasks')} className={`px-2 py-1 text-[10px] font-medium ${viewMode === 'tasks' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`}>Tasks</button>
+                  </div>
+                  {viewMode === 'form' && (
+                    <button
+                      onClick={async () => {
+                        if (!context) return
+                        toast('Generating...', 'info')
+                        await supabase.from('content_calendar_items').update({ status: 'strategist_approved' }).eq('id', selectedItem.id)
+                        await generateBriefs(cycleId, clientId, context)
+                        await loadItems()
+                        toast('Details filled', 'success')
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-semibold text-brand bg-brand-tint rounded-lg hover:bg-brand/10 transition-colors"
+                    >
+                      <Sparkles className="w-3 h-3" /> AI Fill
+                    </button>
+                  )}
                   <button onClick={() => handleApprove(selectedItem.id)} className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
                     (selectedItem.status === 'approved' || selectedItem.status === 'strategist_approved')
                       ? 'bg-brand/10 text-brand border border-brand/20'
@@ -252,7 +261,15 @@ export default function ContentDetailsView({ cycleId, clientId, context, onGoToP
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto px-4 py-4">
-                {renderForm(selectedItem)}
+                {viewMode === 'form' && renderForm(selectedItem)}
+                {viewMode === 'tasks' && (
+                  <TaskPipelinePanel
+                    item={selectedItem}
+                    onStageUpdate={(field, value) => {
+                      setItems((prev) => prev.map((i) => i.id === selectedItem.id ? { ...i, [field]: value } : i))
+                    }}
+                  />
+                )}
               </div>
             </>
           ) : (

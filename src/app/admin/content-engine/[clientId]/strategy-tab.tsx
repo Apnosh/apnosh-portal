@@ -14,6 +14,7 @@ import EditableSection from '@/components/content-engine/editable-section'
 import type { ClientContext } from '@/lib/content-engine/context'
 import ContentProfileSection from './content-profile-section'
 import DefaultsSection from './defaults-section'
+import TeamDefaultsSection from '@/components/content-engine/team-defaults-section'
 
 interface CycleData {
   id: string
@@ -215,6 +216,11 @@ export default function StrategyTab({
 
       {/* Content Defaults */}
       <DefaultsSection clientId={clientId} defaults={context.contentDefaults as never} onUpdate={(d) => setContext({ ...context, contentDefaults: d as unknown as Record<string, unknown> })} toast={toast} />
+
+      {/* Team Defaults */}
+      <div className="bg-white rounded-xl border border-ink-6 p-4">
+        <TeamDefaultsSection clientId={clientId} />
+      </div>
 
       {/* Content History (read-only) */}
       <EditableSection title={`Content History (${context.recentContent.length})`} icon={<Clock className="w-4 h-4 text-brand" />} defaultOpen={false} onSave={async () => {}} editContent={null}>
