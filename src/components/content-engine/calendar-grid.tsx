@@ -45,9 +45,10 @@ interface CalendarGridProps {
   selectedItemId: string | null
   onItemClick: (id: string) => void
   onDropItem: (itemId: string, dateStr: string) => void
+  onFilmingClick?: (date: string) => void
 }
 
-export function CalendarGrid({ weeks, byDate, milestones, conflicts, selectedItemId, onItemClick, onDropItem }: CalendarGridProps) {
+export function CalendarGrid({ weeks, byDate, milestones, conflicts, selectedItemId, onItemClick, onDropItem, onFilmingClick }: CalendarGridProps) {
   const [dragOverDate, setDragOverDate] = useState<string | null>(null)
 
   const handleDragOver = (e: React.DragEvent, dateStr: string, inMonth: boolean) => {
@@ -102,9 +103,15 @@ export function CalendarGrid({ weeks, byDate, milestones, conflicts, selectedIte
                 </div>
 
                 {dayMilestones.map((m, mi) => (
-                  <div key={mi} className="flex items-center gap-1 px-1 py-0.5 mb-0.5 rounded bg-orange-50 border border-orange-200 text-[8px] font-medium text-orange-700">
-                    🎥 {m.label}
-                  </div>
+                  m.type === 'filming' ? (
+                    <button key={mi} onClick={(e) => { e.stopPropagation(); onFilmingClick?.(day.dateStr) }} className="w-full flex items-center gap-1 px-1 py-0.5 mb-0.5 rounded bg-orange-50 border border-orange-200 text-[8px] font-medium text-orange-700 hover:bg-orange-100 transition-colors text-left">
+                      🎥 {m.label}
+                    </button>
+                  ) : (
+                    <div key={mi} className="flex items-center gap-1 px-1 py-0.5 mb-0.5 rounded bg-purple-50 border border-purple-200 text-[8px] font-medium text-purple-700">
+                      ✂️ {m.label}
+                    </div>
+                  )
                 ))}
 
                 <div className="space-y-0.5">
