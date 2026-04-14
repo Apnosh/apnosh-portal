@@ -124,10 +124,11 @@ interface ProductionBriefFormProps {
   initialData?: Partial<BriefFormData>
   onSave: (data: BriefFormData) => Promise<void>
   onAutoFill?: () => Promise<Partial<BriefFormData>>
+  layout?: 'tabbed' | 'scroll' // tabbed = builder (step-by-step), scroll = all sections visible
 }
 
 export default function ProductionBriefForm({
-  isVideo, conceptTitle, initialData, onSave, onAutoFill,
+  isVideo, conceptTitle, initialData, onSave, onAutoFill, layout = 'tabbed',
 }: ProductionBriefFormProps) {
   const [form, setForm] = useState<BriefFormData>({ ...EMPTY_FORM, ...initialData })
   const [activeSection, setActiveSection] = useState<FormSection>('category')
@@ -221,30 +222,33 @@ export default function ProductionBriefForm({
         </div>
       </div>
 
-      {/* Section tabs */}
-      <div className="flex border-b border-ink-6 px-2 flex-shrink-0">
-        {sections.map((s) => {
-          const status = getSectionStatus(s.key)
-          return (
-            <button
-              key={s.key}
-              onClick={() => setActiveSection(s.key)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium border-b-2 -mb-px transition-colors ${
-                activeSection === s.key ? 'border-ink text-ink' : 'border-transparent text-ink-3 hover:text-ink-2'
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOTS[status]}`} />
-              {s.label}
-            </button>
-          )
-        })}
-      </div>
+      {/* Section tabs (only in tabbed mode) */}
+      {layout === 'tabbed' && (
+        <div className="flex border-b border-ink-6 px-2 flex-shrink-0">
+          {sections.map((s) => {
+            const status = getSectionStatus(s.key)
+            return (
+              <button
+                key={s.key}
+                onClick={() => setActiveSection(s.key)}
+                className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium border-b-2 -mb-px transition-colors ${
+                  activeSection === s.key ? 'border-ink text-ink' : 'border-transparent text-ink-3 hover:text-ink-2'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOTS[status]}`} />
+                {s.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Form content */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
 
         {/* Category */}
-        {activeSection === 'category' && (
+        {(layout === 'scroll' || activeSection === 'category') && layout === 'scroll' && <h3 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider border-b border-ink-6 pb-2 mb-3">Type</h3>}
+        {(layout === 'scroll' || activeSection === 'category') && (
           <div>
             <label className="text-xs font-semibold text-ink-3 block mb-2">What type of content?</label>
             <div className="grid grid-cols-3 gap-1.5">
@@ -262,7 +266,8 @@ export default function ProductionBriefForm({
         )}
 
         {/* Details (graphic only, depends on category) */}
-        {activeSection === 'details' && !isVideo && (
+        {(layout === 'scroll' || activeSection === 'details') && !isVideo && layout === 'scroll' && <h3 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider border-b border-ink-6 pb-2 mb-3">Details</h3>}
+        {(layout === 'scroll' || activeSection === 'details') && !isVideo && (
           <div className="space-y-3">
             {form.content_category === 'promo' && (
               <>
@@ -327,7 +332,8 @@ export default function ProductionBriefForm({
         )}
 
         {/* Message & Copy */}
-        {activeSection === 'message' && (
+        {(layout === 'scroll' || activeSection === 'message') && layout === 'scroll' && <h3 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider border-b border-ink-6 pb-2 mb-3">{isVideo ? 'Message & Script' : 'Message & Copy'}</h3>}
+        {(layout === 'scroll' || activeSection === 'message') && (
           <div className="space-y-3">
             <Field label="Main message" value={form.main_message} onChange={(v) => update('main_message', v)} placeholder="What's the core message of this post?" multiline />
             {isVideo && <Field label="Hook" value={form.hook} onChange={(v) => update('hook', v)} placeholder="Opening line — first 3 seconds" />}
@@ -393,7 +399,8 @@ export default function ProductionBriefForm({
         )}
 
         {/* Creative / Style */}
-        {activeSection === 'creative' && (
+        {(layout === 'scroll' || activeSection === 'creative') && layout === 'scroll' && <h3 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider border-b border-ink-6 pb-2 mb-3">{isVideo ? 'Filming & Music' : 'Style & Design'}</h3>}
+        {(layout === 'scroll' || activeSection === 'creative') && (
           <div className="space-y-3">
             {isVideo ? (
               <>
@@ -512,7 +519,8 @@ export default function ProductionBriefForm({
         )}
 
         {/* Timing */}
-        {activeSection === 'timing' && (
+        {(layout === 'scroll' || activeSection === 'timing') && layout === 'scroll' && <h3 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider border-b border-ink-6 pb-2 mb-3">Scheduling</h3>}
+        {(layout === 'scroll' || activeSection === 'timing') && (
           <div className="space-y-3">
             <Field label="Publish date" value={form.publish_date} onChange={(v) => update('publish_date', v)} type="date" />
             <div>
