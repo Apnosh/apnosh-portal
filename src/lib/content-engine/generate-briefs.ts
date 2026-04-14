@@ -96,25 +96,75 @@ async function generateSingleBrief(
 - "editor_notes": Pacing, text overlays, transitions`
     : ''
 
+  // Build rich context for higher quality briefs
+  const contextBlocks: string[] = []
+  contextBlocks.push(`CONCEPT: ${item.concept_title}`)
+  contextBlocks.push(`DESCRIPTION: ${item.concept_description ?? ''}`)
+  contextBlocks.push(`TYPE: ${contentType}`)
+  contextBlocks.push(`PLATFORM: ${platform}`)
+  contextBlocks.push(`GOAL: ${item.strategic_goal ?? 'awareness'}`)
+  contextBlocks.push(`BUSINESS: ${context.businessName} (${context.businessType ?? 'local business'})`)
+  contextBlocks.push(`VOICE: ${context.voiceNotes ?? 'friendly and professional'}`)
+
+  if (context.targetAudience) {
+    const ta = context.targetAudience
+    contextBlocks.push(`AUDIENCE: ${ta.lifestyle ?? 'general'} | Age: ${ta.age_range ?? 'all'} | Pain points: ${ta.pain_points?.join(', ') ?? 'none specified'}`)
+  }
+
+  if (context.offerings.length > 0) {
+    contextBlocks.push(`KEY OFFERINGS (reference where natural): ${context.offerings.slice(0, 5).join(', ')}`)
+  }
+
+  if (context.contentPillars.length > 0) {
+    contextBlocks.push(`CONTENT PILLAR: This post falls under "${context.contentPillars[0] ?? 'general'}" theme`)
+  }
+
+  if (context.ctaPreferences.length > 0) {
+    contextBlocks.push(`PREFERRED CTAs: ${context.ctaPreferences.slice(0, 3).map((c) => `"${c}"`).join(' OR ')}`)
+  }
+
+  if (context.hashtagSets) {
+    const hs = context.hashtagSets
+    const allTags: string[] = [...(hs.branded ?? []), ...(hs.community ?? []).slice(0, 5), ...(hs.location ?? []).slice(0, 3)]
+    if (allTags.length > 0) {
+      contextBlocks.push(`HASHTAG STRATEGY (always include branded, mix in community/location): ${allTags.join(' ')}`)
+    }
+  }
+
+  if (context.goldenPosts.length > 0) {
+    const example = context.goldenPosts[0]
+    contextBlocks.push(`CAPTION STYLE EXAMPLE (match this tone): "${example.caption.slice(0, 200)}..."`)
+  }
+
+  if (context.keyPeople.length > 0) {
+    const onCamera = context.keyPeople.filter((p) => p.comfortable_on_camera)
+    if (onCamera.length > 0 && isVideo) {
+      contextBlocks.push(`TALENT: Feature ${onCamera[0].name} (${onCamera[0].role})`)
+    }
+  }
+
+  // Platform-specific guidance
+  const platformGuidance = platform === 'tiktok'
+    ? 'TikTok: Hook in first 1-2 seconds. Conversational, raw, authentic. Trending audio reference if possible. Shorter captions.'
+    : platform === 'instagram'
+      ? 'Instagram: Hook in first 3 seconds for Reels. Polished but authentic. Longer captions work. Use line breaks for readability.'
+      : platform === 'linkedin'
+        ? 'LinkedIn: Professional but human. Lead with an insight or surprising stat. No hashtags in body, add at end.'
+        : ''
+
+  if (platformGuidance) contextBlocks.push(`PLATFORM NOTES: ${platformGuidance}`)
+
   const prompt = `Generate a production brief for this content piece:
 
-CONCEPT: ${item.concept_title}
-DESCRIPTION: ${item.concept_description ?? ''}
-TYPE: ${contentType}
-PLATFORM: ${platform}
-GOAL: ${item.strategic_goal ?? 'awareness'}
-
-BUSINESS: ${context.businessName} (${context.businessType ?? 'local business'})
-VOICE: ${context.voiceNotes ?? 'friendly and professional'}
-AUDIENCE: ${context.targetAudience ?? 'local community'}
+${contextBlocks.join('\n')}
 
 Return a JSON object with:
-- "caption": Full caption with line breaks, emoji per brand voice (max 2200 chars)
-- "hashtags": Array of 15-20 relevant hashtags
+- "caption": Full caption with line breaks, emoji per brand voice (max 2200 chars). Use a preferred CTA. Include branded hashtags.
+- "hashtags": Array of 15-20 relevant hashtags (always include branded ones from the strategy)
 - "platform_specs": { "aspect_ratio": "${aspectRatio}" }
 ${videoFields}
 
-${isVideo ? 'Make the script conversational and authentic. The hook must stop the scroll in 3 seconds.' : 'Focus on a compelling caption that drives the strategic goal.'}
+${isVideo ? 'Make the script conversational and authentic. The hook MUST stop the scroll — it\'s the single most important line. Reference specific offerings/products where natural. Feature the talent by name.' : 'Focus on a compelling caption that drives the strategic goal. Use the brand voice consistently. End with a clear CTA from the preferred list.'}
 
 Return ONLY valid JSON. No markdown.`
 
