@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  Sparkles, ChevronRight, Filter, Clock, CheckCircle, AlertCircle,
+  Sparkles, ChevronRight, ChevronLeft, Filter, Clock, CheckCircle, AlertCircle,
   FileText, Palette, Loader2,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -54,9 +54,11 @@ export default function ContentEnginePage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'mine'>('all')
   const [statusFilter, setStatusFilter] = useState<CycleStatus | 'all'>('all')
+  const [selectedMonth, setSelectedMonth] = useState(
+    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+  )
 
-  const currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-    .toISOString().split('T')[0]
+  const currentMonth = selectedMonth
 
   const load = useCallback(async () => {
     // Fetch all clients with their current month cycle
@@ -130,7 +132,29 @@ export default function ContentEnginePage() {
             <Sparkles className="w-5 h-5 text-brand" />
             Content Engine
           </h1>
-          <p className="text-sm text-ink-3 mt-0.5">{monthLabel} content cycles</p>
+          <div className="flex items-center gap-2 mt-1">
+            <button
+              onClick={() => {
+                const d = new Date(selectedMonth + 'T12:00:00')
+                d.setMonth(d.getMonth() - 1)
+                setSelectedMonth(d.toISOString().split('T')[0])
+              }}
+              className="p-0.5 text-ink-4 hover:text-ink rounded transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-medium text-ink min-w-[130px] text-center">{monthLabel}</span>
+            <button
+              onClick={() => {
+                const d = new Date(selectedMonth + 'T12:00:00')
+                d.setMonth(d.getMonth() + 1)
+                setSelectedMonth(d.toISOString().split('T')[0])
+              }}
+              className="p-0.5 text-ink-4 hover:text-ink rounded transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 

@@ -247,7 +247,7 @@ export default function CalendarView({
       setItems((prev) => prev.filter((i) => i.status !== 'draft'))
     }
 
-    const result = await generateCalendar(cId, clientId, context, strategyNotes)
+    const result = await generateCalendar(cId, clientId, context, strategyNotes, month.toISOString().split('T')[0])
     if (result.success) {
       onStatusChange('calendar_draft')
       await loadItems()
