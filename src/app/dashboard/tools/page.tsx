@@ -5,6 +5,12 @@ import {
   Sparkles, Lightbulb, MessageSquare, Hash, ClipboardCheck, Eye,
   Copy, Check, ChevronLeft, Loader2, Star, Calendar, ToggleLeft, ToggleRight
 } from 'lucide-react'
+import {
+  generateCaptions as aiCaptions,
+  generateIdeas as aiIdeas,
+  generateReviewResponse as aiReviewResponse,
+  generateHashtags as aiHashtags,
+} from '@/lib/ai-tools'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -262,13 +268,17 @@ function CaptionTool() {
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<string[] | null>(null)
 
-  const generate = () => {
+  const generate = async () => {
     setLoading(true)
     setResults(null)
-    setTimeout(() => {
-      setResults(mockCaptions(platform, topic, tone, hashtags, cta))
-      setLoading(false)
-    }, 1500)
+    try {
+      const captions = await aiCaptions({ platform, postType, topic, tone, hashtags, cta })
+      setResults(captions)
+    } catch (err) {
+      console.error('Caption generation failed:', err)
+      setResults(['Something went wrong. Please try again.'])
+    }
+    setLoading(false)
   }
 
   return (
@@ -364,15 +374,23 @@ function IdeasTool() {
     setTypes((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t])
   }
 
-  const generate = () => {
+  const generate = async () => {
     setLoading(true)
     setResults(null)
     setSaved(new Set())
-    setTimeout(() => {
-      const filtered = mockIdeas.filter((idea) => types.includes(idea.contentType))
-      setResults(filtered.length > 0 ? filtered : mockIdeas.slice(0, 8))
-      setLoading(false)
-    }, 1500)
+    try {
+      const ideas = await aiIdeas({
+        industry: '',
+        goals: [],
+        platforms: types,
+        businessContext: events ? `Upcoming events: ${events}` : undefined,
+      })
+      setResults(ideas)
+    } catch (err) {
+      console.error('Idea generation failed:', err)
+      setResults([])
+    }
+    setLoading(false)
   }
 
   const saveToCalendar = (index: number) => {
@@ -471,13 +489,17 @@ function ReviewTool() {
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<{ responses: string[]; tips: string[] } | null>(null)
 
-  const generate = () => {
+  const generate = async () => {
     setLoading(true)
     setResults(null)
-    setTimeout(() => {
-      setResults(mockReviewResponses(rating, tone))
-      setLoading(false)
-    }, 1500)
+    try {
+      const result = await aiReviewResponse({ rating, reviewText: review, tone })
+      setResults(result)
+    } catch (err) {
+      console.error('Review response generation failed:', err)
+      setResults({ responses: ['Something went wrong. Please try again.'], tips: [] })
+    }
+    setLoading(false)
   }
 
   return (
@@ -560,16 +582,20 @@ function HashtagTool() {
   const [topic, setTopic] = useState('')
   const [platform, setPlatform] = useState('Instagram')
   const [loading, setLoading] = useState(false)
-  const [results, setResults] = useState<ReturnType<typeof mockHashtags> | null>(null)
+  const [results, setResults] = useState<{ high: HashtagItem[]; medium: HashtagItem[]; niche: HashtagItem[] } | null>(null)
   const [copiedGroup, setCopiedGroup] = useState<string | null>(null)
 
-  const generate = () => {
+  const generate = async () => {
     setLoading(true)
     setResults(null)
-    setTimeout(() => {
-      setResults(mockHashtags(topic.toLowerCase().replace(/\s+/g, '') || 'marketing'))
-      setLoading(false)
-    }, 1500)
+    try {
+      const hashtags = await aiHashtags({ topic: topic || 'marketing', platform })
+      setResults(hashtags)
+    } catch (err) {
+      console.error('Hashtag generation failed:', err)
+      setResults({ high: [], medium: [], niche: [] })
+    }
+    setLoading(false)
   }
 
   const copyGroup = (group: HashtagItem[], name: string) => {

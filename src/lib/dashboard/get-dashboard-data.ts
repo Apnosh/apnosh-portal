@@ -20,18 +20,22 @@ export async function getDashboardData(
 ): Promise<DashboardData | null> {
   const supabase = await createClient()
 
-  // Fetch client name
+  // Fetch client name + location + industry for benchmark lookups
   const { data: client } = await supabase
     .from('clients')
-    .select('name')
+    .select('name, location, industry')
     .eq('id', clientId)
     .maybeSingle()
 
   if (!client) return null
 
+  // Resolve city and business type for benchmarks
+  const city = client.location || 'Seattle'
+  const bizType = (client.industry || 'restaurant').toLowerCase().replace(/[^a-z_]/g, '_')
+
   const [visibility, footTraffic] = await Promise.all([
-    buildVisibilityView(supabase, clientId),
-    buildFootTrafficView(supabase, clientId),
+    buildVisibilityView(supabase, clientId, city, bizType),
+    buildFootTrafficView(supabase, clientId, city, bizType),
   ])
 
   return {
@@ -47,7 +51,9 @@ export async function getDashboardData(
 
 async function buildVisibilityView(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  clientId: string
+  clientId: string,
+  city: string = 'Seattle',
+  bizType: string = 'restaurant'
 ): Promise<DashboardView> {
   const now = new Date()
   const thisMonthStart = startOfMonth(now)
@@ -134,7 +140,7 @@ async function buildVisibilityView(
   const chartData = buildChartData(daily, 'reach')
 
   // Benchmarks
-  const benchmark = await getBenchmark(supabase, 'visibility', 'Seattle', 'restaurant')
+  const benchmark = await getBenchmark(supabase, 'visibility', city, bizType)
   const rank = computeRank(thisReach, benchmark)
 
   // Insights
@@ -169,7 +175,9 @@ async function buildVisibilityView(
 
 async function buildFootTrafficView(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  clientId: string
+  clientId: string,
+  city: string = 'Seattle',
+  bizType: string = 'restaurant'
 ): Promise<DashboardView> {
   const now = new Date()
   const thisMonthStart = startOfMonth(now)
@@ -252,7 +260,7 @@ async function buildFootTrafficView(
 
   const chartData = buildChartData(daily, 'actions')
 
-  const benchmark = await getBenchmark(supabase, 'foot_traffic', 'Seattle', 'restaurant')
+  const benchmark = await getBenchmark(supabase, 'foot_traffic', city, bizType)
   const rank = computeRank(thisActions, benchmark)
 
   const insights = await getInsights(supabase, clientId, 'foot_traffic')
@@ -448,7 +456,8 @@ async function getBenchmark(
   city: string,
   businessType: string
 ): Promise<BenchmarkRow | null> {
-  const { data } = await supabase
+  // Try city-level benchmark first, fall back to national
+  let { data } = await supabase
     .from('benchmarks')
     .select('avg_value, max_value, percentile_25, percentile_50, percentile_75')
     .eq('metric_type', metricType)
@@ -456,6 +465,17 @@ async function getBenchmark(
     .eq('area_value', city)
     .eq('business_type', businessType)
     .maybeSingle()
+
+  if (!data) {
+    const national = await supabase
+      .from('benchmarks')
+      .select('avg_value, max_value, percentile_25, percentile_50, percentile_75')
+      .eq('metric_type', metricType)
+      .eq('area_type', 'national')
+      .eq('business_type', businessType)
+      .maybeSingle()
+    data = national.data
+  }
 
   if (!data) return null
   return {
