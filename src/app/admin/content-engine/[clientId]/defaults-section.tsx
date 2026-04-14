@@ -10,7 +10,6 @@ interface ContentDefaults {
   default_times: Record<string, string>
   default_goal: string
   auto_cross_post: boolean
-  content_type_split: Record<string, number>
 }
 
 const ALL_PLATFORMS = [
@@ -64,11 +63,13 @@ export default function DefaultsSection({ clientId, defaults, onUpdate, toast }:
     setDraft({ ...draft, default_times: { ...(draft.default_times ?? {}), [day]: time } })
   }
 
-  const setSplit = (type: string, pct: number) => {
-    setDraft({ ...draft, content_type_split: { ...(draft.content_type_split ?? {}), [type]: pct } })
+  // Format time display
+  const formatTimes = (times: Record<string, string> | undefined) => {
+    if (!times) return null
+    const unique = new Set(Object.values(times))
+    if (unique.size === 1) return `All days at ${[...unique][0]}`
+    return DAYS.map((d) => `${d.label} ${times[d.key] ?? '10:00'}`).join(', ')
   }
-
-  const splitTotal = Object.values(draft.content_type_split ?? {}).reduce((a, b) => a + b, 0)
 
   return (
     <EditableSection
@@ -84,7 +85,7 @@ export default function DefaultsSection({ clientId, defaults, onUpdate, toast }:
             <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-2">
               Default Platforms
             </label>
-            <p className="text-[10px] text-ink-4 mb-2">New calendar items will target these platforms by default.</p>
+            <p className="text-[10px] text-ink-4 mb-2">Generated calendar items will target these platforms. Each item can be adjusted individually.</p>
             <div className="flex flex-wrap gap-2">
               {ALL_PLATFORMS.map((p) => {
                 const active = (draft.default_platforms ?? []).includes(p.value)
@@ -111,7 +112,7 @@ export default function DefaultsSection({ clientId, defaults, onUpdate, toast }:
               onChange={(e) => setDraft({ ...draft, auto_cross_post: e.target.checked })}
               className="rounded border-ink-5 text-brand focus:ring-brand/30"
             />
-            <span className="text-xs text-ink-2">Auto cross-post to all default platforms</span>
+            <span className="text-xs text-ink-2">Auto cross-post every item to all default platforms</span>
           </label>
 
           {/* Default posting times per day */}
@@ -119,6 +120,7 @@ export default function DefaultsSection({ clientId, defaults, onUpdate, toast }:
             <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-2">
               Default Posting Times
             </label>
+            <p className="text-[10px] text-ink-4 mb-2">AI will schedule posts at these times unless performance data suggests better times.</p>
             <div className="grid grid-cols-7 gap-1.5">
               {DAYS.map((d) => (
                 <div key={d.key} className="text-center">
@@ -139,6 +141,7 @@ export default function DefaultsSection({ clientId, defaults, onUpdate, toast }:
             <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-2">
               Default Strategic Goal
             </label>
+            <p className="text-[10px] text-ink-4 mb-2">Applied as the default goal for new items. AI will vary goals across the calendar for balance.</p>
             <div className="flex flex-wrap gap-2">
               {GOALS.map((g) => (
                 <button
@@ -153,37 +156,6 @@ export default function DefaultsSection({ clientId, defaults, onUpdate, toast }:
               ))}
             </div>
           </div>
-
-          {/* Content type split */}
-          <div>
-            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-2">
-              Content Type Split (%)
-            </label>
-            <p className="text-[10px] text-ink-4 mb-2">
-              How to distribute posts by type. Total: <strong className={splitTotal === 100 ? 'text-brand' : 'text-red-500'}>{splitTotal}%</strong>
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { key: 'reels', label: 'Reels' },
-                { key: 'feed_posts', label: 'Feed Posts' },
-                { key: 'carousels', label: 'Carousels' },
-                { key: 'stories', label: 'Stories' },
-              ].map((t) => (
-                <div key={t.key} className="flex items-center gap-2">
-                  <label className="text-xs text-ink-3 w-20">{t.label}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={(draft.content_type_split ?? {})[t.key] ?? 0}
-                    onChange={(e) => setSplit(t.key, parseInt(e.target.value) || 0)}
-                    className="w-16 text-sm text-center border border-ink-6 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                  />
-                  <span className="text-[10px] text-ink-4">%</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       }
     >
@@ -195,11 +167,11 @@ export default function DefaultsSection({ clientId, defaults, onUpdate, toast }:
         {defaults.default_goal && (
           <p><strong className="text-ink-3">Default goal:</strong> {defaults.default_goal}</p>
         )}
-        {defaults.content_type_split && (
-          <p><strong className="text-ink-3">Split:</strong> {Object.entries(defaults.content_type_split).map(([k, v]) => `${k.replace('_', ' ')} ${v}%`).join(', ')}</p>
+        {defaults.default_times && (
+          <p><strong className="text-ink-3">Times:</strong> {formatTimes(defaults.default_times)}</p>
         )}
         {!(defaults.default_platforms ?? []).length && !defaults.default_goal && (
-          <p className="text-ink-3 italic">No defaults set. Click Edit to configure default platforms, posting times, and content split.</p>
+          <p className="text-ink-3 italic">No defaults set. Click Edit to configure default platforms, posting times, and goals.</p>
         )}
       </div>
     </EditableSection>
