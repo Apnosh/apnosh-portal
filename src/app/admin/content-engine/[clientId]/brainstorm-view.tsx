@@ -2,56 +2,37 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Sparkles, Loader2, Plus, Trash2, Check, X,
-  Camera, Video, Image, Film,
-  ChevronLeft, ChevronRight,
-  Globe, MessageCircle,
+  Sparkles, Loader2, Plus, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
+  Camera, Globe, Video, MessageCircle, Image, Film,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { generateCalendar } from '@/lib/content-engine/generate-calendar'
+import { generateCalendar, refineCalendarItem } from '@/lib/content-engine/generate-calendar'
 import { updateCalendarItem, deleteCalendarItem } from '@/lib/content-engine/actions'
 import type { ClientContext } from '@/lib/content-engine/context'
+import BrainstormCard, { type IdeaCard } from '@/components/content-engine/brainstorm-card'
 import ConfirmModal from '@/components/content-engine/confirm-modal'
 import { useToast } from '@/components/ui/toast'
 
-interface IdeaCard {
-  id: string
-  concept_title: string
-  content_type: string // 'graphic' | 'reel' | 'carousel' | 'story'
-  content_category: string | null // promo | product | event | educational | testimonial | bts | brand | seasonal | other
-  platform: string
-  additional_platforms: string[] | null
-  concept_description: string | null
-  scheduled_date: string
-  strategic_goal: string | null
-  status: string
-  sort_order: number
-}
+const CATEGORY_OPTIONS = [
+  'Behind the scenes', 'Product highlight', 'Educational tip', 'Promo/Offer',
+  'Customer story', 'Team spotlight', 'Seasonal', 'Community', 'Trending', 'Brand story',
+]
+
+const PLATFORM_OPTIONS = [
+  { value: 'instagram', label: 'IG' }, { value: 'tiktok', label: 'TT' },
+  { value: 'facebook', label: 'FB' }, { value: 'linkedin', label: 'LI' },
+]
 
 const FORMAT_OPTIONS = [
-  { value: 'graphic', label: 'Static Post', icon: Image, color: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
+  { value: 'feed_post', label: 'Static Post', icon: Image, color: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
   { value: 'reel', label: 'Reel / Video', icon: Film, color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   { value: 'carousel', label: 'Carousel', icon: Camera, color: 'bg-pink-50 text-pink-700 border-pink-200' },
 ]
 
-const CATEGORY_OPTIONS = [
-  { value: 'promo', label: 'Promo / Offer' },
-  { value: 'product', label: 'Product / Service' },
-  { value: 'event', label: 'Event' },
-  { value: 'educational', label: 'Educational / Tips' },
-  { value: 'testimonial', label: 'Testimonial' },
-  { value: 'bts', label: 'Behind the Scenes' },
-  { value: 'brand', label: 'Brand Awareness' },
-  { value: 'seasonal', label: 'Seasonal / Holiday' },
-  { value: 'other', label: 'Other' },
-]
-
-const PLATFORM_OPTIONS = [
-  { value: 'instagram', label: 'IG', icon: Camera },
-  { value: 'tiktok', label: 'TT', icon: Video },
-  { value: 'facebook', label: 'FB', icon: Globe },
-  { value: 'linkedin', label: 'LI', icon: MessageCircle },
-]
+const GOAL_COLORS: Record<string, string> = {
+  awareness: 'text-blue-700', engagement: 'text-purple-700', conversion: 'text-emerald-700',
+  community: 'text-orange-700', education: 'text-teal-700',
+}
 
 interface BrainstormViewProps {
   clientId: string
@@ -76,14 +57,16 @@ export default function BrainstormView({
   const [generating, setGenerating] = useState(false)
   const [addingNew, setAddingNew] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [contextExpanded, setContextExpanded] = useState(false)
 
-  // New idea form state
+  // New idea form
   const [newTitle, setNewTitle] = useState('')
   const [newDescription, setNewDescription] = useState('')
-  const [newFormat, setNewFormat] = useState('graphic')
+  const [newFormat, setNewFormat] = useState('feed_post')
   const [newCategory, setNewCategory] = useState('')
+  const [newGoal, setNewGoal] = useState('')
   const [newPlatform, setNewPlatform] = useState('instagram')
-  const [newDate, setNewDate] = useState('')
+  const [newWeek, setNewWeek] = useState(1)
 
   const targetMonthLabel = new Date(targetMonth + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
@@ -91,20 +74,97 @@ export default function BrainstormView({
     if (!cycleId) { setLoading(false); return }
     const { data } = await supabase
       .from('content_calendar_items')
-      .select('id, concept_title, concept_description, content_type, platform, additional_platforms, scheduled_date, strategic_goal, status, sort_order')
+      .select('id, concept_title, concept_description, content_type, content_category, platform, additional_platforms, scheduled_date, strategic_goal, filming_batch, source, status, sort_order, week_number')
       .eq('cycle_id', cycleId)
-      .order('scheduled_date').order('sort_order')
+      .order('week_number', { ascending: true, nullsFirst: false })
+      .order('sort_order')
     setIdeas((data ?? []) as IdeaCard[])
     setLoading(false)
   }, [cycleId, supabase])
 
   useEffect(() => { loadIdeas() }, [loadIdeas])
 
-  // AI generate ideas
+  // Deliverables targets
+  const deliverables = context?.deliverables ?? { reels: 0, feed_posts: 0, carousels: 0, stories: 0, platforms: [] }
+  const targets: Record<string, number> = {
+    feed_post: deliverables.feed_posts + deliverables.carousels,
+    reel: deliverables.reels,
+    carousel: 0, // counted in feed_post target
+  }
+  const counts: Record<string, number> = { feed_post: 0, reel: 0, carousel: 0 }
+  for (const idea of ideas) {
+    const type = idea.content_type === 'static_post' ? 'feed_post' : idea.content_type
+    if (type in counts) counts[type]++
+  }
+
+  // Goal distribution
+  const goalCounts: Record<string, number> = {}
+  for (const idea of ideas) {
+    if (idea.strategic_goal) goalCounts[idea.strategic_goal] = (goalCounts[idea.strategic_goal] ?? 0) + 1
+  }
+
+  // Batch summary
+  const batchCounts: Record<string, number> = {}
+  for (const idea of ideas) {
+    if (idea.filming_batch) batchCounts[idea.filming_batch] = (batchCounts[idea.filming_batch] ?? 0) + 1
+  }
+
+  // Week groups
+  const weekGroups = new Map<number, IdeaCard[]>()
+  for (const idea of ideas) {
+    const week = idea.week_number ?? 0
+    if (!weekGroups.has(week)) weekGroups.set(week, [])
+    weekGroups.get(week)!.push(idea)
+  }
+
+  // Handlers
+  const handleUpdateField = async (id: string, field: string, value: unknown) => {
+    await updateCalendarItem(id, { [field]: value })
+    setIdeas((prev) => prev.map((i) => i.id === id ? { ...i, [field]: value } : i))
+  }
+
+  const handleUpdateTitle = async (id: string, title: string) => {
+    await updateCalendarItem(id, { concept_title: title })
+  }
+
+  const handleDelete = async (id: string) => {
+    await deleteCalendarItem(id)
+    setIdeas((prev) => prev.filter((i) => i.id !== id))
+  }
+
+  const handleRefine = async (id: string, direction: string) => {
+    if (!context) return
+    await refineCalendarItem(id, direction, context)
+    await loadIdeas()
+    toast('Refined', 'success')
+  }
+
+  const handleReplace = async (id: string) => {
+    if (!context) return
+    await refineCalendarItem(id, 'Generate a completely different concept for the same slot. Make it fresh and creative.', context)
+    await loadIdeas()
+    toast('Replaced', 'success')
+  }
+
+  const handleDuplicate = async (id: string) => {
+    const idea = ideas.find((i) => i.id === id)
+    if (!idea || !cycleId) return
+    const { data } = await supabase.from('content_calendar_items').insert({
+      cycle_id: cycleId, client_id: clientId,
+      concept_title: idea.concept_title + ' (copy)',
+      concept_description: idea.concept_description,
+      content_type: idea.content_type, platform: idea.platform,
+      scheduled_date: idea.scheduled_date, strategic_goal: idea.strategic_goal,
+      filming_batch: idea.filming_batch, week_number: idea.week_number,
+      source: 'strategist', status: 'draft', sort_order: ideas.length,
+    }).select().single()
+    if (data) { setIdeas((prev) => [...prev, data as IdeaCard]); toast('Duplicated', 'success') }
+  }
+
+  // AI generate
   const handleGenerate = async () => {
     if (!context) return
     setGenerating(true)
-
     let cId = cycleId
     if (!cId) {
       const { data } = await supabase.from('content_cycles').insert({
@@ -114,19 +174,13 @@ export default function BrainstormView({
       if (data) { cId = data.id; onCycleCreated(data.id) }
     }
     if (!cId) { setGenerating(false); return }
-
     const result = await generateCalendar(cId, clientId, context, strategyNotes, targetMonth)
-    if (result.success) {
-      onStatusChange('calendar_draft')
-      await loadIdeas()
-      toast(`${result.count} content ideas generated`, 'success')
-    } else {
-      toast(result.error ?? 'Generation failed', 'error')
-    }
+    if (result.success) { onStatusChange('calendar_draft'); await loadIdeas(); toast(`${result.count} ideas generated`, 'success') }
+    else { toast(result.error ?? 'Failed', 'error') }
     setGenerating(false)
   }
 
-  // Add single idea
+  // Add idea
   const handleAddIdea = async () => {
     if (!newTitle.trim()) return
     let cId = cycleId
@@ -138,66 +192,58 @@ export default function BrainstormView({
       if (data) { cId = data.id; onCycleCreated(data.id) }
     }
     if (!cId) return
-
-    const contentType = newFormat === 'graphic' ? 'feed_post' : newFormat
     const { data } = await supabase.from('content_calendar_items').insert({
-      cycle_id: cId, client_id: clientId,
-      concept_title: newTitle.trim(),
-      concept_description: newDescription.trim() || null,
-      content_type: contentType,
-      platform: newPlatform,
-      scheduled_date: newDate || targetMonth,
-      source: 'strategist', status: 'draft', sort_order: ideas.length,
+      cycle_id: cId, client_id: clientId, concept_title: newTitle.trim(),
+      concept_description: newDescription.trim() || null, content_type: newFormat,
+      content_category: newCategory || null, strategic_goal: newGoal || null,
+      platform: newPlatform, week_number: newWeek,
+      scheduled_date: targetMonth, source: 'strategist', status: 'draft', sort_order: ideas.length,
     }).select().single()
-
     if (data) {
       setIdeas((prev) => [...prev, data as IdeaCard])
-      setNewTitle(''); setNewDescription(''); setNewFormat('graphic'); setNewCategory(''); setNewDate('')
-      setAddingNew(false)
-      toast('Idea added', 'success')
+      setNewTitle(''); setNewDescription(''); setNewFormat('feed_post'); setNewCategory(''); setNewGoal(''); setNewWeek(1)
+      setAddingNew(false); toast('Added', 'success')
     }
   }
 
-  // Quick edit
-  const handleUpdateTitle = async (id: string, title: string) => {
-    await updateCalendarItem(id, { concept_title: title })
-    setIdeas((prev) => prev.map((i) => i.id === id ? { ...i, concept_title: title } : i))
-  }
-
-  const handleUpdateField = async (id: string, field: string, value: unknown) => {
-    await updateCalendarItem(id, { [field]: value })
-    setIdeas((prev) => prev.map((i) => i.id === id ? { ...i, [field]: value } : i))
-  }
-
-  const handleDelete = async (id: string) => {
-    await deleteCalendarItem(id)
-    setIdeas((prev) => prev.filter((i) => i.id !== id))
-  }
-
   const handleClearAll = async () => {
-    if (!cycleId) return
-    setConfirmClear(false)
+    if (!cycleId) return; setConfirmClear(false)
     await supabase.from('content_calendar_items').delete().eq('cycle_id', cycleId)
-    setIdeas([])
-    toast('All ideas cleared', 'info')
+    setIdeas([]); toast('Cleared', 'info')
   }
 
   const prevMonth = () => { const d = new Date(targetMonth + 'T12:00:00'); d.setMonth(d.getMonth() - 1); onMonthChange(d.toISOString().split('T')[0]) }
   const nextMonth = () => { const d = new Date(targetMonth + 'T12:00:00'); d.setMonth(d.getMonth() + 1); onMonthChange(d.toISOString().split('T')[0]) }
 
-  // Count by format
-  const formatCounts = FORMAT_OPTIONS.map((f) => ({
-    ...f,
-    count: ideas.filter((i) => {
-      if (f.value === 'graphic') return i.content_type === 'feed_post' || i.content_type === 'static_post'
-      return i.content_type === f.value
-    }).length,
-  }))
-
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-ink-4" /></div>
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
+      {/* Change 1: Context bar */}
+      <div className="bg-bg-2 rounded-xl border border-ink-6 overflow-hidden">
+        <button onClick={() => setContextExpanded(!contextExpanded)} className="w-full flex items-center gap-3 px-4 py-2.5 text-left">
+          <div className="flex-1 min-w-0">
+            <span className="text-xs text-ink-2 truncate block">
+              {strategyNotes ? strategyNotes.slice(0, 100) + (strategyNotes.length > 100 ? '...' : '') : 'No strategy direction set'}
+            </span>
+          </div>
+          {context?.performance && (
+            <span className="text-[10px] text-ink-3 flex-shrink-0 hidden sm:block">
+              {context.performance.reachTrend} · Best: {context.performance.bestDays.join(', ')}
+            </span>
+          )}
+          {contextExpanded ? <ChevronUp className="w-3.5 h-3.5 text-ink-4 flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-ink-4 flex-shrink-0" />}
+        </button>
+        {contextExpanded && (
+          <div className="px-4 pb-3 border-t border-ink-6 pt-3 space-y-2 text-xs text-ink-2">
+            {strategyNotes && <p><strong className="text-ink-3">Direction:</strong> {strategyNotes}</p>}
+            {context?.performance && <p><strong className="text-ink-3">Performance:</strong> Reach {context.performance.reachTrend}. Best days: {context.performance.bestDays.join(' & ')}. +{context.performance.followerGrowth} followers (60d).</p>}
+            {context?.upcomingEvents && context.upcomingEvents.length > 0 && <p><strong className="text-ink-3">Events:</strong> {context.upcomingEvents.join(', ')}</p>}
+            <p><strong className="text-ink-3">Deliverables:</strong> {deliverables.reels} reels, {deliverables.feed_posts} posts, {deliverables.carousels} carousels — {deliverables.platforms.join(', ')}</p>
+          </div>
+        )}
+      </div>
+
       {/* Month selector */}
       <div className="flex items-center justify-center gap-3">
         <button onClick={prevMonth} className="p-1 text-ink-4 hover:text-ink rounded"><ChevronLeft className="w-5 h-5" /></button>
@@ -205,17 +251,42 @@ export default function BrainstormView({
         <button onClick={nextMonth} className="p-1 text-ink-4 hover:text-ink rounded"><ChevronRight className="w-5 h-5" /></button>
       </div>
 
-      {/* Quick stats */}
+      {/* Change 2: Deliverables counter + Change 3: Goal summary + Change 5: Batch summary */}
       {ideas.length > 0 && (
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-sm font-bold text-ink">{ideas.length} ideas</span>
-          {formatCounts.filter((f) => f.count > 0).map((f) => (
-            <span key={f.value} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${f.color}`}>
-              {f.count} {f.label}{f.count !== 1 ? 's' : ''}
-            </span>
-          ))}
-          <div className="flex-1" />
-          <button onClick={() => setConfirmClear(true)} className="text-[10px] text-ink-4 hover:text-red-500 transition-colors">Clear all</button>
+        <div className="space-y-2">
+          {/* Deliverables */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-bold text-ink">{ideas.length} ideas</span>
+            {[
+              { key: 'feed_post', label: 'Static/Carousel', target: targets.feed_post, count: counts.feed_post + counts.carousel },
+              { key: 'reel', label: 'Reels', target: targets.reel, count: counts.reel },
+            ].map((d) => {
+              const fulfilled = d.count >= d.target && d.target > 0
+              const over = d.count > d.target && d.target > 0
+              const short = d.count < d.target && d.target > 0
+              return (
+                <span key={d.key} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                  fulfilled ? (over ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200')
+                  : short ? 'bg-amber-50 text-amber-700 border-amber-200'
+                  : 'bg-ink-6 text-ink-3 border-ink-5'
+                }`}>
+                  {d.count}/{d.target} {d.label} {fulfilled && !over ? '✓' : over ? `(+${d.count - d.target})` : ''}
+                </span>
+              )
+            })}
+            <div className="flex-1" />
+            <button onClick={() => setConfirmClear(true)} className="text-[10px] text-ink-4 hover:text-red-500">Clear all</button>
+          </div>
+
+          {/* Goal + batch summary */}
+          <div className="flex items-center gap-3 flex-wrap text-[10px] text-ink-3">
+            {Object.entries(goalCounts).length > 0 && (
+              <span>{Object.entries(goalCounts).map(([g, c]) => <span key={g} className={`${GOAL_COLORS[g] ?? ''} font-medium`}>{c} {g}</span>).reduce((prev, curr, i) => i === 0 ? [curr] : [...prev, <span key={`sep-${i}`}> · </span>, curr], [] as React.ReactNode[])}</span>
+            )}
+            {Object.keys(batchCounts).length > 0 && (
+              <span>{Object.keys(batchCounts).length} filming sessions</span>
+            )}
+          </div>
         </div>
       )}
 
@@ -224,11 +295,9 @@ export default function BrainstormView({
         <div className="text-center py-12">
           <Sparkles className="w-10 h-10 text-ink-4 mx-auto mb-4" />
           <h2 className="text-lg font-bold text-ink mb-2">Brainstorm {targetMonthLabel}</h2>
-          <p className="text-sm text-ink-3 max-w-md mx-auto mb-6">
-            Start with a batch of AI-generated ideas based on the strategy, or add your own one by one.
-          </p>
+          <p className="text-sm text-ink-3 max-w-md mx-auto mb-6">Generate AI ideas based on the strategy, or add your own.</p>
           <div className="flex items-center justify-center gap-3">
-            <button onClick={handleGenerate} disabled={generating} className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors">
+            <button onClick={handleGenerate} className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors">
               <Sparkles className="w-4 h-4" /> Generate Ideas
             </button>
             <button onClick={() => setAddingNew(true)} className="inline-flex items-center gap-2 px-5 py-2.5 border border-ink-5 text-sm font-medium rounded-xl hover:bg-bg-2 transition-colors">
@@ -238,170 +307,98 @@ export default function BrainstormView({
         </div>
       )}
 
-      {/* Generating */}
       {generating && (
         <div className="text-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-brand mx-auto mb-4" />
           <h3 className="text-sm font-bold text-ink">Generating content ideas...</h3>
-          <p className="text-xs text-ink-3 mt-1">Based on your strategy, goals, and performance data</p>
+          <p className="text-xs text-ink-3 mt-1">Based on strategy, goals, and performance data</p>
         </div>
       )}
 
-      {/* Idea cards */}
+      {/* Change 6: Week-grouped cards */}
       {ideas.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {ideas.map((idea) => {
-            const fmt = FORMAT_OPTIONS.find((f) => f.value === idea.content_type || (f.value === 'graphic' && (idea.content_type === 'feed_post' || idea.content_type === 'static_post')))
-            const FmtIcon = fmt?.icon ?? Image
-
-            return (
-              <div key={idea.id} className={`bg-white rounded-xl border p-4 hover:shadow-sm transition-all group ${fmt?.color.split(' ').find((c) => c.startsWith('border-')) ?? 'border-ink-6'}`}>
-                {/* Header: format + platform + delete */}
-                {/* Content Type — prominent toggle */}
-                <div className="flex gap-1 mb-2">
-                  {FORMAT_OPTIONS.map((f) => {
-                    const FIcon = f.icon
-                    const isActive = idea.content_type === (f.value === 'graphic' ? 'feed_post' : f.value) || (f.value === 'graphic' && idea.content_type === 'static_post')
-                    return (
-                      <button
-                        key={f.value}
-                        onClick={() => handleUpdateField(idea.id, 'content_type', f.value === 'graphic' ? 'feed_post' : f.value)}
-                        className={`flex items-center gap-1 px-2 py-1 text-[9px] font-semibold rounded-md transition-colors ${
-                          isActive ? f.color : 'text-ink-4 hover:text-ink-3'
-                        }`}
-                      >
-                        <FIcon className="w-3 h-3" />
-                        {f.label}
-                      </button>
-                    )
-                  })}
-                  <div className="flex-1" />
-                  <button onClick={() => handleDelete(idea.id)} className="p-1 text-ink-5 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-
-                {/* Category + Platform row */}
-                <div className="flex items-center gap-2 mb-2">
-                  <select
-                    defaultValue=""
-                    className="text-[10px] text-ink-3 bg-bg-2 border border-ink-6 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand/30"
-                  >
-                    <option value="">Category</option>
-                    {CATEGORY_OPTIONS.map((c) => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={idea.platform}
-                    onChange={(e) => handleUpdateField(idea.id, 'platform', e.target.value)}
-                    className="text-[10px] text-ink-3 bg-bg-2 border border-ink-6 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand/30"
-                  >
-                    {PLATFORM_OPTIONS.map((p) => (
-                      <option key={p.value} value={p.value}>{p.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Title — editable */}
-                <input
-                  value={idea.concept_title}
-                  onChange={(e) => setIdeas((prev) => prev.map((i) => i.id === idea.id ? { ...i, concept_title: e.target.value } : i))}
-                  onBlur={(e) => handleUpdateTitle(idea.id, e.target.value)}
-                  className="text-sm font-medium text-ink w-full bg-transparent border-none focus:outline-none focus:ring-0 p-0 mb-1"
-                  placeholder="What's this post about?"
-                />
-
-                {/* Description — editable */}
-                <textarea
-                  value={idea.concept_description ?? ''}
-                  onChange={(e) => setIdeas((prev) => prev.map((i) => i.id === idea.id ? { ...i, concept_description: e.target.value } : i))}
-                  onBlur={(e) => handleUpdateField(idea.id, 'concept_description', e.target.value)}
-                  className="text-xs text-ink-3 w-full bg-transparent border-none focus:outline-none focus:ring-0 p-0 mb-2 resize-none"
-                  rows={2}
-                  placeholder="Brief description — what should this post communicate?"
-                />
-
-                {/* Date */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={idea.scheduled_date}
-                    onChange={(e) => handleUpdateField(idea.id, 'scheduled_date', e.target.value)}
-                    className="text-[10px] text-ink-3 bg-transparent border-none focus:outline-none cursor-pointer"
+        <div className="space-y-6">
+          {[...weekGroups.entries()].sort((a, b) => a[0] - b[0]).map(([week, weekIdeas]) => (
+            <div key={week}>
+              <h3 className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider mb-2 border-b border-ink-6 pb-1">
+                {week === 0 ? 'Unscheduled' : `Week ${week}`} — {weekIdeas.length} items
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {weekIdeas.map((idea) => (
+                  <BrainstormCard
+                    key={idea.id}
+                    idea={idea}
+                    onUpdateField={handleUpdateField}
+                    onUpdateTitle={handleUpdateTitle}
+                    onDelete={handleDelete}
+                    onRefine={handleRefine}
+                    onReplace={handleReplace}
+                    onDuplicate={handleDuplicate}
+                    setLocalTitle={(id, title) => setIdeas((prev) => prev.map((i) => i.id === id ? { ...i, concept_title: title } : i))}
+                    setLocalDesc={(id, desc) => setIdeas((prev) => prev.map((i) => i.id === id ? { ...i, concept_description: desc } : i))}
                   />
-                </div>
+                ))}
               </div>
-            )
-          })}
+            </div>
+          ))}
 
-          {/* Add card */}
-          <button
-            onClick={() => setAddingNew(true)}
-            className="border-2 border-dashed border-ink-5 rounded-xl p-4 flex flex-col items-center justify-center gap-2 text-ink-4 hover:text-ink hover:border-ink-4 transition-colors min-h-[120px]"
-          >
-            <Plus className="w-5 h-5" />
-            <span className="text-xs font-medium">Add idea</span>
-          </button>
+          {/* Change 7: Generate more + add */}
+          <div className="flex items-center gap-3">
+            <button onClick={handleGenerate} disabled={generating} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-ink-5 rounded-lg hover:bg-bg-2 transition-colors">
+              <Sparkles className="w-3 h-3" /> Generate more
+            </button>
+            <button onClick={() => setAddingNew(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-ink-5 rounded-lg hover:bg-bg-2 transition-colors">
+              <Plus className="w-3 h-3" /> Add manually
+            </button>
+          </div>
         </div>
       )}
 
-      {/* New idea form (inline) */}
+      {/* New idea form */}
       {addingNew && (
         <div className="bg-white rounded-xl border border-brand/30 p-5 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-ink">New Content Idea</h3>
             <button onClick={() => setAddingNew(false)} className="p-1 text-ink-4 hover:text-ink"><X className="w-4 h-4" /></button>
           </div>
-
-          {/* Content type — prominent toggle first */}
+          {/* Format */}
           <div>
-            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-2">What type of content?</label>
+            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-2">Format</label>
             <div className="flex gap-2">
               {FORMAT_OPTIONS.map((f) => {
                 const FIcon = f.icon
-                const active = newFormat === f.value
-                return (
-                  <button key={f.value} onClick={() => setNewFormat(f.value)} className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${active ? f.color : 'border-ink-6 text-ink-3 hover:border-ink-5'}`}>
-                    <FIcon className="w-3.5 h-3.5" /> {f.label}
-                  </button>
-                )
+                return (<button key={f.value} onClick={() => setNewFormat(f.value)} className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${newFormat === f.value ? f.color : 'border-ink-6 text-ink-3 hover:border-ink-5'}`}><FIcon className="w-3.5 h-3.5" /> {f.label}</button>)
               })}
             </div>
           </div>
-
-          {/* Category */}
-          <div>
-            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-2">What's it about?</label>
-            <div className="flex flex-wrap gap-1.5">
-              {CATEGORY_OPTIONS.map((c) => (
-                <button key={c.value} onClick={() => setNewCategory(c.value)} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${newCategory === c.value ? 'bg-brand-tint border-brand/30 text-brand-dark' : 'border-ink-6 text-ink-3 hover:border-ink-5'}`}>
-                  {c.label}
-                </button>
-              ))}
+          {/* Theme + Goal */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] text-ink-4 block mb-0.5">Theme</label>
+              <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className="w-full text-xs border border-ink-6 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30">
+                <option value="">Select</option>
+                {CATEGORY_OPTIONS.map((c) => (<option key={c} value={c.toLowerCase().replace(/[^a-z]/g, '_')}>{c}</option>))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] text-ink-4 block mb-0.5">Goal</label>
+              <select value={newGoal} onChange={(e) => setNewGoal(e.target.value)} className="w-full text-xs border border-ink-6 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30">
+                <option value="">Select</option>
+                <option value="awareness">Awareness</option>
+                <option value="engagement">Engagement</option>
+                <option value="conversion">Conversion</option>
+                <option value="community">Community</option>
+                <option value="education">Education</option>
+              </select>
             </div>
           </div>
-
-          {/* Title + Description */}
+          {/* Idea */}
           <div>
             <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1">Idea</label>
-            <input
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="What's this post about?"
-              className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand mb-2"
-              autoFocus
-            />
-            <textarea
-              value={newDescription}
-              onChange={(e) => setNewDescription(e.target.value)}
-              placeholder="Brief description — what should this post communicate? What details matter?"
-              rows={2}
-              className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-            />
+            <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="What's this post about?" className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30 mb-2" autoFocus />
+            <textarea value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="What should this communicate?" rows={2} className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand/30" />
           </div>
-
-          {/* Platform + Date */}
+          {/* Platform + Week */}
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-ink-4 block mb-0.5">Platform</label>
@@ -410,8 +407,11 @@ export default function BrainstormView({
               </select>
             </div>
             <div>
-              <label className="text-[10px] text-ink-4 block mb-0.5">Target Date</label>
-              <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="w-full text-xs border border-ink-6 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30" />
+              <label className="text-[10px] text-ink-4 block mb-0.5">Week</label>
+              <select value={newWeek} onChange={(e) => setNewWeek(parseInt(e.target.value))} className="w-full text-xs border border-ink-6 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30">
+                <option value={1}>Week 1</option><option value={2}>Week 2</option>
+                <option value={3}>Week 3</option><option value={4}>Week 4</option>
+              </select>
             </div>
           </div>
           <button onClick={handleAddIdea} disabled={!newTitle.trim()} className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 bg-brand text-white text-sm font-semibold rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50">
@@ -420,29 +420,20 @@ export default function BrainstormView({
         </div>
       )}
 
-      {/* Next step CTA */}
+      {/* Next step */}
       {ideas.length > 0 && !generating && (
         <div className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-ink">Ready to flesh out the details?</h3>
-            <p className="text-xs text-ink-3 mt-0.5">{ideas.length} ideas ready. Add briefs, scripts, and production details for each piece.</p>
+            <h3 className="text-sm font-bold text-ink">Ready for details?</h3>
+            <p className="text-xs text-ink-3 mt-0.5">{ideas.length} ideas. Add briefs, scripts, and production details.</p>
           </div>
           <button onClick={onGoToContentPlan} className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors">
-            Continue to Content Details →
+            Content Details →
           </button>
         </div>
       )}
 
-      {/* Add more ideas (when ideas exist) */}
-      {ideas.length > 0 && !addingNew && (
-        <div className="flex items-center gap-3">
-          <button onClick={handleGenerate} disabled={generating} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-ink-5 rounded-lg hover:bg-bg-2 transition-colors">
-            <Sparkles className="w-3 h-3" /> Generate more ideas
-          </button>
-        </div>
-      )}
-
-      <ConfirmModal open={confirmClear} onConfirm={handleClearAll} onCancel={() => setConfirmClear(false)} title="Clear all ideas?" description={`This will remove all ${ideas.length} ideas for ${targetMonthLabel}.`} confirmLabel="Clear all" variant="danger" />
+      <ConfirmModal open={confirmClear} onConfirm={handleClearAll} onCancel={() => setConfirmClear(false)} title="Clear all?" description={`Remove all ${ideas.length} ideas for ${targetMonthLabel}.`} confirmLabel="Clear" variant="danger" />
     </div>
   )
 }
