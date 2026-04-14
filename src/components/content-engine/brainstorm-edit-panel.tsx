@@ -62,7 +62,7 @@ export default function BrainstormEditPanel({
   const [goal, setGoal] = useState(item?.strategic_goal ?? '')
   const [theme, setTheme] = useState(item?.content_category ?? '')
   const [platform, setPlatform] = useState(item?.platform ?? 'instagram')
-  const [week, setWeek] = useState(item?.week_number ?? 0)
+  const [scheduledDate, setScheduledDate] = useState(item?.scheduled_date ?? '')
   const [refineText, setRefineText] = useState('')
   const [refining, setRefining] = useState(false)
   const [replacing, setReplacing] = useState(false)
@@ -76,7 +76,7 @@ export default function BrainstormEditPanel({
     setGoal(item?.strategic_goal ?? '')
     setTheme(item?.content_category ?? '')
     setPlatform(item?.platform ?? 'instagram')
-    setWeek(item?.week_number ?? 0)
+    setScheduledDate(item?.scheduled_date ?? '')
     setRefineText('')
     setConfirmDelete(false)
   }, [item?.id])
@@ -118,8 +118,8 @@ export default function BrainstormEditPanel({
       content_category: theme || null,
       strategic_goal: goal || null,
       platform,
-      week_number: week || null,
-    })
+      scheduled_date: scheduledDate || undefined,
+    } as Partial<IdeaCard>)
     onClose()
   }
 
@@ -218,16 +218,27 @@ export default function BrainstormEditPanel({
             </select>
           </div>
 
-          {/* Platform */}
-          <div>
-            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">Platform</label>
-            <select
-              value={platform}
-              onChange={(e) => { setPlatform(e.target.value); saveField('platform', e.target.value) }}
-              className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
-            >
-              {PLATFORM_OPTIONS.map((p) => (<option key={p.value} value={p.value}>{p.label}</option>))}
-            </select>
+          {/* Platform + Date */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">Platform</label>
+              <select
+                value={platform}
+                onChange={(e) => { setPlatform(e.target.value); saveField('platform', e.target.value) }}
+                className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
+              >
+                {PLATFORM_OPTIONS.map((p) => (<option key={p.value} value={p.value}>{p.label}</option>))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1.5">Date</label>
+              <input
+                type="date"
+                value={scheduledDate}
+                onChange={(e) => { setScheduledDate(e.target.value); saveField('scheduled_date', e.target.value) }}
+                className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
+              />
+            </div>
           </div>
 
           {/* Source (read-only) */}
