@@ -19,3 +19,46 @@
 
 html { scroll-behavior: smooth; }
 body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+/* ================================================================== */
+/* Dashboard v4 — Robinhood-style metrics dashboard                    */
+/* ================================================================== */
+
+:root {
+  --db-up: #00C805;
+  --db-up-bg: rgba(0,200,5,0.08);
+  --db-up-bg2: rgba(0,200,5,0.04);
+  --db-down: #FF5000;
+  --db-down-bg: rgba(255,80,0,0.08);
+  --db-black: #0a0a0a;
+  --db-ink: #1a1a1a;
+  --db-ink-2: #555;
+  --db-ink-3: #999;
+  --db-border: #eee;
+  --db-bg: #fff;
+  --db-bg-2: #fafafa;
+  --db-bg-3: #f3f3f3;
+  --db-radius: 14px;
+}
+
+@keyframes dbFadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes dbPulse {
+  0%, 100% { transform: translate(-50%,-50%) scale(1); opacity: .15; }
+  50% { transform: translate(-50%,-50%) scale(1.8); opacity: .04; }
+}
+
+.db-fade {
+  animation: dbFadeUp 0.45s cubic-bezier(.16,1,.3,1) both;
+}
+
+.db-d1 { animation-delay: 0.04s; opacity: 0; }
+.db-d2 { animation-delay: 0.08s; opacity: 0; }
+.db-d3 { animation-delay: 0.12s; opacity: 0; }
+.db-d4 { animation-delay: 0.18s; opacity: 0; }
+.db-d5 { animation-delay: 0.24s; opacity: 0; }
+.db-d6 { animation-delay: 0.30s; opacity: 0; }
+.db-d7 { animation-delay: 0.36s; opacity: 0; }
