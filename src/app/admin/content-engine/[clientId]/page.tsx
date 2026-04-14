@@ -11,13 +11,14 @@ import { createClient } from '@/lib/supabase/client'
 import { assembleClientContext, type ClientContext } from '@/lib/content-engine/context'
 import {
   updateClientGoals, updateClientVoiceNotes, updateCycleDeliverables,
-  updateCycleEvents, updateCycleClientRequests,
+  updateCycleEvents, updateCycleClientRequests, updateContentProfile,
 } from '@/lib/content-engine/actions'
 import EditableSection from '@/components/content-engine/editable-section'
 import { useToast } from '@/components/ui/toast'
 import CalendarView from './calendar-view'
 import BriefsView from './briefs-view'
 import ProductionView from './production-view'
+import ContentProfileSection from './content-profile-section'
 
 type WorkspaceTab = 'context' | 'calendar' | 'briefs' | 'production'
 
@@ -440,6 +441,9 @@ function ContextTab({
           )}
         </div>
       </EditableSection>
+
+      {/* Content Profile — the big one with all strategy fields */}
+      <ContentProfileSection clientId={clientId} context={context} setContext={setContext} toast={toast} />
 
       {/* Client Requests (actionable — no Edit button, always interactive) */}
       {clientRequests.length > 0 && (
