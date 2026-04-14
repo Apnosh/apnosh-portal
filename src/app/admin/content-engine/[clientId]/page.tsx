@@ -158,21 +158,44 @@ export default function ContentEngineWorkspace({
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-ink-6 mb-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-              activeTab === tab.key
-                ? 'border-ink text-ink'
-                : 'border-transparent text-ink-3 hover:text-ink-2'
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
+        {tabs.map((tab) => {
+          const isCalendarApproved = cycle && ['calendar_approved', 'briefs_draft', 'briefs_approved', 'in_production', 'complete'].includes(cycle.status)
+          const isBriefsApproved = cycle && ['briefs_approved', 'in_production', 'complete'].includes(cycle.status)
+          const disabled =
+            (tab.key === 'briefs' && !isCalendarApproved) ||
+            (tab.key === 'production' && !isBriefsApproved)
+
+          return (
+            <button
+              key={tab.key}
+              onClick={() => !disabled && setActiveTab(tab.key)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeTab === tab.key
+                  ? 'border-ink text-ink'
+                  : disabled
+                    ? 'border-transparent text-ink-4 opacity-50 cursor-not-allowed'
+                    : 'border-transparent text-ink-3 hover:text-ink-2'
+              }`}
+              title={disabled ? (tab.key === 'briefs' ? 'Approve calendar first' : 'Approve briefs first') : undefined}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          )
+        })}
       </div>
+
+      {/* Tab prerequisite warnings */}
+      {activeTab === 'briefs' && cycle && !['calendar_approved', 'briefs_draft', 'briefs_approved', 'in_production', 'complete'].includes(cycle.status) && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6">
+          <span className="text-amber-600 text-sm">Approve your calendar first to generate briefs.</span>
+        </div>
+      )}
+      {activeTab === 'production' && cycle && !['briefs_approved', 'in_production', 'complete'].includes(cycle.status) && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6">
+          <span className="text-amber-600 text-sm">Approve briefs first to see production packages.</span>
+        </div>
+      )}
 
       {/* Context Tab */}
       {activeTab === 'context' && context && (

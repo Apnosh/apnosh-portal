@@ -2,12 +2,18 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Sparkles, Loader2, Trash2, RefreshCw, Check, Send,
-  GripVertical, ChevronDown, ChevronUp,
+  Sparkles, Loader2, Trash2, RefreshCw, Check,
+  LayoutList, CalendarDays, Plus,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { generateCalendar, refineCalendarItem } from '@/lib/content-engine/generate-calendar'
+import { updateCalendarItem, deleteCalendarItem, restoreCalendarItem, approveAllCalendarItems } from '@/lib/content-engine/actions'
 import type { ClientContext } from '@/lib/content-engine/context'
+import EditableField from '@/components/content-engine/editable-field'
+import ConfirmModal from '@/components/content-engine/confirm-modal'
+import { CalendarGenerationProgress } from '@/components/content-engine/generation-progress'
+import WeekGrid from '@/components/content-engine/week-grid'
+import { useToast } from '@/components/ui/toast'
 
 interface CalendarItem {
   id: string
@@ -32,18 +38,25 @@ const GOAL_COLORS: Record<string, string> = {
 }
 
 const BATCH_COLORS: Record<string, string> = {
-  A: 'bg-blue-100 text-blue-800',
-  B: 'bg-emerald-100 text-emerald-800',
-  C: 'bg-orange-100 text-orange-800',
-  D: 'bg-purple-100 text-purple-800',
+  A: 'bg-blue-100 text-blue-800', B: 'bg-emerald-100 text-emerald-800',
+  C: 'bg-orange-100 text-orange-800', D: 'bg-purple-100 text-purple-800',
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  reel: 'Reel',
-  feed_post: 'Feed Post',
-  carousel: 'Carousel',
-  story: 'Story',
-}
+const PLATFORM_OPTIONS = [
+  { value: 'instagram', label: 'Instagram' }, { value: 'facebook', label: 'Facebook' },
+  { value: 'tiktok', label: 'TikTok' }, { value: 'linkedin', label: 'LinkedIn' },
+]
+
+const TYPE_OPTIONS = [
+  { value: 'reel', label: 'Reel' }, { value: 'feed_post', label: 'Feed Post' },
+  { value: 'carousel', label: 'Carousel' }, { value: 'story', label: 'Story' },
+  { value: 'static_post', label: 'Static Post' }, { value: 'video', label: 'Video' },
+]
+
+const GOAL_OPTIONS = [
+  { value: 'awareness', label: 'Awareness' }, { value: 'engagement', label: 'Engagement' },
+  { value: 'conversion', label: 'Conversion' }, { value: 'community', label: 'Community' },
+]
 
 interface CalendarViewProps {
   clientId: string
@@ -55,20 +68,23 @@ interface CalendarViewProps {
 }
 
 export default function CalendarView({
-  clientId,
-  cycleId,
-  context,
-  strategyNotes,
-  onCycleCreated,
-  onStatusChange,
+  clientId, cycleId, context, strategyNotes, onCycleCreated, onStatusChange,
 }: CalendarViewProps) {
   const supabase = createClient()
+  const { toast } = useToast()
   const [items, setItems] = useState<CalendarItem[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'list' | 'week'>('list')
+  const [weekStart, setWeekStart] = useState(new Date())
   const [refiningId, setRefiningId] = useState<string | null>(null)
   const [refineText, setRefineText] = useState('')
+
+  // Confirm modals
+  const [confirmDelete, setConfirmDelete] = useState<CalendarItem | null>(null)
+  const [confirmRegen, setConfirmRegen] = useState(false)
+  const [confirmApprove, setConfirmApprove] = useState(false)
   const [approving, setApproving] = useState(false)
 
   const loadItems = useCallback(async () => {
@@ -77,19 +93,37 @@ export default function CalendarView({
       .from('content_calendar_items')
       .select('*')
       .eq('cycle_id', cycleId)
-      .order('sort_order')
+      .order('scheduled_date', { ascending: true })
+      .order('scheduled_time', { ascending: true })
     setItems((data ?? []) as CalendarItem[])
     setLoading(false)
   }, [cycleId, supabase])
 
   useEffect(() => { loadItems() }, [loadItems])
 
+  // Inline save handler
+  const saveField = async (itemId: string, field: string, value: string) => {
+    await updateCalendarItem(itemId, { [field]: value })
+    setItems((prev) => prev.map((i) => i.id === itemId ? { ...i, [field]: value } : i))
+  }
+
+  // Delete with undo
+  const handleDelete = async () => {
+    if (!confirmDelete) return
+    const item = confirmDelete
+    setConfirmDelete(null)
+    setItems((prev) => prev.filter((i) => i.id !== item.id))
+    await deleteCalendarItem(item.id)
+    toast(`Deleted "${item.concept_title}"`, 'info')
+  }
+
+  // Generate
   const handleGenerate = async () => {
     if (!context) return
+    setConfirmRegen(false)
     setGenerating(true)
     setError(null)
 
-    // Ensure cycle exists
     let cId = cycleId
     if (!cId) {
       const { data } = await supabase
@@ -104,258 +138,178 @@ export default function CalendarView({
         })
         .select()
         .single()
-      if (data) {
-        cId = data.id
-        onCycleCreated(data.id)
-      }
+      if (data) { cId = data.id; onCycleCreated(data.id) }
     }
 
     if (!cId) { setError('Failed to create cycle'); setGenerating(false); return }
+
+    // Clear existing items if regenerating
+    if (items.length > 0) {
+      await supabase.from('content_calendar_items').delete().eq('cycle_id', cId)
+      setItems([])
+    }
 
     const result = await generateCalendar(cId, clientId, context, strategyNotes)
     if (result.success) {
       onStatusChange('calendar_draft')
       await loadItems()
+      toast(`Calendar generated: ${result.count} items`, 'success')
     } else {
       setError(result.error ?? 'Generation failed')
     }
     setGenerating(false)
   }
 
+  // Refine
   const handleRefine = async (itemId: string) => {
     if (!context || !refineText.trim()) return
-    setRefiningId(itemId)
     const result = await refineCalendarItem(itemId, refineText, context)
     if (result.success) {
       await loadItems()
       setRefineText('')
       setRefiningId(null)
+      toast('Item refined', 'success')
     }
-    setRefiningId(null)
   }
 
-  const handleDelete = async (itemId: string) => {
-    await supabase.from('content_calendar_items').delete().eq('id', itemId)
-    setItems((prev) => prev.filter((i) => i.id !== itemId))
-  }
-
-  const handleApproveAll = async () => {
+  // Approve all
+  const handleApprove = async () => {
     if (!cycleId) return
     setApproving(true)
-    await supabase
-      .from('content_calendar_items')
-      .update({ status: 'strategist_approved', updated_at: new Date().toISOString() })
-      .eq('cycle_id', cycleId)
-      .eq('status', 'draft')
-
-    await supabase
-      .from('content_cycles')
-      .update({
-        status: 'calendar_approved',
-        calendar_approved_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', cycleId)
-
-    onStatusChange('calendar_approved')
-    await loadItems()
+    setConfirmApprove(false)
+    const result = await approveAllCalendarItems(cycleId)
+    if (result.success) {
+      onStatusChange('calendar_approved')
+      await loadItems()
+      toast('Calendar approved', 'success')
+    }
     setApproving(false)
   }
 
-  // Compute strategy summary from items
-  const summary = computeSummary(items)
+  // Summary
+  const typeCount = new Map<string, number>()
+  const batchCount = new Map<string, number>()
+  for (const item of items) {
+    typeCount.set(item.content_type, (typeCount.get(item.content_type) ?? 0) + 1)
+    if (item.filming_batch) batchCount.set(item.filming_batch, (batchCount.get(item.filming_batch) ?? 0) + 1)
+  }
 
-  // Empty state — no items yet
-  if (!loading && items.length === 0) {
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-ink-4" /></div>
+
+  // Empty + generating
+  if (items.length === 0 && !generating) {
     return (
       <div className="text-center py-16">
         <Sparkles className="w-10 h-10 text-ink-4 mx-auto mb-4" />
         <h2 className="text-lg font-bold text-ink mb-2">Generate your content calendar</h2>
         <p className="text-sm text-ink-3 max-w-md mx-auto mb-6">
-          The AI will create a full month of content based on the client's profile, performance data, and your strategy notes.
+          AI will create a full month of content based on the client's profile, performance data, and your strategy notes.
         </p>
         {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors disabled:opacity-50"
-        >
-          {generating ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Creating calendar...</>
-          ) : (
-            <><Sparkles className="w-4 h-4" /> Generate Calendar</>
-          )}
+        <button onClick={handleGenerate} disabled={generating} className="inline-flex items-center gap-2 px-6 py-3 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors disabled:opacity-50">
+          <Sparkles className="w-4 h-4" /> Generate Calendar
         </button>
       </div>
     )
   }
 
-  if (loading) {
-    return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-ink-4" /></div>
+  if (generating) {
+    return <CalendarGenerationProgress total={15} completed={0} />
   }
 
   return (
-    <div className="space-y-5">
-      {/* Strategy Summary */}
-      {summary && (
-        <div className="bg-bg-2 rounded-xl p-4 text-sm text-ink-2">
-          <strong>This month:</strong> {summary.typeBreakdown}.{' '}
-          <strong>Batch filming:</strong> {summary.batchBreakdown}.{' '}
-          <strong>Cadence:</strong> {summary.cadence}.
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-ink-3">
+          {items.length} items &middot;{' '}
+          {[...typeCount.entries()].map(([t, c]) => `${c} ${t.replace('_', ' ')}${c > 1 ? 's' : ''}`).join(', ')}
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex rounded-lg border border-ink-6 overflow-hidden">
+            <button onClick={() => setViewMode('list')} className={`p-1.5 ${viewMode === 'list' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`}>
+              <LayoutList className="w-4 h-4" />
+            </button>
+            <button onClick={() => setViewMode('week')} className={`p-1.5 ${viewMode === 'week' ? 'bg-ink text-white' : 'text-ink-3 hover:bg-bg-2'}`}>
+              <CalendarDays className="w-4 h-4" />
+            </button>
+          </div>
+          <button onClick={() => items.length > 0 ? setConfirmRegen(true) : handleGenerate()} disabled={generating} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-ink-5 rounded-lg hover:bg-bg-2 transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" /> Regenerate
+          </button>
+        </div>
+      </div>
 
       {error && <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{error}</p>}
 
-      {/* Calendar items */}
-      <div className="space-y-2">
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className="bg-white rounded-xl border border-ink-6 p-4 hover:border-ink-5 transition-colors"
-          >
-            <div className="flex items-start gap-3">
-              <GripVertical className="w-4 h-4 text-ink-4 mt-1 flex-shrink-0 cursor-grab" />
-              <div className="flex-1 min-w-0">
-                {/* Top row */}
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="text-xs text-ink-3 font-medium">
-                    {item.scheduled_date} {item.scheduled_time}
-                  </span>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize bg-ink-6 text-ink-3">
-                    {item.platform}
-                  </span>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-ink text-white">
-                    {TYPE_LABELS[item.content_type] ?? item.content_type}
-                  </span>
-                  {item.strategic_goal && (
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize ${GOAL_COLORS[item.strategic_goal] ?? ''}`}>
-                      {item.strategic_goal}
-                    </span>
-                  )}
-                  {item.filming_batch && (
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${BATCH_COLORS[item.filming_batch] ?? 'bg-ink-6 text-ink-3'}`}>
-                      Batch {item.filming_batch}
-                    </span>
-                  )}
-                  <span className="text-[10px] text-ink-4 capitalize">{item.source}</span>
-                </div>
+      {/* Week view */}
+      {viewMode === 'week' && (
+        <WeekGrid items={items} weekStart={weekStart} onWeekChange={setWeekStart} onItemClick={() => setViewMode('list')} />
+      )}
 
-                {/* Title & description */}
-                <h3 className="text-sm font-semibold text-ink">{item.concept_title}</h3>
-                {item.concept_description && (
-                  <p className="text-xs text-ink-3 mt-1 line-clamp-2">{item.concept_description}</p>
+      {/* List view */}
+      {viewMode === 'list' && (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <div key={item.id} className="bg-white rounded-xl border border-ink-6 p-4 hover:border-ink-5 transition-colors">
+              {/* Top row: date + badges */}
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <EditableField value={item.scheduled_date} onSave={(v) => saveField(item.id, 'scheduled_date', v)} type="date" displayClassName="text-xs text-ink-3 font-medium" />
+                <EditableField value={item.scheduled_time || ''} onSave={(v) => saveField(item.id, 'scheduled_time', v)} type="time" displayClassName="text-xs text-ink-3" placeholder="Time" />
+                <EditableField value={item.platform} onSave={(v) => saveField(item.id, 'platform', v)} type="select" options={PLATFORM_OPTIONS} displayClassName="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-ink-6 text-ink-3 capitalize" />
+                <EditableField value={item.content_type} onSave={(v) => saveField(item.id, 'content_type', v)} type="select" options={TYPE_OPTIONS} displayClassName="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-ink text-white" />
+                {item.strategic_goal && (
+                  <EditableField value={item.strategic_goal} onSave={(v) => saveField(item.id, 'strategic_goal', v)} type="select" options={GOAL_OPTIONS} displayClassName={`text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize ${GOAL_COLORS[item.strategic_goal] ?? ''}`} />
                 )}
-
-                {/* Refine input */}
-                {refiningId === item.id && (
-                  <div className="flex gap-2 mt-3">
-                    <input
-                      value={refineText}
-                      onChange={(e) => setRefineText(e.target.value)}
-                      placeholder="Direction for AI refinement..."
-                      className="flex-1 text-sm border border-ink-6 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30"
-                      onKeyDown={(e) => e.key === 'Enter' && handleRefine(item.id)}
-                    />
-                    <button
-                      onClick={() => handleRefine(item.id)}
-                      className="px-3 py-1.5 bg-brand text-white text-xs font-medium rounded-lg"
-                    >
-                      Refine
-                    </button>
-                    <button
-                      onClick={() => { setRefiningId(null); setRefineText('') }}
-                      className="px-3 py-1.5 text-xs text-ink-3"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+                {item.filming_batch && (
+                  <EditableField value={item.filming_batch} onSave={(v) => saveField(item.id, 'filming_batch', v)} displayClassName={`text-[10px] font-bold px-1.5 py-0.5 rounded ${BATCH_COLORS[item.filming_batch] ?? 'bg-ink-6 text-ink-3'}`} placeholder="Batch" />
                 )}
               </div>
 
+              {/* Title + description */}
+              <EditableField value={item.concept_title} onSave={(v) => saveField(item.id, 'concept_title', v)} displayClassName="text-sm font-semibold text-ink" placeholder="Concept title" />
+              {(item.concept_description || true) && (
+                <div className="mt-1">
+                  <EditableField value={item.concept_description ?? ''} onSave={(v) => saveField(item.id, 'concept_description', v)} type="textarea" displayClassName="text-xs text-ink-3" placeholder="Add a description..." rows={2} />
+                </div>
+              )}
+
+              {/* Refine input */}
+              {refiningId === item.id && (
+                <div className="flex gap-2 mt-3">
+                  <input value={refineText} onChange={(e) => setRefineText(e.target.value)} placeholder="Direction for AI refinement..." className="flex-1 text-sm border border-ink-6 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30" onKeyDown={(e) => e.key === 'Enter' && handleRefine(item.id)} />
+                  <button onClick={() => handleRefine(item.id)} className="px-3 py-1.5 bg-brand text-white text-xs font-medium rounded-lg">Refine</button>
+                  <button onClick={() => { setRefiningId(null); setRefineText('') }} className="px-3 py-1.5 text-xs text-ink-3">Cancel</button>
+                </div>
+              )}
+
               {/* Actions */}
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  onClick={() => setRefiningId(refiningId === item.id ? null : item.id)}
-                  className="p-1.5 text-ink-4 hover:text-brand rounded-lg hover:bg-bg-2 transition-colors"
-                  title="Refine with AI"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-1 mt-2 pt-2 border-t border-ink-6">
+                <button onClick={() => setRefiningId(refiningId === item.id ? null : item.id)} className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-brand hover:bg-brand-tint rounded transition-colors">
+                  <Sparkles className="w-3 h-3" /> AI Refine
                 </button>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  className="p-1.5 text-ink-4 hover:text-red-500 rounded-lg hover:bg-bg-2 transition-colors"
-                  title="Delete"
-                >
+                <div className="flex-1" />
+                <button onClick={() => setConfirmDelete(item)} className="p-1.5 text-ink-4 hover:text-red-500 rounded-lg hover:bg-bg-2 transition-colors">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+      )}
+
+      {/* Approve bar */}
+      <div className="flex items-center gap-3 pt-4 border-t border-ink-6">
+        <button onClick={() => setConfirmApprove(true)} disabled={approving || items.length === 0} className="inline-flex items-center gap-2 px-6 py-2.5 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors disabled:opacity-50">
+          {approving ? <><Loader2 className="w-4 h-4 animate-spin" /> Approving...</> : <><Check className="w-4 h-4" /> Approve Calendar ({items.length} items)</>}
+        </button>
       </div>
 
-      {/* Approve */}
-      <div className="flex items-center gap-3 pt-4 border-t border-ink-6">
-        <button
-          onClick={handleApproveAll}
-          disabled={approving || items.length === 0}
-          className="inline-flex items-center gap-2 px-6 py-2.5 bg-brand text-white text-sm font-semibold rounded-xl hover:bg-brand-dark transition-colors disabled:opacity-50"
-        >
-          {approving ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Approving...</>
-          ) : (
-            <><Check className="w-4 h-4" /> Approve Calendar ({items.length} items)</>
-          )}
-        </button>
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="inline-flex items-center gap-2 px-4 py-2.5 border border-ink-5 text-sm font-medium rounded-xl hover:bg-bg-2 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
-          Regenerate all
-        </button>
-      </div>
+      {/* Modals */}
+      <ConfirmModal open={!!confirmDelete} onConfirm={handleDelete} onCancel={() => setConfirmDelete(null)} title="Delete this item?" description={`"${confirmDelete?.concept_title}" will be removed from the calendar.`} confirmLabel="Delete" variant="danger" />
+      <ConfirmModal open={confirmRegen} onConfirm={handleGenerate} onCancel={() => setConfirmRegen(false)} title="Regenerate calendar?" description={`This will replace all ${items.length} items. Any manual edits will be lost.`} confirmLabel="Regenerate" variant="danger" />
+      <ConfirmModal open={confirmApprove} onConfirm={handleApprove} onCancel={() => setConfirmApprove(false)} title="Approve entire calendar?" description={`${items.length} items will be marked as approved and move to the briefs phase.`} confirmLabel="Approve All" variant="primary" loading={approving} />
     </div>
   )
-}
-
-// ---------------------------------------------------------------------------
-// Summary computation
-// ---------------------------------------------------------------------------
-
-function computeSummary(items: CalendarItem[]) {
-  if (items.length === 0) return null
-
-  const types = new Map<string, number>()
-  const batches = new Map<string, number>()
-  for (const item of items) {
-    types.set(item.content_type, (types.get(item.content_type) ?? 0) + 1)
-    if (item.filming_batch) {
-      batches.set(item.filming_batch, (batches.get(item.filming_batch) ?? 0) + 1)
-    }
-  }
-
-  const typeBreakdown = [...types.entries()]
-    .map(([t, c]) => `${c} ${TYPE_LABELS[t] ?? t}${c > 1 ? 's' : ''}`)
-    .join(', ')
-
-  const batchBreakdown = batches.size > 0
-    ? `${batches.size} session${batches.size > 1 ? 's' : ''} (${[...batches.entries()].map(([b, c]) => `${b}: ${c} items`).join(', ')})`
-    : 'No batches'
-
-  // Compute weekly cadence
-  const weeks = new Set(items.map((i) => {
-    const d = new Date(i.scheduled_date + 'T12:00:00')
-    const weekNum = Math.ceil(d.getDate() / 7)
-    return weekNum
-  }))
-  const perWeek = Math.round(items.length / Math.max(weeks.size, 1))
-
-  return {
-    typeBreakdown,
-    batchBreakdown,
-    cadence: `~${perWeek}x/week`,
-  }
 }
