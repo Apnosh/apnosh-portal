@@ -257,30 +257,50 @@ export default function BrainstormView({
             return (
               <div key={idea.id} className={`bg-white rounded-xl border p-4 hover:shadow-sm transition-all group ${fmt?.color.split(' ').find((c) => c.startsWith('border-')) ?? 'border-ink-6'}`}>
                 {/* Header: format + platform + delete */}
+                {/* Content Type — prominent toggle */}
+                <div className="flex gap-1 mb-2">
+                  {FORMAT_OPTIONS.map((f) => {
+                    const FIcon = f.icon
+                    const isActive = idea.content_type === (f.value === 'graphic' ? 'feed_post' : f.value) || (f.value === 'graphic' && idea.content_type === 'static_post')
+                    return (
+                      <button
+                        key={f.value}
+                        onClick={() => handleUpdateField(idea.id, 'content_type', f.value === 'graphic' ? 'feed_post' : f.value)}
+                        className={`flex items-center gap-1 px-2 py-1 text-[9px] font-semibold rounded-md transition-colors ${
+                          isActive ? f.color : 'text-ink-4 hover:text-ink-3'
+                        }`}
+                      >
+                        <FIcon className="w-3 h-3" />
+                        {f.label}
+                      </button>
+                    )
+                  })}
+                  <div className="flex-1" />
+                  <button onClick={() => handleDelete(idea.id)} className="p-1 text-ink-5 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {/* Category + Platform row */}
                 <div className="flex items-center gap-2 mb-2">
-                  <FmtIcon className="w-3.5 h-3.5 flex-shrink-0" />
                   <select
-                    value={idea.content_type}
-                    onChange={(e) => handleUpdateField(idea.id, 'content_type', e.target.value)}
-                    className="text-[10px] font-semibold bg-transparent border-none focus:outline-none cursor-pointer capitalize"
+                    defaultValue=""
+                    className="text-[10px] text-ink-3 bg-bg-2 border border-ink-6 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand/30"
                   >
-                    {FORMAT_OPTIONS.map((f) => (
-                      <option key={f.value} value={f.value === 'graphic' ? 'feed_post' : f.value}>{f.label}</option>
+                    <option value="">Category</option>
+                    {CATEGORY_OPTIONS.map((c) => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
                     ))}
                   </select>
-                  <div className="flex-1" />
                   <select
                     value={idea.platform}
                     onChange={(e) => handleUpdateField(idea.id, 'platform', e.target.value)}
-                    className="text-[10px] text-ink-3 bg-transparent border-none focus:outline-none cursor-pointer"
+                    className="text-[10px] text-ink-3 bg-bg-2 border border-ink-6 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-brand/30"
                   >
                     {PLATFORM_OPTIONS.map((p) => (
                       <option key={p.value} value={p.value}>{p.label}</option>
                     ))}
                   </select>
-                  <button onClick={() => handleDelete(idea.id)} className="p-1 text-ink-5 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
-                    <Trash2 className="w-3 h-3" />
-                  </button>
                 </div>
 
                 {/* Title — editable */}
@@ -299,16 +319,18 @@ export default function BrainstormView({
                   onBlur={(e) => handleUpdateField(idea.id, 'concept_description', e.target.value)}
                   className="text-xs text-ink-3 w-full bg-transparent border-none focus:outline-none focus:ring-0 p-0 mb-2 resize-none"
                   rows={2}
-                  placeholder="Brief description of the idea..."
+                  placeholder="Brief description — what should this post communicate?"
                 />
 
                 {/* Date */}
-                <input
-                  type="date"
-                  value={idea.scheduled_date}
-                  onChange={(e) => handleUpdateField(idea.id, 'scheduled_date', e.target.value)}
-                  className="text-[10px] text-ink-3 bg-transparent border-none focus:outline-none cursor-pointer"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={idea.scheduled_date}
+                    onChange={(e) => handleUpdateField(idea.id, 'scheduled_date', e.target.value)}
+                    className="text-[10px] text-ink-3 bg-transparent border-none focus:outline-none cursor-pointer"
+                  />
+                </div>
               </div>
             )
           })}
@@ -326,39 +348,61 @@ export default function BrainstormView({
 
       {/* New idea form (inline) */}
       {addingNew && (
-        <div className="bg-white rounded-xl border border-brand/30 p-4 shadow-sm space-y-3">
+        <div className="bg-white rounded-xl border border-brand/30 p-5 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-ink">New Content Idea</h3>
             <button onClick={() => setAddingNew(false)} className="p-1 text-ink-4 hover:text-ink"><X className="w-4 h-4" /></button>
           </div>
-          <input
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="What's this post about?"
-            className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-            autoFocus
-          />
-          <textarea
-            value={newDescription}
-            onChange={(e) => setNewDescription(e.target.value)}
-            placeholder="Brief description — what's the idea, what should it communicate?"
-            rows={2}
-            className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
-          />
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div>
-              <label className="text-[10px] text-ink-4 block mb-0.5">Format</label>
-              <select value={newFormat} onChange={(e) => setNewFormat(e.target.value)} className="w-full text-xs border border-ink-6 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30">
-                {FORMAT_OPTIONS.map((f) => (<option key={f.value} value={f.value}>{f.label}</option>))}
-              </select>
+
+          {/* Content type — prominent toggle first */}
+          <div>
+            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-2">What type of content?</label>
+            <div className="flex gap-2">
+              {FORMAT_OPTIONS.map((f) => {
+                const FIcon = f.icon
+                const active = newFormat === f.value
+                return (
+                  <button key={f.value} onClick={() => setNewFormat(f.value)} className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors ${active ? f.color : 'border-ink-6 text-ink-3 hover:border-ink-5'}`}>
+                    <FIcon className="w-3.5 h-3.5" /> {f.label}
+                  </button>
+                )
+              })}
             </div>
-            <div>
-              <label className="text-[10px] text-ink-4 block mb-0.5">Category</label>
-              <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className="w-full text-xs border border-ink-6 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30">
-                <option value="">Optional</option>
-                {CATEGORY_OPTIONS.map((c) => (<option key={c.value} value={c.value}>{c.label}</option>))}
-              </select>
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-2">What's it about?</label>
+            <div className="flex flex-wrap gap-1.5">
+              {CATEGORY_OPTIONS.map((c) => (
+                <button key={c.value} onClick={() => setNewCategory(c.value)} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${newCategory === c.value ? 'bg-brand-tint border-brand/30 text-brand-dark' : 'border-ink-6 text-ink-3 hover:border-ink-5'}`}>
+                  {c.label}
+                </button>
+              ))}
             </div>
+          </div>
+
+          {/* Title + Description */}
+          <div>
+            <label className="text-[10px] font-semibold text-ink-3 uppercase tracking-wider block mb-1">Idea</label>
+            <input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="What's this post about?"
+              className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand mb-2"
+              autoFocus
+            />
+            <textarea
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              placeholder="Brief description — what should this post communicate? What details matter?"
+              rows={2}
+              className="w-full text-sm border border-ink-6 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+            />
+          </div>
+
+          {/* Platform + Date */}
+          <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-ink-4 block mb-0.5">Platform</label>
               <select value={newPlatform} onChange={(e) => setNewPlatform(e.target.value)} className="w-full text-xs border border-ink-6 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30">
@@ -370,8 +414,8 @@ export default function BrainstormView({
               <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="w-full text-xs border border-ink-6 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand/30" />
             </div>
           </div>
-          <button onClick={handleAddIdea} disabled={!newTitle.trim()} className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand text-white text-xs font-semibold rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50">
-            <Plus className="w-3 h-3" /> Add Idea
+          <button onClick={handleAddIdea} disabled={!newTitle.trim()} className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 bg-brand text-white text-sm font-semibold rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50">
+            <Plus className="w-4 h-4" /> Add Idea
           </button>
         </div>
       )}
