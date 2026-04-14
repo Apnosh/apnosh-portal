@@ -94,6 +94,21 @@ SOCIAL HANDLES: ${Object.entries(context.socialHandles).filter(([,v]) => v).map(
     if (parts.length) blocks.push(`HASHTAG STRATEGY:\n${parts.join('\n')}`)
   }
 
+  // Content defaults
+  const defaults = context.contentDefaults as Record<string, unknown> ?? {}
+  const defaultTimes = defaults.default_times as Record<string, string> | undefined
+  const defaultPlatforms = defaults.default_platforms as string[] | undefined
+  const defaultGoal = defaults.default_goal as string | undefined
+
+  if (defaultTimes) {
+    blocks.push(`DEFAULT POSTING TIMES (use these unless performance data suggests better times):
+${Object.entries(defaultTimes).map(([day, time]) => `- ${day}: ${time}`).join('\n')}`)
+  }
+
+  if (defaultGoal) {
+    blocks.push(`DEFAULT STRATEGIC GOAL: ${defaultGoal} (vary across calendar for balance, but weight toward this)`)
+  }
+
   if (context.performance) {
     blocks.push(`PERFORMANCE DATA (last 60 days):
 - Reach trend: ${context.performance.reachTrend}
@@ -215,22 +230,36 @@ Respond ONLY with valid JSON — no preamble, no markdown, no explanation.`,
       return 'awareness'
     }
 
+    // Apply auto_cross_post: if enabled, add all default platforms except the primary
+    const autoCrossPost = defaults.auto_cross_post as boolean ?? false
+    const crossPostPlatforms = autoCrossPost && defaultPlatforms
+      ? defaultPlatforms.filter((p) => p !== 'all')
+      : []
+
     // Insert items
-    const rows = items.map((item, i) => ({
-      cycle_id: cycleId,
-      client_id: clientId,
-      scheduled_date: item.scheduled_date,
-      scheduled_time: item.scheduled_time,
-      platform: normalizePlatform(item.platform),
-      content_type: normalizeType(item.content_type),
-      concept_title: item.concept_title,
-      concept_description: item.concept_description,
-      strategic_goal: normalizeGoal(item.strategic_goal),
-      filming_batch: item.filming_batch,
-      source: item.source ?? 'ai',
-      status: 'draft',
-      sort_order: i,
-    }))
+    const rows = items.map((item, i) => {
+      const primaryPlatform = normalizePlatform(item.platform)
+      const additional = autoCrossPost
+        ? crossPostPlatforms.filter((p) => p !== primaryPlatform)
+        : []
+
+      return {
+        cycle_id: cycleId,
+        client_id: clientId,
+        scheduled_date: item.scheduled_date,
+        scheduled_time: item.scheduled_time,
+        platform: primaryPlatform,
+        additional_platforms: additional.length > 0 ? additional : [],
+        content_type: normalizeType(item.content_type),
+        concept_title: item.concept_title,
+        concept_description: item.concept_description,
+        strategic_goal: normalizeGoal(item.strategic_goal),
+        filming_batch: item.filming_batch,
+        source: item.source ?? 'ai',
+        status: 'draft',
+        sort_order: i,
+      }
+    })
 
     const { error } = await supabase.from('content_calendar_items').insert(rows)
     if (error) return { success: false, error: error.message }
