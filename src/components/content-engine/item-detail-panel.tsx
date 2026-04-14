@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   X, ChevronUp, ChevronDown, Check, Trash2, Sparkles, Loader2,
-  Camera, Globe, Video, MessageCircle, Clock, Target, Layers, Film,
+  Camera, Globe, Video, MessageCircle, Clock, Target, Layers,
 } from 'lucide-react'
 import type { CalendarItemData } from './calendar-item-row'
 
@@ -314,37 +314,10 @@ export default function ItemDetailPanel({
             </div>
           </div>
 
-          {/* Platform Preview */}
-          <div>
-            <label className="text-[10px] font-semibold text-ink-4 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-              <Film className="w-3 h-3" /> Preview
-            </label>
-            <div className="bg-ink rounded-xl p-4 text-white">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-                  <PlatformIcon className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-semibold">Your Brand</div>
-                  <div className="text-[10px] text-white/50">{platform}</div>
-                </div>
-              </div>
-              <div className="bg-white/10 rounded-lg aspect-square mb-3 flex items-center justify-center">
-                <span className={`text-xs font-semibold px-2 py-1 rounded ${tc}`}>
-                  {contentType.replace(/_/g, ' ')}
-                </span>
-              </div>
-              <p className="text-xs text-white/80 leading-relaxed">
-                <strong className="text-white">{title || 'Untitled post'}</strong>
-                {description && <><br />{description.slice(0, 120)}{description.length > 120 ? '...' : ''}</>}
-              </p>
-            </div>
-          </div>
-
-          {/* Meta info */}
-          <div className="text-[10px] text-ink-4 space-y-0.5">
-            <p>Source: {item.source}</p>
-            <p>Status: {item.status.replace(/_/g, ' ')}</p>
+          {/* Meta */}
+          <div className="flex items-center gap-3 text-[10px] text-ink-4 pt-2 border-t border-ink-6">
+            <span className="capitalize">Source: {item.source}</span>
+            <span>Status: {item.status.replace(/_/g, ' ')}</span>
           </div>
         </div>
 
