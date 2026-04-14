@@ -22,13 +22,14 @@ export async function generateCalendar(
   cycleId: string,
   clientId: string,
   context: ClientContext,
-  strategyNotes: string
+  strategyNotes: string,
+  targetMonth?: string // YYYY-MM-DD format, defaults to current month
 ): Promise<{ success: boolean; error?: string; count?: number }> {
   const supabase = await createClient()
 
-  const now = new Date()
-  const month = now.toLocaleDateString('en-US', { month: 'long' })
-  const year = now.getFullYear()
+  const targetDate = targetMonth ? new Date(targetMonth + 'T12:00:00') : new Date()
+  const month = targetDate.toLocaleDateString('en-US', { month: 'long' })
+  const year = targetDate.getFullYear()
 
   const d = context.deliverables
   const total = d.reels + d.feed_posts + d.stories + d.carousels

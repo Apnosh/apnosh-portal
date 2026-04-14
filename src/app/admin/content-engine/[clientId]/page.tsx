@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, use } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, Sparkles, BarChart3, FileText, Clock, Users,
-  ChevronDown, ChevronUp, Save, Loader2, Check, Calendar as CalIcon,
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Save, Loader2, Check, Calendar as CalIcon,
   Zap, Star, BookOpen, X,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -47,9 +47,19 @@ export default function ContentEngineWorkspace({
   const [strategyNotes, setStrategyNotes] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesSaved, setNotesSaved] = useState(false)
+  const [selectedMonth, setSelectedMonth] = useState(
+    new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+  )
 
-  const currentMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-    .toISOString().split('T')[0]
+  const currentMonth = selectedMonth
+
+  // Reset state when month changes
+  useEffect(() => {
+    setCycle(null)
+    setActiveTab('context')
+    setStrategyNotes('')
+    setLoading(true)
+  }, [selectedMonth])
 
   const load = useCallback(async () => {
     const [ctx, { data: client }, { data: cycleRow }] = await Promise.all([
@@ -151,7 +161,29 @@ export default function ContentEngineWorkspace({
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-ink">{clientName}</h1>
-          <p className="text-sm text-ink-3">{monthLabel} content plan</p>
+          <div className="flex items-center gap-2 mt-1">
+            <button
+              onClick={() => {
+                const d = new Date(selectedMonth + 'T12:00:00')
+                d.setMonth(d.getMonth() - 1)
+                setSelectedMonth(d.toISOString().split('T')[0])
+              }}
+              className="p-0.5 text-ink-4 hover:text-ink rounded transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-medium text-ink min-w-[130px] text-center">{monthLabel}</span>
+            <button
+              onClick={() => {
+                const d = new Date(selectedMonth + 'T12:00:00')
+                d.setMonth(d.getMonth() + 1)
+                setSelectedMonth(d.toISOString().split('T')[0])
+              }}
+              className="p-0.5 text-ink-4 hover:text-ink rounded transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
         {cycle && (
           <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-ink-6 text-ink-3">
