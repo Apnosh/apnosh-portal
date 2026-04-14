@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { generateBriefs, refineBriefField } from '@/lib/content-engine/generate-briefs'
+import { syncCalendarToQueue } from '@/lib/content-engine/sync-to-queue'
 import type { ClientContext } from '@/lib/content-engine/context'
 
 interface BriefItem {
@@ -104,6 +105,9 @@ export default function BriefsView({ cycleId, clientId, context, onStatusChange 
         updated_at: new Date().toISOString(),
       })
       .eq('id', cycleId)
+
+    // Sync approved items to content_queue so clients can see them
+    await syncCalendarToQueue(cycleId, clientId)
 
     onStatusChange('briefs_approved')
     await loadItems()
