@@ -154,8 +154,47 @@ function OverviewDashboard({ items }: { items: ContentItem[] }) {
     stages.some((s) => (item[s] as string) === 'blocked')
   )
 
+  // Needs attention items
+  const needsAttention: Array<{ title: string; issue: string; severity: 'red' | 'yellow' }> = []
+  const today = new Date().toISOString().split('T')[0]
+  items.forEach((item) => {
+    const title = (item.concept_title as string) ?? ''
+    const isVideo = ['reel', 'video', 'short_form_video'].includes((item.content_type as string) ?? '')
+    // No filming date on a video that needs filming
+    if (isVideo && !['client_provides', 'animation', 'stock'].includes((item.footage_source as string) ?? '') && !(item.shoot_date as string) && (item.filming_status as string) !== 'filmed') {
+      needsAttention.push({ title, issue: 'No filming date set', severity: 'red' })
+    }
+    // Filming overdue
+    if ((item.shoot_date as string) && (item.shoot_date as string) < today && (item.filming_status as string) !== 'filmed') {
+      needsAttention.push({ title, issue: 'Filming overdue', severity: 'red' })
+    }
+    // Blocked items
+    if (stages.some((st) => (item[st] as string) === 'blocked')) {
+      needsAttention.push({ title, issue: 'Blocked', severity: 'red' })
+    }
+  })
+
   return (
     <div className="space-y-5">
+      {/* Needs attention */}
+      {needsAttention.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <h3 className="text-xs font-bold text-red-700 mb-2 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Needs Attention
+          </h3>
+          <div className="space-y-1.5">
+            {needsAttention.map((a, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.severity === 'red' ? 'bg-red-400' : 'bg-amber-400'}`} />
+                <span className="font-medium text-ink">{a.title}</span>
+                <span className="text-ink-4">—</span>
+                <span className={a.severity === 'red' ? 'text-red-600' : 'text-amber-600'}>{a.issue}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Overall progress */}
       <div className="bg-white rounded-xl border border-ink-6 p-5">
         <div className="flex items-center justify-between mb-3">
