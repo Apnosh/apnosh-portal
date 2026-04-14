@@ -129,6 +129,9 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
     return <div className="text-center py-16 text-sm text-ink-3">No content items yet. Go to the Brainstorm tab first.</div>
   }
 
+  // Content defaults from context
+  const contentDefaults = (context?.contentDefaults ?? {}) as Record<string, unknown>
+
   // Render the right form based on content type
   const renderForm = (item: ContentItem) => {
     const type = item.content_type as string
@@ -136,7 +139,7 @@ export default function ContentDetailsView({ cycleId, clientId, context }: Conte
     if (['reel', 'video', 'short_form_video'].includes(type)) return <ReelForm data={data} onSave={saveField} />
     if (type === 'carousel') return <CarouselForm data={data} onSave={saveField} />
     if (type === 'story') return <StoryForm data={data} onSave={saveField} />
-    return <FeedPostForm data={data} onSave={saveField} />
+    return <FeedPostForm data={data} onSave={saveField} defaults={contentDefaults} />
   }
 
   return (
