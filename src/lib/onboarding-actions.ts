@@ -124,3 +124,44 @@ export async function getConnectedPlatforms(clientId: string): Promise<Record<st
   }
   return connected
 }
+
+/**
+ * Get connected platforms for the current user's client.
+ * Uses admin client to bypass RLS. Returns platform + username pairs.
+ */
+export async function getMyConnectedPlatforms(): Promise<Array<{ platform: string; username: string | null; page_name: string | null }>> {
+  const { createClient: createServerClient } = await import('@/lib/supabase/server')
+  const userSupabase = await createServerClient()
+  const { data: { user } } = await userSupabase.auth.getUser()
+  if (!user) return []
+
+  // Resolve client_id via businesses
+  const supabase = createAdminClient()
+  const { data: biz } = await supabase
+    .from('businesses')
+    .select('client_id')
+    .eq('owner_id', user.id)
+    .maybeSingle()
+
+  let clientId = biz?.client_id
+
+  // Fallback to client_users
+  if (!clientId) {
+    const { data: cu } = await supabase
+      .from('client_users')
+      .select('client_id')
+      .eq('auth_user_id', user.id)
+      .maybeSingle()
+    clientId = cu?.client_id
+  }
+
+  if (!clientId) return []
+
+  const { data } = await supabase
+    .from('platform_connections')
+    .select('platform, username, page_name')
+    .eq('client_id', clientId)
+    .not('access_token', 'is', null)
+
+  return (data ?? []) as Array<{ platform: string; username: string | null; page_name: string | null }>
+}

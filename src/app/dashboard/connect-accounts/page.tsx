@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   Check, Loader2, Camera, Globe, Tv, Briefcase, Link as LinkIcon,
   ArrowRight, Sparkles,
 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 import { useClient } from '@/lib/client-context'
+import { getMyConnectedPlatforms } from '@/lib/onboarding-actions'
 
 const PLATFORMS = [
   {
@@ -51,7 +51,6 @@ interface Connection {
 }
 
 export default function ConnectAccountsPage() {
-  const supabase = createClient()
   const { client, loading: clientLoading } = useClient()
 
   const [connections, setConnections] = useState<Connection[]>([])
@@ -59,21 +58,14 @@ export default function ConnectAccountsPage() {
 
   useEffect(() => {
     if (clientLoading) return
-    if (!client?.id) { setLoading(false); return }
 
-    const clientId = client.id
     async function load() {
-      const { data } = await supabase
-        .from('platform_connections')
-        .select('platform, username, page_name')
-        .eq('client_id', clientId)
-        .not('access_token', 'is', null)
-      setConnections((data ?? []) as Connection[])
+      const data = await getMyConnectedPlatforms()
+      setConnections(data)
       setLoading(false)
     }
     load()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client?.id, clientLoading])
+  }, [clientLoading])
 
   function isConnected(platform: string) {
     return connections.some(c => c.platform === platform)
