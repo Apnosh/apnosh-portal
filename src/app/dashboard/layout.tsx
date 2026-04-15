@@ -46,7 +46,7 @@ const navSections: NavSection[] = [
   {
     label: null,
     items: [
-      { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
+      { label: 'Executive Summary', href: '/dashboard', icon: LayoutDashboard, exact: true },
     ],
   },
   {
