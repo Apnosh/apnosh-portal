@@ -29,16 +29,26 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
 
   // Ensure a clients record exists for OAuth
   useEffect(() => {
-    if (!businessId) return
+    if (!businessId) {
+      console.log('[connect] No businessId yet')
+      return
+    }
     async function init() {
-      const cId = await ensureClientForBusiness(businessId!)
-      setClientId(cId)
-      // Also load any already-connected platforms
-      if (cId) {
-        const connected = await getConnectedPlatforms(cId)
-        if (Object.keys(connected).length > 0) {
-          update('connected', { ...data.connected, ...connected })
+      console.log('[connect] Ensuring client for business:', businessId)
+      try {
+        const cId = await ensureClientForBusiness(businessId!)
+        console.log('[connect] Got clientId:', cId)
+        setClientId(cId)
+        // Also load any already-connected platforms
+        if (cId) {
+          const connected = await getConnectedPlatforms(cId)
+          console.log('[connect] Connected platforms:', connected)
+          if (Object.keys(connected).length > 0) {
+            update('connected', { ...data.connected, ...connected })
+          }
         }
+      } catch (err) {
+        console.error('[connect] Error:', err)
       }
     }
     init()
@@ -74,11 +84,16 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
 
   function connectPlatform(name: string) {
     const authPath = OAUTH_PATHS[name]
+    console.log('[connect] Platform:', name, 'authPath:', authPath, 'clientId:', clientId)
     if (!authPath || !clientId) {
-      // No OAuth available (Google Business, Yelp) — just toggle visual state
-      const connected = { ...data.connected }
-      connected[name] = !connected[name]
-      update('connected', connected)
+      if (!authPath) {
+        // No OAuth available (Google Business, Yelp) — just toggle visual state
+        const connected = { ...data.connected }
+        connected[name] = !connected[name]
+        update('connected', connected)
+      } else {
+        console.error('[connect] clientId is null — cannot start OAuth')
+      }
       return
     }
 
@@ -88,6 +103,7 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
     // Full-page redirect to OAuth (more reliable than popups for Meta)
     // The callback will redirect back to /onboarding after connecting
     const url = `${authPath}?clientId=${clientId}&returnTo=/onboarding`
+    console.log('[connect] Redirecting to:', url)
     window.location.href = url
   }
 
