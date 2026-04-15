@@ -3,11 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import { getOAuthUrl } from '@/lib/instagram'
 
 /**
- * GET /api/auth/instagram?clientId=xxx
+ * GET /api/auth/instagram?clientId=xxx[&returnTo=url][&popup=1]
  *
- * Initiates the Meta OAuth flow. Admin only.
- * The `clientId` query param tells us which Apnosh client
- * we're connecting Instagram for.
+ * Initiates the Meta OAuth flow for Instagram + Facebook.
+ * Accepts authenticated users (admin or client during onboarding).
  */
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
@@ -17,26 +16,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  // Verify admin
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role !== 'admin') {
-    return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-  }
-
   const clientId = request.nextUrl.searchParams.get('clientId')
   if (!clientId) {
     return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
   }
 
-  // Encode state: clientId + userId (so callback knows where to save the token)
+  const returnTo = request.nextUrl.searchParams.get('returnTo') || ''
+  const popup = request.nextUrl.searchParams.get('popup') === '1'
+
   const state = Buffer.from(JSON.stringify({
     clientId,
     userId: user.id,
+    returnTo,
+    popup,
     ts: Date.now(),
   })).toString('base64url')
 

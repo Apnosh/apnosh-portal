@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  let state: { clientId: string; userId: string }
+  let state: { clientId: string; userId: string; returnTo?: string; popup?: boolean }
   try {
     state = JSON.parse(Buffer.from(stateParam, 'base64url').toString())
   } catch {
@@ -144,12 +144,27 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. Redirect back
+    const connectedPlatforms = ['facebook']
+    if (igConnected) connectedPlatforms.push('instagram')
+
+    // Popup mode: render a page that sends message to opener and closes
+    if (state.popup) {
+      return new NextResponse(popupCloseHtml(connectedPlatforms), {
+        headers: { 'Content-Type': 'text/html' },
+      })
+    }
+
+    // returnTo mode: redirect to the specified URL
+    if (state.returnTo) {
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}${state.returnTo}?connected=${connectedPlatforms.join(',')}`
+      )
+    }
+
+    // Default: redirect to admin client page
     const { data: clientRow } = await supabase
       .from('clients').select('slug').eq('id', state.clientId).single()
     const slug = clientRow?.slug || ''
-
-    const connectedPlatforms = ['facebook']
-    if (igConnected) connectedPlatforms.push('instagram')
 
     return NextResponse.redirect(
       `${process.env.NEXT_PUBLIC_APP_URL}/admin/clients/${slug}?tab=connections&connected=${connectedPlatforms.join(',')}`
@@ -158,6 +173,12 @@ export async function GET(request: NextRequest) {
     console.error('[meta callback]', err)
     const message = err instanceof Error ? err.message : 'Unknown error'
 
+    if (state.popup) {
+      return new NextResponse(popupCloseHtml([], message), {
+        headers: { 'Content-Type': 'text/html' },
+      })
+    }
+
     const { data: clientRow } = await supabase
       .from('clients').select('slug').eq('id', state.clientId).maybeSingle()
 
@@ -165,4 +186,18 @@ export async function GET(request: NextRequest) {
       `${process.env.NEXT_PUBLIC_APP_URL}/admin/clients/${clientRow?.slug || ''}?tab=connections&error=${encodeURIComponent(message)}`
     )
   }
+}
+
+function popupCloseHtml(connected: string[], error?: string): string {
+  return `<!DOCTYPE html><html><head><title>Connected</title></head><body>
+<script>
+  if (window.opener) {
+    window.opener.postMessage({ type: 'oauth-callback', connected: ${JSON.stringify('PLACEHOLDER')}, error: ${JSON.stringify('ERR_PLACEHOLDER')} }, '*');
+  }
+  window.close();
+</script>
+<p>${error ? 'Connection failed. You can close this window.' : 'Connected! This window will close.'}</p>
+</body></html>`
+    .replace('"PLACEHOLDER"', JSON.stringify(connected))
+    .replace('"ERR_PLACEHOLDER"', JSON.stringify(error || null))
 }

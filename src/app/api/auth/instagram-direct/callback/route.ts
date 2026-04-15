@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  let state: { clientId: string }
+  let state: { clientId: string; popup?: boolean }
   try {
     state = JSON.parse(Buffer.from(stateParam, 'base64url').toString())
   } catch {
@@ -76,6 +76,10 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. Redirect back
+    if (state.popup) {
+      return new NextResponse(popupCloseHtml(['Instagram']), { headers: { 'Content-Type': 'text/html' } })
+    }
+
     const { data: clientRow } = await supabase
       .from('clients').select('slug').eq('id', state.clientId).single()
 
@@ -85,10 +89,29 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error('[instagram-direct callback]', err)
     const message = err instanceof Error ? err.message : 'Unknown error'
+
+    if (state.popup) {
+      return new NextResponse(popupCloseHtml([], message), { headers: { 'Content-Type': 'text/html' } })
+    }
+
     const { data: clientRow } = await supabase
       .from('clients').select('slug').eq('id', state.clientId).maybeSingle()
     return NextResponse.redirect(
       `${process.env.NEXT_PUBLIC_APP_URL}/admin/clients/${clientRow?.slug || ''}?tab=connections&error=${encodeURIComponent(message)}`
     )
   }
+}
+
+function popupCloseHtml(connected: string[], error?: string): string {
+  return `<!DOCTYPE html><html><head><title>Connected</title></head><body>
+<script>
+  if (window.opener) {
+    window.opener.postMessage({ type: 'oauth-callback', connected: ${JSON.stringify('PLACEHOLDER')}, error: ${JSON.stringify('ERR_PLACEHOLDER')} }, '*');
+  }
+  window.close();
+</script>
+<p>${error ? 'Connection failed. You can close this window.' : 'Connected! This window will close.'}</p>
+</body></html>`
+    .replace('"PLACEHOLDER"', JSON.stringify(connected))
+    .replace('"ERR_PLACEHOLDER"', JSON.stringify(error || null))
 }

@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getInstagramDirectOAuthUrl } from '@/lib/instagram'
 
 /**
- * GET /api/auth/instagram-direct?clientId=xxx
+ * GET /api/auth/instagram-direct?clientId=xxx[&popup=1]
  * Initiates Instagram Direct Login (not Facebook login).
  */
 export async function GET(request: NextRequest) {
@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
   const clientId = request.nextUrl.searchParams.get('clientId')
   if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 })
 
-  const state = Buffer.from(JSON.stringify({ clientId, userId: user.id, ts: Date.now() })).toString('base64url')
+  const popup = request.nextUrl.searchParams.get('popup') === '1'
+  const state = Buffer.from(JSON.stringify({ clientId, userId: user.id, popup, ts: Date.now() })).toString('base64url')
   return NextResponse.redirect(getInstagramDirectOAuthUrl(state))
 }

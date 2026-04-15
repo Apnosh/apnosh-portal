@@ -72,7 +72,7 @@ export default function StepRenderer(props: Props) {
       case 'content': return <StepContent data={data} update={update} nav={nav} />
       case 'avoid': return <StepAvoid data={data} update={update} nav={nav} />
       case 'approval': return <StepApproval data={data} update={update} nav={nav} />
-      case 'connect': return <StepConnect data={data} update={update} nav={nav} />
+      case 'connect': return <StepConnect data={data} update={update} nav={nav} businessId={props.businessId} />
       case 'assets': return <StepAssets data={data} update={update} nav={nav} onLogoUpload={onLogoUpload} onPhotosUpload={onPhotosUpload} />
       case 'review': return <StepReview data={data} update={update} onGoToStep={onGoToStep} onComplete={onComplete} saving={saving} />
       default: return <StepDone bizName={data.biz_name} />
