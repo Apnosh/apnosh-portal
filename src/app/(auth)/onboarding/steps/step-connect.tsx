@@ -6,9 +6,11 @@ import { Question, Hint } from '../ui'
 import { ensureClientForBusiness, getConnectedPlatforms } from '@/lib/onboarding-actions'
 
 // Map platform display names to OAuth paths
+// Instagram uses the direct Instagram login (simpler, no Facebook Page required)
+// Facebook uses the Meta OAuth flow (connects Facebook Page + linked IG)
 const OAUTH_PATHS: Record<string, string> = {
-  Instagram: '/api/auth/instagram',
-  Facebook: '/api/auth/instagram', // Meta flow handles both
+  Instagram: '/api/auth/instagram-direct',
+  Facebook: '/api/auth/instagram',
   TikTok: '/api/auth/tiktok',
   LinkedIn: '/api/auth/linkedin',
 }
@@ -83,28 +85,10 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
     setConnectingPlatform(name)
     setLoading(true)
 
-    // Open OAuth in popup
-    const url = `${authPath}?clientId=${clientId}&popup=1`
-    const width = 600
-    const height = 700
-    const left = window.screenX + (window.outerWidth - width) / 2
-    const top = window.screenY + (window.outerHeight - height) / 2
-    const popup = window.open(url, 'oauth', `width=${width},height=${height},left=${left},top=${top}`)
-
-    // Poll for popup close (in case user closes without completing)
-    const timer = setInterval(() => {
-      if (popup?.closed) {
-        clearInterval(timer)
-        setConnectingPlatform(null)
-        setLoading(false)
-        // Refresh connected status from DB
-        if (clientId) {
-          getConnectedPlatforms(clientId).then((connected) => {
-            update('connected', { ...data.connected, ...connected })
-          })
-        }
-      }
-    }, 500)
+    // Full-page redirect to OAuth (more reliable than popups for Meta)
+    // The callback will redirect back to /onboarding after connecting
+    const url = `${authPath}?clientId=${clientId}&returnTo=/onboarding`
+    window.location.href = url
   }
 
   return (

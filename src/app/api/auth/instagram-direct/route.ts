@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 })
 
   const popup = request.nextUrl.searchParams.get('popup') === '1'
-  const state = Buffer.from(JSON.stringify({ clientId, userId: user.id, popup, ts: Date.now() })).toString('base64url')
+  const returnTo = request.nextUrl.searchParams.get('returnTo') || ''
+  const state = Buffer.from(JSON.stringify({ clientId, userId: user.id, popup, returnTo, ts: Date.now() })).toString('base64url')
   return NextResponse.redirect(getInstagramDirectOAuthUrl(state))
 }

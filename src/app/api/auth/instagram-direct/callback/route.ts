@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  let state: { clientId: string; popup?: boolean }
+  let state: { clientId: string; popup?: boolean; returnTo?: string }
   try {
     state = JSON.parse(Buffer.from(stateParam, 'base64url').toString())
   } catch {
@@ -80,6 +80,12 @@ export async function GET(request: NextRequest) {
       return new NextResponse(popupCloseHtml(['Instagram']), { headers: { 'Content-Type': 'text/html' } })
     }
 
+    if (state.returnTo) {
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}${state.returnTo}?connected=instagram`
+      )
+    }
+
     const { data: clientRow } = await supabase
       .from('clients').select('slug').eq('id', state.clientId).single()
 
@@ -92,6 +98,12 @@ export async function GET(request: NextRequest) {
 
     if (state.popup) {
       return new NextResponse(popupCloseHtml([], message), { headers: { 'Content-Type': 'text/html' } })
+    }
+
+    if (state.returnTo) {
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}${state.returnTo}?error=${encodeURIComponent(message)}`
+      )
     }
 
     const { data: clientRow } = await supabase
