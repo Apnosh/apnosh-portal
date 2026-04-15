@@ -12,6 +12,9 @@
 const GRAPH_BASE = 'https://graph.facebook.com/v21.0'
 const META_APP_ID = process.env.META_APP_ID!
 const META_APP_SECRET = process.env.META_APP_SECRET!
+// Instagram Direct Login uses a separate Instagram App ID (different from the Facebook App ID)
+const IG_APP_ID = process.env.INSTAGRAM_APP_ID || META_APP_ID
+const IG_APP_SECRET = process.env.INSTAGRAM_APP_SECRET || META_APP_SECRET
 
 // Scopes we need:
 // - pages_show_list: list Pages the user manages
@@ -39,7 +42,7 @@ export const IG_DIRECT_SCOPES = [
 export function getInstagramDirectOAuthUrl(state: string): string {
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/instagram-direct/callback`
   const params = new URLSearchParams({
-    client_id: META_APP_ID,
+    client_id: IG_APP_ID,
     redirect_uri: redirectUri,
     scope: IG_DIRECT_SCOPES,
     response_type: 'code',
@@ -60,8 +63,8 @@ export async function exchangeInstagramDirectCode(code: string): Promise<{
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: META_APP_ID,
-      client_secret: META_APP_SECRET,
+      client_id: IG_APP_ID,
+      client_secret: IG_APP_SECRET,
       grant_type: 'authorization_code',
       redirect_uri: redirectUri,
       code,
@@ -81,7 +84,7 @@ export async function exchangeForLongLivedIgToken(shortToken: string): Promise<{
 }> {
   const params = new URLSearchParams({
     grant_type: 'ig_exchange_token',
-    client_secret: META_APP_SECRET,
+    client_secret: IG_APP_SECRET,
     access_token: shortToken,
   })
   const res = await fetch(`https://graph.instagram.com/access_token?${params}`)
