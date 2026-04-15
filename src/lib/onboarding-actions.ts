@@ -29,11 +29,11 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
     return biz.client_id
   }
 
-  // Check if a client with this exact name already exists — link to it
+  // Check if a client with this name already exists (case-insensitive) — link to it
   const { data: existingClient } = await supabase
     .from('clients')
     .select('id')
-    .eq('name', biz.name || 'My Business')
+    .ilike('name', biz.name || 'My Business')
     .maybeSingle()
 
   if (existingClient) {
