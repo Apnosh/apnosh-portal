@@ -9,6 +9,10 @@ export function getFallbackDashboardData(): DashboardData {
     businessName: 'The Golden Spoon',
     visibility: FALLBACK_VISIBILITY,
     footTraffic: FALLBACK_FOOT_TRAFFIC,
+    healthSignal: 'green',
+    healthHeadline: 'Your marketing is performing well',
+    pendingApprovals: 0,
+    actionItems: [],
   }
 }
 

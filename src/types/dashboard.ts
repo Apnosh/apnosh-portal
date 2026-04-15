@@ -46,8 +46,21 @@ export interface DashboardView {
   chartData: Record<TimeRange, ChartData>
 }
 
+export interface ActionItem {
+  icon: 'inbox' | 'alert' | 'message' | 'check'
+  title: string
+  href: string
+}
+
+export type HealthSignal = 'green' | 'amber' | 'red'
+
 export interface DashboardData {
   visibility: DashboardView
   footTraffic: DashboardView
   businessName: string
+  // Executive summary extensions
+  healthSignal: HealthSignal
+  healthHeadline: string
+  pendingApprovals: number
+  actionItems: ActionItem[]
 }

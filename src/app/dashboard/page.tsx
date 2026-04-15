@@ -1,22 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { ViewType, TimeRange, DashboardView, DashboardData } from '@/types/dashboard'
+import type { DashboardData } from '@/types/dashboard'
 import { getDashboardData } from '@/lib/dashboard/get-dashboard-data'
 import { useClient } from '@/lib/client-context'
 import StatusBanner from '@/components/dashboard/status-banner'
-import ViewSelector from '@/components/dashboard/view-selector'
-import HeroMetric from '@/components/dashboard/hero-metric'
-import TrendChart from '@/components/dashboard/trend-chart'
-import MetricGrid from '@/components/dashboard/metric-grid'
-import BenchmarkBar from '@/components/dashboard/benchmark-bar'
+import KPIStrip from '@/components/dashboard/kpi-strip'
+import ActionItems from '@/components/dashboard/action-items'
+import TrendSnapshot from '@/components/dashboard/trend-snapshot'
 import InsightCard from '@/components/dashboard/insight-card'
 import AMNote from '@/components/dashboard/am-note'
 
 export default function DashboardPage() {
   const { client, loading: clientLoading } = useClient()
-  const [currentView, setCurrentView] = useState<ViewType>('visibility')
-  const [timeRange, setTimeRange] = useState<TimeRange>('1W')
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -37,7 +33,6 @@ export default function DashboardPage() {
         }
       }
 
-      // No client or no data -- show empty state (no mock data)
       setDashboardData(null)
       setLoading(false)
     }
@@ -57,7 +52,7 @@ export default function DashboardPage() {
     )
   }
 
-  // No client record or no dashboard data -- welcome screen
+  // No client or no data — welcome screen
   if (!dashboardData) {
     return (
       <div
@@ -91,42 +86,29 @@ export default function DashboardPage() {
     )
   }
 
-  const view: DashboardView =
-    currentView === 'visibility' ? dashboardData.visibility : dashboardData.footTraffic
+  const vis = dashboardData.visibility
+  const ft = dashboardData.footTraffic
 
-  const handleViewChange = (v: ViewType) => {
-    setCurrentView(v)
-    setTimeRange('1W')
-  }
-
-  const fmtBenchmark = (n: number): string => {
-    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
-    return n.toLocaleString()
-  }
-
-  // Empty state: no metrics data yet
-  if (view.num === '---') {
+  // Empty state — metrics tables exist but no data
+  if (vis.num === '---' && ft.num === '---') {
     return (
       <div
         className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20"
         style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
       >
-        <div className="db-fade db-d2">
-          <ViewSelector current={currentView} onChange={handleViewChange} />
-        </div>
-        <div className="db-fade db-d3 text-center py-20">
+        <div className="text-center py-20">
           <div
             className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center"
-            style={{ background: 'var(--db-up-bg)' }}
+            style={{ background: 'rgba(74, 189, 152, 0.1)' }}
           >
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--db-up)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4abd98" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
             </svg>
           </div>
-          <h2 className="text-[20px] font-bold mb-2" style={{ color: 'var(--db-black)' }}>
+          <h2 className="text-[20px] font-bold mb-2" style={{ color: 'var(--db-black, #111)' }}>
             Setting up your dashboard
           </h2>
-          <p className="text-[14px] max-w-sm mx-auto" style={{ color: 'var(--db-ink-3)' }}>
+          <p className="text-[14px] max-w-sm mx-auto" style={{ color: 'var(--db-ink-3, #888)' }}>
             We're collecting your first data. You'll see your numbers here within 48 hours.
           </p>
         </div>
@@ -134,82 +116,93 @@ export default function DashboardPage() {
     )
   }
 
+  // Pick the best 4 KPIs across both views
+  const kpis = [
+    vis.metrics[0],  // Social reach
+    ...(ft.num !== '---'
+      ? [ft.metrics[0]]  // Foot traffic actions
+      : [vis.metrics[2]] // Impressions (fallback if no GBP)
+    ),
+    ...(ft.num !== '---'
+      ? [ft.metrics[1]]  // Calls
+      : [vis.metrics[1]] // Profile visits (fallback)
+    ),
+    vis.metrics[3],  // New followers
+  ].filter(Boolean)
+
+  // 30-day trend data from visibility chart
+  const trendData = vis.chartData['1M']?.data || []
+  const fmtK = (n: number) => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n)
+  const trendStart = trendData.length > 0 ? fmtK(trendData[0]) : ''
+  const trendEnd = trendData.length > 0 ? fmtK(trendData[trendData.length - 1]) : ''
+
+  // Combine insights from both views
+  const allInsights = [
+    ...vis.insights,
+    ...ft.insights.filter(fi => !vis.insights.some(vi => vi.title === fi.title)),
+  ].slice(0, 3)
+
   return (
     <div
       className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
-      {/* Status Banner */}
+      {/* 1. Health Signal */}
       <div className="db-fade db-d1">
         <StatusBanner
-          headline={view.headline}
+          headline={dashboardData.healthHeadline}
           businessName={dashboardData.businessName}
-          pct={view.pct}
-          up={view.up}
+          signal={dashboardData.healthSignal}
+          rank={vis.rank || ft.rank || ''}
+          pct={vis.pct}
+          up={vis.up}
         />
       </div>
 
-      {/* View Selector */}
-      <div className="db-fade db-d2">
-        <ViewSelector current={currentView} onChange={handleViewChange} />
+      {/* 2. KPI Strip */}
+      <div className="db-fade db-d2 mb-6">
+        <KPIStrip metrics={kpis} />
       </div>
 
-      {/* Hero Metric */}
-      <div className="db-fade db-d3">
-        <HeroMetric ctx={view.ctx} num={view.num} pctFull={view.pctFull} up={view.up} />
+      {/* 3. Action Items */}
+      <div className="db-fade db-d3 mb-6">
+        <ActionItems items={dashboardData.actionItems} />
       </div>
 
-      {/* Chart */}
-      <div className="db-fade db-d4">
-        <TrendChart
-          data={view.chartData}
-          timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
-          up={view.up}
-          unit={view.unit}
-        />
-      </div>
+      {/* 4. Trend Snapshot */}
+      {trendData.length > 1 && (
+        <div className="db-fade db-d4 mb-6">
+          <TrendSnapshot
+            data={trendData}
+            up={vis.up}
+            startLabel={trendStart}
+            endLabel={trendEnd}
+          />
+        </div>
+      )}
 
-      {/* Metric Breakdown Grid */}
-      <div className="db-fade db-d5">
-        <MetricGrid title={view.bdtitle} metrics={view.metrics} />
-      </div>
-
-      {/* Benchmark */}
-      <div className="db-fade db-d6">
-        <BenchmarkBar
-          yourValue={view.bmy}
-          avgValue={view.bmavg}
-          maxValue={view.bmmax}
-          rank={view.rank}
-          yourFormatted={fmtBenchmark(view.bmy)}
-          avgFormatted={fmtBenchmark(view.bmavg)}
-          animationKey={currentView}
-        />
-      </div>
-
-      {/* Insights */}
-      {view.insights.length > 0 && (
-        <div className="db-fade db-d6 pb-8 mb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
-          <h2 className="text-[15px] font-bold mb-3" style={{ color: 'var(--db-black)' }}>
+      {/* 5. Insights */}
+      {allInsights.length > 0 && (
+        <div className="db-fade db-d5 pb-6 mb-6" style={{ borderBottom: '1px solid var(--db-border, #f0f0f0)' }}>
+          <h3 className="text-[11px] font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--db-ink-3, #888)' }}>
             Insights
-          </h2>
+          </h3>
           <div className="flex flex-col gap-2.5">
-            {view.insights.map((ins, i) => (
+            {allInsights.map((ins, i) => (
               <InsightCard key={i} icon={ins.icon} title={ins.title} subtitle={ins.subtitle} />
             ))}
           </div>
         </div>
       )}
 
-      {/* Account Manager Note */}
-      {view.am.note && (
-        <div className="db-fade db-d7">
+      {/* 6. AM Note */}
+      {vis.am.note && (
+        <div className="db-fade db-d6">
           <AMNote
-            name={view.am.name}
-            initials={view.am.initials}
-            role={view.am.role}
-            note={view.am.note}
+            name={vis.am.name}
+            initials={vis.am.initials}
+            role={vis.am.role}
+            note={vis.am.note}
           />
         </div>
       )}
