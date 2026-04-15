@@ -59,11 +59,11 @@ const navSections: NavSection[] = [
         exact: false,
         serviceArea: 'social',
         children: [
-          { label: 'Overview', href: '/dashboard/social', exact: true },
-          { label: 'Action needed', href: '/dashboard/social/action-needed' },
+          { label: 'Performance', href: '/dashboard/social', exact: true },
+          { label: 'Review', href: '/dashboard/social/action-needed' },
           { label: 'Calendar', href: '/dashboard/social/calendar' },
-          { label: 'My requests', href: '/dashboard/social/requests' },
-          { label: 'Results', href: '/dashboard/social/results' },
+          { label: 'Request content', href: '/dashboard/social/requests/new' },
+          { label: 'Requests', href: '/dashboard/social/requests' },
         ],
       },
       {
