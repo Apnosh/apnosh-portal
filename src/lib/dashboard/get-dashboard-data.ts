@@ -473,6 +473,12 @@ function buildTimeRange(
     cursor = addDays(cursor, step)
   }
 
+  // Trim trailing zeros so the chart doesn't drop to 0 at the end
+  // (happens when today's sync hasn't populated all fields yet)
+  while (data.length > 1 && data[data.length - 1] === 0) {
+    data.pop()
+  }
+
   // Build label strings
   const xlabels: string[] = []
   for (const d of labelDates) {
