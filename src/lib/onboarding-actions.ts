@@ -6,22 +6,49 @@ import { createAdminClient } from '@/lib/supabase/admin'
  * Ensures a `clients` record exists for the given business, linked via
  * businesses.client_id. Returns the client_id. Used during onboarding
  * so OAuth flows have a client_id to store tokens against.
- * Uses admin client to bypass RLS (clients table may not have insert policies for regular users).
+ * Uses admin client to bypass RLS.
  */
 export async function ensureClientForBusiness(businessId: string): Promise<string | null> {
   const supabase = createAdminClient()
 
   // Check if businesses already has a linked client
-  const { data: biz } = await supabase
+  const { data: biz, error: bizErr } = await supabase
     .from('businesses')
     .select('id, name, client_id, industry, city, state, website_url, phone')
     .eq('id', businessId)
     .single()
 
-  if (!biz) return null
+  if (bizErr || !biz) {
+    console.error('[ensureClient] Business not found:', businessId, bizErr?.message)
+    return null
+  }
 
-  // Already linked
-  if (biz.client_id) return biz.client_id
+  // Already linked to a client
+  if (biz.client_id) {
+    console.log('[ensureClient] Already linked to client:', biz.client_id)
+    return biz.client_id
+  }
+
+  // Check if a client with this exact name already exists — link to it
+  const { data: existingClient } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('name', biz.name || 'My Business')
+    .maybeSingle()
+
+  if (existingClient) {
+    console.log('[ensureClient] Found existing client by name, linking:', existingClient.id)
+    const { error: updateErr } = await supabase
+      .from('businesses')
+      .update({ client_id: existingClient.id })
+      .eq('id', businessId)
+
+    if (updateErr) {
+      console.error('[ensureClient] Failed to link business to existing client:', updateErr.message)
+      return null
+    }
+    return existingClient.id
+  }
 
   // Create a new clients row from business data
   const slug = (biz.name || 'business')
@@ -33,7 +60,7 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
 
   const location = [biz.city, biz.state].filter(Boolean).join(', ')
 
-  const { data: newClient, error } = await supabase
+  const { data: newClient, error: insertErr } = await supabase
     .from('clients')
     .insert({
       name: biz.name || 'My Business',
@@ -50,16 +77,22 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
     .select('id')
     .single()
 
-  if (error || !newClient) {
-    console.error('Failed to create client:', error)
+  if (insertErr || !newClient) {
+    console.error('[ensureClient] Failed to create client:', insertErr?.message)
     return null
   }
 
+  console.log('[ensureClient] Created new client:', newClient.id)
+
   // Link the business to the client
-  await supabase
+  const { error: linkErr } = await supabase
     .from('businesses')
     .update({ client_id: newClient.id })
     .eq('id', businessId)
+
+  if (linkErr) {
+    console.error('[ensureClient] Failed to link business:', linkErr.message)
+  }
 
   return newClient.id
 }
@@ -79,7 +112,6 @@ export async function getConnectedPlatforms(clientId: string): Promise<Record<st
   const connected: Record<string, boolean> = {}
   if (data) {
     for (const row of data) {
-      // Map platform names to match onboarding UI
       const name = row.platform === 'instagram' ? 'Instagram'
         : row.platform === 'facebook' ? 'Facebook'
         : row.platform === 'tiktok' ? 'TikTok'
