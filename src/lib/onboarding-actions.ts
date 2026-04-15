@@ -1,14 +1,15 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
  * Ensures a `clients` record exists for the given business, linked via
  * businesses.client_id. Returns the client_id. Used during onboarding
  * so OAuth flows have a client_id to store tokens against.
+ * Uses admin client to bypass RLS (clients table may not have insert policies for regular users).
  */
 export async function ensureClientForBusiness(businessId: string): Promise<string | null> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Check if businesses already has a linked client
   const { data: biz } = await supabase
@@ -67,7 +68,7 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
  * Check which platforms are connected for a given client.
  */
 export async function getConnectedPlatforms(clientId: string): Promise<Record<string, boolean>> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data } = await supabase
     .from('platform_connections')
