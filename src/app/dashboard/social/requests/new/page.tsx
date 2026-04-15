@@ -1,60 +1,94 @@
 'use client'
 
-import Link from 'next/link'
-import { ArrowLeft, ImageIcon, Film, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
+import { MessageCircle, LayoutGrid, SlidersHorizontal } from 'lucide-react'
+import RequestQuick from '@/components/dashboard/request-quick'
+import RequestTemplates from '@/components/dashboard/request-templates'
+import RequestDetailed from '@/components/dashboard/request-detailed'
 
-const TYPES = [
-  {
-    id: 'graphic',
-    label: 'Static / Graphic',
-    description: 'A single image, carousel, story graphic, or banner. Posts, promos, events, testimonials.',
-    icon: ImageIcon,
-    href: '/dashboard/social/requests/new/graphic',
-    available: true,
-  },
-  {
-    id: 'video',
-    label: 'Short-form Video',
-    description: 'Reels, TikToks, and YouTube Shorts. 15–90 second vertical videos.',
-    icon: Film,
-    href: '/dashboard/social/requests/new/video',
-    available: true,
-  },
-]
+type Mode = 'pick' | 'quick' | 'template' | 'detailed'
 
-export default function NewSocialRequestPickerPage() {
+export default function NewRequestPage() {
+  const [mode, setMode] = useState<Mode>('pick')
+
+  if (mode === 'quick') return (
+    <div className="max-w-lg mx-auto py-8 px-4">
+      <RequestQuick onBack={() => setMode('pick')} />
+    </div>
+  )
+
+  if (mode === 'template') return (
+    <div className="max-w-lg mx-auto py-8 px-4">
+      <RequestTemplates onBack={() => setMode('pick')} />
+    </div>
+  )
+
+  if (mode === 'detailed') return (
+    <div className="max-w-lg mx-auto py-8 px-4">
+      <RequestDetailed onBack={() => setMode('pick')} />
+    </div>
+  )
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <Link href="/dashboard/social/requests" className="text-ink-4 hover:text-ink transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">New Social Request</h1>
-          <p className="text-ink-3 text-sm mt-0.5">What kind of content are you looking for?</p>
-        </div>
-      </div>
+    <div className="max-w-lg mx-auto py-8 px-4">
+      <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold mb-1" style={{ color: 'var(--ink, #111)' }}>
+        New content request
+      </h1>
+      <p className="text-sm mb-8" style={{ color: 'var(--ink-3, #888)' }}>
+        How much detail do you want to give?
+      </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {TYPES.map(t => {
-          const Icon = t.icon
-          return (
-            <Link
-              key={t.id}
-              href={t.href}
-              className="group bg-white rounded-2xl border border-ink-6 hover:border-brand/40 hover:shadow-sm transition-all p-6 text-left"
-            >
-              <div className="w-12 h-12 rounded-xl bg-brand-tint flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-                <Icon className="w-6 h-6 text-brand-dark" />
+      <div className="space-y-3">
+        <button
+          onClick={() => setMode('quick')}
+          className="w-full text-left rounded-xl border border-ink-6 p-5 hover:border-brand hover:bg-brand-tint/30 transition-all"
+        >
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(74, 189, 152, 0.1)' }}>
+              <MessageCircle className="w-5 h-5" style={{ color: '#4abd98' }} />
+            </div>
+            <div>
+              <div className="text-[15px] font-semibold mb-0.5" style={{ color: 'var(--ink, #111)' }}>Just tell us</div>
+              <div className="text-sm" style={{ color: 'var(--ink-3, #888)' }}>
+                Type what you want and we'll handle the rest. Best if you're short on time.
               </div>
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="font-[family-name:var(--font-display)] text-xl text-ink">{t.label}</h3>
-                <ChevronRight className="w-5 h-5 text-ink-4 group-hover:text-brand-dark transition-colors mt-1" />
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => setMode('template')}
+          className="w-full text-left rounded-xl border border-ink-6 p-5 hover:border-brand hover:bg-brand-tint/30 transition-all"
+        >
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(74, 189, 152, 0.1)' }}>
+              <LayoutGrid className="w-5 h-5" style={{ color: '#4abd98' }} />
+            </div>
+            <div>
+              <div className="text-[15px] font-semibold mb-0.5" style={{ color: 'var(--ink, #111)' }}>Pick a type</div>
+              <div className="text-sm" style={{ color: 'var(--ink-3, #888)' }}>
+                Choose what kind of post you need and answer a few quick questions.
               </div>
-              <p className="text-sm text-ink-3 mt-2 leading-relaxed">{t.description}</p>
-            </Link>
-          )
-        })}
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => setMode('detailed')}
+          className="w-full text-left rounded-xl border border-ink-6 p-5 hover:border-brand hover:bg-brand-tint/30 transition-all"
+        >
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(74, 189, 152, 0.1)' }}>
+              <SlidersHorizontal className="w-5 h-5" style={{ color: '#4abd98' }} />
+            </div>
+            <div>
+              <div className="text-[15px] font-semibold mb-0.5" style={{ color: 'var(--ink, #111)' }}>Get specific</div>
+              <div className="text-sm" style={{ color: 'var(--ink-3, #888)' }}>
+                Fill in the details yourself. Good if you know exactly what you want.
+              </div>
+            </div>
+          </div>
+        </button>
       </div>
     </div>
   )
