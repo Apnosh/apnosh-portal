@@ -38,10 +38,68 @@ export async function getDashboardData(
     buildFootTrafficView(supabase, clientId, city, bizType),
   ])
 
+  // Pending approvals count
+  const { count: pendingApprovals } = await supabase
+    .from('deliverables')
+    .select('id', { count: 'exact', head: true })
+    .eq('business_id', clientId)
+    .eq('status', 'client_review')
+
+  // Compute health signal from both views
+  const visUp = visibility.up
+  const ftUp = footTraffic.up
+  const healthSignal: import('@/types/dashboard').HealthSignal =
+    (visUp && ftUp) ? 'green' : (!visUp && !ftUp) ? 'red' : 'amber'
+
+  const healthHeadline = healthSignal === 'green'
+    ? 'Your marketing is performing well'
+    : healthSignal === 'red'
+      ? "Let's focus on turning things around"
+      : 'Mostly on track, one area needs attention'
+
+  // Build action items
+  const actionItems: import('@/types/dashboard').ActionItem[] = []
+  if ((pendingApprovals ?? 0) > 0) {
+    actionItems.push({
+      icon: 'inbox',
+      title: `${pendingApprovals} post${pendingApprovals === 1 ? '' : 's'} ready for your review`,
+      href: '/dashboard/social/action-needed',
+    })
+  }
+  // Flag metric drops > 10%
+  const visPct = parseInt(visibility.pct)
+  const ftPct = parseInt(footTraffic.pct)
+  if (!isNaN(visPct) && visPct < -10) {
+    actionItems.push({
+      icon: 'alert',
+      title: `Social reach dropped ${Math.abs(visPct)}% this month`,
+      href: '/dashboard/social/performance',
+    })
+  }
+  if (!isNaN(ftPct) && ftPct < -10) {
+    actionItems.push({
+      icon: 'alert',
+      title: `Foot traffic dropped ${Math.abs(ftPct)}% this month`,
+      href: '/dashboard/analytics',
+    })
+  }
+  // AM note as action item if exists
+  if (visibility.am.note) {
+    actionItems.push({
+      icon: 'message',
+      title: `Note from ${visibility.am.name}: ${visibility.am.note.slice(0, 60)}...`,
+      href: '/dashboard/messages',
+    })
+  }
+
   return {
     visibility,
     footTraffic,
     businessName: client.name,
+    healthSignal,
+    healthHeadline,
+    pendingApprovals: pendingApprovals ?? 0,
+    actionItems: actionItems.slice(0, 3),
   }
 }
 
