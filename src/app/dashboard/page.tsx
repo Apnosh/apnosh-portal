@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import type { ViewType, TimeRange, DashboardView, DashboardData } from '@/types/dashboard'
-import { getFallbackDashboardData } from '@/lib/dashboard-data'
 import { getDashboardData } from '@/lib/dashboard/get-dashboard-data'
 import { useClient } from '@/lib/client-context'
 import StatusBanner from '@/components/dashboard/status-banner'
@@ -38,21 +37,55 @@ export default function DashboardPage() {
         }
       }
 
-      // Fallback to mock data if no client or no real data
-      setDashboardData(getFallbackDashboardData())
+      // No client or no data -- show empty state (no mock data)
+      setDashboardData(null)
       setLoading(false)
     }
 
     loadData()
   }, [client?.id, clientLoading])
 
-  if (loading || !dashboardData) {
+  if (loading) {
     return (
       <div className="max-w-[840px] mx-auto px-8 max-sm:px-4 pt-12 text-center">
         <div className="animate-pulse space-y-4">
           <div className="h-6 bg-ink-6 rounded w-48 mx-auto" />
           <div className="h-12 bg-ink-6 rounded w-32 mx-auto" />
           <div className="h-64 bg-ink-6 rounded" />
+        </div>
+      </div>
+    )
+  }
+
+  // No client record or no dashboard data -- welcome screen
+  if (!dashboardData) {
+    return (
+      <div
+        className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20"
+        style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
+      >
+        <div className="text-center py-20">
+          <div
+            className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center"
+            style={{ background: 'rgba(74, 189, 152, 0.1)' }}
+          >
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4abd98" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
+          </div>
+          <h2 className="text-[20px] font-bold mb-2" style={{ color: 'var(--db-black, #111)' }}>
+            Welcome to Apnosh
+          </h2>
+          <p className="text-[14px] max-w-sm mx-auto mb-8" style={{ color: 'var(--db-ink-3, #888)' }}>
+            Your dashboard is being set up. Once your accounts are connected, your data will appear here.
+          </p>
+          <a
+            href="/dashboard/connect-accounts"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
+            style={{ background: '#4abd98' }}
+          >
+            Connect your accounts
+          </a>
         </div>
       </div>
     )

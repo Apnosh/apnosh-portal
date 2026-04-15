@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import {
   type Deliverable, type DeliverableStatus, type Platform,
-  initialDeliverables, platformIcon, platformLabel, platformColor,
+  platformIcon, platformLabel, platformColor,
   urgencyColor, urgencyBadge,
 } from '@/lib/mock-deliverables'
 import { createClient } from '@/lib/supabase/client'

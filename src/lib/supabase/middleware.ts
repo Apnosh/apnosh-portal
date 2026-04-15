@@ -45,6 +45,24 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // ── Authenticated user on /onboarding: redirect to dashboard if already completed ──
+  if (user && isOnboarding) {
+    const { data: business } = await supabase
+      .from('businesses')
+      .select('onboarding_completed')
+      .eq('owner_id', user.id)
+      .maybeSingle()
+
+    if (business?.onboarding_completed) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard'
+      return NextResponse.redirect(url)
+    }
+
+    // Not completed (or no record) — allow access to onboarding
+    return supabaseResponse
+  }
+
   // ── Authenticated: check if user is a client_user first ──
   if (user && (isDashboard || isAdminRoute || isClientRoute)) {
     // Check client_user linkage by auth_user_id
@@ -100,8 +118,6 @@ export async function updateSession(request: NextRequest) {
       }
 
       // ── Onboarding enforcement for client/team_member on /dashboard ──
-      // Only for users that actually have a businesses row (legacy SaaS flow).
-      // Client portal users (linked via client_users only) skip onboarding.
       if (isDashboard && (role === 'client' || role === 'team_member')) {
         const { data: business } = await supabase
           .from('businesses')
@@ -109,7 +125,16 @@ export async function updateSession(request: NextRequest) {
           .eq('owner_id', user.id)
           .maybeSingle()
 
-        if (business && !business.onboarding_completed) {
+        // If no businesses row exists at all, redirect to onboarding
+        // (new signup that hasn't started onboarding yet)
+        if (!business) {
+          const url = request.nextUrl.clone()
+          url.pathname = '/onboarding'
+          return NextResponse.redirect(url)
+        }
+
+        // If businesses row exists but onboarding not complete, redirect
+        if (!business.onboarding_completed) {
           const url = request.nextUrl.clone()
           url.pathname = '/onboarding'
           return NextResponse.redirect(url)
