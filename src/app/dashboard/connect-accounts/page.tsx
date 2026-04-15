@@ -57,18 +57,23 @@ export default function ConnectAccountsPage() {
   const [connections, setConnections] = useState<Connection[]>([])
   const [loading, setLoading] = useState(true)
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    if (clientLoading) return
     if (!client?.id) { setLoading(false); return }
-    const { data } = await supabase
-      .from('platform_connections')
-      .select('platform, username, page_name')
-      .eq('client_id', client.id)
-      .not('access_token', 'is', null)
-    setConnections((data ?? []) as Connection[])
-    setLoading(false)
-  }, [client?.id, supabase])
 
-  useEffect(() => { if (!clientLoading) load() }, [load, clientLoading])
+    const clientId = client.id
+    async function load() {
+      const { data } = await supabase
+        .from('platform_connections')
+        .select('platform, username, page_name')
+        .eq('client_id', clientId)
+        .not('access_token', 'is', null)
+      setConnections((data ?? []) as Connection[])
+      setLoading(false)
+    }
+    load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client?.id, clientLoading])
 
   function isConnected(platform: string) {
     return connections.some(c => c.platform === platform)
