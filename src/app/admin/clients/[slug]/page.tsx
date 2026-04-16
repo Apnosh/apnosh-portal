@@ -6,7 +6,7 @@ import {
   ArrowLeft, Loader2, Save, ExternalLink, Plus, Trash2,
   Building2, Palette, Image, BookOpen, ListTodo,
   Globe, MapPin, Mail, Phone, User, X, Check,
-  BarChart3, Star, MessageSquare, RefreshCw, FileText,
+  BarChart3, Star, MessageSquare, RefreshCw, FileText, UserCircle,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import BrandTab from './tabs/brand-tab'
@@ -19,6 +19,8 @@ import NotesTab from './tabs/notes-tab'
 import ConnectionsTab from './tabs/connections-tab'
 import DashboardNotesTab from './tabs/dashboard-notes-tab'
 import SyncControls from './tabs/sync-controls'
+import ProfileTab from './tabs/profile-tab'
+import WebsiteTab from './tabs/website-tab'
 import type {
   Client, ClientBrand, ClientPattern, ClientUser, ClientAllotments,
   ClientBillingStatus, ClientTier, ClientUserRole, ClientUserStatus,
@@ -28,10 +30,11 @@ import type {
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type Tab = 'overview' | 'brand' | 'assets' | 'style_library' | 'queue' | 'metrics' | 'reviews' | 'notes' | 'connections' | 'dashboard_notes' | 'data_sync'
+type Tab = 'overview' | 'profile' | 'brand' | 'assets' | 'style_library' | 'queue' | 'metrics' | 'reviews' | 'website' | 'notes' | 'connections' | 'dashboard_notes' | 'data_sync'
 
 const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
   { key: 'overview', label: 'Overview', icon: Building2 },
+  { key: 'profile', label: 'CRM Profile', icon: UserCircle },
   { key: 'brand', label: 'Brand System', icon: Palette },
   { key: 'assets', label: 'Assets', icon: Image },
   { key: 'style_library', label: 'Style Library', icon: BookOpen },
@@ -39,6 +42,7 @@ const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
   { key: 'metrics', label: 'Social Metrics', icon: BarChart3 },
   { key: 'reviews', label: 'Reviews', icon: Star },
   { key: 'notes', label: 'AM Notes', icon: MessageSquare },
+  { key: 'website', label: 'Website', icon: Globe },
   { key: 'connections', label: 'Connections', icon: Globe },
   { key: 'dashboard_notes', label: 'Dashboard Notes', icon: FileText },
   { key: 'data_sync', label: 'Data Sync', icon: RefreshCw },
@@ -250,6 +254,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
         />
       )}
 
+      {activeTab === 'profile' && (
+        <ProfileTab clientId={client.id} />
+      )}
+
       {activeTab === 'brand' && (
         <BrandTab
           clientId={client.id}
@@ -281,6 +289,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
       {activeTab === 'notes' && (
         <NotesTab clientId={client.id} />
       )}
+      {activeTab === 'website' && (
+        <WebsiteTab clientId={client.id} />
+      )}
+
       {activeTab === 'connections' && (
         <ConnectionsTab clientId={client.id} />
       )}

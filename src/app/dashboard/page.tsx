@@ -56,14 +56,14 @@ export default function DashboardPage() {
     )
   }
 
-  // No client or no data
+  // No client or no data - show welcoming empty state
   if (!dashboardData) {
     return (
       <div
         className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20"
         style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
       >
-        <div className="text-center py-20">
+        <div className="text-center py-16">
           <div
             className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center"
             style={{ background: 'rgba(74, 189, 152, 0.1)' }}
@@ -73,11 +73,31 @@ export default function DashboardPage() {
             </svg>
           </div>
           <h2 className="text-[20px] font-bold mb-2" style={{ color: 'var(--db-black, #111)' }}>
-            Welcome to Apnosh
+            We're setting up your dashboard
           </h2>
-          <p className="text-[14px] max-w-sm mx-auto mb-8" style={{ color: 'var(--db-ink-3, #888)' }}>
-            We're getting your dashboard ready. Connect your accounts and your numbers will show up here.
+          <p className="text-[14px] max-w-md mx-auto mb-10" style={{ color: 'var(--db-ink-3, #888)' }}>
+            Your performance data will appear here once your accounts are connected and content starts going out. Your account manager will help you get started.
           </p>
+
+          <div className="max-w-sm mx-auto text-left space-y-4 mb-10">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--db-ink-3, #888)' }}>What to expect</p>
+            {[
+              "We'll connect your social accounts",
+              'Performance data starts flowing within 24-48 hours',
+              "You'll see your metrics, insights, and trends right here",
+            ].map((text, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <span
+                  className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                  style={{ background: '#4abd98' }}
+                >
+                  {i + 1}
+                </span>
+                <span className="text-sm pt-0.5" style={{ color: 'var(--db-ink-2, #555)' }}>{text}</span>
+              </div>
+            ))}
+          </div>
+
           <a
             href="/dashboard/connect-accounts"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
@@ -85,6 +105,27 @@ export default function DashboardPage() {
           >
             Connect your accounts
           </a>
+
+          {/* Coming Soon channels */}
+          <div className="mt-16 max-w-lg mx-auto">
+            <p className="text-xs font-semibold uppercase tracking-wider text-center mb-4" style={{ color: 'var(--db-ink-3, #888)' }}>Coming soon to your dashboard</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[
+                { icon: '📊', label: 'Paid Ads', desc: 'Google & Meta ad performance' },
+                { icon: '🍽️', label: 'Reservations', desc: 'Booking trends' },
+                { icon: '📦', label: 'Online Orders', desc: 'DoorDash, Uber Eats' },
+                { icon: '📞', label: 'Call Tracking', desc: 'Calls by source' },
+                { icon: '📧', label: 'Email Campaigns', desc: 'Opens, clicks, revenue' },
+                { icon: '🔍', label: 'SEO Rankings', desc: 'Search positions' },
+              ].map((item) => (
+                <div key={item.label} className="rounded-lg border p-3 text-center opacity-60" style={{ borderColor: '#e5e5e5' }}>
+                  <span className="text-lg">{item.icon}</span>
+                  <p className="text-xs font-medium mt-1" style={{ color: 'var(--db-ink-2, #555)' }}>{item.label}</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'var(--db-ink-3, #888)' }}>{item.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     )

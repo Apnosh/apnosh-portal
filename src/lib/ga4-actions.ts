@@ -1,0 +1,92 @@
+'use server'
+
+import { createAdminClient } from '@/lib/supabase/admin'
+import { listGA4Properties, type GA4Property } from '@/lib/google'
+
+/**
+ * Fetch GA4 properties for a client using the stored access token.
+ */
+export async function fetchGA4PropertiesForClient(
+  clientId: string
+): Promise<{ success: true; properties: GA4Property[] } | { success: false; error: string }> {
+  const supabase = createAdminClient()
+
+  const { data: conn } = await supabase
+    .from('channel_connections')
+    .select('access_token, refresh_token, token_expires_at')
+    .eq('client_id', clientId)
+    .eq('channel', 'google_analytics')
+    .eq('platform_account_id', 'pending')
+    .maybeSingle()
+
+  if (!conn?.access_token) {
+    return { success: false, error: 'No pending Google Analytics connection found' }
+  }
+
+  try {
+    const properties = await listGA4Properties(conn.access_token)
+    return { success: true, properties }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to list properties' }
+  }
+}
+
+/**
+ * Finalize the GA4 connection by picking a property.
+ */
+export async function finalizeGA4Connection(
+  clientId: string,
+  property: GA4Property
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = createAdminClient()
+
+  // Move the pending row to the actual property
+  const { data: pending } = await supabase
+    .from('channel_connections')
+    .select('id, access_token, refresh_token, token_expires_at, scopes, connected_by')
+    .eq('client_id', clientId)
+    .eq('channel', 'google_analytics')
+    .eq('platform_account_id', 'pending')
+    .maybeSingle()
+
+  if (!pending) {
+    return { success: false, error: 'No pending connection to finalize' }
+  }
+
+  // Upsert with the real property ID
+  const { error: upsertErr } = await supabase
+    .from('channel_connections')
+    .upsert({
+      client_id: clientId,
+      channel: 'google_analytics',
+      connection_type: 'oauth',
+      platform_account_id: property.propertyId,
+      platform_account_name: property.propertyName,
+      access_token: pending.access_token,
+      refresh_token: pending.refresh_token,
+      token_expires_at: pending.token_expires_at,
+      scopes: pending.scopes,
+      status: 'active',
+      connected_by: pending.connected_by,
+      connected_at: new Date().toISOString(),
+      metadata: {
+        property_id: property.propertyId,
+        property_name: property.propertyName,
+        account_name: property.accountName,
+        time_zone: property.timeZone,
+        currency_code: property.currencyCode,
+      },
+    }, { onConflict: 'client_id,channel,platform_account_id' })
+
+  if (upsertErr) {
+    return { success: false, error: upsertErr.message }
+  }
+
+  // Delete the pending placeholder
+  await supabase
+    .from('channel_connections')
+    .delete()
+    .eq('id', pending.id)
+
+  return { success: true }
+}

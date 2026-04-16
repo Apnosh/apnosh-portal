@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Loader2, Trash2, Pencil, X, Save, Star, Flag, MessageSquare } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { createReview, updateReview, deleteReview } from '@/lib/admin-data-actions'
+import { createReview, updateReview, deleteReview, upsertReviewSnapshot } from '@/lib/admin-data-actions'
 import type { Review, ReviewSource } from '@/types/database'
 
 const SOURCE_OPTIONS: { value: ReviewSource; label: string }[] = [
@@ -70,6 +70,9 @@ export default function ReviewsTab({ clientId }: { clientId: string }) {
   const [form, setForm] = useState<FormState>(makeBlankForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showSnapshot, setShowSnapshot] = useState(false)
+  const [snapshot, setSnapshot] = useState({ platform: 'google', rating_avg: '', review_count: '', date: new Date().toISOString().slice(0, 10) })
+  const [snapshotSaving, setSnapshotSaving] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -103,6 +106,25 @@ export default function ReviewsTab({ clientId }: { clientId: string }) {
     setShowForm(false)
     setEditingId(null)
     setError(null)
+  }
+
+  async function handleSnapshotSave() {
+    if (!snapshot.rating_avg || !snapshot.review_count) return
+    setSnapshotSaving(true)
+    const res = await upsertReviewSnapshot({
+      client_id: clientId,
+      platform: snapshot.platform,
+      date: snapshot.date,
+      rating_avg: parseFloat(snapshot.rating_avg),
+      review_count: parseInt(snapshot.review_count, 10),
+    })
+    setSnapshotSaving(false)
+    if (res.success) {
+      setShowSnapshot(false)
+      setSnapshot({ platform: 'google', rating_avg: '', review_count: '', date: new Date().toISOString().slice(0, 10) })
+    } else {
+      setError(res.error)
+    }
   }
 
   async function handleSave() {
@@ -153,14 +175,58 @@ export default function ReviewsTab({ clientId }: { clientId: string }) {
         <p className="text-sm text-ink-3">
           Reviews from Google, Yelp, and other platforms. Entered here, shown to the client on their Reviews page.
         </p>
-        <button
-          onClick={startAdd}
-          className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 flex items-center gap-2 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Review
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSnapshot(true)}
+            className="text-sm font-medium text-ink-3 hover:text-ink border border-ink-5 rounded-lg px-4 py-2 flex items-center gap-2 transition-colors"
+          >
+            <Star className="w-4 h-4" />
+            Log Snapshot
+          </button>
+          <button
+            onClick={startAdd}
+            className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 flex items-center gap-2 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Review
+          </button>
+        </div>
       </div>
+
+      {showSnapshot && (
+        <div className="bg-white rounded-xl border border-amber-200 ring-1 ring-amber-100 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-ink">Log Review Snapshot</h3>
+            <button onClick={() => setShowSnapshot(false)} className="text-ink-4 hover:text-ink"><X className="w-4 h-4" /></button>
+          </div>
+          <p className="text-xs text-ink-4">Quick-log the headline numbers from a review platform. No individual reviews needed.</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-ink-4 mb-1 block">Platform</label>
+              <select className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm" value={snapshot.platform} onChange={(e) => setSnapshot((s) => ({ ...s, platform: e.target.value }))}>
+                {SOURCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-ink-4 mb-1 block">Avg Rating</label>
+              <input type="number" step="0.1" min="1" max="5" className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm" placeholder="4.5" value={snapshot.rating_avg} onChange={(e) => setSnapshot((s) => ({ ...s, rating_avg: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-ink-4 mb-1 block">Total Reviews</label>
+              <input type="number" min="0" className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm" placeholder="287" value={snapshot.review_count} onChange={(e) => setSnapshot((s) => ({ ...s, review_count: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-ink-4 mb-1 block">Date</label>
+              <input type="date" className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm" value={snapshot.date} onChange={(e) => setSnapshot((s) => ({ ...s, date: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button onClick={handleSnapshotSave} disabled={snapshotSaving || !snapshot.rating_avg || !snapshot.review_count} className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 disabled:opacity-50 transition-colors">
+              {snapshotSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save Snapshot
+            </button>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="bg-white rounded-xl border border-brand/30 ring-1 ring-brand/20 p-5 space-y-4">

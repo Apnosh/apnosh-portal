@@ -58,9 +58,27 @@ const PLATFORMS = [
   },
 ]
 
+interface ChannelConnection {
+  id: string
+  channel: string
+  platform_account_name: string | null
+  platform_url: string | null
+  status: string
+  sync_error: string | null
+  last_sync_at: string | null
+  connected_at: string
+}
+
+const CHANNEL_LABELS: Record<string, string> = {
+  google_analytics: 'Google Analytics',
+  google_search_console: 'Google Search Console',
+  google_business_profile: 'Google Business Profile',
+}
+
 export default function ConnectionsTab({ clientId }: { clientId: string }) {
   const supabase = createClient()
   const [connections, setConnections] = useState<PlatformConnection[]>([])
+  const [channelConnections, setChannelConnections] = useState<ChannelConnection[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState<string | null>(null)
   const [syncResult, setSyncResult] = useState<string | null>(null)
@@ -73,12 +91,21 @@ export default function ConnectionsTab({ clientId }: { clientId: string }) {
   const [manualIgError, setManualIgError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from('platform_connections')
-      .select('*')
-      .eq('client_id', clientId)
-      .order('platform')
-    setConnections((data ?? []) as PlatformConnection[])
+    const [pc, cc] = await Promise.all([
+      supabase
+        .from('platform_connections')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('platform'),
+      supabase
+        .from('channel_connections')
+        .select('id, channel, platform_account_name, platform_url, status, sync_error, last_sync_at, connected_at')
+        .eq('client_id', clientId)
+        .neq('platform_account_id', 'pending')
+        .order('channel'),
+    ])
+    setConnections((pc.data ?? []) as PlatformConnection[])
+    setChannelConnections((cc.data ?? []) as ChannelConnection[])
     setLoading(false)
   }, [clientId, supabase])
 
@@ -361,6 +388,60 @@ export default function ConnectionsTab({ clientId }: { clientId: string }) {
               </div>
             )
           })}
+
+          {/* Google connections (GA4, Search Console, Business Profile) */}
+          {channelConnections.length > 0 && (
+            <div className="mt-4 pt-6 border-t border-ink-6">
+              <h3 className="text-sm font-bold text-ink mb-3">Google Services</h3>
+              <div className="space-y-2">
+                {channelConnections.map((cc) => (
+                  <div key={cc.id} className="bg-white rounded-xl border border-ink-6 p-4 flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-semibold text-ink">
+                          {CHANNEL_LABELS[cc.channel] || cc.channel}
+                        </span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                          cc.status === 'active' ? 'bg-brand-tint text-brand-dark'
+                            : cc.status === 'error' ? 'bg-red-50 text-red-600'
+                            : 'bg-amber-50 text-amber-700'
+                        }`}>
+                          {cc.status}
+                        </span>
+                      </div>
+                      {cc.platform_account_name && (
+                        <p className="text-xs text-ink-3 truncate">{cc.platform_account_name}</p>
+                      )}
+                      {cc.last_sync_at && (
+                        <p className="text-[11px] text-ink-4 mt-1">
+                          Last sync: {new Date(cc.last_sync_at).toLocaleString()}
+                        </p>
+                      )}
+                      {cc.sync_error && (
+                        <p className="text-[11px] text-red-600 mt-1 flex items-start gap-1">
+                          <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                          <span>{cc.sync_error}</span>
+                        </p>
+                      )}
+                    </div>
+                    {cc.platform_url && (
+                      <a
+                        href={cc.platform_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-ink-4 hover:text-brand flex-shrink-0"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-ink-4 mt-3">
+                These are connected by the client from the dashboard. To re-connect or change a property, the client must do it from <code className="text-[11px] bg-bg-2 px-1 rounded">/dashboard/connect-accounts</code>.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

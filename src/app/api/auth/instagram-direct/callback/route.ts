@@ -75,6 +75,18 @@ export async function GET(request: NextRequest) {
       await supabase.from('platform_connections').insert(connData)
     }
 
+    // Bridge: also store in social_connections for the sync Edge Function
+    await supabase.from('social_connections').upsert({
+      client_id: state.clientId,
+      platform: 'instagram',
+      platform_account_id: profile.id,
+      platform_account_name: profile.username,
+      access_token: longLived.access_token,
+      token_expires_at: connData.expires_at,
+      connected_at: new Date().toISOString(),
+      sync_status: 'pending',
+    }, { onConflict: 'client_id,platform,platform_account_id' })
+
     // 5. Redirect back
     if (state.popup) {
       return new NextResponse(popupCloseHtml(['Instagram']), { headers: { 'Content-Type': 'text/html' } })

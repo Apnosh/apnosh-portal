@@ -89,6 +89,30 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url)
       }
 
+      // Check if this client_user has completed onboarding via client_profiles
+      if (isDashboard) {
+        const { data: cp } = await supabase
+          .from('client_profiles')
+          .select('onboarding_complete')
+          .eq('client_id', clientUser.client_id)
+          .maybeSingle()
+
+        // If no client_profiles or not complete, also check businesses (legacy path)
+        if (!cp?.onboarding_complete) {
+          const { data: biz } = await supabase
+            .from('businesses')
+            .select('onboarding_completed')
+            .eq('owner_id', user.id)
+            .maybeSingle()
+
+          if (!biz?.onboarding_completed) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/onboarding'
+            return NextResponse.redirect(url)
+          }
+        }
+      }
+
       // /dashboard is allowed — fall through to supabaseResponse below.
       return supabaseResponse
     }

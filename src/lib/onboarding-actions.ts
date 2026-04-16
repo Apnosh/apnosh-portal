@@ -98,6 +98,105 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
 }
 
 /**
+ * After onboarding completes, create/populate the client_profiles record
+ * and ensure a client_users row links the auth user to the client.
+ * Uses admin client to bypass RLS. Delegates profile writes to crm-sync.
+ */
+export async function completeOnboardingCRM(
+  businessId: string,
+  userId: string,
+  data: Record<string, unknown>
+): Promise<{ clientId: string | null; error: string | null }> {
+  const { upsertClientProfile } = await import('@/lib/crm-sync')
+  const supabase = createAdminClient()
+
+  // 1. Ensure clients record exists and is linked
+  const clientId = await ensureClientForBusiness(businessId)
+  if (!clientId) {
+    return { clientId: null, error: 'Failed to create/link client record' }
+  }
+
+  // 2. Upsert client_profiles via shared CRM sync
+  const { error: profileErr } = await upsertClientProfile(clientId, {
+    user_role: data.role as string || null,
+    business_type: data.biz_type as string || null,
+    business_type_other: data.biz_other as string || null,
+    business_description: data.biz_desc as string || null,
+    unique_differentiator: data.unique as string || null,
+    competitors: data.competitors as string || null,
+    cuisine: data.cuisine as string || null,
+    cuisine_other: data.cuisine_other as string || null,
+    service_styles: data.service_styles as string[] || [],
+    full_address: data.full_address as string || null,
+    city: data.city as string || null,
+    state: data.state as string || null,
+    zip: data.zip as string || null,
+    location_count: data.location_count as string || null,
+    hours: data.hours as Record<string, unknown> || null,
+    website_url: data.website as string || null,
+    business_phone: data.phone as string || null,
+    customer_types: data.customer_types as string[] || [],
+    why_choose: data.why_choose as string[] || [],
+    primary_goal: data.primary_goal as string || null,
+    goal_detail: data.goal_detail as string || null,
+    success_signs: data.success_signs as string[] || [],
+    timeline: data.timeline as string || null,
+    main_offerings: data.main_offerings as string || null,
+    upcoming_events: data.upcoming as string || null,
+    tone_tags: data.tones as string[] || [],
+    custom_tone: data.custom_tone as string || null,
+    content_type_tags: data.content_likes as string[] || [],
+    reference_accounts: data.ref_accounts as string || null,
+    avoid_content_tags: data.avoid_list as string[] || [],
+    approval_type: data.approval_type as string || null,
+    can_film: data.can_film as string[] || [],
+    can_tag: data.can_tag as string || null,
+    platforms_connected: data.connected as Record<string, boolean> || {},
+    logo_url: data.logo_url as string || null,
+    brand_color_primary: data.color1 as string || '#4abd98',
+    brand_color_secondary: data.color2 as string || '#2e9a78',
+    brand_drive: data.brand_drive as string || null,
+    onboarding_complete: true,
+    onboarding_step: 99,
+    agreed_terms: true,
+    agreed_terms_at: new Date().toISOString(),
+    onboarding_completed_at: new Date().toISOString(),
+  })
+
+  if (profileErr) {
+    console.error('[completeOnboardingCRM] Profile upsert failed:', profileErr)
+  }
+
+  // 3. Ensure client_users row links auth user to client
+  const { data: existingCU } = await supabase
+    .from('client_users')
+    .select('id')
+    .eq('auth_user_id', userId)
+    .maybeSingle()
+
+  if (!existingCU) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email, full_name')
+      .eq('id', userId)
+      .single()
+
+    await supabase
+      .from('client_users')
+      .insert({
+        client_id: clientId,
+        auth_user_id: userId,
+        email: profile?.email || '',
+        name: profile?.full_name || '',
+        role: 'owner',
+        status: 'active',
+      })
+  }
+
+  return { clientId, error: null }
+}
+
+/**
  * Check which platforms are connected for a given client.
  */
 export async function getConnectedPlatforms(clientId: string): Promise<Record<string, boolean>> {
@@ -157,11 +256,27 @@ export async function getMyConnectedPlatforms(): Promise<Array<{ platform: strin
 
   if (!clientId) return []
 
-  const { data } = await supabase
-    .from('platform_connections')
-    .select('platform, username, page_name')
-    .eq('client_id', clientId)
-    .not('access_token', 'is', null)
+  const [pc, cc] = await Promise.all([
+    supabase
+      .from('platform_connections')
+      .select('platform, username, page_name')
+      .eq('client_id', clientId)
+      .not('access_token', 'is', null),
+    // channel_connections (new unified layer) — GA4, etc.
+    supabase
+      .from('channel_connections')
+      .select('channel, platform_account_name')
+      .eq('client_id', clientId)
+      .eq('status', 'active')
+      .not('access_token', 'is', null),
+  ])
 
-  return (data ?? []) as Array<{ platform: string; username: string | null; page_name: string | null }>
+  const results: Array<{ platform: string; username: string | null; page_name: string | null }> = []
+  for (const r of pc.data ?? []) {
+    results.push({ platform: r.platform, username: r.username, page_name: r.page_name })
+  }
+  for (const r of cc.data ?? []) {
+    results.push({ platform: r.channel, username: r.platform_account_name, page_name: null })
+  }
+  return results
 }

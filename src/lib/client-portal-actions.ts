@@ -38,6 +38,10 @@ export async function inviteClientUser(
 
   const admin = createAdminClient()
 
+  // Ensure CRM profile exists before creating user link
+  const { ensureClientProfile } = await import('@/lib/crm-sync')
+  await ensureClientProfile(clientId)
+
   // Upsert the client_users row
   const { data: existing } = await admin
     .from('client_users')

@@ -308,8 +308,8 @@ async function maybeRefreshToken(
     }
   } else if (conn.platform === 'facebook') {
     // Facebook long-lived token refresh
-    const appId = Deno.env.get('FACEBOOK_APP_ID')
-    const appSecret = Deno.env.get('FACEBOOK_APP_SECRET')
+    const appId = Deno.env.get('FACEBOOK_APP_ID') || Deno.env.get('META_APP_ID')
+    const appSecret = Deno.env.get('FACEBOOK_APP_SECRET') || Deno.env.get('META_APP_SECRET')
     if (!appId || !appSecret) return
 
     const refreshUrl = `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${conn.access_token}`

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   Check, Loader2, Camera, Globe, Tv, Briefcase, Link as LinkIcon,
-  ArrowRight, Sparkles,
+  ArrowRight, Sparkles, BarChart3, Search, MapPin,
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { getMyConnectedPlatforms } from '@/lib/onboarding-actions'
@@ -41,6 +41,30 @@ const PLATFORMS = [
     color: 'from-blue-700 to-blue-600',
     description: 'Connect your company page for follower and post tracking.',
     authPath: '/api/auth/linkedin',
+  },
+  {
+    id: 'google_analytics',
+    label: 'Google Analytics',
+    icon: BarChart3,
+    color: 'from-orange-500 to-yellow-500',
+    description: 'Track website visitors, traffic sources, and top pages.',
+    authPath: '/api/auth/google',
+  },
+  {
+    id: 'google_search_console',
+    label: 'Google Search Console',
+    icon: Search,
+    color: 'from-blue-500 to-teal-500',
+    description: 'See what people search to find your site, and where you rank.',
+    authPath: '/api/auth/google-search-console',
+  },
+  {
+    id: 'google_business_profile',
+    label: 'Google Business Profile',
+    icon: MapPin,
+    color: 'from-sky-500 to-blue-600',
+    description: 'Track searches, map views, direction requests, and calls.',
+    authPath: '/api/auth/google-business',
   },
 ]
 
