@@ -7,7 +7,7 @@ import {
   LayoutDashboard, CheckCircle, Calendar, ShoppingBag, BarChart3,
   MessageSquare, Wrench, Building2, CreditCard, FileText, HelpCircle, Settings,
   Menu, X, ChevronDown, BookOpen, FileBarChart, ListTodo,
-  Share2, Globe, MapPin, Mail, Image as ImageIcon,
+  Share2, Globe, MapPin, Mail, Image as ImageIcon, Target,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { CartProvider } from '@/lib/cart-context'
@@ -134,6 +134,7 @@ const navSections: NavSection[] = [
 
 const bottomItems = [
   { label: 'Business Profile', href: '/dashboard/profile', icon: Building2 },
+  { label: 'My Strategy', href: '/dashboard/profile/strategy', icon: Target },
   { label: 'Brand Guidelines', href: '/dashboard/profile/brand-guidelines', icon: BookOpen },
   { label: 'Agreements', href: '/dashboard/agreements', icon: FileText },
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },

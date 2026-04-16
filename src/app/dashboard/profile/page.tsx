@@ -398,6 +398,11 @@ export default function ProfilePage() {
       return
     }
 
+    // Sync to CRM client_profiles (non-blocking)
+    import('@/lib/crm-sync')
+      .then(({ syncBusinessToClientProfile }) => syncBusinessToClientProfile(businessId))
+      .catch((err) => console.error('[profile] CRM sync failed:', err))
+
     // Re-fetch to get fresh data
     const { data: fresh } = await supabase
       .from('businesses')

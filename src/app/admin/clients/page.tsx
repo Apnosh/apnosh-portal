@@ -177,6 +177,10 @@ function AddClientModal({
     // 3. Create patterns row (empty for now)
     await supabase.from('client_patterns').insert({ client_id: client.id })
 
+    // 4. Create minimal client_profiles row (CRM canonical profile)
+    const { ensureClientProfile } = await import('@/lib/crm-sync')
+    await ensureClientProfile(client.id)
+
     setSaving(false)
     setForm(INITIAL_FORM)
     setStep(1)

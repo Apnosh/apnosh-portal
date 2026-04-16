@@ -94,6 +94,19 @@ export async function GET(request: NextRequest) {
       await supabase.from('platform_connections').insert(fbConnData)
     }
 
+    // Bridge: also store in social_connections for the sync Edge Function
+    await supabase.from('social_connections').upsert({
+      client_id: state.clientId,
+      platform: 'facebook',
+      platform_account_id: firstPage.id,
+      platform_account_name: firstPage.name,
+      access_token: firstPage.access_token,
+      token_expires_at: expiresAt,
+      connected_by: state.userId,
+      connected_at: new Date().toISOString(),
+      sync_status: 'pending',
+    }, { onConflict: 'client_id,platform,platform_account_id' })
+
     // 4. Check each Page for linked Instagram Business account
     let igConnected = false
     let igUsername = ''
@@ -136,6 +149,20 @@ export async function GET(request: NextRequest) {
         } else {
           await supabase.from('platform_connections').insert(igConnData)
         }
+
+        // Bridge: also store in social_connections for the sync Edge Function
+        await supabase.from('social_connections').upsert({
+          client_id: state.clientId,
+          platform: 'instagram',
+          platform_account_id: ig.id,
+          platform_account_name: ig.username || ig.id,
+          access_token: page.access_token,
+          refresh_token: longLived.access_token,
+          token_expires_at: expiresAt,
+          connected_by: state.userId,
+          connected_at: new Date().toISOString(),
+          sync_status: 'pending',
+        }, { onConflict: 'client_id,platform,platform_account_id' })
 
         igConnected = true
         igUsername = ig.username || ig.id

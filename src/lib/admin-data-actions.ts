@@ -187,3 +187,102 @@ export async function deleteReview(id: string): Promise<ActionResult> {
   revalidatePath('/dashboard/local-seo/reviews')
   return { success: true }
 }
+
+// ---------------------------------------------------------------------------
+// Review snapshots (aggregate per platform -- rating + count)
+// ---------------------------------------------------------------------------
+
+export async function upsertReviewSnapshot(
+  input: {
+    client_id: string
+    platform: string
+    date: string
+    rating_avg: number
+    review_count: number
+    new_reviews?: number
+    response_rate?: number
+  },
+): Promise<ActionResult<{ id: string }>> {
+  const check = await requireAdmin()
+  if (!check.ok) return { success: false, error: check.error }
+
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('review_metrics')
+    .upsert(
+      {
+        client_id: input.client_id,
+        platform: input.platform,
+        date: input.date,
+        rating_avg: input.rating_avg,
+        review_count: input.review_count,
+        new_reviews: input.new_reviews ?? 0,
+        response_rate: input.response_rate ?? null,
+      },
+      { onConflict: 'client_id,platform,date' },
+    )
+    .select('id')
+    .single()
+
+  if (error || !data) return { success: false, error: error?.message || 'Upsert failed' }
+
+  revalidatePath('/admin/clients')
+  return { success: true, data: { id: data.id } }
+}
+
+// ---------------------------------------------------------------------------
+// Website metrics (manual entry for clients without GA4)
+// ---------------------------------------------------------------------------
+
+export async function upsertWebsiteMetrics(
+  input: {
+    client_id: string
+    date: string
+    visitors?: number
+    page_views?: number
+    sessions?: number
+    bounce_rate?: number
+    avg_session_duration?: number
+    mobile_pct?: number
+    traffic_sources?: string
+    top_pages?: string
+  },
+): Promise<ActionResult<{ id: string }>> {
+  const check = await requireAdmin()
+  if (!check.ok) return { success: false, error: check.error }
+
+  const admin = createAdminClient()
+
+  let trafficJson = null
+  let pagesJson = null
+  try { if (input.traffic_sources) trafficJson = JSON.parse(input.traffic_sources) }
+  catch { trafficJson = { raw: input.traffic_sources } }
+  try { if (input.top_pages) pagesJson = JSON.parse(input.top_pages) }
+  catch { pagesJson = { raw: input.top_pages } }
+
+  const { data, error } = await admin
+    .from('website_metrics')
+    .upsert(
+      {
+        client_id: input.client_id,
+        date: input.date,
+        visitors: input.visitors ?? 0,
+        page_views: input.page_views ?? 0,
+        sessions: input.sessions ?? 0,
+        bounce_rate: input.bounce_rate ?? null,
+        avg_session_duration: input.avg_session_duration ?? null,
+        mobile_pct: input.mobile_pct ?? null,
+        traffic_sources: trafficJson,
+        top_pages: pagesJson,
+      },
+      { onConflict: 'client_id,date' },
+    )
+    .select('id')
+    .single()
+
+  if (error || !data) return { success: false, error: error?.message || 'Upsert failed' }
+
+  revalidatePath('/admin/clients')
+  revalidatePath('/dashboard/website')
+  return { success: true, data: { id: data.id } }
+}

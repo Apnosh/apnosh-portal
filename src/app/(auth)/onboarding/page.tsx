@@ -11,6 +11,7 @@ import {
   canContinue,
 } from './data'
 import StepRenderer from './step-renderer'
+import { completeOnboardingCRM } from '@/lib/onboarding-actions'
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -195,8 +196,10 @@ export default function OnboardingPage() {
 
   // Complete onboarding
   async function handleComplete() {
-    if (!businessId) return
+    if (!businessId || !userId) return
     setSaving(true)
+
+    // Mark businesses as completed (legacy gate)
     await supabase
       .from('businesses')
       .update({
@@ -206,6 +209,21 @@ export default function OnboardingPage() {
         agreed_terms_at: new Date().toISOString(),
       })
       .eq('id', businessId)
+
+    // Create CRM records: clients + client_profiles + client_users
+    await completeOnboardingCRM(businessId, userId, {
+      ...data,
+      biz_desc: data.biz_desc,
+      unique: data.unique,
+      upcoming: data.upcoming,
+      tones: data.tones,
+      content_likes: data.content_likes,
+      ref_accounts: data.ref_accounts,
+      avoid_list: data.avoid_list,
+      connected: data.connected,
+      logo_url: '', // URL set by upload handler if applicable
+    })
+
     setSaving(false)
     setShowSuccess(true)
   }
