@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import type { TimeRange, DashboardData } from '@/types/dashboard'
+import type { DashboardData } from '@/types/dashboard'
 import { getDashboardData } from '@/lib/dashboard/get-dashboard-data'
+import { getSocialBreakdown, type SocialDailyRow } from '@/lib/dashboard/get-social-breakdown'
 import { useClient } from '@/lib/client-context'
 import StatusBanner from '@/components/dashboard/status-banner'
 import HeroMetric from '@/components/dashboard/hero-metric'
-import TrendChart from '@/components/dashboard/trend-chart'
+import SocialInsightsChart from '@/components/dashboard/social-insights-chart'
 import MetricGrid from '@/components/dashboard/metric-grid'
 import BenchmarkBar from '@/components/dashboard/benchmark-bar'
 import InsightCard from '@/components/dashboard/insight-card'
@@ -14,8 +15,8 @@ import AMNote from '@/components/dashboard/am-note'
 
 export default function SocialOverviewPage() {
   const { client, loading: clientLoading } = useClient()
-  const [timeRange, setTimeRange] = useState<TimeRange>('1M')
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
+  const [breakdown, setBreakdown] = useState<{ rows: SocialDailyRow[]; platforms: string[] } | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -24,9 +25,13 @@ export default function SocialOverviewPage() {
 
       if (client?.id) {
         try {
-          const data = await getDashboardData(client.id)
+          const [data, bd] = await Promise.all([
+            getDashboardData(client.id),
+            getSocialBreakdown(client.id),
+          ])
           if (data) {
             setDashboardData(data)
+            setBreakdown({ rows: bd.rows, platforms: bd.platforms })
             setLoading(false)
             return
           }
@@ -36,6 +41,7 @@ export default function SocialOverviewPage() {
       }
 
       setDashboardData(null)
+      setBreakdown(null)
       setLoading(false)
     }
 
@@ -141,16 +147,12 @@ export default function SocialOverviewPage() {
         <HeroMetric ctx={view.ctx} num={view.num} pctFull={view.pctFull} up={view.up} />
       </div>
 
-      {/* Your trend over time */}
-      <div className="db-fade db-d4">
-        <TrendChart
-          data={view.chartData}
-          timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
-          up={view.up}
-          unit={view.unit}
-        />
-      </div>
+      {/* Your trend over time -- with platform breakdown + metric switcher */}
+      {breakdown && breakdown.rows.length > 0 && (
+        <div className="db-fade db-d4">
+          <SocialInsightsChart rows={breakdown.rows} platforms={breakdown.platforms} />
+        </div>
+      )}
 
       {/* The breakdown */}
       <div className="db-fade db-d5">
