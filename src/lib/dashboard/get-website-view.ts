@@ -6,7 +6,6 @@ import type {
   DashboardMetric,
   ChartData,
   TimeRange,
-  InsightIcon,
   DashboardInsight,
 } from '@/types/dashboard'
 
@@ -524,6 +523,3 @@ function isToday(d: Date): boolean {
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate()
 }
-
-// Unused but keeps tsc happy if InsightIcon is referenced elsewhere
-export type { InsightIcon }
