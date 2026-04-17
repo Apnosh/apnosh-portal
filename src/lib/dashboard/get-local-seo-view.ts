@@ -22,9 +22,30 @@ import type {
  * Primary metric is "interactions" -- directions + calls + website clicks
  * from the GBP listing. That's what drives actual business outcomes for a
  * local business: someone took a next-step action.
+ *
+ * Multi-location:
+ *   - When locationId is null, aggregates across every location for the client.
+ *   - When locationId is provided, filters gbp_metrics to rows whose
+ *     location_id equals the client_locations.gbp_location_id for that
+ *     location, and filters reviews to rows whose reviews.location_id matches.
  */
-export async function getLocalSeoView(clientId: string): Promise<DashboardView | null> {
+export async function getLocalSeoView(
+  clientId: string,
+  locationId: string | null = null,
+): Promise<DashboardView | null> {
   const supabase = await createClient()
+
+  // If filtering to a specific location, resolve its GBP location ID so we can
+  // match against gbp_metrics.location_id (which stores the GBP-native ID).
+  let gbpLocationId: string | null = null
+  if (locationId) {
+    const { data: loc } = await supabase
+      .from('client_locations')
+      .select('gbp_location_id')
+      .eq('id', locationId)
+      .maybeSingle()
+    gbpLocationId = loc?.gbp_location_id ?? null
+  }
 
   const now = new Date()
   const thisMonthStart = startOfMonth(now)
@@ -36,25 +57,34 @@ export async function getLocalSeoView(clientId: string): Promise<DashboardView |
 
   const yearAgo = addDays(now, -365)
 
+  let gbpQuery = supabase
+    .from('gbp_metrics')
+    .select('date, directions, calls, website_clicks, search_views, search_views_maps, search_views_search, photo_views')
+    .eq('client_id', clientId)
+    .gte('date', formatDate(yearAgo))
+    .order('date', { ascending: true })
+  if (gbpLocationId) gbpQuery = gbpQuery.eq('location_id', gbpLocationId)
+
+  let reviewsQuery = supabase
+    .from('reviews')
+    .select('id, source, rating, author_name, review_text, responded_at, created_at')
+    .eq('client_id', clientId)
+    .gte('created_at', formatDate(yearAgo))
+    .order('created_at', { ascending: false })
+  if (locationId) reviewsQuery = reviewsQuery.eq('location_id', locationId)
+
+  let prevReviewsQuery = supabase
+    .from('reviews')
+    .select('id')
+    .eq('client_id', clientId)
+    .gte('created_at', formatDate(lastMonthStart))
+    .lte('created_at', formatDate(lastMonthSameDay))
+  if (locationId) prevReviewsQuery = prevReviewsQuery.eq('location_id', locationId)
+
   const [gbpRes, reviewsRes, prevReviewsRes] = await Promise.all([
-    supabase
-      .from('gbp_metrics')
-      .select('date, directions, calls, website_clicks, search_views, search_views_maps, search_views_search, photo_views')
-      .eq('client_id', clientId)
-      .gte('date', formatDate(yearAgo))
-      .order('date', { ascending: true }),
-    supabase
-      .from('reviews')
-      .select('id, source, rating, author_name, review_text, responded_at, created_at')
-      .eq('client_id', clientId)
-      .gte('created_at', formatDate(yearAgo))
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('reviews')
-      .select('id')
-      .eq('client_id', clientId)
-      .gte('created_at', formatDate(lastMonthStart))
-      .lte('created_at', formatDate(lastMonthSameDay)),
+    gbpQuery,
+    reviewsQuery,
+    prevReviewsQuery,
   ])
 
   const gbpRows = (gbpRes.data ?? []) as GbpRow[]

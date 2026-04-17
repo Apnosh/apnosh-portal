@@ -89,6 +89,7 @@ const navSections: NavSection[] = [
         children: [
           { label: 'Performance', href: '/dashboard/local-seo', exact: true },
           { label: 'Full details', href: '/dashboard/analytics' },
+          { label: 'Locations', href: '/dashboard/local-seo/locations' },
           { label: 'Reviews', href: '/dashboard/local-seo/reviews' },
         ],
       },

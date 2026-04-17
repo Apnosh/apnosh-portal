@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { MapPin, Star, TrendingUp, ChevronRight, BarChart3 } from 'lucide-react'
 import type { TimeRange, DashboardView } from '@/types/dashboard'
 import { getLocalSeoView } from '@/lib/dashboard/get-local-seo-view'
+import { getClientLocations, type ClientLocation } from '@/lib/dashboard/get-client-locations'
 import { useClient } from '@/lib/client-context'
 import StatusBanner from '@/components/dashboard/status-banner'
 import HeroMetric from '@/components/dashboard/hero-metric'
@@ -12,11 +14,18 @@ import TrendChart from '@/components/dashboard/trend-chart'
 import MetricGrid from '@/components/dashboard/metric-grid'
 import InsightCard from '@/components/dashboard/insight-card'
 import AMNote from '@/components/dashboard/am-note'
+import LocationSelector from '@/components/dashboard/location-selector'
 
-export default function LocalSeoOverviewPage() {
+function LocalSeoContent() {
   const { client, loading: clientLoading } = useClient()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const selectedLocationId = searchParams.get('location')
+
   const [timeRange, setTimeRange] = useState<TimeRange>('1M')
   const [view, setView] = useState<DashboardView | null>(null)
+  const [locations, setLocations] = useState<ClientLocation[]>([])
   const [businessName, setBusinessName] = useState<string>('')
   const [loading, setLoading] = useState(true)
 
@@ -26,8 +35,12 @@ export default function LocalSeoOverviewPage() {
       if (!client?.id) { setLoading(false); return }
 
       try {
-        const v = await getLocalSeoView(client.id)
+        const [v, locs] = await Promise.all([
+          getLocalSeoView(client.id, selectedLocationId),
+          getClientLocations(client.id),
+        ])
         setView(v)
+        setLocations(locs)
         setBusinessName(client.name ?? '')
       } catch (err) {
         console.error('Failed to load local-seo view', err)
@@ -36,7 +49,15 @@ export default function LocalSeoOverviewPage() {
       setLoading(false)
     }
     loadData()
-  }, [client?.id, client?.name, clientLoading])
+  }, [client?.id, client?.name, clientLoading, selectedLocationId])
+
+  function handleLocationChange(locId: string | null) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (locId) params.set('location', locId)
+    else params.delete('location')
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }
 
   if (loading) {
     return (
@@ -50,13 +71,22 @@ export default function LocalSeoOverviewPage() {
     )
   }
 
-  // No data yet (common state right now since GBP API approval is pending)
+  // No data yet (GBP not connected or still syncing)
   if (!view || view.num === '---') {
     return (
       <div
         className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20"
         style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
       >
+        {locations.length > 1 && (
+          <div className="flex justify-end pt-6">
+            <LocationSelector
+              locations={locations}
+              selectedLocationId={selectedLocationId}
+              onChange={handleLocationChange}
+            />
+          </div>
+        )}
         <div className="text-center py-20">
           <div
             className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center"
@@ -79,7 +109,6 @@ export default function LocalSeoOverviewPage() {
           </Link>
         </div>
 
-        {/* Still link to reviews and legacy analytics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-10">
           <Link
             href="/dashboard/local-seo/reviews"
@@ -121,6 +150,17 @@ export default function LocalSeoOverviewPage() {
       className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
+      {/* Location selector (hidden when 0-1 locations) */}
+      {locations.length > 1 && (
+        <div className="flex justify-end pt-6">
+          <LocationSelector
+            locations={locations}
+            selectedLocationId={selectedLocationId}
+            onChange={handleLocationChange}
+          />
+        </div>
+      )}
+
       {/* How your local presence is doing */}
       <div className="db-fade db-d1">
         <StatusBanner
@@ -183,7 +223,24 @@ export default function LocalSeoOverviewPage() {
         <h2 className="text-[15px] font-bold mb-3" style={{ color: 'var(--db-black)' }}>
           Local SEO tools
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {locations.length > 1 && (
+            <Link
+              href="/dashboard/local-seo/locations"
+              className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-bg-2 flex items-center justify-center">
+                  <MapPin className="w-5 h-5 text-ink-3" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-ink">Locations</div>
+                  <div className="text-xs text-ink-4">{locations.length} locations compared</div>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-ink-4" />
+            </Link>
+          )}
           <Link
             href="/dashboard/local-seo/reviews"
             className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
@@ -217,5 +274,17 @@ export default function LocalSeoOverviewPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LocalSeoOverviewPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-[840px] mx-auto px-8 pt-12 text-center">
+        <div className="animate-pulse h-12 bg-ink-6 rounded w-48 mx-auto" />
+      </div>
+    }>
+      <LocalSeoContent />
+    </Suspense>
   )
 }
