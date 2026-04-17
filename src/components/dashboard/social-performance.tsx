@@ -126,7 +126,7 @@ function daysAgo(iso: string): string {
  * The "big number + honest small print" pattern beats burying the number
  * inside a tooltip or omitting it altogether.
  */
-function AtAGlance({ posts }: { posts: SocialPost[] }) {
+export function AtAGlance({ posts }: { posts: SocialPost[] }) {
   const stats = useMemo(() => {
     const now = Date.now()
     const thirtyDaysMs = 30 * 86_400_000
@@ -227,7 +227,7 @@ function GlanceCard({
  * but it's the cleanest WoW we can make from post-level data and matches
  * how agencies report in weekly rollups.
  */
-function WeekOverWeek({ posts }: { posts: SocialPost[] }) {
+export function WeekOverWeek({ posts }: { posts: SocialPost[] }) {
   const stats = useMemo(() => {
     const now = new Date()
     now.setHours(0, 0, 0, 0)
@@ -332,7 +332,7 @@ function WoWStat({
 type PostSort = 'reach' | 'engagement' | 'saves' | 'recent'
 type PostFilter = 'all' | 'reels' | 'feed'
 
-function TopPosts({ posts }: { posts: SocialPost[] }) {
+export function TopPosts({ posts }: { posts: SocialPost[] }) {
   const [sort, setSort] = useState<PostSort>('reach')
   const [filter, setFilter] = useState<PostFilter>('all')
 
@@ -542,7 +542,7 @@ function Stat({ icon: Icon, value }: { icon: typeof Heart; value: number | null 
 // Content Type Breakdown
 // ---------------------------------------------------------------------------
 
-function ContentTypeBreakdown({ posts }: { posts: SocialPost[] }) {
+export function ContentTypeBreakdown({ posts }: { posts: SocialPost[] }) {
   const breakdown = useMemo(() => {
     const buckets = new Map<string, { count: number; totalReach: number; totalEng: number; totalSaves: number }>()
     for (const p of posts) {
@@ -609,7 +609,7 @@ function ContentTypeBreakdown({ posts }: { posts: SocialPost[] }) {
 // Posting Cadence (last 4 weeks)
 // ---------------------------------------------------------------------------
 
-function PostingCadence({ posts }: { posts: SocialPost[] }) {
+export function PostingCadence({ posts }: { posts: SocialPost[] }) {
   const grid = useMemo(() => {
     // 28 days ending today, laid out in 4 weeks of 7 columns
     const now = new Date()
@@ -695,7 +695,7 @@ function PostingCadence({ posts }: { posts: SocialPost[] }) {
 // Best Time To Post (heatmap by day-of-week × rough hour band)
 // ---------------------------------------------------------------------------
 
-function BestTimeToPost({ posts }: { posts: SocialPost[] }) {
+export function BestTimeToPost({ posts }: { posts: SocialPost[] }) {
   const matrix = useMemo(() => {
     // Rows = day of week (Mon-Sun), Cols = 4 time bands (morning/midday/afternoon/evening)
     const bands = [
@@ -832,7 +832,7 @@ function BestTimeToPost({ posts }: { posts: SocialPost[] }) {
  *
  * Everything is computed locally from posts we already have; no new API.
  */
-function CaptionAnalysis({ posts }: { posts: SocialPost[] }) {
+export function CaptionAnalysis({ posts }: { posts: SocialPost[] }) {
   const analysis = useMemo(() => {
     const postsWithReach = posts.filter(p => (p.reach ?? 0) > 0)
     if (postsWithReach.length < 3) return null

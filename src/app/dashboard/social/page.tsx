@@ -8,13 +8,22 @@ import { getSocialPosts, type SocialPost } from '@/lib/dashboard/get-social-post
 import { useClient } from '@/lib/client-context'
 import StatusBanner from '@/components/dashboard/status-banner'
 import SocialOverview from '@/components/dashboard/social-overview'
-import SocialPerformance from '@/components/dashboard/social-performance'
+import {
+  AtAGlance,
+  WeekOverWeek,
+  TopPosts,
+  ContentTypeBreakdown,
+  CaptionAnalysis,
+  PostingCadence,
+  BestTimeToPost,
+} from '@/components/dashboard/social-performance'
 import SocialInsightsChart from '@/components/dashboard/social-insights-chart'
 import InsightCard from '@/components/dashboard/insight-card'
 import AMNote from '@/components/dashboard/am-note'
 
-type SocialTab = 'overview' | 'details'
+type SocialTab = 'overview' | 'content' | 'audience'
 const TAB_STORAGE_KEY = 'apnosh.social.tab'
+const VALID_TABS: SocialTab[] = ['overview', 'content', 'audience']
 
 export default function SocialOverviewPage() {
   const { client, loading: clientLoading } = useClient()
@@ -30,12 +39,17 @@ export default function SocialOverviewPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const urlTab = new URLSearchParams(window.location.search).get('view') as SocialTab | null
-    const stored = window.localStorage.getItem(TAB_STORAGE_KEY) as SocialTab | null
-    const resolved: SocialTab = urlTab === 'details' || urlTab === 'overview'
-      ? urlTab
-      : stored === 'details' || stored === 'overview'
-      ? stored
+    const urlTab = new URLSearchParams(window.location.search).get('view')
+    const stored = window.localStorage.getItem(TAB_STORAGE_KEY)
+    const isValid = (t: string | null): t is SocialTab =>
+      t !== null && VALID_TABS.includes(t as SocialTab)
+    // Backwards compat: anyone with an old 'details' bookmark lands on
+    // 'content' (the most-used subsection of the old Details tab).
+    const remap = (t: string | null) => t === 'details' ? 'content' : t
+    const resolved: SocialTab = isValid(remap(urlTab))
+      ? (remap(urlTab) as SocialTab)
+      : isValid(remap(stored))
+      ? (remap(stored) as SocialTab)
       : 'overview'
     setTab(resolved)
   }, [])
@@ -171,11 +185,14 @@ export default function SocialOverviewPage() {
       </div>
 
       {/* Tab switcher */}
-      <div className="db-fade db-d2 mt-4 mb-6 flex items-center gap-2 border-b border-ink-6">
+      <div className="db-fade db-d2 mt-4 mb-6 flex items-center gap-2 border-b border-ink-6 overflow-x-auto">
         <TabButton label="Overview" active={tab === 'overview'} onClick={() => handleTabChange('overview')} />
-        <TabButton label="Details" active={tab === 'details'} onClick={() => handleTabChange('details')} />
-        <span className="ml-auto text-[11px] text-ink-4">
-          {tab === 'overview' ? 'For quick check-ins' : 'For deep analysis'}
+        <TabButton label="Content" active={tab === 'content'} onClick={() => handleTabChange('content')} />
+        <TabButton label="Audience" active={tab === 'audience'} onClick={() => handleTabChange('audience')} />
+        <span className="ml-auto text-[11px] text-ink-4 whitespace-nowrap pl-3">
+          {tab === 'overview' ? 'Quick check-in'
+            : tab === 'content' ? 'Posts & what works'
+            : 'Growth & trends'}
         </span>
       </div>
 
@@ -191,42 +208,49 @@ export default function SocialOverviewPage() {
         </div>
       )}
 
-      {tab === 'overview' ? (
+      {tab === 'overview' && (
         <div className="db-fade db-d4">
           <SocialOverview posts={posts} rows={breakdown?.rows ?? []} />
         </div>
-      ) : (
-        <div className="db-fade db-d4 space-y-10">
-          {/* Group 1: Content performance */}
-          <DetailsGroup
-            title="Content performance"
-            description="How your individual posts and content formats are doing."
-          >
-            <SocialPerformance posts={posts} />
-          </DetailsGroup>
+      )}
 
-          {/* Group 2: AM observations */}
+      {tab === 'content' && (
+        <div className="db-fade db-d4">
+          <AtAGlance posts={posts} />
+          <WeekOverWeek posts={posts} />
+          <TopPosts posts={posts} />
+          <ContentTypeBreakdown posts={posts} />
+          <CaptionAnalysis posts={posts} />
+        </div>
+      )}
+
+      {tab === 'audience' && (
+        <div className="db-fade db-d4">
+          <PostingCadence posts={posts} />
+          <BestTimeToPost posts={posts} />
+
           {view.insights.length > 0 && (
-            <DetailsGroup
-              title="What we noticed"
-              description="Signals your account manager pulled from this week."
-            >
+            <section className="mb-10 pb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
+              <div className="mb-4">
+                <h2 className="text-lg font-bold text-ink">What we noticed</h2>
+                <p className="text-xs text-ink-3 mt-0.5">Signals your account manager pulled from this week.</p>
+              </div>
               <div className="flex flex-col gap-2.5">
                 {view.insights.map((ins, i) => (
                   <InsightCard key={i} icon={ins.icon} title={ins.title} subtitle={ins.subtitle} />
                 ))}
               </div>
-            </DetailsGroup>
+            </section>
           )}
 
-          {/* Group 3: Audience trends */}
           {breakdown && breakdown.rows.length > 0 && (
-            <DetailsGroup
-              title="Audience trends"
-              description="How followers and other account-level numbers move over time."
-            >
+            <section>
+              <div className="mb-4">
+                <h2 className="text-lg font-bold text-ink">Audience trends</h2>
+                <p className="text-xs text-ink-3 mt-0.5">How followers and other account-level numbers move over time.</p>
+              </div>
               <SocialInsightsChart rows={breakdown.rows} platforms={breakdown.platforms} />
-            </DetailsGroup>
+            </section>
           )}
         </div>
       )}
@@ -238,7 +262,7 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
   return (
     <button
       onClick={onClick}
-      className="text-[14px] font-semibold px-4 py-3 -mb-px transition-colors"
+      className="text-[14px] font-semibold px-4 py-3 -mb-px transition-colors whitespace-nowrap"
       style={{
         color: active ? 'var(--db-black)' : 'var(--db-ink-3)',
         borderBottom: active ? '2px solid var(--db-black)' : '2px solid transparent',
@@ -246,23 +270,5 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
     >
       {label}
     </button>
-  )
-}
-
-function DetailsGroup({
-  title, description, children,
-}: {
-  title: string
-  description: string
-  children: React.ReactNode
-}) {
-  return (
-    <section>
-      <div className="mb-5 pb-3 border-b border-ink-6">
-        <h3 className="text-[11px] font-bold uppercase tracking-wider text-ink-3">{title}</h3>
-        <p className="text-xs text-ink-4 mt-0.5">{description}</p>
-      </div>
-      {children}
-    </section>
   )
 }
