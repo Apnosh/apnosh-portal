@@ -3,120 +3,97 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, BarChart3, Users, Eye, TrendingUp, TrendingDown, Minus,
-  ChevronDown, FileText, Search, Share2, Link as LinkIcon, Mail, DollarSign,
-  RefreshCw, Phone, MapPin, Navigation, Send, Calendar, Target, Globe, Repeat,
+  ArrowLeft, BarChart3, Users, Target, Search,
+  TrendingUp, TrendingDown, ChevronDown, ChevronRight,
+  MapPin, FileText, Globe, Phone, Navigation, Send, Calendar,
+  RefreshCw, Info,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from '@/lib/realtime'
 import { useClient } from '@/lib/client-context'
+import {
+  buildWebsiteInsight,
+  type DailyWebsiteRow, type DailySearchRow, type WebsiteInsight,
+  type UniqueAggregateOverride,
+} from '@/lib/website-insights'
 
 // ---------------------------------------------------------------------------
-// Source labels (covers GA4 default channel groups, normalized to lowercase)
+// Time range options
 // ---------------------------------------------------------------------------
 
-const SOURCE_LABELS: Record<string, { label: string; icon: typeof Search }> = {
-  direct: { label: 'Direct', icon: LinkIcon },
-  'organic search': { label: 'Search', icon: Search },
-  search: { label: 'Search', icon: Search },
-  'organic social': { label: 'Social', icon: Share2 },
-  social: { label: 'Social', icon: Share2 },
-  'paid social': { label: 'Paid Social', icon: DollarSign },
-  'paid search': { label: 'Paid Search', icon: DollarSign },
-  paid: { label: 'Paid Ads', icon: DollarSign },
-  referral: { label: 'Referral', icon: LinkIcon },
-  email: { label: 'Email', icon: Mail },
-  unassigned: { label: 'Other', icon: LinkIcon },
+type RangeKey = 'last_30_days' | 'last_7_days' | 'this_month' | 'last_month' | 'last_90_days'
+
+const RANGE_OPTIONS: Record<RangeKey, { label: string; compute: () => { start: Date; end: Date } }> = {
+  last_7_days: {
+    label: 'Last 7 days',
+    compute: () => {
+      const end = new Date(); end.setHours(0, 0, 0, 0)
+      const start = new Date(end); start.setDate(start.getDate() - 6)
+      return { start, end }
+    },
+  },
+  last_30_days: {
+    label: 'Last 30 days',
+    compute: () => {
+      const end = new Date(); end.setHours(0, 0, 0, 0)
+      const start = new Date(end); start.setDate(start.getDate() - 29)
+      return { start, end }
+    },
+  },
+  this_month: {
+    label: 'This month',
+    compute: () => {
+      const now = new Date()
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      const end = new Date()
+      return { start, end }
+    },
+  },
+  last_month: {
+    label: 'Last month',
+    compute: () => {
+      const now = new Date()
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const end = new Date(now.getFullYear(), now.getMonth(), 0)
+      return { start, end }
+    },
+  },
+  last_90_days: {
+    label: 'Last 90 days',
+    compute: () => {
+      const end = new Date(); end.setHours(0, 0, 0, 0)
+      const start = new Date(end); start.setDate(start.getDate() - 89)
+      return { start, end }
+    },
+  },
 }
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface ConversionEvents {
-  phone_clicks: number
-  direction_clicks: number
-  form_submits: number
-  booking_clicks: number
-  other: number
-  total: number
+function toDateStr(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
-interface DailyMetric {
-  date: string
-  visitors: number | null
-  page_views: number | null
-  sessions: number | null
-  bounce_rate: number | null
-  avg_session_duration: number | null
-  mobile_pct: number | null
-  traffic_sources: Record<string, number> | null
-  top_pages: Array<{ path: string; views: number }> | null
-  conversion_events: ConversionEvents | null
-  top_cities: Array<{ city: string; sessions: number }> | null
-  landing_pages: Array<{ path: string; sessions: number }> | null
-  new_users: number | null
-  returning_users: number | null
-  top_referrers: Array<{ source: string; sessions: number }> | null
-  created_at: string
+function previousRange(start: Date, end: Date): { start: Date; end: Date } {
+  const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  const newEnd = new Date(start); newEnd.setDate(newEnd.getDate() - 1)
+  const newStart = new Date(newEnd); newStart.setDate(newStart.getDate() - days + 1)
+  return { start: newStart, end: newEnd }
 }
 
-interface MonthlyUniques {
-  year: number
-  month: number
-  unique_visitors: number | null
-  unique_new_users: number | null
-  unique_returning_users: number | null
-}
-
-interface SearchDaily {
-  date: string
-  total_impressions: number | null
-  total_clicks: number | null
-  avg_ctr: number | null
-  avg_position: number | null
-  top_queries: Array<{ query: string; clicks: number; impressions: number; position: number }> | null
-  top_pages: Array<{ page: string; clicks: number; impressions: number }> | null
-}
-
-interface MonthlyAggregate {
-  year: number
-  month: number
-  visitors: number
-  pageviews: number
-  sessions: number
-  bounce_rate: number | null
-  avg_session_duration: number | null
-  traffic_sources: Record<string, number>
-  top_pages: Array<{ path: string; title?: string; pageviews: number }>
-  conversion_events: ConversionEvents
-  top_cities: Array<{ city: string; sessions: number }>
-  landing_pages: Array<{ path: string; sessions: number }>
-  new_users: number
-  returning_users: number
-  top_referrers: Array<{ source: string; sessions: number }>
-  days_with_data: number
-  latest_sync: string | null
-  // search (GSC) rolled up for the same month
-  search: {
-    impressions: number
-    clicks: number
-    avg_ctr: number | null
-    avg_position: number | null
-    top_queries: Array<{ query: string; clicks: number; impressions: number }>
-    days_with_data: number
-  }
+function formatRange(start: Date, end: Date): string {
+  const sameYear = start.getFullYear() === end.getFullYear()
+  const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: sameYear ? undefined : 'numeric' })
+  const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return `${startStr} – ${endStr}`
 }
 
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  if (n >= 10_000) return `${(n / 1000).toFixed(0)}k`
+  if (n >= 1_000) return `${(n / 1000).toFixed(1)}k`
   return n.toLocaleString()
-}
-
-function calcChange(current: number, previous: number): number {
-  if (previous === 0) return current === 0 ? 0 : 100
-  return Math.round(((current - previous) / previous) * 1000) / 10
 }
 
 function formatDuration(seconds: number | null): string {
@@ -126,254 +103,24 @@ function formatDuration(seconds: number | null): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-function cleanReferrerDomain(source: string): string {
-  // GA4 sessionSource can include "/referral" etc; trim to bare domain
-  return source.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]
-}
-
-// ---------------------------------------------------------------------------
-// Aggregation: daily GA4 + daily GSC into unified monthly buckets
-// ---------------------------------------------------------------------------
-
-function aggregateByMonth(
-  daily: DailyMetric[],
-  searchDaily: SearchDaily[],
-  monthlyUniques: MonthlyUniques[],
-): MonthlyAggregate[] {
-  const uniquesByMonth = new Map<string, MonthlyUniques>()
-  for (const m of monthlyUniques) uniquesByMonth.set(`${m.year}-${m.month}`, m)
-  type Bucket = MonthlyAggregate & {
-    _bounceNumerator: number
-    _bounceDenominator: number
-    _durationNumerator: number
-    _durationDenominator: number
-    _queryMap: Map<string, { query: string; clicks: number; impressions: number }>
-    _ctrSum: number
-    _positionSum: number
-    _ctrCount: number
-  }
-  const buckets = new Map<string, Bucket>()
-
-  const getBucket = (year: number, month: number): Bucket => {
-    const key = `${year}-${month}`
-    let agg = buckets.get(key)
-    if (!agg) {
-      agg = {
-        year, month,
-        visitors: 0, pageviews: 0, sessions: 0,
-        bounce_rate: null, avg_session_duration: null,
-        traffic_sources: {},
-        top_pages: [],
-        conversion_events: { phone_clicks: 0, direction_clicks: 0, form_submits: 0, booking_clicks: 0, other: 0, total: 0 },
-        top_cities: [],
-        landing_pages: [],
-        new_users: 0, returning_users: 0,
-        top_referrers: [],
-        days_with_data: 0,
-        latest_sync: null,
-        search: {
-          impressions: 0, clicks: 0,
-          avg_ctr: null, avg_position: null,
-          top_queries: [],
-          days_with_data: 0,
-        },
-        _bounceNumerator: 0,
-        _bounceDenominator: 0,
-        _durationNumerator: 0,
-        _durationDenominator: 0,
-        _queryMap: new Map(),
-        _ctrSum: 0,
-        _positionSum: 0,
-        _ctrCount: 0,
-      }
-      buckets.set(key, agg)
-    }
-    return agg
-  }
-
-  // --- GA4 daily rollups
-  for (const d of daily) {
-    const [year, month] = d.date.split('-').map(Number)
-    const agg = getBucket(year, month)
-
-    agg.visitors += d.visitors ?? 0
-    agg.pageviews += d.page_views ?? 0
-    agg.sessions += d.sessions ?? 0
-    agg.days_with_data += 1
-
-    const sessionsForWeighting = d.sessions ?? 0
-    if (d.bounce_rate != null && sessionsForWeighting > 0) {
-      agg._bounceNumerator += d.bounce_rate * sessionsForWeighting
-      agg._bounceDenominator += sessionsForWeighting
-    }
-    if (d.avg_session_duration != null && sessionsForWeighting > 0) {
-      agg._durationNumerator += d.avg_session_duration * sessionsForWeighting
-      agg._durationDenominator += sessionsForWeighting
-    }
-
-    if (d.traffic_sources) {
-      for (const [k, v] of Object.entries(d.traffic_sources)) {
-        if (typeof v === 'number') agg.traffic_sources[k] = (agg.traffic_sources[k] ?? 0) + v
-      }
-    }
-
-    if (d.top_pages) {
-      for (const p of d.top_pages) {
-        const existing = agg.top_pages.find(x => x.path === p.path)
-        if (existing) existing.pageviews += p.views ?? 0
-        else agg.top_pages.push({ path: p.path, pageviews: p.views ?? 0 })
-      }
-    }
-
-    if (d.conversion_events) {
-      const ce = d.conversion_events
-      agg.conversion_events.phone_clicks += ce.phone_clicks ?? 0
-      agg.conversion_events.direction_clicks += ce.direction_clicks ?? 0
-      agg.conversion_events.form_submits += ce.form_submits ?? 0
-      agg.conversion_events.booking_clicks += ce.booking_clicks ?? 0
-      agg.conversion_events.other += ce.other ?? 0
-      agg.conversion_events.total += ce.total ?? 0
-    }
-
-    if (d.top_cities) {
-      for (const c of d.top_cities) {
-        const existing = agg.top_cities.find(x => x.city === c.city)
-        if (existing) existing.sessions += c.sessions ?? 0
-        else agg.top_cities.push({ city: c.city, sessions: c.sessions ?? 0 })
-      }
-    }
-
-    if (d.landing_pages) {
-      for (const p of d.landing_pages) {
-        const existing = agg.landing_pages.find(x => x.path === p.path)
-        if (existing) existing.sessions += p.sessions ?? 0
-        else agg.landing_pages.push({ path: p.path, sessions: p.sessions ?? 0 })
-      }
-    }
-
-    agg.new_users += d.new_users ?? 0
-    agg.returning_users += d.returning_users ?? 0
-
-    if (d.top_referrers) {
-      for (const r of d.top_referrers) {
-        const domain = cleanReferrerDomain(r.source)
-        const existing = agg.top_referrers.find(x => x.source === domain)
-        if (existing) existing.sessions += r.sessions ?? 0
-        else agg.top_referrers.push({ source: domain, sessions: r.sessions ?? 0 })
-      }
-    }
-
-    if (!agg.latest_sync || d.created_at > agg.latest_sync) {
-      agg.latest_sync = d.created_at
-    }
-  }
-
-  // --- GSC daily rollups (same buckets)
-  for (const s of searchDaily) {
-    const [year, month] = s.date.split('-').map(Number)
-    const agg = getBucket(year, month)
-
-    const imp = s.total_impressions ?? 0
-    const clk = s.total_clicks ?? 0
-    agg.search.impressions += imp
-    agg.search.clicks += clk
-    agg.search.days_with_data += 1
-
-    if (imp > 0) {
-      agg._ctrCount += 1
-      agg._ctrSum += s.avg_ctr ?? 0
-      agg._positionSum += s.avg_position ?? 0
-    }
-
-    if (s.top_queries) {
-      for (const q of s.top_queries) {
-        const existing = agg._queryMap.get(q.query)
-        if (existing) {
-          existing.clicks += q.clicks ?? 0
-          existing.impressions += q.impressions ?? 0
-        } else {
-          agg._queryMap.set(q.query, {
-            query: q.query,
-            clicks: q.clicks ?? 0,
-            impressions: q.impressions ?? 0,
-          })
-        }
-      }
-    }
-  }
-
-  // --- Finalize
-  // For user-count metrics (visitors, new_users, returning_users), override
-  // the summed-daily values with the authoritative monthly aggregate from
-  // website_metrics_monthly. Summing daily unique-user counts inflates the
-  // number because a user visiting on multiple days gets counted per-day.
-  const result: MonthlyAggregate[] = []
-  for (const agg of buckets.values()) {
-    const truth = uniquesByMonth.get(`${agg.year}-${agg.month}`)
-    if (truth) {
-      if (truth.unique_visitors != null) agg.visitors = truth.unique_visitors
-      if (truth.unique_new_users != null) agg.new_users = truth.unique_new_users
-      if (truth.unique_returning_users != null) agg.returning_users = truth.unique_returning_users
-    }
-    if (agg._bounceDenominator > 0) {
-      agg.bounce_rate = Math.round((agg._bounceNumerator / agg._bounceDenominator) * 1000) / 10
-    }
-    if (agg._durationDenominator > 0) {
-      agg.avg_session_duration = Math.round(agg._durationNumerator / agg._durationDenominator)
-    }
-    agg.top_pages.sort((a, b) => b.pageviews - a.pageviews)
-    agg.top_pages = agg.top_pages.slice(0, 10)
-    agg.top_cities.sort((a, b) => b.sessions - a.sessions)
-    agg.top_cities = agg.top_cities.slice(0, 10)
-    agg.landing_pages.sort((a, b) => b.sessions - a.sessions)
-    agg.landing_pages = agg.landing_pages.slice(0, 10)
-    agg.top_referrers.sort((a, b) => b.sessions - a.sessions)
-    agg.top_referrers = agg.top_referrers.slice(0, 10)
-
-    // Search query rollup
-    const queries = Array.from(agg._queryMap.values()).sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions)
-    agg.search.top_queries = queries.slice(0, 10)
-    if (agg._ctrCount > 0) {
-      agg.search.avg_ctr = Math.round((agg._ctrSum / agg._ctrCount) * 1000) / 10
-      agg.search.avg_position = Math.round((agg._positionSum / agg._ctrCount) * 10) / 10
-    }
-
-    result.push({
-      year: agg.year, month: agg.month,
-      visitors: agg.visitors, pageviews: agg.pageviews, sessions: agg.sessions,
-      bounce_rate: agg.bounce_rate, avg_session_duration: agg.avg_session_duration,
-      traffic_sources: agg.traffic_sources,
-      top_pages: agg.top_pages,
-      conversion_events: agg.conversion_events,
-      top_cities: agg.top_cities,
-      landing_pages: agg.landing_pages,
-      new_users: agg.new_users, returning_users: agg.returning_users,
-      top_referrers: agg.top_referrers,
-      days_with_data: agg.days_with_data,
-      latest_sync: agg.latest_sync,
-      search: agg.search,
-    })
-  }
-
-  result.sort((a, b) => (b.year - a.year) || (b.month - a.month))
-  return result
-}
-
 // ---------------------------------------------------------------------------
 
 export default function WebsiteTrafficPage() {
   const supabase = createClient()
   const { client, loading: clientLoading } = useClient()
 
-  const [daily, setDaily] = useState<DailyMetric[]>([])
-  const [searchDaily, setSearchDaily] = useState<SearchDaily[]>([])
-  const [monthlyUniques, setMonthlyUniques] = useState<MonthlyUniques[]>([])
+  const [rangeKey, setRangeKey] = useState<RangeKey>('last_30_days')
+  const [dailyWeb, setDailyWeb] = useState<DailyWebsiteRow[]>([])
+  const [dailySearch, setDailySearch] = useState<DailySearchRow[]>([])
+  const [monthlyUniques, setMonthlyUniques] = useState<Array<{
+    year: number; month: number
+    unique_visitors: number | null; unique_new_users: number | null; unique_returning_users: number | null
+  }>>([])
   const [loading, setLoading] = useState(true)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [latestSync, setLatestSync] = useState<string | null>(null)
 
-  const now = new Date()
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1)
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear())
-
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const load = useCallback(async () => {
     if (!client?.id) { setLoading(false); return }
 
@@ -382,65 +129,92 @@ export default function WebsiteTrafficPage() {
         .from('website_metrics')
         .select('date, visitors, page_views, sessions, bounce_rate, avg_session_duration, mobile_pct, traffic_sources, top_pages, conversion_events, top_cities, landing_pages, new_users, returning_users, top_referrers, created_at')
         .eq('client_id', client.id)
-        .order('date', { ascending: false }),
+        .order('date', { ascending: false })
+        .limit(400),
       supabase
         .from('search_metrics')
         .select('date, total_impressions, total_clicks, avg_ctr, avg_position, top_queries, top_pages')
         .eq('client_id', client.id)
-        .order('date', { ascending: false }),
+        .order('date', { ascending: false })
+        .limit(400),
       supabase
         .from('website_metrics_monthly')
         .select('year, month, unique_visitors, unique_new_users, unique_returning_users')
         .eq('client_id', client.id),
     ])
 
-    setDaily((ga.data ?? []) as DailyMetric[])
-    setSearchDaily((gsc.data ?? []) as SearchDaily[])
-    setMonthlyUniques((monthly.data ?? []) as MonthlyUniques[])
+    const gaRowsRaw = (ga.data ?? []) as Array<DailyWebsiteRow & { created_at?: string }>
+    setDailyWeb(gaRowsRaw)
+    setDailySearch((gsc.data ?? []) as DailySearchRow[])
+    setMonthlyUniques(monthly.data ?? [])
+    if (gaRowsRaw.length > 0) setLatestSync(gaRowsRaw[0].created_at ?? null)
     setLoading(false)
   }, [client?.id, supabase])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [load])
-  useRealtimeRefresh(['website_metrics', 'search_metrics'], load)
+  useRealtimeRefresh(['website_metrics', 'search_metrics', 'website_metrics_monthly'], load)
 
-  const traffic = useMemo(
-    () => aggregateByMonth(daily, searchDaily, monthlyUniques),
-    [daily, searchDaily, monthlyUniques],
-  )
+  // Compute insight for the selected range
+  const insight = useMemo<WebsiteInsight | null>(() => {
+    if (dailyWeb.length === 0 && dailySearch.length === 0) return null
 
-  useEffect(() => {
-    if (traffic.length === 0) return
-    const hasCurrent = traffic.some(r => r.month === selectedMonth && r.year === selectedYear)
-    if (!hasCurrent) {
-      setSelectedMonth(traffic[0].month)
-      setSelectedYear(traffic[0].year)
+    const { start, end } = RANGE_OPTIONS[rangeKey].compute()
+    const prev = previousRange(start, end)
+    const startStr = toDateStr(start)
+    const endStr = toDateStr(end)
+    const prevStartStr = toDateStr(prev.start)
+    const prevEndStr = toDateStr(prev.end)
+
+    const currDaily = dailyWeb.filter(r => r.date >= startStr && r.date <= endStr)
+    const prevDaily = dailyWeb.filter(r => r.date >= prevStartStr && r.date <= prevEndStr)
+    const currSearch = dailySearch.filter(r => r.date >= startStr && r.date <= endStr)
+    const prevSearch = dailySearch.filter(r => r.date >= prevStartStr && r.date <= prevEndStr)
+
+    // Use monthly aggregate override when the range IS an exact calendar month
+    let override: UniqueAggregateOverride | undefined
+    let prevOverride: UniqueAggregateOverride | undefined
+    if (rangeKey === 'this_month' || rangeKey === 'last_month') {
+      const month = start.getMonth() + 1
+      const year = start.getFullYear()
+      const match = monthlyUniques.find(m => m.year === year && m.month === month)
+      if (match?.unique_visitors != null) {
+        override = {
+          unique_visitors: match.unique_visitors,
+          unique_new_users: match.unique_new_users ?? undefined,
+          unique_returning_users: match.unique_returning_users ?? undefined,
+        }
+      }
+      const prevM = prev.start.getMonth() + 1
+      const prevY = prev.start.getFullYear()
+      const prevMatch = monthlyUniques.find(m => m.year === prevY && m.month === prevM)
+      if (prevMatch?.unique_visitors != null) {
+        prevOverride = {
+          unique_visitors: prevMatch.unique_visitors,
+          unique_new_users: prevMatch.unique_new_users ?? undefined,
+          unique_returning_users: prevMatch.unique_returning_users ?? undefined,
+        }
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [traffic])
 
-  const current = useMemo(
-    () => traffic.find(t => t.month === selectedMonth && t.year === selectedYear) || null,
-    [traffic, selectedMonth, selectedYear],
-  )
+    return buildWebsiteInsight(
+      { daily: currDaily, search: currSearch, uniqueOverride: override },
+      { daily: prevDaily, search: prevSearch, uniqueOverride: prevOverride },
+      startStr,
+      endStr,
+    )
+  }, [dailyWeb, dailySearch, monthlyUniques, rangeKey])
 
-  const prevMonth = selectedMonth === 1 ? 12 : selectedMonth - 1
-  const prevYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear
-  const previous = useMemo(
-    () => traffic.find(t => t.month === prevMonth && t.year === prevYear) || null,
-    [traffic, prevMonth, prevYear],
-  )
-
-  const availablePeriods = useMemo(
-    () => traffic.map(t => ({ year: t.year, month: t.month })),
-    [traffic],
-  )
+  const { start, end } = RANGE_OPTIONS[rangeKey].compute()
+  const rangeLabel = formatRange(start, end)
 
   if (clientLoading || loading) {
     return (
-      <div className="max-w-5xl mx-auto space-y-6 animate-pulse">
-        <div className="h-8 w-48 bg-ink-6 rounded" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
+      <div className="max-w-4xl mx-auto space-y-6 animate-pulse">
+        <div className="h-6 w-48 bg-ink-6 rounded" />
+        <div className="h-24 bg-ink-6 rounded-xl" />
+        <div className="grid grid-cols-3 gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="bg-white rounded-xl border border-ink-6 h-28" />
           ))}
         </div>
@@ -448,13 +222,15 @@ export default function WebsiteTrafficPage() {
     )
   }
 
-  const hasData = traffic.length > 0
-  const sourcesTotal = current
-    ? Object.values(current.traffic_sources).reduce<number>((sum, v) => sum + (v ?? 0), 0)
-    : 0
+  const hasAnyData = insight != null && (
+    insight.hero.visitors.hasData ||
+    insight.hero.actions.hasData ||
+    insight.hero.searchVisibility.hasData ||
+    insight.advanced.sessions > 0
+  )
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
@@ -462,229 +238,102 @@ export default function WebsiteTrafficPage() {
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
-            <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink flex items-center gap-2">
-              <BarChart3 className="w-6 h-6 text-ink-4" />
-              Website Traffic
+            <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">
+              Your Website
             </h1>
-            <p className="text-ink-3 text-sm mt-0.5">Visitors, conversions, and search performance.</p>
+            <p className="text-ink-3 text-sm mt-0.5">{rangeLabel}</p>
           </div>
         </div>
 
-        {availablePeriods.length > 0 && (
-          <div className="relative">
-            <select
-              value={`${selectedYear}-${String(selectedMonth).padStart(2, '0')}`}
-              onChange={e => {
-                const [y, m] = e.target.value.split('-')
-                setSelectedYear(Number(y))
-                setSelectedMonth(Number(m))
-              }}
-              className="appearance-none bg-white border border-ink-6 rounded-lg pl-3 pr-8 py-2 text-sm text-ink font-medium focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand cursor-pointer"
-            >
-              {availablePeriods.map(p => (
-                <option key={`${p.year}-${p.month}`} value={`${p.year}-${String(p.month).padStart(2, '0')}`}>
-                  {new Date(p.year, p.month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="w-4 h-4 text-ink-4 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
-        )}
+        <div className="relative">
+          <select
+            value={rangeKey}
+            onChange={e => setRangeKey(e.target.value as RangeKey)}
+            className="appearance-none bg-white border border-ink-6 rounded-lg pl-3 pr-8 py-2 text-sm text-ink font-medium focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand cursor-pointer"
+          >
+            {(Object.keys(RANGE_OPTIONS) as RangeKey[]).map(k => (
+              <option key={k} value={k}>{RANGE_OPTIONS[k].label}</option>
+            ))}
+          </select>
+          <ChevronDown className="w-4 h-4 text-ink-4 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
       </div>
 
-      {!hasData || !current ? (
-        <div className="bg-white rounded-xl border border-ink-6 p-12 text-center">
-          <BarChart3 className="w-6 h-6 text-ink-4 mx-auto mb-3" />
-          <p className="text-sm font-medium text-ink-2">No traffic data yet</p>
-          <p className="text-xs text-ink-4 mt-1 max-w-sm mx-auto">
-            We sync Google Analytics and Search Console daily. If you&apos;ve just connected, give it up to 24 hours for your first data to show up here.
-          </p>
-        </div>
+      {!hasAnyData || !insight ? (
+        <EmptyState />
       ) : (
         <>
-          {/* Sync freshness indicator */}
-          {current.latest_sync && (
-            <div className="flex items-center gap-1.5 text-[11px] text-ink-4">
-              <RefreshCw className="w-3 h-3" />
-              <span>
-                Last synced {new Date(current.latest_sync).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {new Date(current.latest_sync).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                {' · '}
-                {current.days_with_data} {current.days_with_data === 1 ? 'day' : 'days'} of data this month
-              </span>
+          {/* HEADLINE — the story */}
+          <div className="bg-gradient-to-br from-brand-tint/40 to-white rounded-2xl border border-brand-tint p-6">
+            <h2 className="font-[family-name:var(--font-display)] text-2xl text-ink mb-3 leading-tight">
+              {insight.headline}
+            </h2>
+            <p className="text-[15px] text-ink-2 leading-relaxed">
+              {insight.narrative}
+            </p>
+          </div>
+
+          {/* 3 HERO METRICS */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <HeroCard metric={insight.hero.visitors} icon={Users} />
+            <HeroCard metric={insight.hero.actions} icon={Target} emptyText="No actions tracked yet" />
+            <HeroCard metric={insight.hero.searchVisibility} icon={Search} emptyText="Not showing on Google yet" />
+          </div>
+
+          {/* WHERE THEY CAME FROM + WHERE THEY ARE */}
+          {(insight.sources.length > 0 || insight.cities.length > 0) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {insight.sources.length > 0 && <SourcesCard sources={insight.sources} />}
+              {insight.cities.length > 0 && <CitiesCard cities={insight.cities} />}
             </div>
           )}
 
-          {/* CONVERSIONS — the most important section for local biz */}
-          <ConversionsSection current={current.conversion_events} previous={previous?.conversion_events ?? null} />
-
-          {/* Top-level metrics */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <MetricCard
-              label="Unique Visitors"
-              value={current.visitors}
-              change={previous ? calcChange(current.visitors, previous.visitors) : null}
-              icon={Users}
-            />
-            <MetricCard
-              label="Pageviews"
-              value={current.pageviews}
-              change={previous ? calcChange(current.pageviews, previous.pageviews) : null}
-              icon={Eye}
-            />
-            <MetricCard
-              label="Sessions"
-              value={current.sessions}
-              change={previous ? calcChange(current.sessions, previous.sessions) : null}
-              icon={TrendingUp}
-            />
+          {/* WHAT THEY LOOKED AT */}
+          {insight.topPages.length > 0 && (
             <div className="bg-white rounded-xl border border-ink-6 p-5">
-              <div className="w-8 h-8 rounded-lg bg-bg-2 flex items-center justify-center mb-3">
-                <TrendingDown className="w-4 h-4 text-ink-3" />
-              </div>
-              <div className="font-[family-name:var(--font-display)] text-2xl text-ink">
-                {current.bounce_rate != null ? `${current.bounce_rate}%` : '—'}
-              </div>
-              <div className="text-ink-3 text-xs mt-0.5">Bounce Rate</div>
-              {current.avg_session_duration != null && (
-                <div className="text-[10px] text-ink-4 mt-1">Avg session {formatDuration(current.avg_session_duration)}</div>
-              )}
-            </div>
-          </div>
-
-          {/* Audience split: new vs returning */}
-          {(current.new_users > 0 || current.returning_users > 0) && (
-            <AudienceSplit newUsers={current.new_users} returningUsers={current.returning_users} />
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Traffic sources */}
-            <div className="bg-white rounded-xl border border-ink-6 p-5">
-              <h2 className="text-sm font-semibold text-ink mb-4">Traffic Sources</h2>
-              {sourcesTotal === 0 ? (
-                <p className="text-sm text-ink-4">No source data</p>
-              ) : (
-                <div className="space-y-3">
-                  {Object.entries(current.traffic_sources)
-                    .filter(([, v]) => (v ?? 0) > 0)
-                    .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
-                    .map(([key, value]) => {
-                      const cfg = SOURCE_LABELS[key] || { label: key.replace(/^\w/, c => c.toUpperCase()), icon: LinkIcon }
-                      const SrcIcon = cfg.icon
-                      const pct = sourcesTotal > 0 ? ((value ?? 0) / sourcesTotal) * 100 : 0
-                      return (
-                        <div key={key}>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="flex items-center gap-2 text-sm text-ink-2">
-                              <SrcIcon className="w-3.5 h-3.5 text-ink-4" />
-                              {cfg.label}
-                            </span>
-                            <span className="text-sm text-ink">
-                              {formatNumber(value ?? 0)}
-                              <span className="text-[10px] text-ink-4 ml-1.5">{pct.toFixed(0)}%</span>
-                            </span>
-                          </div>
-                          <div className="h-1.5 bg-bg-2 rounded-full overflow-hidden">
-                            <div className="h-full bg-brand transition-all" style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-                      )
-                    })}
-                </div>
-              )}
-            </div>
-
-            {/* Top referrers (detail of the Referral bucket) */}
-            <div className="bg-white rounded-xl border border-ink-6 p-5">
-              <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
-                <Globe className="w-4 h-4 text-ink-4" />
-                Top Referring Sites
-              </h2>
-              {current.top_referrers.length === 0 ? (
-                <p className="text-sm text-ink-4">No referrals this month</p>
-              ) : (
-                <div className="space-y-2">
-                  {current.top_referrers.slice(0, 8).map((r, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <span className="text-[10px] text-ink-4 font-mono w-5">{i + 1}</span>
-                      <div className="flex-1 min-w-0 text-xs text-ink truncate">{r.source}</div>
-                      <span className="text-xs text-ink-2 font-medium">{formatNumber(r.sessions)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Top pages (all views) */}
-            <div className="bg-white rounded-xl border border-ink-6 p-5">
-              <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-ink mb-1 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-ink-4" />
-                Top Pages
-              </h2>
-              {current.top_pages.length === 0 ? (
-                <p className="text-sm text-ink-4">No page data</p>
-              ) : (
-                <div className="space-y-2">
-                  {current.top_pages.slice(0, 8).map((p, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <span className="text-[10px] text-ink-4 font-mono w-5">{i + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs text-ink truncate">{p.title || p.path}</div>
-                        {p.title && <div className="text-[10px] text-ink-4 truncate font-mono">{p.path}</div>}
-                      </div>
-                      <span className="text-xs text-ink-2 font-medium">{formatNumber(p.pageviews)}</span>
+                What they looked at
+              </h3>
+              <p className="text-xs text-ink-4 mb-4">The pages people viewed most on your site.</p>
+              <div className="space-y-2">
+                {insight.topPages.slice(0, 6).map((p, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="text-[10px] text-ink-4 font-mono w-5">{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-ink truncate">{p.label}</div>
+                      <div className="text-[10px] text-ink-4 truncate font-mono">{p.path}</div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Landing pages (entry points) */}
-            <div className="bg-white rounded-xl border border-ink-6 p-5">
-              <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
-                <Navigation className="w-4 h-4 text-ink-4" />
-                Top Landing Pages
-              </h2>
-              <p className="text-[10px] text-ink-4 mb-3">Where visitors first arrive on your site</p>
-              {current.landing_pages.length === 0 ? (
-                <p className="text-sm text-ink-4">No landing page data</p>
-              ) : (
-                <div className="space-y-2">
-                  {current.landing_pages.slice(0, 8).map((p, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <span className="text-[10px] text-ink-4 font-mono w-5">{i + 1}</span>
-                      <div className="flex-1 min-w-0 text-xs text-ink truncate font-mono">{p.path}</div>
-                      <span className="text-xs text-ink-2 font-medium">{formatNumber(p.sessions)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Top cities */}
-          {current.top_cities.length > 0 && (
-            <div className="bg-white rounded-xl border border-ink-6 p-5">
-              <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-ink-4" />
-                Where Your Visitors Are
-              </h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                {current.top_cities.slice(0, 10).map((c, i) => (
-                  <div key={i} className="bg-bg-2 rounded-lg p-3">
-                    <div className="text-xs text-ink-3 truncate">{c.city}</div>
-                    <div className="text-lg font-[family-name:var(--font-display)] text-ink mt-0.5">
-                      {formatNumber(c.sessions)}
-                    </div>
+                    <span className="text-xs text-ink-2 font-medium">{formatNumber(p.views)} views</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* GSC search performance */}
-          <SearchSection search={current.search} prevSearch={previous?.search ?? null} />
+          {/* HOW YOU SHOW UP ON GOOGLE */}
+          {insight.search.hasData && <SearchCard search={insight.search} />}
+
+          {/* ADVANCED DETAILS (collapsed) */}
+          <AdvancedSection
+            open={showAdvanced}
+            onToggle={() => setShowAdvanced(v => !v)}
+            advanced={insight.advanced}
+          />
+
+          {/* Freshness + method footnote */}
+          {latestSync && (
+            <div className="flex items-start gap-1.5 text-[11px] text-ink-4 pt-2">
+              <RefreshCw className="w-3 h-3 mt-0.5" />
+              <span>
+                Last updated {new Date(latestSync).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{' '}
+                at {new Date(latestSync).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}.{' '}
+                {insight.meta.usingMonthlyAggregate
+                  ? 'Visitor count matches Google Analytics exactly.'
+                  : 'Visitor count uses a daily sum (may slightly overcount repeat visitors across days).'}
+              </span>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -695,206 +344,31 @@ export default function WebsiteTrafficPage() {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function ConversionsSection({
-  current, previous,
-}: {
-  current: ConversionEvents
-  previous: ConversionEvents | null
-}) {
-  const items = [
-    { key: 'phone_clicks', label: 'Phone Calls', icon: Phone, value: current.phone_clicks, prev: previous?.phone_clicks ?? 0 },
-    { key: 'direction_clicks', label: 'Directions', icon: Navigation, value: current.direction_clicks, prev: previous?.direction_clicks ?? 0 },
-    { key: 'form_submits', label: 'Form Submits', icon: Send, value: current.form_submits, prev: previous?.form_submits ?? 0 },
-    { key: 'booking_clicks', label: 'Bookings', icon: Calendar, value: current.booking_clicks, prev: previous?.booking_clicks ?? 0 },
-  ]
-  const hasAnyConversions = current.total > 0
-
+function EmptyState() {
   return (
-    <div className="bg-white rounded-xl border border-ink-6 p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
-          <Target className="w-4 h-4 text-brand" />
-          Conversions
-        </h2>
-        {hasAnyConversions && (
-          <span className="text-xs text-ink-3">
-            {formatNumber(current.total)} total actions taken
-          </span>
-        )}
-      </div>
-      {!hasAnyConversions ? (
-        <div className="text-xs text-ink-4 py-2">
-          We haven&apos;t seen any phone clicks, direction clicks, form submits, or bookings yet. These show up automatically once your website has GA4 events set up for them.
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {items.map(item => {
-            const change = previous ? (item.prev === 0 ? (item.value > 0 ? 100 : 0) : Math.round(((item.value - item.prev) / item.prev) * 1000) / 10) : null
-            const Icon = item.icon
-            const trendColor = change == null ? 'text-ink-4' : change > 0 ? 'text-emerald-600' : change < 0 ? 'text-red-500' : 'text-ink-4'
-            return (
-              <div key={item.key} className="bg-bg-2 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <Icon className="w-4 h-4 text-brand" />
-                  {change != null && change !== 0 && (
-                    <span className={`text-[10px] font-medium ${trendColor}`}>
-                      {change > 0 ? '+' : ''}{change}%
-                    </span>
-                  )}
-                </div>
-                <div className="font-[family-name:var(--font-display)] text-xl text-ink">{formatNumber(item.value)}</div>
-                <div className="text-[10px] text-ink-3 mt-0.5 uppercase tracking-wide">{item.label}</div>
-              </div>
-            )
-          })}
-        </div>
-      )}
+    <div className="bg-white rounded-xl border border-ink-6 p-12 text-center">
+      <BarChart3 className="w-6 h-6 text-ink-4 mx-auto mb-3" />
+      <p className="text-sm font-medium text-ink-2">No data for this period yet</p>
+      <p className="text-xs text-ink-4 mt-1 max-w-sm mx-auto">
+        If you just connected Google Analytics, data takes up to 24 hours to appear.
+        Try switching to &ldquo;Last 30 days&rdquo; if you selected a shorter window.
+      </p>
     </div>
   )
 }
 
-function AudienceSplit({ newUsers, returningUsers }: { newUsers: number; returningUsers: number }) {
-  const total = newUsers + returningUsers
-  const newPct = total > 0 ? (newUsers / total) * 100 : 0
-  const returningPct = total > 0 ? (returningUsers / total) * 100 : 0
-
-  return (
-    <div className="bg-white rounded-xl border border-ink-6 p-5">
-      <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
-        <Repeat className="w-4 h-4 text-ink-4" />
-        Audience
-      </h2>
-      <div className="flex gap-1 h-8 rounded-lg overflow-hidden mb-3">
-        {newUsers > 0 && (
-          <div className="bg-brand flex items-center justify-center" style={{ width: `${newPct}%` }}>
-            {newPct > 15 && <span className="text-[10px] text-white font-medium">New</span>}
-          </div>
-        )}
-        {returningUsers > 0 && (
-          <div className="bg-brand/50 flex items-center justify-center" style={{ width: `${returningPct}%` }}>
-            {returningPct > 15 && <span className="text-[10px] text-white font-medium">Returning</span>}
-          </div>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-3 text-xs">
-        <div>
-          <div className="text-ink-3">New visitors</div>
-          <div className="font-semibold text-ink">{formatNumber(newUsers)} <span className="text-[10px] text-ink-4">({newPct.toFixed(0)}%)</span></div>
-        </div>
-        <div>
-          <div className="text-ink-3">Returning</div>
-          <div className="font-semibold text-ink">{formatNumber(returningUsers)} <span className="text-[10px] text-ink-4">({returningPct.toFixed(0)}%)</span></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SearchSection({
-  search, prevSearch,
+function HeroCard({
+  metric, icon: Icon, emptyText,
 }: {
-  search: MonthlyAggregate['search']
-  prevSearch: MonthlyAggregate['search'] | null
-}) {
-  const hasAnySearch = search.impressions > 0 || search.clicks > 0 || search.days_with_data > 0
-
-  return (
-    <div className="bg-white rounded-xl border border-ink-6 p-5">
-      <h2 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
-        <Search className="w-4 h-4 text-ink-4" />
-        Google Search Performance
-      </h2>
-
-      {!hasAnySearch ? (
-        <div className="text-xs text-ink-4">
-          No search data yet. Google Search Console has a 2-3 day delay on new data. If you just connected, give it a few days.
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <SearchMetric
-              label="Impressions"
-              value={search.impressions}
-              change={prevSearch ? calcChange(search.impressions, prevSearch.impressions) : null}
-            />
-            <SearchMetric
-              label="Clicks"
-              value={search.clicks}
-              change={prevSearch ? calcChange(search.clicks, prevSearch.clicks) : null}
-            />
-            <SearchMetric
-              label="CTR"
-              value={search.avg_ctr ?? 0}
-              suffix="%"
-              change={null}
-            />
-            <SearchMetric
-              label="Avg Position"
-              value={search.avg_position ?? 0}
-              change={null}
-              noFormat
-            />
-          </div>
-
-          {search.top_queries.length > 0 && (
-            <div>
-              <h3 className="text-xs font-semibold text-ink-2 mb-2">What people search to find you</h3>
-              <div className="space-y-2">
-                {search.top_queries.slice(0, 10).map((q, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <span className="text-[10px] text-ink-4 font-mono w-5">{i + 1}</span>
-                    <div className="flex-1 min-w-0 text-xs text-ink truncate">{q.query}</div>
-                    <span className="text-[10px] text-ink-4">{formatNumber(q.impressions)} imp</span>
-                    <span className="text-xs text-ink-2 font-medium min-w-[3ch] text-right">{formatNumber(q.clicks)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  )
-}
-
-function SearchMetric({
-  label, value, change, suffix, noFormat,
-}: {
-  label: string
-  value: number
-  change: number | null
-  suffix?: string
-  noFormat?: boolean
-}) {
-  const trendColor = change == null ? 'text-ink-4' : change > 0 ? 'text-emerald-600' : change < 0 ? 'text-red-500' : 'text-ink-4'
-  return (
-    <div className="bg-bg-2 rounded-lg p-3">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] text-ink-3 uppercase tracking-wide">{label}</span>
-        {change != null && change !== 0 && (
-          <span className={`text-[10px] font-medium ${trendColor}`}>
-            {change > 0 ? '+' : ''}{change}%
-          </span>
-        )}
-      </div>
-      <div className="font-[family-name:var(--font-display)] text-xl text-ink">
-        {noFormat ? value.toFixed(1) : formatNumber(value)}{suffix}
-      </div>
-    </div>
-  )
-}
-
-function MetricCard({
-  label, value, change, icon: Icon,
-}: {
-  label: string
-  value: number
-  change: number | null
+  metric: { value: number; label: string; sublabel: string | null; trendPct: number | null; hasData: boolean }
   icon: typeof Users
+  emptyText?: string
 }) {
-  const trendIcon = change == null ? null : change > 0 ? TrendingUp : change < 0 ? TrendingDown : Minus
-  const trendColor = change == null ? 'text-ink-4' : change > 0 ? 'text-emerald-600' : change < 0 ? 'text-red-500' : 'text-ink-4'
-  const TrendIcon = trendIcon
+  const trendColor = metric.trendPct == null ? 'text-ink-4'
+    : metric.trendPct > 0 ? 'text-emerald-600'
+    : metric.trendPct < 0 ? 'text-red-500'
+    : 'text-ink-4'
+  const TrendIcon = metric.trendPct == null ? null : metric.trendPct > 0 ? TrendingUp : metric.trendPct < 0 ? TrendingDown : null
 
   return (
     <div className="bg-white rounded-xl border border-ink-6 p-5">
@@ -902,15 +376,237 @@ function MetricCard({
         <div className="w-8 h-8 rounded-lg bg-bg-2 flex items-center justify-center">
           <Icon className="w-4 h-4 text-ink-3" />
         </div>
-        {change != null && TrendIcon && (
+        {metric.hasData && metric.trendPct != null && TrendIcon && (
           <span className={`text-xs font-medium flex items-center gap-0.5 ${trendColor}`}>
             <TrendIcon className="w-3 h-3" />
-            {change > 0 ? '+' : ''}{change}%
+            {metric.trendPct > 0 ? '+' : ''}{metric.trendPct}%
           </span>
         )}
       </div>
-      <div className="font-[family-name:var(--font-display)] text-2xl text-ink">{formatNumber(value)}</div>
-      <div className="text-ink-3 text-xs mt-0.5">{label}</div>
+      <div className="font-[family-name:var(--font-display)] text-3xl text-ink">
+        {metric.hasData ? formatNumber(metric.value) : '—'}
+      </div>
+      <div className="text-ink-3 text-xs mt-1 uppercase tracking-wide font-medium">{metric.label}</div>
+      <div className="text-[11px] text-ink-4 mt-1 min-h-[14px]">
+        {metric.hasData ? metric.sublabel : (emptyText ?? 'No data yet')}
+      </div>
+    </div>
+  )
+}
+
+function SourcesCard({ sources }: { sources: Array<{ label: string; count: number; pct: number }> }) {
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 p-5">
+      <h3 className="text-sm font-semibold text-ink mb-1 flex items-center gap-2">
+        <Globe className="w-4 h-4 text-ink-4" />
+        Where they came from
+      </h3>
+      <p className="text-xs text-ink-4 mb-4">How visitors found your site.</p>
+      <div className="space-y-3">
+        {sources.slice(0, 6).map(s => (
+          <div key={s.label}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm text-ink-2">{s.label}</span>
+              <span className="text-sm text-ink">
+                {formatNumber(s.count)}
+                <span className="text-[10px] text-ink-4 ml-1.5">{s.pct.toFixed(0)}%</span>
+              </span>
+            </div>
+            <div className="h-1.5 bg-bg-2 rounded-full overflow-hidden">
+              <div className="h-full bg-brand transition-all" style={{ width: `${s.pct}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function CitiesCard({ cities }: { cities: Array<{ city: string; sessions: number }> }) {
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 p-5">
+      <h3 className="text-sm font-semibold text-ink mb-1 flex items-center gap-2">
+        <MapPin className="w-4 h-4 text-ink-4" />
+        Where they are
+      </h3>
+      <p className="text-xs text-ink-4 mb-4">Top cities visitors came from.</p>
+      <div className="space-y-2">
+        {cities.slice(0, 6).map(c => (
+          <div key={c.city} className="flex items-center justify-between">
+            <span className="text-sm text-ink truncate">{c.city}</span>
+            <span className="text-sm text-ink-2 font-medium">{formatNumber(c.sessions)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SearchCard({ search }: { search: WebsiteInsight['search'] }) {
+  const ctr = search.impressions > 0 ? (search.clicks / search.impressions) * 100 : 0
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 p-5">
+      <h3 className="text-sm font-semibold text-ink mb-1 flex items-center gap-2">
+        <Search className="w-4 h-4 text-ink-4" />
+        How you show up on Google
+      </h3>
+      {search.insight ? (
+        <p className="text-sm text-ink-2 mt-2 mb-4 leading-relaxed">{search.insight}</p>
+      ) : (
+        <p className="text-xs text-ink-4 mb-4">Your presence in Google search results.</p>
+      )}
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <div className="text-[10px] text-ink-3 uppercase tracking-wide">Shown</div>
+          <div className="font-[family-name:var(--font-display)] text-xl text-ink mt-0.5">
+            {formatNumber(search.impressions)}
+          </div>
+          <div className="text-[10px] text-ink-4">times</div>
+        </div>
+        <div>
+          <div className="text-[10px] text-ink-3 uppercase tracking-wide">Clicked</div>
+          <div className="font-[family-name:var(--font-display)] text-xl text-ink mt-0.5">
+            {formatNumber(search.clicks)}
+          </div>
+          <div className="text-[10px] text-ink-4">{ctr.toFixed(0)}% of shows</div>
+        </div>
+        {search.topQuery && (
+          <div>
+            <div className="text-[10px] text-ink-3 uppercase tracking-wide">Top Search</div>
+            <div className="text-sm text-ink mt-1 truncate font-medium">&ldquo;{search.topQuery}&rdquo;</div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AdvancedSection({
+  open, onToggle, advanced,
+}: {
+  open: boolean
+  onToggle: () => void
+  advanced: WebsiteInsight['advanced']
+}) {
+  const hasAnyAdvanced =
+    advanced.sessions > 0 ||
+    advanced.pageViews > 0 ||
+    advanced.landingPages.length > 0 ||
+    advanced.referrers.length > 0 ||
+    advanced.conversionBreakdown.total > 0
+
+  if (!hasAnyAdvanced) return null
+
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between p-5 hover:bg-bg-2 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Info className="w-4 h-4 text-ink-4" />
+          <span className="text-sm font-semibold text-ink">Advanced details</span>
+          <span className="text-xs text-ink-4">Bounce rate, session time, conversion breakdown, referrers, entry pages</span>
+        </div>
+        <ChevronRight className={`w-4 h-4 text-ink-4 transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 space-y-5 border-t border-ink-6">
+          {/* Detailed metrics */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4">
+            <MiniStat label="Sessions" value={formatNumber(advanced.sessions)} />
+            <MiniStat label="Pageviews" value={formatNumber(advanced.pageViews)} />
+            <MiniStat
+              label="Bounce rate"
+              value={advanced.bounceRate != null ? `${advanced.bounceRate}%` : '—'}
+            />
+            <MiniStat
+              label="Avg time on site"
+              value={formatDuration(advanced.avgSessionDuration)}
+            />
+            <MiniStat
+              label="On mobile"
+              value={advanced.mobilePct != null ? `${advanced.mobilePct.toFixed(0)}%` : '—'}
+            />
+            <MiniStat label="New visitors" value={formatNumber(advanced.newUsers)} />
+            <MiniStat label="Returning" value={formatNumber(advanced.returningUsers)} />
+          </div>
+
+          {/* Conversion breakdown */}
+          {advanced.conversionBreakdown.total > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-ink mb-3 uppercase tracking-wide">Actions breakdown</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <ActionStat icon={Phone} label="Phone calls" value={advanced.conversionBreakdown.phone_clicks} />
+                <ActionStat icon={Navigation} label="Directions" value={advanced.conversionBreakdown.direction_clicks} />
+                <ActionStat icon={Send} label="Form submits" value={advanced.conversionBreakdown.form_submits} />
+                <ActionStat icon={Calendar} label="Bookings" value={advanced.conversionBreakdown.booking_clicks} />
+              </div>
+            </div>
+          )}
+
+          {/* Landing pages */}
+          {advanced.landingPages.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-ink mb-2 uppercase tracking-wide">Entry pages</h4>
+              <p className="text-[11px] text-ink-4 mb-3">Where visitors first arrive.</p>
+              <div className="space-y-1.5">
+                {advanced.landingPages.slice(0, 6).map((p, i) => (
+                  <div key={i} className="flex items-center gap-3 text-xs">
+                    <span className="text-ink-4 font-mono w-4">{i + 1}</span>
+                    <span className="flex-1 min-w-0 text-ink truncate font-mono">{p.path}</span>
+                    <span className="text-ink-2 font-medium">{formatNumber(p.sessions)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Referrers */}
+          {advanced.referrers.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-ink mb-2 uppercase tracking-wide">Referring sites</h4>
+              <div className="space-y-1.5">
+                {advanced.referrers.slice(0, 6).map((r, i) => (
+                  <div key={i} className="flex items-center gap-3 text-xs">
+                    <span className="text-ink-4 font-mono w-4">{i + 1}</span>
+                    <span className="flex-1 min-w-0 text-ink truncate">{r.source}</span>
+                    <span className="text-ink-2 font-medium">{formatNumber(r.sessions)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-bg-2 rounded-lg p-3">
+      <div className="text-[10px] text-ink-3 uppercase tracking-wide">{label}</div>
+      <div className="text-sm font-semibold text-ink mt-1">{value}</div>
+    </div>
+  )
+}
+
+function ActionStat({
+  icon: Icon, label, value,
+}: {
+  icon: typeof Phone
+  label: string
+  value: number
+}) {
+  return (
+    <div className="bg-bg-2 rounded-lg p-3">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon className="w-3 h-3 text-brand" />
+        <span className="text-[10px] text-ink-3 uppercase tracking-wide">{label}</span>
+      </div>
+      <div className="text-base font-semibold text-ink">{formatNumber(value)}</div>
     </div>
   )
 }
