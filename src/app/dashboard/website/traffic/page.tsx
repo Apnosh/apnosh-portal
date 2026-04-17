@@ -5,19 +5,59 @@ import Link from 'next/link'
 import {
   ArrowLeft, BarChart3, Users, Eye, TrendingUp, TrendingDown, Minus,
   ChevronDown, FileText, Search, Share2, Link as LinkIcon, Mail, DollarSign,
+  RefreshCw,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from '@/lib/realtime'
 import { useClient } from '@/lib/client-context'
-import type { WebsiteTraffic, TrafficSources, TopPage } from '@/types/database'
+
+// ---------------------------------------------------------------------------
+// Source labels (covers GA4 default channel groups, normalized to lowercase)
+// ---------------------------------------------------------------------------
 
 const SOURCE_LABELS: Record<string, { label: string; icon: typeof Search }> = {
   direct: { label: 'Direct', icon: LinkIcon },
+  'organic search': { label: 'Search', icon: Search },
   search: { label: 'Search', icon: Search },
+  'organic social': { label: 'Social', icon: Share2 },
   social: { label: 'Social', icon: Share2 },
+  'paid social': { label: 'Paid Social', icon: DollarSign },
+  'paid search': { label: 'Paid Search', icon: DollarSign },
+  paid: { label: 'Paid Ads', icon: DollarSign },
   referral: { label: 'Referral', icon: LinkIcon },
   email: { label: 'Email', icon: Mail },
-  paid: { label: 'Paid Ads', icon: DollarSign },
+  unassigned: { label: 'Other', icon: LinkIcon },
+}
+
+// ---------------------------------------------------------------------------
+// Types for the daily website_metrics row (subset we care about)
+// ---------------------------------------------------------------------------
+
+interface DailyMetric {
+  date: string                                       // "YYYY-MM-DD"
+  visitors: number | null
+  page_views: number | null
+  sessions: number | null
+  bounce_rate: number | null                         // GA4 gives 0-1 fraction
+  avg_session_duration: number | null                // seconds
+  mobile_pct: number | null
+  traffic_sources: Record<string, number> | null
+  top_pages: Array<{ path: string; views: number }> | null
+  created_at: string
+}
+
+interface MonthlyAggregate {
+  year: number
+  month: number
+  visitors: number
+  pageviews: number
+  sessions: number
+  bounce_rate: number | null                         // 0-100 percentage, weighted by sessions
+  avg_session_duration: number | null                // seconds, weighted by sessions
+  traffic_sources: Record<string, number>
+  top_pages: Array<{ path: string; title?: string; pageviews: number }>
+  days_with_data: number
+  latest_sync: string | null                         // ISO timestamp
 }
 
 function formatNumber(n: number): string {
@@ -31,11 +71,131 @@ function calcChange(current: number, previous: number): number {
   return Math.round(((current - previous) / previous) * 1000) / 10
 }
 
+function formatDuration(seconds: number | null): string {
+  if (seconds == null) return '—'
+  const m = Math.floor(seconds / 60)
+  const s = Math.round(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+/**
+ * Aggregate daily GA4 rows into monthly buckets.
+ * - visitors / pageviews / sessions: simple sum
+ * - bounce_rate: weighted average by sessions, converted to 0-100 percentage
+ * - avg_session_duration: weighted average by sessions
+ * - traffic_sources: merge+sum
+ * - top_pages: merge by path, sum views, take top 10
+ */
+function aggregateByMonth(daily: DailyMetric[]): MonthlyAggregate[] {
+  type Bucket = MonthlyAggregate & {
+    _bounceNumerator: number
+    _bounceDenominator: number
+    _durationNumerator: number
+    _durationDenominator: number
+  }
+  const buckets = new Map<string, Bucket>()
+
+  for (const d of daily) {
+    const parts = d.date.split('-')
+    const year = Number(parts[0])
+    const month = Number(parts[1])
+    const key = `${year}-${month}`
+
+    let agg = buckets.get(key)
+    if (!agg) {
+      agg = {
+        year, month,
+        visitors: 0, pageviews: 0, sessions: 0,
+        bounce_rate: null,
+        avg_session_duration: null,
+        traffic_sources: {},
+        top_pages: [],
+        days_with_data: 0,
+        latest_sync: null,
+        _bounceNumerator: 0,
+        _bounceDenominator: 0,
+        _durationNumerator: 0,
+        _durationDenominator: 0,
+      }
+      buckets.set(key, agg)
+    }
+
+    agg.visitors += d.visitors ?? 0
+    agg.pageviews += d.page_views ?? 0
+    agg.sessions += d.sessions ?? 0
+    agg.days_with_data += 1
+
+    const sessionsForWeighting = d.sessions ?? 0
+    if (d.bounce_rate != null && sessionsForWeighting > 0) {
+      agg._bounceNumerator += d.bounce_rate * sessionsForWeighting
+      agg._bounceDenominator += sessionsForWeighting
+    }
+    if (d.avg_session_duration != null && sessionsForWeighting > 0) {
+      agg._durationNumerator += d.avg_session_duration * sessionsForWeighting
+      agg._durationDenominator += sessionsForWeighting
+    }
+
+    // Merge traffic sources (keys already lowercased by sync fn)
+    if (d.traffic_sources) {
+      for (const [k, v] of Object.entries(d.traffic_sources)) {
+        if (typeof v === 'number') {
+          agg.traffic_sources[k] = (agg.traffic_sources[k] ?? 0) + v
+        }
+      }
+    }
+
+    // Merge top pages by path
+    if (d.top_pages) {
+      for (const p of d.top_pages) {
+        const existing = agg.top_pages.find(x => x.path === p.path)
+        if (existing) existing.pageviews += p.views ?? 0
+        else agg.top_pages.push({ path: p.path, pageviews: p.views ?? 0 })
+      }
+    }
+
+    if (!agg.latest_sync || d.created_at > agg.latest_sync) {
+      agg.latest_sync = d.created_at
+    }
+  }
+
+  const result: MonthlyAggregate[] = []
+  for (const agg of buckets.values()) {
+    if (agg._bounceDenominator > 0) {
+      // GA4 bounce_rate is 0-1, multiply by 100 for percentage
+      agg.bounce_rate = Math.round((agg._bounceNumerator / agg._bounceDenominator) * 1000) / 10
+    }
+    if (agg._durationDenominator > 0) {
+      agg.avg_session_duration = Math.round(agg._durationNumerator / agg._durationDenominator)
+    }
+    agg.top_pages.sort((a, b) => b.pageviews - a.pageviews)
+    agg.top_pages = agg.top_pages.slice(0, 10)
+
+    result.push({
+      year: agg.year,
+      month: agg.month,
+      visitors: agg.visitors,
+      pageviews: agg.pageviews,
+      sessions: agg.sessions,
+      bounce_rate: agg.bounce_rate,
+      avg_session_duration: agg.avg_session_duration,
+      traffic_sources: agg.traffic_sources,
+      top_pages: agg.top_pages,
+      days_with_data: agg.days_with_data,
+      latest_sync: agg.latest_sync,
+    })
+  }
+
+  result.sort((a, b) => (b.year - a.year) || (b.month - a.month))
+  return result
+}
+
+// ---------------------------------------------------------------------------
+
 export default function WebsiteTrafficPage() {
   const supabase = createClient()
   const { client, loading: clientLoading } = useClient()
 
-  const [traffic, setTraffic] = useState<WebsiteTraffic[]>([])
+  const [daily, setDaily] = useState<DailyMetric[]>([])
   const [loading, setLoading] = useState(true)
 
   const now = new Date()
@@ -46,30 +206,30 @@ export default function WebsiteTrafficPage() {
     if (!client?.id) { setLoading(false); return }
 
     const { data } = await supabase
-      .from('website_traffic')
-      .select('*')
+      .from('website_metrics')
+      .select('date, visitors, page_views, sessions, bounce_rate, avg_session_duration, mobile_pct, traffic_sources, top_pages, created_at')
       .eq('client_id', client.id)
-      .order('year', { ascending: false })
-      .order('month', { ascending: false })
+      .order('date', { ascending: false })
 
-    const rows = (data ?? []) as WebsiteTraffic[]
-    setTraffic(rows)
-
-    // Default to latest month with data
-    if (rows.length > 0) {
-      const hasCurrent = rows.some(r => r.month === selectedMonth && r.year === selectedYear)
-      if (!hasCurrent) {
-        setSelectedMonth(rows[0].month)
-        setSelectedYear(rows[0].year)
-      }
-    }
-
+    setDaily((data ?? []) as DailyMetric[])
     setLoading(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client?.id, supabase])
 
   useEffect(() => { load() }, [load])
-  useRealtimeRefresh(['website_traffic'], load)
+  useRealtimeRefresh(['website_metrics'], load)
+
+  const traffic = useMemo(() => aggregateByMonth(daily), [daily])
+
+  // Default to latest month with data if current selection has none
+  useEffect(() => {
+    if (traffic.length === 0) return
+    const hasCurrent = traffic.some(r => r.month === selectedMonth && r.year === selectedYear)
+    if (!hasCurrent) {
+      setSelectedMonth(traffic[0].month)
+      setSelectedYear(traffic[0].year)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [traffic])
 
   const current = useMemo(
     () => traffic.find(t => t.month === selectedMonth && t.year === selectedYear) || null,
@@ -102,10 +262,8 @@ export default function WebsiteTrafficPage() {
   }
 
   const hasData = traffic.length > 0
-
-  // Calculate total traffic for source percentages
   const sourcesTotal = current
-    ? Object.values(current.traffic_sources as TrafficSources).reduce<number>((sum, v) => sum + (v ?? 0), 0)
+    ? Object.values(current.traffic_sources).reduce<number>((sum, v) => sum + (v ?? 0), 0)
     : 0
 
   return (
@@ -152,11 +310,23 @@ export default function WebsiteTrafficPage() {
           <BarChart3 className="w-6 h-6 text-ink-4 mx-auto mb-3" />
           <p className="text-sm font-medium text-ink-2">No traffic data yet</p>
           <p className="text-xs text-ink-4 mt-1 max-w-sm mx-auto">
-            Your Apnosh team will publish monthly traffic snapshots here with visitors, top pages, and traffic sources.
+            We sync Google Analytics daily. If you&apos;ve just connected GA4, give it up to 24 hours for your first data to show up here.
           </p>
         </div>
       ) : (
         <>
+          {/* Sync freshness indicator */}
+          {current.latest_sync && (
+            <div className="flex items-center gap-1.5 text-[11px] text-ink-4">
+              <RefreshCw className="w-3 h-3" />
+              <span>
+                Last synced {new Date(current.latest_sync).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {new Date(current.latest_sync).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                {' · '}
+                {current.days_with_data} {current.days_with_data === 1 ? 'day' : 'days'} of data this month
+              </span>
+            </div>
+          )}
+
           {/* Top-level metrics */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <MetricCard
@@ -185,6 +355,9 @@ export default function WebsiteTrafficPage() {
                 {current.bounce_rate != null ? `${current.bounce_rate}%` : '—'}
               </div>
               <div className="text-ink-3 text-xs mt-0.5">Bounce Rate</div>
+              {current.avg_session_duration != null && (
+                <div className="text-[10px] text-ink-4 mt-1">Avg session {formatDuration(current.avg_session_duration)}</div>
+              )}
             </div>
           </div>
 
@@ -196,11 +369,11 @@ export default function WebsiteTrafficPage() {
                 <p className="text-sm text-ink-4">No source data</p>
               ) : (
                 <div className="space-y-3">
-                  {Object.entries(current.traffic_sources as TrafficSources)
+                  {Object.entries(current.traffic_sources)
                     .filter(([, v]) => (v ?? 0) > 0)
                     .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
                     .map(([key, value]) => {
-                      const cfg = SOURCE_LABELS[key] || { label: key, icon: LinkIcon }
+                      const cfg = SOURCE_LABELS[key] || { label: key.replace(/^\w/, c => c.toUpperCase()), icon: LinkIcon }
                       const SrcIcon = cfg.icon
                       const pct = sourcesTotal > 0 ? ((value ?? 0) / sourcesTotal) * 100 : 0
                       return (
@@ -231,11 +404,11 @@ export default function WebsiteTrafficPage() {
                 <FileText className="w-4 h-4 text-ink-4" />
                 Top Pages
               </h2>
-              {(current.top_pages as TopPage[]).length === 0 ? (
+              {current.top_pages.length === 0 ? (
                 <p className="text-sm text-ink-4">No page data</p>
               ) : (
                 <div className="space-y-2">
-                  {(current.top_pages as TopPage[]).slice(0, 8).map((p, i) => (
+                  {current.top_pages.slice(0, 8).map((p, i) => (
                     <div key={i} className="flex items-center gap-3">
                       <span className="text-[10px] text-ink-4 font-mono w-5">{i + 1}</span>
                       <div className="flex-1 min-w-0">
@@ -249,13 +422,6 @@ export default function WebsiteTrafficPage() {
               )}
             </div>
           </div>
-
-          {current.notes && (
-            <div className="bg-white rounded-xl border border-ink-6 p-5">
-              <h2 className="text-sm font-semibold text-ink mb-2">Notes from your team</h2>
-              <p className="text-sm text-ink-2 whitespace-pre-wrap leading-relaxed">{current.notes}</p>
-            </div>
-          )}
         </>
       )}
     </div>
