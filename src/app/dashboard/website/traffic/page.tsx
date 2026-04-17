@@ -61,6 +61,14 @@ interface DailyMetric {
   created_at: string
 }
 
+interface MonthlyUniques {
+  year: number
+  month: number
+  unique_visitors: number | null
+  unique_new_users: number | null
+  unique_returning_users: number | null
+}
+
 interface SearchDaily {
   date: string
   total_impressions: number | null
@@ -127,7 +135,13 @@ function cleanReferrerDomain(source: string): string {
 // Aggregation: daily GA4 + daily GSC into unified monthly buckets
 // ---------------------------------------------------------------------------
 
-function aggregateByMonth(daily: DailyMetric[], searchDaily: SearchDaily[]): MonthlyAggregate[] {
+function aggregateByMonth(
+  daily: DailyMetric[],
+  searchDaily: SearchDaily[],
+  monthlyUniques: MonthlyUniques[],
+): MonthlyAggregate[] {
+  const uniquesByMonth = new Map<string, MonthlyUniques>()
+  for (const m of monthlyUniques) uniquesByMonth.set(`${m.year}-${m.month}`, m)
   type Bucket = MonthlyAggregate & {
     _bounceNumerator: number
     _bounceDenominator: number
@@ -289,8 +303,18 @@ function aggregateByMonth(daily: DailyMetric[], searchDaily: SearchDaily[]): Mon
   }
 
   // --- Finalize
+  // For user-count metrics (visitors, new_users, returning_users), override
+  // the summed-daily values with the authoritative monthly aggregate from
+  // website_metrics_monthly. Summing daily unique-user counts inflates the
+  // number because a user visiting on multiple days gets counted per-day.
   const result: MonthlyAggregate[] = []
   for (const agg of buckets.values()) {
+    const truth = uniquesByMonth.get(`${agg.year}-${agg.month}`)
+    if (truth) {
+      if (truth.unique_visitors != null) agg.visitors = truth.unique_visitors
+      if (truth.unique_new_users != null) agg.new_users = truth.unique_new_users
+      if (truth.unique_returning_users != null) agg.returning_users = truth.unique_returning_users
+    }
     if (agg._bounceDenominator > 0) {
       agg.bounce_rate = Math.round((agg._bounceNumerator / agg._bounceDenominator) * 1000) / 10
     }
@@ -343,6 +367,7 @@ export default function WebsiteTrafficPage() {
 
   const [daily, setDaily] = useState<DailyMetric[]>([])
   const [searchDaily, setSearchDaily] = useState<SearchDaily[]>([])
+  const [monthlyUniques, setMonthlyUniques] = useState<MonthlyUniques[]>([])
   const [loading, setLoading] = useState(true)
 
   const now = new Date()
@@ -352,7 +377,7 @@ export default function WebsiteTrafficPage() {
   const load = useCallback(async () => {
     if (!client?.id) { setLoading(false); return }
 
-    const [ga, gsc] = await Promise.all([
+    const [ga, gsc, monthly] = await Promise.all([
       supabase
         .from('website_metrics')
         .select('date, visitors, page_views, sessions, bounce_rate, avg_session_duration, mobile_pct, traffic_sources, top_pages, conversion_events, top_cities, landing_pages, new_users, returning_users, top_referrers, created_at')
@@ -363,17 +388,25 @@ export default function WebsiteTrafficPage() {
         .select('date, total_impressions, total_clicks, avg_ctr, avg_position, top_queries, top_pages')
         .eq('client_id', client.id)
         .order('date', { ascending: false }),
+      supabase
+        .from('website_metrics_monthly')
+        .select('year, month, unique_visitors, unique_new_users, unique_returning_users')
+        .eq('client_id', client.id),
     ])
 
     setDaily((ga.data ?? []) as DailyMetric[])
     setSearchDaily((gsc.data ?? []) as SearchDaily[])
+    setMonthlyUniques((monthly.data ?? []) as MonthlyUniques[])
     setLoading(false)
   }, [client?.id, supabase])
 
   useEffect(() => { load() }, [load])
   useRealtimeRefresh(['website_metrics', 'search_metrics'], load)
 
-  const traffic = useMemo(() => aggregateByMonth(daily, searchDaily), [daily, searchDaily])
+  const traffic = useMemo(
+    () => aggregateByMonth(daily, searchDaily, monthlyUniques),
+    [daily, searchDaily, monthlyUniques],
+  )
 
   useEffect(() => {
     if (traffic.length === 0) return
@@ -487,7 +520,7 @@ export default function WebsiteTrafficPage() {
           {/* Top-level metrics */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <MetricCard
-              label="Visitors"
+              label="Unique Visitors"
               value={current.visitors}
               change={previous ? calcChange(current.visitors, previous.visitors) : null}
               icon={Users}

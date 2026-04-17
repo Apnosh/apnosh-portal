@@ -74,6 +74,7 @@ Deno.serve(async (req) => {
 
         // Loop through N days (default 1 = just yesterday; backfill = up to 90)
         const daysSynced: string[] = []
+        const monthsTouched = new Set<string>()
         for (let offset = 1; offset <= daysToSync; offset++) {
           const date = getDaysAgo(offset)
           const metrics = await runDailyReport(conn.platform_account_id, freshToken, date)
@@ -102,6 +103,37 @@ Deno.serve(async (req) => {
 
           if (upsertErr) throw new Error(upsertErr.message)
           daysSynced.push(date)
+
+          // Track distinct calendar months so we recompute their aggregates below
+          const [y, m] = date.split('-')
+          monthsTouched.add(`${y}-${m}`)
+        }
+
+        // Recompute monthly unique-user aggregates for each month we touched.
+        // GA4 activeUsers/newUsers cannot be summed across days (they count
+        // unique per day), so we ask GA4 for the full-month total directly.
+        const monthResults: { month: string; status: string }[] = []
+        for (const ym of monthsTouched) {
+          try {
+            const [year, month] = ym.split('-').map(Number)
+            const agg = await runMonthlyAggregate(conn.platform_account_id, freshToken, year, month)
+
+            const { error: monthErr } = await supabase
+              .from('website_metrics_monthly')
+              .upsert({
+                client_id: conn.client_id,
+                year,
+                month,
+                unique_visitors: agg.uniqueVisitors,
+                unique_new_users: agg.uniqueNewUsers,
+                unique_returning_users: agg.uniqueReturningUsers,
+                last_synced_at: new Date().toISOString(),
+              }, { onConflict: 'client_id,year,month' })
+
+            monthResults.push({ month: ym, status: monthErr ? 'error' : 'ok' })
+          } catch {
+            monthResults.push({ month: ym, status: 'error' })
+          }
         }
 
         await supabase
@@ -110,7 +142,12 @@ Deno.serve(async (req) => {
           .eq('id', conn.id)
 
         synced++
-        results.push({ client_id: conn.client_id, status: 'ok', days: daysSynced.length })
+        results.push({
+          client_id: conn.client_id,
+          status: 'ok',
+          days: daysSynced.length,
+          months_recomputed: monthResults.length,
+        })
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error'
         await supabase
@@ -395,6 +432,55 @@ async function runDailyReport(propertyId: string, accessToken: string, date: str
     topReferrers,
     raw: { core, sources, pages, devices, events, cities, landings, newReturning, referrers },
   }
+}
+
+// ---------------------------------------------------------------------------
+// Monthly unique-user aggregate -- one row per calendar month per client
+// ---------------------------------------------------------------------------
+
+async function runMonthlyAggregate(
+  propertyId: string,
+  accessToken: string,
+  year: number,
+  month: number,
+) {
+  const url = `https://analyticsdata.googleapis.com/v1beta/${propertyId}:runReport`
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  }
+
+  // First and last day of the month in YYYY-MM-DD
+  const mm = String(month).padStart(2, '0')
+  const startDate = `${year}-${mm}-01`
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const endDate = `${year}-${mm}-${String(lastDay).padStart(2, '0')}`
+
+  const [totalRes, newVsReturningRes] = await Promise.all([
+    fetchJson(url, headers, {
+      dateRanges: [{ startDate, endDate }],
+      metrics: [{ name: 'activeUsers' }, { name: 'newUsers' }],
+    }),
+    fetchJson(url, headers, {
+      dateRanges: [{ startDate, endDate }],
+      dimensions: [{ name: 'newVsReturning' }],
+      metrics: [{ name: 'activeUsers' }],
+    }),
+  ])
+
+  const totalRow = totalRes.rows?.[0]?.metricValues || []
+  const uniqueVisitors = Number(totalRow[0]?.value || 0)
+  const uniqueNewUsers = Number(totalRow[1]?.value || 0)
+
+  let uniqueReturningUsers = 0
+  for (const row of newVsReturningRes.rows || []) {
+    const label = (row.dimensionValues?.[0]?.value || '').toLowerCase()
+    if (label === 'returning') {
+      uniqueReturningUsers = Number(row.metricValues?.[0]?.value || 0)
+    }
+  }
+
+  return { uniqueVisitors, uniqueNewUsers, uniqueReturningUsers }
 }
 
 async function fetchJson(url: string, headers: Record<string, string>, body: unknown) {
