@@ -8,6 +8,7 @@ import type {
   TimeRange,
   DashboardInsight,
 } from '@/types/dashboard'
+import { prettySource } from '@/lib/website-insights'
 
 /**
  * Returns a DashboardView-shaped object for Website data, so it can be rendered
@@ -258,7 +259,7 @@ function buildWebsiteInsights(d: {
   if (sourcesSorted.length > 0 && totalSessions > 0) {
     const [topKey, topCount] = sourcesSorted[0]
     const topPct = Math.round((topCount / totalSessions) * 100)
-    const pretty = prettySourceKey(topKey)
+    const pretty = prettySource(topKey)
     insights.push({
       icon: 'trending',
       title: `${topPct}% come from ${pretty.toLowerCase()}`,
@@ -325,23 +326,6 @@ function buildWebsiteInsights(d: {
   }
 
   return insights.slice(0, 3)
-}
-
-function prettySourceKey(key: string): string {
-  const map: Record<string, string> = {
-    direct: 'Direct',
-    'organic search': 'Google Search',
-    search: 'Google Search',
-    'organic social': 'Social Media',
-    social: 'Social Media',
-    'paid social': 'Paid Social',
-    'paid search': 'Paid Search',
-    paid: 'Paid Ads',
-    referral: 'Other Websites',
-    email: 'Email',
-    unassigned: 'Other',
-  }
-  return map[key.toLowerCase()] ?? key.replace(/^\w/, c => c.toUpperCase())
 }
 
 // ---------------------------------------------------------------------------

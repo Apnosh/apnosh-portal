@@ -1,3 +1,10 @@
+// DO NOT EDIT DIRECTLY.
+// This is a Deno-compatible mirror of src/lib/website-insights.ts.
+// Both files must be kept in sync. Any change made here MUST be made in the
+// canonical source too (or vice versa). The library is pure TypeScript with
+// no framework dependencies, which makes the mirror safe.
+// ============================================================================
+
 /**
  * website-insights.ts
  *
