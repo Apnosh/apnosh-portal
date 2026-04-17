@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { parseYelpAlias, type YelpPreview } from '@/lib/yelp-helpers'
 
 // ---------------------------------------------------------------------------
 // Unified connection type for the Connected Accounts hub
@@ -73,6 +74,14 @@ const PLATFORM_META: Record<string, {
     label: 'Google Business Profile',
     category: 'google',
     reconnectPath: '/api/auth/google-business',
+  },
+  yelp: {
+    label: 'Yelp',
+    category: 'reviews',
+    // Yelp uses a URL-based connect flow, not OAuth -- the "reconnect" button
+    // sends them back to the same form to paste a fresh URL.
+    reconnectPath: '/dashboard/connected-accounts/yelp',
+    profileUrlBuilder: (n) => n ? `https://www.yelp.com/biz/${n}` : null,
   },
 }
 
@@ -262,4 +271,127 @@ export async function getAvailablePlatforms() {
     category: meta.category,
     connectPath: meta.reconnectPath,
   }))
+}
+
+// ---------------------------------------------------------------------------
+// Yelp-specific connect flow (no OAuth; user pastes their Yelp URL)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches business details from Yelp to preview the business before saving.
+ * Used to show the user "we found: [Starbucks in Seattle, 3.9★]" so they can
+ * confirm before committing.
+ */
+export async function previewYelpBusiness(
+  input: string,
+): Promise<{ success: true; preview: YelpPreview } | { success: false; error: string }> {
+  const alias = parseYelpAlias(input)
+  if (!alias) {
+    return {
+      success: false,
+      error: "That doesn't look like a Yelp business link. Paste the URL from the top of your Yelp page -- something like https://www.yelp.com/biz/your-business-name.",
+    }
+  }
+
+  const apiKey = process.env.YELP_API_KEY
+  if (!apiKey) {
+    return { success: false, error: 'Yelp is not configured on the server. Contact support.' }
+  }
+
+  const res = await fetch(`https://api.yelp.com/v3/businesses/${encodeURIComponent(alias)}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  })
+  const data = await res.json()
+  if (!res.ok) {
+    if (res.status === 404) {
+      return { success: false, error: "We couldn't find that business on Yelp. Double-check the URL." }
+    }
+    return { success: false, error: data?.error?.description ?? `Yelp API returned ${res.status}` }
+  }
+
+  return {
+    success: true,
+    preview: {
+      alias: data.alias,
+      name: data.name,
+      rating: Number(data.rating ?? 0),
+      review_count: Number(data.review_count ?? 0),
+      is_closed: Boolean(data.is_closed),
+      is_claimed: Boolean(data.is_claimed),
+      url: data.url,
+      city: data.location?.city ?? null,
+      state: data.location?.state ?? null,
+      categories: (data.categories ?? []).map((c: { title: string }) => c.title),
+    },
+  }
+}
+
+/**
+ * Saves a verified Yelp connection for the current client and kicks off
+ * the first sync immediately so the user sees data right away.
+ */
+export async function connectYelp(
+  input: string,
+): Promise<{ success: true; preview: YelpPreview } | { success: false; error: string }> {
+  const userSupabase = await createServerClient()
+  const { data: { user } } = await userSupabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const clientId = await resolveClientId(user.id)
+  if (!clientId) return { success: false, error: 'No client context' }
+
+  const verify = await previewYelpBusiness(input)
+  if (!verify.success) return verify
+
+  const admin = createAdminClient()
+
+  // Wipe any prior yelp connection for this client first (handles reconnect
+  // the same way the Google callbacks do, and avoids ON CONFLICT surprises).
+  await admin
+    .from('channel_connections')
+    .delete()
+    .eq('client_id', clientId)
+    .eq('channel', 'yelp')
+
+  const { error: insertErr } = await admin
+    .from('channel_connections')
+    .insert({
+      client_id: clientId,
+      channel: 'yelp',
+      connection_type: 'api_key',
+      platform_account_id: verify.preview.alias,
+      platform_account_name: verify.preview.name,
+      platform_url: verify.preview.url,
+      status: 'active',
+      connected_by: user.id,
+      connected_at: new Date().toISOString(),
+      metadata: {
+        rating: verify.preview.rating,
+        review_count: verify.preview.review_count,
+        is_closed: verify.preview.is_closed,
+        is_claimed: verify.preview.is_claimed,
+        city: verify.preview.city,
+        state: verify.preview.state,
+        categories: verify.preview.categories,
+      },
+    })
+
+  if (insertErr) return { success: false, error: insertErr.message }
+
+  // Fire-and-forget first sync so review_metrics gets populated right away.
+  // We don't await this -- if it fails, the daily cron picks it up tomorrow.
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (supabaseUrl && serviceKey) {
+    fetch(`${supabaseUrl}/functions/v1/sync-yelp-metrics`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ client_id: clientId }),
+    }).catch(() => { /* best effort */ })
+  }
+
+  return { success: true, preview: verify.preview }
 }

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Camera, Globe, Tv, Briefcase, BarChart3, Search, MapPin,
   CheckCircle2, AlertCircle, Clock, Loader2, Link as LinkIcon,
-  RefreshCw, Trash2, ExternalLink, Plus, HelpCircle,
+  RefreshCw, Trash2, ExternalLink, Plus, HelpCircle, Star,
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { getConnectionsForClient, disconnectPlatform, type UnifiedConnection } from '@/lib/connection-actions'
@@ -31,6 +31,7 @@ const CATALOG: PlatformCatalog[] = [
   { id: 'google_analytics', label: 'Google Analytics', icon: BarChart3, color: 'from-orange-500 to-yellow-500', description: 'Website visitors, traffic sources, top pages.', authPath: '/api/auth/google', category: 'google' },
   { id: 'google_search_console', label: 'Google Search Console', icon: Search, color: 'from-blue-500 to-teal-500', description: 'What people search to find your site.', authPath: '/api/auth/google-search-console', category: 'google' },
   { id: 'google_business_profile', label: 'Google Business Profile', icon: MapPin, color: 'from-sky-500 to-blue-600', description: 'Directions, calls, website clicks, search views.', authPath: '/api/auth/google-business', category: 'google' },
+  { id: 'yelp', label: 'Yelp', icon: Star, color: 'from-red-500 to-red-600', description: 'Your Yelp rating and review count over time.', authPath: '/dashboard/connected-accounts/yelp', category: 'reviews' },
 ]
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -216,6 +217,7 @@ export default function ConnectedAccountsPage() {
     setLoading(false)
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [load])
 
   if (clientLoading || loading) {
@@ -326,7 +328,7 @@ export default function ConnectedAccountsPage() {
             {connections.length === 0 ? 'Connect an account' : 'Add more'}
           </h2>
           <div className="space-y-6">
-            {(['social', 'google'] as const).map((cat) => {
+            {(['social', 'google', 'reviews'] as const).map((cat) => {
               const list = unconnectedByCategory[cat]
               if (!list || list.length === 0) return null
               return (
