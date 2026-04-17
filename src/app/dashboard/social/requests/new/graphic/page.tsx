@@ -182,22 +182,27 @@ export default function GraphicRequestBuilderPage() {
   }
 
   // ── File upload helper ──
-  async function uploadFiles(files: FileList | File[]): Promise<string[]> {
+  // Returns { urls, failures } so callers can surface errors instead of
+  // silently dropping files the owner thought they uploaded.
+  async function uploadFiles(files: FileList | File[]): Promise<{ urls: string[]; failures: Array<{ name: string; reason: string }> }> {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return []
+    if (!user) return { urls: [], failures: [{ name: '(auth)', reason: 'You need to be signed in to upload files.' }] }
     const urls: string[] = []
+    const failures: Array<{ name: string; reason: string }> = []
     for (const file of Array.from(files)) {
       const ext = file.name.split('.').pop() || 'jpg'
       const path = `${user.id}/graphic-requests/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
       const { error: uploadErr } = await supabase.storage
         .from('client-photos')
         .upload(path, file, { upsert: false })
-      if (!uploadErr) {
+      if (uploadErr) {
+        failures.push({ name: file.name, reason: uploadErr.message || 'Upload failed' })
+      } else {
         const { data } = supabase.storage.from('client-photos').getPublicUrl(path)
         urls.push(data.publicUrl)
       }
     }
-    return urls
+    return { urls, failures }
   }
 
   // ── Submit ──
@@ -1015,15 +1020,26 @@ function MainMessageStep({ form, update }: StepProps) {
 
 function VisualsStep({
   form, update, uploadFiles,
-}: StepProps & { uploadFiles: (files: FileList | File[]) => Promise<string[]> }) {
+}: StepProps & { uploadFiles: (files: FileList | File[]) => Promise<{ urls: string[]; failures: Array<{ name: string; reason: string }> }> }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState<string | null>(null)
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
     setUploading(true)
-    const urls = await uploadFiles(files)
-    update('uploaded_asset_urls', [...(form.uploaded_asset_urls || []), ...urls])
+    setUploadErr(null)
+    const { urls, failures } = await uploadFiles(files)
+    if (urls.length > 0) {
+      update('uploaded_asset_urls', [...(form.uploaded_asset_urls || []), ...urls])
+    }
+    if (failures.length > 0) {
+      setUploadErr(
+        failures.length === 1
+          ? `Couldn't upload "${failures[0].name}": ${failures[0].reason}. Try again?`
+          : `Couldn't upload ${failures.length} files. Try again?`
+      )
+    }
     setUploading(false)
     if (fileRef.current) fileRef.current.value = ''
   }
@@ -1071,6 +1087,11 @@ function VisualsStep({
             onChange={e => handleFiles(e.target.files)}
           />
           <p className="text-[10px] text-ink-4 mt-2">JPG, PNG, or HEIC. Multiple files OK.</p>
+          {uploadErr && (
+            <div className="mt-3 rounded-lg bg-red-50 border border-red-200 p-3 text-[12px] text-red-800">
+              {uploadErr}
+            </div>
+          )}
         </div>
 
         <ToggleRow
@@ -1114,15 +1135,26 @@ function ToggleRow({
 
 function StyleStep({
   form, update, uploadFiles,
-}: StepProps & { uploadFiles: (files: FileList | File[]) => Promise<string[]> }) {
+}: StepProps & { uploadFiles: (files: FileList | File[]) => Promise<{ urls: string[]; failures: Array<{ name: string; reason: string }> }> }) {
   const refRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState<string | null>(null)
 
   async function handleRefFiles(files: FileList | null) {
     if (!files || files.length === 0) return
     setUploading(true)
-    const urls = await uploadFiles(files)
-    update('reference_asset_urls', [...(form.reference_asset_urls || []), ...urls])
+    setUploadErr(null)
+    const { urls, failures } = await uploadFiles(files)
+    if (urls.length > 0) {
+      update('reference_asset_urls', [...(form.reference_asset_urls || []), ...urls])
+    }
+    if (failures.length > 0) {
+      setUploadErr(
+        failures.length === 1
+          ? `Couldn't upload "${failures[0].name}": ${failures[0].reason}. Try again?`
+          : `Couldn't upload ${failures.length} files. Try again?`
+      )
+    }
     setUploading(false)
     if (refRef.current) refRef.current.value = ''
   }
@@ -1191,6 +1223,11 @@ function StyleStep({
             className="hidden"
             onChange={e => handleRefFiles(e.target.files)}
           />
+          {uploadErr && (
+            <div className="mt-3 rounded-lg bg-red-50 border border-red-200 p-3 text-[12px] text-red-800">
+              {uploadErr}
+            </div>
+          )}
         </div>
       </div>
     </>

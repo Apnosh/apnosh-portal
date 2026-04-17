@@ -44,6 +44,7 @@ export default function SocialCalendarPage() {
 
   // Approve from modal
   const [approving, setApproving] = useState(false)
+  const [approveError, setApproveError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!client?.id) { setLoading(false); return }
@@ -134,11 +135,23 @@ export default function SocialCalendarPage() {
   async function handleApproveFromModal() {
     if (!selectedRequest) return
     setApproving(true)
-    await submitClientFeedback(selectedRequest.id, 'approval')
+    setApproveError(null)
+    const result = await submitClientFeedback(selectedRequest.id, 'approval')
     setApproving(false)
-    setSelectedEntry(null)
-    load()
+    if (result.success) {
+      setSelectedEntry(null)
+      load()
+    } else {
+      // Keep the modal open and surface the error so the user knows the
+      // approval didn't land -- previously the modal closed regardless.
+      setApproveError(result.error || 'Approval failed. Please try again.')
+    }
   }
+
+  // Clear any approval error when the user opens a different entry
+  useEffect(() => {
+    setApproveError(null)
+  }, [selectedEntry?.id])
 
   const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
@@ -311,6 +324,15 @@ export default function SocialCalendarPage() {
                 <p className="text-sm text-ink-2 whitespace-pre-wrap leading-relaxed line-clamp-4">
                   {selectedDraft.caption}
                 </p>
+              </div>
+            )}
+
+            {/* Approval error banner -- shows when submitClientFeedback fails
+                so the user knows to retry instead of assuming it worked */}
+            {approveError && (
+              <div className="mx-5 mb-3 rounded-lg bg-red-50 border border-red-200 p-3 text-[12px] text-red-800 flex items-start gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <span>{approveError}</span>
               </div>
             )}
 

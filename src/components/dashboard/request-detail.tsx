@@ -123,10 +123,14 @@ export function ClientRequestDetail({ requestId, backHref, backLabel = 'Back to 
     setCancelling(true)
     setError(null)
     const result = await cancelContentRequest(requestId)
-    setCancelling(false)
     if (result.success) {
+      // Redirect back to the requests list so the user has an obvious
+      // "I'm done" state. Previously we just closed the confirm bar and
+      // left the user on the cancelled detail page, which looked broken.
       setCancelConfirm(false)
-    } else if (!result.success) {
+      router.push('/dashboard/social/requests')
+    } else {
+      setCancelling(false)
       setError(result.error)
     }
   }
