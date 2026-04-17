@@ -174,8 +174,16 @@ async function syncInstagram(
 
   const followersGained = prevRow ? followersTotal - (prevRow.followers_total ?? 0) : 0
 
-  // 3. Recent media (engagement + top post)
-  const mediaUrl = `https://graph.instagram.com/v21.0/${igUserId}/media?fields=id,timestamp,like_count,comments_count,media_type&limit=10&access_token=${token}`
+  // 3. Recent media -- fetch last 30 posts with rich fields for the
+  // content-first performance page. Upserts per-post rows into social_posts
+  // so the UI can render top posts, content-type breakdowns, and posting
+  // cadence.
+  const mediaFields = [
+    'id', 'timestamp', 'caption', 'media_type', 'media_product_type',
+    'media_url', 'thumbnail_url', 'permalink',
+    'like_count', 'comments_count',
+  ].join(',')
+  const mediaUrl = `https://graph.instagram.com/v21.0/${igUserId}/media?fields=${mediaFields}&limit=30&access_token=${token}`
   const mediaRes = await fetch(mediaUrl)
   const mediaData = await mediaRes.json()
 
@@ -184,25 +192,70 @@ async function syncInstagram(
   let topPostReach = 0
 
   const yesterdayStr = formatDate(yesterday)
+  const postsToUpsert: Array<Record<string, unknown>> = []
+
   for (const post of mediaData.data ?? []) {
     const postDate = post.timestamp?.split('T')[0]
-    if (postDate !== yesterdayStr) continue
 
-    mediaEngagement += (post.like_count ?? 0) + (post.comments_count ?? 0)
-
-    // Per-post reach (only 'reach' works on post-level now; 'impressions' is deprecated)
+    // Per-post insights: best-effort fetch of the metrics that matter.
+    // Different media types accept different metric sets in v21; we try a
+    // broad set and let the per-metric catch handle individual rejections.
+    const postMetrics: Record<string, number> = {}
+    let postInsightsRaw: unknown = null
     try {
-      const postInsightsUrl = `https://graph.instagram.com/v21.0/${post.id}/insights?metric=reach&access_token=${token}`
+      const metricList = post.media_type === 'VIDEO' || post.media_product_type === 'REELS'
+        ? 'reach,saved,shares,total_interactions,views'
+        : 'reach,saved,shares,total_interactions'
+      const postInsightsUrl = `https://graph.instagram.com/v21.0/${post.id}/insights?metric=${metricList}&access_token=${token}`
       const postInsightsRes = await fetch(postInsightsUrl)
-      const postInsights = await postInsightsRes.json()
-      const postReach = postInsights.data?.[0]?.values?.[0]?.value ?? 0
+      const insightsJson = await postInsightsRes.json()
+      postInsightsRaw = insightsJson
+      for (const m of insightsJson.data ?? []) {
+        postMetrics[m.name] = m.values?.[0]?.value ?? m.total_value?.value ?? 0
+      }
+    } catch {
+      // Ignore per-post insight failures -- we still store the post itself
+    }
+
+    const postReach = postMetrics.reach ?? 0
+
+    // Track the best post from yesterday for the daily social_metrics row
+    if (postDate === yesterdayStr) {
+      mediaEngagement += (post.like_count ?? 0) + (post.comments_count ?? 0)
       if (postReach > topPostReach) {
         topPostReach = postReach
         topPostId = post.id
       }
-    } catch {
-      // Skip -- post-level insights sometimes fail for non-owned content
     }
+
+    postsToUpsert.push({
+      client_id: conn.client_id,
+      platform: 'instagram',
+      external_id: post.id,
+      permalink: post.permalink,
+      media_type: post.media_type,
+      media_product_type: post.media_product_type,
+      caption: post.caption ?? null,
+      media_url: post.media_url ?? null,
+      thumbnail_url: post.thumbnail_url ?? post.media_url ?? null,
+      posted_at: post.timestamp,
+      reach: postReach,
+      likes: post.like_count ?? null,
+      comments: post.comments_count ?? null,
+      saves: postMetrics.saved ?? null,
+      shares: postMetrics.shares ?? null,
+      video_views: postMetrics.views ?? null,
+      total_interactions: postMetrics.total_interactions ?? null,
+      raw_data: { post, insights: postInsightsRaw },
+      synced_at: new Date().toISOString(),
+    })
+  }
+
+  // Bulk upsert all posts we fetched
+  if (postsToUpsert.length > 0) {
+    await supabase
+      .from('social_posts')
+      .upsert(postsToUpsert, { onConflict: 'client_id,platform,external_id' })
   }
 
   // Prefer the account-level total_interactions metric; fall back to sum of

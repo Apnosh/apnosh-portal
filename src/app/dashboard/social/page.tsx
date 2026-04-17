@@ -4,12 +4,11 @@ import { useState, useEffect } from 'react'
 import type { DashboardData } from '@/types/dashboard'
 import { getDashboardData } from '@/lib/dashboard/get-dashboard-data'
 import { getSocialBreakdown, type SocialDailyRow } from '@/lib/dashboard/get-social-breakdown'
+import { getSocialPosts, type SocialPost } from '@/lib/dashboard/get-social-posts'
 import { useClient } from '@/lib/client-context'
 import StatusBanner from '@/components/dashboard/status-banner'
-import HeroMetric from '@/components/dashboard/hero-metric'
+import SocialPerformance from '@/components/dashboard/social-performance'
 import SocialInsightsChart from '@/components/dashboard/social-insights-chart'
-import MetricGrid from '@/components/dashboard/metric-grid'
-import BenchmarkBar from '@/components/dashboard/benchmark-bar'
 import InsightCard from '@/components/dashboard/insight-card'
 import AMNote from '@/components/dashboard/am-note'
 
@@ -17,6 +16,7 @@ export default function SocialOverviewPage() {
   const { client, loading: clientLoading } = useClient()
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [breakdown, setBreakdown] = useState<{ rows: SocialDailyRow[]; platforms: string[] } | null>(null)
+  const [posts, setPosts] = useState<SocialPost[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -25,13 +25,15 @@ export default function SocialOverviewPage() {
 
       if (client?.id) {
         try {
-          const [data, bd] = await Promise.all([
+          const [data, bd, p] = await Promise.all([
             getDashboardData(client.id),
             getSocialBreakdown(client.id),
+            getSocialPosts(client.id, 90),
           ])
           if (data) {
             setDashboardData(data)
             setBreakdown({ rows: bd.rows, platforms: bd.platforms })
+            setPosts(p)
             setLoading(false)
             return
           }
@@ -42,6 +44,7 @@ export default function SocialOverviewPage() {
 
       setDashboardData(null)
       setBreakdown(null)
+      setPosts([])
       setLoading(false)
     }
 
@@ -122,17 +125,12 @@ export default function SocialOverviewPage() {
     )
   }
 
-  const fmtBenchmark = (n: number): string => {
-    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
-    return n.toLocaleString()
-  }
-
   return (
     <div
-      className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
+      className="max-w-[1080px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
-      {/* How your social media is doing */}
+      {/* Compact status line (banner only — no big hero number) */}
       <div className="db-fade db-d1">
         <StatusBanner
           headline={view.headline}
@@ -142,42 +140,15 @@ export default function SocialOverviewPage() {
         />
       </div>
 
-      {/* Your main number */}
-      <div className="db-fade db-d3">
-        <HeroMetric ctx={view.ctx} num={view.num} pctFull={view.pctFull} up={view.up} />
+      {/* CONTENT-FIRST: Top posts + content breakdown + cadence + heatmap */}
+      <div className="db-fade db-d2 mt-2">
+        <SocialPerformance posts={posts} />
       </div>
 
-      {/* Your trend over time -- with platform breakdown + metric switcher */}
-      {breakdown && breakdown.rows.length > 0 && (
-        <div className="db-fade db-d4">
-          <SocialInsightsChart rows={breakdown.rows} platforms={breakdown.platforms} />
-        </div>
-      )}
-
-      {/* The breakdown */}
-      <div className="db-fade db-d5">
-        <MetricGrid title={view.bdtitle} metrics={view.metrics} />
-      </div>
-
-      {/* How you compare */}
-      <div className="db-fade db-d6">
-        <BenchmarkBar
-          yourValue={view.bmy}
-          avgValue={view.bmavg}
-          maxValue={view.bmmax}
-          rank={view.rank}
-          yourFormatted={fmtBenchmark(view.bmy)}
-          avgFormatted={fmtBenchmark(view.bmavg)}
-          animationKey="social"
-        />
-      </div>
-
-      {/* What we noticed */}
+      {/* AM's observations stay prominent -- human signal matters */}
       {view.insights.length > 0 && (
-        <div className="db-fade db-d6 pb-8 mb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
-          <h2 className="text-[15px] font-bold mb-3" style={{ color: 'var(--db-black)' }}>
-            What we noticed
-          </h2>
+        <div className="db-fade db-d5 pb-8 mb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
+          <h2 className="text-lg font-bold text-ink mb-3">What we noticed</h2>
           <div className="flex flex-col gap-2.5">
             {view.insights.map((ins, i) => (
               <InsightCard key={i} icon={ins.icon} title={ins.title} subtitle={ins.subtitle} />
@@ -186,15 +157,23 @@ export default function SocialOverviewPage() {
         </div>
       )}
 
-      {/* From your account manager */}
       {view.am.note && (
-        <div className="db-fade db-d7">
+        <div className="db-fade db-d6 pb-8 mb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
           <AMNote
             name={view.am.name}
             initials={view.am.initials}
             role={view.am.role}
             note={view.am.note}
           />
+        </div>
+      )}
+
+      {/* Audience trends (demoted to bottom -- secondary to content performance) */}
+      {breakdown && breakdown.rows.length > 0 && (
+        <div className="db-fade db-d7">
+          <h2 className="text-lg font-bold text-ink mb-1">Audience trends</h2>
+          <p className="text-xs text-ink-3 mb-4">How reach, followers, and other aggregate metrics have moved over time.</p>
+          <SocialInsightsChart rows={breakdown.rows} platforms={breakdown.platforms} />
         </div>
       )}
     </div>
