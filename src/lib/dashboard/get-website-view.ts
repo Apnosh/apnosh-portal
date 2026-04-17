@@ -25,8 +25,15 @@ export async function getWebsiteView(clientId: string): Promise<DashboardView | 
 
   const now = new Date()
   const thisMonthStart = startOfMonth(now)
+
+  // Same-day-window comparison so the MoM trend is fair mid-month.
+  // If today is April 16, we compare Apr 1-16 vs Mar 1-16 (not the full month).
+  // If the previous month is shorter (e.g. we're on Mar 31 comparing to Feb),
+  // we clamp to the last day of the previous month.
   const lastMonthStart = startOfMonth(addMonths(now, -1))
-  const lastMonthEnd = endOfMonth(addMonths(now, -1))
+  const lastMonthFullEnd = endOfMonth(addMonths(now, -1))
+  const lastMonthSameDay = new Date(lastMonthStart)
+  lastMonthSameDay.setDate(Math.min(now.getDate(), lastMonthFullEnd.getDate()))
 
   // Pull a year of daily rows for chart + trend
   const yearAgo = addDays(now, -365)
@@ -64,24 +71,36 @@ export async function getWebsiteView(clientId: string): Promise<DashboardView | 
   // ---- Hero: unique visitors this month (from monthly aggregate, authoritative)
   const thisY = now.getFullYear()
   const thisM = now.getMonth() + 1
-  const lastM = now.getMonth() === 0 ? 12 : now.getMonth()
-  const lastY = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear()
 
   const thisMonthAgg = monthly.find(m => m.year === thisY && m.month === thisM)
-  const lastMonthAgg = monthly.find(m => m.year === lastY && m.month === lastM)
+  // Note: we intentionally do NOT use lastMonthAgg for the hero trend, because
+  // comparing a partial-month sum (this month) vs a full-month aggregate (last
+  // month) would always look "down" mid-month. We compute trends from the
+  // same-day windows below.
 
-  const thisVisitors = thisMonthAgg?.unique_visitors ?? sumField(filterByDateRange(daily, thisMonthStart, now), 'visitors')
-  const lastVisitors = lastMonthAgg?.unique_visitors ?? sumField(filterByDateRange(daily, lastMonthStart, lastMonthEnd), 'visitors')
+  // Same-day windows (fair for MoM trend)
+  const thisMonthDaily = filterByDateRange(daily, thisMonthStart, now)
+  const lastMonthDaily = filterByDateRange(daily, lastMonthStart, lastMonthSameDay)
+  const thisMonthSearch = filterByDateRange(searchDaily, thisMonthStart, now)
+  const lastMonthSearch = filterByDateRange(searchDaily, lastMonthStart, lastMonthSameDay)
 
-  const pctChange = lastVisitors > 0 ? Math.round(((thisVisitors - lastVisitors) / lastVisitors) * 100) : 0
+  // Hero number: the accurate month-to-date unique-visitor count.
+  // Use the monthly aggregate if present (authoritative full-month, but since
+  // we're mid-month it reflects data through yesterday). Otherwise sum daily.
+  const thisVisitors = thisMonthAgg?.unique_visitors ?? sumField(thisMonthDaily, 'visitors')
+
+  // Hero trend: ALWAYS same-day-window sum-of-daily for both sides so the
+  // comparison is apples-to-apples even mid-month.
+  const thisVisitorsForTrend = sumField(thisMonthDaily, 'visitors')
+  const lastVisitorsForTrend = sumField(lastMonthDaily, 'visitors')
+
+  const pctChange = lastVisitorsForTrend > 0
+    ? Math.round(((thisVisitorsForTrend - lastVisitorsForTrend) / lastVisitorsForTrend) * 100)
+    : 0
   const isUp = pctChange >= 0
 
   // ---- Metric cards: Visitors, Sessions, Search Impressions, Actions Taken
-  const thisMonthDaily = filterByDateRange(daily, thisMonthStart, now)
-  const lastMonthDaily = filterByDateRange(daily, lastMonthStart, lastMonthEnd)
-  const thisMonthSearch = filterByDateRange(searchDaily, thisMonthStart, now)
-  const lastMonthSearch = filterByDateRange(searchDaily, lastMonthStart, lastMonthEnd)
-
+  // All numbers and trends use the same-day window for fair MoM comparison.
   const thisSessions = sumField(thisMonthDaily, 'sessions')
   const lastSessions = sumField(lastMonthDaily, 'sessions')
 
@@ -96,8 +115,8 @@ export async function getWebsiteView(clientId: string): Promise<DashboardView | 
       label: 'Website visitors',
       value: fmtNum(thisVisitors),
       subtitle: 'Unique people who visited',
-      trend: fmtPct(thisVisitors, lastVisitors),
-      up: thisVisitors >= lastVisitors,
+      trend: fmtPct(thisVisitorsForTrend, lastVisitorsForTrend),
+      up: thisVisitorsForTrend >= lastVisitorsForTrend,
       sparkline: weeklySparkline(daily, 'visitors', 12),
     },
     {
@@ -132,7 +151,7 @@ export async function getWebsiteView(clientId: string): Promise<DashboardView | 
   // ---- Insights: derive from real data
   const insights = buildWebsiteInsights({
     daily, searchDaily, thisMonthDaily, thisMonthSearch,
-    thisVisitors, lastVisitors, pctChange,
+    thisVisitors, lastVisitors: lastVisitorsForTrend, pctChange,
   })
 
   // ---- AM note (same source as other views, keyed by view_type)
@@ -149,7 +168,7 @@ export async function getWebsiteView(clientId: string): Promise<DashboardView | 
     num: fmtNum(thisVisitors),
     unit: 'visitors',
     pct: (isUp ? '+' : '') + pctChange + '%',
-    pctFull: (isUp ? '+' : '') + pctChange + '% from last month',
+    pctFull: (isUp ? '+' : '') + pctChange + '% vs same time last month',
     bdtitle: "What's driving your website",
     // No benchmark for website yet -- zero out so BenchmarkBar can conditionally hide
     bmy: thisVisitors,
