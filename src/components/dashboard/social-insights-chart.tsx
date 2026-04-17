@@ -55,9 +55,14 @@ interface MetricDef {
  *     daily accounts but total_interactions is aggregated differently, so
  *     dividing them produces nonsense (e.g. 63,500% for a quiet account).
  *     We'd rather show nothing than a misleading number.
+ *   - Reach (account-level daily): Meta v21 narrowed this metric so
+ *     dramatically that it returns 3-10/day even for active accounts.
+ *     Reach is fundamentally a per-post measurement -- it's surfaced in
+ *     Top Posts, Content Type Breakdown, and the vs-median chips where
+ *     it actually means something. Trying to force it into a daily time
+ *     series misleads more than it informs.
  */
 const METRICS: MetricDef[] = [
-  { key: 'reach', label: 'Reach', subtitle: 'Unique people who saw your content', aggregate: 'sum', unit: 'people', field: 'reach' },
   { key: 'profile_visits', label: 'Profile visits', subtitle: 'People who clicked through to your page', aggregate: 'sum', unit: 'visits', field: 'profile_visits' },
   { key: 'followers_total', label: 'Followers', subtitle: 'Total followers (most recent day in range)', aggregate: 'latest', unit: 'followers', field: 'followers_total' },
   { key: 'followers_gained', label: 'New followers', subtitle: 'Net followers gained in this period', aggregate: 'sum', unit: 'followers', field: 'followers_gained' },
@@ -252,7 +257,7 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
   // we prefer 1W so the chart looks full on first load.
   const defaultRange: TimeRange = coverage.totalDays <= 10 ? '1W' : '1M'
 
-  const [metricKey, setMetricKey] = useState<string>('reach')
+  const [metricKey, setMetricKey] = useState<string>('profile_visits')
   const [platformFilter, setPlatformFilter] = useState<string | 'all'>('all')
   const [timeRange, setTimeRange] = useState<TimeRange>(defaultRange)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -553,21 +558,23 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
           <div>
             <p className="font-semibold text-ink-2 mb-1">Metrics we trust for marketing decisions</p>
             <ul className="list-disc list-inside space-y-1">
-              <li><strong>Reach</strong> -- unique accounts that saw your content. The gold-standard &ldquo;real humans who noticed us.&rdquo;</li>
-              <li><strong>Profile visits</strong> -- people who cared enough to click through to your page.</li>
-              <li><strong>Followers</strong> and <strong>New followers</strong> -- audience size and growth.</li>
+              <li><strong>Profile visits</strong> &mdash; people who cared enough to click through to your page.</li>
+              <li><strong>Followers</strong> and <strong>New followers</strong> &mdash; audience size and growth (new-followers becomes accurate once two consecutive days of sync exist).</li>
             </ul>
           </div>
           <div>
             <p className="font-semibold text-ink-2 mb-1">Metrics we show but don&apos;t trust</p>
             <ul className="list-disc list-inside space-y-1">
-              <li><strong>Interactions</strong> -- Meta&apos;s &ldquo;total interactions&rdquo; counts reel replays, story slide taps, and auto-play events. A quiet account with 4 reach can show 2,500 &ldquo;interactions&rdquo; because Instagram keeps looping your reels.</li>
-              <li><strong>Times shown</strong> (&ldquo;Views&rdquo;) -- same inflation problem. Meta counts every play, including reels auto-played on the explore page to strangers who didn&apos;t engage.</li>
+              <li><strong>Interactions</strong> &mdash; Meta&apos;s &ldquo;total interactions&rdquo; counts reel replays, story slide taps, and auto-play events. A quiet account can show thousands of &ldquo;interactions&rdquo; because Instagram keeps looping your reels.</li>
+              <li><strong>Times shown</strong> (&ldquo;Views&rdquo;) &mdash; same inflation problem. Meta counts every play, including reels auto-played on the explore page to strangers who didn&apos;t engage.</li>
             </ul>
           </div>
-          <p className="text-[11px]">
-            We show the noisy metrics because you&apos;ll see them elsewhere (Meta&apos;s own apps use them), but we don&apos;t put them next to engagement-rate math or use them to judge performance.
-          </p>
+          <div>
+            <p className="font-semibold text-ink-2 mb-1">Where reach lives now</p>
+            <p>
+              Reach is fundamentally a per-post measurement, so we removed it from this daily chart (Meta&apos;s v21 API returns misleading account-level numbers like 3-10/day). You&apos;ll find real reach figures in <strong>Top Posts</strong>, <strong>Content type breakdown</strong>, and the &ldquo;vs median&rdquo; chips above &mdash; which reflect true per-post reach from Meta.
+            </p>
+          </div>
         </div>
       )}
     </div>
