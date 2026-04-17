@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import { Chart, registerables } from 'chart.js'
+import { ChevronDown, Info } from 'lucide-react'
 import type { SocialDailyRow } from '@/lib/dashboard/get-social-breakdown'
 import type { TimeRange } from '@/types/dashboard'
 
@@ -19,19 +20,39 @@ const TIME_RANGES: Array<{ key: TimeRange; days: number; label: string }> = [
   { key: '1Y', days: 365, label: '1Y' },
 ]
 
-// Business-owner language. Keep labels plain, avoid jargon.
-const METRICS: Array<{
-  key: keyof Pick<SocialDailyRow, 'reach' | 'impressions' | 'engagement' | 'profile_visits' | 'followers_total'>
+/**
+ * Metrics surfaced to business owners, in order of reliability.
+ *
+ * Ordered so the most trustworthy signals (real humans, not auto-plays)
+ * come first. "Times shown" (Meta's `views` / `impressions`) is kept for
+ * the curious but lives in the "Advanced" section, labelled honestly so
+ * nobody walks around saying "we got 15k views!" when most are silent
+ * auto-plays triggered by Instagram's algorithm.
+ */
+type AggMode = 'sum' | 'latest' | 'rate'
+
+interface MetricDef {
+  key: string
   label: string
   subtitle: string
-  aggregate: 'sum' | 'latest'   // sum for rate metrics, latest for cumulative counts
+  aggregate: AggMode
   unit: string
-}> = [
-  { key: 'reach',          label: 'People reached',   subtitle: 'Unique people who saw your content',       aggregate: 'sum',    unit: 'people' },
-  { key: 'impressions',    label: 'Views',            subtitle: 'Total views of your content',              aggregate: 'sum',    unit: 'views' },
-  { key: 'engagement',     label: 'Engagement',       subtitle: 'Likes, comments, shares, saves',           aggregate: 'sum',    unit: 'actions' },
-  { key: 'profile_visits', label: 'Profile visits',   subtitle: 'People who clicked through to your page',  aggregate: 'sum',    unit: 'visits' },
-  { key: 'followers_total',label: 'Followers',        subtitle: 'Total followers (latest day in range)',    aggregate: 'latest', unit: 'followers' },
+  advanced?: boolean
+  // For rate metrics: numerator/denominator fields
+  rateNum?: keyof SocialDailyRow
+  rateDen?: keyof SocialDailyRow
+  // For direct metrics: the field name
+  field?: keyof SocialDailyRow
+}
+
+const METRICS: MetricDef[] = [
+  { key: 'reach', label: 'Reach', subtitle: 'Unique people who saw your content', aggregate: 'sum', unit: 'people', field: 'reach' },
+  { key: 'engagement', label: 'Engagement', subtitle: 'Likes, comments, shares, saves', aggregate: 'sum', unit: 'actions', field: 'engagement' },
+  { key: 'engagement_rate', label: 'Engagement rate', subtitle: 'Percent of reached people who engaged', aggregate: 'rate', unit: '%', rateNum: 'engagement', rateDen: 'reach' },
+  { key: 'profile_visits', label: 'Profile visits', subtitle: 'People who clicked through to your page', aggregate: 'sum', unit: 'visits', field: 'profile_visits' },
+  { key: 'followers_total', label: 'Followers', subtitle: 'Total followers (most recent day in range)', aggregate: 'latest', unit: 'followers', field: 'followers_total' },
+  { key: 'followers_gained', label: 'New followers', subtitle: 'Net followers gained in this period', aggregate: 'sum', unit: 'followers', field: 'followers_gained' },
+  { key: 'impressions', label: 'Times shown', subtitle: 'All plays + displays (includes automated auto-plays; inflated number)', aggregate: 'sum', unit: 'times', field: 'impressions', advanced: true },
 ]
 
 const PLATFORM_COLORS: Record<string, string> = {
@@ -53,10 +74,19 @@ const PLATFORM_LABELS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 function formatNumber(n: number): string {
+  if (!Number.isFinite(n)) return '0'
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
   if (n >= 10_000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
-  if (n >= 1000) return n.toLocaleString('en-US')
+  if (n >= 1000) return Math.round(n).toLocaleString('en-US')
   return Math.round(n).toString()
+}
+
+function formatValue(n: number, metric: MetricDef): string {
+  if (metric.aggregate === 'rate') {
+    // For rate metrics, show one decimal place
+    return `${n.toFixed(1)}%`
+  }
+  return formatNumber(n)
 }
 
 function toDateStr(d: Date): string {
@@ -80,9 +110,9 @@ interface Series {
 function buildSeries(
   rows: SocialDailyRow[],
   days: number,
-  metric: (typeof METRICS)[number],
+  metric: MetricDef,
   platformFilter: string | 'all',
-): { series: Series[]; labels: string[]; resolution: 'day' | 'biday' | 'week' } {
+): { series: Series[]; labels: string[]; daysWithData: number } {
   const now = new Date()
   now.setHours(0, 0, 0, 0)
   const start = addDays(now, -(days - 1))
@@ -90,19 +120,34 @@ function buildSeries(
   const nowStr = toDateStr(now)
 
   const inRange = rows.filter(r => r.date >= startStr && r.date <= nowStr)
+  const daysWithData = new Set(inRange.map(r => r.date)).size
 
-  // Platforms to include
   const allPlatforms = Array.from(new Set(inRange.map(r => r.platform))).sort()
   const platforms = platformFilter === 'all'
     ? allPlatforms
     : allPlatforms.filter(p => p === platformFilter)
 
-  // Resolution for x-axis smoothing
   const resolution: 'day' | 'biday' | 'week' =
     days <= 14 ? 'day' : days <= 60 ? 'day' : days <= 120 ? 'biday' : 'week'
   const step = resolution === 'week' ? 7 : resolution === 'biday' ? 2 : 1
   const buckets: Date[] = []
   for (let d = new Date(start); d <= now; d = addDays(d, step)) buckets.push(new Date(d))
+
+  const computeBucketValue = (bucketRows: SocialDailyRow[]): number => {
+    if (metric.aggregate === 'sum' && metric.field) {
+      return bucketRows.reduce((acc, r) => acc + (Number(r[metric.field!]) || 0), 0)
+    }
+    if (metric.aggregate === 'latest' && metric.field) {
+      const sorted = [...bucketRows].sort((a, b) => a.date.localeCompare(b.date))
+      return sorted.length > 0 ? Number(sorted[sorted.length - 1][metric.field!]) || 0 : 0
+    }
+    if (metric.aggregate === 'rate' && metric.rateNum && metric.rateDen) {
+      const num = bucketRows.reduce((acc, r) => acc + (Number(r[metric.rateNum!]) || 0), 0)
+      const den = bucketRows.reduce((acc, r) => acc + (Number(r[metric.rateDen!]) || 0), 0)
+      return den > 0 ? (num / den) * 100 : 0
+    }
+    return 0
+  }
 
   const series: Series[] = []
   for (const platform of platforms) {
@@ -111,19 +156,20 @@ function buildSeries(
     for (const bucketStart of buckets) {
       const bucketEnd = addDays(bucketStart, step - 1)
       const bucketRows = platformRows.filter(r => r.date >= toDateStr(bucketStart) && r.date <= toDateStr(bucketEnd))
-      if (metric.aggregate === 'sum') {
-        data.push(bucketRows.reduce((acc, r) => acc + (Number(r[metric.key]) || 0), 0))
-      } else {
-        // 'latest': take the last value in the bucket
-        const sorted = [...bucketRows].sort((a, b) => a.date.localeCompare(b.date))
-        data.push(sorted.length > 0 ? Number(sorted[sorted.length - 1][metric.key]) || 0 : 0)
-      }
+      data.push(computeBucketValue(bucketRows))
     }
 
-    // For 'latest' metrics (followers), total = the most recent non-zero value
-    const total = metric.aggregate === 'latest'
-      ? ([...data].reverse().find(v => v > 0) ?? 0)
-      : data.reduce((a, b) => a + b, 0)
+    // Totals for the legend
+    let total = 0
+    if (metric.aggregate === 'latest') {
+      total = [...data].reverse().find(v => v > 0) ?? 0
+    } else if (metric.aggregate === 'rate' && metric.rateNum && metric.rateDen) {
+      const num = platformRows.reduce((acc, r) => acc + (Number(r[metric.rateNum!]) || 0), 0)
+      const den = platformRows.reduce((acc, r) => acc + (Number(r[metric.rateDen!]) || 0), 0)
+      total = den > 0 ? (num / den) * 100 : 0
+    } else {
+      total = data.reduce((a, b) => a + b, 0)
+    }
 
     series.push({
       platform,
@@ -134,7 +180,7 @@ function buildSeries(
     })
   }
 
-  // X-axis labels: pick readable breakpoints based on range
+  // X-axis labels
   const labels: string[] = []
   if (days <= 7) {
     for (const b of buckets) {
@@ -142,7 +188,6 @@ function buildSeries(
       labels.push(isToday ? 'Today' : b.toLocaleDateString('en-US', { weekday: 'short' }))
     }
   } else if (days <= 30) {
-    // Show 5 markers across the range
     const markers = 5
     for (let i = 0; i < buckets.length; i++) {
       if (i % Math.max(1, Math.floor(buckets.length / markers)) === 0) {
@@ -152,20 +197,14 @@ function buildSeries(
       }
     }
   } else {
-    // Month markers
     const seen = new Set<string>()
     for (const b of buckets) {
       const m = b.toLocaleDateString('en-US', { month: 'short' })
-      if (!seen.has(m)) {
-        seen.add(m)
-        labels.push(m)
-      } else {
-        labels.push('')
-      }
+      if (!seen.has(m)) { seen.add(m); labels.push(m) } else { labels.push('') }
     }
   }
 
-  return { series, labels, resolution }
+  return { series, labels, daysWithData }
 }
 
 // ---------------------------------------------------------------------------
@@ -178,15 +217,15 @@ interface SocialInsightsChartProps {
 }
 
 export default function SocialInsightsChart({ rows, platforms }: SocialInsightsChartProps) {
-  const [metricKey, setMetricKey] = useState<(typeof METRICS)[number]['key']>('reach')
+  const [metricKey, setMetricKey] = useState<string>('reach')
   const [platformFilter, setPlatformFilter] = useState<string | 'all'>('all')
   const [timeRange, setTimeRange] = useState<TimeRange>('1M')
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const metric = useMemo(() => METRICS.find(m => m.key === metricKey) ?? METRICS[0], [metricKey])
   const timeConfig = useMemo(() => TIME_RANGES.find(t => t.key === timeRange) ?? TIME_RANGES[1], [timeRange])
 
-  const { series, labels } = useMemo(
+  const { series, labels, daysWithData } = useMemo(
     () => buildSeries(rows, timeConfig.days, metric, platformFilter),
     [rows, timeConfig.days, metric, platformFilter],
   )
@@ -220,6 +259,8 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
       borderJoinStyle: 'round' as const,
     }))
 
+    const isRate = metric.aggregate === 'rate'
+
     chartRef.current = new Chart(canvas, {
       type: 'line',
       data: { labels, datasets },
@@ -244,7 +285,7 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
             ticks: {
               color: '#aaa',
               font: { size: 11 },
-              callback(v) { return formatNumber(Number(v)) },
+              callback(v) { return isRate ? `${Number(v).toFixed(0)}%` : formatNumber(Number(v)) },
             },
           },
         },
@@ -263,23 +304,19 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
             callbacks: {
               label(ctx) {
                 const val = Number(ctx.parsed.y)
-                return `  ${ctx.dataset.label}: ${formatNumber(val)} ${metric.unit}`
+                const display = isRate ? `${val.toFixed(1)}%` : `${formatNumber(val)} ${metric.unit}`
+                return `  ${ctx.dataset.label}: ${display}`
               },
             },
           },
         },
-        onHover(_e, active) {
-          setHoveredIdx(active[0]?.index ?? null)
-        },
       },
     })
-  }, [series, labels, metric.unit])
+  }, [series, labels, metric])
 
   useEffect(() => {
     drawChart()
-    return () => {
-      if (chartRef.current) chartRef.current.destroy()
-    }
+    return () => { if (chartRef.current) chartRef.current.destroy() }
   }, [drawChart])
 
   useEffect(() => {
@@ -289,12 +326,36 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
   }, [drawChart])
 
   // Grand total across all visible series
-  const grandTotal = series.reduce((acc, s) => acc + s.total, 0)
-  const grandLabel = metric.aggregate === 'latest'
-    ? formatNumber(series.reduce((acc, s) => acc + s.total, 0))
-    : formatNumber(grandTotal)
+  const grandTotal = useMemo(() => {
+    if (metric.aggregate === 'latest') {
+      return series.reduce((acc, s) => acc + s.total, 0)
+    }
+    if (metric.aggregate === 'rate' && metric.rateNum && metric.rateDen) {
+      const inRange = rows.filter(r => {
+        const start = addDays(new Date(), -(timeConfig.days - 1))
+        start.setHours(0, 0, 0, 0)
+        return r.date >= toDateStr(start)
+      })
+      const filtered = platformFilter === 'all' ? inRange : inRange.filter(r => r.platform === platformFilter)
+      const num = filtered.reduce((a, r) => a + (Number(r[metric.rateNum!]) || 0), 0)
+      const den = filtered.reduce((a, r) => a + (Number(r[metric.rateDen!]) || 0), 0)
+      return den > 0 ? (num / den) * 100 : 0
+    }
+    return series.reduce((acc, s) => acc + s.total, 0)
+  }, [series, metric, rows, platformFilter, timeConfig.days])
 
   const hasAnyData = series.some(s => s.data.some(v => v > 0))
+
+  // Split metrics into primary (trusted) and advanced (noisy)
+  const primaryMetrics = METRICS.filter(m => !m.advanced)
+  const advancedMetrics = METRICS.filter(m => m.advanced)
+  const isCurrentAdvanced = metric.advanced === true
+
+  const timeLabel = timeConfig.key === '1W' ? 'Last 7 days'
+    : timeConfig.key === '1M' ? 'Last 30 days'
+    : timeConfig.key === '3M' ? 'Last 3 months'
+    : timeConfig.key === '6M' ? 'Last 6 months'
+    : 'Last year'
 
   return (
     <div className="pb-10 mb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
@@ -322,16 +383,21 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
         <div className="relative">
           <select
             value={metricKey}
-            onChange={e => setMetricKey(e.target.value as typeof metricKey)}
+            onChange={e => setMetricKey(e.target.value)}
             className="appearance-none bg-white border border-ink-6 rounded-lg pl-3 pr-8 py-1.5 text-[13px] font-medium text-ink cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
           >
-            {METRICS.map(m => (
-              <option key={m.key} value={m.key}>{m.label}</option>
-            ))}
+            <optgroup label="Primary metrics">
+              {primaryMetrics.map(m => (
+                <option key={m.key} value={m.key}>{m.label}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Advanced (less reliable)">
+              {advancedMetrics.map(m => (
+                <option key={m.key} value={m.key}>{m.label}</option>
+              ))}
+            </optgroup>
           </select>
-          <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-ink-4 pointer-events-none" viewBox="0 0 12 12" fill="none">
-            <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-ink-4 pointer-events-none" />
         </div>
 
         {/* Time range */}
@@ -355,15 +421,25 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
       {/* Grand total + subtitle */}
       <div className="mb-2">
         <div className="flex items-baseline gap-2">
-          <span className="text-[13px] text-ink-4">{timeConfig.key === '1W' ? 'Last 7 days' : timeConfig.key === '1M' ? 'Last 30 days' : timeConfig.key === '3M' ? 'Last 3 months' : timeConfig.key === '6M' ? 'Last 6 months' : 'Last year'}</span>
+          <span className="text-[13px] text-ink-4">{timeLabel}</span>
         </div>
         <div className="flex items-baseline gap-3 flex-wrap">
           <span className="font-[family-name:var(--font-display)] text-4xl text-ink tabular-nums">
-            {hasAnyData ? grandLabel : '—'}
+            {hasAnyData ? formatValue(grandTotal, metric) : '—'}
           </span>
           <span className="text-sm text-ink-3">{metric.subtitle.toLowerCase()}</span>
         </div>
       </div>
+
+      {/* Honest disclaimer for advanced metrics */}
+      {isCurrentAdvanced && (
+        <div className="flex items-start gap-2 mb-3 text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+          <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <span>
+            <span className="font-semibold">Treat this number loosely.</span> It includes silent auto-plays Instagram fires at non-followers, so it&apos;s often 100x the real attention your content got. Use Reach or Engagement for real marketing signal.
+          </span>
+        </div>
+      )}
 
       {/* Legend (multi-line only) */}
       {platformFilter === 'all' && series.length > 1 && (
@@ -372,7 +448,7 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
             <div key={s.platform} className="flex items-center gap-2 text-xs">
               <span className="w-2.5 h-2.5 rounded-sm" style={{ background: s.color }} />
               <span className="font-medium text-ink">{s.label}</span>
-              <span className="text-ink-4 tabular-nums">{formatNumber(s.total)}</span>
+              <span className="text-ink-4 tabular-nums">{formatValue(s.total, metric)}</span>
             </div>
           ))}
         </div>
@@ -392,17 +468,34 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
         )}
       </div>
 
-      {/* Footer hint about hover */}
-      {hasAnyData && (
+      {/* Coverage footer */}
+      {daysWithData > 0 && (
         <p className="text-[11px] text-ink-4 mt-3">
-          {platformFilter === 'all' && series.length > 1
-            ? 'Hover to see each platform at any point. Tap a tab above to zoom into one platform.'
-            : 'Hover the chart to see the value for any day.'}
+          {daysWithData === 1
+            ? `Showing 1 day of synced data. Trend shape will fill in as the daily sync runs.`
+            : `${daysWithData} days of synced data in this range. ${platformFilter === 'all' && series.length > 1 ? 'Hover the chart to compare platforms at any day.' : 'Hover the chart for day-level detail.'}`}
         </p>
       )}
 
-      {/* Keep hoveredIdx around so re-renders aren't wasted (lint-safe use) */}
-      <span className="sr-only">{hoveredIdx != null ? `index ${hoveredIdx}` : ''}</span>
+      {/* Advanced metrics toggle */}
+      <button
+        onClick={() => setShowAdvanced(v => !v)}
+        className="text-[11px] text-ink-4 hover:text-ink-2 mt-3 inline-flex items-center gap-1 transition-colors"
+      >
+        {showAdvanced ? 'Hide advanced metrics' : 'What about Views / Impressions?'}
+        <ChevronDown className={`w-3 h-3 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+      </button>
+      {showAdvanced && (
+        <div className="mt-3 p-3 bg-bg-2 rounded-lg text-[12px] text-ink-3 leading-relaxed">
+          <p className="font-semibold text-ink-2 mb-1">A note on &quot;Views&quot; and &quot;Impressions&quot;</p>
+          <p>
+            Instagram counts a &ldquo;view&rdquo; every time a reel auto-plays in the feed, explore tab, or someone swipes past a story slide. A single reel shown to 5,000 random users on the explore page = 5,000 views, but probably 0 real marketing impact.
+          </p>
+          <p className="mt-2">
+            You can pick &ldquo;Times shown&rdquo; from the metric dropdown to see the raw number, but we recommend treating it as a vanity number — not a measure of whether your content is working.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
