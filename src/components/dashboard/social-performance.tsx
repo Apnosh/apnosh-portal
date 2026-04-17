@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState } from 'react'
 import Image from 'next/image'
 import {
   Play, Image as ImageIcon, Layers, Heart, MessageCircle, Bookmark, Repeat,
-  ExternalLink, TrendingUp, Clock, Calendar,
+  ExternalLink, TrendingUp, Clock, Calendar, ArrowUpRight, ArrowDownRight, Minus,
 } from 'lucide-react'
 import type { SocialPost } from '@/lib/dashboard/get-social-posts'
 
@@ -56,6 +56,45 @@ function ContentTypeIcon({ post, className = '' }: { post: SocialPost; className
   return <ImageIcon className={className} />
 }
 
+/**
+ * Post-level engagement rate -- (likes+comments+saves+shares) / reach.
+ *
+ * This is the ONE engagement-rate calculation that's honest: both numerator
+ * and denominator come from the same post, measured over the same window.
+ * Contrast with account-level rate (removed earlier) which divides Meta's
+ * 1-day reach by aggregate interactions and produces nonsense.
+ *
+ * Returns null when reach is zero so we can display "—" rather than a
+ * misleading 0%.
+ */
+function engagementRate(p: SocialPost): number | null {
+  if (!p.reach || p.reach <= 0) return null
+  const actions = (p.likes ?? 0) + (p.comments ?? 0) + (p.saves ?? 0) + (p.shares ?? 0)
+  return (actions / p.reach) * 100
+}
+
+/**
+ * Is this post a reel (short-form video)? Marketers benchmark reels and
+ * feed posts separately because the IG algorithm distributes them very
+ * differently -- a "good" reel reach is often 5-10x a "good" carousel reach.
+ */
+function isReel(p: SocialPost): boolean {
+  return p.media_product_type === 'REELS' || p.media_type === 'VIDEO'
+}
+
+function isStatic(p: SocialPost): boolean {
+  return !isReel(p) && p.media_product_type !== 'STORY'
+}
+
+/** Median of a numeric array, ignoring null/undefined. */
+function median(values: Array<number | null | undefined>): number | null {
+  const nums = values.filter((v): v is number => v != null && Number.isFinite(v))
+  if (nums.length === 0) return null
+  const sorted = [...nums].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+}
+
 function daysAgo(iso: string): string {
   const posted = new Date(iso).getTime()
   const now = Date.now()
@@ -68,47 +107,196 @@ function daysAgo(iso: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Week-over-week summary
+// ---------------------------------------------------------------------------
+
+/**
+ * Aggregates post-level stats for the current 7 days vs the prior 7 days.
+ * Uses the post's published date as the anchor -- a reel published Monday
+ * counts toward Monday's week, and its lifetime engagement shows up there.
+ *
+ * This isn't perfect (a reel keeps accumulating views after its week ends),
+ * but it's the cleanest WoW we can make from post-level data and matches
+ * how agencies report in weekly rollups.
+ */
+function WeekOverWeek({ posts }: { posts: SocialPost[] }) {
+  const stats = useMemo(() => {
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7)
+    const twoWeeksAgo = new Date(now); twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14)
+
+    const bucket = (start: Date, end: Date) =>
+      posts.filter(p => {
+        const t = new Date(p.posted_at).getTime()
+        return t >= start.getTime() && t < end.getTime()
+      })
+
+    const thisWeek = bucket(weekAgo, now)
+    const lastWeek = bucket(twoWeeksAgo, weekAgo)
+
+    const sum = (arr: SocialPost[], field: keyof SocialPost) =>
+      arr.reduce((acc, p) => acc + (Number(p[field]) || 0), 0)
+
+    return {
+      thisWeek: {
+        posts: thisWeek.length,
+        reach: sum(thisWeek, 'reach'),
+        saves: sum(thisWeek, 'saves'),
+        engagement: thisWeek.reduce((acc, p) =>
+          acc + (p.likes ?? 0) + (p.comments ?? 0) + (p.saves ?? 0) + (p.shares ?? 0), 0),
+      },
+      lastWeek: {
+        posts: lastWeek.length,
+        reach: sum(lastWeek, 'reach'),
+        saves: sum(lastWeek, 'saves'),
+        engagement: lastWeek.reduce((acc, p) =>
+          acc + (p.likes ?? 0) + (p.comments ?? 0) + (p.saves ?? 0) + (p.shares ?? 0), 0),
+      },
+    }
+  }, [posts])
+
+  // Hide if there's literally nothing in either week (fresh connection)
+  if (stats.thisWeek.posts === 0 && stats.lastWeek.posts === 0) return null
+
+  return (
+    <section className="mb-10">
+      <div className="mb-4">
+        <h2 className="text-lg font-bold text-ink">This week vs last week</h2>
+        <p className="text-xs text-ink-3 mt-0.5">Week-over-week changes across what you posted.</p>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <WoWStat label="Posts published" current={stats.thisWeek.posts} prior={stats.lastWeek.posts} />
+        <WoWStat label="Total reach" current={stats.thisWeek.reach} prior={stats.lastWeek.reach} />
+        <WoWStat label="Total engagement" current={stats.thisWeek.engagement} prior={stats.lastWeek.engagement} />
+        <WoWStat label="Saves" current={stats.thisWeek.saves} prior={stats.lastWeek.saves} hint="Algorithm favors this" />
+      </div>
+    </section>
+  )
+}
+
+function WoWStat({
+  label, current, prior, hint,
+}: {
+  label: string
+  current: number
+  prior: number
+  hint?: string
+}) {
+  const hasDelta = prior > 0
+  const pct = hasDelta ? ((current - prior) / prior) * 100 : 0
+  const rounded = Math.round(pct)
+  const dir: 'up' | 'down' | 'flat' = !hasDelta ? 'flat' : rounded > 0 ? 'up' : rounded < 0 ? 'down' : 'flat'
+  const Icon = dir === 'up' ? ArrowUpRight : dir === 'down' ? ArrowDownRight : Minus
+  const color = dir === 'up' ? 'var(--db-up, #4abd98)' : dir === 'down' ? 'var(--db-down, #e57373)' : 'var(--db-ink-3)'
+  const bg = dir === 'up' ? 'rgba(74, 189, 152, 0.12)' : dir === 'down' ? 'rgba(229, 115, 115, 0.12)' : 'transparent'
+
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 p-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">{label}</span>
+      </div>
+      <div className="flex items-baseline gap-2 flex-wrap mb-1">
+        <span className="font-[family-name:var(--font-display)] text-2xl text-ink tabular-nums">{formatNumber(current)}</span>
+        {hasDelta && (
+          <span
+            className="inline-flex items-center gap-0.5 text-[11px] font-semibold rounded-full px-1.5 py-0.5 tabular-nums"
+            style={{ color, background: bg }}
+            title={`${prior.toLocaleString('en-US')} last week`}
+          >
+            <Icon className="w-3 h-3" />
+            {Math.abs(rounded)}%
+          </span>
+        )}
+      </div>
+      <span className="text-[11px] text-ink-4">
+        {hasDelta ? `vs ${formatNumber(prior)} prior week` : 'no prior-week data yet'}
+        {hint ? ` · ${hint}` : ''}
+      </span>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Top Posts section
 // ---------------------------------------------------------------------------
 
-type PostSort = 'reach' | 'engagement' | 'recent'
+type PostSort = 'reach' | 'engagement' | 'saves' | 'recent'
+type PostFilter = 'all' | 'reels' | 'feed'
 
 function TopPosts({ posts }: { posts: SocialPost[] }) {
   const [sort, setSort] = useState<PostSort>('reach')
+  const [filter, setFilter] = useState<PostFilter>('all')
+
+  // Filter first, sort second. Filtering by format matters because reels
+  // and feed posts sit on totally different reach scales -- showing them
+  // together in a "top posts" list makes reels always win and hides the
+  // winners inside the feed-post cohort.
+  const filtered = useMemo(() => {
+    if (filter === 'reels') return posts.filter(isReel)
+    if (filter === 'feed') return posts.filter(isStatic)
+    return posts
+  }, [posts, filter])
+
+  // Median reach is computed from whatever cohort the user is viewing so the
+  // "vs median" chip compares apples to apples (reels to reels, feed to feed).
+  const medianReach = useMemo(
+    () => median(filtered.map(p => p.reach)) ?? 0,
+    [filtered],
+  )
 
   const sortedPosts = useMemo(() => {
     const engagementScore = (p: SocialPost) =>
       (p.likes ?? 0) + (p.comments ?? 0) + (p.saves ?? 0) + (p.shares ?? 0)
 
-    const sorted = [...posts].sort((a, b) => {
+    const sorted = [...filtered].sort((a, b) => {
       if (sort === 'reach') return (b.reach ?? 0) - (a.reach ?? 0)
       if (sort === 'engagement') return engagementScore(b) - engagementScore(a)
+      if (sort === 'saves') return (b.saves ?? 0) - (a.saves ?? 0)
       return new Date(b.posted_at).getTime() - new Date(a.posted_at).getTime()
     })
-    return sorted.slice(0, 5)
-  }, [posts, sort])
+    return sorted.slice(0, 6)
+  }, [filtered, sort])
 
   if (posts.length === 0) {
     return null
   }
 
+  const reelCount = posts.filter(isReel).length
+  const feedCount = posts.filter(isStatic).length
+
   return (
     <section className="mb-10">
-      <div className="flex items-end justify-between mb-4">
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
         <div>
           <h2 className="text-lg font-bold text-ink">Top posts</h2>
-          <p className="text-xs text-ink-3 mt-0.5">Your best-performing content — this is what to do more of.</p>
+          <p className="text-xs text-ink-3 mt-0.5">
+            Your best-performing content — this is what to do more of.
+            {medianReach > 0 && (
+              <> Median reach for this cohort: <span className="font-semibold text-ink-2 tabular-nums">{formatNumber(medianReach)}</span>.</>
+            )}
+          </p>
         </div>
-        <div className="inline-flex bg-bg-2 rounded-lg p-0.5 text-[12px]">
-          <SortTab label="By reach" active={sort === 'reach'} onClick={() => setSort('reach')} />
-          <SortTab label="By engagement" active={sort === 'engagement'} onClick={() => setSort('engagement')} />
-          <SortTab label="Most recent" active={sort === 'recent'} onClick={() => setSort('recent')} />
+        <div className="flex flex-wrap gap-2">
+          {/* Format filter -- reels and feed posts benchmark differently */}
+          <div className="inline-flex bg-bg-2 rounded-lg p-0.5 text-[12px]">
+            <SortTab label={`All (${posts.length})`} active={filter === 'all'} onClick={() => setFilter('all')} />
+            {reelCount > 0 && <SortTab label={`Reels (${reelCount})`} active={filter === 'reels'} onClick={() => setFilter('reels')} />}
+            {feedCount > 0 && <SortTab label={`Feed (${feedCount})`} active={filter === 'feed'} onClick={() => setFilter('feed')} />}
+          </div>
+          {/* Sort order */}
+          <div className="inline-flex bg-bg-2 rounded-lg p-0.5 text-[12px]">
+            <SortTab label="Reach" active={sort === 'reach'} onClick={() => setSort('reach')} />
+            <SortTab label="Engagement" active={sort === 'engagement'} onClick={() => setSort('engagement')} />
+            <SortTab label="Saves" active={sort === 'saves'} onClick={() => setSort('saves')} />
+            <SortTab label="Recent" active={sort === 'recent'} onClick={() => setSort('recent')} />
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {sortedPosts.map(post => (
-          <PostCard key={post.id} post={post} />
+          <PostCard key={post.id} post={post} medianReach={medianReach} />
         ))}
       </div>
     </section>
@@ -131,8 +319,21 @@ function SortTab({ label, active, onClick }: { label: string; active: boolean; o
   )
 }
 
-function PostCard({ post }: { post: SocialPost }) {
+function PostCard({ post, medianReach }: { post: SocialPost; medianReach: number }) {
   const platformColor = PLATFORM_COLORS[post.platform] ?? '#888'
+  const engRate = engagementRate(post)
+
+  // "vs median" chip: how this post's reach compares to the cohort median.
+  // Only render when we actually have a median (>= 2 posts) and the post
+  // itself has reach -- a "0.0x" chip would be noise.
+  const vsMedian = medianReach > 0 && post.reach && post.reach > 0
+    ? post.reach / medianReach
+    : null
+
+  const chipColor = !vsMedian ? null
+    : vsMedian >= 1.5 ? { bg: 'rgba(74, 189, 152, 0.15)', fg: 'var(--db-up, #2d7a5f)' }
+    : vsMedian >= 0.8 ? { bg: 'var(--db-bg-3, #f1f1f1)', fg: 'var(--db-ink-2, #666)' }
+    : { bg: 'rgba(229, 115, 115, 0.12)', fg: 'var(--db-down, #c14343)' }
 
   return (
     <a
@@ -170,6 +371,16 @@ function PostCard({ post }: { post: SocialPost }) {
         >
           {post.platform.charAt(0).toUpperCase()}
         </div>
+        {/* vs-median chip, bottom-left so it's visible against thumbnail */}
+        {vsMedian !== null && chipColor && (
+          <div
+            className="absolute bottom-2 left-2 text-[10px] font-bold px-2 py-1 rounded-md tabular-nums"
+            style={{ background: chipColor.bg, color: chipColor.fg, backdropFilter: 'blur(4px)' }}
+            title={`Reach is ${vsMedian.toFixed(1)}x the cohort median (${formatNumber(medianReach)})`}
+          >
+            {vsMedian >= 1 ? `${vsMedian.toFixed(1)}× median` : `${Math.round(vsMedian * 100)}% of median`}
+          </div>
+        )}
         {/* Open-in-new hint */}
         <div className="absolute bottom-2 right-2 bg-white/90 rounded-md p-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <ExternalLink className="w-3 h-3 text-ink-2" />
@@ -178,9 +389,19 @@ function PostCard({ post }: { post: SocialPost }) {
 
       {/* Caption + meta */}
       <div className="p-3 flex flex-col gap-2 flex-1">
-        <div className="text-[11px] text-ink-4 flex items-center gap-1.5">
-          <Clock className="w-3 h-3" />
-          {daysAgo(post.posted_at)}
+        <div className="flex items-center justify-between text-[11px] text-ink-4">
+          <span className="flex items-center gap-1.5">
+            <Clock className="w-3 h-3" />
+            {daysAgo(post.posted_at)}
+          </span>
+          {engRate !== null && (
+            <span
+              className="font-semibold tabular-nums text-ink-2"
+              title="Engagement rate = (likes + comments + saves + shares) / reach"
+            >
+              {engRate.toFixed(1)}% eng
+            </span>
+          )}
         </div>
         <p className="text-[13px] text-ink-2 line-clamp-3 leading-snug">
           {truncateCaption(post.caption) || <span className="italic text-ink-4">No caption</span>}
@@ -500,6 +721,7 @@ export default function SocialPerformance({ posts }: SocialPerformanceProps) {
 
   return (
     <>
+      <WeekOverWeek posts={posts} />
       <TopPosts posts={posts} />
       <ContentTypeBreakdown posts={posts} />
       <PostingCadence posts={posts} />
