@@ -9,7 +9,19 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
  * refreshes OAuth token if expired, pulls yesterday's metrics from the
  * GA4 Data API, upserts rows into website_metrics.
  *
- * Input: { client_id?: string } -- if omitted, syncs all active clients
+ * Pulls these GA4 dimensions per day:
+ *   - Core totals: activeUsers, sessions, screenPageViews, bounceRate,
+ *     averageSessionDuration
+ *   - Traffic sources: sessions by sessionDefaultChannelGroup
+ *   - Top pages: screenPageViews by pagePath (top 10)
+ *   - Device mix: sessions by deviceCategory
+ *   - Conversion events: eventCount by eventName (all conversion events)
+ *   - Top cities: sessions by city (top 10)
+ *   - Landing pages: sessions by landingPage (top 10)
+ *   - New vs returning: activeUsers by newVsReturning
+ *   - Top referrers: sessions by sessionSource where medium = referral (top 10)
+ *
+ * Input:  { client_id?: string } — if omitted, syncs all active clients
  * Output: { synced: number, results: [...] }
  */
 
@@ -72,6 +84,12 @@ Deno.serve(async (req) => {
             mobile_pct: metrics.mobilePct,
             traffic_sources: metrics.trafficSources,
             top_pages: metrics.topPages,
+            conversion_events: metrics.conversionEvents,
+            top_cities: metrics.topCities,
+            landing_pages: metrics.landingPages,
+            new_users: metrics.newUsers,
+            returning_users: metrics.returningUsers,
+            top_referrers: metrics.topReferrers,
             raw_data: metrics.raw,
           }, { onConflict: 'client_id,date' })
 
@@ -150,60 +168,113 @@ async function ensureFreshToken(supabase, conn: Connection): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// GA4 Data API
+// GA4 Data API -- expanded report set
 // ---------------------------------------------------------------------------
 
 async function runDailyReport(propertyId: string, accessToken: string, date: string) {
+  const url = `https://analyticsdata.googleapis.com/v1beta/${propertyId}:runReport`
   const headers = {
     Authorization: `Bearer ${accessToken}`,
     'Content-Type': 'application/json',
   }
+  const dateRange = { startDate: date, endDate: date }
 
-  const [coreRes, sourceRes, pagesRes, deviceRes] = await Promise.all([
-    fetch(`https://analyticsdata.googleapis.com/v1beta/${propertyId}:runReport`, {
-      method: 'POST', headers,
-      body: JSON.stringify({
-        dateRanges: [{ startDate: date, endDate: date }],
-        metrics: [
-          { name: 'activeUsers' }, { name: 'sessions' }, { name: 'screenPageViews' },
-          { name: 'bounceRate' }, { name: 'averageSessionDuration' },
-        ],
-      }),
+  // Fire all reports in parallel. Any single failure is caught below; core must succeed.
+  const reports = await Promise.allSettled([
+    // 0: core totals
+    fetchJson(url, headers, {
+      dateRanges: [dateRange],
+      metrics: [
+        { name: 'activeUsers' }, { name: 'sessions' }, { name: 'screenPageViews' },
+        { name: 'bounceRate' }, { name: 'averageSessionDuration' },
+      ],
     }),
-    fetch(`https://analyticsdata.googleapis.com/v1beta/${propertyId}:runReport`, {
-      method: 'POST', headers,
-      body: JSON.stringify({
-        dateRanges: [{ startDate: date, endDate: date }],
-        dimensions: [{ name: 'sessionDefaultChannelGroup' }],
-        metrics: [{ name: 'sessions' }],
-      }),
+    // 1: traffic sources by channel
+    fetchJson(url, headers, {
+      dateRanges: [dateRange],
+      dimensions: [{ name: 'sessionDefaultChannelGroup' }],
+      metrics: [{ name: 'sessions' }],
     }),
-    fetch(`https://analyticsdata.googleapis.com/v1beta/${propertyId}:runReport`, {
-      method: 'POST', headers,
-      body: JSON.stringify({
-        dateRanges: [{ startDate: date, endDate: date }],
-        dimensions: [{ name: 'pagePath' }],
-        metrics: [{ name: 'screenPageViews' }],
-        orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
-        limit: 10,
-      }),
+    // 2: top pages by views
+    fetchJson(url, headers, {
+      dateRanges: [dateRange],
+      dimensions: [{ name: 'pagePath' }],
+      metrics: [{ name: 'screenPageViews' }],
+      orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+      limit: 10,
     }),
-    fetch(`https://analyticsdata.googleapis.com/v1beta/${propertyId}:runReport`, {
-      method: 'POST', headers,
-      body: JSON.stringify({
-        dateRanges: [{ startDate: date, endDate: date }],
-        dimensions: [{ name: 'deviceCategory' }],
-        metrics: [{ name: 'sessions' }],
-      }),
+    // 3: device mix
+    fetchJson(url, headers, {
+      dateRanges: [dateRange],
+      dimensions: [{ name: 'deviceCategory' }],
+      metrics: [{ name: 'sessions' }],
+    }),
+    // 4: conversion events by eventName
+    // GA4 returns ALL events; we bucket recognized conversion types below
+    fetchJson(url, headers, {
+      dateRanges: [dateRange],
+      dimensions: [{ name: 'eventName' }],
+      metrics: [{ name: 'eventCount' }],
+      orderBys: [{ metric: { metricName: 'eventCount' }, desc: true }],
+      limit: 50,
+    }),
+    // 5: top cities by sessions
+    fetchJson(url, headers, {
+      dateRanges: [dateRange],
+      dimensions: [{ name: 'city' }],
+      metrics: [{ name: 'sessions' }],
+      orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+      limit: 10,
+    }),
+    // 6: landing pages by sessions
+    fetchJson(url, headers, {
+      dateRanges: [dateRange],
+      dimensions: [{ name: 'landingPage' }],
+      metrics: [{ name: 'sessions' }],
+      orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+      limit: 10,
+    }),
+    // 7: new vs returning
+    fetchJson(url, headers, {
+      dateRanges: [dateRange],
+      dimensions: [{ name: 'newVsReturning' }],
+      metrics: [{ name: 'activeUsers' }],
+    }),
+    // 8: top referrer sources (filtered to medium = referral)
+    fetchJson(url, headers, {
+      dateRanges: [dateRange],
+      dimensions: [{ name: 'sessionSource' }, { name: 'sessionMedium' }],
+      metrics: [{ name: 'sessions' }],
+      dimensionFilter: {
+        filter: {
+          fieldName: 'sessionMedium',
+          stringFilter: { matchType: 'EXACT', value: 'referral' },
+        },
+      },
+      orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+      limit: 10,
     }),
   ])
 
-  const [core, sources, pages, devices] = await Promise.all([
-    coreRes.json(), sourceRes.json(), pagesRes.json(), deviceRes.json(),
-  ])
-
+  // Core must succeed
+  if (reports[0].status !== 'fulfilled') {
+    throw new Error(`GA4 core report failed: ${reports[0].reason?.message || 'unknown'}`)
+  }
+  const core = reports[0].value
   if (core.error) throw new Error(core.error.message)
 
+  // Unwrap the rest, tolerate per-report failures
+  const unwrap = (i: number) => reports[i].status === 'fulfilled' ? reports[i].value : null
+  const sources = unwrap(1)
+  const pages = unwrap(2)
+  const devices = unwrap(3)
+  const events = unwrap(4)
+  const cities = unwrap(5)
+  const landings = unwrap(6)
+  const newReturning = unwrap(7)
+  const referrers = unwrap(8)
+
+  // --- Parse core
   const coreRow = core.rows?.[0]?.metricValues || []
   const visitors = Number(coreRow[0]?.value || 0)
   const sessions = Number(coreRow[1]?.value || 0)
@@ -211,32 +282,122 @@ async function runDailyReport(propertyId: string, accessToken: string, date: str
   const bounceRate = Number(coreRow[3]?.value || 0)
   const avgSessionDuration = Math.round(Number(coreRow[4]?.value || 0))
 
+  // --- Parse traffic sources (channel groups)
   const trafficSources: Record<string, number> = {}
-  for (const row of sources.rows || []) {
+  for (const row of sources?.rows || []) {
     const channel = row.dimensionValues?.[0]?.value || 'unknown'
     trafficSources[channel.toLowerCase()] = Number(row.metricValues?.[0]?.value || 0)
   }
 
-  const topPages = (pages.rows || []).map((row) => ({
+  // --- Parse top pages
+  const topPages = (pages?.rows || []).map((row: any) => ({
     path: row.dimensionValues?.[0]?.value || '/',
     views: Number(row.metricValues?.[0]?.value || 0),
   }))
 
+  // --- Parse device mix
   let mobileSessions = 0
-  let totalSessions = 0
-  for (const row of devices.rows || []) {
+  let totalDeviceSessions = 0
+  for (const row of devices?.rows || []) {
     const device = row.dimensionValues?.[0]?.value || ''
     const s = Number(row.metricValues?.[0]?.value || 0)
-    totalSessions += s
+    totalDeviceSessions += s
     if (device === 'mobile') mobileSessions = s
   }
-  const mobilePct = totalSessions > 0 ? (mobileSessions / totalSessions) * 100 : 0
+  const mobilePct = totalDeviceSessions > 0 ? (mobileSessions / totalDeviceSessions) * 100 : 0
+
+  // --- Parse conversion events: bucket by intent type
+  // GA4 event names: click, phone_click, call, directions_click, get_directions,
+  //   form_submit, submit, generate_lead, reservation, book_now, etc.
+  // Strategy: pattern-match event names into intent buckets. Anything that looks
+  // like a conversion but doesn't match a known bucket goes to 'other'.
+  const conversionEvents = {
+    phone_clicks: 0,
+    direction_clicks: 0,
+    form_submits: 0,
+    booking_clicks: 0,
+    other: 0,
+    total: 0,
+  }
+  for (const row of events?.rows || []) {
+    const name = (row.dimensionValues?.[0]?.value || '').toLowerCase()
+    const count = Number(row.metricValues?.[0]?.value || 0)
+    if (count === 0) continue
+    if (name.includes('phone') || name.includes('call') || name === 'click_to_call') {
+      conversionEvents.phone_clicks += count
+      conversionEvents.total += count
+    } else if (name.includes('direction') || name.includes('map_click')) {
+      conversionEvents.direction_clicks += count
+      conversionEvents.total += count
+    } else if (name === 'form_submit' || name === 'submit' || name === 'generate_lead' || name.includes('form_')) {
+      conversionEvents.form_submits += count
+      conversionEvents.total += count
+    } else if (name.includes('book') || name.includes('reservation') || name.includes('appointment')) {
+      conversionEvents.booking_clicks += count
+      conversionEvents.total += count
+    } else if (
+      // Exclude GA4 auto-collected noise from "other conversions"
+      name !== 'page_view' && name !== 'session_start' && name !== 'first_visit' &&
+      name !== 'user_engagement' && name !== 'scroll' && name !== 'click' &&
+      name !== 'file_download' && !name.startsWith('view_') &&
+      // Positive signal: looks conversion-like
+      (name.includes('convert') || name.includes('purchase') || name.includes('checkout') ||
+       name.includes('signup') || name.includes('sign_up') || name.includes('subscribe'))
+    ) {
+      conversionEvents.other += count
+      conversionEvents.total += count
+    }
+  }
+
+  // --- Parse top cities
+  const topCities = (cities?.rows || []).map((row: any) => ({
+    city: row.dimensionValues?.[0]?.value || '(not set)',
+    sessions: Number(row.metricValues?.[0]?.value || 0),
+  })).filter((c: any) => c.city && c.city !== '(not set)' && c.sessions > 0)
+
+  // --- Parse landing pages
+  const landingPages = (landings?.rows || []).map((row: any) => ({
+    path: row.dimensionValues?.[0]?.value || '/',
+    sessions: Number(row.metricValues?.[0]?.value || 0),
+  })).filter((p: any) => p.sessions > 0)
+
+  // --- Parse new vs returning
+  let newUsers = 0
+  let returningUsers = 0
+  for (const row of newReturning?.rows || []) {
+    const label = (row.dimensionValues?.[0]?.value || '').toLowerCase()
+    const count = Number(row.metricValues?.[0]?.value || 0)
+    if (label === 'new') newUsers = count
+    else if (label === 'returning') returningUsers = count
+  }
+
+  // --- Parse top referrers
+  const topReferrers = (referrers?.rows || []).map((row: any) => ({
+    source: row.dimensionValues?.[0]?.value || 'unknown',
+    sessions: Number(row.metricValues?.[0]?.value || 0),
+  })).filter((r: any) => r.sessions > 0)
 
   return {
     visitors, sessions, pageViews, bounceRate, avgSessionDuration, mobilePct,
     trafficSources, topPages,
-    raw: { core, sources, pages, devices },
+    conversionEvents,
+    topCities, landingPages,
+    newUsers, returningUsers,
+    topReferrers,
+    raw: { core, sources, pages, devices, events, cities, landings, newReturning, referrers },
   }
+}
+
+async function fetchJson(url: string, headers: Record<string, string>, body: unknown) {
+  const res = await fetch(url, {
+    method: 'POST', headers,
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`GA4 API ${res.status}: ${text.slice(0, 200)}`)
+  }
+  return res.json()
 }
 
 // ---------------------------------------------------------------------------
