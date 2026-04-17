@@ -18,19 +18,23 @@ const SERVICE_NAME_TO_AREA: Record<string, ServiceArea> = {
   'website': 'website',
   'website management': 'website',
   'web': 'website',
-  // Local SEO / GBP
+  // Local SEO / GBP -- accept both 'local seo' (space) and 'local_seo'
+  // (underscore) since the canonical slugs are underscored but older data
+  // sometimes uses spaces.
   'local seo': 'local_seo',
+  'local_seo': 'local_seo',
   'local business': 'local_seo',
   'local business & seo': 'local_seo',
   'google business profile': 'local_seo',
   'gbp': 'local_seo',
   'seo': 'local_seo',
-  // Email / SMS
+  // Email / SMS -- same space-vs-underscore coverage
   'email': 'email_sms',
   'email marketing': 'email_sms',
   'email & sms': 'email_sms',
   'sms': 'email_sms',
   'email sms': 'email_sms',
+  'email_sms': 'email_sms',
 }
 
 /**
