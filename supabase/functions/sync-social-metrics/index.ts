@@ -273,8 +273,13 @@ async function upsertInstagramDay(
       .eq('platform', 'instagram')
       .eq('date', prevDate)
       .maybeSingle()
-    followersGained = prevRow && followersTotal !== null
-      ? followersTotal - (prevRow.followers_total ?? 0)
+    // Only compute a delta when BOTH sides are known. If yesterday's row
+    // exists but its followers_total is null (backfill placeholder), we
+    // genuinely don't know the delta -- recording 1990-0=1990 as "new
+    // followers gained yesterday" would be a lie. Leave as null in that case.
+    const prevTotal = prevRow?.followers_total
+    followersGained = prevTotal != null && followersTotal !== null
+      ? followersTotal - prevTotal
       : 0
 
     // Recent media -- fetch last 30 posts with rich fields for the
@@ -494,8 +499,10 @@ async function syncFacebook(
         .eq('platform', 'facebook')
         .eq('date', prevDate)
         .maybeSingle()
-      followersGained = prevRow && followersTotal !== null
-        ? followersTotal - (prevRow.followers_total ?? 0)
+      // Same guard as Instagram: only compute when both sides are known.
+      const prevTotal = prevRow?.followers_total
+      followersGained = prevTotal != null && followersTotal !== null
+        ? followersTotal - prevTotal
         : 0
     }
 
