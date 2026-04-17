@@ -94,10 +94,22 @@ export async function getWebsiteView(clientId: string): Promise<DashboardView | 
   const thisVisitorsForTrend = sumField(thisMonthDaily, 'visitors')
   const lastVisitorsForTrend = sumField(lastMonthDaily, 'visitors')
 
-  const pctChange = lastVisitorsForTrend > 0
+  // Trend handling:
+  // - If prev window has data: standard % change
+  // - If prev window is empty but this window has data: not a "0%" change,
+  //   it's "no comparison yet" (we only have partial history)
+  // - If both empty: just show 0%
+  const hasPrevData = lastVisitorsForTrend > 0
+  const pctChange = hasPrevData
     ? Math.round(((thisVisitorsForTrend - lastVisitorsForTrend) / lastVisitorsForTrend) * 100)
     : 0
   const isUp = pctChange >= 0
+  const pctLabel = hasPrevData
+    ? (isUp ? '+' : '') + pctChange + '%'
+    : 'New'
+  const pctFullLabel = hasPrevData
+    ? (isUp ? '+' : '') + pctChange + '% vs same time last month'
+    : 'Not enough history for a comparison yet'
 
   // ---- Metric cards: Visitors, Sessions, Search Impressions, Actions Taken
   // All numbers and trends use the same-day window for fair MoM comparison.
@@ -158,17 +170,19 @@ export async function getWebsiteView(clientId: string): Promise<DashboardView | 
   const am = await getAmNote(supabase, clientId, 'website')
 
   return {
-    headline: pctChange > 5
-      ? "Your website is growing"
-      : pctChange < -5
-        ? "Your website needs a push"
-        : "Your website is steady",
+    headline: !hasPrevData
+      ? "Your website is building momentum"
+      : pctChange > 5
+        ? "Your website is growing"
+        : pctChange < -5
+          ? "Your website needs a push"
+          : "Your website is steady",
     up: isUp,
     ctx: 'People who visited your website',
     num: fmtNum(thisVisitors),
     unit: 'visitors',
-    pct: (isUp ? '+' : '') + pctChange + '%',
-    pctFull: (isUp ? '+' : '') + pctChange + '% vs same time last month',
+    pct: pctLabel,
+    pctFull: pctFullLabel,
     bdtitle: "What's driving your website",
     // No benchmark for website yet -- zero out so BenchmarkBar can conditionally hide
     bmy: thisVisitors,
@@ -507,7 +521,8 @@ function fmtNum(n: number): string {
 }
 
 function fmtPct(current: number, previous: number): string {
-  if (previous === 0) return current > 0 ? '+100%' : '0%'
+  // When we have no baseline, don't fake a percentage -- call it out as "New"
+  if (previous === 0) return current > 0 ? 'New' : '0%'
   const pct = Math.round(((current - previous) / previous) * 100)
   return (pct >= 0 ? '+' : '') + pct + '%'
 }
