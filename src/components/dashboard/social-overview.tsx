@@ -189,43 +189,6 @@ function BarChart({
   )
 }
 
-/**
- * Tiny inline sparkline for the at-a-glance strip. Height is 20px so it
- * fits under a small number without stealing attention.
- */
-function MiniSparkline({
-  values, color = '#4abd98',
-}: {
-  values: number[]
-  color?: string
-}) {
-  if (values.length < 2) return null
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const range = max - min || 1
-  const height = 20
-  const width = 100
-  const step = width / (values.length - 1)
-  const points = values.map((v, i) => {
-    const x = i * step
-    const y = height - ((v - min) / range) * (height * 0.8) - height * 0.1
-    return `${x.toFixed(2)},${y.toFixed(2)}`
-  }).join(' ')
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full" style={{ height: `${height}px` }}>
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
-  )
-}
 
 // ---------------------------------------------------------------------------
 // Computed weekly snapshot (used by every section below)
@@ -396,7 +359,7 @@ function computeSnapshot(posts: SocialPost[], rows: SocialDailyRow[]): WeeklySna
 
 type PulseStatus = 'green' | 'yellow' | 'red'
 
-function computePulse(snap: WeeklySnapshot): { status: PulseStatus; headline: string; detail: string } {
+function computePulse(snap: WeeklySnapshot): { status: PulseStatus; headline: string } {
   const daysSince = snap.daysSinceLastPost ?? 999
   const postedRecently = daysSince <= 3
   const postedThisWeek = snap.postsThisWeek.length > 0
@@ -404,8 +367,6 @@ function computePulse(snap: WeeklySnapshot): { status: PulseStatus; headline: st
     ? ((snap.reachThisWeek - snap.reachLastWeek) / snap.reachLastWeek) * 100
     : null
 
-  // Scoring: 1 point each for "posted this week", "reach steady/up", "followers steady/up"
-  // Green = 3, Yellow = 2, Red = 0-1
   let score = 0
   if (postedThisWeek) score += 1
   if (reachChange === null || reachChange >= -20) score += 1
@@ -413,40 +374,31 @@ function computePulse(snap: WeeklySnapshot): { status: PulseStatus; headline: st
 
   const status: PulseStatus = score >= 3 ? 'green' : score >= 2 ? 'yellow' : 'red'
 
-  // One-line headline
+  // Pick the most distinctive thing happening this week and lead with it.
+  // The numbers live in the Growth section right below -- the pulse is just
+  // the mood, not the data.
   let headline: string
-  if (status === 'green') {
-    headline = reachChange && reachChange >= 20
-      ? 'Your social is having a great week.'
-      : 'Your social is growing steadily.'
+  if (!postedThisWeek && daysSince >= 7) {
+    headline = `It's been ${daysSince} days since your last post.`
+  } else if (status === 'green' && reachChange !== null && reachChange >= 30) {
+    headline = 'Your content is having a breakout week.'
+  } else if (status === 'green' && snap.followersWeekDelta >= 3) {
+    headline = 'New followers are showing up.'
+  } else if (status === 'green') {
+    headline = 'Your social is growing steadily.'
+  } else if (status === 'yellow' && !postedThisWeek) {
+    headline = "Haven't posted yet this week."
+  } else if (status === 'yellow' && reachChange !== null && reachChange < -20) {
+    headline = 'Reach cooled off this week.'
   } else if (status === 'yellow') {
-    headline = !postedThisWeek
-      ? 'Your social is quiet this week.'
-      : reachChange !== null && reachChange < -20
-      ? 'Reach is softening this week.'
-      : 'Your social is holding steady.'
+    headline = 'Holding steady this week.'
+  } else if (!postedRecently) {
+    headline = `No posts in ${daysSince} days \u2014 time to get back out there.`
   } else {
-    headline = !postedRecently
-      ? `No new posts in ${daysSince} days.`
-      : 'Your social needs attention this week.'
+    headline = 'This week needs some love.'
   }
 
-  // Detail line: "2 new followers · 3 posts · reach up 18% vs last week"
-  const parts: string[] = []
-  if (snap.followersWeekDelta > 0) {
-    parts.push(`${snap.followersWeekDelta} new follower${snap.followersWeekDelta === 1 ? '' : 's'}`)
-  } else if (snap.followersWeekDelta < 0) {
-    parts.push(`${Math.abs(snap.followersWeekDelta)} lost`)
-  }
-  parts.push(`${snap.postsThisWeek.length} post${snap.postsThisWeek.length === 1 ? '' : 's'}`)
-  if (reachChange !== null) {
-    const rounded = Math.round(reachChange)
-    if (Math.abs(rounded) >= 5) {
-      parts.push(`reach ${rounded > 0 ? 'up' : 'down'} ${Math.abs(rounded)}% vs last week`)
-    }
-  }
-
-  return { status, headline, detail: parts.join(' · ') }
+  return { status, headline }
 }
 
 function HealthPulse({ snap }: { snap: WeeklySnapshot }) {
@@ -462,7 +414,7 @@ function HealthPulse({ snap }: { snap: WeeklySnapshot }) {
   return (
     <section className="mb-8">
       <div
-        className="rounded-2xl border-2 p-6 flex items-start gap-5"
+        className="rounded-2xl border-2 p-6 flex items-center gap-5"
         style={{ background: s.bg, borderColor: s.border }}
       >
         <div className="flex-shrink-0 flex flex-col items-center">
@@ -477,12 +429,9 @@ function HealthPulse({ snap }: { snap: WeeklySnapshot }) {
             {s.label}
           </span>
         </div>
-        <div className="flex-1 min-w-0">
-          <h2 className="font-[family-name:var(--font-display)] text-[22px] text-ink leading-tight mb-2">
-            {pulse.headline}
-          </h2>
-          <p className="text-[13px] text-ink-3">{pulse.detail}</p>
-        </div>
+        <h2 className="font-[family-name:var(--font-display)] text-[22px] text-ink leading-tight flex-1 min-w-0">
+          {pulse.headline}
+        </h2>
       </div>
     </section>
   )
@@ -687,7 +636,7 @@ function Growth({ snap }: { snap: WeeklySnapshot }) {
             </div>
             <div className="font-[family-name:var(--font-display)] text-2xl text-ink tabular-nums mb-2">
               {formatNumber(avgWeeklyReach)}
-              <span className="text-xs text-ink-4 font-sans ml-2">avg/week</span>
+              <span className="text-xs text-ink-4 font-sans ml-2">weekly average</span>
             </div>
             <BarChart values={snap.reachByWeek} color={reachColor} height={80} />
           </div>
@@ -704,22 +653,21 @@ function Growth({ snap }: { snap: WeeklySnapshot }) {
 interface Highlight {
   emoji: string
   text: string
-  priority: number // Higher = more prominent
+  action?: string          // Optional CTA attached to this highlight
+  priority: number         // Higher = more prominent
 }
 
+/**
+ * Generate weekly highlights. Deliberately NARROWER than before:
+ * we skip anything already surfaced by the pulse or growth section
+ * (follower delta, raw reach %, cadence gap) -- highlights are only
+ * for NOVEL observations the owner wouldn't see elsewhere.
+ */
 function computeHighlights(snap: WeeklySnapshot): Highlight[] {
   const out: Highlight[] = []
 
-  // Cadence warning -- highest priority if problem
-  if (snap.daysSinceLastPost !== null && snap.daysSinceLastPost >= 5) {
-    out.push({
-      emoji: '⚠️',
-      text: `You haven't posted in ${snap.daysSinceLastPost} days. Aim for 3-4 posts per week to stay in the algorithm.`,
-      priority: 100,
-    })
-  }
-
-  // Top post of the week
+  // Top post of the week vs historical median -- novel (growth charts don't
+  // compare individual posts to the owner's own baseline).
   if (snap.postsThisWeek.length > 0) {
     const bestThisWeek = [...snap.postsThisWeek].sort(
       (a, b) => (b.reach ?? 0) - (a.reach ?? 0),
@@ -732,92 +680,89 @@ function computeHighlights(snap: WeeklySnapshot): Highlight[] {
         emoji: '🔥',
         text: multiple
           ? `Your ${contentTypeLabel(bestThisWeek)} this week reached ${multiple}\u00d7 your typical post.`
-          : `Your ${contentTypeLabel(bestThisWeek)} this week is your top performer.`,
-        priority: 80,
+          : `Your ${contentTypeLabel(bestThisWeek)} this week is a standout.`,
+        action: `Try making another one like it soon \u2014 topic, hook, or format.`,
+        priority: 90,
       })
     }
   }
 
-  // Reels vs static performance
+  // Format comparison -- novel (growth charts show weekly totals, not format
+  // winners). Highest priority insight when the gap is meaningful.
   if (snap.reelCount >= 2 && snap.staticCount >= 2 && snap.staticAvgReach > 0) {
     const multiple = snap.reelAvgReach / snap.staticAvgReach
     if (multiple >= 1.5) {
       out.push({
         emoji: '📈',
-        text: `Your reels reach ${Math.round(multiple * 10) / 10}\u00d7 more people than your other posts.`,
-        priority: 70,
+        text: `Reels reach ${Math.round(multiple * 10) / 10}\u00d7 more people than your photos and carousels.`,
+        action: `Post at least one reel this week.`,
+        priority: 85,
       })
     } else if (multiple <= 0.67) {
       out.push({
         emoji: '📊',
-        text: `Your photos and carousels are outperforming your reels right now.`,
-        priority: 70,
+        text: `Your photos and carousels are outperforming reels right now.`,
+        action: `Lean into the static content that's working.`,
+        priority: 85,
       })
     }
   }
 
-  // Reach trend
-  if (snap.reachLastWeek > 0) {
-    const change = ((snap.reachThisWeek - snap.reachLastWeek) / snap.reachLastWeek) * 100
-    const rounded = Math.round(change)
-    if (rounded >= 25) {
-      out.push({
-        emoji: '🚀',
-        text: `Total reach is up ${rounded}% vs last week.`,
-        priority: 60,
-      })
-    } else if (rounded <= -25) {
-      out.push({
-        emoji: '📉',
-        text: `Total reach dropped ${Math.abs(rounded)}% vs last week. Try posting more this week.`,
-        priority: 65,
-      })
-    }
-  }
-
-  // Saves trend -- algorithm-favored
+  // Saves -- novel (not shown elsewhere on Overview), algorithm-predictive
   if (snap.savesLastWeek > 0) {
     const change = ((snap.savesThisWeek - snap.savesLastWeek) / snap.savesLastWeek) * 100
     if (change >= 30) {
       out.push({
         emoji: '💾',
-        text: `Saves are up ${Math.round(change)}% — the algorithm loves that.`,
-        priority: 55,
+        text: `Saves are up ${Math.round(change)}% \u2014 the algorithm loves that.`,
+        priority: 70,
       })
     }
   } else if (snap.savesThisWeek >= 3) {
     out.push({
       emoji: '💾',
-      text: `You got ${snap.savesThisWeek} saves this week. Saves are the strongest signal to the algorithm.`,
-      priority: 50,
+      text: `${snap.savesThisWeek} saves this week. Saves are the strongest signal to the algorithm.`,
+      priority: 65,
+    })
+  } else if (snap.postsThisWeek.length >= 2 && snap.savesThisWeek === 0) {
+    out.push({
+      emoji: '💡',
+      text: `No saves this week yet.`,
+      action: `Try a post worth saving \u2014 recipes, tips, or behind-the-scenes tend to work best.`,
+      priority: 60,
     })
   }
 
-  // Follower growth
-  if (snap.followersWeekDelta > 0) {
+  // Underposting even if the pulse is green -- cadence alert
+  if (snap.postsThisWeek.length > 0 && snap.postsThisWeek.length < 2 && snap.daysSinceLastPost !== null && snap.daysSinceLastPost <= 4) {
     out.push({
-      emoji: '✨',
-      text: `Gained ${snap.followersWeekDelta} new follower${snap.followersWeekDelta === 1 ? '' : 's'} this week.`,
-      priority: 40,
-    })
-  } else if (snap.followersWeekDelta < -5) {
-    out.push({
-      emoji: '👋',
-      text: `${Math.abs(snap.followersWeekDelta)} followers unfollowed this week. Normal ebb, but worth noting.`,
-      priority: 45,
+      emoji: '⏰',
+      text: `One post this week so far.`,
+      action: `Try for 2 more to hit the sweet spot for weekly reach.`,
+      priority: 55,
     })
   }
 
-  // Fallback -- don't leave the section empty
-  if (out.length === 0 && snap.postsThisWeek.length > 0) {
-    out.push({
-      emoji: '👍',
-      text: `You posted ${snap.postsThisWeek.length} time${snap.postsThisWeek.length === 1 ? '' : 's'} this week. Steady rhythm.`,
-      priority: 10,
-    })
+  // Fallback -- don't leave empty
+  if (out.length === 0) {
+    if (snap.postsThisWeek.length === 0) {
+      out.push({
+        emoji: '🎬',
+        text: `No posts this week yet.`,
+        action: `A reel is the fastest way to reach new people.`,
+        priority: 10,
+      })
+    } else {
+      out.push({
+        emoji: '👍',
+        text: `Steady rhythm this week.`,
+        action: `Keep going. What's working is working.`,
+        priority: 10,
+      })
+    }
   }
 
-  return out.sort((a, b) => b.priority - a.priority).slice(0, 5)
+  return out.sort((a, b) => b.priority - a.priority).slice(0, 3)
 }
 
 function WeeklyHighlights({ snap }: { snap: WeeklySnapshot }) {
@@ -828,157 +773,28 @@ function WeeklyHighlights({ snap }: { snap: WeeklySnapshot }) {
   return (
     <section className="mb-8">
       <div className="mb-3">
-        <h2 className="text-lg font-bold text-ink">This week&apos;s highlights</h2>
-        <p className="text-xs text-ink-3 mt-0.5">What changed since last time you checked.</p>
+        <h2 className="text-lg font-bold text-ink">What&apos;s notable</h2>
+        <p className="text-xs text-ink-3 mt-0.5">Novel observations from the last week, and what to do next.</p>
       </div>
       <div className="bg-white rounded-xl border border-ink-6 divide-y divide-ink-6">
         {highlights.map((h, i) => (
-          <div key={i} className="flex items-start gap-3 p-4">
-            <span className="text-[18px] leading-none flex-shrink-0 mt-0.5">{h.emoji}</span>
-            <p className="text-[14px] text-ink-2 leading-snug">{h.text}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// 4. One action for this week
-// ---------------------------------------------------------------------------
-
-function computeAction(snap: WeeklySnapshot): string {
-  // Priority 1: cadence gap
-  if (snap.daysSinceLastPost !== null && snap.daysSinceLastPost >= 5) {
-    return 'Post something this week. A reel is your best bet.'
-  }
-
-  // Priority 2: underposting
-  if (snap.postsThisWeek.length === 0) {
-    return 'Get one post out this week to stay visible.'
-  }
-  if (snap.postsThisWeek.length === 1) {
-    return 'Try posting 2 more times this week. Consistency trains the algorithm.'
-  }
-
-  // Priority 3: content format lever
-  if (snap.reelCount >= 2 && snap.staticCount >= 2 && snap.staticAvgReach > 0) {
-    const multiple = snap.reelAvgReach / snap.staticAvgReach
-    if (multiple >= 1.5) {
-      return `Post at least one more reel this week. They reach ${Math.round(multiple * 10) / 10}\u00d7 more people for you.`
-    }
-  }
-
-  // Priority 4: saves opportunity
-  if (snap.savesThisWeek === 0 && snap.postsThisWeek.length >= 2) {
-    return 'Try a post worth saving — recipes, tips, or behind-the-scenes tend to get saved most.'
-  }
-
-  // Default: stay the course
-  return 'Keep your cadence going. What\u2019s working is working.'
-}
-
-function WeeklyAction({ snap }: { snap: WeeklySnapshot }) {
-  const action = useMemo(() => computeAction(snap), [snap])
-
-  return (
-    <section className="mb-8">
-      <div className="bg-ink text-white rounded-2xl p-5 flex items-center gap-4">
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: 'rgba(255, 255, 255, 0.1)' }}
-        >
-          <span className="text-[18px]">👉</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: '#4abd98' }}>
-            This week&apos;s move
-          </div>
-          <p className="text-[15px] font-semibold leading-snug">{action}</p>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// 5. At-a-glance strip -- compact row of numbers at the bottom
-// ---------------------------------------------------------------------------
-
-function AtAGlanceStrip({ snap }: { snap: WeeklySnapshot }) {
-  const items: Array<{
-    label: string
-    value: string
-    delta?: number
-    spark: number[]
-  }> = [
-    {
-      label: 'Followers',
-      value: formatNumber(snap.followersNow),
-      delta: snap.followersWeekDelta,
-      spark: snap.sparkFollowers30,
-    },
-    {
-      label: 'Reach this week',
-      value: formatNumber(snap.reachThisWeek),
-      spark: snap.sparkReach8,
-    },
-    {
-      label: 'Saves this week',
-      value: formatNumber(snap.savesThisWeek),
-      spark: snap.sparkSaves8,
-    },
-    {
-      label: 'Posts this week',
-      value: String(snap.postsThisWeek.length),
-      spark: snap.sparkPosts8,
-    },
-  ]
-
-  return (
-    <section>
-      <div className="mb-3">
-        <h2 className="text-sm font-semibold text-ink-3">At a glance</h2>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {items.map(item => {
-          // Tint color based on series direction
-          const first = item.spark[0] ?? 0
-          const last = item.spark[item.spark.length - 1] ?? 0
-          const sparkColor = last > first ? '#4abd98'
-            : last < first ? '#e57373'
-            : 'var(--db-ink-4, #aaa)'
-          return (
-            <div key={item.label} className="bg-white rounded-xl border border-ink-6 px-4 py-3">
-              <div className="text-[10px] font-semibold text-ink-4 uppercase tracking-wide mb-1.5">
-                {item.label}
-              </div>
-              <div className="flex items-baseline gap-2 mb-2">
-                <span className="font-[family-name:var(--font-display)] text-xl text-ink tabular-nums">
-                  {item.value}
-                </span>
-                {item.delta !== undefined && item.delta !== 0 && (
-                  <span
-                    className="inline-flex items-center text-[11px] font-semibold tabular-nums"
-                    style={{ color: item.delta > 0 ? '#2d7a5f' : '#c14343' }}
-                  >
-                    {item.delta > 0 ? (
-                      <ArrowUpRight className="w-3 h-3" />
-                    ) : (
-                      <ArrowDownRight className="w-3 h-3" />
-                    )}
-                    {Math.abs(item.delta)}
-                  </span>
+          <div key={i} className="p-4">
+            <div className="flex items-start gap-3">
+              <span className="text-[18px] leading-none flex-shrink-0 mt-0.5">{h.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] text-ink-2 leading-snug font-medium">{h.text}</p>
+                {h.action && (
+                  <div className="flex items-start gap-1.5 mt-2 pl-0">
+                    <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#4abd98' }}>
+                      Do this →
+                    </span>
+                    <span className="text-[13px] text-ink-3 leading-snug">{h.action}</span>
+                  </div>
                 )}
               </div>
-              {item.spark.length >= 2 && (
-                <div className="opacity-80">
-                  <MiniSparkline values={item.spark} color={sparkColor} />
-                </div>
-              )}
             </div>
-          )
-        })}
+          </div>
+        ))}
       </div>
     </section>
   )
@@ -1008,11 +824,9 @@ export default function SocialOverview({ posts, rows }: SocialOverviewProps) {
   return (
     <>
       <HealthPulse snap={snap} />
-      <LatestPost snap={snap} />
       <Growth snap={snap} />
+      <LatestPost snap={snap} />
       <WeeklyHighlights snap={snap} />
-      <WeeklyAction snap={snap} />
-      <AtAGlanceStrip snap={snap} />
     </>
   )
 }
