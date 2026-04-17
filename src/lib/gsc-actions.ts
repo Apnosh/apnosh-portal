@@ -52,9 +52,18 @@ export async function finalizeGSCConnection(
     return { success: false, error: 'No pending connection to finalize' }
   }
 
-  const { error: upsertErr } = await supabase
+  // Delete any existing row for this exact site (handles reconnects),
+  // then insert. Avoids the expression-index ON CONFLICT mismatch.
+  await supabase
     .from('channel_connections')
-    .upsert({
+    .delete()
+    .eq('client_id', clientId)
+    .eq('channel', 'google_search_console')
+    .eq('platform_account_id', site.siteUrl)
+
+  const { error: insertErr } = await supabase
+    .from('channel_connections')
+    .insert({
       client_id: clientId,
       channel: 'google_search_console',
       connection_type: 'oauth',
@@ -72,10 +81,10 @@ export async function finalizeGSCConnection(
         site_url: site.siteUrl,
         permission_level: site.permissionLevel,
       },
-    }, { onConflict: 'client_id,channel,platform_account_id' })
+    })
 
-  if (upsertErr) {
-    return { success: false, error: upsertErr.message }
+  if (insertErr) {
+    return { success: false, error: insertErr.message }
   }
 
   // Delete pending placeholder

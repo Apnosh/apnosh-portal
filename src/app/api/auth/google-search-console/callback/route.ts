@@ -38,10 +38,19 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeGSCCode(code)
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
-    // Store pending connection until site is selected
+    // Store pending connection until site is selected.
+    // See note in /api/auth/google/callback about the expression index -- we
+    // delete then insert instead of using upsert with onConflict.
     await supabase
       .from('channel_connections')
-      .upsert({
+      .delete()
+      .eq('client_id', state.clientId)
+      .eq('channel', 'google_search_console')
+      .eq('platform_account_id', 'pending')
+
+    const { error: insertErr } = await supabase
+      .from('channel_connections')
+      .insert({
         client_id: state.clientId,
         channel: 'google_search_console',
         connection_type: 'oauth',
@@ -54,7 +63,14 @@ export async function GET(request: NextRequest) {
         status: 'pending',
         connected_by: state.userId,
         connected_at: new Date().toISOString(),
-      }, { onConflict: 'client_id,channel,platform_account_id' })
+      })
+
+    if (insertErr) {
+      console.error('[gsc callback] insert failed:', insertErr)
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent(insertErr.message)}`
+      )
+    }
 
     const sitePickerUrl = `/dashboard/connect-accounts/google-search-console-site?clientId=${state.clientId}${state.returnTo ? `&returnTo=${encodeURIComponent(state.returnTo)}` : ''}`
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}${sitePickerUrl}`)

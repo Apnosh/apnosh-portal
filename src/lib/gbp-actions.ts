@@ -76,9 +76,18 @@ export async function finalizeGBPConnection(
     location.postalCode,
   ].filter(Boolean).join(', ')
 
-  const { error: upsertErr } = await supabase
+  // Delete any existing row for this exact location (handles reconnects),
+  // then insert. Avoids the expression-index ON CONFLICT mismatch.
+  await supabase
     .from('channel_connections')
-    .upsert({
+    .delete()
+    .eq('client_id', clientId)
+    .eq('channel', 'google_business_profile')
+    .eq('platform_account_id', location.name)
+
+  const { error: insertErr } = await supabase
+    .from('channel_connections')
+    .insert({
       client_id: clientId,
       channel: 'google_business_profile',
       connection_type: 'oauth',
@@ -101,10 +110,10 @@ export async function finalizeGBPConnection(
         website: location.websiteUri,
         category: location.primaryCategory,
       },
-    }, { onConflict: 'client_id,channel,platform_account_id' })
+    })
 
-  if (upsertErr) {
-    return { success: false, error: upsertErr.message }
+  if (insertErr) {
+    return { success: false, error: insertErr.message }
   }
 
   // Also write a row to gbp_connections so existing dashboard queries see it

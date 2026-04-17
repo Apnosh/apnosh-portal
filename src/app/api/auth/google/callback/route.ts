@@ -39,11 +39,21 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeGoogleCode(code)
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
-    // Store in channel_connections as 'pending' -- user will select property next
-    // Use platform_account_id = 'pending' as a placeholder until they pick
+    // Store in channel_connections as 'pending' -- user will select property next.
+    // NOTE: the unique index on channel_connections is an expression index over
+    // COALESCE(platform_account_id, 'default'), which Postgres will not match
+    // against a plain-column ON CONFLICT clause. So upsert(..., { onConflict })
+    // fails silently. Instead, delete any prior pending row, then insert.
     await supabase
       .from('channel_connections')
-      .upsert({
+      .delete()
+      .eq('client_id', state.clientId)
+      .eq('channel', 'google_analytics')
+      .eq('platform_account_id', 'pending')
+
+    const { error: insertErr } = await supabase
+      .from('channel_connections')
+      .insert({
         client_id: state.clientId,
         channel: 'google_analytics',
         connection_type: 'oauth',
@@ -56,7 +66,14 @@ export async function GET(request: NextRequest) {
         status: 'pending',
         connected_by: state.userId,
         connected_at: new Date().toISOString(),
-      }, { onConflict: 'client_id,channel,platform_account_id' })
+      })
+
+    if (insertErr) {
+      console.error('[google callback] insert failed:', insertErr)
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent(insertErr.message)}`
+      )
+    }
 
     // Redirect to property selection page
     const propertyPickerUrl = `/dashboard/connect-accounts/google-property?clientId=${state.clientId}${state.returnTo ? `&returnTo=${encodeURIComponent(state.returnTo)}` : ''}`

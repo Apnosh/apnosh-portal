@@ -53,10 +53,18 @@ export async function finalizeGA4Connection(
     return { success: false, error: 'No pending connection to finalize' }
   }
 
-  // Upsert with the real property ID
-  const { error: upsertErr } = await supabase
+  // Delete any existing row for this exact property (handles reconnects),
+  // then insert. Avoids the expression-index ON CONFLICT mismatch.
+  await supabase
     .from('channel_connections')
-    .upsert({
+    .delete()
+    .eq('client_id', clientId)
+    .eq('channel', 'google_analytics')
+    .eq('platform_account_id', property.propertyId)
+
+  const { error: insertErr } = await supabase
+    .from('channel_connections')
+    .insert({
       client_id: clientId,
       channel: 'google_analytics',
       connection_type: 'oauth',
@@ -76,10 +84,10 @@ export async function finalizeGA4Connection(
         time_zone: property.timeZone,
         currency_code: property.currencyCode,
       },
-    }, { onConflict: 'client_id,channel,platform_account_id' })
+    })
 
-  if (upsertErr) {
-    return { success: false, error: upsertErr.message }
+  if (insertErr) {
+    return { success: false, error: insertErr.message }
   }
 
   // Delete the pending placeholder
