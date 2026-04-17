@@ -121,24 +121,43 @@ async function syncInstagram(
   const token = conn.access_token
   const igUserId = conn.platform_account_id
 
-  // 1. Account insights (reach, impressions)
-  const insightsUrl = `https://graph.instagram.com/v21.0/${igUserId}/insights?metric=impressions,reach&period=day&since=${yesterdayUnix}&until=${todayUnix}&access_token=${token}`
-  const insightsRes = await fetch(insightsUrl)
-  const insightsData = await insightsRes.json()
+  // --- Insights: each metric is its own call so one deprecation doesn't
+  // blow up the whole sync. Meta v21 split metrics into two buckets:
+  //   period=day         -> reach (time-series)
+  //   metric_type=total_value -> views, profile_views, total_interactions
+  // "impressions" was deprecated; "views" replaces it.
 
-  let reach = 0
-  let impressions = 0
-
-  if (insightsData.data) {
-    for (const metric of insightsData.data) {
-      const value = metric.values?.[0]?.value ?? 0
-      if (metric.name === 'reach') reach = value
-      if (metric.name === 'impressions') impressions = value
+  type MetricResult = { name: string; value: number; error?: string }
+  const callInsight = async (metric: string, useTotalValue = false): Promise<MetricResult> => {
+    const totalValueParam = useTotalValue ? '&metric_type=total_value' : ''
+    const url = `https://graph.instagram.com/v21.0/${igUserId}/insights?metric=${metric}&period=day&since=${yesterdayUnix}&until=${todayUnix}${totalValueParam}&access_token=${token}`
+    try {
+      const res = await fetch(url)
+      const data = await res.json()
+      if (data.error) return { name: metric, value: 0, error: data.error.message }
+      // total_value responses put the number in total_value.value; period=day responses put it in values[0].value
+      const row = data.data?.[0]
+      const val = row?.total_value?.value ?? row?.values?.[0]?.value ?? 0
+      return { name: metric, value: Number(val) }
+    } catch (err) {
+      return { name: metric, value: 0, error: err instanceof Error ? err.message : 'fetch failed' }
     }
   }
 
-  // 2. Follower count
-  const userUrl = `https://graph.instagram.com/v21.0/${igUserId}?fields=followers_count&access_token=${token}`
+  const [reachRes, viewsRes, profileViewsRes, interactionsRes] = await Promise.all([
+    callInsight('reach'),
+    callInsight('views', true),
+    callInsight('profile_views', true),
+    callInsight('total_interactions', true),
+  ])
+
+  const reach = reachRes.value
+  const impressions = viewsRes.value // v21 rename: "views" is the new "impressions"
+  const profileVisits = profileViewsRes.value
+  const totalInteractions = interactionsRes.value
+
+  // --- Follower count
+  const userUrl = `https://graph.instagram.com/v21.0/${igUserId}?fields=followers_count,username&access_token=${token}`
   const userRes = await fetch(userUrl)
   const userData = await userRes.json()
   const followersTotal = userData.followers_count ?? 0
@@ -160,7 +179,7 @@ async function syncInstagram(
   const mediaRes = await fetch(mediaUrl)
   const mediaData = await mediaRes.json()
 
-  let engagement = 0
+  let mediaEngagement = 0
   let topPostId: string | null = null
   let topPostReach = 0
 
@@ -169,30 +188,28 @@ async function syncInstagram(
     const postDate = post.timestamp?.split('T')[0]
     if (postDate !== yesterdayStr) continue
 
-    const postEngagement = (post.like_count ?? 0) + (post.comments_count ?? 0)
-    engagement += postEngagement
+    mediaEngagement += (post.like_count ?? 0) + (post.comments_count ?? 0)
 
-    // Get per-post reach
+    // Per-post reach (only 'reach' works on post-level now; 'impressions' is deprecated)
     try {
-      const postInsightsUrl = `https://graph.instagram.com/v21.0/${post.id}/insights?metric=impressions,reach&access_token=${token}`
+      const postInsightsUrl = `https://graph.instagram.com/v21.0/${post.id}/insights?metric=reach&access_token=${token}`
       const postInsightsRes = await fetch(postInsightsUrl)
       const postInsights = await postInsightsRes.json()
-
-      let postReach = 0
-      for (const m of postInsights.data ?? []) {
-        if (m.name === 'reach') postReach = m.values?.[0]?.value ?? 0
-      }
-
+      const postReach = postInsights.data?.[0]?.values?.[0]?.value ?? 0
       if (postReach > topPostReach) {
         topPostReach = postReach
         topPostId = post.id
       }
     } catch {
-      // Skip individual post insights if they fail
+      // Skip -- post-level insights sometimes fail for non-owned content
     }
   }
 
-  // 4. Upsert into social_metrics
+  // Prefer the account-level total_interactions metric; fall back to sum of
+  // per-post likes+comments if that metric errored or returned 0.
+  const engagement = totalInteractions > 0 ? totalInteractions : mediaEngagement
+
+  // 4. Upsert into social_metrics with detailed raw_data for debugging
   await supabase
     .from('social_metrics')
     .upsert({
@@ -201,7 +218,7 @@ async function syncInstagram(
       date: yesterdayStr,
       reach,
       impressions,
-      profile_visits: 0, // Not available via basic API
+      profile_visits: profileVisits,
       followers_total: followersTotal,
       followers_gained: Math.max(0, followersGained),
       engagement,
@@ -210,7 +227,16 @@ async function syncInstagram(
       ).length,
       top_post_id: topPostId,
       top_post_reach: topPostReach,
-      raw_data: { insights: insightsData, user: userData },
+      raw_data: {
+        metrics: {
+          reach: reachRes,
+          views: viewsRes,
+          profile_views: profileViewsRes,
+          total_interactions: interactionsRes,
+        },
+        user: userData,
+        media_engagement_fallback: mediaEngagement,
+      },
     }, {
       onConflict: 'client_id,platform,date',
     })
@@ -229,26 +255,39 @@ async function syncFacebook(
   const token = conn.access_token
   const pageId = conn.platform_account_id
 
-  // Page insights
   const sinceUnix = Math.floor(yesterday.getTime() / 1000)
   const untilUnix = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000)
 
-  const insightsUrl = `https://graph.facebook.com/v21.0/${pageId}/insights?metric=page_impressions,page_post_engagements,page_fan_adds&period=day&since=${sinceUnix}&until=${untilUnix}&access_token=${token}`
-  const insightsRes = await fetch(insightsUrl)
-  const insightsData = await insightsRes.json()
-
-  let impressions = 0
-  let engagement = 0
-  let followersGained = 0
-
-  if (insightsData.data) {
-    for (const metric of insightsData.data) {
-      const value = metric.values?.[0]?.value ?? 0
-      if (metric.name === 'page_impressions') impressions = value
-      if (metric.name === 'page_post_engagements') engagement = value
-      if (metric.name === 'page_fan_adds') followersGained = value
+  // Same per-metric try pattern as Instagram. FB Page Insights keeps
+  // deprecating metrics in minor API versions; isolating each call keeps
+  // partial data flowing when one breaks.
+  type MetricResult = { name: string; value: number; error?: string }
+  const callInsight = async (metric: string, period: string = 'day'): Promise<MetricResult> => {
+    const url = `https://graph.facebook.com/v21.0/${pageId}/insights?metric=${metric}&period=${period}&since=${sinceUnix}&until=${untilUnix}&access_token=${token}`
+    try {
+      const res = await fetch(url)
+      const data = await res.json()
+      if (data.error) return { name: metric, value: 0, error: data.error.message }
+      const row = data.data?.[0]
+      const val = row?.values?.[0]?.value ?? 0
+      return { name: metric, value: typeof val === 'object' ? 0 : Number(val) }
+    } catch (err) {
+      return { name: metric, value: 0, error: err instanceof Error ? err.message : 'fetch failed' }
     }
   }
+
+  // Try the common FB Page Insights metrics. Each one is independent; if
+  // Meta deprecates one we still get partial data from the others.
+  //
+  // Known v21 deprecations (Meta removed them without a clean replacement):
+  //   page_impressions      -> try page_views_total instead
+  //   page_fan_adds         -> compute from daily fan_count delta
+  //   page_fans_by_X        -> most demographic metrics gone
+  const [impressionsRes, reachRes, engagementRes] = await Promise.all([
+    callInsight('page_views_total'),              // was page_impressions
+    callInsight('page_impressions_unique'),       // FB's version of "reach"
+    callInsight('page_post_engagements'),
+  ])
 
   // Get page fan count (total followers)
   const pageUrl = `https://graph.facebook.com/v21.0/${pageId}?fields=fan_count&access_token=${token}`
@@ -256,20 +295,40 @@ async function syncFacebook(
   const pageData = await pageRes.json()
   const followersTotal = pageData.fan_count ?? 0
 
+  // Compute followers_gained from yesterday's fan_count, since page_fan_adds
+  // was deprecated. If yesterday's row doesn't exist, report 0 (first sync).
+  const prevDate = formatDate(addDays(yesterday, -1))
+  const { data: prevRow } = await supabase
+    .from('social_metrics')
+    .select('followers_total')
+    .eq('client_id', conn.client_id)
+    .eq('platform', 'facebook')
+    .eq('date', prevDate)
+    .maybeSingle()
+  const followersGained = prevRow ? followersTotal - (prevRow.followers_total ?? 0) : 0
+
   await supabase
     .from('social_metrics')
     .upsert({
       client_id: conn.client_id,
       platform: 'facebook',
       date: yesterdayStr,
-      reach: 0, // page_reach requires different API call
-      impressions,
-      profile_visits: 0,
+      reach: reachRes.value,
+      impressions: impressionsRes.value,
+      profile_visits: 0,      // FB profile_views deprecated; no clean replacement
       followers_total: followersTotal,
       followers_gained: Math.max(0, followersGained),
-      engagement,
-      posts_published: 0,
-      raw_data: { insights: insightsData, page: pageData },
+      engagement: engagementRes.value,
+      posts_published: 0,     // TODO: /feed endpoint count
+      raw_data: {
+        metrics: {
+          page_views_total: impressionsRes,
+          page_impressions_unique: reachRes,
+          page_post_engagements: engagementRes,
+        },
+        page: pageData,
+        followers_gained_computed: followersGained,
+      },
     }, {
       onConflict: 'client_id,platform,date',
     })
