@@ -7,7 +7,7 @@ import {
   LayoutDashboard, CheckCircle, Calendar, ShoppingBag, BarChart3,
   MessageSquare, Wrench, Building2, CreditCard, FileText, HelpCircle, Settings,
   Menu, X, ChevronDown, BookOpen, FileBarChart, ListTodo,
-  Share2, Globe, MapPin, Mail, Image as ImageIcon, Target, Link2,
+  Share2, Globe, MapPin, Mail, Image as ImageIcon, Target, Link2, Newspaper,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { CartProvider } from '@/lib/cart-context'
@@ -120,6 +120,12 @@ const navSections: NavSection[] = [
         label: 'Messages',
         href: '/dashboard/messages',
         icon: MessageSquare,
+        exact: false,
+      },
+      {
+        label: 'Weekly Briefs',
+        href: '/dashboard/briefs',
+        icon: Newspaper,
         exact: false,
       },
       {

@@ -1,0 +1,30 @@
+-- ============================================================================
+-- 050: weekly brief generation cron (record only -- applied via Management API)
+-- ============================================================================
+-- Schedules the generate-weekly-brief Edge Function to run every Monday at
+-- 14:13 UTC (6:13 AM Pacific). Timing picked to land after the daily
+-- sync-ga4-metrics and sync-gsc-metrics jobs have refreshed yesterday's data.
+--
+-- Like 048, the real cron.schedule call is applied via the Supabase
+-- Management API because it references SUPABASE_URL and the service role
+-- key which are only available at apply time. See cron.job for the live
+-- definition. Reference SQL (values must be templated):
+--
+--   SELECT cron.schedule(
+--     'generate-weekly-briefs-monday',
+--     '13 14 * * 1',
+--     $$SELECT net.http_post(
+--       url := '<SUPABASE_URL>/functions/v1/generate-weekly-brief',
+--       headers := jsonb_build_object(
+--         'Authorization', 'Bearer <SERVICE_ROLE_KEY>',
+--         'Content-Type', 'application/json'
+--       ),
+--       body := '{}'::jsonb,
+--       timeout_milliseconds := 120000
+--     );$$
+--   );
+-- ============================================================================
+
+-- This file intentionally contains no DDL. It serves as an audit record of
+-- the cron job setup for future migrations to reference.
+SELECT 1;

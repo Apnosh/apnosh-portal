@@ -28,6 +28,7 @@ type TableName =
   | 'website_metrics'
   | 'website_metrics_monthly'
   | 'search_metrics'
+  | 'weekly_briefs'
   | 'email_campaigns'
   | 'email_list_snapshot'
 
@@ -130,6 +131,7 @@ const TRACKED_TABLES: TableName[] = [
   'website_metrics',
   'website_metrics_monthly',
   'search_metrics',
+  'weekly_briefs',
   'email_campaigns',
   'email_list_snapshot',
 ]
