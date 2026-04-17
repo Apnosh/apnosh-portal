@@ -86,6 +86,148 @@ function median(values: number[]): number {
 }
 
 // ---------------------------------------------------------------------------
+// Mini chart primitives (pure SVG, no chart library)
+// ---------------------------------------------------------------------------
+
+/**
+ * Smooth area chart -- for "nice curve going up" growth visuals like
+ * followers over time. Draws both a filled area and a top stroke.
+ */
+function AreaChart({
+  values, color = '#4abd98', height = 80,
+}: {
+  values: number[]
+  color?: string
+  height?: number
+}) {
+  if (values.length < 2) return null
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min || 1
+  const width = 100
+  const step = width / (values.length - 1)
+  const padY = height * 0.12
+  const plotH = height - padY * 2
+
+  const points = values.map((v, i) => ({
+    x: i * step,
+    y: height - ((v - min) / range) * plotH - padY,
+  }))
+
+  const stroke = points.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')
+  const area = `M ${points[0].x},${height} L ${stroke.split(' ').join(' L ')} L ${points[points.length - 1].x},${height} Z`
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      className="w-full"
+      style={{ height: `${height}px` }}
+    >
+      <defs>
+        <linearGradient id={`area-grad-${color}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#area-grad-${color})`} />
+      <polyline
+        points={stroke}
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  )
+}
+
+/**
+ * Bar chart -- for weekly totals where week-over-week comparison matters
+ * more than a smooth curve.
+ */
+function BarChart({
+  values, color = '#4abd98', height = 80,
+}: {
+  values: number[]
+  color?: string
+  height?: number
+}) {
+  if (values.length === 0) return null
+  const max = Math.max(...values, 1)
+  const width = 100
+  const gap = 2
+  const barWidth = (width - gap * (values.length - 1)) / values.length
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      className="w-full"
+      style={{ height: `${height}px` }}
+    >
+      {values.map((v, i) => {
+        const h = Math.max(1, (v / max) * (height - 4))
+        const x = i * (barWidth + gap)
+        const y = height - h
+        return (
+          <rect
+            key={i}
+            x={x.toFixed(2)}
+            y={y.toFixed(2)}
+            width={barWidth.toFixed(2)}
+            height={h.toFixed(2)}
+            fill={color}
+            rx="1"
+            opacity={i === values.length - 1 ? 1 : 0.55}
+          />
+        )
+      })}
+    </svg>
+  )
+}
+
+/**
+ * Tiny inline sparkline for the at-a-glance strip. Height is 20px so it
+ * fits under a small number without stealing attention.
+ */
+function MiniSparkline({
+  values, color = '#4abd98',
+}: {
+  values: number[]
+  color?: string
+}) {
+  if (values.length < 2) return null
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min || 1
+  const height = 20
+  const width = 100
+  const step = width / (values.length - 1)
+  const points = values.map((v, i) => {
+    const x = i * step
+    const y = height - ((v - min) / range) * (height * 0.8) - height * 0.1
+    return `${x.toFixed(2)},${y.toFixed(2)}`
+  }).join(' ')
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full" style={{ height: `${height}px` }}>
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Computed weekly snapshot (used by every section below)
 // ---------------------------------------------------------------------------
 
@@ -99,6 +241,7 @@ interface WeeklySnapshot {
   engThisWeek: number
   engLastWeek: number
   followersNow: number
+  followersMonthDelta: number
   followersWeekDelta: number
   daysSinceLastPost: number | null
   latestPost: SocialPost | null
@@ -107,6 +250,14 @@ interface WeeklySnapshot {
   staticCount: number
   reelAvgReach: number
   staticAvgReach: number
+  // Trend series for visualizations
+  followersTrend30: number[]         // 30-day followers, carry-forward
+  reachByWeek: number[]              // last 6 ISO-weeks of content reach
+  sparkFollowers30: number[]         // 30 data points (same as trend)
+  sparkReach8: number[]              // 8 weekly reach totals
+  sparkSaves8: number[]              // 8 weekly saves totals
+  sparkPosts8: number[]              // 8 weekly post counts
+  reachWeeklyChangePct: number | null
 }
 
 function computeSnapshot(posts: SocialPost[], rows: SocialDailyRow[]): WeeklySnapshot {
@@ -161,6 +312,55 @@ function computeSnapshot(posts: SocialPost[], rows: SocialDailyRow[]): WeeklySna
     )
   }
 
+  // ----- Trend series for visualizations -----
+
+  // Followers over the last 30 days, carry-forward so the line stays
+  // continuous across backfill days with null followers_total.
+  const followersByDate = new Map<string, number>()
+  const sortedDates = Array.from(new Set(rows.map(r => r.date))).sort()
+  for (const date of sortedDates) {
+    const dayRows = rows.filter(r => r.date === date)
+    const total = dayRows.reduce((acc, r) => acc + (r.followers_total ?? 0), 0)
+    if (total > 0) followersByDate.set(date, total)
+  }
+  const followersTrend30: number[] = []
+  let lastSeen = 0
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now - i * 86_400_000)
+    const dateStr = d.toISOString().split('T')[0]
+    const val = followersByDate.get(dateStr)
+    if (val) lastSeen = val
+    if (lastSeen > 0) followersTrend30.push(lastSeen)
+  }
+
+  // Followers month delta: current vs 30 days ago (if we have both)
+  const followersMonthDelta = followersTrend30.length >= 2
+    ? followersTrend30[followersTrend30.length - 1] - followersTrend30[0]
+    : 0
+
+  // Last 8 weeks of content so each at-a-glance card can carry a spark.
+  const reachByWeekAll: number[] = []
+  const savesByWeekAll: number[] = []
+  const postsByWeekAll: number[] = []
+  for (let w = 7; w >= 0; w--) {
+    const weekStart = now - (w + 1) * 7 * 86_400_000
+    const weekEnd = now - w * 7 * 86_400_000
+    const weekPosts = posts.filter(p => {
+      const t = new Date(p.posted_at).getTime()
+      return t >= weekStart && t < weekEnd
+    })
+    reachByWeekAll.push(weekPosts.reduce((a, p) => a + (p.reach ?? 0), 0))
+    savesByWeekAll.push(weekPosts.reduce((a, p) => a + (p.saves ?? 0), 0))
+    postsByWeekAll.push(weekPosts.length)
+  }
+
+  // Weekly change %: this week vs last week content reach
+  const thisWeekReach = reachByWeekAll[reachByWeekAll.length - 1] ?? 0
+  const lastWeekReach = reachByWeekAll[reachByWeekAll.length - 2] ?? 0
+  const reachWeeklyChangePct = lastWeekReach > 0
+    ? ((thisWeekReach - lastWeekReach) / lastWeekReach) * 100
+    : null
+
   return {
     postsThisWeek,
     postsLastWeek,
@@ -171,6 +371,7 @@ function computeSnapshot(posts: SocialPost[], rows: SocialDailyRow[]): WeeklySna
     engThisWeek: eng(postsThisWeek),
     engLastWeek: eng(postsLastWeek),
     followersNow,
+    followersMonthDelta,
     followersWeekDelta,
     daysSinceLastPost,
     latestPost,
@@ -179,6 +380,13 @@ function computeSnapshot(posts: SocialPost[], rows: SocialDailyRow[]): WeeklySna
     staticCount: statics.length,
     reelAvgReach: avg(reels),
     staticAvgReach: avg(statics),
+    followersTrend30,
+    reachByWeek: reachByWeekAll.slice(-6),
+    sparkFollowers30: followersTrend30,
+    sparkReach8: reachByWeekAll,
+    sparkSaves8: savesByWeekAll,
+    sparkPosts8: postsByWeekAll,
+    reachWeeklyChangePct,
   }
 }
 
@@ -385,6 +593,106 @@ function LatestPost({ snap }: { snap: WeeklySnapshot }) {
           </div>
         </div>
       </a>
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 2b. Your growth -- two compact trend cards
+// ---------------------------------------------------------------------------
+
+/**
+ * Visual reassurance that "we're growing" in a way numbers alone can't
+ * provide. Two side-by-side cards: followers (smooth area chart) and
+ * content reach (weekly bars). Intentionally lightweight -- no axes, no
+ * filters, just the shape. Chart color softens to yellow/red when the
+ * trend is flat or declining so the visual doubles as a soft alert.
+ */
+function Growth({ snap }: { snap: WeeklySnapshot }) {
+  const hasFollowerData = snap.followersTrend30.length >= 3
+  const hasReachData = snap.reachByWeek.some(v => v > 0)
+  if (!hasFollowerData && !hasReachData) return null
+
+  // Followers trend color -- green if up, neutral if flat, red if down
+  const followersStart = snap.followersTrend30[0] ?? 0
+  const followersEnd = snap.followersTrend30[snap.followersTrend30.length - 1] ?? 0
+  const followersDelta = followersEnd - followersStart
+  const followerColor = followersDelta > 0 ? '#4abd98'
+    : followersDelta < 0 ? '#e57373'
+    : 'var(--db-ink-4, #888)'
+
+  // Reach trend color -- compare last 3 weeks vs prior 3
+  const recent3 = snap.reachByWeek.slice(-3).reduce((a, b) => a + b, 0)
+  const prior3 = snap.reachByWeek.slice(0, 3).reduce((a, b) => a + b, 0)
+  const reachColor = recent3 > prior3 ? '#4abd98'
+    : recent3 < prior3 ? '#eab308'
+    : 'var(--db-ink-4, #888)'
+
+  const totalReach6w = snap.reachByWeek.reduce((a, b) => a + b, 0)
+  const avgWeeklyReach = snap.reachByWeek.length > 0
+    ? Math.round(totalReach6w / snap.reachByWeek.length)
+    : 0
+
+  return (
+    <section className="mb-8">
+      <div className="mb-3">
+        <h2 className="text-lg font-bold text-ink">Your growth</h2>
+        <p className="text-xs text-ink-3 mt-0.5">Followers and content reach over the last several weeks.</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Followers area chart */}
+        {hasFollowerData && (
+          <div className="bg-white rounded-xl border border-ink-6 p-4">
+            <div className="flex items-baseline justify-between mb-1 gap-2">
+              <span className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">Followers</span>
+              {snap.followersMonthDelta !== 0 && (
+                <span
+                  className="inline-flex items-center text-[11px] font-semibold tabular-nums"
+                  style={{ color: snap.followersMonthDelta > 0 ? '#2d7a5f' : '#c14343' }}
+                >
+                  {snap.followersMonthDelta > 0 ? (
+                    <ArrowUpRight className="w-3 h-3" />
+                  ) : (
+                    <ArrowDownRight className="w-3 h-3" />
+                  )}
+                  {Math.abs(snap.followersMonthDelta)} this month
+                </span>
+              )}
+            </div>
+            <div className="font-[family-name:var(--font-display)] text-2xl text-ink tabular-nums mb-2">
+              {formatNumber(followersEnd)}
+            </div>
+            <AreaChart values={snap.followersTrend30} color={followerColor} height={80} />
+          </div>
+        )}
+
+        {/* Weekly reach bars */}
+        {hasReachData && (
+          <div className="bg-white rounded-xl border border-ink-6 p-4">
+            <div className="flex items-baseline justify-between mb-1 gap-2">
+              <span className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">Content reach</span>
+              {snap.reachWeeklyChangePct !== null && Math.abs(snap.reachWeeklyChangePct) >= 5 && (
+                <span
+                  className="inline-flex items-center text-[11px] font-semibold tabular-nums"
+                  style={{ color: snap.reachWeeklyChangePct > 0 ? '#2d7a5f' : '#c14343' }}
+                >
+                  {snap.reachWeeklyChangePct > 0 ? (
+                    <ArrowUpRight className="w-3 h-3" />
+                  ) : (
+                    <ArrowDownRight className="w-3 h-3" />
+                  )}
+                  {Math.abs(Math.round(snap.reachWeeklyChangePct))}% vs last week
+                </span>
+              )}
+            </div>
+            <div className="font-[family-name:var(--font-display)] text-2xl text-ink tabular-nums mb-2">
+              {formatNumber(avgWeeklyReach)}
+              <span className="text-xs text-ink-4 font-sans ml-2">avg/week</span>
+            </div>
+            <BarChart values={snap.reachByWeek} color={reachColor} height={80} />
+          </div>
+        )}
+      </div>
     </section>
   )
 }
@@ -598,23 +906,32 @@ function WeeklyAction({ snap }: { snap: WeeklySnapshot }) {
 // ---------------------------------------------------------------------------
 
 function AtAGlanceStrip({ snap }: { snap: WeeklySnapshot }) {
-  const items: Array<{ label: string; value: string; delta?: number }> = [
+  const items: Array<{
+    label: string
+    value: string
+    delta?: number
+    spark: number[]
+  }> = [
     {
       label: 'Followers',
       value: formatNumber(snap.followersNow),
       delta: snap.followersWeekDelta,
+      spark: snap.sparkFollowers30,
     },
     {
       label: 'Reach this week',
       value: formatNumber(snap.reachThisWeek),
+      spark: snap.sparkReach8,
     },
     {
       label: 'Saves this week',
       value: formatNumber(snap.savesThisWeek),
+      spark: snap.sparkSaves8,
     },
     {
       label: 'Posts this week',
       value: String(snap.postsThisWeek.length),
+      spark: snap.sparkPosts8,
     },
   ]
 
@@ -624,31 +941,44 @@ function AtAGlanceStrip({ snap }: { snap: WeeklySnapshot }) {
         <h2 className="text-sm font-semibold text-ink-3">At a glance</h2>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {items.map(item => (
-          <div key={item.label} className="bg-white rounded-xl border border-ink-6 px-4 py-3">
-            <div className="text-[10px] font-semibold text-ink-4 uppercase tracking-wide mb-1.5">
-              {item.label}
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-[family-name:var(--font-display)] text-xl text-ink tabular-nums">
-                {item.value}
-              </span>
-              {item.delta !== undefined && item.delta !== 0 && (
-                <span
-                  className="inline-flex items-center text-[11px] font-semibold tabular-nums"
-                  style={{ color: item.delta > 0 ? '#2d7a5f' : '#c14343' }}
-                >
-                  {item.delta > 0 ? (
-                    <ArrowUpRight className="w-3 h-3" />
-                  ) : (
-                    <ArrowDownRight className="w-3 h-3" />
-                  )}
-                  {Math.abs(item.delta)}
+        {items.map(item => {
+          // Tint color based on series direction
+          const first = item.spark[0] ?? 0
+          const last = item.spark[item.spark.length - 1] ?? 0
+          const sparkColor = last > first ? '#4abd98'
+            : last < first ? '#e57373'
+            : 'var(--db-ink-4, #aaa)'
+          return (
+            <div key={item.label} className="bg-white rounded-xl border border-ink-6 px-4 py-3">
+              <div className="text-[10px] font-semibold text-ink-4 uppercase tracking-wide mb-1.5">
+                {item.label}
+              </div>
+              <div className="flex items-baseline gap-2 mb-2">
+                <span className="font-[family-name:var(--font-display)] text-xl text-ink tabular-nums">
+                  {item.value}
                 </span>
+                {item.delta !== undefined && item.delta !== 0 && (
+                  <span
+                    className="inline-flex items-center text-[11px] font-semibold tabular-nums"
+                    style={{ color: item.delta > 0 ? '#2d7a5f' : '#c14343' }}
+                  >
+                    {item.delta > 0 ? (
+                      <ArrowUpRight className="w-3 h-3" />
+                    ) : (
+                      <ArrowDownRight className="w-3 h-3" />
+                    )}
+                    {Math.abs(item.delta)}
+                  </span>
+                )}
+              </div>
+              {item.spark.length >= 2 && (
+                <div className="opacity-80">
+                  <MiniSparkline values={item.spark} color={sparkColor} />
+                </div>
               )}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </section>
   )
@@ -679,6 +1009,7 @@ export default function SocialOverview({ posts, rows }: SocialOverviewProps) {
     <>
       <HealthPulse snap={snap} />
       <LatestPost snap={snap} />
+      <Growth snap={snap} />
       <WeeklyHighlights snap={snap} />
       <WeeklyAction snap={snap} />
       <AtAGlanceStrip snap={snap} />
