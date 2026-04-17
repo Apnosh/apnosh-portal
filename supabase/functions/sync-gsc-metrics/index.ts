@@ -6,11 +6,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
  * sync-gsc-metrics Edge Function
  *
  * Pulls daily Search Console metrics for each active client connection
- * and writes to search_metrics.
+ * and writes to search_metrics. One row per day per site.
  *
- * NOTE: GSC data has a ~2 day delay. We pull data for (today - 3) to be safe.
+ * NOTE: GSC data has a ~2 day delay. Default sync pulls (today - 3).
+ * For backfill, pass days=30 to pull the last 30 days.
  *
- * Input: { client_id?: string }
+ * Input:  { client_id?: string, days?: number } -- days defaults to 1 (just
+ *         yesterday-ish); pass e.g. 30 to backfill last 30 days
  * Output: { synced: number, results: [...] }
  */
 
@@ -30,6 +32,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}))
     const targetClientId: string | undefined = body.client_id
+    const daysToSync: number = Math.max(1, Math.min(Number(body.days ?? 1), 90))
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -56,25 +59,31 @@ Deno.serve(async (req) => {
     for (const conn of (conns ?? []) as Connection[]) {
       try {
         const freshToken = await ensureFreshToken(supabase, conn)
-        // GSC has ~2 day latency — pull data from 3 days ago
-        const date = getDaysAgo(3)
-        const metrics = await runDailyQuery(conn.platform_account_id, freshToken, date)
 
-        const { error: upsertErr } = await supabase
-          .from('search_metrics')
-          .upsert({
-            client_id: conn.client_id,
-            site_url: conn.platform_account_id,
-            date,
-            total_impressions: metrics.totalImpressions,
-            total_clicks: metrics.totalClicks,
-            avg_ctr: metrics.avgCtr,
-            avg_position: metrics.avgPosition,
-            top_queries: metrics.topQueries,
-            top_pages: metrics.topPages,
-          }, { onConflict: 'client_id,site_url,date' })
+        // GSC has ~2 day latency. Start N days ago and pull that many days.
+        // Default (days=1): just yesterday-ish (today-3). Backfill (days=30): last 30 days.
+        const daysSynced: string[] = []
+        for (let offset = 3; offset < 3 + daysToSync; offset++) {
+          const date = getDaysAgo(offset)
+          const metrics = await runDailyQuery(conn.platform_account_id, freshToken, date)
 
-        if (upsertErr) throw new Error(upsertErr.message)
+          const { error: upsertErr } = await supabase
+            .from('search_metrics')
+            .upsert({
+              client_id: conn.client_id,
+              site_url: conn.platform_account_id,
+              date,
+              total_impressions: metrics.totalImpressions,
+              total_clicks: metrics.totalClicks,
+              avg_ctr: metrics.avgCtr,
+              avg_position: metrics.avgPosition,
+              top_queries: metrics.topQueries,
+              top_pages: metrics.topPages,
+            }, { onConflict: 'client_id,site_url,date' })
+
+          if (upsertErr) throw new Error(upsertErr.message)
+          daysSynced.push(date)
+        }
 
         await supabase
           .from('channel_connections')
@@ -82,7 +91,7 @@ Deno.serve(async (req) => {
           .eq('id', conn.id)
 
         synced++
-        results.push({ client_id: conn.client_id, site: conn.platform_account_id, status: 'ok' })
+        results.push({ client_id: conn.client_id, site: conn.platform_account_id, status: 'ok', days: daysSynced.length })
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error'
         await supabase

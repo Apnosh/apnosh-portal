@@ -21,7 +21,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
  *   - New vs returning: activeUsers by newVsReturning
  *   - Top referrers: sessions by sessionSource where medium = referral (top 10)
  *
- * Input:  { client_id?: string } — if omitted, syncs all active clients
+ * Input:  { client_id?: string, days?: number } — if client_id omitted, syncs
+ *         all active clients. days defaults to 1 (just yesterday); pass e.g.
+ *         30 to backfill last 30 days.
  * Output: { synced: number, results: [...] }
  */
 
@@ -42,6 +44,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}))
     const targetClientId: string | undefined = body.client_id
+    const daysToSync: number = Math.max(1, Math.min(Number(body.days ?? 1), 90))
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -68,32 +71,38 @@ Deno.serve(async (req) => {
     for (const conn of (conns ?? []) as Connection[]) {
       try {
         const freshToken = await ensureFreshToken(supabase, conn)
-        const date = getYesterday()
-        const metrics = await runDailyReport(conn.platform_account_id, freshToken, date)
 
-        const { error: upsertErr } = await supabase
-          .from('website_metrics')
-          .upsert({
-            client_id: conn.client_id,
-            date,
-            visitors: metrics.visitors,
-            page_views: metrics.pageViews,
-            sessions: metrics.sessions,
-            bounce_rate: metrics.bounceRate,
-            avg_session_duration: metrics.avgSessionDuration,
-            mobile_pct: metrics.mobilePct,
-            traffic_sources: metrics.trafficSources,
-            top_pages: metrics.topPages,
-            conversion_events: metrics.conversionEvents,
-            top_cities: metrics.topCities,
-            landing_pages: metrics.landingPages,
-            new_users: metrics.newUsers,
-            returning_users: metrics.returningUsers,
-            top_referrers: metrics.topReferrers,
-            raw_data: metrics.raw,
-          }, { onConflict: 'client_id,date' })
+        // Loop through N days (default 1 = just yesterday; backfill = up to 90)
+        const daysSynced: string[] = []
+        for (let offset = 1; offset <= daysToSync; offset++) {
+          const date = getDaysAgo(offset)
+          const metrics = await runDailyReport(conn.platform_account_id, freshToken, date)
 
-        if (upsertErr) throw new Error(upsertErr.message)
+          const { error: upsertErr } = await supabase
+            .from('website_metrics')
+            .upsert({
+              client_id: conn.client_id,
+              date,
+              visitors: metrics.visitors,
+              page_views: metrics.pageViews,
+              sessions: metrics.sessions,
+              bounce_rate: metrics.bounceRate,
+              avg_session_duration: metrics.avgSessionDuration,
+              mobile_pct: metrics.mobilePct,
+              traffic_sources: metrics.trafficSources,
+              top_pages: metrics.topPages,
+              conversion_events: metrics.conversionEvents,
+              top_cities: metrics.topCities,
+              landing_pages: metrics.landingPages,
+              new_users: metrics.newUsers,
+              returning_users: metrics.returningUsers,
+              top_referrers: metrics.topReferrers,
+              raw_data: metrics.raw,
+            }, { onConflict: 'client_id,date' })
+
+          if (upsertErr) throw new Error(upsertErr.message)
+          daysSynced.push(date)
+        }
 
         await supabase
           .from('channel_connections')
@@ -101,7 +110,7 @@ Deno.serve(async (req) => {
           .eq('id', conn.id)
 
         synced++
-        results.push({ client_id: conn.client_id, status: 'ok' })
+        results.push({ client_id: conn.client_id, status: 'ok', days: daysSynced.length })
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error'
         await supabase
@@ -404,8 +413,8 @@ async function fetchJson(url: string, headers: Record<string, string>, body: unk
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getYesterday(): string {
+function getDaysAgo(n: number): string {
   const d = new Date()
-  d.setDate(d.getDate() - 1)
+  d.setDate(d.getDate() - n)
   return d.toISOString().split('T')[0]
 }
