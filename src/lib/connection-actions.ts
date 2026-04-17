@@ -1,0 +1,265 @@
+'use server'
+
+import { createClient as createServerClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+
+// ---------------------------------------------------------------------------
+// Unified connection type for the Connected Accounts hub
+// ---------------------------------------------------------------------------
+
+export type ConnectionCategory = 'social' | 'google' | 'reviews'
+
+export type ConnectionStatus = 'connected' | 'expired' | 'error' | 'pending' | 'setting_up'
+
+export interface UnifiedConnection {
+  id: string
+  source: 'platform_connections' | 'channel_connections'
+  platform: string                // machine id: 'instagram', 'facebook', 'google_analytics', etc.
+  label: string                   // display name: "Instagram", "Google Analytics"
+  category: ConnectionCategory
+  accountName: string | null      // "@apnosh" or "Apnosh - Seattle"
+  profileUrl: string | null
+  status: ConnectionStatus
+  friendlyStatus: string          // "Connected", "Needs attention", "Expired", "Setting up"
+  lastSyncAt: string | null
+  syncError: string | null
+  connectedAt: string | null
+  actions: { canReconnect: boolean; canDisconnect: boolean; reconnectUrl: string | null }
+}
+
+// ---------------------------------------------------------------------------
+// Platform metadata
+// ---------------------------------------------------------------------------
+
+const PLATFORM_META: Record<string, {
+  label: string
+  category: ConnectionCategory
+  reconnectPath: string | null
+  profileUrlBuilder?: (accountName: string | null) => string | null
+}> = {
+  instagram: {
+    label: 'Instagram',
+    category: 'social',
+    reconnectPath: '/api/auth/instagram',
+    profileUrlBuilder: (n) => n ? `https://instagram.com/${n.replace(/^@/, '')}` : null,
+  },
+  facebook: {
+    label: 'Facebook',
+    category: 'social',
+    reconnectPath: '/api/auth/instagram', // Meta OAuth handles both
+  },
+  tiktok: {
+    label: 'TikTok',
+    category: 'social',
+    reconnectPath: '/api/auth/tiktok',
+    profileUrlBuilder: (n) => n ? `https://tiktok.com/@${n.replace(/^@/, '')}` : null,
+  },
+  linkedin: {
+    label: 'LinkedIn',
+    category: 'social',
+    reconnectPath: '/api/auth/linkedin',
+  },
+  google_analytics: {
+    label: 'Google Analytics',
+    category: 'google',
+    reconnectPath: '/api/auth/google',
+  },
+  google_search_console: {
+    label: 'Google Search Console',
+    category: 'google',
+    reconnectPath: '/api/auth/google-search-console',
+  },
+  google_business_profile: {
+    label: 'Google Business Profile',
+    category: 'google',
+    reconnectPath: '/api/auth/google-business',
+  },
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function resolveClientId(userId: string): Promise<string | null> {
+  const admin = createAdminClient()
+  const { data: biz } = await admin
+    .from('businesses').select('client_id').eq('owner_id', userId).maybeSingle()
+  if (biz?.client_id) return biz.client_id
+  const { data: cu } = await admin
+    .from('client_users').select('client_id').eq('auth_user_id', userId).maybeSingle()
+  return cu?.client_id ?? null
+}
+
+function humanizeSyncError(err: string | null): string | null {
+  if (!err) return null
+  const lower = err.toLowerCase()
+  if (lower.includes('permission') || lower.includes('not.*enabled') || lower.includes('awaiting')) {
+    return 'Waiting on Google to approve API access. No action needed — we\'re on it.'
+  }
+  if (lower.includes('token') && (lower.includes('expired') || lower.includes('invalid'))) {
+    return 'Your login expired. Click Reconnect to refresh.'
+  }
+  if (lower.includes('403') || lower.includes('denied')) {
+    return 'We don\'t have permission to read this account. Click Reconnect and accept all permissions.'
+  }
+  if (lower.includes('quota') || lower.includes('rate')) {
+    return 'Hit a rate limit. This will sort itself out — try again in a few hours.'
+  }
+  // Default: first sentence of error
+  const firstSentence = err.split('.')[0]
+  return firstSentence.length > 120 ? 'Something went wrong with the last sync. Your account manager has been notified.' : firstSentence
+}
+
+// ---------------------------------------------------------------------------
+// getConnectionsForClient -- unified list reading both tables
+// ---------------------------------------------------------------------------
+
+export async function getConnectionsForClient(): Promise<UnifiedConnection[]> {
+  const userSupabase = await createServerClient()
+  const { data: { user } } = await userSupabase.auth.getUser()
+  if (!user) return []
+
+  const admin = createAdminClient()
+  const clientId = await resolveClientId(user.id)
+  if (!clientId) return []
+
+  const [pc, cc] = await Promise.all([
+    admin
+      .from('platform_connections')
+      .select('id, platform, username, page_name, profile_url, connected_at, expires_at, access_token')
+      .eq('client_id', clientId),
+    admin
+      .from('channel_connections')
+      .select('id, channel, platform_account_name, platform_url, status, last_sync_at, sync_error, connected_at, access_token')
+      .eq('client_id', clientId)
+      .neq('platform_account_id', 'pending'),
+  ])
+
+  const results: UnifiedConnection[] = []
+
+  // Social platform_connections
+  for (const r of pc.data ?? []) {
+    if (!r.access_token) continue
+    const meta = PLATFORM_META[r.platform]
+    if (!meta) continue
+
+    const isExpired = r.expires_at ? new Date(r.expires_at) < new Date() : false
+    const status: ConnectionStatus = isExpired ? 'expired' : 'connected'
+
+    const accountName = r.username || r.page_name || null
+    const profileUrl = r.profile_url || (meta.profileUrlBuilder ? meta.profileUrlBuilder(accountName) : null)
+
+    results.push({
+      id: r.id,
+      source: 'platform_connections',
+      platform: r.platform,
+      label: meta.label,
+      category: meta.category,
+      accountName,
+      profileUrl,
+      status,
+      friendlyStatus: status === 'expired' ? 'Needs reconnect' : 'Connected',
+      lastSyncAt: null, // platform_connections doesn't track this directly; sync-social-metrics uses social_connections
+      syncError: null,
+      connectedAt: r.connected_at,
+      actions: {
+        canReconnect: !!meta.reconnectPath,
+        canDisconnect: true,
+        reconnectUrl: meta.reconnectPath,
+      },
+    })
+  }
+
+  // Google channel_connections
+  for (const r of cc.data ?? []) {
+    if (!r.access_token) continue
+    const meta = PLATFORM_META[r.channel]
+    if (!meta) continue
+
+    // Normalize status
+    let status: ConnectionStatus = 'connected'
+    let friendlyStatus = 'Connected'
+    if (r.status === 'error') {
+      status = 'error'
+      friendlyStatus = 'Needs attention'
+    } else if (r.status === 'pending') {
+      status = 'pending'
+      friendlyStatus = 'Setting up'
+    } else if (r.status === 'disconnected') {
+      status = 'expired'
+      friendlyStatus = 'Disconnected'
+    } else if (r.sync_error) {
+      // Active but with sync_error means still working (gracefully pending for things like GBP API approval)
+      status = 'connected'
+      friendlyStatus = 'Connected (pending data)'
+    }
+
+    results.push({
+      id: r.id,
+      source: 'channel_connections',
+      platform: r.channel,
+      label: meta.label,
+      category: meta.category,
+      accountName: r.platform_account_name,
+      profileUrl: r.platform_url,
+      status,
+      friendlyStatus,
+      lastSyncAt: r.last_sync_at,
+      syncError: humanizeSyncError(r.sync_error),
+      connectedAt: r.connected_at,
+      actions: {
+        canReconnect: !!meta.reconnectPath,
+        canDisconnect: true,
+        reconnectUrl: meta.reconnectPath,
+      },
+    })
+  }
+
+  return results
+}
+
+// ---------------------------------------------------------------------------
+// Disconnect a platform
+// ---------------------------------------------------------------------------
+
+export async function disconnectPlatform(
+  source: 'platform_connections' | 'channel_connections',
+  connectionId: string
+): Promise<{ success: true } | { success: false; error: string }> {
+  const userSupabase = await createServerClient()
+  const { data: { user } } = await userSupabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const admin = createAdminClient()
+  const clientId = await resolveClientId(user.id)
+  if (!clientId) return { success: false, error: 'No client context' }
+
+  // Verify the connection belongs to this client before deleting
+  const { data: existing } = await admin
+    .from(source)
+    .select('client_id')
+    .eq('id', connectionId)
+    .maybeSingle()
+
+  if (!existing || existing.client_id !== clientId) {
+    return { success: false, error: 'Connection not found' }
+  }
+
+  const { error } = await admin.from(source).delete().eq('id', connectionId)
+  if (error) return { success: false, error: error.message }
+
+  return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// Get the list of possible platforms (for "Add more" section)
+// ---------------------------------------------------------------------------
+
+export async function getAvailablePlatforms() {
+  return Object.entries(PLATFORM_META).map(([id, meta]) => ({
+    id,
+    label: meta.label,
+    category: meta.category,
+    connectPath: meta.reconnectPath,
+  }))
+}
