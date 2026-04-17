@@ -81,17 +81,39 @@ export async function getLocalSeoView(
     .lte('created_at', formatDate(lastMonthSameDay))
   if (locationId) prevReviewsQuery = prevReviewsQuery.eq('location_id', locationId)
 
-  const [gbpRes, reviewsRes, prevReviewsRes] = await Promise.all([
+  // review_metrics holds per-platform daily aggregates (rating + review_count)
+  // This covers Yelp (where we can't fetch individual reviews on the free tier)
+  // and will also cover other sources as we add them.
+  const reviewMetricsQuery = supabase
+    .from('review_metrics')
+    .select('date, platform, rating_avg, review_count, new_reviews')
+    .eq('client_id', clientId)
+    .order('date', { ascending: false })
+    .limit(60)
+
+  const [gbpRes, reviewsRes, prevReviewsRes, reviewMetricsRes] = await Promise.all([
     gbpQuery,
     reviewsQuery,
     prevReviewsQuery,
+    reviewMetricsQuery,
   ])
 
   const gbpRows = (gbpRes.data ?? []) as GbpRow[]
   const reviews = (reviewsRes.data ?? []) as ReviewRow[]
   const prevReviewCount = (prevReviewsRes.data ?? []).length
+  const reviewMetrics = (reviewMetricsRes.data ?? []) as ReviewMetricRow[]
 
-  if (gbpRows.length === 0 && reviews.length === 0) {
+  // Latest snapshot per platform (first = most recent thanks to order desc)
+  const platformSnapshot = new Map<string, ReviewMetricRow>()
+  for (const m of reviewMetrics) {
+    if (!platformSnapshot.has(m.platform)) platformSnapshot.set(m.platform, m)
+  }
+  // New reviews this month summed across all aggregate platforms (Yelp etc.)
+  const platformNewReviewsThisMonth = reviewMetrics
+    .filter(m => m.date >= formatDate(thisMonthStart))
+    .reduce((acc, m) => acc + (m.new_reviews ?? 0), 0)
+
+  if (gbpRows.length === 0 && reviews.length === 0 && reviewMetrics.length === 0) {
     return emptyLocalSeoView()
   }
 
@@ -124,10 +146,13 @@ export async function getLocalSeoView(
   const thisClicks = sumField(thisMonthGbp, 'website_clicks')
   const lastClicks = sumField(lastMonthGbp, 'website_clicks')
 
-  const newReviewCount = thisMonthReviews.length
+  // "New reviews" combines individual-review sources (Google, FB) with
+  // aggregate-only sources (Yelp) which we track as review_count deltas.
+  const newReviewCount = thisMonthReviews.length + platformNewReviewsThisMonth
   const avgRatingThisMonth = thisMonthReviews.length > 0
     ? Math.round((thisMonthReviews.reduce((a, r) => a + Number(r.rating), 0) / thisMonthReviews.length) * 10) / 10
-    : null
+    : (platformSnapshot.get('yelp')?.rating_avg ?? null)
+  const yelpSnapshot = platformSnapshot.get('yelp')
 
   const metricsCards: DashboardMetric[] = [
     {
@@ -157,9 +182,11 @@ export async function getLocalSeoView(
     {
       label: 'New reviews',
       value: fmtNum(newReviewCount),
-      subtitle: avgRatingThisMonth != null
-        ? `Avg rating ${avgRatingThisMonth} of 5`
-        : 'Across Google, Yelp, and more',
+      subtitle: yelpSnapshot
+        ? `Yelp ${yelpSnapshot.rating_avg ?? '—'}★ (${fmtNum(yelpSnapshot.review_count ?? 0)} total)`
+        : avgRatingThisMonth != null
+          ? `Avg rating ${avgRatingThisMonth} of 5`
+          : 'Across Google, Yelp, and more',
       trend: fmtPct(newReviewCount, prevReviewCount),
       up: newReviewCount >= prevReviewCount,
       sparkline: weeklyReviewSparkline(reviews, 12),
@@ -173,6 +200,7 @@ export async function getLocalSeoView(
   const insights = buildLocalSeoInsights({
     thisMonthGbp, lastMonthGbp, thisMonthReviews, allReviews: reviews,
     thisInteractions, pctChange, hasPrevData,
+    yelpSnapshot, yelpNewReviewsThisMonth: platformNewReviewsThisMonth,
   })
 
   // ---- AM note
@@ -229,6 +257,14 @@ interface ReviewRow {
   created_at: string
 }
 
+interface ReviewMetricRow {
+  date: string
+  platform: string
+  rating_avg: number | null
+  review_count: number | null
+  new_reviews: number | null
+}
+
 // ---------------------------------------------------------------------------
 // Insights
 // ---------------------------------------------------------------------------
@@ -241,8 +277,30 @@ function buildLocalSeoInsights(d: {
   thisInteractions: number
   pctChange: number
   hasPrevData: boolean
+  yelpSnapshot?: ReviewMetricRow
+  yelpNewReviewsThisMonth?: number
 }): DashboardInsight[] {
   const insights: DashboardInsight[] = []
+
+  // Yelp snapshot insight (when connected)
+  if (d.yelpSnapshot && d.yelpSnapshot.review_count != null && d.yelpSnapshot.review_count > 0) {
+    const rating = d.yelpSnapshot.rating_avg ?? 0
+    const count = d.yelpSnapshot.review_count
+    const newThisMonth = d.yelpNewReviewsThisMonth ?? 0
+    if (newThisMonth > 0) {
+      insights.push({
+        icon: 'star',
+        title: `${newThisMonth} new Yelp ${newThisMonth === 1 ? 'review' : 'reviews'} this month`,
+        subtitle: `Now at ${rating}★ from ${count.toLocaleString()} total`,
+      })
+    } else if (rating >= 4.5) {
+      insights.push({
+        icon: 'star',
+        title: `Yelp rating: ${rating}★ from ${count.toLocaleString()} reviews`,
+        subtitle: 'Strong standing on Yelp',
+      })
+    }
+  }
 
   // Insight 1: review signal
   if (d.thisMonthReviews.length > 0) {
