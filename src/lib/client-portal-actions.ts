@@ -326,7 +326,23 @@ export async function submitGraphicRequest(
       service_area: 'social',
       content_format: 'graphic',
       platform: null,
-      size: payload.placement === 'story' || payload.placement === 'reel-cover' ? 'story' : 'feed',
+      // PostSize in content_queue is a dimensional hint ('feed' | 'square' |
+      // 'story'); the full placement ('carousel', 'banner', 'custom', etc)
+      // is always preserved verbatim on graphic_requests.placement.
+      // Map the 6 placements we accept to the closest of the 3 enum values:
+      //   story / reel-cover -> 'story'   (9:16 portrait)
+      //   carousel           -> 'square'  (IG carousels default to 1:1)
+      //   custom + square-ish ratio -> 'square'
+      //   feed / banner / other -> 'feed' (general rectangular)
+      size: (
+        payload.placement === 'story' || payload.placement === 'reel-cover'
+          ? 'story'
+          : payload.placement === 'carousel'
+          ? 'square'
+          : payload.placement === 'custom' && payload.custom_ratio === '1:1'
+          ? 'square'
+          : 'feed'
+      ),
       status: 'new',
       drafts: [],
     })

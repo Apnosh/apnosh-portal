@@ -176,7 +176,7 @@ export default function ContentQueuePage() {
             <p className="text-sm font-semibold text-amber-900">
               {needsApproval} {needsApproval === 1 ? 'request needs' : 'requests need'} your approval
             </p>
-            <p className="text-xs text-amber-700">Scroll down to find them in the &ldquo;Needs your approval&rdquo; section.</p>
+            <p className="text-xs text-amber-700">Find them below under &ldquo;Draft ready — review now&rdquo;.</p>
           </div>
         </div>
       )}

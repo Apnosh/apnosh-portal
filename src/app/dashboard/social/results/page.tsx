@@ -102,6 +102,9 @@ export default function ResultsPage() {
   // Aggregates
   const reach = currentMonth.reduce((s, m) => s + m.total_reach, 0)
   const engagement = currentMonth.reduce((s, m) => s + m.total_engagement, 0)
+  // Followers summed across platforms = combined audience size. An individual
+  // could follow on multiple platforms so this isn't truly "unique people",
+  // but Meta doesn't expose cross-platform dedup anyway. Label it clearly.
   const followers = currentMonth.reduce((s, m) => s + m.followers_count, 0)
   const followersChange = currentMonth.reduce((s, m) => s + m.followers_change, 0)
   const posts = currentMonth.reduce((s, m) => s + m.posts_published, 0)
@@ -117,7 +120,9 @@ export default function ResultsPage() {
   // Engagement rate
   const engagementRate = reach > 0 ? ((engagement / reach) * 100).toFixed(1) : null
 
-  // Sparkline data (last 6 months, oldest to newest)
+  // Sparkline data (last 6 months, oldest to newest).
+  // For SUM-style metrics (reach, engagement, etc.) this is just a per-month
+  // total summed across platforms -- standard and correct.
   function getSparklineData(field: keyof SocialMetricsRow): number[] {
     const months: number[] = []
     for (let i = 5; i >= 0; i--) {
@@ -127,6 +132,53 @@ export default function ResultsPage() {
       const rows = allMetrics.filter(r => r.month === m && r.year === y)
       const val = rows.reduce((s, r) => s + (typeof r[field] === 'number' ? (r[field] as number) : 0), 0)
       months.push(val)
+    }
+    return months
+  }
+
+  // Followers need a different treatment -- they're a SNAPSHOT per platform,
+  // not a monthly-sum metric. If platform A has data for month 1 but not 2,
+  // a naive sum creates a false dip in month 2. Carry-forward each platform's
+  // last-known count across missing months so the curve reflects real growth
+  // rather than sync coverage artifacts.
+  function getFollowerSparkline(): number[] {
+    const allPlatforms = Array.from(new Set(allMetrics.map(r => r.platform)))
+    // Build a { platform -> { 'YYYY-MM' -> count } } map
+    const byPlatform = new Map<string, Map<string, number>>()
+    for (const p of allPlatforms) byPlatform.set(p, new Map())
+    for (const r of allMetrics) {
+      const key = `${r.year}-${String(r.month).padStart(2, '0')}`
+      byPlatform.get(r.platform)?.set(key, r.followers_count)
+    }
+
+    const months: number[] = []
+    for (let i = 5; i >= 0; i--) {
+      let m = viewMonth - i
+      let y = viewYear
+      while (m < 1) { m += 12; y-- }
+      const key = `${y}-${String(m).padStart(2, '0')}`
+      // For each platform, find its value for this month or the nearest
+      // earlier month (carry-forward). If no earlier month exists, use 0.
+      let total = 0
+      for (const [, series] of byPlatform) {
+        const direct = series.get(key)
+        if (direct !== undefined) {
+          total += direct
+          continue
+        }
+        // Walk backward month-by-month up to 24 months to find last known
+        let walkM = m, walkY = y
+        let found = 0
+        for (let steps = 0; steps < 24; steps++) {
+          walkM -= 1
+          if (walkM < 1) { walkM = 12; walkY -= 1 }
+          const walkKey = `${walkY}-${String(walkM).padStart(2, '0')}`
+          const v = series.get(walkKey)
+          if (v !== undefined) { found = v; break }
+        }
+        total += found
+      }
+      months.push(total)
     }
     return months
   }
@@ -249,9 +301,9 @@ export default function ResultsPage() {
             <BigStat
               icon={UserPlus}
               value={fmtNum(followers)}
-              label="total followers"
+              label={platforms.length > 1 ? `followers across ${platforms.length} platforms` : 'followers'}
               sub={followersChange !== 0 ? `${followersChange > 0 ? '+' : ''}${fmtNum(followersChange)} this month` : undefined}
-              sparkData={getSparklineData('followers_count')}
+              sparkData={getFollowerSparkline()}
               sparkColor={followersChange >= 0 ? '#4abd98' : '#ef4444'}
             />
             <BigStat
