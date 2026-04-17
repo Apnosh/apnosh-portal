@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { getLocationsScoreboard, type LocationScoreRow } from '@/lib/dashboard/get-locations-scoreboard'
-import { locationLabel } from '@/lib/dashboard/get-client-locations'
+import { locationLabel } from '@/lib/dashboard/location-helpers'
 
 function fmtNum(n: number): string {
   if (n >= 10000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'

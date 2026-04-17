@@ -1,7 +1,8 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { getClientLocations, type ClientLocation } from '@/lib/dashboard/get-client-locations'
+import { getClientLocations } from '@/lib/dashboard/get-client-locations'
+import type { ClientLocation } from '@/lib/dashboard/location-helpers'
 
 export interface LocationScoreRow {
   location: ClientLocation

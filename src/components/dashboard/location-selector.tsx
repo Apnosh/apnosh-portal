@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { MapPin, ChevronDown, Check } from 'lucide-react'
-import { locationLabel, type ClientLocation } from '@/lib/dashboard/get-client-locations'
+import { locationLabel, type ClientLocation } from '@/lib/dashboard/location-helpers'
 
 interface LocationSelectorProps {
   locations: ClientLocation[]
