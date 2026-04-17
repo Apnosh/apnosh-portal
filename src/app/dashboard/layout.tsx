@@ -87,11 +87,10 @@ const navSections: NavSection[] = [
         exact: false,
         serviceArea: 'local_seo',
         children: [
-          { label: 'Overview', href: '/dashboard/local-seo', exact: true },
+          { label: 'Performance', href: '/dashboard/local-seo', exact: true },
+          { label: 'Full details', href: '/dashboard/analytics' },
           { label: 'Reviews', href: '/dashboard/local-seo/reviews' },
-          { label: 'GBP Analytics', href: '/dashboard/analytics' },
         ],
-        // Note: Reviews + Analytics are display/perf tabs, kept after Overview.
       },
       {
         label: 'Email & SMS',
