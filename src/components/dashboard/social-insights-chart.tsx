@@ -45,13 +45,23 @@ interface MetricDef {
   field?: keyof SocialDailyRow
 }
 
+/**
+ * Metric list -- ordered by trustworthiness. Metrics where Meta's v21 API
+ * returns reliable numbers come first. Noisy/inflated metrics live in the
+ * "Advanced" section with warnings.
+ *
+ * Intentionally NOT included:
+ *   - Engagement Rate (engagement / reach): Meta counts reach as unique
+ *     daily accounts but total_interactions is aggregated differently, so
+ *     dividing them produces nonsense (e.g. 63,500% for a quiet account).
+ *     We'd rather show nothing than a misleading number.
+ */
 const METRICS: MetricDef[] = [
   { key: 'reach', label: 'Reach', subtitle: 'Unique people who saw your content', aggregate: 'sum', unit: 'people', field: 'reach' },
-  { key: 'engagement', label: 'Engagement', subtitle: 'Likes, comments, shares, saves', aggregate: 'sum', unit: 'actions', field: 'engagement' },
-  { key: 'engagement_rate', label: 'Engagement rate', subtitle: 'Percent of reached people who engaged', aggregate: 'rate', unit: '%', rateNum: 'engagement', rateDen: 'reach' },
   { key: 'profile_visits', label: 'Profile visits', subtitle: 'People who clicked through to your page', aggregate: 'sum', unit: 'visits', field: 'profile_visits' },
   { key: 'followers_total', label: 'Followers', subtitle: 'Total followers (most recent day in range)', aggregate: 'latest', unit: 'followers', field: 'followers_total' },
   { key: 'followers_gained', label: 'New followers', subtitle: 'Net followers gained in this period', aggregate: 'sum', unit: 'followers', field: 'followers_gained' },
+  { key: 'engagement', label: 'Interactions', subtitle: 'Likes, comments, shares, saves (Meta inflates this; treat as directional)', aggregate: 'sum', unit: 'actions', field: 'engagement', advanced: true },
   { key: 'impressions', label: 'Times shown', subtitle: 'All plays + displays (includes automated auto-plays; inflated number)', aggregate: 'sum', unit: 'times', field: 'impressions', advanced: true },
 ]
 
@@ -436,7 +446,7 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
         <div className="flex items-start gap-2 mb-3 text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
           <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <span>
-            <span className="font-semibold">Treat this number loosely.</span> It includes silent auto-plays Instagram fires at non-followers, so it&apos;s often 100x the real attention your content got. Use Reach or Engagement for real marketing signal.
+            <span className="font-semibold">Treat this number loosely.</span> Meta counts auto-plays, story slide advances, and reels in the explore tab all as events, even when a human didn&apos;t really engage. The number is often 100x the real attention your content got. Use <strong>Reach</strong> or <strong>Profile visits</strong> for reliable marketing signal.
           </span>
         </div>
       )}
@@ -482,17 +492,28 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
         onClick={() => setShowAdvanced(v => !v)}
         className="text-[11px] text-ink-4 hover:text-ink-2 mt-3 inline-flex items-center gap-1 transition-colors"
       >
-        {showAdvanced ? 'Hide advanced metrics' : 'What about Views / Impressions?'}
+        {showAdvanced ? 'Hide metric definitions' : 'What do these metrics mean?'}
         <ChevronDown className={`w-3 h-3 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
       </button>
       {showAdvanced && (
-        <div className="mt-3 p-3 bg-bg-2 rounded-lg text-[12px] text-ink-3 leading-relaxed">
-          <p className="font-semibold text-ink-2 mb-1">A note on &quot;Views&quot; and &quot;Impressions&quot;</p>
-          <p>
-            Instagram counts a &ldquo;view&rdquo; every time a reel auto-plays in the feed, explore tab, or someone swipes past a story slide. A single reel shown to 5,000 random users on the explore page = 5,000 views, but probably 0 real marketing impact.
-          </p>
-          <p className="mt-2">
-            You can pick &ldquo;Times shown&rdquo; from the metric dropdown to see the raw number, but we recommend treating it as a vanity number — not a measure of whether your content is working.
+        <div className="mt-3 p-4 bg-bg-2 rounded-lg text-[12px] text-ink-3 leading-relaxed space-y-3">
+          <div>
+            <p className="font-semibold text-ink-2 mb-1">Metrics we trust for marketing decisions</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li><strong>Reach</strong> -- unique accounts that saw your content. The gold-standard &ldquo;real humans who noticed us.&rdquo;</li>
+              <li><strong>Profile visits</strong> -- people who cared enough to click through to your page.</li>
+              <li><strong>Followers</strong> and <strong>New followers</strong> -- audience size and growth.</li>
+            </ul>
+          </div>
+          <div>
+            <p className="font-semibold text-ink-2 mb-1">Metrics we show but don&apos;t trust</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li><strong>Interactions</strong> -- Meta&apos;s &ldquo;total interactions&rdquo; counts reel replays, story slide taps, and auto-play events. A quiet account with 4 reach can show 2,500 &ldquo;interactions&rdquo; because Instagram keeps looping your reels.</li>
+              <li><strong>Times shown</strong> (&ldquo;Views&rdquo;) -- same inflation problem. Meta counts every play, including reels auto-played on the explore page to strangers who didn&apos;t engage.</li>
+            </ul>
+          </div>
+          <p className="text-[11px]">
+            We show the noisy metrics because you&apos;ll see them elsewhere (Meta&apos;s own apps use them), but we don&apos;t put them next to engagement-rate math or use them to judge performance.
           </p>
         </div>
       )}
