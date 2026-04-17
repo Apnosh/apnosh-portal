@@ -282,14 +282,16 @@ async function upsertInstagramDay(
       ? followersTotal - prevTotal
       : 0
 
-    // Recent media -- fetch last 30 posts with rich fields for the
-    // content-first performance page.
+    // Recent media -- fetch last 90 posts with rich fields. Going from 30 to
+    // 90 gives the best-time heatmap roughly 3x the sample size per cell,
+    // which moves it from "noisy suggestion" into "statistically meaningful
+    // for most clients." Meta's /media endpoint supports up to 100/page.
     const mediaFields = [
       'id', 'timestamp', 'caption', 'media_type', 'media_product_type',
       'media_url', 'thumbnail_url', 'permalink',
       'like_count', 'comments_count',
     ].join(',')
-    const mediaUrl = `https://graph.instagram.com/v21.0/${igUserId}/media?fields=${mediaFields}&limit=30&access_token=${token}`
+    const mediaUrl = `https://graph.instagram.com/v21.0/${igUserId}/media?fields=${mediaFields}&limit=90&access_token=${token}`
     const mediaRes = await fetch(mediaUrl)
     mediaData = await mediaRes.json()
 
@@ -352,6 +354,72 @@ async function upsertInstagramDay(
       await supabase
         .from('social_posts')
         .upsert(postsToUpsert, { onConflict: 'client_id,platform,external_id' })
+    }
+
+    // ----- Stories --------------------------------------------------------
+    // Stories are separate from /media and only live for 24 hours. We fetch
+    // whatever's still live plus historical stories via /stories. Because
+    // stories expire, we'll miss some that were published between daily
+    // syncs -- but capturing what we can is still more signal than nothing.
+    try {
+      const storiesUrl = `https://graph.instagram.com/v21.0/${igUserId}/stories?fields=${mediaFields}&access_token=${token}`
+      const storiesRes = await fetch(storiesUrl)
+      const storiesData = await storiesRes.json()
+
+      const storiesToUpsert: Array<Record<string, unknown>> = []
+      for (const story of (storiesData.data ?? []) as Array<Record<string, unknown>>) {
+        // Story-specific insights: Meta exposes reach, replies, and
+        // navigation events (taps_forward/back, exits) rather than the
+        // feed-style likes/comments.
+        const storyMetrics: Record<string, number> = {}
+        try {
+          const storyInsightsUrl = `https://graph.instagram.com/v21.0/${story.id}/insights?metric=reach,replies,taps_forward,taps_back,exits&access_token=${token}`
+          const sRes = await fetch(storyInsightsUrl)
+          const sJson = await sRes.json()
+          for (const m of sJson.data ?? []) {
+            storyMetrics[m.name] = m.values?.[0]?.value ?? 0
+          }
+        } catch {
+          // Per-story insight failures are normal (insights become
+          // unavailable 24-48h after posting); still record the story
+        }
+
+        storiesToUpsert.push({
+          client_id: conn.client_id,
+          platform: 'instagram',
+          external_id: story.id,
+          permalink: story.permalink,
+          media_type: story.media_type,
+          media_product_type: 'STORY',
+          caption: story.caption ?? null,
+          media_url: story.media_url ?? null,
+          thumbnail_url: story.thumbnail_url ?? story.media_url ?? null,
+          posted_at: story.timestamp,
+          reach: storyMetrics.reach ?? null,
+          // Replies are the closest story analogue to comments; keep it
+          // there so the same UI stats row renders without special-casing.
+          likes: null,
+          comments: storyMetrics.replies ?? null,
+          saves: null,
+          shares: null,
+          video_views: null,
+          // "Interactions" on a story = replies + nav events. Imperfect
+          // but useful for sort-by-engagement.
+          total_interactions: (storyMetrics.replies ?? 0)
+            + (storyMetrics.taps_forward ?? 0) + (storyMetrics.taps_back ?? 0),
+          raw_data: { story, insights: storyMetrics },
+          synced_at: new Date().toISOString(),
+        })
+      }
+
+      if (storiesToUpsert.length > 0) {
+        await supabase
+          .from('social_posts')
+          .upsert(storiesToUpsert, { onConflict: 'client_id,platform,external_id' })
+      }
+    } catch {
+      // Don't fail the whole sync if /stories errors (common when the
+      // connected token lacks instagram_basic/stories permission).
     }
   }
 

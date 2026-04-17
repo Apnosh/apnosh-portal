@@ -5,6 +5,7 @@ import Image from 'next/image'
 import {
   Play, Image as ImageIcon, Layers, Heart, MessageCircle, Bookmark, Repeat,
   ExternalLink, TrendingUp, Clock, Calendar, ArrowUpRight, ArrowDownRight, Minus,
+  Hash, MessageSquare, Sparkles,
 } from 'lucide-react'
 import type { SocialPost } from '@/lib/dashboard/get-social-posts'
 
@@ -461,8 +462,11 @@ function ContentTypeBreakdown({ posts }: { posts: SocialPost[] }) {
 
   const best = breakdown[0]
   const worst = breakdown[breakdown.length - 1]
+  // Action-oriented phrasing: tell the marketer what to DO, not just what's
+  // happening. "Post more reels" is directly usable; "Your reels average
+  // 10x reach" makes the reader translate it themselves.
   const insight = breakdown.length > 1 && worst.avgReach > 0
-    ? `Your ${best.type.toLowerCase()}s average ${Math.round((best.avgReach / worst.avgReach) * 10) / 10}x the reach of your ${worst.type.toLowerCase()}s.`
+    ? `Post more ${best.type.toLowerCase()}s \u2014 they reach ${Math.round((best.avgReach / worst.avgReach) * 10) / 10}\u00d7 more people than your ${worst.type.toLowerCase()}s.`
     : `You've posted ${best.count} ${best.type.toLowerCase()}${best.count === 1 ? '' : 's'} recently.`
 
   return (
@@ -521,8 +525,11 @@ function PostingCadence({ posts }: { posts: SocialPost[] }) {
       <div className="mb-4">
         <h2 className="text-lg font-bold text-ink">Posting cadence</h2>
         <p className="text-xs text-ink-3 mt-0.5">
-          You posted {totalRecent} {totalRecent === 1 ? 'time' : 'times'} in the last 4 weeks,
-          active on {daysActive} of 28 days.
+          {daysActive < 8
+            ? `Post more often \u2014 you were only active on ${daysActive} of the last 28 days. Consistent posting (3\u20135 times per week) trains the algorithm to favor your account.`
+            : daysActive < 14
+            ? `You posted on ${daysActive} of 28 days. Getting to 12\u201315 active days per month tends to unlock the next tier of organic reach.`
+            : `Great cadence \u2014 you posted on ${daysActive} of 28 days. Keep it steady.`}
         </p>
       </div>
 
@@ -651,7 +658,7 @@ function BestTimeToPost({ posts }: { posts: SocialPost[] }) {
         <h2 className="text-lg font-bold text-ink">When to post</h2>
         <p className="text-xs text-ink-3 mt-0.5">
           {matrix.bestAvg > 0
-            ? `Your best-performing window: ${matrix.bestKey} (avg reach ${formatNumber(Math.round(matrix.bestAvg))}).`
+            ? `Schedule your next post for ${matrix.bestKey} \u2014 posts in this window averaged ${formatNumber(Math.round(matrix.bestAvg))} reach. Sample is still small; pattern firms up as you post more.`
             : `Post more consistently to see time-of-day patterns emerge here.`}
         </p>
       </div>
@@ -702,6 +709,229 @@ function BestTimeToPost({ posts }: { posts: SocialPost[] }) {
 }
 
 // ---------------------------------------------------------------------------
+// Caption / hashtag analysis
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts lightweight patterns from captions and correlates them with reach
+ * so marketers can see whether captions that ask questions, use CTAs, or run
+ * certain hashtags actually move the needle.
+ *
+ * This is heuristic, not ML -- we look at:
+ *   - Caption length buckets (short / medium / long)
+ *   - Has a question mark ("ask something")
+ *   - Has a CTA verb ("try/order/visit/tag/save/tap")
+ *   - Top 5 hashtags by reach
+ *
+ * Everything is computed locally from posts we already have; no new API.
+ */
+function CaptionAnalysis({ posts }: { posts: SocialPost[] }) {
+  const analysis = useMemo(() => {
+    const postsWithReach = posts.filter(p => (p.reach ?? 0) > 0)
+    if (postsWithReach.length < 3) return null
+
+    const mean = (arr: number[]) =>
+      arr.length === 0 ? 0 : arr.reduce((a, b) => a + b, 0) / arr.length
+
+    const lengthBucket = (p: SocialPost): 'short' | 'medium' | 'long' | 'none' => {
+      const len = (p.caption ?? '').trim().length
+      if (len === 0) return 'none'
+      if (len < 80) return 'short'
+      if (len < 220) return 'medium'
+      return 'long'
+    }
+
+    const hasQuestion = (p: SocialPost) => /\?/.test(p.caption ?? '')
+
+    // Simple CTA detector -- english-only first pass; good enough for US
+    // restaurants. Imperfect but high-signal: a caption ending in "tap
+    // save to try this" is obviously a CTA, and gets flagged.
+    const CTA_WORDS = /\b(try|order|visit|tag|save|tap|book|reserve|dm|comment|share|follow|click|link in bio|swipe)\b/i
+    const hasCTA = (p: SocialPost) => CTA_WORDS.test(p.caption ?? '')
+
+    // Length breakdown
+    const lengthBuckets: Record<'short' | 'medium' | 'long' | 'none', SocialPost[]> = {
+      short: [], medium: [], long: [], none: [],
+    }
+    for (const p of postsWithReach) lengthBuckets[lengthBucket(p)].push(p)
+
+    const lengthStats = (Object.keys(lengthBuckets) as Array<keyof typeof lengthBuckets>).map(key => ({
+      key,
+      count: lengthBuckets[key].length,
+      avgReach: Math.round(mean(lengthBuckets[key].map(p => p.reach ?? 0))),
+    })).filter(s => s.count > 0)
+
+    // Best length band by avg reach, with at least 2 posts (avoid single-post outliers)
+    const bestLength = [...lengthStats]
+      .filter(s => s.count >= 2)
+      .sort((a, b) => b.avgReach - a.avgReach)[0]
+
+    // Question vs no question
+    const qPosts = postsWithReach.filter(hasQuestion)
+    const nqPosts = postsWithReach.filter(p => !hasQuestion(p))
+    const questionInsight = qPosts.length >= 2 && nqPosts.length >= 2
+      ? {
+          qAvg: Math.round(mean(qPosts.map(p => p.reach ?? 0))),
+          nqAvg: Math.round(mean(nqPosts.map(p => p.reach ?? 0))),
+          qCount: qPosts.length,
+          nqCount: nqPosts.length,
+        }
+      : null
+
+    // CTA vs no CTA
+    const ctaPosts = postsWithReach.filter(hasCTA)
+    const nctaPosts = postsWithReach.filter(p => !hasCTA(p))
+    const ctaInsight = ctaPosts.length >= 2 && nctaPosts.length >= 2
+      ? {
+          ctaAvg: Math.round(mean(ctaPosts.map(p => p.reach ?? 0))),
+          nctaAvg: Math.round(mean(nctaPosts.map(p => p.reach ?? 0))),
+          ctaCount: ctaPosts.length,
+          nctaCount: nctaPosts.length,
+        }
+      : null
+
+    // Top hashtags by avg reach. Require >= 2 posts to avoid ranking
+    // one-off winners.
+    const hashtagMap = new Map<string, { count: number; totalReach: number }>()
+    for (const p of postsWithReach) {
+      const tags = (p.caption ?? '').match(/#[\w\u0080-\uFFFF]+/g) ?? []
+      const uniqueInPost = new Set(tags.map(t => t.toLowerCase()))
+      for (const tag of uniqueInPost) {
+        const entry = hashtagMap.get(tag) ?? { count: 0, totalReach: 0 }
+        entry.count += 1
+        entry.totalReach += p.reach ?? 0
+        hashtagMap.set(tag, entry)
+      }
+    }
+    const topHashtags = Array.from(hashtagMap.entries())
+      .filter(([, v]) => v.count >= 2)
+      .map(([tag, v]) => ({ tag, count: v.count, avgReach: Math.round(v.totalReach / v.count) }))
+      .sort((a, b) => b.avgReach - a.avgReach)
+      .slice(0, 5)
+
+    return {
+      totalAnalyzed: postsWithReach.length,
+      bestLength,
+      questionInsight,
+      ctaInsight,
+      topHashtags,
+    }
+  }, [posts])
+
+  if (!analysis) return null
+
+  const lengthLabel = (key: string) =>
+    key === 'short' ? 'Short (<80 chars)'
+      : key === 'medium' ? 'Medium (80-220)'
+      : key === 'long' ? 'Long (220+)'
+      : 'No caption'
+
+  return (
+    <section className="mb-10">
+      <div className="mb-4">
+        <h2 className="text-lg font-bold text-ink">What makes your captions work</h2>
+        <p className="text-xs text-ink-3 mt-0.5">
+          Patterns across {analysis.totalAnalyzed} posts with reach data. Use these as directional, not absolute.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Length */}
+        {analysis.bestLength && (
+          <div className="bg-white rounded-xl border border-ink-6 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <MessageSquare className="w-4 h-4 text-ink-4" />
+              <span className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">Caption length</span>
+            </div>
+            <p className="text-[13px] text-ink-2 leading-snug mb-3">
+              <span className="font-semibold">{lengthLabel(analysis.bestLength.key)}</span> captions reach the most people
+              &mdash; averaging <span className="font-semibold tabular-nums">{formatNumber(analysis.bestLength.avgReach)}</span> reach
+              across {analysis.bestLength.count} posts.
+            </p>
+            <div className="text-[11px] text-ink-4">
+              Try leaning into this length for your next few posts.
+            </div>
+          </div>
+        )}
+
+        {/* Questions */}
+        {analysis.questionInsight && (
+          <div className="bg-white rounded-xl border border-ink-6 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="w-4 h-4 text-ink-4" />
+              <span className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">Asking a question</span>
+            </div>
+            <p className="text-[13px] text-ink-2 leading-snug mb-3">
+              {analysis.questionInsight.qAvg > analysis.questionInsight.nqAvg ? (
+                <>
+                  Posts with a question reach <span className="font-semibold">{Math.round((analysis.questionInsight.qAvg / analysis.questionInsight.nqAvg) * 10) / 10}&times;</span> more
+                  &mdash; <span className="font-semibold tabular-nums">{formatNumber(analysis.questionInsight.qAvg)}</span> vs <span className="tabular-nums">{formatNumber(analysis.questionInsight.nqAvg)}</span> for plain captions.
+                </>
+              ) : (
+                <>
+                  Questions aren&apos;t helping here &mdash; plain captions average <span className="font-semibold tabular-nums">{formatNumber(analysis.questionInsight.nqAvg)}</span> vs <span className="tabular-nums">{formatNumber(analysis.questionInsight.qAvg)}</span> for question posts.
+                </>
+              )}
+            </p>
+            <div className="text-[11px] text-ink-4">
+              {analysis.questionInsight.qCount} with questions, {analysis.questionInsight.nqCount} without.
+            </div>
+          </div>
+        )}
+
+        {/* CTA */}
+        {analysis.ctaInsight && (
+          <div className="bg-white rounded-xl border border-ink-6 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="w-4 h-4 text-ink-4" />
+              <span className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">Call to action</span>
+            </div>
+            <p className="text-[13px] text-ink-2 leading-snug mb-3">
+              {analysis.ctaInsight.ctaAvg > analysis.ctaInsight.nctaAvg ? (
+                <>
+                  Captions with a CTA (try, order, visit, save, etc) reach <span className="font-semibold">{Math.round((analysis.ctaInsight.ctaAvg / analysis.ctaInsight.nctaAvg) * 10) / 10}&times;</span> more
+                  &mdash; <span className="font-semibold tabular-nums">{formatNumber(analysis.ctaInsight.ctaAvg)}</span> vs <span className="tabular-nums">{formatNumber(analysis.ctaInsight.nctaAvg)}</span>.
+                </>
+              ) : (
+                <>
+                  CTA phrasing isn&apos;t moving reach for you yet &mdash; non-CTA posts average <span className="font-semibold tabular-nums">{formatNumber(analysis.ctaInsight.nctaAvg)}</span>.
+                </>
+              )}
+            </p>
+            <div className="text-[11px] text-ink-4">
+              {analysis.ctaInsight.ctaCount} with CTA, {analysis.ctaInsight.nctaCount} without.
+            </div>
+          </div>
+        )}
+
+        {/* Top hashtags */}
+        {analysis.topHashtags.length > 0 && (
+          <div className="bg-white rounded-xl border border-ink-6 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Hash className="w-4 h-4 text-ink-4" />
+              <span className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">Top hashtags</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {analysis.topHashtags.map(h => (
+                <div key={h.tag} className="flex items-center justify-between text-[12px]">
+                  <span className="font-medium text-ink-2 truncate">{h.tag}</span>
+                  <span className="text-ink-4 tabular-nums flex-shrink-0 ml-3">
+                    {formatNumber(h.avgReach)} avg · {h.count} use{h.count === 1 ? '' : 's'}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="text-[11px] text-ink-4 mt-3">
+              Tags you&apos;ve used at least twice, ranked by average reach.
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Combined export
 // ---------------------------------------------------------------------------
 
@@ -724,6 +954,7 @@ export default function SocialPerformance({ posts }: SocialPerformanceProps) {
       <WeekOverWeek posts={posts} />
       <TopPosts posts={posts} />
       <ContentTypeBreakdown posts={posts} />
+      <CaptionAnalysis posts={posts} />
       <PostingCadence posts={posts} />
       <BestTimeToPost posts={posts} />
     </>
