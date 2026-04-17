@@ -108,6 +108,113 @@ function daysAgo(iso: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// At-a-glance summary (the headline row above WoW)
+// ---------------------------------------------------------------------------
+
+/**
+ * Cumulative summary for the last N days. This answers "how big is my
+ * content footprint" at a glance -- the first thing a marketer wants to
+ * see on page load.
+ *
+ * Every card is honest about its data source via a subtitle:
+ *   - Content reach: sums per-post reach (so people who saw multiple
+ *     posts are counted multiple times -- footnote says so)
+ *   - Avg reach per post: clean normalized benchmark
+ *   - Total views: Meta's inflated "Times shown" (auto-plays included)
+ *   - Total interactions: Meta's inflated total_interactions
+ *
+ * The "big number + honest small print" pattern beats burying the number
+ * inside a tooltip or omitting it altogether.
+ */
+function AtAGlance({ posts }: { posts: SocialPost[] }) {
+  const stats = useMemo(() => {
+    const now = Date.now()
+    const thirtyDaysMs = 30 * 86_400_000
+    const windowPosts = posts.filter(
+      p => now - new Date(p.posted_at).getTime() <= thirtyDaysMs,
+    )
+
+    const sum = (arr: SocialPost[], field: keyof SocialPost) =>
+      arr.reduce((a, p) => a + (Number(p[field]) || 0), 0)
+
+    const totalReach = sum(windowPosts, 'reach')
+    const totalViews = sum(windowPosts, 'video_views')
+    const totalInteractions = windowPosts.reduce(
+      (acc, p) => acc + (p.likes ?? 0) + (p.comments ?? 0) + (p.saves ?? 0) + (p.shares ?? 0),
+      0,
+    )
+    const avgReach = windowPosts.length > 0
+      ? Math.round(totalReach / windowPosts.length)
+      : 0
+
+    return {
+      postCount: windowPosts.length,
+      totalReach,
+      avgReach,
+      totalViews,
+      totalInteractions,
+    }
+  }, [posts])
+
+  if (stats.postCount === 0) return null
+
+  return (
+    <section className="mb-10">
+      <div className="mb-4">
+        <h2 className="text-lg font-bold text-ink">At a glance</h2>
+        <p className="text-xs text-ink-3 mt-0.5">Last 30 days across {stats.postCount} post{stats.postCount === 1 ? '' : 's'}.</p>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <GlanceCard
+          label="Content reach"
+          value={stats.totalReach}
+          subtitle="Sum across all posts"
+          footnote="People who saw multiple posts counted per post"
+        />
+        <GlanceCard
+          label="Avg reach per post"
+          value={stats.avgReach}
+          subtitle="Your normalized benchmark"
+        />
+        <GlanceCard
+          label="Total views"
+          value={stats.totalViews}
+          subtitle="All plays + displays"
+          footnote="Incl. auto-plays; Meta-inflated"
+        />
+        <GlanceCard
+          label="Total interactions"
+          value={stats.totalInteractions}
+          subtitle="Likes, comments, saves, shares"
+        />
+      </div>
+    </section>
+  )
+}
+
+function GlanceCard({
+  label, value, subtitle, footnote,
+}: {
+  label: string
+  value: number
+  subtitle: string
+  footnote?: string
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-ink-6 p-4">
+      <div className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide mb-2">{label}</div>
+      <div className="font-[family-name:var(--font-display)] text-3xl text-ink tabular-nums mb-1">
+        {formatNumber(value)}
+      </div>
+      <div className="text-[11px] text-ink-4 leading-tight">{subtitle}</div>
+      {footnote && (
+        <div className="text-[10px] text-ink-4 italic mt-1 leading-tight">{footnote}</div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Week-over-week summary
 // ---------------------------------------------------------------------------
 
@@ -951,6 +1058,7 @@ export default function SocialPerformance({ posts }: SocialPerformanceProps) {
 
   return (
     <>
+      <AtAGlance posts={posts} />
       <WeekOverWeek posts={posts} />
       <TopPosts posts={posts} />
       <ContentTypeBreakdown posts={posts} />
