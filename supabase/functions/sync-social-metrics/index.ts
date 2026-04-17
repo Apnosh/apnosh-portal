@@ -40,13 +40,16 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
-  // Optional: sync a single client (from admin trigger)
+  // Optional: sync a single client (from admin trigger), and optional
+  // backfill override (pulls last 30 days regardless of existing data).
   let targetClientId: string | null = null
+  let forceBackfill = false
   try {
     const body = await req.json()
     targetClientId = body.client_id ?? null
+    forceBackfill = body.backfill === true
   } catch {
-    // No body = sync all clients
+    // No body = sync all clients, incremental
   }
 
   // Fetch active connections
@@ -74,9 +77,9 @@ Deno.serve(async (req) => {
   for (const conn of (connections as SocialConnection[]) ?? []) {
     try {
       if (conn.platform === 'instagram') {
-        await syncInstagram(supabase, conn)
+        await syncInstagram(supabase, conn, forceBackfill)
       } else if (conn.platform === 'facebook') {
-        await syncFacebook(supabase, conn)
+        await syncFacebook(supabase, conn, forceBackfill)
       }
 
       // Check token expiry and refresh if needed
@@ -113,171 +116,275 @@ Deno.serve(async (req) => {
 
 async function syncInstagram(
   supabase: ReturnType<typeof createClient>,
-  conn: SocialConnection
+  conn: SocialConnection,
+  forceBackfill: boolean = false,
 ) {
-  const yesterday = getYesterday()
-  const yesterdayUnix = Math.floor(yesterday.getTime() / 1000)
-  const todayUnix = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000)
   const token = conn.access_token
   const igUserId = conn.platform_account_id
 
-  // --- Insights: each metric is its own call so one deprecation doesn't
-  // blow up the whole sync. Meta v21 split metrics into two buckets:
-  //   period=day         -> reach (time-series)
-  //   metric_type=total_value -> views, profile_views, total_interactions
-  // "impressions" was deprecated; "views" replaces it.
+  // ----- Backfill detection ---------------------------------------------
+  // If this client has no Instagram metrics rows yet (or caller forced it),
+  // pull the last 30 days of daily insights -- Meta's maximum account-level
+  // window. Otherwise we only need yesterday.
+  const { count: existingCount } = await supabase
+    .from('social_metrics')
+    .select('date', { count: 'exact', head: true })
+    .eq('client_id', conn.client_id)
+    .eq('platform', 'instagram')
 
+  const isBackfill = forceBackfill || !existingCount || existingCount === 0
+  const windowDays = isBackfill ? 30 : 1
+
+  // Meta's `reach` time series returns one value per day when requested with
+  // period=day and a since/until window. `metric_type=total_value` metrics
+  // return a single aggregate across the whole window, so for those we have
+  // to loop day-by-day if we want per-day history.
   type MetricResult = { name: string; value: number; error?: string }
-  const callInsight = async (metric: string, useTotalValue = false): Promise<MetricResult> => {
+  const callInsightRange = async (
+    metric: string,
+    sinceUnix: number,
+    untilUnix: number,
+    useTotalValue = false,
+  ): Promise<MetricResult & { perDay?: Record<string, number> }> => {
     const totalValueParam = useTotalValue ? '&metric_type=total_value' : ''
-    const url = `https://graph.instagram.com/v21.0/${igUserId}/insights?metric=${metric}&period=day&since=${yesterdayUnix}&until=${todayUnix}${totalValueParam}&access_token=${token}`
+    const url = `https://graph.instagram.com/v21.0/${igUserId}/insights?metric=${metric}&period=day&since=${sinceUnix}&until=${untilUnix}${totalValueParam}&access_token=${token}`
     try {
       const res = await fetch(url)
       const data = await res.json()
       if (data.error) return { name: metric, value: 0, error: data.error.message }
-      // total_value responses put the number in total_value.value; period=day responses put it in values[0].value
       const row = data.data?.[0]
-      const val = row?.total_value?.value ?? row?.values?.[0]?.value ?? 0
+      if (row?.values && Array.isArray(row.values)) {
+        // period=day time series -- map each day
+        const perDay: Record<string, number> = {}
+        for (const v of row.values) {
+          const dateKey = v.end_time?.split('T')[0]
+          if (dateKey) perDay[dateKey] = Number(v.value) || 0
+        }
+        const total = Object.values(perDay).reduce((a, b) => a + b, 0)
+        return { name: metric, value: total, perDay }
+      }
+      const val = row?.total_value?.value ?? 0
       return { name: metric, value: Number(val) }
     } catch (err) {
       return { name: metric, value: 0, error: err instanceof Error ? err.message : 'fetch failed' }
     }
   }
 
-  const [reachRes, viewsRes, profileViewsRes, interactionsRes] = await Promise.all([
-    callInsight('reach'),
-    callInsight('views', true),
-    callInsight('profile_views', true),
-    callInsight('total_interactions', true),
-  ])
+  // Sync each day in the window individually so backfill and incremental work
+  // the same way. The expensive per-post media fetch only needs to run once.
+  const todayMidnight = new Date()
+  todayMidnight.setHours(0, 0, 0, 0)
 
-  const reach = reachRes.value
-  const impressions = viewsRes.value // v21 rename: "views" is the new "impressions"
-  const profileVisits = profileViewsRes.value
-  const totalInteractions = interactionsRes.value
+  // Pull a single wide range for reach (supports per-day) up front. For
+  // aggregate metrics (views/profile_views/total_interactions), call per day.
+  const windowStart = addDays(todayMidnight, -windowDays)
+  const reachRange = await callInsightRange(
+    'reach',
+    Math.floor(windowStart.getTime() / 1000),
+    Math.floor(todayMidnight.getTime() / 1000),
+  )
 
-  // --- Follower count
-  const userUrl = `https://graph.instagram.com/v21.0/${igUserId}?fields=followers_count,username&access_token=${token}`
-  const userRes = await fetch(userUrl)
-  const userData = await userRes.json()
-  const followersTotal = userData.followers_count ?? 0
+  // Loop from oldest day to newest so followers_gained deltas work.
+  for (let offset = windowDays; offset >= 1; offset--) {
+    const dayDate = addDays(todayMidnight, -offset)
+    const dayStr = formatDate(dayDate)
+    const daySince = Math.floor(dayDate.getTime() / 1000)
+    const dayUntil = Math.floor(addDays(dayDate, 1).getTime() / 1000)
 
-  // Get previous day's follower count to compute gained
-  const prevDate = formatDate(addDays(yesterday, -1))
-  const { data: prevRow } = await supabase
-    .from('social_metrics')
-    .select('followers_total')
-    .eq('client_id', conn.client_id)
-    .eq('platform', 'instagram')
-    .eq('date', prevDate)
-    .maybeSingle()
+    const [viewsRes, profileViewsRes, interactionsRes] = await Promise.all([
+      callInsightRange('views', daySince, dayUntil, true),
+      callInsightRange('profile_views', daySince, dayUntil, true),
+      callInsightRange('total_interactions', daySince, dayUntil, true),
+    ])
 
-  const followersGained = prevRow ? followersTotal - (prevRow.followers_total ?? 0) : 0
+    const reach = reachRange.perDay?.[dayStr] ?? 0
+    const impressions = viewsRes.value
+    const profileVisits = profileViewsRes.value
+    const totalInteractions = interactionsRes.value
 
-  // 3. Recent media -- fetch last 30 posts with rich fields for the
-  // content-first performance page. Upserts per-post rows into social_posts
-  // so the UI can render top posts, content-type breakdowns, and posting
-  // cadence.
-  const mediaFields = [
-    'id', 'timestamp', 'caption', 'media_type', 'media_product_type',
-    'media_url', 'thumbnail_url', 'permalink',
-    'like_count', 'comments_count',
-  ].join(',')
-  const mediaUrl = `https://graph.instagram.com/v21.0/${igUserId}/media?fields=${mediaFields}&limit=30&access_token=${token}`
-  const mediaRes = await fetch(mediaUrl)
-  const mediaData = await mediaRes.json()
-
-  let mediaEngagement = 0
-  let topPostId: string | null = null
-  let topPostReach = 0
-
-  const yesterdayStr = formatDate(yesterday)
-  const postsToUpsert: Array<Record<string, unknown>> = []
-
-  for (const post of mediaData.data ?? []) {
-    const postDate = post.timestamp?.split('T')[0]
-
-    // Per-post insights: best-effort fetch of the metrics that matter.
-    // Different media types accept different metric sets in v21; we try a
-    // broad set and let the per-metric catch handle individual rejections.
-    const postMetrics: Record<string, number> = {}
-    let postInsightsRaw: unknown = null
-    try {
-      const metricList = post.media_type === 'VIDEO' || post.media_product_type === 'REELS'
-        ? 'reach,saved,shares,total_interactions,views'
-        : 'reach,saved,shares,total_interactions'
-      const postInsightsUrl = `https://graph.instagram.com/v21.0/${post.id}/insights?metric=${metricList}&access_token=${token}`
-      const postInsightsRes = await fetch(postInsightsUrl)
-      const insightsJson = await postInsightsRes.json()
-      postInsightsRaw = insightsJson
-      for (const m of insightsJson.data ?? []) {
-        postMetrics[m.name] = m.values?.[0]?.value ?? m.total_value?.value ?? 0
-      }
-    } catch {
-      // Ignore per-post insight failures -- we still store the post itself
-    }
-
-    const postReach = postMetrics.reach ?? 0
-
-    // Track the best post from yesterday for the daily social_metrics row
-    if (postDate === yesterdayStr) {
-      mediaEngagement += (post.like_count ?? 0) + (post.comments_count ?? 0)
-      if (postReach > topPostReach) {
-        topPostReach = postReach
-        topPostId = post.id
-      }
-    }
-
-    postsToUpsert.push({
-      client_id: conn.client_id,
-      platform: 'instagram',
-      external_id: post.id,
-      permalink: post.permalink,
-      media_type: post.media_type,
-      media_product_type: post.media_product_type,
-      caption: post.caption ?? null,
-      media_url: post.media_url ?? null,
-      thumbnail_url: post.thumbnail_url ?? post.media_url ?? null,
-      posted_at: post.timestamp,
-      reach: postReach,
-      likes: post.like_count ?? null,
-      comments: post.comments_count ?? null,
-      saves: postMetrics.saved ?? null,
-      shares: postMetrics.shares ?? null,
-      video_views: postMetrics.views ?? null,
-      total_interactions: postMetrics.total_interactions ?? null,
-      raw_data: { post, insights: postInsightsRaw },
-      synced_at: new Date().toISOString(),
+    await upsertInstagramDay(supabase, conn, {
+      dayStr,
+      reach,
+      impressions,
+      profileVisits,
+      totalInteractions,
+      reachRes: { name: 'reach', value: reach },
+      viewsRes,
+      profileViewsRes,
+      interactionsRes,
+      token,
+      igUserId,
+      // Only fetch media + follower snapshot on the most recent day to avoid
+      // hammering the API with 30 identical follower reads.
+      skipMediaAndFollowers: offset !== 1,
     })
   }
+}
 
-  // Bulk upsert all posts we fetched
-  if (postsToUpsert.length > 0) {
-    await supabase
-      .from('social_posts')
-      .upsert(postsToUpsert, { onConflict: 'client_id,platform,external_id' })
+interface InstagramDayArgs {
+  dayStr: string
+  reach: number
+  impressions: number
+  profileVisits: number
+  totalInteractions: number
+  reachRes: { name: string; value: number; error?: string }
+  viewsRes: { name: string; value: number; error?: string }
+  profileViewsRes: { name: string; value: number; error?: string }
+  interactionsRes: { name: string; value: number; error?: string }
+  token: string
+  igUserId: string
+  skipMediaAndFollowers: boolean
+}
+
+async function upsertInstagramDay(
+  supabase: ReturnType<typeof createClient>,
+  conn: SocialConnection,
+  args: InstagramDayArgs,
+) {
+  const {
+    dayStr, reach, impressions, profileVisits, totalInteractions,
+    reachRes, viewsRes, profileViewsRes, interactionsRes,
+    token, igUserId, skipMediaAndFollowers,
+  } = args
+
+  // --- Follower count (only on the most recent day; saves API calls).
+  // For historical backfill days, we leave followers_total null -- we don't
+  // actually know what the count was on that past date.
+  let followersTotal: number | null = null
+  let followersGained = 0
+  let userData: unknown = null
+  let mediaData: { data?: Array<{ timestamp?: string }> } = {}
+  let topPostId: string | null = null
+  let topPostReach = 0
+  let mediaEngagement = 0
+
+  if (!skipMediaAndFollowers) {
+    const userUrl = `https://graph.instagram.com/v21.0/${igUserId}?fields=followers_count,username&access_token=${token}`
+    const userRes = await fetch(userUrl)
+    userData = await userRes.json()
+    followersTotal = (userData as { followers_count?: number })?.followers_count ?? 0
+
+    // Get previous day's follower count to compute gained
+    const prevDate = formatDate(addDays(new Date(dayStr), -1))
+    const { data: prevRow } = await supabase
+      .from('social_metrics')
+      .select('followers_total')
+      .eq('client_id', conn.client_id)
+      .eq('platform', 'instagram')
+      .eq('date', prevDate)
+      .maybeSingle()
+    followersGained = prevRow && followersTotal !== null
+      ? followersTotal - (prevRow.followers_total ?? 0)
+      : 0
+
+    // Recent media -- fetch last 30 posts with rich fields for the
+    // content-first performance page.
+    const mediaFields = [
+      'id', 'timestamp', 'caption', 'media_type', 'media_product_type',
+      'media_url', 'thumbnail_url', 'permalink',
+      'like_count', 'comments_count',
+    ].join(',')
+    const mediaUrl = `https://graph.instagram.com/v21.0/${igUserId}/media?fields=${mediaFields}&limit=30&access_token=${token}`
+    const mediaRes = await fetch(mediaUrl)
+    mediaData = await mediaRes.json()
+
+    const postsToUpsert: Array<Record<string, unknown>> = []
+
+    for (const post of (mediaData.data ?? []) as Array<Record<string, unknown>>) {
+      const postDate = (post.timestamp as string | undefined)?.split('T')[0]
+
+      const postMetrics: Record<string, number> = {}
+      let postInsightsRaw: unknown = null
+      try {
+        const metricList = post.media_type === 'VIDEO' || post.media_product_type === 'REELS'
+          ? 'reach,saved,shares,total_interactions,views'
+          : 'reach,saved,shares,total_interactions'
+        const postInsightsUrl = `https://graph.instagram.com/v21.0/${post.id}/insights?metric=${metricList}&access_token=${token}`
+        const postInsightsRes = await fetch(postInsightsUrl)
+        const insightsJson = await postInsightsRes.json()
+        postInsightsRaw = insightsJson
+        for (const m of insightsJson.data ?? []) {
+          postMetrics[m.name] = m.values?.[0]?.value ?? m.total_value?.value ?? 0
+        }
+      } catch {
+        // Ignore per-post insight failures
+      }
+
+      const postReach = postMetrics.reach ?? 0
+
+      if (postDate === dayStr) {
+        mediaEngagement += (Number(post.like_count) || 0) + (Number(post.comments_count) || 0)
+        if (postReach > topPostReach) {
+          topPostReach = postReach
+          topPostId = post.id as string
+        }
+      }
+
+      postsToUpsert.push({
+        client_id: conn.client_id,
+        platform: 'instagram',
+        external_id: post.id,
+        permalink: post.permalink,
+        media_type: post.media_type,
+        media_product_type: post.media_product_type,
+        caption: post.caption ?? null,
+        media_url: post.media_url ?? null,
+        thumbnail_url: post.thumbnail_url ?? post.media_url ?? null,
+        posted_at: post.timestamp,
+        reach: postReach,
+        likes: post.like_count ?? null,
+        comments: post.comments_count ?? null,
+        saves: postMetrics.saved ?? null,
+        shares: postMetrics.shares ?? null,
+        video_views: postMetrics.views ?? null,
+        total_interactions: postMetrics.total_interactions ?? null,
+        raw_data: { post, insights: postInsightsRaw },
+        synced_at: new Date().toISOString(),
+      })
+    }
+
+    if (postsToUpsert.length > 0) {
+      await supabase
+        .from('social_posts')
+        .upsert(postsToUpsert, { onConflict: 'client_id,platform,external_id' })
+    }
   }
 
-  // Prefer the account-level total_interactions metric; fall back to sum of
-  // per-post likes+comments if that metric errored or returned 0.
+  // For backfill days we can still count posts published on that date from
+  // whatever media rows we've already stored (the media fetch on the latest
+  // day covers the last 30 posts).
+  const { data: postsOnDay } = await supabase
+    .from('social_posts')
+    .select('id, likes, comments')
+    .eq('client_id', conn.client_id)
+    .eq('platform', 'instagram')
+    .gte('posted_at', `${dayStr}T00:00:00Z`)
+    .lt('posted_at', `${dayStr}T23:59:59Z`)
+
+  const postsPublished = postsOnDay?.length ?? 0
+  if (!skipMediaAndFollowers) {
+    // mediaEngagement already accounts for today
+  } else if (postsOnDay) {
+    mediaEngagement = postsOnDay.reduce(
+      (acc, p) => acc + (p.likes ?? 0) + (p.comments ?? 0), 0,
+    )
+  }
+
   const engagement = totalInteractions > 0 ? totalInteractions : mediaEngagement
 
-  // 4. Upsert into social_metrics with detailed raw_data for debugging
   await supabase
     .from('social_metrics')
     .upsert({
       client_id: conn.client_id,
       platform: 'instagram',
-      date: yesterdayStr,
+      date: dayStr,
       reach,
       impressions,
       profile_visits: profileVisits,
       followers_total: followersTotal,
       followers_gained: Math.max(0, followersGained),
       engagement,
-      posts_published: (mediaData.data ?? []).filter(
-        (p: { timestamp?: string }) => p.timestamp?.split('T')[0] === yesterdayStr
-      ).length,
+      posts_published: postsPublished,
       top_post_id: topPostId,
       top_post_reach: topPostReach,
       raw_data: {
@@ -289,6 +396,7 @@ async function syncInstagram(
         },
         user: userData,
         media_engagement_fallback: mediaEngagement,
+        backfilled: skipMediaAndFollowers,
       },
     }, {
       onConflict: 'client_id,platform,date',
@@ -301,27 +409,47 @@ async function syncInstagram(
 
 async function syncFacebook(
   supabase: ReturnType<typeof createClient>,
-  conn: SocialConnection
+  conn: SocialConnection,
+  forceBackfill: boolean = false,
 ) {
-  const yesterday = getYesterday()
-  const yesterdayStr = formatDate(yesterday)
   const token = conn.access_token
   const pageId = conn.platform_account_id
 
-  const sinceUnix = Math.floor(yesterday.getTime() / 1000)
-  const untilUnix = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000)
+  // Backfill detection (same pattern as Instagram)
+  const { count: existingCount } = await supabase
+    .from('social_metrics')
+    .select('date', { count: 'exact', head: true })
+    .eq('client_id', conn.client_id)
+    .eq('platform', 'facebook')
 
-  // Same per-metric try pattern as Instagram. FB Page Insights keeps
-  // deprecating metrics in minor API versions; isolating each call keeps
-  // partial data flowing when one breaks.
-  type MetricResult = { name: string; value: number; error?: string }
-  const callInsight = async (metric: string, period: string = 'day'): Promise<MetricResult> => {
+  const isBackfill = forceBackfill || !existingCount || existingCount === 0
+  const windowDays = isBackfill ? 30 : 1
+
+  const todayMidnight = new Date()
+  todayMidnight.setHours(0, 0, 0, 0)
+
+  type MetricResult = { name: string; value: number; error?: string; perDay?: Record<string, number> }
+  const callInsight = async (
+    metric: string,
+    sinceUnix: number,
+    untilUnix: number,
+    period: string = 'day',
+  ): Promise<MetricResult> => {
     const url = `https://graph.facebook.com/v21.0/${pageId}/insights?metric=${metric}&period=${period}&since=${sinceUnix}&until=${untilUnix}&access_token=${token}`
     try {
       const res = await fetch(url)
       const data = await res.json()
       if (data.error) return { name: metric, value: 0, error: data.error.message }
       const row = data.data?.[0]
+      if (row?.values && Array.isArray(row.values)) {
+        const perDay: Record<string, number> = {}
+        for (const v of row.values) {
+          const dateKey = v.end_time?.split('T')[0]
+          if (dateKey) perDay[dateKey] = typeof v.value === 'object' ? 0 : Number(v.value) || 0
+        }
+        const total = Object.values(perDay).reduce((a, b) => a + b, 0)
+        return { name: metric, value: total, perDay }
+      }
       const val = row?.values?.[0]?.value ?? 0
       return { name: metric, value: typeof val === 'object' ? 0 : Number(val) }
     } catch (err) {
@@ -329,62 +457,74 @@ async function syncFacebook(
     }
   }
 
-  // Try the common FB Page Insights metrics. Each one is independent; if
-  // Meta deprecates one we still get partial data from the others.
-  //
-  // Known v21 deprecations (Meta removed them without a clean replacement):
-  //   page_impressions      -> try page_views_total instead
-  //   page_fan_adds         -> compute from daily fan_count delta
-  //   page_fans_by_X        -> most demographic metrics gone
+  // Pull a single wide range for each metric (FB time-series metrics return
+  // per-day values across the whole window).
+  const windowStart = addDays(todayMidnight, -windowDays)
+  const sinceUnix = Math.floor(windowStart.getTime() / 1000)
+  const untilUnix = Math.floor(todayMidnight.getTime() / 1000)
+
   const [impressionsRes, reachRes, engagementRes] = await Promise.all([
-    callInsight('page_views_total'),              // was page_impressions
-    callInsight('page_impressions_unique'),       // FB's version of "reach"
-    callInsight('page_post_engagements'),
+    callInsight('page_views_total', sinceUnix, untilUnix),
+    callInsight('page_impressions_unique', sinceUnix, untilUnix),
+    callInsight('page_post_engagements', sinceUnix, untilUnix),
   ])
 
-  // Get page fan count (total followers)
+  // Current fan count (only known for today)
   const pageUrl = `https://graph.facebook.com/v21.0/${pageId}?fields=fan_count&access_token=${token}`
   const pageRes = await fetch(pageUrl)
   const pageData = await pageRes.json()
-  const followersTotal = pageData.fan_count ?? 0
+  const currentFollowersTotal = pageData.fan_count ?? 0
 
-  // Compute followers_gained from yesterday's fan_count, since page_fan_adds
-  // was deprecated. If yesterday's row doesn't exist, report 0 (first sync).
-  const prevDate = formatDate(addDays(yesterday, -1))
-  const { data: prevRow } = await supabase
-    .from('social_metrics')
-    .select('followers_total')
-    .eq('client_id', conn.client_id)
-    .eq('platform', 'facebook')
-    .eq('date', prevDate)
-    .maybeSingle()
-  const followersGained = prevRow ? followersTotal - (prevRow.followers_total ?? 0) : 0
+  for (let offset = windowDays; offset >= 1; offset--) {
+    const dayDate = addDays(todayMidnight, -offset)
+    const dayStr = formatDate(dayDate)
+    const isLatestDay = offset === 1
 
-  await supabase
-    .from('social_metrics')
-    .upsert({
-      client_id: conn.client_id,
-      platform: 'facebook',
-      date: yesterdayStr,
-      reach: reachRes.value,
-      impressions: impressionsRes.value,
-      profile_visits: 0,      // FB profile_views deprecated; no clean replacement
-      followers_total: followersTotal,
-      followers_gained: Math.max(0, followersGained),
-      engagement: engagementRes.value,
-      posts_published: 0,     // TODO: /feed endpoint count
-      raw_data: {
-        metrics: {
-          page_views_total: impressionsRes,
-          page_impressions_unique: reachRes,
-          page_post_engagements: engagementRes,
+    // followers_total is only truly known for the latest day (Meta doesn't
+    // give us historical fan counts). Leave null for backfill days.
+    const followersTotal: number | null = isLatestDay ? currentFollowersTotal : null
+
+    let followersGained = 0
+    if (isLatestDay) {
+      const prevDate = formatDate(addDays(dayDate, -1))
+      const { data: prevRow } = await supabase
+        .from('social_metrics')
+        .select('followers_total')
+        .eq('client_id', conn.client_id)
+        .eq('platform', 'facebook')
+        .eq('date', prevDate)
+        .maybeSingle()
+      followersGained = prevRow && followersTotal !== null
+        ? followersTotal - (prevRow.followers_total ?? 0)
+        : 0
+    }
+
+    await supabase
+      .from('social_metrics')
+      .upsert({
+        client_id: conn.client_id,
+        platform: 'facebook',
+        date: dayStr,
+        reach: reachRes.perDay?.[dayStr] ?? 0,
+        impressions: impressionsRes.perDay?.[dayStr] ?? 0,
+        profile_visits: 0,
+        followers_total: followersTotal,
+        followers_gained: Math.max(0, followersGained),
+        engagement: engagementRes.perDay?.[dayStr] ?? 0,
+        posts_published: 0,
+        raw_data: {
+          metrics: {
+            page_views_total: impressionsRes,
+            page_impressions_unique: reachRes,
+            page_post_engagements: engagementRes,
+          },
+          page: pageData,
+          backfilled: !isLatestDay,
         },
-        page: pageData,
-        followers_gained_computed: followersGained,
-      },
-    }, {
-      onConflict: 'client_id,platform,date',
-    })
+      }, {
+        onConflict: 'client_id,platform,date',
+      })
+  }
 }
 
 // ---------------------------------------------------------------------------

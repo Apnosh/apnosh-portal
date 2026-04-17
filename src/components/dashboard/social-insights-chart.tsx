@@ -113,7 +113,9 @@ interface Series {
   platform: string
   label: string
   color: string
-  data: number[]
+  // null marks buckets with no synced data (so Chart.js draws a gap instead of
+  // plummeting to 0). Non-null values are plotted normally.
+  data: Array<number | null>
   total: number
 }
 
@@ -143,42 +145,47 @@ function buildSeries(
   const buckets: Date[] = []
   for (let d = new Date(start); d <= now; d = addDays(d, step)) buckets.push(new Date(d))
 
-  const computeBucketValue = (bucketRows: SocialDailyRow[]): number => {
+  const computeBucketValue = (bucketRows: SocialDailyRow[]): number | null => {
+    // No rows in this bucket means we simply haven't synced yet -- return
+    // null so the chart draws a gap rather than a misleading drop to zero.
+    if (bucketRows.length === 0) return null
     if (metric.aggregate === 'sum' && metric.field) {
       return bucketRows.reduce((acc, r) => acc + (Number(r[metric.field!]) || 0), 0)
     }
     if (metric.aggregate === 'latest' && metric.field) {
       const sorted = [...bucketRows].sort((a, b) => a.date.localeCompare(b.date))
-      return sorted.length > 0 ? Number(sorted[sorted.length - 1][metric.field!]) || 0 : 0
+      const latest = sorted.length > 0 ? Number(sorted[sorted.length - 1][metric.field!]) : null
+      return latest && latest > 0 ? latest : null
     }
     if (metric.aggregate === 'rate' && metric.rateNum && metric.rateDen) {
       const num = bucketRows.reduce((acc, r) => acc + (Number(r[metric.rateNum!]) || 0), 0)
       const den = bucketRows.reduce((acc, r) => acc + (Number(r[metric.rateDen!]) || 0), 0)
-      return den > 0 ? (num / den) * 100 : 0
+      return den > 0 ? (num / den) * 100 : null
     }
-    return 0
+    return null
   }
 
   const series: Series[] = []
   for (const platform of platforms) {
     const platformRows = inRange.filter(r => r.platform === platform)
-    const data: number[] = []
+    const data: Array<number | null> = []
     for (const bucketStart of buckets) {
       const bucketEnd = addDays(bucketStart, step - 1)
       const bucketRows = platformRows.filter(r => r.date >= toDateStr(bucketStart) && r.date <= toDateStr(bucketEnd))
       data.push(computeBucketValue(bucketRows))
     }
 
-    // Totals for the legend
+    // Totals for the legend -- sum only non-null buckets so empty days don't
+    // drag averages down or make the grand total look artificially precise.
     let total = 0
     if (metric.aggregate === 'latest') {
-      total = [...data].reverse().find(v => v > 0) ?? 0
+      total = [...data].reverse().find((v): v is number => v !== null && v > 0) ?? 0
     } else if (metric.aggregate === 'rate' && metric.rateNum && metric.rateDen) {
       const num = platformRows.reduce((acc, r) => acc + (Number(r[metric.rateNum!]) || 0), 0)
       const den = platformRows.reduce((acc, r) => acc + (Number(r[metric.rateDen!]) || 0), 0)
       total = den > 0 ? (num / den) * 100 : 0
     } else {
-      total = data.reduce((a, b) => a + b, 0)
+      total = data.reduce((a: number, b) => a + (b ?? 0), 0)
     }
 
     series.push({
@@ -227,9 +234,27 @@ interface SocialInsightsChartProps {
 }
 
 export default function SocialInsightsChart({ rows, platforms }: SocialInsightsChartProps) {
+  // Total coverage of synced data -- used to disable time ranges we can't
+  // actually fill and to render an honest "Data since X" badge.
+  const coverage = useMemo(() => {
+    if (rows.length === 0) return { dataSince: null as string | null, totalDays: 0 }
+    const sortedDates = [...new Set(rows.map(r => r.date))].sort()
+    const earliest = sortedDates[0]
+    const latest = sortedDates[sortedDates.length - 1]
+    const earliestMs = new Date(earliest).getTime()
+    const latestMs = new Date(latest).getTime()
+    const spanDays = Math.max(1, Math.round((latestMs - earliestMs) / (1000 * 60 * 60 * 24)) + 1)
+    return { dataSince: earliest, totalDays: spanDays }
+  }, [rows])
+
+  // Pick a default range that matches our actual coverage. If we only have
+  // 12 days, 1M is still fine (it won't show wrong data, just some gap), but
+  // we prefer 1W so the chart looks full on first load.
+  const defaultRange: TimeRange = coverage.totalDays <= 10 ? '1W' : '1M'
+
   const [metricKey, setMetricKey] = useState<string>('reach')
   const [platformFilter, setPlatformFilter] = useState<string | 'all'>('all')
-  const [timeRange, setTimeRange] = useState<TimeRange>('1M')
+  const [timeRange, setTimeRange] = useState<TimeRange>(defaultRange)
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   const metric = useMemo(() => METRICS.find(m => m.key === metricKey) ?? METRICS[0], [metricKey])
@@ -265,6 +290,9 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
       pointHoverBorderWidth: 2,
       tension: 0.3,
       fill: false,
+      // Bridge single-day gaps with a dashed connector, leave larger gaps
+      // empty so missing data is visually obvious.
+      spanGaps: 1000 * 60 * 60 * 24 * 2,
       borderCapStyle: 'round' as const,
       borderJoinStyle: 'round' as const,
     }))
@@ -354,7 +382,7 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
     return series.reduce((acc, s) => acc + s.total, 0)
   }, [series, metric, rows, platformFilter, timeConfig.days])
 
-  const hasAnyData = series.some(s => s.data.some(v => v > 0))
+  const hasAnyData = series.some(s => s.data.some(v => v !== null && v > 0))
 
   // Split metrics into primary (trusted) and advanced (noisy)
   const primaryMetrics = METRICS.filter(m => !m.advanced)
@@ -366,6 +394,16 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
     : timeConfig.key === '3M' ? 'Last 3 months'
     : timeConfig.key === '6M' ? 'Last 6 months'
     : 'Last year'
+
+  // Format "Data since Apr 17" for the coverage badge.
+  const dataSinceLabel = coverage.dataSince
+    ? new Date(coverage.dataSince).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : null
+
+  // Coverage ratio for the current range -- if less than 25% of the range has
+  // real data, mark the range button as "low coverage" so the user knows the
+  // trend shape is thin.
+  const rangeCoverageRatio = timeConfig.days > 0 ? daysWithData / timeConfig.days : 0
 
   return (
     <div className="pb-10 mb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
@@ -412,26 +450,41 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
 
         {/* Time range */}
         <div className="ml-auto flex gap-0.5">
-          {TIME_RANGES.map(tr => (
-            <button
-              key={tr.key}
-              onClick={() => setTimeRange(tr.key)}
-              className="text-[12px] font-semibold rounded-md transition-colors px-3 py-1.5"
-              style={{
-                color: timeRange === tr.key ? 'var(--db-black)' : 'var(--db-ink-3)',
-                background: timeRange === tr.key ? 'var(--db-bg-3)' : 'transparent',
-              }}
-            >
-              {tr.label}
-            </button>
-          ))}
+          {TIME_RANGES.map(tr => {
+            // "Exceeds coverage" = picking this range would show more empty
+            // space than actual data. We still let the user click it (they
+            // might want to see the full axis), but we dim it so the default
+            // choice lands on something informative.
+            const exceedsCoverage = coverage.totalDays > 0 && tr.days > coverage.totalDays * 2
+            const isActive = timeRange === tr.key
+            return (
+              <button
+                key={tr.key}
+                onClick={() => setTimeRange(tr.key)}
+                title={exceedsCoverage ? `Only ${coverage.totalDays} days of data synced -- this range will show gaps` : undefined}
+                className="text-[12px] font-semibold rounded-md transition-colors px-3 py-1.5"
+                style={{
+                  color: isActive ? 'var(--db-black)' : exceedsCoverage ? 'var(--db-ink-4)' : 'var(--db-ink-3)',
+                  background: isActive ? 'var(--db-bg-3)' : 'transparent',
+                  opacity: !isActive && exceedsCoverage ? 0.5 : 1,
+                }}
+              >
+                {tr.label}
+              </button>
+            )
+          })}
         </div>
       </div>
 
       {/* Grand total + subtitle */}
       <div className="mb-2">
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-baseline gap-2 flex-wrap">
           <span className="text-[13px] text-ink-4">{timeLabel}</span>
+          {dataSinceLabel && (
+            <span className="text-[11px] text-ink-4 bg-bg-2 rounded-full px-2 py-0.5">
+              Data since {dataSinceLabel}
+            </span>
+          )}
         </div>
         <div className="flex items-baseline gap-3 flex-wrap">
           <span className="font-[family-name:var(--font-display)] text-4xl text-ink tabular-nums">
@@ -483,7 +536,7 @@ export default function SocialInsightsChart({ rows, platforms }: SocialInsightsC
         <p className="text-[11px] text-ink-4 mt-3">
           {daysWithData === 1
             ? `Showing 1 day of synced data. Trend shape will fill in as the daily sync runs.`
-            : `${daysWithData} days of synced data in this range. ${platformFilter === 'all' && series.length > 1 ? 'Hover the chart to compare platforms at any day.' : 'Hover the chart for day-level detail.'}`}
+            : `${daysWithData} of ${timeConfig.days} days have synced data${rangeCoverageRatio < 0.5 ? ' — gaps are days we haven\u2019t synced yet, not drops to zero.' : '.'} ${platformFilter === 'all' && series.length > 1 ? 'Hover the chart to compare platforms at any day.' : 'Hover the chart for day-level detail.'}`}
         </p>
       )}
 
