@@ -21,6 +21,7 @@ import DashboardNotesTab from './tabs/dashboard-notes-tab'
 import SyncControls from './tabs/sync-controls'
 import ProfileTab from './tabs/profile-tab'
 import WebsiteTab from './tabs/website-tab'
+import { StripeBillingCard } from '@/components/admin/stripe-billing-card'
 import type {
   Client, ClientBrand, ClientPattern, ClientUser, ClientAllotments,
   ClientBillingStatus, ClientTier, ClientUserRole, ClientUserStatus,
@@ -729,6 +730,9 @@ function OverviewTab({
             )}
           </div>
         </Card>
+
+        {/* Stripe Billing (new) */}
+        <StripeBillingCard clientId={client.id} />
 
         {/* Service Allotments */}
         <ServiceAllotmentsCard
