@@ -309,8 +309,11 @@ export async function createOneTimeInvoice(args: {
       // tax codes. WA sales tax applies to taxable categories only.
       automatic_tax: { enabled: true },
       payment_settings: {
-        payment_method_types: ['card', 'us_bank_account'],
+        // ACH first so it displays as the primary option; saves ~3% vs card.
+        payment_method_types: ['us_bank_account', 'card'],
       },
+      // Custom footer encouraging ACH. Shows on every hosted invoice PDF + page.
+      footer: 'Pay by bank transfer (ACH) for no processing fees. Credit card also accepted.',
       metadata: { client_id: args.clientId, source: 'admin_portal_one_time' },
       description: args.notes,
     })

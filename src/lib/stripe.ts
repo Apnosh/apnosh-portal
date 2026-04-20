@@ -125,6 +125,11 @@ export async function getOrCreateStripeCustomerForClient(opts: {
           country: opts.address.country ?? 'US',
         }
       : undefined,
+    // Footer shown at the bottom of every hosted invoice page + PDF.
+    // Nudges clients toward ACH to reduce card processing fees.
+    invoice_settings: {
+      footer: 'Pay by bank transfer (ACH) for no processing fees. Credit card also accepted.',
+    },
     metadata: { client_id: opts.clientId },
   })
 
@@ -175,11 +180,11 @@ export async function startMonthlyRetainer(opts: {
     // In WA this correctly applies sales tax on taxable categories
     // (e.g., video production) and skips exempt ones (pure advertising).
     automatic_tax: { enabled: true },
-    // Let the client choose card OR ACH (us_bank_account) on the hosted
-    // pay page. ACH takes 3-5 business days to settle but is ~$5 flat
-    // per charge vs ~3% on card -- matters on larger retainers.
+    // Payment methods listed in display order: ACH first so clients see
+    // it as the primary option (saves ~3% per charge; Apnosh absorbs the
+    // difference when clients insist on card).
     payment_settings: {
-      payment_method_types: ['card', 'us_bank_account'],
+      payment_method_types: ['us_bank_account', 'card'],
       save_default_payment_method: 'on_subscription',
     },
     items: [
