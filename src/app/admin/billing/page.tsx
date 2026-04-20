@@ -1,114 +1,97 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+/**
+ * Admin billing overview -- all invoices + recurring subscriptions
+ * across all clients. Reads from the new billing v2 schema (migration 055).
+ *
+ * To create a new invoice or start a retainer, admins use the Stripe
+ * Billing card on each client's detail page. This page is for the
+ * across-all-clients audit view.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { adminCreateManualInvoice } from '@/lib/actions'
 import {
-  DollarSign, TrendingUp, AlertCircle, Clock,
-  Search, Plus, X, Loader2, ChevronDown, ChevronUp,
-  FileText, RefreshCw,
+  DollarSign, TrendingUp, AlertCircle, Clock, Search,
+  FileText, RefreshCw, ExternalLink, ChevronDown, ChevronUp,
 } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
-/*  Types                                                              */
+/*  Types (mirror billing v2 schema)                                   */
 /* ------------------------------------------------------------------ */
 
-type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'void'
+type InvoiceStatus = 'draft' | 'open' | 'paid' | 'void' | 'uncollectible' | 'failed'
 
 interface InvoiceRow {
   id: string
-  business_id: string
-  invoice_number: string | null
-  amount: number
-  total: number
+  client_id: string
+  invoice_number: string
+  type: 'subscription' | 'one_time'
   status: string
-  description: string | null
-  due_date: string | null
+  total_cents: number
+  amount_paid_cents: number
+  issued_at: string | null
+  due_at: string | null
   paid_at: string | null
-  created_at: string
-  businesses: { name: string } | null
+  description: string | null
+  hosted_invoice_url: string | null
+  clients: { name: string; slug: string } | null
 }
 
 interface SubscriptionRow {
   id: string
-  business_id: string
+  client_id: string
   plan_name: string
-  plan_price: number
-  billing_interval: string
+  amount_cents: number
+  interval: string
   status: string
   current_period_end: string | null
-  businesses: { name: string } | null
+  cancel_at_period_end: boolean
+  clients: { name: string; slug: string } | null
 }
 
-interface BusinessOption {
-  id: string
-  name: string
-}
-
-interface LineItem {
-  description: string
-  quantity: number
-  unit_price: number
-}
-
-type FilterTab = 'all' | 'draft' | 'sent' | 'paid' | 'overdue'
+type FilterTab = 'all' | 'open' | 'paid' | 'failed' | 'draft'
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
+function formatCents(cents: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '--'
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+  if (!iso) return '—'
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function isOverdue(invoice: InvoiceRow): boolean {
-  if (invoice.status !== 'sent' || !invoice.due_date) return false
-  return new Date(invoice.due_date) < new Date()
+function isOverdue(inv: InvoiceRow): boolean {
+  if (inv.status !== 'open' || !inv.due_at) return false
+  return new Date(inv.due_at) < new Date()
 }
 
-function resolveStatus(invoice: InvoiceRow): InvoiceStatus {
-  if (isOverdue(invoice)) return 'overdue'
-  return invoice.status as InvoiceStatus
-}
-
-const STATUS_BADGE: Record<InvoiceStatus, string> = {
+const STATUS_BADGE: Record<string, string> = {
   draft: 'bg-ink-6 text-ink-3',
-  sent: 'bg-blue-50 text-blue-700',
+  open: 'bg-blue-50 text-blue-700',
   paid: 'bg-emerald-50 text-emerald-700',
-  overdue: 'bg-red-50 text-red-700',
+  failed: 'bg-red-50 text-red-700',
   void: 'bg-ink-6 text-ink-4',
-}
-
-const STATUS_LABEL: Record<InvoiceStatus, string> = {
-  draft: 'Draft',
-  sent: 'Sent',
-  paid: 'Paid',
-  overdue: 'Overdue',
-  void: 'Void',
-}
-
-const SUB_STATUS_BADGE: Record<string, string> = {
+  uncollectible: 'bg-red-50 text-red-700',
   active: 'bg-emerald-50 text-emerald-700',
   trialing: 'bg-blue-50 text-blue-700',
   past_due: 'bg-red-50 text-red-700',
-  cancelled: 'bg-ink-6 text-ink-4',
+  canceled: 'bg-ink-6 text-ink-4',
+  paused: 'bg-amber-50 text-amber-700',
+  incomplete: 'bg-amber-50 text-amber-700',
 }
 
 const tabs: Array<{ label: string; filter: FilterTab }> = [
   { label: 'All', filter: 'all' },
-  { label: 'Draft', filter: 'draft' },
-  { label: 'Sent', filter: 'sent' },
+  { label: 'Open', filter: 'open' },
   { label: 'Paid', filter: 'paid' },
-  { label: 'Overdue', filter: 'overdue' },
+  { label: 'Failed', filter: 'failed' },
+  { label: 'Draft', filter: 'draft' },
 ]
 
 /* ------------------------------------------------------------------ */
@@ -138,241 +121,43 @@ function SkeletonRow({ cols }: { cols: number }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Create Invoice Form                                                */
-/* ------------------------------------------------------------------ */
-
-function CreateInvoiceForm({
-  businesses,
-  onClose,
-  onCreated,
-}: {
-  businesses: BusinessOption[]
-  onClose: () => void
-  onCreated: () => void
-}) {
-  const [businessId, setBusinessId] = useState('')
-  const [lineItems, setLineItems] = useState<LineItem[]>([
-    { description: '', quantity: 1, unit_price: 0 },
-  ])
-  const [dueDate, setDueDate] = useState('')
-  const [notes, setNotes] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const total = lineItems.reduce((sum, li) => sum + li.quantity * li.unit_price, 0)
-
-  function updateLineItem(index: number, field: keyof LineItem, value: string | number) {
-    setLineItems((prev) =>
-      prev.map((li, i) => (i === index ? { ...li, [field]: value } : li))
-    )
-  }
-
-  function addLineItem() {
-    setLineItems((prev) => [...prev, { description: '', quantity: 1, unit_price: 0 }])
-  }
-
-  function removeLineItem(index: number) {
-    if (lineItems.length === 1) return
-    setLineItems((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!businessId || !dueDate || lineItems.some((li) => !li.description || li.unit_price <= 0)) {
-      setError('Please fill in all required fields.')
-      return
-    }
-
-    setSubmitting(true)
-    setError(null)
-
-    const result = await adminCreateManualInvoice(
-      businessId,
-      lineItems,
-      dueDate,
-      notes || undefined,
-    )
-
-    setSubmitting(false)
-
-    if (!result.success) {
-      setError(result.error ?? 'Failed to create invoice.')
-      return
-    }
-
-    onCreated()
-  }
-
-  const inputClass =
-    'w-full rounded-lg border border-ink-6 bg-bg-2 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30'
-
-  return (
-    <div className="bg-white rounded-xl border border-ink-6 p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-ink">Create Invoice</h3>
-        <button onClick={onClose} className="text-ink-4 hover:text-ink">
-          <X size={18} />
-        </button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Client select */}
-        <div>
-          <label className="block text-xs font-medium text-ink-3 mb-1">Client</label>
-          <select
-            value={businessId}
-            onChange={(e) => setBusinessId(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">Select a client</option>
-            {businesses.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Line items */}
-        <div>
-          <label className="block text-xs font-medium text-ink-3 mb-1">Line Items</label>
-          <div className="space-y-2">
-            {lineItems.map((li, index) => (
-              <div key={index} className="flex gap-2 items-start">
-                <input
-                  type="text"
-                  placeholder="Description"
-                  value={li.description}
-                  onChange={(e) => updateLineItem(index, 'description', e.target.value)}
-                  className={`${inputClass} flex-1`}
-                />
-                <input
-                  type="number"
-                  placeholder="Qty"
-                  min={1}
-                  value={li.quantity}
-                  onChange={(e) => updateLineItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                  className={`${inputClass} w-20`}
-                />
-                <input
-                  type="number"
-                  placeholder="Price"
-                  min={0}
-                  step={0.01}
-                  value={li.unit_price || ''}
-                  onChange={(e) => updateLineItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                  className={`${inputClass} w-28`}
-                />
-                {lineItems.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeLineItem(index)}
-                    className="mt-2 text-ink-4 hover:text-red-500"
-                  >
-                    <X size={16} />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={addLineItem}
-            className="mt-2 text-xs text-brand hover:text-brand-dark font-medium flex items-center gap-1"
-          >
-            <Plus size={14} /> Add line item
-          </button>
-        </div>
-
-        {/* Due date */}
-        <div>
-          <label className="block text-xs font-medium text-ink-3 mb-1">Due Date</label>
-          <input
-            type="date"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-
-        {/* Notes */}
-        <div>
-          <label className="block text-xs font-medium text-ink-3 mb-1">Notes</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-            placeholder="Optional notes"
-            className={inputClass}
-          />
-        </div>
-
-        {/* Total and submit */}
-        <div className="flex items-center justify-between pt-2 border-t border-ink-6">
-          <span className="text-sm font-medium text-ink">
-            Total: {formatCurrency(total)}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-sm text-ink-3 hover:text-ink px-3 py-2"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 disabled:opacity-50 flex items-center gap-2"
-            >
-              {submitting && <Loader2 size={14} className="animate-spin" />}
-              Create Invoice
-            </button>
-          </div>
-        </div>
-
-        {error && (
-          <p className="text-sm text-red-600">{error}</p>
-        )}
-      </form>
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/*  Main Page                                                          */
+/*  Main page                                                          */
 /* ------------------------------------------------------------------ */
 
 export default function AdminBillingPage() {
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [subscriptions, setSubscriptions] = useState<SubscriptionRow[]>([])
-  const [businesses, setBusinesses] = useState<BusinessOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
   const [search, setSearch] = useState('')
   const [sortAsc, setSortAsc] = useState(false)
-  const [showCreate, setShowCreate] = useState(false)
 
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     const supabase = createClient()
-
-    const [invoiceRes, subRes, bizRes] = await Promise.all([
+    const [invoiceRes, subRes] = await Promise.all([
       supabase
         .from('invoices')
-        .select('id, business_id, invoice_number, amount, total, status, description, due_date, paid_at, created_at, businesses(name)')
-        .order('created_at', { ascending: false }),
+        .select(`
+          id, client_id, invoice_number, type, status, total_cents,
+          amount_paid_cents, issued_at, due_at, paid_at, description,
+          hosted_invoice_url,
+          clients!inner(name, slug)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(500),
       supabase
         .from('subscriptions')
-        .select('id, business_id, plan_name, plan_price, billing_interval, status, current_period_end, businesses(name)')
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('businesses')
-        .select('id, name')
-        .order('name'),
+        .select(`
+          id, client_id, plan_name, amount_cents, interval, status,
+          current_period_end, cancel_at_period_end,
+          clients!inner(name, slug)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(200),
     ])
 
     if (invoiceRes.error) {
@@ -383,62 +168,59 @@ export default function AdminBillingPage() {
 
     setInvoices((invoiceRes.data as unknown as InvoiceRow[]) ?? [])
     setSubscriptions((subRes.data as unknown as SubscriptionRow[]) ?? [])
-    setBusinesses((bizRes.data as unknown as BusinessOption[]) ?? [])
     setLoading(false)
-  }
+  }, [])
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [fetchData])
 
-  /* ---- Revenue metrics ---- */
-  const totalMRR = subscriptions
-    .filter((s) => s.status === 'active')
-    .reduce((sum, s) => sum + (s.plan_price ?? 0), 0)
+  /* ---- Revenue metrics (all in cents internally) ---- */
+  const mrrCents = subscriptions
+    .filter(s => s.status === 'active' || s.status === 'trialing')
+    .reduce((sum, s) => sum + (s.amount_cents ?? 0), 0)
 
-  const totalRevenue = invoices
-    .filter((inv) => inv.status === 'paid')
-    .reduce((sum, inv) => sum + (inv.amount ?? 0), 0)
+  const totalPaidCents = invoices
+    .filter(inv => inv.status === 'paid')
+    .reduce((sum, inv) => sum + (inv.amount_paid_cents ?? 0), 0)
 
-  const outstanding = invoices
-    .filter((inv) => inv.status === 'sent' || inv.status === 'draft')
-    .reduce((sum, inv) => sum + (inv.amount ?? 0), 0)
+  const outstandingCents = invoices
+    .filter(inv => inv.status === 'open' || inv.status === 'draft' || inv.status === 'failed')
+    .reduce((sum, inv) => sum + (inv.total_cents ?? 0), 0)
 
-  const overdueCount = invoices.filter((inv) => isOverdue(inv)).length
+  const overdueCount = invoices.filter(isOverdue).length
 
   const stats = [
-    { label: 'Monthly Recurring Revenue', value: formatCurrency(totalMRR), icon: TrendingUp, color: 'bg-brand-tint text-brand-dark' },
-    { label: 'Total Revenue', value: formatCurrency(totalRevenue), icon: DollarSign, color: 'bg-emerald-50 text-emerald-600' },
-    { label: 'Outstanding', value: formatCurrency(outstanding), icon: Clock, color: 'bg-amber-50 text-amber-600' },
-    { label: 'Overdue Invoices', value: overdueCount.toString(), icon: AlertCircle, color: 'bg-red-50 text-red-600' },
+    { label: 'MRR', value: formatCents(mrrCents), hint: `ARR: ${formatCents(mrrCents * 12)}`, icon: TrendingUp, color: 'bg-brand-tint text-brand-dark' },
+    { label: 'Revenue collected', value: formatCents(totalPaidCents), hint: `${invoices.filter(i => i.status === 'paid').length} paid`, icon: DollarSign, color: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Outstanding', value: formatCents(outstandingCents), hint: `${invoices.filter(i => ['open', 'draft', 'failed'].includes(i.status)).length} invoices`, icon: Clock, color: 'bg-amber-50 text-amber-600' },
+    { label: 'Overdue', value: String(overdueCount), hint: overdueCount > 0 ? 'Needs attention' : 'All current', icon: AlertCircle, color: overdueCount > 0 ? 'bg-red-50 text-red-600' : 'bg-ink-6 text-ink-4' },
   ]
 
   /* ---- Filtered invoices ---- */
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return invoices
-      .filter((inv) => {
+      .filter(inv => {
         if (activeTab === 'all') return true
-        if (activeTab === 'overdue') return isOverdue(inv)
         return inv.status === activeTab
       })
-      .filter((inv) => {
+      .filter(inv => {
         if (!q) return true
-        const clientName = inv.businesses?.name?.toLowerCase() ?? ''
-        const invNum = inv.invoice_number?.toLowerCase() ?? ''
+        const clientName = inv.clients?.name?.toLowerCase() ?? ''
+        const invNum = inv.invoice_number.toLowerCase()
         return clientName.includes(q) || invNum.includes(q)
       })
       .sort((a, b) => {
-        const da = new Date(a.created_at).getTime()
-        const db = new Date(b.created_at).getTime()
+        const da = new Date(a.issued_at ?? a.due_at ?? 0).getTime()
+        const db = new Date(b.issued_at ?? b.due_at ?? 0).getTime()
         return sortAsc ? da - db : db - da
       })
   }, [invoices, activeTab, search, sortAsc])
 
-  /* ---- Active subscriptions ---- */
   const activeSubs = useMemo(
-    () => subscriptions.filter((s) => s.status === 'active' || s.status === 'trialing'),
-    [subscriptions]
+    () => subscriptions.filter(s => s.status === 'active' || s.status === 'trialing'),
+    [subscriptions],
   )
 
   return (
@@ -447,43 +229,35 @@ export default function AdminBillingPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Billing &amp; Revenue</h1>
-          <p className="text-ink-3 text-sm mt-1">Revenue overview, invoices, and recurring billing.</p>
+          <p className="text-ink-3 text-sm mt-1">
+            Revenue overview across all clients. To start a retainer or send a new invoice,
+            open the client&apos;s detail page.
+          </p>
         </div>
         <button
-          onClick={() => setShowCreate(true)}
-          className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 flex items-center gap-2"
+          onClick={fetchData}
+          className="text-ink-4 hover:text-ink text-sm font-medium flex items-center gap-1.5"
         >
-          <Plus size={16} />
-          Create Invoice
+          <RefreshCw size={14} />
+          Refresh
         </button>
       </div>
 
-      {/* Revenue Cards */}
+      {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
-          : stats.map((s) => (
+          : stats.map(s => (
               <div key={s.label} className="bg-white rounded-xl border border-ink-6 p-5">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 ${s.color}`}>
                   <s.icon size={16} />
                 </div>
                 <div className="text-xl font-semibold text-ink">{s.value}</div>
                 <div className="text-xs text-ink-4 mt-0.5">{s.label}</div>
+                <div className="text-[10px] text-ink-4 mt-1">{s.hint}</div>
               </div>
             ))}
       </div>
-
-      {/* Create Invoice Form */}
-      {showCreate && (
-        <CreateInvoiceForm
-          businesses={businesses}
-          onClose={() => setShowCreate(false)}
-          onCreated={() => {
-            setShowCreate(false)
-            fetchData()
-          }}
-        />
-      )}
 
       {/* Error */}
       {error && (
@@ -492,26 +266,19 @@ export default function AdminBillingPage() {
         </div>
       )}
 
-      {/* Invoice Management */}
+      {/* Invoices section */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
             <FileText size={16} className="text-ink-4" />
             Invoices
           </h2>
-          <button
-            onClick={fetchData}
-            className="text-ink-4 hover:text-ink text-xs flex items-center gap-1"
-          >
-            <RefreshCw size={12} />
-            Refresh
-          </button>
         </div>
 
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
           <div className="flex gap-1 bg-bg-2 rounded-lg p-0.5">
-            {tabs.map((tab) => (
+            {tabs.map(tab => (
               <button
                 key={tab.filter}
                 onClick={() => setActiveTab(tab.filter)}
@@ -525,81 +292,97 @@ export default function AdminBillingPage() {
               </button>
             ))}
           </div>
-
           <div className="relative flex-1 max-w-xs">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-4" />
             <input
               type="text"
               placeholder="Search client or invoice #"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={e => setSearch(e.target.value)}
               className="w-full rounded-lg border border-ink-6 bg-bg-2 pl-9 pr-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30"
             />
           </div>
         </div>
 
-        {/* Table */}
+        {/* Invoices table */}
         <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>
-                  <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">Invoice #</th>
-                  <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">Client</th>
-                  <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">Description</th>
-                  <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-right">Amount</th>
-                  <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">Status</th>
-                  <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">
+                  <Th>Invoice #</Th>
+                  <Th>Client</Th>
+                  <Th>Type</Th>
+                  <Th align="right">Amount</Th>
+                  <Th>Status</Th>
+                  <Th>
                     <button
                       onClick={() => setSortAsc(!sortAsc)}
                       className="flex items-center gap-1 hover:text-ink"
                     >
-                      Due Date
+                      Issued
                       {sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                     </button>
-                  </th>
-                  <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">Paid Date</th>
+                  </Th>
+                  <Th>Paid</Th>
+                  <Th></Th>
                 </tr>
               </thead>
               <tbody>
                 {loading
-                  ? Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={7} />)
+                  ? Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} cols={8} />)
                   : filtered.length === 0
                     ? (
-                        <tr>
-                          <td colSpan={7} className="px-4 py-12 text-center text-sm text-ink-4">
-                            No invoices found.
-                          </td>
-                        </tr>
-                      )
-                    : filtered.map((inv) => {
-                        const status = resolveStatus(inv)
+                      <tr>
+                        <td colSpan={8} className="px-4 py-12 text-center text-sm text-ink-4">
+                          No invoices yet. Start a retainer or send a one-time invoice from a client&apos;s page.
+                        </td>
+                      </tr>
+                    )
+                    : filtered.map(inv => {
+                        const overdue = isOverdue(inv)
+                        const displayStatus = overdue ? 'failed' : inv.status
                         return (
                           <tr key={inv.id} className="border-b border-ink-6 last:border-0 hover:bg-bg-2/50">
                             <td className="px-4 py-3 text-sm text-ink font-medium">
-                              {inv.invoice_number ?? '--'}
+                              {inv.invoice_number}
                             </td>
                             <td className="px-4 py-3 text-sm text-ink">
-                              {inv.businesses?.name ?? 'Unknown'}
+                              {inv.clients?.slug ? (
+                                <Link href={`/admin/clients/${inv.clients.slug}`} className="hover:text-brand-dark">
+                                  {inv.clients.name}
+                                </Link>
+                              ) : 'Unknown'}
                             </td>
-                            <td className="px-4 py-3 text-sm text-ink-3 max-w-[200px] truncate">
-                              {inv.description ?? '--'}
+                            <td className="px-4 py-3 text-[11px] text-ink-4 capitalize">
+                              {inv.type === 'subscription' ? 'Retainer' : 'One-time'}
                             </td>
-                            <td className="px-4 py-3 text-sm text-ink text-right font-medium">
-                              {formatCurrency(inv.amount ?? 0)}
+                            <td className="px-4 py-3 text-sm text-ink text-right font-medium tabular-nums">
+                              {formatCents(inv.total_cents)}
                             </td>
                             <td className="px-4 py-3">
-                              <span
-                                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[status] ?? ''}`}
-                              >
-                                {STATUS_LABEL[status] ?? status}
+                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[displayStatus] ?? ''}`}>
+                                {overdue ? 'overdue' : inv.status}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-sm text-ink">
-                              {formatDate(inv.due_date)}
+                            <td className="px-4 py-3 text-sm text-ink-3">
+                              {formatDate(inv.issued_at)}
                             </td>
                             <td className="px-4 py-3 text-sm text-ink-3">
                               {formatDate(inv.paid_at)}
+                            </td>
+                            <td className="px-4 py-3">
+                              {inv.hosted_invoice_url && (
+                                <a
+                                  href={inv.hosted_invoice_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-ink-4 hover:text-brand-dark"
+                                  title="Open hosted invoice"
+                                >
+                                  <ExternalLink size={14} />
+                                </a>
+                              )}
                             </td>
                           </tr>
                         )
@@ -610,11 +393,11 @@ export default function AdminBillingPage() {
         </div>
       </div>
 
-      {/* Recurring Billing */}
+      {/* Active subscriptions */}
       <div className="space-y-3">
         <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
           <RefreshCw size={16} className="text-ink-4" />
-          Recurring Billing
+          Active retainers
         </h2>
 
         <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
@@ -622,45 +405,51 @@ export default function AdminBillingPage() {
             <table className="w-full">
               <thead>
                 <tr>
-                  <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">Client</th>
-                  <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">Plan</th>
-                  <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-right">Amount</th>
-                  <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">Status</th>
-                  <th className="px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6 text-left">Next Billing Date</th>
+                  <Th>Client</Th>
+                  <Th>Plan</Th>
+                  <Th align="right">Amount</Th>
+                  <Th>Status</Th>
+                  <Th>Next billing</Th>
+                  <Th>Flag</Th>
                 </tr>
               </thead>
               <tbody>
                 {loading
-                  ? Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} cols={5} />)
+                  ? Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} cols={6} />)
                   : activeSubs.length === 0
                     ? (
-                        <tr>
-                          <td colSpan={5} className="px-4 py-12 text-center text-sm text-ink-4">
-                            No active subscriptions.
-                          </td>
-                        </tr>
-                      )
-                    : activeSubs.map((sub) => (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-12 text-center text-sm text-ink-4">
+                          No active retainers. Start one from a client&apos;s detail page.
+                        </td>
+                      </tr>
+                    )
+                    : activeSubs.map(sub => (
                         <tr key={sub.id} className="border-b border-ink-6 last:border-0 hover:bg-bg-2/50">
                           <td className="px-4 py-3 text-sm text-ink font-medium">
-                            {sub.businesses?.name ?? 'Unknown'}
+                            {sub.clients?.slug ? (
+                              <Link href={`/admin/clients/${sub.clients.slug}`} className="hover:text-brand-dark">
+                                {sub.clients.name}
+                              </Link>
+                            ) : 'Unknown'}
                           </td>
                           <td className="px-4 py-3 text-sm text-ink">
                             {sub.plan_name}
                           </td>
-                          <td className="px-4 py-3 text-sm text-ink text-right font-medium">
-                            {formatCurrency(sub.plan_price ?? 0)}
-                            <span className="text-ink-4 font-normal">/{sub.billing_interval === 'year' ? 'yr' : 'mo'}</span>
+                          <td className="px-4 py-3 text-sm text-ink text-right font-medium tabular-nums">
+                            {formatCents(sub.amount_cents)}
+                            <span className="text-ink-4 font-normal">/{sub.interval === 'year' ? 'yr' : 'mo'}</span>
                           </td>
                           <td className="px-4 py-3">
-                            <span
-                              className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${SUB_STATUS_BADGE[sub.status] ?? 'bg-ink-6 text-ink-4'}`}
-                            >
-                              {sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
+                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[sub.status] ?? 'bg-ink-6 text-ink-4'}`}>
+                              {sub.status}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-sm text-ink">
+                          <td className="px-4 py-3 text-sm text-ink-3">
                             {formatDate(sub.current_period_end)}
+                          </td>
+                          <td className="px-4 py-3 text-[11px] text-amber-700">
+                            {sub.cancel_at_period_end ? 'Canceling' : ''}
                           </td>
                         </tr>
                       ))}
@@ -670,5 +459,16 @@ export default function AdminBillingPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function Th({ children, align = 'left' }: { children?: React.ReactNode; align?: 'left' | 'right' }) {
+  return (
+    <th
+      className={`px-4 py-3 text-[11px] text-ink-4 font-medium uppercase tracking-wide bg-bg-2 border-b border-ink-6`}
+      style={{ textAlign: align }}
+    >
+      {children}
+    </th>
   )
 }

@@ -145,11 +145,11 @@ export default function AdminDashboard() {
           .select('*', { count: 'exact', head: true })
           .eq('client_status', 'active'),
 
-        // Active subscriptions for MRR
+        // Active subscriptions for MRR (migration 055: amount_cents in cents)
         supabase
           .from('subscriptions')
-          .select('plan_price')
-          .eq('status', 'active'),
+          .select('amount_cents')
+          .in('status', ['active', 'trialing']),
 
         // Pending approvals (deliverables in client_review)
         supabase
@@ -157,12 +157,12 @@ export default function AdminDashboard() {
           .select('*', { count: 'exact', head: true })
           .eq('status', 'client_review'),
 
-        // Overdue invoices (pending + past due date)
+        // Overdue invoices (open/failed + past due date) -- v2 columns
         supabase
           .from('invoices')
           .select('*', { count: 'exact', head: true })
-          .in('status', ['pending', 'failed'])
-          .lt('due_date', new Date().toISOString()),
+          .in('status', ['open', 'failed'])
+          .lt('due_at', new Date().toISOString()),
 
         // Unsigned agreements (status = sent)
         supabase
@@ -215,7 +215,11 @@ export default function AdminDashboard() {
       ])
 
       // Calculate MRR
-      const mrr = (activeSubs ?? []).reduce((sum, s) => sum + (Number(s.plan_price) || 0), 0)
+      // New schema: subscriptions.amount_cents is integer cents
+      const mrr = (activeSubs ?? []).reduce(
+        (sum, s) => sum + (Number((s as { amount_cents?: number }).amount_cents) || 0),
+        0,
+      ) / 100
 
       setSummary({
         activeClients: activeClients ?? 0,

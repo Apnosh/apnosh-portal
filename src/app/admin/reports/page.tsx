@@ -116,17 +116,52 @@ export default function ReportsPage() {
         { data: agreements },
         { data: orders },
       ] = await Promise.all([
-        supabase.from('subscriptions').select('business_id, plan_price').eq('status', 'active'),
-        supabase.from('invoices').select('business_id, amount, created_at').eq('status', 'paid'),
-        supabase.from('invoices').select('business_id, status, due_date'),
+        // v2 schema: subscriptions/invoices keyed on client_id with cents.
+        // We join to businesses via clients.id to preserve the business_id
+        // lookups the rest of this page uses.
+        supabase.from('subscriptions')
+          .select('client_id, amount_cents, clients!inner(id, businesses(id))')
+          .in('status', ['active', 'trialing']),
+        supabase.from('invoices')
+          .select('client_id, amount_paid_cents, created_at, clients!inner(id, businesses(id))')
+          .eq('status', 'paid'),
+        supabase.from('invoices')
+          .select('client_id, status, due_at, clients!inner(id, businesses(id))'),
         supabase.from('businesses').select('id, name, client_status').in('client_status', ['active', 'paused', 'agreement_sent', 'agreement_signed', 'offboarded']).order('name'),
         supabase.from('agreements').select('business_id, status').order('created_at', { ascending: false }),
         supabase.from('orders').select('service_name'),
       ])
 
+      // Normalize new-schema rows into the shape the rest of this page uses:
+      // { business_id, plan_price (dollars) } / { business_id, amount (dollars), status, due_date }.
+      // This is a compatibility shim -- the real migration to pure v2 comes later.
+      type NewSubRow = { client_id: string; amount_cents: number | null; clients?: { businesses?: Array<{ id: string }> | null } | null }
+      type NewInvRow = { client_id: string; amount_paid_cents?: number | null; status?: string; due_at?: string | null; created_at?: string; clients?: { businesses?: Array<{ id: string }> | null } | null }
+
+      const activeSubsCompat = ((activeSubs ?? []) as unknown as NewSubRow[]).flatMap(s => {
+        const bizzes = s.clients?.businesses ?? []
+        return bizzes.map(b => ({ business_id: b.id, plan_price: (s.amount_cents ?? 0) / 100 }))
+      })
+      const paidInvoicesCompat = ((paidInvoices ?? []) as unknown as NewInvRow[]).flatMap(i => {
+        const bizzes = i.clients?.businesses ?? []
+        return bizzes.map(b => ({
+          business_id: b.id,
+          amount: (i.amount_paid_cents ?? 0) / 100,
+          created_at: i.created_at,
+        }))
+      })
+      const allInvoicesCompat = ((allInvoices ?? []) as unknown as NewInvRow[]).flatMap(i => {
+        const bizzes = i.clients?.businesses ?? []
+        return bizzes.map(b => ({
+          business_id: b.id,
+          status: i.status,
+          due_date: i.due_at,
+        }))
+      })
+
       // ── Revenue Stats ──────────────────────────────────────────
-      const mrr = (activeSubs ?? []).reduce((sum, s) => sum + (Number(s.plan_price) || 0), 0)
-      const totalRevenue = (paidInvoices ?? []).reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0)
+      const mrr = activeSubsCompat.reduce((sum, s) => sum + s.plan_price, 0)
+      const totalRevenue = paidInvoicesCompat.reduce((sum, inv) => sum + inv.amount, 0)
       const activeCount = (businesses ?? []).filter(b => b.client_status === 'active').length
       const avgRevenue = activeCount > 0 ? totalRevenue / activeCount : 0
 
@@ -145,7 +180,7 @@ export default function ReportsPage() {
 
       // Build lookup: MRR per business
       const mrrMap = new Map<string, number>()
-      for (const s of activeSubs ?? []) {
+      for (const s of activeSubsCompat) {
         mrrMap.set(s.business_id, (mrrMap.get(s.business_id) || 0) + (Number(s.plan_price) || 0))
       }
 
@@ -155,7 +190,7 @@ export default function ReportsPage() {
       const overdueSet = new Set<string>()
       const now = new Date().toISOString()
 
-      for (const inv of allInvoices ?? []) {
+      for (const inv of allInvoicesCompat) {
         invoiceTotalMap.set(inv.business_id, (invoiceTotalMap.get(inv.business_id) || 0) + 1)
         if (inv.status === 'paid') {
           invoicePaidMap.set(inv.business_id, (invoicePaidMap.get(inv.business_id) || 0) + 1)
@@ -208,7 +243,8 @@ export default function ReportsPage() {
 
       // ── Monthly Revenue Breakdown ─────────────────────────────
       const monthMap = new Map<string, number>()
-      for (const inv of paidInvoices ?? []) {
+      for (const inv of paidInvoicesCompat) {
+        if (!inv.created_at) continue
         const d = new Date(inv.created_at)
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
         monthMap.set(key, (monthMap.get(key) || 0) + (Number(inv.amount) || 0))
