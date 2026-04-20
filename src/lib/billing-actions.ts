@@ -284,12 +284,17 @@ export async function createOneTimeInvoice(args: {
 
   try {
     // Step 1: create the invoice in Stripe (draft state) so we can attach
-    // line items to it.
+    // line items to it. payment_settings lets the client choose card OR
+    // ACH (us_bank_account) on the hosted pay page; ACH is much cheaper
+    // for larger one-time invoices ($5 flat vs ~3%).
     const invoice = await stripe.invoices.create({
       customer: bc.stripe_customer_id,
       collection_method: 'send_invoice',
       days_until_due: args.dueDateDays ?? 14,
       auto_advance: false, // we finalize explicitly below
+      payment_settings: {
+        payment_method_types: ['card', 'us_bank_account'],
+      },
       metadata: { client_id: args.clientId, source: 'admin_portal_one_time' },
       description: args.notes,
     })

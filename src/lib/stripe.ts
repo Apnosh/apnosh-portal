@@ -132,6 +132,16 @@ export async function startMonthlyRetainer(opts: {
     days_until_due: 14,
     billing_cycle_anchor: anchorUnix,
     proration_behavior: 'none',
+    // Let the client choose card OR ACH (us_bank_account) on the hosted
+    // pay page. ACH takes 3-5 business days to settle but is ~$5 flat
+    // per charge vs ~3% on card -- matters on larger retainers.
+    payment_settings: {
+      payment_method_types: ['card', 'us_bank_account'],
+      // Tell Stripe to save the first payment method the client uses so
+      // we can later auto-charge from it (if they want to switch from
+      // send_invoice to charge_automatically).
+      save_default_payment_method: 'on_subscription',
+    },
     items: [
       {
         price_data: {
