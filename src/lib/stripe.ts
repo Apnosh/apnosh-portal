@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('STRIPE_SECRET_KEY is not set')
@@ -9,6 +10,145 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-02-24.acacia',
   typescript: true,
 })
+
+// ============================================================
+// Money helpers -- use these everywhere so conversions stay consistent.
+// ============================================================
+
+/** Safe dollars (number) -> cents (integer). Rounds to nearest cent. */
+export function dollarsToCents(dollars: number): number {
+  return Math.round(dollars * 100)
+}
+
+export function centsToDollars(cents: number): number {
+  return cents / 100
+}
+
+/** USD display formatter. Use in all UI so the app stays consistent. */
+export function formatCents(cents: number, currency: string = 'usd'): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: 2,
+  }).format(cents / 100)
+}
+
+/**
+ * Next Apnosh billing anchor (15th of the month). Returns the next
+ * 15th on or after the provided date. Stripe takes this as a unix
+ * timestamp via `billing_cycle_anchor`.
+ */
+export function nextBillingAnchor(from: Date = new Date()): Date {
+  const anchor = new Date(from)
+  anchor.setHours(12, 0, 0, 0)
+  if (anchor.getDate() <= 15) {
+    anchor.setDate(15)
+  } else {
+    anchor.setMonth(anchor.getMonth() + 1, 15)
+  }
+  return anchor
+}
+
+// ============================================================
+// Client-keyed helpers (new billing model, migration 055+).
+// ============================================================
+// The legacy helpers below (getOrCreateStripeCustomer, etc.) operate on
+// businesses.id and remain for the self-serve /dashboard/orders flow.
+// The functions below are for the admin-initiated retainer flow that
+// keys on clients.id per the billing spec.
+
+function getAdminSupabase() {
+  return createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+}
+
+/**
+ * Look up or create a Stripe customer for a given client_id.
+ * Mirrors the stripe_customer_id into billing_customers.
+ */
+export async function getOrCreateStripeCustomerForClient(opts: {
+  clientId: string
+  email: string
+  name: string
+  phone?: string
+}): Promise<string> {
+  const admin = getAdminSupabase()
+
+  // Existing mirror row?
+  const { data: existing } = await admin
+    .from('billing_customers')
+    .select('stripe_customer_id')
+    .eq('client_id', opts.clientId)
+    .maybeSingle()
+
+  if (existing?.stripe_customer_id) return existing.stripe_customer_id
+
+  const customer = await stripe.customers.create({
+    email: opts.email,
+    name: opts.name,
+    phone: opts.phone,
+    metadata: { client_id: opts.clientId },
+  })
+
+  await admin.from('billing_customers').insert({
+    client_id: opts.clientId,
+    stripe_customer_id: customer.id,
+  })
+
+  return customer.id
+}
+
+/**
+ * Start a monthly retainer subscription for a client at a custom amount.
+ *
+ * Uses:
+ *   - collection_method: 'send_invoice' (Stripe emails an invoice rather
+ *     than auto-charging; clients used to paying by check respond better
+ *     to this)
+ *   - billing_cycle_anchor: next 15th (Apnosh's monthly billing day)
+ *   - proration_behavior: 'none' (no mid-month pro-rated charge during
+ *     cutover; first full invoice on the next 15th)
+ *
+ * Creates a per-subscription price inline via `price_data`, which lets us
+ * charge any custom retainer amount without creating a Stripe Price for
+ * every client. The umbrella product ID is required.
+ */
+export async function startMonthlyRetainer(opts: {
+  customerId: string
+  clientId: string
+  amountCents: number
+  planName?: string
+  retainerProductId: string
+  billingAnchor?: Date
+}): Promise<Stripe.Subscription> {
+  const anchor = opts.billingAnchor ?? nextBillingAnchor()
+  const anchorUnix = Math.floor(anchor.getTime() / 1000)
+
+  return await stripe.subscriptions.create({
+    customer: opts.customerId,
+    collection_method: 'send_invoice',
+    days_until_due: 14,
+    billing_cycle_anchor: anchorUnix,
+    proration_behavior: 'none',
+    items: [
+      {
+        price_data: {
+          product: opts.retainerProductId,
+          currency: 'usd',
+          unit_amount: opts.amountCents,
+          recurring: { interval: 'month' },
+        },
+      },
+    ],
+    metadata: {
+      client_id: opts.clientId,
+      plan_name: opts.planName ?? 'Monthly Retainer',
+      source: 'admin_portal',
+    },
+  })
+}
 
 /**
  * Get or create a Stripe Customer for a business.
