@@ -67,28 +67,64 @@ function getAdminSupabase() {
 /**
  * Look up or create a Stripe customer for a given client_id.
  * Mirrors the stripe_customer_id into billing_customers.
+ *
+ * Address is REQUIRED for Stripe Tax to calculate sales tax on invoices.
+ * Without it, tax calculation silently skips. State + postal code is
+ * the minimum; line1/city/country fill out a cleaner invoice header.
  */
 export async function getOrCreateStripeCustomerForClient(opts: {
   clientId: string
   email: string
   name: string
   phone?: string
+  address?: {
+    line1?: string
+    line2?: string
+    city?: string
+    state: string           // e.g. 'WA'
+    postal_code: string     // e.g. '98101'
+    country?: string        // defaults to 'US'
+  }
 }): Promise<string> {
   const admin = getAdminSupabase()
 
-  // Existing mirror row?
+  // Existing mirror row? If so, update address if new one provided.
   const { data: existing } = await admin
     .from('billing_customers')
     .select('stripe_customer_id')
     .eq('client_id', opts.clientId)
     .maybeSingle()
 
-  if (existing?.stripe_customer_id) return existing.stripe_customer_id
+  if (existing?.stripe_customer_id) {
+    if (opts.address) {
+      await stripe.customers.update(existing.stripe_customer_id, {
+        address: {
+          line1: opts.address.line1,
+          line2: opts.address.line2,
+          city: opts.address.city,
+          state: opts.address.state,
+          postal_code: opts.address.postal_code,
+          country: opts.address.country ?? 'US',
+        },
+      })
+    }
+    return existing.stripe_customer_id
+  }
 
   const customer = await stripe.customers.create({
     email: opts.email,
     name: opts.name,
     phone: opts.phone,
+    address: opts.address
+      ? {
+          line1: opts.address.line1,
+          line2: opts.address.line2,
+          city: opts.address.city,
+          state: opts.address.state,
+          postal_code: opts.address.postal_code,
+          country: opts.address.country ?? 'US',
+        }
+      : undefined,
     metadata: { client_id: opts.clientId },
   })
 
@@ -132,14 +168,18 @@ export async function startMonthlyRetainer(opts: {
     days_until_due: 14,
     billing_cycle_anchor: anchorUnix,
     proration_behavior: 'none',
+    // Stripe Tax calculates sales tax per line based on:
+    //   - Origin: the business profile address on the Stripe account
+    //   - Destination: the customer's address (must be set on Customer)
+    //   - Tax code on each Product (set at product-creation time)
+    // In WA this correctly applies sales tax on taxable categories
+    // (e.g., video production) and skips exempt ones (pure advertising).
+    automatic_tax: { enabled: true },
     // Let the client choose card OR ACH (us_bank_account) on the hosted
     // pay page. ACH takes 3-5 business days to settle but is ~$5 flat
     // per charge vs ~3% on card -- matters on larger retainers.
     payment_settings: {
       payment_method_types: ['card', 'us_bank_account'],
-      // Tell Stripe to save the first payment method the client uses so
-      // we can later auto-charge from it (if they want to switch from
-      // send_invoice to charge_automatically).
       save_default_payment_method: 'on_subscription',
     },
     items: [

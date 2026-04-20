@@ -116,6 +116,7 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
 
   const [showRetainerForm, setShowRetainerForm] = useState(false)
   const [showInvoiceForm, setShowInvoiceForm] = useState(false)
+  const [showSetupForm, setShowSetupForm] = useState(false)
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -145,12 +146,18 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
 
   // ----- Action handlers -----
 
-  async function onSetupStripe() {
+  async function onSetupStripe(address: {
+    line1?: string
+    line2?: string
+    city?: string
+    state: string
+    postal_code: string
+  }) {
     setBusyAction('setup'); setError(null); setNotice(null)
-    const result = await createStripeCustomerForClient(clientId)
+    const result = await createStripeCustomerForClient({ clientId, address })
     setBusyAction(null)
     if (!result.success) setError(result.error)
-    else { setNotice('Stripe customer created.'); load() }
+    else { setNotice('Stripe customer created.'); setShowSetupForm(false); load() }
   }
 
   async function onCancelSubscription(atPeriodEnd: boolean) {
@@ -223,21 +230,27 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
       )}
 
       {/* STATE 1: no Stripe customer yet */}
-      {!hasCustomer && (
+      {!hasCustomer && !showSetupForm && (
         <div className="space-y-3">
           <p className="text-[12px] text-ink-3 leading-snug">
-            This client isn&apos;t set up in Stripe yet. Clicking below creates a Stripe
-            customer record so you can start a retainer or send an invoice.
+            This client isn&apos;t set up in Stripe yet. We&apos;ll ask for their state
+            and ZIP so sales tax is calculated correctly on invoices.
           </p>
           <button
-            onClick={onSetupStripe}
-            disabled={busyAction === 'setup'}
-            className="w-full bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-3 py-2 flex items-center justify-center gap-2 disabled:opacity-50"
+            onClick={() => setShowSetupForm(true)}
+            className="w-full bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-3 py-2 flex items-center justify-center gap-2"
           >
-            {busyAction === 'setup' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+            <CreditCard className="w-4 h-4" />
             Set up Stripe billing
           </button>
         </div>
+      )}
+      {!hasCustomer && showSetupForm && (
+        <SetupBillingForm
+          onClose={() => setShowSetupForm(false)}
+          onSubmit={onSetupStripe}
+          busy={busyAction === 'setup'}
+        />
       )}
 
       {/* STATE 2+: has Stripe customer */}
@@ -374,6 +387,122 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
       <h3 className="text-sm font-semibold text-ink mb-3">{title}</h3>
       {children}
     </div>
+  )
+}
+
+// US states -- short list because we're US-only for now
+const US_STATES: Array<{ code: string; name: string }> = [
+  { code: 'AL', name: 'Alabama' }, { code: 'AK', name: 'Alaska' },
+  { code: 'AZ', name: 'Arizona' }, { code: 'AR', name: 'Arkansas' },
+  { code: 'CA', name: 'California' }, { code: 'CO', name: 'Colorado' },
+  { code: 'CT', name: 'Connecticut' }, { code: 'DE', name: 'Delaware' },
+  { code: 'FL', name: 'Florida' }, { code: 'GA', name: 'Georgia' },
+  { code: 'HI', name: 'Hawaii' }, { code: 'ID', name: 'Idaho' },
+  { code: 'IL', name: 'Illinois' }, { code: 'IN', name: 'Indiana' },
+  { code: 'IA', name: 'Iowa' }, { code: 'KS', name: 'Kansas' },
+  { code: 'KY', name: 'Kentucky' }, { code: 'LA', name: 'Louisiana' },
+  { code: 'ME', name: 'Maine' }, { code: 'MD', name: 'Maryland' },
+  { code: 'MA', name: 'Massachusetts' }, { code: 'MI', name: 'Michigan' },
+  { code: 'MN', name: 'Minnesota' }, { code: 'MS', name: 'Mississippi' },
+  { code: 'MO', name: 'Missouri' }, { code: 'MT', name: 'Montana' },
+  { code: 'NE', name: 'Nebraska' }, { code: 'NV', name: 'Nevada' },
+  { code: 'NH', name: 'New Hampshire' }, { code: 'NJ', name: 'New Jersey' },
+  { code: 'NM', name: 'New Mexico' }, { code: 'NY', name: 'New York' },
+  { code: 'NC', name: 'North Carolina' }, { code: 'ND', name: 'North Dakota' },
+  { code: 'OH', name: 'Ohio' }, { code: 'OK', name: 'Oklahoma' },
+  { code: 'OR', name: 'Oregon' }, { code: 'PA', name: 'Pennsylvania' },
+  { code: 'RI', name: 'Rhode Island' }, { code: 'SC', name: 'South Carolina' },
+  { code: 'SD', name: 'South Dakota' }, { code: 'TN', name: 'Tennessee' },
+  { code: 'TX', name: 'Texas' }, { code: 'UT', name: 'Utah' },
+  { code: 'VT', name: 'Vermont' }, { code: 'VA', name: 'Virginia' },
+  { code: 'WA', name: 'Washington' }, { code: 'WV', name: 'West Virginia' },
+  { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' },
+  { code: 'DC', name: 'Washington DC' },
+]
+
+function SetupBillingForm({
+  onClose, onSubmit, busy,
+}: {
+  onClose: () => void
+  onSubmit: (addr: { line1?: string; city?: string; state: string; postal_code: string }) => Promise<void>
+  busy: boolean
+}) {
+  const [line1, setLine1] = useState('')
+  const [city, setCity] = useState('')
+  const [state, setState] = useState('WA') // default to WA since most clients here
+  const [postal, setPostal] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!state || !postal) { setErr('State and ZIP are required'); return }
+    setErr(null)
+    await onSubmit({
+      line1: line1 || undefined,
+      city: city || undefined,
+      state,
+      postal_code: postal,
+    })
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="border border-ink-6 rounded-lg p-3 space-y-3 bg-bg-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-medium text-ink-3 uppercase tracking-wide">Billing address</span>
+        <button type="button" onClick={onClose} className="text-ink-4 hover:text-ink"><X className="w-3.5 h-3.5" /></button>
+      </div>
+      <p className="text-[11px] text-ink-4 leading-snug">
+        Used for sales tax calculation on invoices. State + ZIP are required; line 1 and city are optional
+        but show on the invoice PDF.
+      </p>
+      <input
+        type="text"
+        placeholder="Street address (optional)"
+        value={line1}
+        onChange={e => setLine1(e.target.value)}
+        className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          type="text"
+          placeholder="City (optional)"
+          value={city}
+          onChange={e => setCity(e.target.value)}
+          className="px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
+        />
+        <input
+          type="text"
+          placeholder="ZIP *"
+          value={postal}
+          onChange={e => setPostal(e.target.value)}
+          required
+          className="px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
+        />
+      </div>
+      <select
+        value={state}
+        onChange={e => setState(e.target.value)}
+        className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
+      >
+        {US_STATES.map(s => (
+          <option key={s.code} value={s.code}>{s.name}</option>
+        ))}
+      </select>
+      {err && <p className="text-[12px] text-red-700">{err}</p>}
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={busy}
+          className="flex-1 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-3 py-2 flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+          Set up billing
+        </button>
+        <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink px-3">
+          Cancel
+        </button>
+      </div>
+    </form>
   )
 }
 

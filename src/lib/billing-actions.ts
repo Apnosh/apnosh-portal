@@ -60,19 +60,31 @@ async function requireAdmin(): Promise<{ ok: true; userId: string } | { ok: fals
 // createStripeCustomerForClient -- first step in onboarding a client to Stripe
 // ---------------------------------------------------------------------------
 
-export async function createStripeCustomerForClient(
-  clientId: string,
-): Promise<ActionResult<{ stripeCustomerId: string }>> {
+export async function createStripeCustomerForClient(args: {
+  clientId: string
+  address: {
+    line1?: string
+    line2?: string
+    city?: string
+    state: string         // required for Stripe Tax
+    postal_code: string   // required for Stripe Tax
+    country?: string
+  }
+}): Promise<ActionResult<{ stripeCustomerId: string }>> {
   const auth = await requireAdmin()
   if (!auth.ok) return { success: false, error: auth.error }
 
+  // Minimum validation: need state + postal code for Stripe Tax.
+  if (!args.address?.state || !args.address?.postal_code) {
+    return { success: false, error: 'State and postal code are required so sales tax can be calculated.' }
+  }
+
   const admin = getAdminSupabase()
 
-  // Pull client details for the Stripe customer record.
   const { data: client, error: clientErr } = await admin
     .from('clients')
     .select('id, name, email, phone')
-    .eq('id', clientId)
+    .eq('id', args.clientId)
     .maybeSingle()
 
   if (clientErr || !client) {
@@ -88,9 +100,10 @@ export async function createStripeCustomerForClient(
       email: client.email,
       name: client.name,
       phone: client.phone ?? undefined,
+      address: args.address,
     })
 
-    revalidatePath(`/admin/clients/${clientId}`)
+    revalidatePath(`/admin/clients/${args.clientId}`)
     revalidatePath(`/admin/billing`)
     return { success: true, data: { stripeCustomerId } }
   } catch (err) {
@@ -292,6 +305,9 @@ export async function createOneTimeInvoice(args: {
       collection_method: 'send_invoice',
       days_until_due: args.dueDateDays ?? 14,
       auto_advance: false, // we finalize explicitly below
+      // Stripe Tax auto-calculates based on customer address + product
+      // tax codes. WA sales tax applies to taxable categories only.
+      automatic_tax: { enabled: true },
       payment_settings: {
         payment_method_types: ['card', 'us_bank_account'],
       },
