@@ -147,6 +147,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
   const [pattern, setPattern] = useState<ClientPattern | null>(null)
   const [users, setUsers] = useState<ClientUser[]>([])
   const [loading, setLoading] = useState(true)
+  // Whether this client has an active Stripe subscription -- when true,
+  // the old Billing card's Monthly Rate + Billing Status become read-only
+  // because they're auto-synced from the subscription via webhook.
+  const [hasActiveStripeSub, setHasActiveStripeSub] = useState(false)
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -165,15 +169,25 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
     const c = clientData as Client
     setClient(c)
 
-    const [brandRes, patternRes, usersRes] = await Promise.all([
+    const [brandRes, patternRes, usersRes, subRes] = await Promise.all([
       supabase.from('client_brands').select('*').eq('client_id', c.id).single(),
       supabase.from('client_patterns').select('*').eq('client_id', c.id).single(),
       supabase.from('client_users').select('*').eq('client_id', c.id).order('invited_at', { ascending: false }),
+      // Detect active/past_due/trialing/paused subscription. If one exists,
+      // the CRM monthly_rate + billing_status are locked because the webhook
+      // auto-syncs them from Stripe.
+      supabase.from('subscriptions')
+        .select('id')
+        .eq('client_id', c.id)
+        .in('status', ['active', 'trialing', 'past_due', 'paused'])
+        .limit(1)
+        .maybeSingle(),
     ])
 
     if (brandRes.data) setBrand(brandRes.data as ClientBrand)
     if (patternRes.data) setPattern(patternRes.data as ClientPattern)
     if (usersRes.data) setUsers(usersRes.data as ClientUser[])
+    setHasActiveStripeSub(subRes.data !== null)
 
     setLoading(false)
   }, [slug, supabase])
@@ -252,6 +266,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
           brand={brand}
           users={users}
           setUsers={setUsers}
+          hasActiveStripeSub={hasActiveStripeSub}
         />
       )}
 
@@ -341,12 +356,14 @@ function OverviewTab({
   brand,
   users,
   setUsers,
+  hasActiveStripeSub,
 }: {
   client: Client
   setClient: (c: Client) => void
   brand: ClientBrand | null
   users: ClientUser[]
   setUsers: (u: ClientUser[]) => void
+  hasActiveStripeSub: boolean
 }) {
   const supabase = createClient()
 
@@ -700,33 +717,57 @@ function OverviewTab({
               </select>
             </div>
             <div>
-              <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">Monthly Rate</label>
-              <input
-                type="number"
-                value={draft.monthly_rate ?? ''}
-                onChange={e => updateDraft({ monthly_rate: e.target.value ? Number(e.target.value) : null })}
-                placeholder="0"
-                className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
-              />
+              <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block flex items-center gap-1.5">
+                Monthly Rate
+                {hasActiveStripeSub && (
+                  <span className="text-[9px] normal-case tracking-normal text-ink-4 italic">· managed by Stripe</span>
+                )}
+              </label>
+              {hasActiveStripeSub ? (
+                <div className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink-3 bg-bg-2">
+                  {client.monthly_rate != null && client.monthly_rate > 0
+                    ? formatCurrency(client.monthly_rate) + '/mo'
+                    : '—'}
+                </div>
+              ) : (
+                <input
+                  type="number"
+                  value={draft.monthly_rate ?? ''}
+                  onChange={e => updateDraft({ monthly_rate: e.target.value ? Number(e.target.value) : null })}
+                  placeholder="0"
+                  className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                />
+              )}
             </div>
             <div>
-              <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">Billing Status</label>
-              <select
-                value={draft.billing_status}
-                onChange={e => updateDraft({ billing_status: e.target.value as ClientBillingStatus })}
-                className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
-              >
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="cancelled">Cancelled</option>
-                <option value="past_due">Past Due</option>
-              </select>
+              <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block flex items-center gap-1.5">
+                Billing Status
+                {hasActiveStripeSub && (
+                  <span className="text-[9px] normal-case tracking-normal text-ink-4 italic">· managed by Stripe</span>
+                )}
+              </label>
+              {hasActiveStripeSub ? (
+                <div className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink-3 bg-bg-2 capitalize">
+                  {(draft.billing_status ?? 'active').replace('_', ' ')}
+                </div>
+              ) : (
+                <select
+                  value={draft.billing_status}
+                  onChange={e => updateDraft({ billing_status: e.target.value as ClientBillingStatus })}
+                  className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                >
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="past_due">Past Due</option>
+                </select>
+              )}
             </div>
-            {client.monthly_rate != null && client.monthly_rate > 0 && (
-              <div className="pt-2 border-t border-ink-6">
-                <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide">Current Rate</span>
-                <p className="text-lg font-semibold text-ink mt-0.5">{formatCurrency(client.monthly_rate)}<span className="text-ink-4 text-sm font-normal">/mo</span></p>
-              </div>
+            {hasActiveStripeSub && (
+              <p className="text-[11px] text-ink-4 leading-snug pt-1">
+                Monthly Rate + Billing Status auto-sync from the active Stripe subscription below.
+                To change them, update the subscription in the Stripe Billing card.
+              </p>
             )}
           </div>
         </Card>

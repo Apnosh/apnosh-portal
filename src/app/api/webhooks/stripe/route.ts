@@ -211,6 +211,27 @@ function mapInvoiceStatus(s: Stripe.Invoice.Status | null): string {
 // Subscription handlers
 // ============================================================
 
+// Map a Stripe subscription status to our clients.billing_status enum.
+// clients.billing_status accepts: active | paused | cancelled | past_due
+function mapToClientBillingStatus(s: Stripe.Subscription.Status): string | null {
+  switch (s) {
+    case 'active':
+    case 'trialing':
+      return 'active'
+    case 'past_due':
+    case 'incomplete':
+      return 'past_due'
+    case 'paused':
+      return 'paused'
+    case 'canceled':
+    case 'unpaid':
+    case 'incomplete_expired':
+      return 'cancelled'
+    default:
+      return null
+  }
+}
+
 async function upsertSubscription(
   supabase: AdminClient,
   sub: Stripe.Subscription,
@@ -256,6 +277,17 @@ async function upsertSubscription(
     },
     { onConflict: 'stripe_subscription_id' },
   )
+
+  // Auto-sync the CRM fields on the clients table so the legacy 'Billing'
+  // card on the client detail page stays accurate. clients.monthly_rate
+  // mirrors the subscription amount (in dollars, numeric). clients.billing_status
+  // mirrors the lifecycle state via mapToClientBillingStatus.
+  const mappedStatus = mapToClientBillingStatus(sub.status)
+  const clientUpdate: Record<string, unknown> = {
+    monthly_rate: amount / 100,
+  }
+  if (mappedStatus) clientUpdate.billing_status = mappedStatus
+  await supabase.from('clients').update(clientUpdate).eq('id', clientId)
 }
 
 async function handleSubscriptionCreated(supabase: AdminClient, sub: Stripe.Subscription) {
@@ -278,6 +310,15 @@ async function handleSubscriptionDeleted(supabase: AdminClient, sub: Stripe.Subs
   // Revoke any service-area grants tied to this subscription's products.
   const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id
   const clientId = await findClientByStripeCustomer(supabase, customerId)
+
+  // Also sync clients.billing_status so the legacy card reflects cancellation.
+  if (clientId) {
+    await supabase
+      .from('clients')
+      .update({ billing_status: 'cancelled' })
+      .eq('id', clientId)
+  }
+
   if (clientId) {
     try {
       const full = await stripe.subscriptions.retrieve(sub.id, {
