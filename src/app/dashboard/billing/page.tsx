@@ -46,11 +46,11 @@ interface InvoiceRow {
 
 const statusConfig: Record<string, { label: string; className: string; icon: typeof CheckCircle }> = {
   paid: { label: 'Paid', className: 'bg-emerald-50 text-emerald-700', icon: CheckCircle },
-  open: { label: 'Open', className: 'bg-blue-50 text-blue-700', icon: Clock },
+  open: { label: 'Unpaid', className: 'bg-amber-50 text-amber-700', icon: Clock },
   failed: { label: 'Payment failed', className: 'bg-red-50 text-red-700', icon: XCircle },
-  void: { label: 'Void', className: 'bg-gray-50 text-gray-500', icon: XCircle },
+  void: { label: 'Canceled', className: 'bg-gray-50 text-gray-500', icon: XCircle },
   draft: { label: 'Draft', className: 'bg-gray-50 text-gray-500', icon: Clock },
-  uncollectible: { label: 'Uncollectible', className: 'bg-red-50 text-red-700', icon: XCircle },
+  uncollectible: { label: 'Written off', className: 'bg-red-50 text-red-700', icon: XCircle },
 }
 
 function formatCents(cents: number): string {

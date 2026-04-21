@@ -73,7 +73,7 @@ function isOverdue(inv: InvoiceRow): boolean {
 
 const STATUS_BADGE: Record<string, string> = {
   draft: 'bg-ink-6 text-ink-3',
-  open: 'bg-blue-50 text-blue-700',
+  open: 'bg-amber-50 text-amber-700',
   paid: 'bg-emerald-50 text-emerald-700',
   failed: 'bg-red-50 text-red-700',
   void: 'bg-ink-6 text-ink-4',
@@ -84,6 +84,15 @@ const STATUS_BADGE: Record<string, string> = {
   canceled: 'bg-ink-6 text-ink-4',
   paused: 'bg-amber-50 text-amber-700',
   incomplete: 'bg-amber-50 text-amber-700',
+}
+
+const INVOICE_STATUS_LABEL: Record<string, string> = {
+  draft: 'Draft',
+  open: 'Unpaid',
+  paid: 'Paid',
+  void: 'Canceled',
+  uncollectible: 'Written off',
+  failed: 'Payment failed',
 }
 
 const tabs: Array<{ label: string; filter: FilterTab }> = [
@@ -362,7 +371,7 @@ export default function AdminBillingPage() {
                             </td>
                             <td className="px-4 py-3">
                               <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[displayStatus] ?? ''}`}>
-                                {overdue ? 'overdue' : inv.status}
+                                {overdue ? 'Overdue' : (INVOICE_STATUS_LABEL[inv.status] ?? inv.status)}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-ink-3">

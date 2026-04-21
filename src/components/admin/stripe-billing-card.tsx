@@ -24,6 +24,7 @@ import {
   resendInvoice,
   voidInvoice,
   createCustomerPortalLink,
+  deleteDraftInvoice,
   type InvoiceLineInput,
   type DiscountInput,
 } from '@/lib/billing-actions'
@@ -96,12 +97,27 @@ const STATUS_BADGE: Record<string, string> = {
   canceled: 'bg-ink-6 text-ink-4',
   paused: 'bg-amber-50 text-amber-700',
   incomplete: 'bg-amber-50 text-amber-700',
-  open: 'bg-blue-50 text-blue-700',
+  open: 'bg-amber-50 text-amber-700',
   paid: 'bg-emerald-50 text-emerald-700',
   void: 'bg-ink-6 text-ink-4',
   draft: 'bg-ink-6 text-ink-3',
   failed: 'bg-red-50 text-red-700',
   uncollectible: 'bg-red-50 text-red-700',
+}
+
+// Human-friendly labels for invoice statuses. Admin sees these on the
+// recent-invoices list instead of raw Stripe terms.
+const INVOICE_STATUS_LABEL: Record<string, string> = {
+  draft: 'Draft',
+  open: 'Unpaid',
+  paid: 'Paid',
+  void: 'Canceled',
+  uncollectible: 'Written off',
+  failed: 'Payment failed',
+}
+
+function invoiceStatusLabel(status: string): string {
+  return INVOICE_STATUS_LABEL[status] ?? status
 }
 
 // ---------------------------------------------------------------------------
@@ -183,12 +199,21 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
   }
 
   async function onVoidInvoice(invoiceId: string) {
-    if (!confirm('Void this invoice? The client can no longer pay it.')) return
+    if (!confirm('Cancel this invoice? The client will no longer be able to pay it. This cannot be undone.')) return
     setBusyAction(`void-${invoiceId}`); setError(null); setNotice(null)
     const result = await voidInvoice(invoiceId)
     setBusyAction(null)
     if (!result.success) setError(result.error)
-    else { setNotice('Invoice voided.'); load() }
+    else { setNotice('Invoice canceled.'); load() }
+  }
+
+  async function onDeleteDraft(invoiceId: string) {
+    if (!confirm('Delete this draft invoice? The client has not seen it yet.')) return
+    setBusyAction(`delete-${invoiceId}`); setError(null); setNotice(null)
+    const result = await deleteDraftInvoice(invoiceId)
+    setBusyAction(null)
+    if (!result.success) setError(result.error)
+    else { setNotice('Draft deleted.'); load() }
   }
 
   async function onGetPortalLink() {
@@ -348,6 +373,7 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
                     busyAction={busyAction}
                     onResend={() => onResendInvoice(inv.id)}
                     onVoid={() => onVoidInvoice(inv.id)}
+                    onDelete={() => onDeleteDraft(inv.id)}
                   />
                 ))}
               </div>
@@ -787,7 +813,17 @@ function CreateInvoiceForm({
   const bufferDollars = addBuffer && subtotal > 0
     ? Math.round(((subtotal / (1 - 0.029) - subtotal) + 0.30) * 100) / 100
     : 0
-  const total = subtotal + bufferDollars
+  const preDiscountSubtotal = subtotal + bufferDollars
+
+  // Discount math (client-side preview -- Stripe computes authoritatively
+  // at invoice creation but we show the expected breakdown live).
+  const discountDollars = discount
+    ? discount.type === 'percent'
+      ? Math.round((preDiscountSubtotal * discount.value / 100) * 100) / 100
+      : Math.min(discount.value, preDiscountSubtotal) // fixed can't exceed subtotal
+    : 0
+
+  const total = Math.max(0, preDiscountSubtotal - discountDollars)
 
   function updateLine(i: number, update: Partial<InvoiceLineInput>) {
     setLines(prev => prev.map((l, idx) => idx === i ? { ...l, ...update } : l))
@@ -908,28 +944,56 @@ function CreateInvoiceForm({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <label className="block">
-          <span className="text-[11px] text-ink-4">Due in (days)</span>
-          <input
-            type="number"
-            min="1"
-            max="90"
-            value={dueDays}
-            onChange={e => setDueDays(parseInt(e.target.value) || 14)}
-            className="w-full px-2 py-1.5 border border-ink-6 rounded text-sm bg-white mt-1"
-          />
-        </label>
-        <div className="text-right">
-          <span className="text-[11px] text-ink-4">Total</span>
-          <p className="text-lg font-semibold text-ink tabular-nums">{formatCents(total * 100)}</p>
-          {addBuffer && bufferDollars > 0 && (
-            <p className="text-[10px] text-ink-4 tabular-nums">
-              incl. {formatCents(bufferDollars * 100)} card buffer
-            </p>
+      <label className="block">
+        <span className="text-[11px] text-ink-4">Due in (days)</span>
+        <input
+          type="number"
+          min="1"
+          max="90"
+          value={dueDays}
+          onChange={e => setDueDays(parseInt(e.target.value) || 14)}
+          className="w-full px-2 py-1.5 border border-ink-6 rounded text-sm bg-white mt-1"
+        />
+      </label>
+
+      {/* Live price breakdown -- shows exactly what the client will see on
+          their hosted invoice, so admin can sanity-check before sending. */}
+      {subtotal > 0 && (
+        <div className="bg-white border border-ink-6 rounded-lg p-3 text-[12px] space-y-1">
+          <div className="text-[10px] font-semibold text-ink-4 uppercase tracking-wide mb-1">
+            What the client will see
+          </div>
+          <div className="flex justify-between tabular-nums">
+            <span className="text-ink-3">Subtotal</span>
+            <span className="text-ink-2">{formatCents(subtotal * 100)}</span>
+          </div>
+          {bufferDollars > 0 && (
+            <div className="flex justify-between tabular-nums">
+              <span className="text-ink-3">Card processing buffer (3%)</span>
+              <span className="text-ink-2">+{formatCents(bufferDollars * 100)}</span>
+            </div>
           )}
+          {discount && discountDollars > 0 && (
+            <div className="flex justify-between tabular-nums text-emerald-700">
+              <span>Discount{discount.name ? ` (${discount.name})` : ''}</span>
+              <span>-{formatCents(discountDollars * 100)}</span>
+            </div>
+          )}
+          <div className="flex justify-between tabular-nums text-ink-4">
+            <span>Sales tax</span>
+            <span>calculated by Stripe</span>
+          </div>
+          <div className="flex justify-between tabular-nums pt-1 mt-1 border-t border-ink-6">
+            <span className="font-semibold text-ink">Total</span>
+            <span className="font-semibold text-ink text-base">{formatCents(total * 100)}</span>
+          </div>
+          <div className="text-[10px] text-ink-4 pt-1">
+            {addBuffer && bufferDollars > 0
+              ? `Net after card fees: ~${formatCents(subtotal * 100)} · net by ACH: ~${formatCents((total - Math.min(5, total * 0.008)) * 100)}`
+              : `Net after card fees: ~${formatCents((total * (1 - 0.029) - 0.30) * 100)} · net by ACH: ~${formatCents((total - Math.min(5, total * 0.008)) * 100)}`}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Card fee buffer toggle */}
       <label className="flex items-start gap-2 cursor-pointer">
@@ -978,14 +1042,16 @@ function CreateInvoiceForm({
 }
 
 function InvoiceRowItem({
-  invoice, busyAction, onResend, onVoid,
+  invoice, busyAction, onResend, onVoid, onDelete,
 }: {
   invoice: InvoiceRow
   busyAction: string | null
   onResend: () => void
   onVoid: () => void
+  onDelete: () => void
 }) {
-  const canVoid = ['open', 'draft', 'failed'].includes(invoice.status)
+  const isDraft = invoice.status === 'draft'
+  const canCancel = ['open', 'failed'].includes(invoice.status)
   const canResend = invoice.status === 'open' && invoice.hosted_invoice_url
 
   return (
@@ -994,7 +1060,7 @@ function InvoiceRowItem({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[12px] font-medium text-ink">{invoice.invoice_number}</span>
           <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_BADGE[invoice.status] ?? 'bg-ink-6 text-ink-4'}`}>
-            {invoice.status}
+            {invoiceStatusLabel(invoice.status)}
           </span>
           {invoice.type === 'subscription' && (
             <span className="text-[10px] text-ink-4">retainer</span>
@@ -1020,20 +1086,30 @@ function InvoiceRowItem({
           <button
             onClick={onResend}
             disabled={busyAction === `resend-${invoice.id}`}
-            title="Resend invoice email"
+            title="Resend email to client"
             className="p-1 text-ink-4 hover:text-brand-dark"
           >
             {busyAction === `resend-${invoice.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
           </button>
         )}
-        {canVoid && (
+        {isDraft && (
+          <button
+            onClick={onDelete}
+            disabled={busyAction === `delete-${invoice.id}`}
+            title="Delete draft (not yet sent to client)"
+            className="p-1 text-ink-4 hover:text-red-700"
+          >
+            {busyAction === `delete-${invoice.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+          </button>
+        )}
+        {canCancel && (
           <button
             onClick={onVoid}
             disabled={busyAction === `void-${invoice.id}`}
-            title="Void invoice"
+            title="Cancel invoice (client can no longer pay)"
             className="p-1 text-ink-4 hover:text-red-700"
           >
-            {busyAction === `void-${invoice.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+            {busyAction === `void-${invoice.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
           </button>
         )}
       </div>

@@ -390,7 +390,31 @@ export async function createOneTimeInvoice(args: {
     // Step 4: send it (Stripe emails the client the hosted invoice link).
     const sent = await stripe.invoices.sendInvoice(finalized.id)
 
-    // The webhook will mirror; revalidate so the admin can see it.
+    // Proactively upsert the 'open' state into our mirror so the admin UI
+    // doesn't show 'draft' for the few seconds before the invoice.finalized
+    // webhook lands. The webhook will overwrite with the same state
+    // afterwards (idempotent).
+    await admin.from('invoices').upsert(
+      {
+        client_id: args.clientId,
+        stripe_invoice_id: sent.id,
+        type: 'one_time' as const,
+        status: 'open' as const,
+        amount_due_cents: sent.amount_due ?? 0,
+        amount_paid_cents: 0,
+        subtotal_cents: sent.subtotal ?? 0,
+        tax_cents: sent.tax ?? 0,
+        total_cents: sent.total ?? 0,
+        currency: (sent.currency ?? 'usd').toLowerCase(),
+        issued_at: sent.created ? new Date(sent.created * 1000).toISOString() : null,
+        due_at: sent.due_date ? new Date(sent.due_date * 1000).toISOString() : null,
+        hosted_invoice_url: sent.hosted_invoice_url ?? null,
+        invoice_pdf_url: sent.invoice_pdf ?? null,
+        description: sent.description ?? null,
+      },
+      { onConflict: 'stripe_invoice_id' },
+    )
+
     revalidatePath(`/admin/clients/${args.clientId}`)
     revalidatePath('/admin/billing')
     return {
@@ -435,6 +459,41 @@ export async function resendInvoice(invoiceId: string): Promise<ActionResult> {
 // ---------------------------------------------------------------------------
 // voidInvoice -- cancels an unpaid invoice
 // ---------------------------------------------------------------------------
+
+/**
+ * Permanently delete a DRAFT invoice. Cannot be used on finalized invoices
+ * (open, paid, void) -- use voidInvoice() for those.
+ */
+export async function deleteDraftInvoice(invoiceId: string): Promise<ActionResult> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const admin = getAdminSupabase()
+  const { data: inv } = await admin
+    .from('invoices')
+    .select('stripe_invoice_id, client_id, status')
+    .eq('id', invoiceId)
+    .maybeSingle()
+
+  if (!inv?.stripe_invoice_id) {
+    return { success: false, error: 'Invoice not found' }
+  }
+  if (inv.status !== 'draft') {
+    return { success: false, error: `Cannot delete a ${inv.status} invoice. Use 'Cancel' to void it instead.` }
+  }
+
+  try {
+    await stripe.invoices.del(inv.stripe_invoice_id)
+    // Remove our mirror too -- Stripe won't send any events for a deletion.
+    await admin.from('invoices').delete().eq('id', invoiceId)
+    revalidatePath(`/admin/clients/${inv.client_id}`)
+    revalidatePath('/admin/billing')
+    return { success: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to delete draft'
+    return { success: false, error: msg }
+  }
+}
 
 export async function voidInvoice(invoiceId: string): Promise<ActionResult> {
   const auth = await requireAdmin()
