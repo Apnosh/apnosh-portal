@@ -36,6 +36,8 @@ interface Props {
   // to import it here. OverviewTab in page.tsx passes in the existing
   // form + service allotments + brand quick view that admins edit.
   editContent: React.ReactNode
+  // Called by the inline-edit fields on the hero header.
+  onClientUpdate: (changes: Partial<Client>) => Promise<void>
 }
 
 interface OverviewStats {
@@ -60,7 +62,7 @@ const EMPTY_STATS: OverviewStats = {
   openContentRequests: 0,
 }
 
-export default function ClientOverview({ client, editContent }: Props) {
+export default function ClientOverview({ client, editContent, onClientUpdate }: Props) {
   const [stats, setStats] = useState<OverviewStats>(EMPTY_STATS)
   const [editOpen, setEditOpen] = useState(false)
   const [interactionModalOpen, setInteractionModalOpen] = useState(false)
@@ -139,12 +141,11 @@ export default function ClientOverview({ client, editContent }: Props) {
         activeRetainerAmountCents={stats.retainerAmountCents}
         subscriptionStatus={stats.retainerStatus}
         onCreateInvoice={() => {
-          // The Stripe Billing card owns the create-invoice modal; scroll
-          // to it + let the admin use the existing flow.
           const card = document.getElementById('stripe-billing-card')
           card?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         }}
         onLogMeeting={() => setInteractionModalOpen(true)}
+        onClientUpdate={onClientUpdate}
       />
 
       {/* Main content: 2-column */}

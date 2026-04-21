@@ -19,6 +19,7 @@ import {
   ExternalLink, MapPin, Globe, Calendar, Clock, AlertTriangle,
 } from 'lucide-react'
 import type { Client } from '@/types/database'
+import InlineEditText from './inline-edit-text'
 
 interface HeroHeaderProps {
   client: Client
@@ -29,6 +30,7 @@ interface HeroHeaderProps {
   subscriptionStatus: string | null
   onCreateInvoice: () => void
   onLogMeeting: () => void
+  onClientUpdate: (changes: Partial<Client>) => Promise<void>
 }
 
 const BILLING_STATUS_LABEL: Record<string, string> = {
@@ -65,6 +67,7 @@ export default function HeroHeader({
   subscriptionStatus,
   onCreateInvoice,
   onLogMeeting,
+  onClientUpdate,
 }: HeroHeaderProps) {
   const status = client.billing_status
   const tone = BILLING_STATUS_TONE[status] ?? BILLING_STATUS_TONE.active
@@ -85,7 +88,15 @@ export default function HeroHeader({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="text-xl font-semibold text-ink truncate">{client.name}</h1>
+              <h1 className="text-xl font-semibold text-ink">
+                <InlineEditText
+                  value={client.name}
+                  placeholder="Untitled client"
+                  allowEmpty={false}
+                  onSave={name => onClientUpdate({ name })}
+                  inputClassName="text-xl font-semibold"
+                />
+              </h1>
               <div className="flex items-center gap-2 flex-wrap mt-1 text-[12px]">
                 <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium ${tone.bg} ${tone.text}`}>
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: tone.dot }} />
@@ -111,32 +122,44 @@ export default function HeroHeader({
                 )}
               </div>
 
-              {/* Meta row */}
+              {/* Meta row -- every field is click-to-edit */}
               <div className="flex items-center gap-3 flex-wrap mt-2 text-[12px] text-ink-4">
-                {client.location && (
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    {client.location}
-                  </span>
-                )}
-                {client.website && (
-                  <a
-                    href={client.website.startsWith('http') ? client.website : `https://${client.website}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 hover:text-brand-dark"
-                  >
-                    <Globe className="w-3 h-3" />
-                    {client.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                    <ExternalLink className="w-2.5 h-2.5" />
-                  </a>
-                )}
-                {client.industry && (
-                  <span className="inline-flex items-center gap-1">
-                    <Building2 className="w-3 h-3" />
-                    {client.industry}
-                  </span>
-                )}
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="w-3 h-3 flex-shrink-0" />
+                  <InlineEditText
+                    value={client.location}
+                    placeholder="Add location"
+                    onSave={location => onClientUpdate({ location: location || null })}
+                  />
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <Globe className="w-3 h-3 flex-shrink-0" />
+                  <InlineEditText
+                    value={client.website}
+                    placeholder="Add website"
+                    onSave={website => onClientUpdate({ website: website || null })}
+                    formatDisplay={w => w.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                  />
+                  {client.website && (
+                    <a
+                      href={client.website.startsWith('http') ? client.website : `https://${client.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-ink-4 hover:text-brand-dark"
+                      title="Open website"
+                    >
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  )}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <Building2 className="w-3 h-3 flex-shrink-0" />
+                  <InlineEditText
+                    value={client.industry}
+                    placeholder="Add industry"
+                    onSave={industry => onClientUpdate({ industry: industry || null })}
+                  />
+                </span>
                 {client.onboarding_date && (
                   <span className="inline-flex items-center gap-1">
                     <Calendar className="w-3 h-3" />

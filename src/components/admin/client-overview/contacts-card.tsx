@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   User, Mail, Phone, MessageSquare, Star, Loader2, Plus,
-  Copy, ExternalLink, Check,
+  Copy, ExternalLink, Check, X, AlertTriangle,
 } from 'lucide-react'
 
 interface ContactRow {
@@ -47,6 +47,7 @@ export default function ContactsCard({ clientId }: { clientId: string }) {
   const [contacts, setContacts] = useState<ContactRow[]>([])
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState<string | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -81,9 +82,9 @@ export default function ContactsCard({ clientId }: { clientId: string }) {
           {contacts.length > 0 && <span className="ml-1.5 text-ink-4 normal-case tracking-normal">({contacts.length})</span>}
         </h3>
         <button
-          className="text-ink-4 hover:text-brand-dark text-[11px] font-medium inline-flex items-center gap-1 opacity-50 cursor-not-allowed"
-          title="Coming soon"
-          disabled
+          type="button"
+          onClick={() => setAddOpen(true)}
+          className="text-ink-4 hover:text-brand-dark text-[11px] font-medium inline-flex items-center gap-1"
         >
           <Plus className="w-3 h-3" /> Add
         </button>
@@ -172,6 +173,201 @@ export default function ContactsCard({ clientId }: { clientId: string }) {
           ))}
         </div>
       )}
+
+      {addOpen && (
+        <AddContactModal
+          clientId={clientId}
+          hasPrimary={contacts.some(c => c.is_primary)}
+          onClose={() => setAddOpen(false)}
+          onSaved={() => { setAddOpen(false); void load() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Add-contact modal
+// ---------------------------------------------------------------------------
+
+type ContactRole = 'owner' | 'manager' | 'marketing_lead' | 'billing' | 'employee' | 'filming_contact' | 'other'
+type PreferredMethod = 'email' | 'phone' | 'text' | 'portal'
+
+function AddContactModal({
+  clientId,
+  hasPrimary,
+  onClose,
+  onSaved,
+}: {
+  clientId: string
+  hasPrimary: boolean
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+  const [title, setTitle] = useState('')
+  const [role, setRole] = useState<ContactRole>('other')
+  const [preferred, setPreferred] = useState<PreferredMethod | ''>('')
+  const [isPrimary, setIsPrimary] = useState(!hasPrimary)
+  const [isBilling, setIsBilling] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!fullName.trim()) {
+      setError('Name is required')
+      return
+    }
+    setSubmitting(true); setError(null)
+    const supabase = createClient()
+
+    // If this new contact is being set as primary, unset any existing primary
+    if (isPrimary) {
+      await supabase.from('client_contacts').update({ is_primary: false }).eq('client_id', clientId).eq('is_primary', true)
+    }
+
+    const { error: insertErr } = await supabase.from('client_contacts').insert({
+      client_id: clientId,
+      full_name: fullName.trim(),
+      email: email.trim() || null,
+      phone: phone.trim() || null,
+      title: title.trim() || null,
+      role,
+      preferred_contact_method: preferred || null,
+      is_primary: isPrimary,
+      is_billing_contact: isBilling,
+    })
+
+    setSubmitting(false)
+    if (insertErr) { setError(insertErr.message); return }
+    onSaved()
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center p-4 overflow-y-auto"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <form onSubmit={submit} className="bg-white rounded-2xl shadow-xl max-w-md w-full my-8 overflow-hidden">
+        <div className="flex items-start justify-between p-4 border-b border-ink-6">
+          <h2 className="text-base font-semibold text-ink">Add contact</h2>
+          <button type="button" onClick={onClose} className="text-ink-4 hover:text-ink p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-3">
+          <div>
+            <label className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide block mb-1">
+              Name <span className="text-red-600 normal-case">*</span>
+            </label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={e => setFullName(e.target.value)}
+              autoFocus
+              className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide block mb-1">Role</label>
+              <select
+                value={role}
+                onChange={e => setRole(e.target.value as ContactRole)}
+                className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
+              >
+                <option value="owner">Owner</option>
+                <option value="manager">Manager</option>
+                <option value="marketing_lead">Marketing lead</option>
+                <option value="billing">Billing</option>
+                <option value="employee">Employee</option>
+                <option value="filming_contact">Filming</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide block mb-1">Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="e.g. GM, Owner"
+                className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide block mb-1">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide block mb-1">Phone</label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide block mb-1">Prefers</label>
+            <select
+              value={preferred}
+              onChange={e => setPreferred(e.target.value as PreferredMethod | '')}
+              className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
+            >
+              <option value="">—</option>
+              <option value="email">Email</option>
+              <option value="phone">Phone</option>
+              <option value="text">Text</option>
+              <option value="portal">Portal</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-4 pt-1">
+            <label className="inline-flex items-center gap-1.5 text-[12px] text-ink-2">
+              <input type="checkbox" checked={isPrimary} onChange={e => setIsPrimary(e.target.checked)} />
+              Primary contact
+            </label>
+            <label className="inline-flex items-center gap-1.5 text-[12px] text-ink-2">
+              <input type="checkbox" checked={isBilling} onChange={e => setIsBilling(e.target.checked)} />
+              Billing contact
+            </label>
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-ink-6 bg-bg-2">
+          <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink px-3">Cancel</button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 inline-flex items-center gap-1.5 disabled:opacity-50"
+          >
+            {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Add contact
+          </button>
+        </div>
+      </form>
     </div>
   )
 }

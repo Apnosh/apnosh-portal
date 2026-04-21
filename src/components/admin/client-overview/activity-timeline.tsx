@@ -20,6 +20,7 @@ import {
   Clock, Phone, MessageSquare, Mail, Calendar, FileText, DollarSign,
   CheckCircle2, XCircle, AlertTriangle, Sparkles, Loader2, ArrowRight, StickyNote,
 } from 'lucide-react'
+import { InvoiceDetailModal } from '@/components/admin/invoice-detail-modal'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,6 +34,7 @@ interface TimelineEvent {
   subtitle?: string
   meta?: string
   href?: string
+  invoiceId?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +98,7 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
   const [events, setEvents] = useState<TimelineEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'client' | 'billing' | 'content'>('all')
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -171,6 +174,7 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
           kind: 'invoice_issued',
           title: `Invoice ${row.invoice_number} sent`,
           subtitle: `${formatCents(row.total_cents)} · ${row.type === 'subscription' ? 'retainer' : 'one-time'}`,
+          invoiceId: row.id,
         })
       }
       // Paid event
@@ -181,6 +185,7 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
           kind: 'invoice_paid',
           title: `Payment received: ${formatCents(row.total_cents)}`,
           subtitle: `Invoice ${row.invoice_number}`,
+          invoiceId: row.id,
         })
       }
       // Failed event
@@ -191,6 +196,7 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
           kind: 'invoice_failed',
           title: `Payment failed: ${formatCents(row.total_cents)}`,
           subtitle: `Invoice ${row.invoice_number}`,
+          invoiceId: row.id,
         })
       }
     }
@@ -307,8 +313,9 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
                 {group.events.map(event => {
                   const meta = KIND_META[event.kind]
                   const Icon = meta.icon
-                  return (
-                    <div key={event.id} className="flex items-start gap-3">
+                  const clickable = !!event.invoiceId
+                  const inner = (
+                    <>
                       <div className={`w-7 h-7 rounded-full ${meta.tone} flex items-center justify-center flex-shrink-0 mt-0.5`}>
                         <Icon className="w-3.5 h-3.5" />
                       </div>
@@ -326,6 +333,23 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
                           <p className="text-[11px] text-ink-4 mt-0.5">{event.meta}</p>
                         )}
                       </div>
+                    </>
+                  )
+                  if (clickable) {
+                    return (
+                      <button
+                        key={event.id}
+                        type="button"
+                        onClick={() => setOpenInvoiceId(event.invoiceId!)}
+                        className="w-full flex items-start gap-3 text-left -mx-2 px-2 py-1 rounded-lg hover:bg-bg-2 transition-colors"
+                      >
+                        {inner}
+                      </button>
+                    )
+                  }
+                  return (
+                    <div key={event.id} className="flex items-start gap-3">
+                      {inner}
                     </div>
                   )
                 })}
@@ -333,6 +357,14 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
             </div>
           ))}
         </div>
+      )}
+
+      {openInvoiceId && (
+        <InvoiceDetailModal
+          invoiceId={openInvoiceId}
+          onClose={() => setOpenInvoiceId(null)}
+          onChange={() => { void load() }}
+        />
       )}
     </div>
   )

@@ -533,6 +533,15 @@ function OverviewTab({
     setSaving(false)
   }
 
+  async function handleClientUpdate(changes: Partial<Client>) {
+    const { error } = await supabase
+      .from('clients')
+      .update(changes)
+      .eq('id', client.id)
+    if (error) throw error
+    setClient({ ...client, ...changes } as Client)
+  }
+
   async function handleNotesBlur() {
     if (draft.notes === client.notes) return
     setNotesSaving(true)
@@ -946,7 +955,7 @@ function OverviewTab({
     </div>
   )
 
-  return <ClientOverview client={client} editContent={editPanelContent} />
+  return <ClientOverview client={client} editContent={editPanelContent} onClientUpdate={handleClientUpdate} />
 }
 
 /* ------------------------------------------------------------------ */
