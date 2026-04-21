@@ -3,8 +3,9 @@
 /**
  * Server actions for Google Drive integration.
  *
- * All Drive API calls go through here so the access_token + refresh_token
- * never touch the browser. The `integrations` row is admin-only per RLS.
+ * Multi-folder: each client can have N linked folders (brand assets,
+ * contracts, content deliverables, etc.) stored in client_drive_folders.
+ * Token lives in the single-row `integrations` table.
  */
 
 import { createClient as createAdminClient } from '@supabase/supabase-js'
@@ -23,7 +24,6 @@ function adminDb() {
   })
 }
 
-/** Whether an admin is currently signed in. Wraps the awkward createClient pattern. */
 async function requireAdmin(): Promise<string | null> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -35,7 +35,6 @@ async function requireAdmin(): Promise<string | null> {
 
 /**
  * Fetch the current access token for Drive, refreshing if expired.
- * Persists the new token back to integrations.
  */
 async function getValidDriveToken(): Promise<string | null> {
   const db = adminDb()
@@ -48,7 +47,7 @@ async function getValidDriveToken(): Promise<string | null> {
   if (!row) return null
 
   const expiresAt = row.token_expires_at ? new Date(row.token_expires_at).getTime() : 0
-  const bufferMs = 60 * 1000 // refresh if expires within 60s
+  const bufferMs = 60 * 1000
   if (expiresAt - Date.now() > bufferMs) return row.access_token
 
   if (!row.refresh_token) return null
@@ -68,7 +67,7 @@ async function getValidDriveToken(): Promise<string | null> {
 }
 
 /**
- * Public API: is Drive connected at all?
+ * Is Drive connected at all?
  */
 export async function isDriveConnected(): Promise<{ connected: boolean; email?: string | null }> {
   if (!(await requireAdmin())) return { connected: false }
@@ -79,90 +78,154 @@ export async function isDriveConnected(): Promise<{ connected: boolean; email?: 
   return { connected: true, email: row.metadata?.email ?? null }
 }
 
-/**
- * List files inside a client's linked folder. Returns an error string if
- * the folder isn't set or Drive isn't connected.
- */
-export async function listClientDriveFiles(clientId: string): Promise<{
+export interface LinkedFolder {
+  id: string              // client_drive_folders row id
+  folderId: string        // Drive folder id
+  folderUrl: string | null
+  label: string | null
+  sortOrder: number
   files: DriveFile[]
   error?: string
-  folderId?: string | null
-  folderUrl?: string | null
-}> {
-  if (!(await requireAdmin())) return { files: [], error: 'Not authorized' }
-
-  const db = adminDb()
-  const { data: client } = await db.from('clients').select('drive_folder_id, drive_folder_url').eq('id', clientId).maybeSingle()
-  const c = client as { drive_folder_id: string | null; drive_folder_url: string | null } | null
-  if (!c?.drive_folder_id) return { files: [], error: 'No Drive folder linked', folderId: null, folderUrl: null }
-
-  const token = await getValidDriveToken()
-  if (!token) return { files: [], error: 'Drive not connected', folderId: c.drive_folder_id, folderUrl: c.drive_folder_url }
-
-  try {
-    const files = await listFilesInFolder(token, c.drive_folder_id)
-    return { files, folderId: c.drive_folder_id, folderUrl: c.drive_folder_url }
-  } catch (e) {
-    return { files: [], error: (e as Error).message, folderId: c.drive_folder_id, folderUrl: c.drive_folder_url }
-  }
 }
 
 /**
- * Link a Drive folder to a client. Accepts either a full URL or a raw
- * folder ID.
+ * List every linked folder for a client along with its file contents.
+ * Returns folders even if one fails — failure is reported per-folder.
  */
-export async function linkDriveFolder(clientId: string, input: string): Promise<{
-  success: boolean
+export async function listClientDriveFolders(clientId: string): Promise<{
+  folders: LinkedFolder[]
   error?: string
-  folderId?: string
 }> {
+  if (!(await requireAdmin())) return { folders: [], error: 'Not authorized' }
+
+  const db = adminDb()
+  const { data: rows } = await db
+    .from('client_drive_folders')
+    .select('id, folder_id, folder_url, label, sort_order')
+    .eq('client_id', clientId)
+    .order('sort_order')
+    .order('created_at')
+
+  const linkRows = (rows ?? []) as Array<{
+    id: string; folder_id: string; folder_url: string | null; label: string | null; sort_order: number
+  }>
+
+  if (linkRows.length === 0) return { folders: [] }
+
+  const token = await getValidDriveToken()
+  if (!token) {
+    // Return folders with no files so the UI can still show labels
+    return {
+      folders: linkRows.map(r => ({
+        id: r.id, folderId: r.folder_id, folderUrl: r.folder_url,
+        label: r.label, sortOrder: r.sort_order, files: [],
+        error: 'Drive not connected',
+      })),
+      error: 'Drive not connected',
+    }
+  }
+
+  const folders = await Promise.all(linkRows.map(async r => {
+    try {
+      const files = await listFilesInFolder(token, r.folder_id)
+      return {
+        id: r.id, folderId: r.folder_id, folderUrl: r.folder_url,
+        label: r.label, sortOrder: r.sort_order, files,
+      } satisfies LinkedFolder
+    } catch (e) {
+      return {
+        id: r.id, folderId: r.folder_id, folderUrl: r.folder_url,
+        label: r.label, sortOrder: r.sort_order, files: [],
+        error: (e as Error).message,
+      } satisfies LinkedFolder
+    }
+  }))
+
+  return { folders }
+}
+
+/**
+ * Add a Drive folder to a client. Accepts URL or raw ID + optional
+ * label. Idempotent via the unique(client_id, folder_id) constraint.
+ */
+export async function addDriveFolder(
+  clientId: string,
+  input: string,
+  label?: string,
+): Promise<{ success: boolean; error?: string; folderId?: string }> {
   if (!(await requireAdmin())) return { success: false, error: 'Not authorized' }
   const folderId = extractFolderId(input)
   if (!folderId) return { success: false, error: 'Could not parse a Drive folder ID from that input' }
 
   const db = adminDb()
   const url = input.includes('drive.google.com') ? input : `https://drive.google.com/drive/folders/${folderId}`
-  const { error } = await db.from('clients').update({
-    drive_folder_id: folderId,
-    drive_folder_url: url,
-  }).eq('id', clientId)
+
+  // Find the current max sort_order so new folders land at the bottom
+  const { data: existing } = await db
+    .from('client_drive_folders')
+    .select('sort_order')
+    .eq('client_id', clientId)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const nextOrder = (existing as { sort_order?: number } | null)?.sort_order !== undefined
+    ? ((existing as { sort_order: number }).sort_order + 1) : 0
+
+  const { error } = await db.from('client_drive_folders').upsert({
+    client_id: clientId,
+    folder_id: folderId,
+    folder_url: url,
+    label: label?.trim() || null,
+    sort_order: nextOrder,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'client_id, folder_id' })
+
   if (error) return { success: false, error: error.message }
   return { success: true, folderId }
 }
 
-/**
- * Unlink the Drive folder from a client.
- */
-export async function unlinkDriveFolder(clientId: string): Promise<{ success: boolean; error?: string }> {
+export async function removeDriveFolder(folderRowId: string): Promise<{ success: boolean; error?: string }> {
   if (!(await requireAdmin())) return { success: false, error: 'Not authorized' }
   const db = adminDb()
-  const { error } = await db.from('clients').update({
-    drive_folder_id: null,
-    drive_folder_url: null,
-  }).eq('id', clientId)
+  const { error } = await db.from('client_drive_folders').delete().eq('id', folderRowId)
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+
+export async function renameDriveFolder(
+  folderRowId: string,
+  label: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!(await requireAdmin())) return { success: false, error: 'Not authorized' }
+  const db = adminDb()
+  const { error } = await db.from('client_drive_folders')
+    .update({ label: label.trim() || null, updated_at: new Date().toISOString() })
+    .eq('id', folderRowId)
   if (error) return { success: false, error: error.message }
   return { success: true }
 }
 
 /**
- * Pull full text content from every Google Doc in the folder. Used by
- * the AI-extract flow (phase 3). Skips non-Doc files.
+ * Pull full text content from every Google Doc across ALL linked
+ * folders for a client. Used by the AI-extract flow (phase 3).
  */
 export async function readClientDocsContent(clientId: string): Promise<{
   docs: Array<{ id: string; name: string; text: string }>
   error?: string
 }> {
   if (!(await requireAdmin())) return { docs: [], error: 'Not authorized' }
-  const { files, error } = await listClientDriveFiles(clientId)
-  if (error) return { docs: [], error }
+  const { folders } = await listClientDriveFolders(clientId)
+  if (folders.length === 0) return { docs: [], error: 'No folders linked' }
   const token = await getValidDriveToken()
   if (!token) return { docs: [], error: 'Drive not connected' }
 
   const docs: Array<{ id: string; name: string; text: string }> = []
-  for (const f of files) {
-    if (f.mimeType !== 'application/vnd.google-apps.document') continue
-    const text = await exportGoogleDocAsText(token, f.id)
-    if (text) docs.push({ id: f.id, name: f.name, text })
+  for (const folder of folders) {
+    for (const f of folder.files) {
+      if (f.mimeType !== 'application/vnd.google-apps.document') continue
+      const text = await exportGoogleDocAsText(token, f.id)
+      if (text) docs.push({ id: f.id, name: f.name, text })
+    }
   }
   return { docs }
 }
