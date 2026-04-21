@@ -99,12 +99,14 @@ export async function listClientDriveFolders(clientId: string): Promise<{
   if (!(await requireAdmin())) return { folders: [], error: 'Not authorized' }
 
   const db = adminDb()
-  const { data: rows } = await db
+  const { data: rows, error: selectErr } = await db
     .from('client_drive_folders')
     .select('id, folder_id, folder_url, label, sort_order')
     .eq('client_id', clientId)
     .order('sort_order')
     .order('created_at')
+
+  if (selectErr) return { folders: [], error: selectErr.message }
 
   const linkRows = (rows ?? []) as Array<{
     id: string; folder_id: string; folder_url: string | null; label: string | null; sort_order: number
