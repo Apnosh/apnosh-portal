@@ -37,12 +37,14 @@ export default function NotesCard({ value, onSave }: Props) {
 
   return (
     <div className="bg-white rounded-xl border border-ink-6 shadow-sm p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide inline-flex items-center gap-1.5">
-          <StickyNote className="w-3 h-3" />
-          Internal notes
-          <span className="text-ink-5 font-normal normal-case tracking-normal text-[10px] ml-1">admin-only</span>
-        </h3>
+      <div className="flex items-start justify-between mb-3 gap-2">
+        <div>
+          <h3 className="text-[13px] font-semibold text-ink inline-flex items-center gap-1.5">
+            <StickyNote className="w-3.5 h-3.5 text-ink-4" />
+            Internal notes
+          </h3>
+          <p className="text-[11px] text-ink-4 mt-0.5">Admin-only · auto-saves on blur</p>
+        </div>
         {saving && (
           <span className="text-[10px] text-ink-4 inline-flex items-center gap-1">
             <Loader2 className="w-3 h-3 animate-spin" /> Saving

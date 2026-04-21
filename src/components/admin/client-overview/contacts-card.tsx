@@ -77,14 +77,17 @@ export default function ContactsCard({ clientId }: { clientId: string }) {
 
   return (
     <div className="bg-white rounded-xl border border-ink-6 shadow-sm p-5 h-full flex flex-col">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <h3 className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">Contacts</h3>
-          {contacts.length > 0 && (
-            <span className="text-[10px] font-semibold text-ink-4 bg-bg-2 rounded-full px-1.5 py-0.5 tabular-nums">
-              {contacts.length}
-            </span>
-          )}
+      <div className="flex items-start justify-between mb-4 gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="text-[13px] font-semibold text-ink">Contacts</h3>
+            {contacts.length > 0 && (
+              <span className="text-[10px] font-semibold text-ink-4 bg-bg-2 rounded-full px-1.5 py-0.5 tabular-nums">
+                {contacts.length}
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-ink-4 mt-0.5">People we work with at this client</p>
         </div>
         <button
           type="button"

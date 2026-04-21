@@ -3,19 +3,20 @@
 /**
  * Client overview — the record-style detail layout.
  *
- * Visual hierarchy (top to bottom):
- *   1. Hero — identity + quick actions + status
- *   2. Risk band (only if something needs attention)
- *   3. KPI strip — 5 numbers that summarize state
- *   4. Primary row — activity timeline (2fr) + tasks (1fr)
- *   5. Secondary row — at a glance · contacts · socials (3 equal cols)
- *   6. Notes (full-width compact card)
- *   7. Billing (full-width Stripe card)
- *   8. Plan & access (collapsed by default)
+ * Visual hierarchy is established through chapter-style section
+ * headings and intentional spacing: more breathing room around the
+ * hero and the billing section, tighter within a row of related
+ * cards. Every card uses the same treatment so structure comes from
+ * typography + position, not visual noise.
  *
- * Every card above uses the same card treatment (white, rounded-xl,
- * ink-6 border, subtle shadow) so the hierarchy comes from size +
- * position, not visual noise.
+ * Sections (top → bottom):
+ *   Hero + risk band   (the client)
+ *   AT A GLANCE        (KPI strip)
+ *   ACTIVITY & WORK    (timeline + tasks)
+ *   DETAILS            (at-a-glance · contacts · socials)
+ *   NOTES              (admin-only)
+ *   BILLING            (Stripe)
+ *   Plan & access      (collapsed)
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -67,6 +68,23 @@ const EMPTY_STATS: OverviewStats = {
   overdueTaskCount: 0,
 }
 
+/**
+ * Small section label used between major rows of the overview to
+ * establish a "chapter" rhythm. Deliberately quiet — it's not a
+ * heading you read, it's a visual palette cleanser that separates
+ * groups of cards.
+ */
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 pt-1">
+      <span className="text-[10px] font-semibold text-ink-4 uppercase tracking-[0.14em]">
+        {children}
+      </span>
+      <span className="flex-1 h-px bg-ink-6" />
+    </div>
+  )
+}
+
 export default function ClientOverview({ client, brand, editContent, onClientUpdate }: Props) {
   const [stats, setStats] = useState<OverviewStats>(EMPTY_STATS)
   const [editOpen, setEditOpen] = useState(false)
@@ -75,8 +93,6 @@ export default function ClientOverview({ client, brand, editContent, onClientUpd
 
   const load = useCallback(async () => {
     const supabase = createClient()
-    const endOfToday = new Date()
-    endOfToday.setHours(23, 59, 59, 999)
 
     const [lastContact, invoices, sub, content, tasks] = await Promise.all([
       supabase
@@ -143,81 +159,96 @@ export default function ClientOverview({ client, brand, editContent, onClientUpd
 
   useEffect(() => { load() }, [load])
 
-  // Days as a client (for KPI strip)
   const daysSinceOnboarding = client.onboarding_date
     ? Math.max(0, Math.round((Date.now() - new Date(client.onboarding_date).getTime()) / 86400000))
     : null
 
   return (
-    <div className="space-y-4">
-      {/* 1-2: Hero + risk band */}
-      <HeroHeader
-        client={client}
-        brand={brand}
-        daysSinceLastContact={stats.daysSinceLastContact}
-        outstandingInvoiceCount={stats.openInvoiceCount}
-        outstandingAmountCents={stats.openInvoiceAmountCents}
-        activeRetainerAmountCents={stats.retainerAmountCents}
-        subscriptionStatus={stats.retainerStatus}
-        onCreateInvoice={() => {
-          const card = document.getElementById('stripe-billing-card')
-          card?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        }}
-        onLogMeeting={() => setInteractionModalOpen(true)}
-        onClientUpdate={onClientUpdate}
-      />
-
-      {/* 3: KPI strip */}
-      <KPIStrip
-        retainerAmountCents={stats.retainerAmountCents}
-        fallbackMonthlyRateDollars={client.monthly_rate}
-        lifetimeRevenueCents={stats.lifetimeRevenueCents}
-        daysSinceOnboarding={daysSinceOnboarding}
-        openTaskCount={stats.openTaskCount}
-        overdueTaskCount={stats.overdueTaskCount}
-        daysSinceLastContact={stats.daysSinceLastContact}
-      />
-
-      {/* 4: Primary row — activity + tasks, true 2:1 split */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
-        <ActivityTimeline clientId={client.id} key={timelineRefresh} />
-        <TasksCard clientId={client.id} />
-      </div>
-
-      {/* 5: Secondary row — at a glance · contacts · socials */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <AtAGlanceCard
-          retainerAmountCents={stats.retainerAmountCents}
-          retainerStatus={stats.retainerStatus}
-          nextInvoiceDate={stats.nextInvoiceDate}
-          lifetimeRevenueCents={stats.lifetimeRevenueCents}
-          openInvoiceCount={stats.openInvoiceCount}
-          openInvoiceAmountCents={stats.openInvoiceAmountCents}
+    <div className="space-y-6">
+      {/* Hero + risk band */}
+      <div className="space-y-3">
+        <HeroHeader
+          client={client}
+          brand={brand}
           daysSinceLastContact={stats.daysSinceLastContact}
-          servicesActive={client.services_active}
-          openContentRequests={stats.openContentRequests}
-        />
-        <ContactsCard clientId={client.id} />
-        <SocialsCard
-          socials={client.socials as Record<string, string | undefined> | null}
-          onSave={socials => onClientUpdate({ socials: socials as Client['socials'] })}
+          outstandingInvoiceCount={stats.openInvoiceCount}
+          outstandingAmountCents={stats.openInvoiceAmountCents}
+          activeRetainerAmountCents={stats.retainerAmountCents}
+          subscriptionStatus={stats.retainerStatus}
+          onCreateInvoice={() => {
+            const card = document.getElementById('stripe-billing-card')
+            card?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }}
+          onLogMeeting={() => setInteractionModalOpen(true)}
+          onClientUpdate={onClientUpdate}
         />
       </div>
 
-      {/* 6: Notes — full-width compact */}
-      <NotesCard
-        value={client.notes}
-        onSave={notes => onClientUpdate({ notes })}
-      />
-
-      {/* 7: Billing — full-width Stripe */}
-      <div id="stripe-billing-card">
-        <StripeBillingCard clientId={client.id} />
+      {/* KPI strip */}
+      <div className="space-y-2.5">
+        <SectionLabel>At a glance</SectionLabel>
+        <KPIStrip
+          retainerAmountCents={stats.retainerAmountCents}
+          fallbackMonthlyRateDollars={client.monthly_rate}
+          lifetimeRevenueCents={stats.lifetimeRevenueCents}
+          daysSinceOnboarding={daysSinceOnboarding}
+          openTaskCount={stats.openTaskCount}
+          overdueTaskCount={stats.overdueTaskCount}
+          daysSinceLastContact={stats.daysSinceLastContact}
+        />
       </div>
 
-      {/* 8: Plan & access — collapsed. Contains services toggle, users
-          table, tier/rate/status plan, allotments. Low-frequency edits. */}
-      <div className="bg-white rounded-xl border border-ink-6 overflow-hidden shadow-sm">
+      {/* Primary row: activity + tasks */}
+      <div className="space-y-2.5">
+        <SectionLabel>Activity &amp; work</SectionLabel>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
+          <ActivityTimeline clientId={client.id} key={timelineRefresh} />
+          <TasksCard clientId={client.id} />
+        </div>
+      </div>
+
+      {/* Secondary row: details */}
+      <div className="space-y-2.5">
+        <SectionLabel>Details</SectionLabel>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <AtAGlanceCard
+            retainerAmountCents={stats.retainerAmountCents}
+            retainerStatus={stats.retainerStatus}
+            nextInvoiceDate={stats.nextInvoiceDate}
+            lifetimeRevenueCents={stats.lifetimeRevenueCents}
+            openInvoiceCount={stats.openInvoiceCount}
+            openInvoiceAmountCents={stats.openInvoiceAmountCents}
+            daysSinceLastContact={stats.daysSinceLastContact}
+            servicesActive={client.services_active}
+            openContentRequests={stats.openContentRequests}
+          />
+          <ContactsCard clientId={client.id} />
+          <SocialsCard
+            socials={client.socials as Record<string, string | undefined> | null}
+            onSave={socials => onClientUpdate({ socials: socials as Client['socials'] })}
+          />
+        </div>
+      </div>
+
+      {/* Notes */}
+      <div className="space-y-2.5">
+        <SectionLabel>Notes</SectionLabel>
+        <NotesCard
+          value={client.notes}
+          onSave={notes => onClientUpdate({ notes })}
+        />
+      </div>
+
+      {/* Billing */}
+      <div className="space-y-2.5">
+        <SectionLabel>Billing</SectionLabel>
+        <div id="stripe-billing-card">
+          <StripeBillingCard clientId={client.id} />
+        </div>
+      </div>
+
+      {/* Plan & access — collapsed by default, low-frequency edits */}
+      <div className="bg-white rounded-xl border border-ink-6 shadow-sm overflow-hidden">
         <button
           type="button"
           onClick={() => setEditOpen(v => !v)}

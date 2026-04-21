@@ -2,19 +2,17 @@
 
 /**
  * KPI strip — five numbers that tell you the state of a client at
- * a glance. Placed directly under the hero so it's the first thing
- * you see after the identity.
- *
- * Each cell is left-aligned within a divided row. Money uses tabular
- * nums. Empty values render as em-dash to maintain layout rhythm.
+ * a glance. Each cell has a subtle top-accent line whose color tracks
+ * the cell's state (red for overdue tasks, amber for stale contact,
+ * green for active retainer, etc). The accent is a 1px line at the
+ * very top, so the cells stay visually calm unless something wants
+ * your attention.
  */
 
 import { DollarSign, Repeat, Clock, ListTodo, Calendar } from 'lucide-react'
 
 interface Props {
   retainerAmountCents: number | null
-  // Fallback when there's no Stripe subscription — the manually-tracked
-  // monthly_rate on the client record. Shown with a " · manual" hint.
   fallbackMonthlyRateDollars: number | null
   lifetimeRevenueCents: number | null
   daysSinceOnboarding: number | null
@@ -23,13 +21,27 @@ interface Props {
   daysSinceLastContact: number | null
 }
 
+type Tone = 'good' | 'warn' | 'bad' | 'neutral'
+
+const TONE_ACCENT: Record<Tone, string> = {
+  good:    'bg-emerald-400',
+  warn:    'bg-amber-400',
+  bad:     'bg-red-500',
+  neutral: 'bg-transparent',
+}
+
+const TONE_VALUE_COLOR: Record<Tone, string> = {
+  good:    'text-ink',
+  warn:    'text-amber-700',
+  bad:     'text-red-700',
+  neutral: 'text-ink',
+}
+
 function formatMoney(cents: number | null): string {
   if (cents === null || cents === undefined) return '—'
   if (cents === 0) return '$0'
   const dollars = cents / 100
-  if (dollars >= 10000) {
-    return '$' + Math.round(dollars / 1000) + 'k'
-  }
+  if (dollars >= 10000) return '$' + Math.round(dollars / 1000) + 'k'
   return new Intl.NumberFormat('en-US', {
     style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0,
   }).format(dollars)
@@ -53,55 +65,74 @@ export default function KPIStrip({
   overdueTaskCount,
   daysSinceLastContact,
 }: Props) {
-  // Prefer the Stripe subscription amount. Fall back to the manually
-  // tracked client.monthly_rate (stored as whole dollars) so clients
-  // you track outside Stripe still show a real number.
   const mrrCents = retainerAmountCents
     ?? (fallbackMonthlyRateDollars ? fallbackMonthlyRateDollars * 100 : null)
   const mrrIsFallback = retainerAmountCents === null && fallbackMonthlyRateDollars !== null
+
+  const lastContactTone: Tone =
+    daysSinceLastContact === null ? 'neutral'
+    : daysSinceLastContact > 30 ? 'warn'
+    : daysSinceLastContact > 60 ? 'bad'
+    : 'good'
+
+  const taskTone: Tone =
+    overdueTaskCount > 0 ? 'bad'
+    : openTaskCount > 0 ? 'neutral'
+    : 'good'
+
+  const mrrTone: Tone = mrrCents && mrrCents > 0 ? (mrrIsFallback ? 'neutral' : 'good') : 'neutral'
 
   const cells: Array<{
     icon: typeof DollarSign
     label: string
     value: string
-    tone?: string
+    unit?: string
     hint?: string
+    tone: Tone
   }> = [
     {
       icon: Repeat,
-      label: 'MRR',
+      label: 'Monthly recurring',
       value: formatMoney(mrrCents),
-      hint: mrrIsFallback ? 'Manual rate · Stripe not connected'
+      unit: mrrCents ? '/month' : undefined,
+      hint: mrrIsFallback ? 'Manual · Stripe not connected'
           : retainerAmountCents ? 'Active retainer'
           : 'No active retainer',
+      tone: mrrTone,
     },
     {
       icon: DollarSign,
-      label: 'Lifetime',
+      label: 'Lifetime revenue',
       value: formatMoney(lifetimeRevenueCents),
-      hint: 'Total paid to date',
+      hint: lifetimeRevenueCents ? 'Total paid to date' : 'No paid invoices yet',
+      tone: 'neutral',
     },
     {
       icon: Calendar,
       label: 'Client since',
       value: formatDays(daysSinceOnboarding),
-      hint: daysSinceOnboarding !== null ? `${daysSinceOnboarding} days` : 'No onboarding date',
+      hint: daysSinceOnboarding !== null
+        ? `${daysSinceOnboarding} days`
+        : 'No onboarding date',
+      tone: 'neutral',
     },
     {
       icon: Clock,
       label: 'Last contact',
       value: formatDays(daysSinceLastContact),
-      tone: daysSinceLastContact !== null && daysSinceLastContact > 30 ? 'text-amber-700'
-        : daysSinceLastContact !== null && daysSinceLastContact > 14 ? 'text-ink-2'
-        : undefined,
-      hint: daysSinceLastContact === null ? 'No contact logged' : 'Since last interaction',
+      hint: daysSinceLastContact === null ? 'No interactions yet'
+        : daysSinceLastContact > 30 ? 'Overdue for check-in'
+        : 'Since last touchpoint',
+      tone: lastContactTone,
     },
     {
       icon: ListTodo,
       label: 'Open tasks',
       value: String(openTaskCount),
-      tone: overdueTaskCount > 0 ? 'text-red-700' : undefined,
-      hint: overdueTaskCount > 0 ? `${overdueTaskCount} overdue` : openTaskCount === 0 ? 'Nothing pending' : 'Active items',
+      hint: overdueTaskCount > 0 ? `${overdueTaskCount} overdue`
+        : openTaskCount === 0 ? 'All caught up'
+        : 'Active items',
+      tone: taskTone,
     },
   ]
 
@@ -111,13 +142,24 @@ export default function KPIStrip({
         {cells.map(cell => {
           const Icon = cell.icon
           return (
-            <div key={cell.label} className="p-4 min-w-0">
+            <div
+              key={cell.label}
+              className="relative p-4 min-w-0 transition-colors hover:bg-bg-2/40"
+            >
+              {/* Top accent line — transparent for neutral cells */}
+              <div className={`absolute top-0 left-0 right-0 h-0.5 ${TONE_ACCENT[cell.tone]}`} />
+
               <div className="flex items-center gap-1.5 text-[10px] font-semibold text-ink-4 uppercase tracking-wide">
                 <Icon className="w-3 h-3" />
                 {cell.label}
               </div>
-              <div className={`font-[family-name:var(--font-display)] text-[22px] leading-none mt-2 tabular-nums ${cell.tone ?? 'text-ink'}`}>
-                {cell.value}
+              <div className="mt-2 flex items-baseline gap-1">
+                <div className={`font-[family-name:var(--font-display)] text-[24px] leading-none tabular-nums tracking-tight ${TONE_VALUE_COLOR[cell.tone]}`}>
+                  {cell.value}
+                </div>
+                {cell.unit && (
+                  <span className="text-[12px] text-ink-4 font-normal">{cell.unit}</span>
+                )}
               </div>
               {cell.hint && (
                 <div className="text-[11px] text-ink-4 mt-1.5 truncate">{cell.hint}</div>

@@ -3,14 +3,14 @@
 /**
  * Client detail page hero — the identity moment.
  *
- * Shows the client with real presence: logo or initials at scale,
- * display-font name, a tight meta row, and prominent quick actions.
- * Health + billing status pills sit under the name as the first thing
- * you scan after the name itself.
+ * Big avatar, display-font name, a one-line summary of who they are
+ * and how long they've been with us, then the three status pills
+ * (health / billing / tier) on their own row. Quick actions on the
+ * right show their keyboard shortcuts so power users can skip the
+ * mouse entirely.
  *
- * A risk band drops below the hero when something needs attention
- * (overdue invoices, stale contact). It's intentionally full-width and
- * loud — this is the one spot we want to interrupt the admin.
+ * A risk band renders full-width below the hero only when something
+ * needs attention.
  */
 
 import { useEffect, useState } from 'react'
@@ -19,6 +19,7 @@ import {
   ExternalLink, AlertTriangle, Clock, ArrowRight,
 } from 'lucide-react'
 import type { Client, ClientBrand, ClientHealth } from '@/types/database'
+import { rollupHealth } from '@/types/database'
 import { createClient } from '@/lib/supabase/client'
 import InlineEditText from './inline-edit-text'
 import HealthBadge from '@/components/admin/health-badge'
@@ -43,11 +44,21 @@ const BILLING_STATUS_LABEL: Record<string, string> = {
   past_due: 'Past due',
 }
 
-const BILLING_STATUS_TONE: Record<string, { dot: string; text: string; bg: string; ring: string }> = {
-  active:    { dot: '#16a34a', text: 'text-emerald-700', bg: 'bg-emerald-50', ring: 'ring-emerald-200' },
-  paused:    { dot: '#eab308', text: 'text-amber-700',   bg: 'bg-amber-50',   ring: 'ring-amber-200' },
-  cancelled: { dot: '#6b7280', text: 'text-ink-4',       bg: 'bg-ink-6',      ring: 'ring-ink-5' },
-  past_due:  { dot: '#dc2626', text: 'text-red-700',     bg: 'bg-red-50',     ring: 'ring-red-200' },
+const BILLING_STATUS_TONE: Record<string, { dot: string; text: string; bg: string }> = {
+  active:    { dot: '#16a34a', text: 'text-emerald-700', bg: 'bg-emerald-50' },
+  paused:    { dot: '#eab308', text: 'text-amber-700',   bg: 'bg-amber-50' },
+  cancelled: { dot: '#6b7280', text: 'text-ink-4',       bg: 'bg-ink-6' },
+  past_due:  { dot: '#dc2626', text: 'text-red-700',     bg: 'bg-red-50' },
+}
+
+// Ring color for the avatar picks up the overall health, so the
+// avatar itself is a status signal.
+const HEALTH_RING: Record<string, string> = {
+  healthy:         'ring-emerald-200',
+  stable:          'ring-ink-6',
+  needs_attention: 'ring-amber-200',
+  at_risk:         'ring-red-200',
+  unknown:         'ring-ink-6',
 }
 
 function formatMoney(cents: number | null): string {
@@ -92,6 +103,21 @@ export default function HeroHeader({
     return () => { cancelled = true }
   }, [client.id])
 
+  // Keyboard shortcuts: ⌘L log meeting, ⌘I new invoice
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey)) return
+      if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return
+      if (e.key.toLowerCase() === 'l') { e.preventDefault(); onLogMeeting() }
+      if (e.key.toLowerCase() === 'i') { e.preventDefault(); onCreateInvoice() }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onLogMeeting, onCreateInvoice])
+
+  const overall = health ? rollupHealth(health) : 'unknown'
+  const healthRing = HEALTH_RING[overall] ?? HEALTH_RING.unknown
+
   const hasContactRisk = daysSinceLastContact !== null && daysSinceLastContact > 30
   const hasInvoiceRisk = outstandingInvoiceCount > 0
   const hasRisk = hasContactRisk || hasInvoiceRisk
@@ -99,27 +125,44 @@ export default function HeroHeader({
   return (
     <>
       <div className="bg-white rounded-2xl border border-ink-6 shadow-sm relative">
-        {/* Top gradient accent — rounded top corners so we don't need
-            overflow-hidden on the wrapper (which was clipping the
-            HealthBadge tooltip on hover). */}
-        <div className="h-1 bg-gradient-to-r from-brand/60 via-brand to-brand-dark rounded-t-2xl" />
+        {/* Top gradient accent — rounded corners to match parent */}
+        <div className="h-1 bg-gradient-to-r from-brand/50 via-brand to-brand-dark rounded-t-2xl" />
 
-        <div className="p-6">
+        <div className="p-6 sm:p-7">
           <div className="flex items-start gap-5">
-            {/* Avatar: logo if we have it, else initials. 64px — big enough
-                to feel like identity, small enough to not dominate. */}
-            <div className="flex-shrink-0">
+            {/* Avatar — 80px with a health-colored ring. The ring is the
+                primary at-a-glance signal: healthy green, at-risk red,
+                stable gray. Works without reading anything. */}
+            <div className="flex-shrink-0 relative">
               {brand?.logo_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={brand.logo_url}
                   alt={client.name}
-                  className="w-16 h-16 rounded-2xl object-cover ring-1 ring-ink-6"
+                  className={`w-20 h-20 rounded-2xl object-cover ring-2 ${healthRing} ring-offset-2 ring-offset-white`}
                 />
               ) : (
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-tint to-brand-tint/50 text-brand-dark flex items-center justify-center font-semibold text-xl ring-1 ring-brand/10">
+                <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-tint via-brand-tint to-brand-tint/40 text-brand-dark flex items-center justify-center font-semibold text-[24px] ring-2 ${healthRing} ring-offset-2 ring-offset-white`}>
                   {formatInitials(client.name)}
                 </div>
+              )}
+              {/* Live presence dot — white background, tone-colored
+                  fill. Only renders if health has data. */}
+              {health && overall !== 'unknown' && (
+                <span
+                  aria-hidden
+                  className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-white flex items-center justify-center"
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{
+                      background: overall === 'healthy' ? '#16a34a'
+                        : overall === 'at_risk' ? '#dc2626'
+                        : overall === 'needs_attention' ? '#d97706'
+                        : '#6b7280',
+                    }}
+                  />
+                </span>
               )}
             </div>
 
@@ -127,19 +170,19 @@ export default function HeroHeader({
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  {/* Name — display font, real presence */}
-                  <h1 className="font-[family-name:var(--font-display)] text-[26px] leading-tight text-ink">
+                  {/* Name + an overflow caption line */}
+                  <h1 className="font-[family-name:var(--font-display)] text-[28px] leading-tight text-ink tracking-tight">
                     <InlineEditText
                       value={client.name}
                       placeholder="Untitled client"
                       allowEmpty={false}
                       onSave={name => onClientUpdate({ name })}
-                      inputClassName="text-[26px] font-semibold"
+                      inputClassName="text-[28px] font-semibold"
                     />
                   </h1>
 
-                  {/* Status row: health + billing + tier + retainer */}
-                  <div className="flex items-center gap-2 flex-wrap mt-2">
+                  {/* Status row */}
+                  <div className="flex items-center gap-2 flex-wrap mt-2.5">
                     <HealthBadge health={health} />
                     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium ${tone.bg} ${tone.text} text-[12px]`}>
                       <span className="w-1.5 h-1.5 rounded-full" style={{ background: tone.dot }} />
@@ -147,24 +190,24 @@ export default function HeroHeader({
                     </span>
                     {client.tier && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-700 text-[12px]">
-                        {client.tier} tier
+                        {client.tier}
                       </span>
                     )}
                     {activeRetainerAmountCents !== null && (
-                      <span className="text-[12px] text-ink-3">
+                      <span className="text-[12px] text-ink-3 inline-flex items-baseline gap-0.5">
                         <span className="font-semibold text-ink tabular-nums">{formatMoney(activeRetainerAmountCents)}</span>
-                        <span className="text-ink-4">/mo retainer</span>
+                        <span className="text-ink-4">/mo</span>
                       </span>
                     )}
                     {subscriptionStatus && subscriptionStatus !== 'active' && (
-                      <span className="text-[11px] text-amber-700">
+                      <span className="text-[11px] text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
                         Stripe: {subscriptionStatus.replace('_', ' ')}
                       </span>
                     )}
                   </div>
 
-                  {/* Meta row — inline-edit fields, calm color */}
-                  <div className="flex items-center gap-4 flex-wrap mt-3 text-[12.5px] text-ink-4">
+                  {/* Meta row */}
+                  <div className="flex items-center gap-x-5 gap-y-2 flex-wrap mt-3 text-[12.5px] text-ink-4">
                     <span className="inline-flex items-center gap-1.5">
                       <Building2 className="w-3.5 h-3.5 flex-shrink-0" />
                       <InlineEditText
@@ -210,21 +253,29 @@ export default function HeroHeader({
                   </div>
                 </div>
 
-                {/* Quick actions — primary CTAs, not ghost buttons */}
+                {/* Quick actions — primary is "Log meeting" (daily-use
+                    verb), secondary is "New invoice". ⌘L / ⌘I keyboard
+                    shortcut hints visible so the power-path is obvious. */}
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
                     onClick={onLogMeeting}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-ink-6 hover:border-ink-4 bg-white hover:bg-bg-2 rounded-lg text-[13px] text-ink-2 font-medium transition-colors shadow-sm"
+                    className="group inline-flex items-center gap-2 pl-3 pr-2 py-2 bg-brand hover:bg-brand-dark text-white rounded-lg text-[13px] font-medium transition-colors shadow-sm"
                   >
                     <MessageSquare className="w-3.5 h-3.5" />
                     Log meeting
+                    <kbd className="hidden md:inline-flex items-center text-[10px] font-medium bg-white/20 rounded px-1.5 py-0.5 ml-0.5">
+                      ⌘L
+                    </kbd>
                   </button>
                   <button
                     onClick={onCreateInvoice}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-brand hover:bg-brand-dark text-white rounded-lg text-[13px] font-medium transition-colors shadow-sm"
+                    className="group inline-flex items-center gap-2 pl-3 pr-2 py-2 border border-ink-6 hover:border-ink-4 bg-white hover:bg-bg-2 rounded-lg text-[13px] text-ink-2 font-medium transition-colors shadow-sm"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    New invoice
+                    <span className="hidden sm:inline">New invoice</span>
+                    <kbd className="hidden md:inline-flex items-center text-[10px] font-medium bg-bg-2 rounded px-1.5 py-0.5 ml-0.5 text-ink-4">
+                      ⌘I
+                    </kbd>
                   </button>
                 </div>
               </div>
@@ -233,7 +284,7 @@ export default function HeroHeader({
         </div>
       </div>
 
-      {/* Risk band — sits below the hero when something needs attention */}
+      {/* Risk band */}
       {hasRisk && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/60 overflow-hidden shadow-sm">
           <div className="flex items-stretch">
@@ -243,7 +294,7 @@ export default function HeroHeader({
             <div className="flex items-center gap-5 px-4 py-3 flex-wrap flex-1">
               {hasInvoiceRisk && (
                 <div className="flex items-center gap-2 text-[13px]">
-                  <span className="text-red-700 font-semibold">
+                  <span className="text-red-700 font-semibold tabular-nums">
                     {outstandingInvoiceCount} unpaid invoice{outstandingInvoiceCount === 1 ? '' : 's'}
                   </span>
                   <span className="text-ink-3 tabular-nums">· {formatMoney(outstandingAmountCents)} outstanding</span>

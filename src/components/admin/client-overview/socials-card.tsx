@@ -89,7 +89,10 @@ export default function SocialsCard({ socials, onSave }: Props) {
 
   return (
     <div className="bg-white rounded-xl border border-ink-6 shadow-sm p-5 h-full flex flex-col">
-      <h3 className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide mb-3">Socials</h3>
+      <div className="mb-4">
+        <h3 className="text-[13px] font-semibold text-ink">Social accounts</h3>
+        <p className="text-[11px] text-ink-4 mt-0.5">Connected handles + quick open</p>
+      </div>
       <div className="space-y-1.5">
         {PLATFORMS.map(p => {
           const value = draft[p.key] ?? ''

@@ -284,9 +284,9 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
   return (
     <div className="bg-white rounded-xl border border-ink-6 shadow-sm">
       {/* Header + filter tabs */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-ink-6">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-ink-6 gap-3">
         <div>
-          <h2 className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">Activity</h2>
+          <h2 className="text-[13px] font-semibold text-ink">Activity timeline</h2>
           <p className="text-[11px] text-ink-4 mt-0.5">Last 90 days across every touchpoint</p>
         </div>
         <div className="inline-flex bg-bg-2 rounded-lg p-0.5 text-[11px]">
