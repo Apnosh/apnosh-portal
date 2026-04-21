@@ -510,17 +510,24 @@ function StartRetainerForm({
   clientId, onClose, onDone,
 }: { clientId: string; onClose: () => void; onDone: () => void }) {
   const [amount, setAmount] = useState('')
+  const [addBuffer, setAddBuffer] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const parsedAmount = parseFloat(amount)
+  // 3% + 30¢ buffer to cover card fees.
+  // Formula: final = (desired + 0.30) / (1 - 0.029) so desired nets exactly.
+  const billedAmount = Number.isFinite(parsedAmount) && parsedAmount > 0 && addBuffer
+    ? Math.round(((parsedAmount + 0.30) / (1 - 0.029)) * 100) / 100
+    : parsedAmount
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const dollars = parseFloat(amount)
-    if (!Number.isFinite(dollars) || dollars <= 0) {
+    if (!Number.isFinite(billedAmount) || billedAmount <= 0) {
       setError('Enter a positive monthly amount'); return
     }
     setSubmitting(true); setError(null)
-    const result = await startMonthlyRetainer({ clientId, monthlyAmountDollars: dollars })
+    const result = await startMonthlyRetainer({ clientId, monthlyAmountDollars: billedAmount })
     setSubmitting(false)
     if (!result.success) setError(result.error)
     else onDone()
@@ -533,7 +540,9 @@ function StartRetainerForm({
         <button type="button" onClick={onClose} className="text-ink-4 hover:text-ink"><X className="w-3.5 h-3.5" /></button>
       </div>
       <label className="block">
-        <span className="text-[11px] text-ink-4">Amount (USD per month)</span>
+        <span className="text-[11px] text-ink-4">
+          {addBuffer ? 'Desired net amount per month' : 'Amount (USD per month)'}
+        </span>
         <div className="relative mt-1">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-4 text-sm">$</span>
           <input
@@ -548,10 +557,45 @@ function StartRetainerForm({
           />
         </div>
       </label>
+
+      {/* Card fee buffer toggle */}
+      <label className="flex items-start gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={addBuffer}
+          onChange={e => setAddBuffer(e.target.checked)}
+          className="mt-0.5 flex-shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          <span className="text-[12px] font-medium text-ink-2">Add 3% card fee buffer</span>
+          <p className="text-[11px] text-ink-4 leading-snug mt-0.5">
+            Billing amount increases so you net your target after card fees. Recommended for
+            new clients. Leave off for existing clients on a known rate.
+          </p>
+        </div>
+      </label>
+
+      {/* Live preview of what the client will be billed */}
+      {addBuffer && Number.isFinite(parsedAmount) && parsedAmount > 0 && (
+        <div className="bg-white border border-ink-6 rounded-lg p-3 text-[12px]">
+          <div className="flex justify-between mb-1">
+            <span className="text-ink-4">Client billed</span>
+            <span className="font-semibold text-ink tabular-nums">${billedAmount.toFixed(2)}/mo</span>
+          </div>
+          <div className="flex justify-between text-ink-4">
+            <span>If paid by card (2.9% + $0.30)</span>
+            <span className="tabular-nums">~${parsedAmount.toFixed(2)} net</span>
+          </div>
+          <div className="flex justify-between text-ink-4">
+            <span>If paid by ACH (0.8% capped $5)</span>
+            <span className="tabular-nums">~${(billedAmount - Math.min(5, billedAmount * 0.008)).toFixed(2)} net</span>
+          </div>
+        </div>
+      )}
+
       <p className="text-[11px] text-ink-4 leading-snug">
-        First invoice will be sent by Stripe on the 15th of next month. The client gets an
-        email with a hosted payment link. Retainers are on &ldquo;send invoice&rdquo; by default
-        (no auto-charge) until the client adds a payment method.
+        First invoice sent by Stripe on the 15th of next month. Retainer uses
+        &ldquo;send invoice&rdquo; by default (no auto-charge).
       </p>
       {error && <p className="text-[12px] text-red-700">{error}</p>}
       <div className="flex gap-2">
@@ -584,13 +628,21 @@ function CreateInvoiceForm({
   ])
   const [dueDays, setDueDays] = useState(14)
   const [notes, setNotes] = useState('')
+  const [addBuffer, setAddBuffer] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const total = useMemo(
+  const subtotal = useMemo(
     () => lines.reduce((sum, l) => sum + (l.unitAmountDollars || 0) * (l.quantity || 0), 0),
     [lines],
   )
+
+  // When the buffer is enabled we add a single "Card processing buffer"
+  // line at +3% + 30c so the net after card fees matches the subtotal.
+  const bufferDollars = addBuffer && subtotal > 0
+    ? Math.round(((subtotal / (1 - 0.029) - subtotal) + 0.30) * 100) / 100
+    : 0
+  const total = subtotal + bufferDollars
 
   function updateLine(i: number, update: Partial<InvoiceLineInput>) {
     setLines(prev => prev.map((l, idx) => idx === i ? { ...l, ...update } : l))
@@ -620,8 +672,19 @@ function CreateInvoiceForm({
     if (lines.some(l => !l.description || l.unitAmountDollars <= 0)) {
       setError('Every line needs a description and positive price'); return
     }
+    const linesToSend = addBuffer && bufferDollars > 0
+      ? [
+          ...lines,
+          {
+            description: 'Card processing buffer (3%)',
+            quantity: 1,
+            unitAmountDollars: bufferDollars,
+            serviceCategory: 'custom' as const,
+          },
+        ]
+      : lines
     setSubmitting(true); setError(null)
-    const result = await createOneTimeInvoice({ clientId, lines, dueDateDays: dueDays, notes: notes || undefined })
+    const result = await createOneTimeInvoice({ clientId, lines: linesToSend, dueDateDays: dueDays, notes: notes || undefined })
     setSubmitting(false)
     if (!result.success) setError(result.error)
     else onDone()
@@ -708,9 +771,31 @@ function CreateInvoiceForm({
         </label>
         <div className="text-right">
           <span className="text-[11px] text-ink-4">Total</span>
-          <p className="text-lg font-semibold text-ink">{formatCents(total * 100)}</p>
+          <p className="text-lg font-semibold text-ink tabular-nums">{formatCents(total * 100)}</p>
+          {addBuffer && bufferDollars > 0 && (
+            <p className="text-[10px] text-ink-4 tabular-nums">
+              incl. {formatCents(bufferDollars * 100)} card buffer
+            </p>
+          )}
         </div>
       </div>
+
+      {/* Card fee buffer toggle */}
+      <label className="flex items-start gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={addBuffer}
+          onChange={e => setAddBuffer(e.target.checked)}
+          className="mt-0.5 flex-shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          <span className="text-[12px] font-medium text-ink-2">Add 3% card fee buffer</span>
+          <p className="text-[11px] text-ink-4 leading-snug mt-0.5">
+            Adds a &ldquo;Card processing buffer&rdquo; line so you net the subtotal after
+            card fees. Recommended for new clients; skip if you want to absorb the fee.
+          </p>
+        </div>
+      </label>
 
       <textarea
         placeholder="Internal notes (not shown to client)"
