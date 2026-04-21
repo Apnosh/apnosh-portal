@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   User, Mail, Phone, MessageSquare, Star, Loader2, Plus,
-  Copy, ExternalLink, Check, X, AlertTriangle,
+  Copy, ExternalLink, Check, X, AlertTriangle, Pencil, Trash2,
 } from 'lucide-react'
 
 interface ContactRow {
@@ -48,6 +48,7 @@ export default function ContactsCard({ clientId }: { clientId: string }) {
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [editContact, setEditContact] = useState<ContactRow | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -99,7 +100,7 @@ export default function ContactsCard({ clientId }: { clientId: string }) {
       ) : (
         <div className="space-y-3">
           {contacts.map(contact => (
-            <div key={contact.id} className="border-b border-ink-6 last:border-0 pb-3 last:pb-0">
+            <div key={contact.id} className="group border-b border-ink-6 last:border-0 pb-3 last:pb-0">
               {/* Name + role */}
               <div className="flex items-start justify-between gap-2 mb-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -111,11 +112,21 @@ export default function ContactsCard({ clientId }: { clientId: string }) {
                     <span className="text-[10px] text-ink-4">({contact.pronouns})</span>
                   )}
                 </div>
-                {contact.role && contact.role !== 'other' && (
-                  <span className="text-[10px] text-ink-3 font-medium bg-bg-2 rounded px-1.5 py-0.5 flex-shrink-0">
-                    {ROLE_LABEL[contact.role] ?? contact.role}
-                  </span>
-                )}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {contact.role && contact.role !== 'other' && (
+                    <span className="text-[10px] text-ink-3 font-medium bg-bg-2 rounded px-1.5 py-0.5">
+                      {ROLE_LABEL[contact.role] ?? contact.role}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setEditContact(contact)}
+                    className="text-ink-4 hover:text-ink-2 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Edit contact"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
               {contact.title && (
                 <p className="text-[11px] text-ink-4 mb-1.5">{contact.title}</p>
@@ -175,11 +186,21 @@ export default function ContactsCard({ clientId }: { clientId: string }) {
       )}
 
       {addOpen && (
-        <AddContactModal
+        <ContactFormModal
           clientId={clientId}
           hasPrimary={contacts.some(c => c.is_primary)}
           onClose={() => setAddOpen(false)}
           onSaved={() => { setAddOpen(false); void load() }}
+        />
+      )}
+
+      {editContact && (
+        <ContactFormModal
+          clientId={clientId}
+          hasPrimary={contacts.some(c => c.is_primary)}
+          contact={editContact}
+          onClose={() => setEditContact(null)}
+          onSaved={() => { setEditContact(null); void load() }}
         />
       )}
     </div>
@@ -187,32 +208,37 @@ export default function ContactsCard({ clientId }: { clientId: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Add-contact modal
+// Contact form modal (add + edit)
 // ---------------------------------------------------------------------------
 
 type ContactRole = 'owner' | 'manager' | 'marketing_lead' | 'billing' | 'employee' | 'filming_contact' | 'other'
 type PreferredMethod = 'email' | 'phone' | 'text' | 'portal'
 
-function AddContactModal({
+function ContactFormModal({
   clientId,
   hasPrimary,
+  contact,
   onClose,
   onSaved,
 }: {
   clientId: string
   hasPrimary: boolean
+  contact?: ContactRow
   onClose: () => void
   onSaved: () => void
 }) {
-  const [fullName, setFullName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [title, setTitle] = useState('')
-  const [role, setRole] = useState<ContactRole>('other')
-  const [preferred, setPreferred] = useState<PreferredMethod | ''>('')
-  const [isPrimary, setIsPrimary] = useState(!hasPrimary)
-  const [isBilling, setIsBilling] = useState(false)
+  const isEdit = !!contact
+  const [fullName, setFullName] = useState(contact?.full_name ?? '')
+  const [email, setEmail] = useState(contact?.email ?? '')
+  const [phone, setPhone] = useState(contact?.phone ?? '')
+  const [title, setTitle] = useState(contact?.title ?? '')
+  const [role, setRole] = useState<ContactRole>((contact?.role as ContactRole) ?? 'other')
+  const [preferred, setPreferred] = useState<PreferredMethod | ''>((contact?.preferred_contact_method as PreferredMethod) ?? '')
+  const [isPrimary, setIsPrimary] = useState(contact?.is_primary ?? !hasPrimary)
+  const [isBilling, setIsBilling] = useState(contact?.is_billing_contact ?? false)
   const [submitting, setSubmitting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function submit(e: React.FormEvent) {
@@ -224,12 +250,16 @@ function AddContactModal({
     setSubmitting(true); setError(null)
     const supabase = createClient()
 
-    // If this new contact is being set as primary, unset any existing primary
+    // If this contact is being set as primary, unset any other primary on
+    // the same client (but leave this row's own is_primary alone).
     if (isPrimary) {
-      await supabase.from('client_contacts').update({ is_primary: false }).eq('client_id', clientId).eq('is_primary', true)
+      const q = supabase.from('client_contacts').update({ is_primary: false })
+        .eq('client_id', clientId).eq('is_primary', true)
+      if (contact) q.neq('id', contact.id)
+      await q
     }
 
-    const { error: insertErr } = await supabase.from('client_contacts').insert({
+    const payload = {
       client_id: clientId,
       full_name: fullName.trim(),
       email: email.trim() || null,
@@ -239,10 +269,24 @@ function AddContactModal({
       preferred_contact_method: preferred || null,
       is_primary: isPrimary,
       is_billing_contact: isBilling,
-    })
+    }
+
+    const { error: saveErr } = isEdit
+      ? await supabase.from('client_contacts').update(payload).eq('id', contact!.id)
+      : await supabase.from('client_contacts').insert(payload)
 
     setSubmitting(false)
-    if (insertErr) { setError(insertErr.message); return }
+    if (saveErr) { setError(saveErr.message); return }
+    onSaved()
+  }
+
+  async function handleDelete() {
+    if (!contact) return
+    setDeleting(true); setError(null)
+    const supabase = createClient()
+    const { error: delErr } = await supabase.from('client_contacts').delete().eq('id', contact.id)
+    setDeleting(false)
+    if (delErr) { setError(delErr.message); return }
     onSaved()
   }
 
@@ -253,7 +297,7 @@ function AddContactModal({
     >
       <form onSubmit={submit} className="bg-white rounded-2xl shadow-xl max-w-md w-full my-8 overflow-hidden">
         <div className="flex items-start justify-between p-4 border-b border-ink-6">
-          <h2 className="text-base font-semibold text-ink">Add contact</h2>
+          <h2 className="text-base font-semibold text-ink">{isEdit ? 'Edit contact' : 'Add contact'}</h2>
           <button type="button" onClick={onClose} className="text-ink-4 hover:text-ink p-1">
             <X className="w-4 h-4" />
           </button>
@@ -356,16 +400,51 @@ function AddContactModal({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-ink-6 bg-bg-2">
-          <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink px-3">Cancel</button>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 inline-flex items-center gap-1.5 disabled:opacity-50"
-          >
-            {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            Add contact
-          </button>
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-ink-6 bg-bg-2">
+          {isEdit ? (
+            confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-ink-2">Delete this contact?</span>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="text-sm text-ink-3 hover:text-ink px-2"
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg px-3 py-1.5 inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  Delete
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="text-[13px] text-red-600 hover:text-red-700 inline-flex items-center gap-1.5 px-2"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete
+              </button>
+            )
+          ) : <span />}
+
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink px-3">Cancel</button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 inline-flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {isEdit ? 'Save changes' : 'Add contact'}
+            </button>
+          </div>
         </div>
       </form>
     </div>

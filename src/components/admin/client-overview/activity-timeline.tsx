@@ -21,6 +21,7 @@ import {
   CheckCircle2, XCircle, AlertTriangle, Sparkles, Loader2, ArrowRight, StickyNote,
 } from 'lucide-react'
 import { InvoiceDetailModal } from '@/components/admin/invoice-detail-modal'
+import InteractionDetailModal from './interaction-detail-modal'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,6 +36,7 @@ interface TimelineEvent {
   meta?: string
   href?: string
   invoiceId?: string
+  interactionId?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -99,6 +101,7 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'client' | 'billing' | 'content'>('all')
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null)
+  const [openInteractionId, setOpenInteractionId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -157,6 +160,7 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
         title: row.summary || row.kind,
         subtitle: row.body?.split('\n')[0]?.slice(0, 140),
         meta: row.performed_by_name ? `by ${row.performed_by_name}` : undefined,
+        interactionId: row.id,
       })
     }
 
@@ -313,7 +317,7 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
                 {group.events.map(event => {
                   const meta = KIND_META[event.kind]
                   const Icon = meta.icon
-                  const clickable = !!event.invoiceId
+                  const clickable = !!event.invoiceId || !!event.interactionId
                   const inner = (
                     <>
                       <div className={`w-7 h-7 rounded-full ${meta.tone} flex items-center justify-center flex-shrink-0 mt-0.5`}>
@@ -340,7 +344,10 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
                       <button
                         key={event.id}
                         type="button"
-                        onClick={() => setOpenInvoiceId(event.invoiceId!)}
+                        onClick={() => {
+                          if (event.invoiceId) setOpenInvoiceId(event.invoiceId)
+                          else if (event.interactionId) setOpenInteractionId(event.interactionId)
+                        }}
                         className="w-full flex items-start gap-3 text-left -mx-2 px-2 py-1 rounded-lg hover:bg-bg-2 transition-colors"
                       >
                         {inner}
@@ -363,6 +370,14 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
         <InvoiceDetailModal
           invoiceId={openInvoiceId}
           onClose={() => setOpenInvoiceId(null)}
+          onChange={() => { void load() }}
+        />
+      )}
+
+      {openInteractionId && (
+        <InteractionDetailModal
+          interactionId={openInteractionId}
+          onClose={() => setOpenInteractionId(null)}
           onChange={() => { void load() }}
         />
       )}
