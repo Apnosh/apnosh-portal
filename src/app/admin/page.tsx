@@ -36,40 +36,6 @@ interface ActionItem {
   href: string
 }
 
-interface ActivityEntry {
-  id: string
-  action_type: string
-  description: string
-  created_at: string
-  business_name?: string
-}
-
-// Legacy local shape kept only for the summary cards that still
-// reference `clients` state; the Client Health card now uses the
-// new `client_health` view (ClientHealthRow from database.ts).
-interface LegacyClientHealth {
-  id: string
-  name: string
-  client_status: string
-  hasUnsignedAgreements: boolean
-  hasPendingApprovals: boolean
-  hasOverdueInvoices: boolean
-}
-
-const actionTypeLabels: Record<string, string> = {
-  agreement_sent: 'Agreement sent',
-  agreement_viewed: 'Agreement viewed',
-  agreement_signed: 'Agreement signed',
-  invoice_sent: 'Invoice sent',
-  invoice_paid: 'Invoice paid',
-  invoice_overdue: 'Invoice overdue',
-  scope_change: 'Scope changed',
-  note_added: 'Note added',
-  status_change: 'Status changed',
-  client_created: 'Client created',
-  onboarding_completed: 'Onboarding completed',
-}
-
 function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse bg-ink-6 rounded ${className}`} />
 }
@@ -93,39 +59,9 @@ function formatCurrency(cents: number): string {
   }).format(cents)
 }
 
-function timeAgo(dateStr: string): string {
-  const now = new Date()
-  const date = new Date(dateStr)
-  const diffMs = now.getTime() - date.getTime()
-  const diffMin = Math.floor(diffMs / 60000)
-  if (diffMin < 1) return 'just now'
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.floor(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-  const diffDays = Math.floor(diffHr / 24)
-  if (diffDays === 1) return 'yesterday'
-  if (diffDays < 7) return `${diffDays}d ago`
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-function getHealthStatus(client: LegacyClientHealth): { label: string; color: string } {
-  if (client.hasOverdueInvoices || client.client_status === 'offboarded') {
-    return { label: 'At risk', color: 'bg-red-50 text-red-700' }
-  }
-  if (client.hasUnsignedAgreements || client.hasPendingApprovals) {
-    return { label: 'Needs attention', color: 'bg-amber-50 text-amber-700' }
-  }
-  if (client.client_status === 'active') {
-    return { label: 'Healthy', color: 'bg-emerald-50 text-emerald-700' }
-  }
-  return { label: client.client_status.replace(/_/g, ' '), color: 'bg-ink-6 text-ink-3' }
-}
-
 export default function AdminDashboard() {
   const [summary, setSummary] = useState<SummaryData | null>(null)
   const [actions, setActions] = useState<ActionItem[]>([])
-  const [activity, setActivity] = useState<ActivityEntry[]>([])
-  const [clients, setClients] = useState<LegacyClientHealth[]>([])
   const [healthRows, setHealthRows] = useState<ClientHealthRow[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -143,14 +79,14 @@ export default function AdminDashboard() {
         { data: overdueDeliverables },
         { data: draftInvoices },
         { data: expiringAgreements },
-        { data: activityLog },
-        { data: allBusinesses },
+        { data: healthData },
       ] = await Promise.all([
-        // Active clients
+        // Active clients (from the CRM clients table — businesses is
+        // the legacy table from before migration 043)
         supabase
-          .from('businesses')
+          .from('clients')
           .select('*', { count: 'exact', head: true })
-          .eq('client_status', 'active'),
+          .eq('billing_status', 'active'),
 
         // Active subscriptions for MRR (migration 055: amount_cents in cents)
         supabase
@@ -207,18 +143,12 @@ export default function AdminDashboard() {
           .gt('expires_at', new Date().toISOString()),
 
         // Recent activity
+        // New signal-level client health view (replaces the old
+        // "compute health from businesses + agreements + invoices" logic
+        // that used the legacy tables).
         supabase
-          .from('client_activity_log')
-          .select('id, action_type, description, created_at, business_id, businesses(name)')
-          .order('created_at', { ascending: false })
-          .limit(15),
-
-        // All businesses for client health
-        supabase
-          .from('businesses')
-          .select('id, name, client_status')
-          .in('client_status', ['active', 'paused', 'agreement_sent', 'agreement_signed', 'offboarded'])
-          .order('name'),
+          .from('client_health')
+          .select('*'),
       ])
 
       // Calculate MRR
@@ -272,76 +202,15 @@ export default function AdminDashboard() {
       }
       setActions(actionItems)
 
-      // Map activity log with business names
-      const mappedActivity: ActivityEntry[] = (activityLog ?? []).map((entry: Record<string, unknown>) => ({
-        id: entry.id as string,
-        action_type: entry.action_type as string,
-        description: entry.description as string,
-        created_at: entry.created_at as string,
-        business_name: (entry.businesses as { name: string } | null)?.name ?? 'Unknown',
-      }))
-      setActivity(mappedActivity)
-
-      // Client health: check unsigned agreements and pending approvals per business
-      if (allBusinesses && allBusinesses.length > 0) {
-        const businessIds = allBusinesses.map((b) => b.id)
-
-        const [{ data: unsignedByBiz }, { data: pendingByBiz }, { data: overdueByBiz }] =
-          await Promise.all([
-            supabase
-              .from('agreements')
-              .select('business_id')
-              .eq('status', 'sent')
-              .in('business_id', businessIds),
-            supabase
-              .from('deliverables')
-              .select('business_id')
-              .eq('status', 'client_review')
-              .in('business_id', businessIds),
-            supabase
-              .from('invoices')
-              .select('business_id')
-              .in('status', ['pending', 'failed'])
-              .lt('due_date', new Date().toISOString())
-              .in('business_id', businessIds),
-          ])
-
-        const unsignedSet = new Set((unsignedByBiz ?? []).map((a) => a.business_id))
-        const pendingSet = new Set((pendingByBiz ?? []).map((d) => d.business_id))
-        const overdueSet = new Set((overdueByBiz ?? []).map((i) => i.business_id))
-
-        // Fetch the new signal-level health view alongside the legacy
-        // derivation. The new card uses healthRows; the legacy shape
-        // remains in `clients` only because other bits of this page
-        // still reference it.
-        const { data: healthData } = await supabase.from('client_health').select('*')
-        if (healthData) {
-          const worstFirst: Record<OverallHealth, number> = {
-            at_risk: 0, needs_attention: 1, stable: 2, healthy: 3, unknown: 4,
-          }
-          const sorted = (healthData as ClientHealthRow[]).slice().sort((a, b) => {
-            return worstFirst[rollupHealth(a)] - worstFirst[rollupHealth(b)]
-          })
-          setHealthRows(sorted)
+      // Sort client health by worst-first (at_risk → healthy → unknown)
+      if (healthData) {
+        const worstFirst: Record<OverallHealth, number> = {
+          at_risk: 0, needs_attention: 1, stable: 2, healthy: 3, unknown: 4,
         }
-
-        const healthList: LegacyClientHealth[] = allBusinesses.map((b) => ({
-          id: b.id,
-          name: b.name,
-          client_status: b.client_status,
-          hasUnsignedAgreements: unsignedSet.has(b.id),
-          hasPendingApprovals: pendingSet.has(b.id),
-          hasOverdueInvoices: overdueSet.has(b.id),
-        }))
-
-        // Sort: red first, then yellow, then green
-        healthList.sort((a, b) => {
-          const scoreA = a.hasOverdueInvoices || a.client_status === 'offboarded' ? 0 : a.hasUnsignedAgreements || a.hasPendingApprovals ? 1 : 2
-          const scoreB = b.hasOverdueInvoices || b.client_status === 'offboarded' ? 0 : b.hasUnsignedAgreements || b.hasPendingApprovals ? 1 : 2
-          return scoreA - scoreB
-        })
-
-        setClients(healthList)
+        const sorted = (healthData as ClientHealthRow[]).slice().sort((a, b) =>
+          worstFirst[rollupHealth(a)] - worstFirst[rollupHealth(b)]
+        )
+        setHealthRows(sorted)
       }
 
       setLoading(false)
