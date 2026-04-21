@@ -30,8 +30,9 @@ import {
 } from '@/lib/billing-actions'
 import {
   CreditCard, Loader2, CheckCircle2, AlertTriangle, X, Plus,
-  Link as LinkIcon, ExternalLink, RefreshCw, Trash2, Send,
+  Link as LinkIcon, ExternalLink, RefreshCw, Trash2, Send, Eye,
 } from 'lucide-react'
+import { InvoiceDetailModal } from './invoice-detail-modal'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -134,6 +135,7 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
   const [showRetainerForm, setShowRetainerForm] = useState(false)
   const [showInvoiceForm, setShowInvoiceForm] = useState(false)
   const [showSetupForm, setShowSetupForm] = useState(false)
+  const [detailInvoiceId, setDetailInvoiceId] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -160,6 +162,17 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
 
   const hasCustomer = billingCustomer !== null
   const hasActiveSubscription = subscription !== null && ['active', 'trialing', 'past_due'].includes(subscription.status)
+
+  // Overdue detection -- any open invoice whose due_at has passed.
+  const overdueInvoices = invoices.filter(inv =>
+    inv.status === 'open' && inv.due_at && new Date(inv.due_at) < new Date()
+  )
+  const overdueCents = overdueInvoices.reduce((s, i) => s + i.total_cents, 0)
+  const oldestDaysOverdue = overdueInvoices.reduce((d, i) => {
+    if (!i.due_at) return d
+    const days = Math.round((Date.now() - new Date(i.due_at).getTime()) / 86400000)
+    return Math.max(d, days)
+  }, 0)
 
   // ----- Action handlers -----
 
@@ -252,6 +265,21 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
           <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <span className="flex-1">{notice}</span>
           <button onClick={() => setNotice(null)}><X className="w-3 h-3" /></button>
+        </div>
+      )}
+
+      {/* Overdue alert -- visible whenever any open invoice has passed its due_at */}
+      {overdueInvoices.length > 0 && (
+        <div className="mb-3 bg-red-50 border border-red-200 rounded-lg p-3 text-[12px] text-red-800 flex items-start gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold">
+              {overdueInvoices.length} overdue invoice{overdueInvoices.length === 1 ? '' : 's'} — {formatCents(overdueCents)}
+            </p>
+            <p className="text-[11px] mt-0.5">
+              Oldest is {oldestDaysOverdue} days past due. Click an invoice below to resend the email or cancel.
+            </p>
+          </div>
         </div>
       )}
 
@@ -371,6 +399,7 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
                     key={inv.id}
                     invoice={inv}
                     busyAction={busyAction}
+                    onView={() => setDetailInvoiceId(inv.id)}
                     onResend={() => onResendInvoice(inv.id)}
                     onVoid={() => onVoidInvoice(inv.id)}
                     onDelete={() => onDeleteDraft(inv.id)}
@@ -399,6 +428,15 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
             />
           )}
         </div>
+      )}
+
+      {/* Full invoice details modal */}
+      {detailInvoiceId && (
+        <InvoiceDetailModal
+          invoiceId={detailInvoiceId}
+          onClose={() => setDetailInvoiceId(null)}
+          onChange={() => load()}
+        />
       )}
     </Card>
   )
@@ -1042,77 +1080,92 @@ function CreateInvoiceForm({
 }
 
 function InvoiceRowItem({
-  invoice, busyAction, onResend, onVoid, onDelete,
+  invoice, busyAction, onView, onResend, onVoid, onDelete,
 }: {
   invoice: InvoiceRow
   busyAction: string | null
+  onView: () => void
   onResend: () => void
   onVoid: () => void
   onDelete: () => void
 }) {
-  const isDraft = invoice.status === 'draft'
-  const canCancel = ['open', 'failed'].includes(invoice.status)
-  const canResend = invoice.status === 'open' && invoice.hosted_invoice_url
+  const isOverdue = invoice.status === 'open' && invoice.due_at && new Date(invoice.due_at) < new Date()
+  const daysOverdue = isOverdue && invoice.due_at
+    ? Math.round((Date.now() - new Date(invoice.due_at).getTime()) / 86400000)
+    : 0
 
   return (
-    <div className="flex items-center justify-between gap-2 py-2 px-2 rounded hover:bg-bg-2">
-      <div className="flex-1 min-w-0">
+    <button
+      type="button"
+      onClick={onView}
+      className="w-full text-left border border-ink-6 rounded-lg p-3 hover:border-brand/40 hover:bg-bg-2/50 transition-colors"
+    >
+      <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[12px] font-medium text-ink">{invoice.invoice_number}</span>
-          <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_BADGE[invoice.status] ?? 'bg-ink-6 text-ink-4'}`}>
+          <span className="text-[13px] font-semibold text-ink">{invoice.invoice_number}</span>
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_BADGE[invoice.status] ?? 'bg-ink-6 text-ink-4'}`}>
             {invoiceStatusLabel(invoice.status)}
           </span>
+          {isOverdue && (
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">
+              {daysOverdue}d overdue
+            </span>
+          )}
           {invoice.type === 'subscription' && (
             <span className="text-[10px] text-ink-4">retainer</span>
           )}
         </div>
-        <p className="text-[11px] text-ink-4 mt-0.5">
-          {formatCents(invoice.total_cents)} · {formatDate(invoice.issued_at ?? invoice.due_at)}
-        </p>
+        <span className="text-sm font-semibold text-ink tabular-nums">{formatCents(invoice.total_cents)}</span>
       </div>
-      <div className="flex items-center gap-1">
-        {invoice.hosted_invoice_url && (
-          <a
-            href={invoice.hosted_invoice_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Open hosted invoice"
-            className="p-1 text-ink-4 hover:text-ink"
-          >
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        )}
-        {canResend && (
-          <button
-            onClick={onResend}
-            disabled={busyAction === `resend-${invoice.id}`}
-            title="Resend email to client"
-            className="p-1 text-ink-4 hover:text-brand-dark"
-          >
-            {busyAction === `resend-${invoice.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-          </button>
-        )}
-        {isDraft && (
-          <button
-            onClick={onDelete}
-            disabled={busyAction === `delete-${invoice.id}`}
-            title="Delete draft (not yet sent to client)"
-            className="p-1 text-ink-4 hover:text-red-700"
-          >
-            {busyAction === `delete-${invoice.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-          </button>
-        )}
-        {canCancel && (
-          <button
-            onClick={onVoid}
-            disabled={busyAction === `void-${invoice.id}`}
-            title="Cancel invoice (client can no longer pay)"
-            className="p-1 text-ink-4 hover:text-red-700"
-          >
-            {busyAction === `void-${invoice.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
-          </button>
-        )}
+      <div className="flex items-center justify-between gap-2 text-[11px] text-ink-4">
+        <span>
+          {invoice.status === 'paid' && invoice.paid_at
+            ? `Paid ${formatDate(invoice.paid_at)}`
+            : invoice.status === 'open' && invoice.due_at
+            ? `Due ${formatDate(invoice.due_at)}`
+            : `Issued ${formatDate(invoice.issued_at ?? invoice.due_at)}`}
+        </span>
+        <span className="text-[11px] text-ink-3 inline-flex items-center gap-1">
+          <Eye className="w-3 h-3" />
+          View details
+        </span>
       </div>
-    </div>
+
+      {/* Quick action row -- only for active invoices (open/failed/draft) */}
+      {['open', 'failed', 'draft'].includes(invoice.status) && (
+        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-ink-6">
+          {invoice.status === 'open' && invoice.hosted_invoice_url && (
+            <button
+              onClick={e => { e.stopPropagation(); onResend() }}
+              disabled={busyAction === `resend-${invoice.id}`}
+              className="inline-flex items-center gap-1 text-[11px] text-ink-3 hover:text-brand-dark font-medium"
+            >
+              {busyAction === `resend-${invoice.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              Resend email
+            </button>
+          )}
+          {invoice.status === 'draft' && (
+            <button
+              onClick={e => { e.stopPropagation(); onDelete() }}
+              disabled={busyAction === `delete-${invoice.id}`}
+              className="inline-flex items-center gap-1 text-[11px] text-red-700 hover:text-red-800 font-medium"
+            >
+              {busyAction === `delete-${invoice.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+              Delete draft
+            </button>
+          )}
+          {['open', 'failed'].includes(invoice.status) && (
+            <button
+              onClick={e => { e.stopPropagation(); onVoid() }}
+              disabled={busyAction === `void-${invoice.id}`}
+              className="inline-flex items-center gap-1 text-[11px] text-red-700 hover:text-red-800 font-medium ml-auto"
+            >
+              {busyAction === `void-${invoice.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+              Cancel invoice
+            </button>
+          )}
+        </div>
+      )}
+    </button>
   )
 }

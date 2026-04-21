@@ -15,7 +15,9 @@ import { createClient } from '@/lib/supabase/client'
 import {
   DollarSign, TrendingUp, AlertCircle, Clock, Search,
   FileText, RefreshCw, ExternalLink, ChevronDown, ChevronUp,
+  AlertTriangle, Eye,
 } from 'lucide-react'
+import { InvoiceDetailModal } from '@/components/admin/invoice-detail-modal'
 
 /* ------------------------------------------------------------------ */
 /*  Types (mirror billing v2 schema)                                   */
@@ -141,6 +143,7 @@ export default function AdminBillingPage() {
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
   const [search, setSearch] = useState('')
   const [sortAsc, setSortAsc] = useState(false)
+  const [detailInvoiceId, setDetailInvoiceId] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -198,12 +201,56 @@ export default function AdminBillingPage() {
     .reduce((sum, inv) => sum + (inv.total_cents ?? 0), 0)
 
   const overdueCount = invoices.filter(isOverdue).length
+  const overdueCents = invoices.filter(isOverdue).reduce((s, i) => s + (i.total_cents - i.amount_paid_cents), 0)
+
+  // Accounts-receivable aging: group unpaid invoices by how long past due.
+  const now = Date.now()
+  const daysPastDue = (inv: InvoiceRow) =>
+    inv.due_at ? Math.max(0, Math.round((now - new Date(inv.due_at).getTime()) / 86400000)) : 0
+
+  const unpaidInvoices = invoices.filter(inv => ['open', 'failed'].includes(inv.status))
+
+  const agingBuckets = {
+    current: unpaidInvoices.filter(inv => daysPastDue(inv) === 0),  // not past due yet
+    '1-30':  unpaidInvoices.filter(inv => { const d = daysPastDue(inv); return d > 0 && d <= 30 }),
+    '31-60': unpaidInvoices.filter(inv => { const d = daysPastDue(inv); return d > 30 && d <= 60 }),
+    '60+':   unpaidInvoices.filter(inv => daysPastDue(inv) > 60),
+  }
+
+  // Outstanding grouped by client -- who owes and how much.
+  const outstandingByClient = useMemo(() => {
+    const map = new Map<string, {
+      clientId: string
+      clientName: string
+      clientSlug: string
+      totalCents: number
+      count: number
+      oldestDays: number
+    }>()
+    for (const inv of unpaidInvoices) {
+      if (!inv.clients) continue
+      const existing = map.get(inv.client_id) ?? {
+        clientId: inv.client_id,
+        clientName: inv.clients.name,
+        clientSlug: inv.clients.slug,
+        totalCents: 0,
+        count: 0,
+        oldestDays: 0,
+      }
+      existing.totalCents += (inv.total_cents - inv.amount_paid_cents)
+      existing.count += 1
+      existing.oldestDays = Math.max(existing.oldestDays, daysPastDue(inv))
+      map.set(inv.client_id, existing)
+    }
+    return Array.from(map.values()).sort((a, b) => b.oldestDays - a.oldestDays || b.totalCents - a.totalCents)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoices])
 
   const stats = [
     { label: 'MRR', value: formatCents(mrrCents), hint: `ARR: ${formatCents(mrrCents * 12)}`, icon: TrendingUp, color: 'bg-brand-tint text-brand-dark' },
     { label: 'Revenue collected', value: formatCents(totalPaidCents), hint: `${invoices.filter(i => i.status === 'paid').length} paid`, icon: DollarSign, color: 'bg-emerald-50 text-emerald-600' },
     { label: 'Outstanding', value: formatCents(outstandingCents), hint: `${invoices.filter(i => ['open', 'draft', 'failed'].includes(i.status)).length} invoices`, icon: Clock, color: 'bg-amber-50 text-amber-600' },
-    { label: 'Overdue', value: String(overdueCount), hint: overdueCount > 0 ? 'Needs attention' : 'All current', icon: AlertCircle, color: overdueCount > 0 ? 'bg-red-50 text-red-600' : 'bg-ink-6 text-ink-4' },
+    { label: 'Overdue', value: overdueCount > 0 ? formatCents(overdueCents) : '0', hint: overdueCount > 0 ? `${overdueCount} invoice${overdueCount === 1 ? '' : 's'}` : 'All current', icon: AlertCircle, color: overdueCount > 0 ? 'bg-red-50 text-red-600' : 'bg-ink-6 text-ink-4' },
   ]
 
   /* ---- Filtered invoices ---- */
@@ -272,6 +319,104 @@ export default function AdminBillingPage() {
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
           {error}
+        </div>
+      )}
+
+      {/* Overdue alert banner -- shows when anything's past due */}
+      {overdueCount > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-red-900">
+              {overdueCount} overdue {overdueCount === 1 ? 'invoice' : 'invoices'} — {formatCents(overdueCents)}
+            </p>
+            <p className="text-xs text-red-700 mt-0.5">
+              Check the Accounts Receivable section below and send reminders to any clients past due.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Accounts Receivable -- who owes what, grouped by client + aging buckets */}
+      {outstandingByClient.length > 0 && !loading && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
+            <Clock size={16} className="text-ink-4" />
+            Accounts receivable
+          </h2>
+
+          {/* Aging buckets summary */}
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { label: 'Current', items: agingBuckets.current, tone: 'ink' as const },
+              { label: '1-30 days late', items: agingBuckets['1-30'], tone: 'amber' as const },
+              { label: '31-60 days late', items: agingBuckets['31-60'], tone: 'orange' as const },
+              { label: '60+ days late', items: agingBuckets['60+'], tone: 'red' as const },
+            ].map(b => {
+              const sum = b.items.reduce((s, i) => s + (i.total_cents - i.amount_paid_cents), 0)
+              const colors = {
+                ink: { bg: 'bg-bg-2', label: 'text-ink-3', val: 'text-ink' },
+                amber: { bg: 'bg-amber-50 border border-amber-200', label: 'text-amber-700', val: 'text-amber-900' },
+                orange: { bg: 'bg-orange-50 border border-orange-200', label: 'text-orange-700', val: 'text-orange-900' },
+                red: { bg: 'bg-red-50 border border-red-200', label: 'text-red-700', val: 'text-red-900' },
+              }[b.tone]
+              return (
+                <div key={b.label} className={`${colors.bg} rounded-lg p-3`}>
+                  <div className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${colors.label}`}>{b.label}</div>
+                  <div className={`text-base font-semibold tabular-nums ${colors.val}`}>{formatCents(sum)}</div>
+                  <div className={`text-[11px] ${colors.label}`}>{b.items.length} inv</div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Per-client outstanding list */}
+          <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Client</Th>
+                  <Th align="right">Owes</Th>
+                  <Th>Invoices</Th>
+                  <Th>Oldest past due</Th>
+                  <Th></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {outstandingByClient.map(row => (
+                  <tr key={row.clientId} className={`border-b border-ink-6 last:border-0 hover:bg-bg-2/50 ${row.oldestDays > 30 ? 'bg-red-50/30' : ''}`}>
+                    <td className="px-4 py-3 text-sm text-ink font-medium">
+                      <Link href={`/admin/clients/${row.clientSlug}`} className="hover:text-brand-dark">
+                        {row.clientName}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-ink text-right font-medium tabular-nums">
+                      {formatCents(row.totalCents)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-ink-3">
+                      {row.count}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {row.oldestDays === 0
+                        ? <span className="text-ink-4">Not yet due</span>
+                        : row.oldestDays <= 7
+                        ? <span className="text-ink-3">{row.oldestDays}d late</span>
+                        : row.oldestDays <= 30
+                        ? <span className="text-amber-700 font-medium">{row.oldestDays}d late</span>
+                        : row.oldestDays <= 60
+                        ? <span className="text-orange-700 font-semibold">{row.oldestDays}d late</span>
+                        : <span className="text-red-700 font-bold">{row.oldestDays}d late</span>}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link href={`/admin/clients/${row.clientSlug}`} className="text-[11px] text-brand hover:text-brand-dark font-medium inline-flex items-center gap-1">
+                        Open client <ExternalLink className="w-3 h-3" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -352,11 +497,15 @@ export default function AdminBillingPage() {
                         const overdue = isOverdue(inv)
                         const displayStatus = overdue ? 'failed' : inv.status
                         return (
-                          <tr key={inv.id} className="border-b border-ink-6 last:border-0 hover:bg-bg-2/50">
+                          <tr
+                            key={inv.id}
+                            className="border-b border-ink-6 last:border-0 hover:bg-bg-2/50 cursor-pointer"
+                            onClick={() => setDetailInvoiceId(inv.id)}
+                          >
                             <td className="px-4 py-3 text-sm text-ink font-medium">
                               {inv.invoice_number}
                             </td>
-                            <td className="px-4 py-3 text-sm text-ink">
+                            <td className="px-4 py-3 text-sm text-ink" onClick={e => e.stopPropagation()}>
                               {inv.clients?.slug ? (
                                 <Link href={`/admin/clients/${inv.clients.slug}`} className="hover:text-brand-dark">
                                   {inv.clients.name}
@@ -380,18 +529,28 @@ export default function AdminBillingPage() {
                             <td className="px-4 py-3 text-sm text-ink-3">
                               {formatDate(inv.paid_at)}
                             </td>
-                            <td className="px-4 py-3">
-                              {inv.hosted_invoice_url && (
-                                <a
-                                  href={inv.hosted_invoice_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-ink-4 hover:text-brand-dark"
-                                  title="Open hosted invoice"
+                            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => setDetailInvoiceId(inv.id)}
+                                  className="text-ink-4 hover:text-brand-dark inline-flex items-center gap-1 text-[11px] font-medium"
+                                  title="View details"
                                 >
-                                  <ExternalLink size={14} />
-                                </a>
-                              )}
+                                  <Eye size={12} />
+                                  View
+                                </button>
+                                {inv.hosted_invoice_url && (
+                                  <a
+                                    href={inv.hosted_invoice_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-ink-4 hover:text-brand-dark"
+                                    title="Open hosted invoice"
+                                  >
+                                    <ExternalLink size={12} />
+                                  </a>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         )
@@ -467,6 +626,14 @@ export default function AdminBillingPage() {
           </div>
         </div>
       </div>
+
+      {detailInvoiceId && (
+        <InvoiceDetailModal
+          invoiceId={detailInvoiceId}
+          onClose={() => setDetailInvoiceId(null)}
+          onChange={() => fetchData()}
+        />
+      )}
     </div>
   )
 }
