@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import {
   Search, Plus, MapPin, Globe, X, ChevronRight, Loader2,
-  Building2, Palette, Users, Check,
+  Building2, Palette, Users, Check, Upload,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { Client, ClientBillingStatus } from '@/types/database'
@@ -538,13 +538,22 @@ export default function AdminClientsPage() {
           <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Clients</h1>
           <p className="text-ink-3 text-sm mt-1">{clients.length} total clients</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 inline-flex items-center gap-2 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Add Client
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/clients/import"
+            className="border border-ink-6 hover:bg-bg-2 text-ink-2 text-sm font-medium rounded-lg px-4 py-2 inline-flex items-center gap-2 transition-colors"
+          >
+            <Upload className="w-4 h-4" />
+            Import from CSV
+          </Link>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 inline-flex items-center gap-2 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Client
+          </button>
+        </div>
       </div>
 
       {/* Search + Filters */}
