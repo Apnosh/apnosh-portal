@@ -163,11 +163,12 @@ export async function startMonthlyRetainer(opts: {
   planName?: string
   retainerProductId: string
   billingAnchor?: Date
+  couponId?: string
 }): Promise<Stripe.Subscription> {
   const anchor = opts.billingAnchor ?? nextBillingAnchor()
   const anchorUnix = Math.floor(anchor.getTime() / 1000)
 
-  return await stripe.subscriptions.create({
+  const params: Stripe.SubscriptionCreateParams = {
     customer: opts.customerId,
     collection_method: 'send_invoice',
     days_until_due: 14,
@@ -180,9 +181,6 @@ export async function startMonthlyRetainer(opts: {
     // In WA this correctly applies sales tax on taxable categories
     // (e.g., video production) and skips exempt ones (pure advertising).
     automatic_tax: { enabled: true },
-    // Payment methods listed in display order: ACH first so clients see
-    // it as the primary option (saves ~3% per charge; Apnosh absorbs the
-    // difference when clients insist on card).
     payment_settings: {
       payment_method_types: ['us_bank_account', 'card'],
       save_default_payment_method: 'on_subscription',
@@ -202,7 +200,17 @@ export async function startMonthlyRetainer(opts: {
       plan_name: opts.planName ?? 'Monthly Retainer',
       source: 'admin_portal',
     },
-  })
+  }
+
+  // Admin-applied discount coupon (optional). Attaches to the subscription
+  // so every invoice it generates carries the discount until the coupon's
+  // duration expires ('once' / 'repeating' / 'forever' -- set at coupon
+  // creation time in billing-actions.ts).
+  if (opts.couponId) {
+    params.discounts = [{ coupon: opts.couponId }]
+  }
+
+  return await stripe.subscriptions.create(params)
 }
 
 /**

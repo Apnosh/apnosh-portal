@@ -116,11 +116,46 @@ export async function createStripeCustomerForClient(args: {
 // startMonthlyRetainer -- creates a Stripe subscription with send_invoice
 // ---------------------------------------------------------------------------
 
+export interface DiscountInput {
+  /** 'percent' = percent_off (e.g. 15), 'fixed' = fixed dollar amount_off */
+  type: 'percent' | 'fixed'
+  /** Percent value 1-100 for 'percent', dollars for 'fixed' */
+  value: number
+  /** 'once' = single invoice, 'forever' = permanent, 'repeating' = N months */
+  duration: 'once' | 'forever' | 'repeating'
+  /** Months for 'repeating'; ignored otherwise */
+  durationMonths?: number
+  /** Admin-facing label shown on the invoice ('Founding rate', 'Loyalty', etc.) */
+  name?: string
+}
+
+async function createCouponFromDiscount(d: DiscountInput): Promise<string> {
+  const params: Stripe.CouponCreateParams = {
+    duration: d.duration,
+    name: d.name ?? (d.type === 'percent' ? `${d.value}% off` : `$${d.value} off`),
+  }
+  if (d.type === 'percent') {
+    if (d.value <= 0 || d.value > 100) throw new Error('Percent discount must be between 1 and 100')
+    params.percent_off = d.value
+  } else {
+    if (d.value <= 0) throw new Error('Fixed discount must be positive')
+    params.amount_off = Math.round(d.value * 100)
+    params.currency = 'usd'
+  }
+  if (d.duration === 'repeating') {
+    if (!d.durationMonths || d.durationMonths < 1) throw new Error('Duration in months required for repeating discount')
+    params.duration_in_months = d.durationMonths
+  }
+  const coupon = await stripe.coupons.create(params)
+  return coupon.id
+}
+
 export async function startMonthlyRetainer(args: {
   clientId: string
   monthlyAmountDollars: number
   billingAnchorDate?: string // ISO date; defaults to next 15th
   planNameOverride?: string
+  discount?: DiscountInput
 }): Promise<ActionResult<{ subscriptionId: string }>> {
   const auth = await requireAdmin()
   if (!auth.ok) return { success: false, error: auth.error }
@@ -172,6 +207,10 @@ export async function startMonthlyRetainer(args: {
       ? new Date(args.billingAnchorDate)
       : nextBillingAnchor()
 
+    // Optional discount coupon (admin-only; applied to the subscription
+    // so it follows through to every invoice Stripe generates).
+    const couponId = args.discount ? await createCouponFromDiscount(args.discount) : undefined
+
     const sub = await startMonthlyRetainerStripe({
       customerId: bc.stripe_customer_id,
       clientId: args.clientId,
@@ -179,6 +218,7 @@ export async function startMonthlyRetainer(args: {
       planName: args.planNameOverride ?? 'Monthly Retainer',
       retainerProductId: retainerProduct.stripe_product_id,
       billingAnchor: anchor,
+      couponId,
     })
 
     // The webhook will mirror into subscriptions, but we don't want the UI
@@ -272,6 +312,11 @@ export async function createOneTimeInvoice(args: {
   lines: InvoiceLineInput[]
   dueDateDays?: number     // default 14
   notes?: string
+  /**
+   * Optional discount applied to the whole invoice. 'once' duration only
+   * here since one-time invoices have no future billing period.
+   */
+  discount?: Omit<DiscountInput, 'duration' | 'durationMonths'>
 }): Promise<ActionResult<{ invoiceId: string; hostedUrl: string | null }>> {
   const auth = await requireAdmin()
   if (!auth.ok) return { success: false, error: auth.error }
@@ -300,22 +345,24 @@ export async function createOneTimeInvoice(args: {
     // line items to it. payment_settings lets the client choose card OR
     // ACH (us_bank_account) on the hosted pay page; ACH is much cheaper
     // for larger one-time invoices ($5 flat vs ~3%).
+    // Optional one-time discount coupon (duration forced to 'once').
+    const couponId = args.discount
+      ? await createCouponFromDiscount({ ...args.discount, duration: 'once' })
+      : undefined
+
     const invoice = await stripe.invoices.create({
       customer: bc.stripe_customer_id,
       collection_method: 'send_invoice',
       days_until_due: args.dueDateDays ?? 14,
-      auto_advance: false, // we finalize explicitly below
-      // Stripe Tax auto-calculates based on customer address + product
-      // tax codes. WA sales tax applies to taxable categories only.
+      auto_advance: false,
       automatic_tax: { enabled: true },
       payment_settings: {
-        // ACH first so it displays as the primary option; saves ~3% vs card.
         payment_method_types: ['us_bank_account', 'card'],
       },
-      // Custom footer encouraging ACH. Shows on every hosted invoice PDF + page.
       footer: 'Pay by bank transfer (ACH) for no processing fees. Credit card also accepted.',
       metadata: { client_id: args.clientId, source: 'admin_portal_one_time' },
       description: args.notes,
+      ...(couponId ? { discounts: [{ coupon: couponId }] } : {}),
     })
 
     // Step 2: attach each line item.

@@ -25,6 +25,7 @@ import {
   voidInvoice,
   createCustomerPortalLink,
   type InvoiceLineInput,
+  type DiscountInput,
 } from '@/lib/billing-actions'
 import {
   CreditCard, Loader2, CheckCircle2, AlertTriangle, X, Plus,
@@ -506,11 +507,159 @@ function SetupBillingForm({
   )
 }
 
+// ---------------------------------------------------------------------------
+// Reusable discount fields -- used inside both retainer + invoice forms.
+// Admin-only (these components render inside admin-side actions).
+// ---------------------------------------------------------------------------
+
+function DiscountFields({
+  value, onChange, allowRecurring,
+}: {
+  value: DiscountInput | null
+  onChange: (d: DiscountInput | null) => void
+  allowRecurring: boolean  // true for subscriptions (forever/repeating); false for invoices
+}) {
+  const enabled = value !== null
+  const [localType, setLocalType] = useState<'percent' | 'fixed'>(value?.type ?? 'percent')
+  const [localValue, setLocalValue] = useState(value?.value?.toString() ?? '')
+  const [localDuration, setLocalDuration] = useState<'once' | 'forever' | 'repeating'>(
+    value?.duration ?? 'once',
+  )
+  const [localMonths, setLocalMonths] = useState(value?.durationMonths?.toString() ?? '3')
+  const [localName, setLocalName] = useState(value?.name ?? '')
+
+  function toggle(on: boolean) {
+    if (on) {
+      commit('percent', localValue, 'once', localMonths, localName)
+    } else {
+      onChange(null)
+    }
+  }
+
+  function commit(
+    type: 'percent' | 'fixed',
+    v: string,
+    duration: 'once' | 'forever' | 'repeating',
+    months: string,
+    name: string,
+  ) {
+    const numValue = parseFloat(v)
+    if (!Number.isFinite(numValue) || numValue <= 0) {
+      onChange(null); return
+    }
+    onChange({
+      type,
+      value: numValue,
+      duration,
+      durationMonths: duration === 'repeating' ? parseInt(months) || 3 : undefined,
+      name: name || undefined,
+    })
+  }
+
+  return (
+    <div className="border border-ink-6 rounded-lg p-3 bg-white space-y-2">
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={e => toggle(e.target.checked)}
+          className="flex-shrink-0"
+        />
+        <span className="text-[12px] font-medium text-ink-2">Apply discount</span>
+      </label>
+
+      {enabled && (
+        <div className="space-y-2 pl-6">
+          <div className="flex gap-1.5">
+            <select
+              value={localType}
+              onChange={e => {
+                const t = e.target.value as 'percent' | 'fixed'
+                setLocalType(t)
+                commit(t, localValue, localDuration, localMonths, localName)
+              }}
+              className="px-2 py-1.5 border border-ink-6 rounded text-sm bg-white"
+            >
+              <option value="percent">Percent</option>
+              <option value="fixed">Dollar amount</option>
+            </select>
+            <div className="relative flex-1">
+              {localType === 'fixed' && (
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4 text-xs">$</span>
+              )}
+              <input
+                type="number"
+                min="0"
+                step={localType === 'percent' ? '1' : '0.01'}
+                max={localType === 'percent' ? '100' : undefined}
+                placeholder={localType === 'percent' ? '15' : '50.00'}
+                value={localValue}
+                onChange={e => {
+                  setLocalValue(e.target.value)
+                  commit(localType, e.target.value, localDuration, localMonths, localName)
+                }}
+                className={`w-full px-2 py-1.5 border border-ink-6 rounded text-sm bg-white ${localType === 'fixed' ? 'pl-5' : ''}`}
+              />
+              {localType === 'percent' && (
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-4 text-xs">%</span>
+              )}
+            </div>
+          </div>
+
+          {allowRecurring && (
+            <div className="flex gap-1.5 items-center">
+              <select
+                value={localDuration}
+                onChange={e => {
+                  const d = e.target.value as 'once' | 'forever' | 'repeating'
+                  setLocalDuration(d)
+                  commit(localType, localValue, d, localMonths, localName)
+                }}
+                className="px-2 py-1.5 border border-ink-6 rounded text-sm bg-white flex-1"
+              >
+                <option value="once">First invoice only</option>
+                <option value="repeating">For N months</option>
+                <option value="forever">Forever (permanent)</option>
+              </select>
+              {localDuration === 'repeating' && (
+                <input
+                  type="number"
+                  min="1"
+                  max="36"
+                  value={localMonths}
+                  onChange={e => {
+                    setLocalMonths(e.target.value)
+                    commit(localType, localValue, localDuration, e.target.value, localName)
+                  }}
+                  className="w-16 px-2 py-1.5 border border-ink-6 rounded text-sm bg-white"
+                />
+              )}
+              {localDuration === 'repeating' && <span className="text-[11px] text-ink-4">months</span>}
+            </div>
+          )}
+
+          <input
+            type="text"
+            placeholder="Label (optional, e.g., &apos;Founding rate&apos;)"
+            value={localName}
+            onChange={e => {
+              setLocalName(e.target.value)
+              commit(localType, localValue, localDuration, localMonths, e.target.value)
+            }}
+            className="w-full px-2 py-1.5 border border-ink-6 rounded text-sm bg-white"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function StartRetainerForm({
   clientId, onClose, onDone,
 }: { clientId: string; onClose: () => void; onDone: () => void }) {
   const [amount, setAmount] = useState('')
   const [addBuffer, setAddBuffer] = useState(false)
+  const [discount, setDiscount] = useState<DiscountInput | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -527,7 +676,11 @@ function StartRetainerForm({
       setError('Enter a positive monthly amount'); return
     }
     setSubmitting(true); setError(null)
-    const result = await startMonthlyRetainer({ clientId, monthlyAmountDollars: billedAmount })
+    const result = await startMonthlyRetainer({
+      clientId,
+      monthlyAmountDollars: billedAmount,
+      discount: discount ?? undefined,
+    })
     setSubmitting(false)
     if (!result.success) setError(result.error)
     else onDone()
@@ -593,6 +746,9 @@ function StartRetainerForm({
         </div>
       )}
 
+      {/* Discount (admin-only) */}
+      <DiscountFields value={discount} onChange={setDiscount} allowRecurring={true} />
+
       <p className="text-[11px] text-ink-4 leading-snug">
         First invoice sent by Stripe on the 15th of next month. Retainer uses
         &ldquo;send invoice&rdquo; by default (no auto-charge).
@@ -629,6 +785,7 @@ function CreateInvoiceForm({
   const [dueDays, setDueDays] = useState(14)
   const [notes, setNotes] = useState('')
   const [addBuffer, setAddBuffer] = useState(false)
+  const [discount, setDiscount] = useState<DiscountInput | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -684,7 +841,13 @@ function CreateInvoiceForm({
         ]
       : lines
     setSubmitting(true); setError(null)
-    const result = await createOneTimeInvoice({ clientId, lines: linesToSend, dueDateDays: dueDays, notes: notes || undefined })
+    const result = await createOneTimeInvoice({
+      clientId,
+      lines: linesToSend,
+      dueDateDays: dueDays,
+      notes: notes || undefined,
+      discount: discount ? { type: discount.type, value: discount.value, name: discount.name } : undefined,
+    })
     setSubmitting(false)
     if (!result.success) setError(result.error)
     else onDone()
@@ -796,6 +959,9 @@ function CreateInvoiceForm({
           </p>
         </div>
       </label>
+
+      {/* Discount (admin-only, applies once to this invoice) */}
+      <DiscountFields value={discount} onChange={setDiscount} allowRecurring={false} />
 
       <textarea
         placeholder="Internal notes (not shown to client)"
