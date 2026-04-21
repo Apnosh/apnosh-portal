@@ -1557,6 +1557,48 @@ export interface ScheduledPost {
   updated_at: string
 }
 
+// Per-client health signals (migration 060). View, not a table. Each
+// signal is one of four levels; we deliberately don't roll them into a
+// composite number — admins synthesize from the breakdown.
+export type HealthLevel = 'good' | 'warning' | 'bad' | 'unknown'
+
+export interface ClientHealth {
+  client_id: string
+  name: string
+  slug: string
+  // Cadence
+  cadence_level: HealthLevel
+  last_contact_at: string | null
+  days_since_contact: number | null
+  cadence_median_days: number | null
+  interaction_count: number | null
+  // Billing
+  billing_level: HealthLevel
+  billing_overdue_count: number | null
+  billing_max_overdue_days: number | null
+  billing_has_active_sub: boolean | null
+  billing_failed_count: number | null
+  // Sentiment
+  sentiment_level: HealthLevel
+  negatives_last_5: number | null
+  positives_last_5: number | null
+  sentiment_count: number | null
+}
+
+// The worst-of-the-three rollup. Computed client-side so we don't bake
+// a priority order into the view and have to migrate if we change it.
+export type OverallHealth = 'healthy' | 'stable' | 'needs_attention' | 'at_risk' | 'unknown'
+
+export function rollupHealth(h: Pick<ClientHealth, 'cadence_level' | 'billing_level' | 'sentiment_level'>): OverallHealth {
+  const levels = [h.cadence_level, h.billing_level, h.sentiment_level]
+  if (levels.some(l => l === 'bad')) return 'at_risk'
+  if (levels.some(l => l === 'warning')) return 'needs_attention'
+  if (levels.every(l => l === 'unknown')) return 'unknown'
+  // At least one 'good' and the rest 'good' or 'unknown'
+  if (levels.some(l => l === 'unknown')) return 'stable'
+  return 'healthy'
+}
+
 // Tasks / work-items (migration 058). One table, two audiences — admin
 // tasks and client-facing asks share the same row but are filtered by
 // `assignee_type` + `visible_to_client`.

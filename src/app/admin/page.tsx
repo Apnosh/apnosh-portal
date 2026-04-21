@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ScheduledPostsPanel } from '@/components/admin/scheduled-posts-panel'
 import CrossClientFeed from '@/components/admin/cross-client-feed'
+import HealthBadge from '@/components/admin/health-badge'
+import { rollupHealth, type ClientHealth as ClientHealthRow, type OverallHealth } from '@/types/database'
 import {
   Users,
   DollarSign,
@@ -42,7 +44,10 @@ interface ActivityEntry {
   business_name?: string
 }
 
-interface ClientHealth {
+// Legacy local shape kept only for the summary cards that still
+// reference `clients` state; the Client Health card now uses the
+// new `client_health` view (ClientHealthRow from database.ts).
+interface LegacyClientHealth {
   id: string
   name: string
   client_status: string
@@ -103,7 +108,7 @@ function timeAgo(dateStr: string): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function getHealthStatus(client: ClientHealth): { label: string; color: string } {
+function getHealthStatus(client: LegacyClientHealth): { label: string; color: string } {
   if (client.hasOverdueInvoices || client.client_status === 'offboarded') {
     return { label: 'At risk', color: 'bg-red-50 text-red-700' }
   }
@@ -120,7 +125,8 @@ export default function AdminDashboard() {
   const [summary, setSummary] = useState<SummaryData | null>(null)
   const [actions, setActions] = useState<ActionItem[]>([])
   const [activity, setActivity] = useState<ActivityEntry[]>([])
-  const [clients, setClients] = useState<ClientHealth[]>([])
+  const [clients, setClients] = useState<LegacyClientHealth[]>([])
+  const [healthRows, setHealthRows] = useState<ClientHealthRow[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -304,7 +310,22 @@ export default function AdminDashboard() {
         const pendingSet = new Set((pendingByBiz ?? []).map((d) => d.business_id))
         const overdueSet = new Set((overdueByBiz ?? []).map((i) => i.business_id))
 
-        const healthList: ClientHealth[] = allBusinesses.map((b) => ({
+        // Fetch the new signal-level health view alongside the legacy
+        // derivation. The new card uses healthRows; the legacy shape
+        // remains in `clients` only because other bits of this page
+        // still reference it.
+        const { data: healthData } = await supabase.from('client_health').select('*')
+        if (healthData) {
+          const worstFirst: Record<OverallHealth, number> = {
+            at_risk: 0, needs_attention: 1, stable: 2, healthy: 3, unknown: 4,
+          }
+          const sorted = (healthData as ClientHealthRow[]).slice().sort((a, b) => {
+            return worstFirst[rollupHealth(a)] - worstFirst[rollupHealth(b)]
+          })
+          setHealthRows(sorted)
+        }
+
+        const healthList: LegacyClientHealth[] = allBusinesses.map((b) => ({
           id: b.id,
           name: b.name,
           client_status: b.client_status,
@@ -410,25 +431,20 @@ export default function AdminDashboard() {
                     <Skeleton className="w-20 h-5 rounded-full" />
                   </div>
                 ))
-              : clients.length === 0
+              : healthRows.length === 0
                 ? (
                     <div className="px-5 py-8 text-center text-ink-4 text-sm">No clients yet</div>
                   )
-                : clients.slice(0, 10).map((client) => {
-                    const health = getHealthStatus(client)
-                    return (
-                      <a
-                        key={client.id}
-                        href={`/admin/clients/${client.id}`}
-                        className="px-5 py-3.5 flex items-center justify-between hover:bg-bg-2 transition-colors"
-                      >
-                        <span className="text-sm text-ink font-medium truncate">{client.name}</span>
-                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${health.color}`}>
-                          {health.label}
-                        </span>
-                      </a>
-                    )
-                  })}
+                : healthRows.slice(0, 10).map((row) => (
+                    <a
+                      key={row.client_id}
+                      href={`/admin/clients/${row.slug}`}
+                      className="px-5 py-3.5 flex items-center justify-between hover:bg-bg-2 transition-colors"
+                    >
+                      <span className="text-sm text-ink font-medium truncate">{row.name}</span>
+                      <HealthBadge health={row} />
+                    </a>
+                  ))}
           </div>
         </div>
       </div>

@@ -18,8 +18,11 @@ import {
   Building2, MessageSquare, Plus, FileText, Phone, Mail,
   ExternalLink, MapPin, Globe, Calendar, Clock, AlertTriangle,
 } from 'lucide-react'
-import type { Client } from '@/types/database'
+import { useEffect, useState } from 'react'
+import type { Client, ClientHealth } from '@/types/database'
+import { createClient } from '@/lib/supabase/client'
 import InlineEditText from './inline-edit-text'
+import HealthBadge from '@/components/admin/health-badge'
 
 interface HeroHeaderProps {
   client: Client
@@ -72,6 +75,22 @@ export default function HeroHeader({
   const status = client.billing_status
   const tone = BILLING_STATUS_TONE[status] ?? BILLING_STATUS_TONE.active
 
+  const [health, setHealth] = useState<ClientHealth | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('client_health')
+        .select('*')
+        .eq('client_id', client.id)
+        .maybeSingle()
+      if (!cancelled) setHealth(data as ClientHealth | null)
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [client.id])
+
   // Risk: no contact in 30+ days OR any overdue invoice
   const hasRisk = (daysSinceLastContact !== null && daysSinceLastContact > 30)
     || outstandingInvoiceCount > 0
@@ -102,6 +121,7 @@ export default function HeroHeader({
                   <span className="w-1.5 h-1.5 rounded-full" style={{ background: tone.dot }} />
                   {BILLING_STATUS_LABEL[status] ?? status}
                 </span>
+                <HealthBadge health={health} />
                 {client.tier && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-700">
                     {client.tier}
