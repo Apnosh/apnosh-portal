@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Plus, Loader2, ChevronDown, Send, Check, Eye, Clock, Pencil,
   ListTodo, MessageSquare, X, Play, Archive, Upload, Image as ImageIcon,
-  FileText, Sparkles, Activity, Film, ExternalLink,
+  FileText, Sparkles, Activity, Film, ExternalLink, Calendar as CalendarIcon,
+  List,
 } from 'lucide-react'
+import ContentCalendar from './content-calendar'
 import { createClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from '@/lib/realtime'
 import {
@@ -59,6 +61,7 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
   const [feedback, setFeedback] = useState<Map<string, ClientFeedbackEntry[]>>(new Map())
   const [showGenerator, setShowGenerator] = useState(false)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [view, setView] = useState<'list' | 'calendar'>('list')
 
   // Pick the most useful tab to land on based on the request's status.
   function defaultTabForStatus(status: QueueStatus): 'brief' | 'deliver' | 'activity' {
@@ -199,24 +202,70 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3 text-xs text-ink-4">
-          {counts.new ? <span className="font-medium text-blue-600">{counts.new} new</span> : null}
-          {counts.in_review ? <span className="font-medium text-amber-600">{counts.in_review} in review</span> : null}
-          {counts.drafting ? <span className="font-medium text-purple-600">{counts.drafting} drafting</span> : null}
+      {/* Header: view toggle + status counters + new post */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          {/* View toggle */}
+          <div className="inline-flex bg-bg-2 rounded-lg p-0.5 text-[12px]">
+            <button
+              onClick={() => setView('list')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium transition-colors ${
+                view === 'list' ? 'bg-white text-ink shadow-sm' : 'text-ink-4 hover:text-ink'
+              }`}
+            >
+              <List className="w-3 h-3" />
+              List
+            </button>
+            <button
+              onClick={() => setView('calendar')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-medium transition-colors ${
+                view === 'calendar' ? 'bg-white text-ink shadow-sm' : 'text-ink-4 hover:text-ink'
+              }`}
+            >
+              <CalendarIcon className="w-3 h-3" />
+              Calendar
+            </button>
+          </div>
+
+          {/* Status counters */}
+          <div className="flex items-center gap-3 text-xs text-ink-4">
+            {counts.new ? <span className="font-medium text-blue-600">{counts.new} new</span> : null}
+            {counts.in_review ? <span className="font-medium text-amber-600">{counts.in_review} in review</span> : null}
+            {counts.drafting ? <span className="font-medium text-purple-600">{counts.drafting} drafting</span> : null}
+          </div>
         </div>
-        <button
-          onClick={() => setShowGenerator(true)}
-          className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 flex items-center gap-2 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Post
-        </button>
+
+        {view === 'list' && (
+          <button
+            onClick={() => setShowGenerator(true)}
+            className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 flex items-center gap-2 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Post
+          </button>
+        )}
       </div>
 
-      {/* Queue list */}
-      {loading ? (
+      {/* Calendar view */}
+      {view === 'calendar' && !loading && (
+        <ContentCalendar
+          items={items}
+          onItemClick={(id) => {
+            setView('list')
+            setExpandedId(id)
+            const item = items.find(i => i.id === id)
+            if (item) setActiveTab(defaultTabForStatus(item.status))
+            // Scroll to the item after a tick so the list has rendered
+            setTimeout(() => {
+              document.getElementById(`queue-item-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }, 50)
+          }}
+          onNewPost={() => setShowGenerator(true)}
+        />
+      )}
+
+      {/* Queue list — hidden when calendar view is active */}
+      {view === 'list' && loading ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="bg-white rounded-xl border border-ink-6 p-4 animate-pulse space-y-2">
@@ -228,13 +277,13 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
             </div>
           ))}
         </div>
-      ) : sorted.length === 0 ? (
+      ) : view === 'list' && sorted.length === 0 ? (
         <div className="bg-white rounded-xl border border-ink-6 p-12 text-center">
           <ListTodo className="w-6 h-6 text-ink-4 mx-auto mb-3" />
           <p className="text-sm font-medium text-ink-2">Queue is empty.</p>
           <p className="text-xs text-ink-4 mt-1">Click &ldquo;New Post&rdquo; to start generating content.</p>
         </div>
-      ) : (
+      ) : view === 'list' ? (
         <div className="space-y-2">
           {sorted.map(item => {
             const isExpanded = expandedId === item.id
@@ -245,6 +294,7 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
             return (
               <div
                 key={item.id}
+                id={`queue-item-${item.id}`}
                 className={`bg-white rounded-xl border overflow-hidden ${
                   isNewClientRequest ? 'border-cyan-300 ring-1 ring-cyan-200' : 'border-ink-6'
                 }`}
@@ -464,7 +514,7 @@ export default function QueueTab({ clientId, clientSlug }: { clientId: string; c
             )
           })}
         </div>
-      )}
+      ) : null}
 
       {/* Post Generator */}
       {showGenerator && (
