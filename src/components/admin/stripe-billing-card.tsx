@@ -517,9 +517,13 @@ function DiscountFields({
 }: {
   value: DiscountInput | null
   onChange: (d: DiscountInput | null) => void
-  allowRecurring: boolean  // true for subscriptions (forever/repeating); false for invoices
+  allowRecurring: boolean  // true for subscriptions; false for one-time invoices
 }) {
-  const enabled = value !== null
+  // Active state is INDEPENDENT of the committed value -- the checkbox stays
+  // on while the user is typing even though the value might not yet parse.
+  // Only valid values propagate to the parent via onChange; invalid typing
+  // state leaves the parent at null and the form submit will fail cleanly.
+  const [active, setActive] = useState(value !== null)
   const [localType, setLocalType] = useState<'percent' | 'fixed'>(value?.type ?? 'percent')
   const [localValue, setLocalValue] = useState(value?.value?.toString() ?? '')
   const [localDuration, setLocalDuration] = useState<'once' | 'forever' | 'repeating'>(
@@ -528,56 +532,50 @@ function DiscountFields({
   const [localMonths, setLocalMonths] = useState(value?.durationMonths?.toString() ?? '3')
   const [localName, setLocalName] = useState(value?.name ?? '')
 
-  function toggle(on: boolean) {
-    if (on) {
-      commit('percent', localValue, 'once', localMonths, localName)
-    } else {
+  // Push up whenever the local state changes. Uses effect so we can always
+  // emit the latest valid value (or null) without callback plumbing inside
+  // every onChange handler.
+  useEffect(() => {
+    if (!active) {
       onChange(null)
+      return
     }
-  }
-
-  function commit(
-    type: 'percent' | 'fixed',
-    v: string,
-    duration: 'once' | 'forever' | 'repeating',
-    months: string,
-    name: string,
-  ) {
-    const numValue = parseFloat(v)
+    const numValue = parseFloat(localValue)
     if (!Number.isFinite(numValue) || numValue <= 0) {
-      onChange(null); return
+      onChange(null) // not yet valid -- form submit will block
+      return
     }
     onChange({
-      type,
+      type: localType,
       value: numValue,
-      duration,
-      durationMonths: duration === 'repeating' ? parseInt(months) || 3 : undefined,
-      name: name || undefined,
+      duration: allowRecurring ? localDuration : 'once',
+      durationMonths: localDuration === 'repeating' ? parseInt(localMonths) || 3 : undefined,
+      name: localName || undefined,
     })
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, localType, localValue, localDuration, localMonths, localName])
 
   return (
     <div className="border border-ink-6 rounded-lg p-3 bg-white space-y-2">
       <label className="flex items-center gap-2 cursor-pointer">
         <input
           type="checkbox"
-          checked={enabled}
-          onChange={e => toggle(e.target.checked)}
+          checked={active}
+          onChange={e => setActive(e.target.checked)}
           className="flex-shrink-0"
         />
         <span className="text-[12px] font-medium text-ink-2">Apply discount</span>
+        {active && !value && (
+          <span className="text-[10px] text-amber-700">enter a value below</span>
+        )}
       </label>
 
-      {enabled && (
+      {active && (
         <div className="space-y-2 pl-6">
           <div className="flex gap-1.5">
             <select
               value={localType}
-              onChange={e => {
-                const t = e.target.value as 'percent' | 'fixed'
-                setLocalType(t)
-                commit(t, localValue, localDuration, localMonths, localName)
-              }}
+              onChange={e => setLocalType(e.target.value as 'percent' | 'fixed')}
               className="px-2 py-1.5 border border-ink-6 rounded text-sm bg-white"
             >
               <option value="percent">Percent</option>
@@ -594,11 +592,9 @@ function DiscountFields({
                 max={localType === 'percent' ? '100' : undefined}
                 placeholder={localType === 'percent' ? '15' : '50.00'}
                 value={localValue}
-                onChange={e => {
-                  setLocalValue(e.target.value)
-                  commit(localType, e.target.value, localDuration, localMonths, localName)
-                }}
+                onChange={e => setLocalValue(e.target.value)}
                 className={`w-full px-2 py-1.5 border border-ink-6 rounded text-sm bg-white ${localType === 'fixed' ? 'pl-5' : ''}`}
+                autoFocus
               />
               {localType === 'percent' && (
                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-4 text-xs">%</span>
@@ -610,11 +606,7 @@ function DiscountFields({
             <div className="flex gap-1.5 items-center">
               <select
                 value={localDuration}
-                onChange={e => {
-                  const d = e.target.value as 'once' | 'forever' | 'repeating'
-                  setLocalDuration(d)
-                  commit(localType, localValue, d, localMonths, localName)
-                }}
+                onChange={e => setLocalDuration(e.target.value as 'once' | 'forever' | 'repeating')}
                 className="px-2 py-1.5 border border-ink-6 rounded text-sm bg-white flex-1"
               >
                 <option value="once">First invoice only</option>
@@ -622,19 +614,18 @@ function DiscountFields({
                 <option value="forever">Forever (permanent)</option>
               </select>
               {localDuration === 'repeating' && (
-                <input
-                  type="number"
-                  min="1"
-                  max="36"
-                  value={localMonths}
-                  onChange={e => {
-                    setLocalMonths(e.target.value)
-                    commit(localType, localValue, localDuration, e.target.value, localName)
-                  }}
-                  className="w-16 px-2 py-1.5 border border-ink-6 rounded text-sm bg-white"
-                />
+                <>
+                  <input
+                    type="number"
+                    min="1"
+                    max="36"
+                    value={localMonths}
+                    onChange={e => setLocalMonths(e.target.value)}
+                    className="w-16 px-2 py-1.5 border border-ink-6 rounded text-sm bg-white"
+                  />
+                  <span className="text-[11px] text-ink-4">months</span>
+                </>
               )}
-              {localDuration === 'repeating' && <span className="text-[11px] text-ink-4">months</span>}
             </div>
           )}
 
@@ -642,10 +633,7 @@ function DiscountFields({
             type="text"
             placeholder="Label (optional, e.g., &apos;Founding rate&apos;)"
             value={localName}
-            onChange={e => {
-              setLocalName(e.target.value)
-              commit(localType, localValue, localDuration, localMonths, e.target.value)
-            }}
+            onChange={e => setLocalName(e.target.value)}
             className="w-full px-2 py-1.5 border border-ink-6 rounded text-sm bg-white"
           />
         </div>
