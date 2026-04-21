@@ -22,6 +22,14 @@ export const GBP_SCOPES = [
   'https://www.googleapis.com/auth/business.manage',
 ] as const
 
+// Read-only scope for Google Drive. Includes docs.readonly so we can
+// pull the text content of Google Docs for AI extraction in phase 3.
+export const DRIVE_SCOPES = [
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/documents.readonly',
+  'https://www.googleapis.com/auth/userinfo.email',
+] as const
+
 // ---------------------------------------------------------------------------
 // OAuth flow
 // ---------------------------------------------------------------------------
@@ -88,6 +96,40 @@ export function getGBPOAuthUrl(state: string): string {
     state,
   })
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
+}
+
+// ── Drive OAuth ──────────────────────────────────────────────────────
+export function getDriveOAuthUrl(state: string): string {
+  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google-drive/callback`
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: DRIVE_SCOPES.join(' '),
+    access_type: 'offline',
+    prompt: 'consent',
+    state,
+  })
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
+}
+
+export async function exchangeDriveCode(code: string): Promise<GoogleTokens> {
+  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google-drive/callback`
+  const params = new URLSearchParams({
+    code,
+    client_id: CLIENT_ID,
+    client_secret: CLIENT_SECRET,
+    redirect_uri: redirectUri,
+    grant_type: 'authorization_code',
+  })
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error_description || data.error || 'Failed to exchange Drive code')
+  return data as GoogleTokens
 }
 
 export async function exchangeGBPCode(code: string): Promise<GoogleTokens> {

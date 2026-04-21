@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import DriveFilesCard from '@/components/admin/drive-files-card'
 
 interface DocRow {
   id: string
@@ -118,6 +119,11 @@ export default function DocsTab({ clientId }: { clientId: string }) {
   }
 
   return (
+    <div className="space-y-4">
+      {/* Google Drive — source of truth for files. Renders state-aware:
+          connect prompt → link folder → file list */}
+      <DriveFilesCard clientId={clientId} />
+
     <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-4">
       {/* Sidebar: categorized doc list */}
       <div className="bg-white rounded-xl border border-ink-6 p-3 h-fit md:sticky md:top-4">
@@ -207,6 +213,7 @@ export default function DocsTab({ clientId }: { clientId: string }) {
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }
