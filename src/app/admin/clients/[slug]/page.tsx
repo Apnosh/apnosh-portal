@@ -21,6 +21,7 @@ import DashboardNotesTab from './tabs/dashboard-notes-tab'
 import SyncControls from './tabs/sync-controls'
 import ProfileTab from './tabs/profile-tab'
 import DocsTab from './tabs/docs-tab'
+import ClientOverview from '@/components/admin/client-overview'
 import WebsiteTab from './tabs/website-tab'
 import { StripeBillingCard } from '@/components/admin/stripe-billing-card'
 import type {
@@ -506,7 +507,7 @@ function OverviewTab({
     setUsers(users.filter(u => u.id !== userId))
   }
 
-  return (
+  const editPanelContent = (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* ── Main column ──────────────────────────────────────────── */}
       <div className="lg:col-span-2 space-y-6">
@@ -778,8 +779,8 @@ function OverviewTab({
           </div>
         </Card>
 
-        {/* Stripe Billing (new) */}
-        <StripeBillingCard clientId={client.id} />
+        {/* Stripe Billing is rendered in the new overview sidebar (above).
+            Kept out of the edit panel to avoid duplication. */}
 
         {/* Service Allotments */}
         <ServiceAllotmentsCard
@@ -858,6 +859,8 @@ function OverviewTab({
       </div>
     </div>
   )
+
+  return <ClientOverview client={client} editContent={editPanelContent} />
 }
 
 /* ------------------------------------------------------------------ */
