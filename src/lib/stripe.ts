@@ -125,10 +125,22 @@ export async function getOrCreateStripeCustomerForClient(opts: {
           country: opts.address.country ?? 'US',
         }
       : undefined,
-    // Footer shown at the bottom of every hosted invoice page + PDF.
-    // Nudges clients toward ACH to reduce card processing fees.
+    // Customer-level defaults get applied to every invoice Stripe
+    // generates for this customer -- including subscription invoices.
+    // Keeping the branded footer + "From: Apnosh" field here means
+    // the monthly retainer emails look consistent with one-time
+    // invoices without duplicating the config per-invoice.
     invoice_settings: {
-      footer: 'Pay by bank transfer (ACH) for no processing fees. Credit card also accepted.',
+      footer: [
+        'Thank you for partnering with Apnosh.',
+        '',
+        'Bank transfer (ACH) is preferred — no processing fees. Credit card also accepted.',
+        'Questions about this invoice? Reply to this email or reach out to your account manager.',
+      ].join('\n'),
+      custom_fields: [
+        ...(opts.name ? [{ name: 'Client', value: opts.name.slice(0, 30) }] : []),
+        { name: 'From', value: 'Apnosh — Content & Growth' },
+      ],
     },
     metadata: { client_id: opts.clientId },
   })
@@ -195,6 +207,10 @@ export async function startMonthlyRetainer(opts: {
         },
       },
     ],
+    // `description` is pulled onto every invoice Stripe generates from
+    // this subscription, so it shows up as the invoice memo in the email
+    // + hosted page. Keeps the monthly retainer invoices looking branded.
+    description: `${opts.planName ?? 'Monthly Retainer'} — Apnosh`,
     metadata: {
       client_id: opts.clientId,
       plan_name: opts.planName ?? 'Monthly Retainer',

@@ -427,6 +427,26 @@ export async function createOneTimeInvoice(args: {
       ? await createCouponFromDiscount({ ...args.discount, duration: 'once' })
       : undefined
 
+    // Fetch client name for personalized memo + custom fields
+    const { data: clientNameRow } = await admin
+      .from('clients')
+      .select('name')
+      .eq('id', args.clientId)
+      .maybeSingle()
+    const clientName = (clientNameRow as { name?: string } | null)?.name ?? null
+
+    // Warmer branded footer (replaces the old "Pay by ACH" one-liner)
+    const footer = [
+      'Thank you for partnering with Apnosh.',
+      '',
+      'Bank transfer (ACH) is preferred — no processing fees. Credit card also accepted.',
+      'Questions about this invoice? Reply to this email or reach out to your account manager.',
+    ].join('\n')
+
+    // Professional default description if admin didn't write one
+    const description = args.notes?.trim()
+      || (clientName ? `Services for ${clientName}` : 'Services from Apnosh')
+
     const invoice = await stripe.invoices.create({
       customer: bc.stripe_customer_id,
       collection_method: 'send_invoice',
@@ -436,9 +456,16 @@ export async function createOneTimeInvoice(args: {
       payment_settings: {
         payment_method_types: ['us_bank_account', 'card'],
       },
-      footer: 'Pay by bank transfer (ACH) for no processing fees. Credit card also accepted.',
+      footer,
+      description,
+      // Stripe displays up to 4 custom fields on the hosted invoice as a
+      // labeled strip near the top. Good spot for context the client needs
+      // (Project, Period) that isn't a line item.
+      custom_fields: [
+        ...(clientName ? [{ name: 'Client', value: clientName.slice(0, 30) }] : []),
+        { name: 'From', value: 'Apnosh — Content & Growth' },
+      ],
       metadata: { client_id: args.clientId, source: 'admin_portal_one_time' },
-      description: args.notes,
       ...(couponId ? { discounts: [{ coupon: couponId }] } : {}),
     })
 
