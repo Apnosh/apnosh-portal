@@ -20,6 +20,7 @@ import ConnectionsTab from './tabs/connections-tab'
 import DashboardNotesTab from './tabs/dashboard-notes-tab'
 import SyncControls from './tabs/sync-controls'
 import ProfileTab from './tabs/profile-tab'
+import DocsTab from './tabs/docs-tab'
 import WebsiteTab from './tabs/website-tab'
 import { StripeBillingCard } from '@/components/admin/stripe-billing-card'
 import type {
@@ -31,11 +32,12 @@ import type {
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type Tab = 'overview' | 'profile' | 'brand' | 'assets' | 'style_library' | 'queue' | 'metrics' | 'reviews' | 'website' | 'notes' | 'connections' | 'dashboard_notes' | 'data_sync'
+type Tab = 'overview' | 'profile' | 'docs' | 'brand' | 'assets' | 'style_library' | 'queue' | 'metrics' | 'reviews' | 'website' | 'notes' | 'connections' | 'dashboard_notes' | 'data_sync'
 
 const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
   { key: 'overview', label: 'Overview', icon: Building2 },
   { key: 'profile', label: 'CRM Profile', icon: UserCircle },
+  { key: 'docs', label: 'Docs', icon: FileText },
   { key: 'brand', label: 'Brand System', icon: Palette },
   { key: 'assets', label: 'Assets', icon: Image },
   { key: 'style_library', label: 'Style Library', icon: BookOpen },
@@ -272,6 +274,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
 
       {activeTab === 'profile' && (
         <ProfileTab clientId={client.id} />
+      )}
+
+      {activeTab === 'docs' && (
+        <DocsTab clientId={client.id} />
       )}
 
       {activeTab === 'brand' && (
