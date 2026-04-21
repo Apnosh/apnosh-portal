@@ -1036,6 +1036,11 @@ function CreateInvoiceForm({
     subtotalCents: number
   } | null>(null)
   const [busyAction, setBusyAction] = useState<'send' | 'discard' | null>(null)
+  // After "Send to client" we keep the preview open in a "sent" mode
+  // so the admin can still click through to the hosted URL to verify
+  // the email looks right.
+  const [sent, setSent] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const subtotal = useMemo(
     () => lines.reduce((sum, l) => sum + (l.unitAmountDollars || 0) * (l.quantity || 0), 0),
@@ -1119,8 +1124,19 @@ function CreateInvoiceForm({
     const r = await resendInvoice(preview.invoiceId)
     setBusyAction(null)
     if (!r.success) { setError(r.error); return }
+    setSent(true)
     onSent()
-    onDone()
+  }
+
+  async function copyLink() {
+    if (!preview?.hostedUrl) return
+    try {
+      await navigator.clipboard.writeText(preview.hostedUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      /* clipboard may be blocked; ignore */
+    }
   }
 
   async function handleDiscardPreview() {
@@ -1133,21 +1149,29 @@ function CreateInvoiceForm({
     onDone()
   }
 
-  // ── Preview mode ─────────────────────────────────────────────────
-  // Invoice created in Stripe but client hasn't been emailed yet.
-  // Admin reviews the real hosted invoice and then sends or discards.
+  // ── Preview / sent mode ──────────────────────────────────────────
+  // Before send: review pane with Send / Discard.
+  // After send: confirmation pane with the hosted link preserved so
+  // the admin can click through and verify the client's experience.
   if (preview) {
     return (
       <div className="border border-ink-6 rounded-lg p-4 space-y-4 bg-white">
         <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center flex-shrink-0">
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+            sent ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+          }`}>
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-ink">Preview ready · not sent yet</h3>
+            <h3 className="text-sm font-semibold text-ink">
+              {sent ? 'Sent — invoice is in the client\u2019s inbox' : 'Preview ready · not sent yet'}
+            </h3>
             <p className="text-[12px] text-ink-3 mt-0.5">
-              The invoice exists in Stripe but the client hasn&apos;t been emailed. Review it,
-              then send or discard.
+              {sent
+                ? billingEmail
+                  ? <>Stripe emailed <span className="font-mono">{billingEmail}</span>. The hosted invoice link below stays valid as long as the invoice is open — use it to verify the email looks right.</>
+                  : 'Stripe emailed the client. The link below stays valid until paid.'
+                : 'The invoice exists in Stripe but the client hasn\u2019t been emailed. Review it, then send or discard.'}
             </p>
           </div>
         </div>
@@ -1174,19 +1198,29 @@ function CreateInvoiceForm({
           </div>
         </div>
 
-        {/* Link to view the Stripe-hosted invoice exactly as the client will see it */}
+        {/* Hosted link: opens in a new tab, always available pre + post send */}
         {preview.hostedUrl && (
-          <a
-            href={preview.hostedUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block w-full text-center bg-white hover:bg-bg-2 border border-ink-6 rounded-lg px-3 py-2.5 text-sm font-medium text-ink transition-colors"
-          >
-            Open preview in Stripe ↗
-          </a>
+          <div className="flex gap-2">
+            <a
+              href={preview.hostedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 text-center bg-white hover:bg-bg-2 border border-ink-6 rounded-lg px-3 py-2.5 text-sm font-medium text-ink transition-colors"
+            >
+              {sent ? 'View sent invoice in Stripe ↗' : 'Open preview in Stripe ↗'}
+            </a>
+            <button
+              type="button"
+              onClick={copyLink}
+              title="Copy hosted link to clipboard"
+              className="border border-ink-6 hover:border-ink-4 bg-white hover:bg-bg-2 rounded-lg px-3 text-[12px] text-ink-3 font-medium transition-colors"
+            >
+              {copied ? 'Copied' : 'Copy link'}
+            </button>
+          </div>
         )}
 
-        {billingEmail && (
+        {!sent && billingEmail && (
           <p className="text-[12px] text-ink-3 leading-snug text-center">
             On &ldquo;Send to client&rdquo; Stripe will email <span className="font-mono">{billingEmail}</span>.
           </p>
@@ -1199,26 +1233,37 @@ function CreateInvoiceForm({
           </div>
         )}
 
-        <div className="flex gap-2">
+        {sent ? (
           <button
             type="button"
-            onClick={handleSendPreview}
-            disabled={busyAction !== null}
-            className="flex-1 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-3 py-2.5 flex items-center justify-center gap-2 disabled:opacity-50"
+            onClick={onDone}
+            className="w-full bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-3 py-2.5 flex items-center justify-center gap-2"
           >
-            {busyAction === 'send' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-            Send to client
+            <CheckCircle2 className="w-4 h-4" />
+            Done
           </button>
-          <button
-            type="button"
-            onClick={handleDiscardPreview}
-            disabled={busyAction !== null}
-            className="border border-ink-6 hover:border-red-300 text-red-600 hover:bg-red-50 text-sm font-medium rounded-lg px-3 py-2.5 flex items-center gap-2 disabled:opacity-50"
-          >
-            {busyAction === 'discard' ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-            Discard
-          </button>
-        </div>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleSendPreview}
+              disabled={busyAction !== null}
+              className="flex-1 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-3 py-2.5 flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {busyAction === 'send' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              Send to client
+            </button>
+            <button
+              type="button"
+              onClick={handleDiscardPreview}
+              disabled={busyAction !== null}
+              className="border border-ink-6 hover:border-red-300 text-red-600 hover:bg-red-50 text-sm font-medium rounded-lg px-3 py-2.5 flex items-center gap-2 disabled:opacity-50"
+            >
+              {busyAction === 'discard' ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+              Discard
+            </button>
+          </div>
+        )}
       </div>
     )
   }
