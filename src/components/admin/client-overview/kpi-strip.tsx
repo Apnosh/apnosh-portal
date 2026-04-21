@@ -13,6 +13,9 @@ import { DollarSign, Repeat, Clock, ListTodo, Calendar } from 'lucide-react'
 
 interface Props {
   retainerAmountCents: number | null
+  // Fallback when there's no Stripe subscription — the manually-tracked
+  // monthly_rate on the client record. Shown with a " · manual" hint.
+  fallbackMonthlyRateDollars: number | null
   lifetimeRevenueCents: number | null
   daysSinceOnboarding: number | null
   openTaskCount: number
@@ -43,12 +46,20 @@ function formatDays(d: number | null): string {
 
 export default function KPIStrip({
   retainerAmountCents,
+  fallbackMonthlyRateDollars,
   lifetimeRevenueCents,
   daysSinceOnboarding,
   openTaskCount,
   overdueTaskCount,
   daysSinceLastContact,
 }: Props) {
+  // Prefer the Stripe subscription amount. Fall back to the manually
+  // tracked client.monthly_rate (stored as whole dollars) so clients
+  // you track outside Stripe still show a real number.
+  const mrrCents = retainerAmountCents
+    ?? (fallbackMonthlyRateDollars ? fallbackMonthlyRateDollars * 100 : null)
+  const mrrIsFallback = retainerAmountCents === null && fallbackMonthlyRateDollars !== null
+
   const cells: Array<{
     icon: typeof DollarSign
     label: string
@@ -59,8 +70,10 @@ export default function KPIStrip({
     {
       icon: Repeat,
       label: 'MRR',
-      value: formatMoney(retainerAmountCents),
-      hint: retainerAmountCents ? 'Active retainer' : 'No active retainer',
+      value: formatMoney(mrrCents),
+      hint: mrrIsFallback ? 'Manual rate · Stripe not connected'
+          : retainerAmountCents ? 'Active retainer'
+          : 'No active retainer',
     },
     {
       icon: DollarSign,

@@ -170,6 +170,7 @@ export default function ClientOverview({ client, brand, editContent, onClientUpd
       {/* 3: KPI strip */}
       <KPIStrip
         retainerAmountCents={stats.retainerAmountCents}
+        fallbackMonthlyRateDollars={client.monthly_rate}
         lifetimeRevenueCents={stats.lifetimeRevenueCents}
         daysSinceOnboarding={daysSinceOnboarding}
         openTaskCount={stats.openTaskCount}

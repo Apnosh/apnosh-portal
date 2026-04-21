@@ -97,7 +97,7 @@ function groupByDay(events: FeedEvent[]): Array<{ day: string; events: FeedEvent
   return Array.from(map.entries()).map(([day, events]) => ({ day, events }))
 }
 
-export default function CrossClientFeed({ days = 7, limit = 60 }: { days?: number; limit?: number }) {
+export default function CrossClientFeed({ days = 30, limit = 60 }: { days?: number; limit?: number }) {
   const [events, setEvents] = useState<FeedEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'client' | 'billing' | 'content' | 'tasks'>('all')
