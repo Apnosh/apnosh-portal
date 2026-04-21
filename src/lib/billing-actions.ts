@@ -390,27 +390,36 @@ export async function createOneTimeInvoice(args: {
     // Step 4: send it (Stripe emails the client the hosted invoice link).
     const sent = await stripe.invoices.sendInvoice(finalized.id)
 
-    // Proactively upsert the 'open' state into our mirror so the admin UI
-    // doesn't show 'draft' for the few seconds before the invoice.finalized
-    // webhook lands. The webhook will overwrite with the same state
-    // afterwards (idempotent).
+    // Step 5: re-fetch to get the authoritative finalized invoice.
+    // The sendInvoice response sometimes has stale totals depending on
+    // when Stripe runs post-processing (tax calculation, discount app).
+    // A fresh GET gives the final numbers every time.
+    const authoritative = await stripe.invoices.retrieve(sent.id, {
+      expand: ['lines'],
+    })
+
+    // Proactively upsert so the admin UI reflects real state immediately
+    // without waiting on the invoice.finalized webhook. The webhook will
+    // later arrive with the same data (idempotent) -- and thanks to the
+    // regress-protection guard in the webhook, it won't overwrite this
+    // with an out-of-order invoice.created payload that has total=0.
     await admin.from('invoices').upsert(
       {
         client_id: args.clientId,
-        stripe_invoice_id: sent.id,
+        stripe_invoice_id: authoritative.id,
         type: 'one_time' as const,
         status: 'open' as const,
-        amount_due_cents: sent.amount_due ?? 0,
+        amount_due_cents: authoritative.amount_due ?? 0,
         amount_paid_cents: 0,
-        subtotal_cents: sent.subtotal ?? 0,
-        tax_cents: sent.tax ?? 0,
-        total_cents: sent.total ?? 0,
-        currency: (sent.currency ?? 'usd').toLowerCase(),
-        issued_at: sent.created ? new Date(sent.created * 1000).toISOString() : null,
-        due_at: sent.due_date ? new Date(sent.due_date * 1000).toISOString() : null,
-        hosted_invoice_url: sent.hosted_invoice_url ?? null,
-        invoice_pdf_url: sent.invoice_pdf ?? null,
-        description: sent.description ?? null,
+        subtotal_cents: authoritative.subtotal ?? 0,
+        tax_cents: authoritative.tax ?? 0,
+        total_cents: authoritative.total ?? 0,
+        currency: (authoritative.currency ?? 'usd').toLowerCase(),
+        issued_at: authoritative.created ? new Date(authoritative.created * 1000).toISOString() : null,
+        due_at: authoritative.due_date ? new Date(authoritative.due_date * 1000).toISOString() : null,
+        hosted_invoice_url: authoritative.hosted_invoice_url ?? null,
+        invoice_pdf_url: authoritative.invoice_pdf ?? null,
+        description: authoritative.description ?? null,
       },
       { onConflict: 'stripe_invoice_id' },
     )

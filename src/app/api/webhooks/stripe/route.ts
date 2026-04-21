@@ -323,28 +323,28 @@ async function upsertInvoice(
     ? invoice.subscription
     : invoice.subscription?.id ?? null
 
-  // Upsert the invoice row. invoice_number is Stripe's human-readable
-  // number when finalized; we keep our auto-generated APNOSH-YYYY-NNNN
-  // for drafts or if Stripe's number is missing.
+  // Find existing row to know whether to preserve our invoice_number
+  // and whether to avoid regressing a real total back to 0.
   const { data: existing } = await supabase
     .from('invoices')
-    .select('id, invoice_number')
+    .select('id, invoice_number, total_cents, status')
     .eq('stripe_invoice_id', invoice.id)
     .maybeSingle()
 
-  const invoiceRow = {
+  // Guard against 'invoice.created' landing AFTER 'invoice.finalized'.
+  // When we see an event with zero totals but our row already has real
+  // totals, skip the total fields (and status) to avoid regressing.
+  // This is specifically the out-of-order webhook race we hit after
+  // calling stripe.invoices.create -> invoiceItems.create -> finalize.
+  const incomingTotal = invoice.total ?? 0
+  const hasExistingTotal = existing && existing.total_cents > 0
+  const shouldRegressProtect = hasExistingTotal && incomingTotal === 0
+
+  const invoiceRow: Record<string, unknown> = {
     client_id: clientId,
     stripe_invoice_id: invoice.id,
     stripe_subscription_id: subId,
-    // Only set invoice_number on new rows; existing rows keep theirs.
-    ...(existing ? {} : { invoice_number: invoice.number ?? undefined }),
-    type: (subId ? 'subscription' : 'one_time') as 'subscription' | 'one_time',
-    status: statusOverride ?? mapInvoiceStatus(invoice.status),
-    amount_due_cents: invoice.amount_due ?? 0,
-    amount_paid_cents: invoice.amount_paid ?? 0,
-    subtotal_cents: invoice.subtotal ?? 0,
-    tax_cents: invoice.tax ?? 0,
-    total_cents: invoice.total ?? 0,
+    type: (subId ? 'subscription' : 'one_time'),
     currency: (invoice.currency ?? 'usd').toLowerCase(),
     issued_at: unixToIso(invoice.created),
     due_at: unixToIso(invoice.due_date),
@@ -355,6 +355,23 @@ async function upsertInvoice(
     hosted_invoice_url: invoice.hosted_invoice_url ?? null,
     invoice_pdf_url: invoice.invoice_pdf ?? null,
     description: invoice.description ?? null,
+  }
+
+  // Invoice number: always use OUR format (APNOSH-YYYY-NNNN) via the
+  // database default -- never store Stripe's auto-assigned number, which
+  // follows their invoice_prefix scheme (e.g. JRMMCTVH-0002).
+  // For new rows, omit the field so the default fires.
+  // For existing rows, don't touch the column.
+  // (invoice.number from Stripe is ignored entirely.)
+
+  // Money fields -- skip writing these if we'd regress from real to zero.
+  if (!shouldRegressProtect) {
+    invoiceRow.amount_due_cents = invoice.amount_due ?? 0
+    invoiceRow.amount_paid_cents = invoice.amount_paid ?? 0
+    invoiceRow.subtotal_cents = invoice.subtotal ?? 0
+    invoiceRow.tax_cents = invoice.tax ?? 0
+    invoiceRow.total_cents = incomingTotal
+    invoiceRow.status = statusOverride ?? mapInvoiceStatus(invoice.status)
   }
 
   const { data: upserted } = await supabase
