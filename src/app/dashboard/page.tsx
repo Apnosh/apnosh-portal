@@ -12,6 +12,7 @@ import MetricGrid from '@/components/dashboard/metric-grid'
 import BenchmarkBar from '@/components/dashboard/benchmark-bar'
 import InsightCard from '@/components/dashboard/insight-card'
 import AMNote from '@/components/dashboard/am-note'
+import WaitingOnYou from '@/components/dashboard/waiting-on-you'
 
 export default function DashboardPage() {
   const { client, loading: clientLoading } = useClient()
@@ -179,6 +180,13 @@ export default function DashboardPage() {
       className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
+      {/* Anything we need from you — renders nothing if no open client-visible tasks */}
+      {client?.id && (
+        <div className="db-fade db-d1 mb-4">
+          <WaitingOnYou clientId={client.id} />
+        </div>
+      )}
+
       {/* How you're doing */}
       <div className="db-fade db-d1">
         <StatusBanner

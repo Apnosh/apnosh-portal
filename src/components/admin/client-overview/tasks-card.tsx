@@ -12,9 +12,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   Plus, Loader2, Circle, CheckCircle2, Clock, AlertTriangle, User, Briefcase,
+  Sparkles, ChevronDown,
 } from 'lucide-react'
 import type { ClientTask } from '@/types/database'
 import TaskFormModal from '@/components/admin/tasks/task-form-modal'
+import ApplyTemplateModal from '@/components/admin/tasks/apply-template-modal'
 
 function formatDue(iso: string): { label: string; tone: string } {
   const d = new Date(iso)
@@ -42,6 +44,8 @@ export default function TasksCard({ clientId }: { clientId: string }) {
   const [loading, setLoading] = useState(true)
   const [completing, setCompleting] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [templateOpen, setTemplateOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [editTask, setEditTask] = useState<ClientTask | null>(null)
   const [showDone, setShowDone] = useState(false)
 
@@ -93,13 +97,37 @@ export default function TasksCard({ clientId }: { clientId: string }) {
           Tasks
           {active.length > 0 && <span className="ml-1.5 text-ink-4 normal-case tracking-normal">({active.length})</span>}
         </h3>
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="text-ink-4 hover:text-brand-dark text-[11px] font-medium inline-flex items-center gap-1"
-        >
-          <Plus className="w-3 h-3" /> Add
-        </button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setMenuOpen(v => !v)}
+            className="text-ink-4 hover:text-brand-dark text-[11px] font-medium inline-flex items-center gap-1"
+          >
+            <Plus className="w-3 h-3" /> Add
+            <ChevronDown className="w-2.5 h-2.5" />
+          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-lg border border-ink-6 shadow-lg z-20 py-1">
+                <button
+                  type="button"
+                  onClick={() => { setMenuOpen(false); setCreateOpen(true) }}
+                  className="w-full text-left px-3 py-1.5 text-[12px] text-ink-2 hover:bg-bg-2 inline-flex items-center gap-2"
+                >
+                  <Plus className="w-3 h-3" /> New task
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMenuOpen(false); setTemplateOpen(true) }}
+                  className="w-full text-left px-3 py-1.5 text-[12px] text-ink-2 hover:bg-bg-2 inline-flex items-center gap-2"
+                >
+                  <Sparkles className="w-3 h-3" /> Apply template
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -209,6 +237,13 @@ export default function TasksCard({ clientId }: { clientId: string }) {
           task={editTask}
           onClose={() => setEditTask(null)}
           onSaved={() => { setEditTask(null); void load() }}
+        />
+      )}
+      {templateOpen && (
+        <ApplyTemplateModal
+          clientId={clientId}
+          onClose={() => setTemplateOpen(false)}
+          onApplied={() => { setTemplateOpen(false); void load() }}
         />
       )}
     </div>
