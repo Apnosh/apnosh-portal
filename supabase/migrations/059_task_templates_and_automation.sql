@@ -122,11 +122,11 @@ declare
   created_count int := 0;
 begin
   with overdue_missing as (
-    select i.id, i.client_id, i.invoice_number, i.total_cents, i.due_date
+    select i.id, i.client_id, i.invoice_number, i.total_cents, i.due_at
     from invoices i
     where i.status in ('open', 'failed')
-      and i.due_date is not null
-      and i.due_date < now()
+      and i.due_at is not null
+      and i.due_at < now()
       and not exists (
         select 1 from client_tasks t
         where t.invoice_id = i.id
@@ -139,7 +139,7 @@ begin
       o.client_id,
       'Chase overdue invoice ' || o.invoice_number,
       'Invoice ' || o.invoice_number || ' for $' || to_char(o.total_cents / 100.0, 'FM999,999,990.00')
-        || ' was due ' || to_char(o.due_date, 'Mon DD') || '. Send a reminder or log why it''s delayed.',
+        || ' was due ' || to_char(o.due_at, 'Mon DD') || '. Send a reminder or log why it''s delayed.',
       now() + interval '1 day',
       'admin',
       'auto_invoice',
