@@ -33,24 +33,55 @@ import type {
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type Tab = 'overview' | 'profile' | 'docs' | 'brand' | 'assets' | 'style_library' | 'queue' | 'metrics' | 'reviews' | 'website' | 'notes' | 'connections' | 'dashboard_notes' | 'data_sync'
+// Grouped tabs. Each group maps to one top-level nav item; within the
+// group, sub-tabs show up as a secondary navigation inside the tab
+// content. Reduces the top-level tab count from 14 to 8 while keeping
+// every existing panel accessible.
+type Tab =
+  | 'overview'
+  | 'profile'
+  | 'docs'
+  | 'brand'          // Brand System + Assets + Style Library
+  | 'content'        // Content Queue (future: calendar, pipeline)
+  | 'performance'    // Social Metrics + Reviews + Website
+  | 'notes'          // AM Notes + Dashboard Notes
+  | 'settings'       // Connections + Data Sync
 
 const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
-  { key: 'overview', label: 'Overview', icon: Building2 },
-  { key: 'profile', label: 'CRM Profile', icon: UserCircle },
-  { key: 'docs', label: 'Docs', icon: FileText },
-  { key: 'brand', label: 'Brand System', icon: Palette },
-  { key: 'assets', label: 'Assets', icon: Image },
-  { key: 'style_library', label: 'Style Library', icon: BookOpen },
-  { key: 'queue', label: 'Content Queue', icon: ListTodo },
-  { key: 'metrics', label: 'Social Metrics', icon: BarChart3 },
-  { key: 'reviews', label: 'Reviews', icon: Star },
-  { key: 'notes', label: 'AM Notes', icon: MessageSquare },
-  { key: 'website', label: 'Website', icon: Globe },
-  { key: 'connections', label: 'Connections', icon: Globe },
-  { key: 'dashboard_notes', label: 'Dashboard Notes', icon: FileText },
-  { key: 'data_sync', label: 'Data Sync', icon: RefreshCw },
+  { key: 'overview',    label: 'Overview',    icon: Building2 },
+  { key: 'profile',     label: 'Profile',     icon: UserCircle },
+  { key: 'docs',        label: 'Docs',        icon: FileText },
+  { key: 'brand',       label: 'Brand',       icon: Palette },
+  { key: 'content',     label: 'Content',     icon: ListTodo },
+  { key: 'performance', label: 'Performance', icon: BarChart3 },
+  { key: 'notes',       label: 'Notes',       icon: MessageSquare },
+  { key: 'settings',    label: 'Settings',    icon: RefreshCw },
 ]
+
+// Sub-tab definitions within grouped tabs. Rendered as a pill row at the
+// top of the tab content area when the top-level tab has sub-sections.
+type SubTab = { key: string; label: string }
+
+const SUB_TABS: Partial<Record<Tab, SubTab[]>> = {
+  brand: [
+    { key: 'brand_system', label: 'Brand System' },
+    { key: 'assets',       label: 'Assets' },
+    { key: 'style',        label: 'Style Library' },
+  ],
+  performance: [
+    { key: 'social',  label: 'Social Metrics' },
+    { key: 'reviews', label: 'Reviews' },
+    { key: 'website', label: 'Website' },
+  ],
+  notes: [
+    { key: 'am_notes',        label: 'AM Notes' },
+    { key: 'dashboard_notes', label: 'Dashboard Notes' },
+  ],
+  settings: [
+    { key: 'connections', label: 'Connections' },
+    { key: 'data_sync',   label: 'Data Sync' },
+  ],
+}
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -145,6 +176,14 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
   const supabase = createClient()
 
   const [activeTab, setActiveTab] = useState<Tab>('overview')
+  // Per-group sub-tab state. Keyed by top-level tab; value is the
+  // currently-selected sub-tab's key. Defaults to the first sub-tab.
+  const [activeSubTab, setActiveSubTab] = useState<Record<string, string>>({
+    brand: 'brand_system',
+    performance: 'social',
+    notes: 'am_notes',
+    settings: 'connections',
+  })
   const [client, setClient] = useState<Client | null>(null)
   const [brand, setBrand] = useState<ClientBrand | null>(null)
   const [pattern, setPattern] = useState<ClientPattern | null>(null)
@@ -281,61 +320,108 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
         <DocsTab clientId={client.id} />
       )}
 
+      {/* Grouped tabs -- sub-nav + content */}
       {activeTab === 'brand' && (
-        <BrandTab
-          clientId={client.id}
-          clientName={client.name}
-          brand={brand}
-          onBrandUpdate={setBrand}
-        />
+        <div className="space-y-4">
+          <SubNav
+            tabs={SUB_TABS.brand!}
+            active={activeSubTab.brand}
+            onChange={key => setActiveSubTab(s => ({ ...s, brand: key }))}
+          />
+          {activeSubTab.brand === 'brand_system' && (
+            <BrandTab
+              clientId={client.id}
+              clientName={client.name}
+              brand={brand}
+              onBrandUpdate={setBrand}
+            />
+          )}
+          {activeSubTab.brand === 'assets' && <AssetsTab clientId={client.id} />}
+          {activeSubTab.brand === 'style' && <StyleLibraryTab clientId={client.id} />}
+        </div>
       )}
 
-      {activeTab === 'assets' && (
-        <AssetsTab clientId={client.id} />
-      )}
-
-      {activeTab === 'style_library' && (
-        <StyleLibraryTab clientId={client.id} />
-      )}
-
-      {activeTab === 'queue' && (
+      {activeTab === 'content' && (
         <QueueTab clientId={client.id} clientSlug={client.slug} />
       )}
 
-      {activeTab === 'metrics' && (
-        <MetricsTab clientId={client.id} />
-      )}
-
-      {activeTab === 'reviews' && (
-        <ReviewsTab clientId={client.id} />
-      )}
-      {activeTab === 'notes' && (
-        <NotesTab clientId={client.id} />
-      )}
-      {activeTab === 'website' && (
-        <WebsiteTab clientId={client.id} />
-      )}
-
-      {activeTab === 'connections' && (
-        <ConnectionsTab clientId={client.id} />
-      )}
-      {activeTab === 'dashboard_notes' && (
-        <DashboardNotesTab clientId={client.id} />
-      )}
-      {activeTab === 'data_sync' && (
-        <div className="space-y-8">
-          <SyncControls clientId={client.id} />
-          <div>
-            <h3 className="text-sm font-bold text-ink mb-2">GBP Data Import</h3>
-            <Link
-              href={`/admin/clients/${client.slug}/import-gbp`}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-ink-5 hover:bg-bg-2 transition-colors"
-            >
-              <Plus className="w-4 h-4" /> Import GBP CSV
-            </Link>
-          </div>
+      {activeTab === 'performance' && (
+        <div className="space-y-4">
+          <SubNav
+            tabs={SUB_TABS.performance!}
+            active={activeSubTab.performance}
+            onChange={key => setActiveSubTab(s => ({ ...s, performance: key }))}
+          />
+          {activeSubTab.performance === 'social' && <MetricsTab clientId={client.id} />}
+          {activeSubTab.performance === 'reviews' && <ReviewsTab clientId={client.id} />}
+          {activeSubTab.performance === 'website' && <WebsiteTab clientId={client.id} />}
         </div>
       )}
+
+      {activeTab === 'notes' && (
+        <div className="space-y-4">
+          <SubNav
+            tabs={SUB_TABS.notes!}
+            active={activeSubTab.notes}
+            onChange={key => setActiveSubTab(s => ({ ...s, notes: key }))}
+          />
+          {activeSubTab.notes === 'am_notes' && <NotesTab clientId={client.id} />}
+          {activeSubTab.notes === 'dashboard_notes' && <DashboardNotesTab clientId={client.id} />}
+        </div>
+      )}
+
+      {activeTab === 'settings' && (
+        <div className="space-y-4">
+          <SubNav
+            tabs={SUB_TABS.settings!}
+            active={activeSubTab.settings}
+            onChange={key => setActiveSubTab(s => ({ ...s, settings: key }))}
+          />
+          {activeSubTab.settings === 'connections' && <ConnectionsTab clientId={client.id} />}
+          {activeSubTab.settings === 'data_sync' && (
+            <div className="space-y-8">
+              <SyncControls clientId={client.id} />
+              <div>
+                <h3 className="text-sm font-bold text-ink mb-2">GBP Data Import</h3>
+                <Link
+                  href={`/admin/clients/${client.slug}/import-gbp`}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-ink-5 hover:bg-bg-2 transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Import GBP CSV
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sub-tab nav used inside grouped tabs                               */
+/* ------------------------------------------------------------------ */
+
+function SubNav({
+  tabs, active, onChange,
+}: {
+  tabs: SubTab[]
+  active: string
+  onChange: (key: string) => void
+}) {
+  return (
+    <div className="inline-flex bg-bg-2 rounded-lg p-0.5 text-[12px]">
+      {tabs.map(t => (
+        <button
+          key={t.key}
+          onClick={() => onChange(t.key)}
+          className={`px-3 py-1.5 font-medium rounded-md transition-colors ${
+            active === t.key ? 'bg-white text-ink shadow-sm' : 'text-ink-4 hover:text-ink'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
     </div>
   )
 }

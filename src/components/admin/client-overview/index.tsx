@@ -27,6 +27,7 @@ import HeroHeader from './hero-header'
 import ActivityTimeline from './activity-timeline'
 import ContactsCard from './contacts-card'
 import AtAGlanceCard from './at-a-glance-card'
+import LogInteractionModal from './log-interaction-modal'
 import { StripeBillingCard } from '@/components/admin/stripe-billing-card'
 
 interface Props {
@@ -62,6 +63,10 @@ const EMPTY_STATS: OverviewStats = {
 export default function ClientOverview({ client, editContent }: Props) {
   const [stats, setStats] = useState<OverviewStats>(EMPTY_STATS)
   const [editOpen, setEditOpen] = useState(false)
+  const [interactionModalOpen, setInteractionModalOpen] = useState(false)
+  // Bump this to trigger the activity timeline to reload after a new
+  // interaction lands. Cheap + reliable vs lifting state into the timeline.
+  const [timelineRefresh, setTimelineRefresh] = useState(0)
 
   const load = useCallback(async () => {
     const supabase = createClient()
@@ -139,30 +144,14 @@ export default function ClientOverview({ client, editContent }: Props) {
           const card = document.getElementById('stripe-billing-card')
           card?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         }}
-        onLogMeeting={() => {
-          // Placeholder -- interaction logging UI lands in a later commit.
-          // For now open a quick prompt that drops a note into the
-          // client_interactions table.
-          const summary = window.prompt('Log a meeting / call / note. Short summary:')
-          if (!summary) return
-          void (async () => {
-            const supabase = createClient()
-            await supabase.from('client_interactions').insert({
-              client_id: client.id,
-              kind: 'meeting',
-              summary,
-              occurred_at: new Date().toISOString(),
-            })
-            load()
-          })()
-        }}
+        onLogMeeting={() => setInteractionModalOpen(true)}
       />
 
       {/* Main content: 2-column */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
         {/* Left: activity timeline */}
         <div>
-          <ActivityTimeline clientId={client.id} />
+          <ActivityTimeline clientId={client.id} key={timelineRefresh} />
         </div>
 
         {/* Right: stacked cards */}
@@ -214,6 +203,18 @@ export default function ClientOverview({ client, editContent }: Props) {
           </div>
         )}
       </div>
+
+      {/* Log-interaction modal */}
+      {interactionModalOpen && (
+        <LogInteractionModal
+          clientId={client.id}
+          onClose={() => setInteractionModalOpen(false)}
+          onSaved={() => {
+            setTimelineRefresh(n => n + 1)
+            load()
+          }}
+        />
+      )}
     </div>
   )
 }
