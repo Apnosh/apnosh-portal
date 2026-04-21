@@ -98,9 +98,11 @@ export default function HeroHeader({
 
   return (
     <>
-      <div className="bg-white rounded-2xl border border-ink-6 overflow-hidden shadow-sm">
-        {/* Top gradient accent — subtle sign of "this is a presence, not a card" */}
-        <div className="h-1 bg-gradient-to-r from-brand/60 via-brand to-brand-dark" />
+      <div className="bg-white rounded-2xl border border-ink-6 shadow-sm relative">
+        {/* Top gradient accent — rounded top corners so we don't need
+            overflow-hidden on the wrapper (which was clipping the
+            HealthBadge tooltip on hover). */}
+        <div className="h-1 bg-gradient-to-r from-brand/60 via-brand to-brand-dark rounded-t-2xl" />
 
         <div className="p-6">
           <div className="flex items-start gap-5">

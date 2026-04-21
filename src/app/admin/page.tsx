@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ScheduledPostsPanel } from '@/components/admin/scheduled-posts-panel'
 import CrossClientFeed from '@/components/admin/cross-client-feed'
-import HealthBadge from '@/components/admin/health-badge'
+import ClientHealthList from '@/components/admin/client-health-list'
 import { rollupHealth, type ClientHealth as ClientHealthRow, type OverallHealth } from '@/types/database'
 import {
   Users,
@@ -42,7 +42,7 @@ function Skeleton({ className = '' }: { className?: string }) {
 
 function SummaryCardSkeleton() {
   return (
-    <div className="bg-white rounded-xl border border-ink-6 p-5">
+    <div className="bg-white rounded-xl border border-ink-6 shadow-sm p-5">
       <Skeleton className="w-9 h-9 rounded-lg mb-3" />
       <Skeleton className="w-16 h-7 mb-1.5" />
       <Skeleton className="w-24 h-3" />
@@ -233,21 +233,29 @@ export default function AdminDashboard() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
-        <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Dashboard</h1>
-        <p className="text-ink-3 text-sm mt-1">Your business at a glance.</p>
+        <h1 className="font-[family-name:var(--font-display)] text-[28px] leading-tight text-ink">Overview</h1>
+        <p className="text-ink-3 text-[13px] mt-1">
+          {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · your business at a glance
+        </p>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* Summary Cards — 3 up on desktop, 2 on tablet */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {loading
           ? Array.from({ length: 6 }).map((_, i) => <SummaryCardSkeleton key={i} />)
           : summaryCards.map((card) => (
-              <div key={card.label} className="bg-white rounded-xl border border-ink-6 p-5">
-                <div className={`w-9 h-9 rounded-lg ${card.color} flex items-center justify-center mb-3`}>
-                  <card.icon className="w-4 h-4" />
+              <div key={card.label} className="group bg-white rounded-xl border border-ink-6 shadow-sm p-5 hover:shadow-md hover:border-ink-5 transition-all">
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`w-9 h-9 rounded-lg ${card.color} flex items-center justify-center`}>
+                    <card.icon className="w-4 h-4" />
+                  </div>
                 </div>
-                <div className="font-[family-name:var(--font-display)] text-2xl text-ink">{card.value}</div>
-                <div className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mt-1">{card.label}</div>
+                <div className="font-[family-name:var(--font-display)] text-[26px] leading-none text-ink tabular-nums">
+                  {card.value}
+                </div>
+                <div className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mt-2">
+                  {card.label}
+                </div>
               </div>
             ))}
       </div>
@@ -255,23 +263,29 @@ export default function AdminDashboard() {
       {/* Scheduled posts panel — what needs to ship and when */}
       <ScheduledPostsPanel />
 
-      {/* Action Items */}
+      {/* Action Items — only renders when there's something to flag */}
       {!loading && actions.length > 0 && (
-        <div className="bg-white rounded-xl border border-ink-6 p-5">
-          <h2 className="font-[family-name:var(--font-display)] text-lg text-ink mb-4">Needs Attention</h2>
-          <div className="space-y-3">
+        <div className="bg-white rounded-xl border border-ink-6 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-ink-6">
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-ink inline-flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              Needs attention
+            </h2>
+            <p className="text-[11px] text-ink-4 mt-0.5">{actions.length} item{actions.length === 1 ? '' : 's'} across your clients</p>
+          </div>
+          <div className="divide-y divide-ink-6">
             {actions.map((item, i) => (
               <a
                 key={i}
                 href={item.href}
-                className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-bg-2 transition-colors group"
+                className="flex items-center justify-between px-5 py-3 hover:bg-bg-2 transition-colors group"
               >
                 <div className="flex items-center gap-3">
-                  <item.icon className={`w-4 h-4 ${item.color}`} />
-                  <span className="text-sm text-ink">{item.label}</span>
+                  <item.icon className={`w-4 h-4 ${item.color} flex-shrink-0`} />
+                  <span className="text-[13.5px] text-ink">{item.label}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`text-sm font-medium ${item.color}`}>{item.count}</span>
+                  <span className={`text-[13.5px] font-semibold tabular-nums ${item.color}`}>{item.count}</span>
                   <ArrowUpRight className="w-3.5 h-3.5 text-ink-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               </a>
@@ -283,40 +297,8 @@ export default function AdminDashboard() {
       {/* Activity across clients — merged event-sourced feed */}
       <CrossClientFeed />
 
-      <div className="grid lg:grid-cols-2 gap-3">
-        {/* Client Health */}
-        <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
-          <div className="flex items-center justify-between p-5 border-b border-ink-6">
-            <h2 className="font-[family-name:var(--font-display)] text-lg text-ink">Client Health</h2>
-            <a href="/admin/clients" className="text-xs text-brand-dark font-medium hover:underline flex items-center gap-1">
-              View all <ArrowUpRight className="w-3 h-3" />
-            </a>
-          </div>
-          <div className="divide-y divide-ink-6">
-            {loading
-              ? Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="px-5 py-3.5 flex items-center justify-between">
-                    <Skeleton className="w-32 h-4" />
-                    <Skeleton className="w-20 h-5 rounded-full" />
-                  </div>
-                ))
-              : healthRows.length === 0
-                ? (
-                    <div className="px-5 py-8 text-center text-ink-4 text-sm">No clients yet</div>
-                  )
-                : healthRows.slice(0, 10).map((row) => (
-                    <a
-                      key={row.client_id}
-                      href={`/admin/clients/${row.slug}`}
-                      className="px-5 py-3.5 flex items-center justify-between hover:bg-bg-2 transition-colors"
-                    >
-                      <span className="text-sm text-ink font-medium truncate">{row.name}</span>
-                      <HealthBadge health={row} />
-                    </a>
-                  ))}
-          </div>
-        </div>
-      </div>
+      {/* Client Health — full-width list grouped by overall status */}
+      <ClientHealthList rows={healthRows} loading={loading} />
     </div>
   )
 }
