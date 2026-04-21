@@ -27,6 +27,8 @@ import HeroHeader from './hero-header'
 import ActivityTimeline from './activity-timeline'
 import ContactsCard from './contacts-card'
 import AtAGlanceCard from './at-a-glance-card'
+import NotesCard from './notes-card'
+import SocialsCard from './socials-card'
 import LogInteractionModal from './log-interaction-modal'
 import { StripeBillingCard } from '@/components/admin/stripe-billing-card'
 
@@ -171,6 +173,16 @@ export default function ClientOverview({ client, editContent, onClientUpdate }: 
 
           <ContactsCard clientId={client.id} />
 
+          <SocialsCard
+            socials={client.socials as Record<string, string | undefined> | null}
+            onSave={socials => onClientUpdate({ socials: socials as Client['socials'] })}
+          />
+
+          <NotesCard
+            value={client.notes}
+            onSave={notes => onClientUpdate({ notes })}
+          />
+
           <div id="stripe-billing-card">
             <StripeBillingCard clientId={client.id} />
           </div>
@@ -193,8 +205,8 @@ export default function ClientOverview({ client, editContent, onClientUpdate }: 
               <ChevronRight className="w-4 h-4 text-ink-4" />
             )}
             <div>
-              <div className="text-sm font-semibold text-ink">Edit details</div>
-              <div className="text-[11px] text-ink-4">Profile, socials, tier, team members, brand quick view</div>
+              <div className="text-sm font-semibold text-ink">Plan &amp; access</div>
+              <div className="text-[11px] text-ink-4">Services, tier, monthly rate, client users, allotments</div>
             </div>
           </div>
         </button>

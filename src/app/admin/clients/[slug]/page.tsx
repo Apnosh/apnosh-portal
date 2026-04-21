@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback, use } from 'react'
+import { useState, useEffect, useCallback, use, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import {
   ArrowLeft, Loader2, Save, ExternalLink, Plus, Trash2,
   Building2, Palette, Image, BookOpen, ListTodo,
@@ -175,15 +176,47 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
   const { slug } = use(params)
   const supabase = createClient()
 
-  const [activeTab, setActiveTab] = useState<Tab>('overview')
-  // Per-group sub-tab state. Keyed by top-level tab; value is the
-  // currently-selected sub-tab's key. Defaults to the first sub-tab.
-  const [activeSubTab, setActiveSubTab] = useState<Record<string, string>>({
+  // Tab state is backed by the URL (?tab=X&sub=Y) so any view is shareable
+  // and the back button navigates between tabs rather than away from the
+  // client page.
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  const urlTab = searchParams.get('tab') as Tab | null
+  const urlSub = searchParams.get('sub')
+  const activeTab: Tab = urlTab && TABS.some(t => t.key === urlTab) ? urlTab : 'overview'
+
+  // Per-group sub-tab default if none in URL
+  const DEFAULT_SUB: Record<string, string> = useMemo(() => ({
     brand: 'brand_system',
     performance: 'social',
     notes: 'am_notes',
     settings: 'connections',
-  })
+  }), [])
+
+  const activeSub = useMemo(() => {
+    const subs = SUB_TABS[activeTab]
+    if (!subs) return ''
+    if (urlSub && subs.some(s => s.key === urlSub)) return urlSub
+    return DEFAULT_SUB[activeTab] ?? subs[0].key
+  }, [activeTab, urlSub, DEFAULT_SUB])
+
+  const setTab = useCallback((tab: Tab, sub?: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (tab === 'overview') params.delete('tab')
+    else params.set('tab', tab)
+    if (sub) params.set('sub', sub)
+    else params.delete('sub')
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [router, pathname, searchParams])
+
+  const setSub = useCallback((sub: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('sub', sub)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }, [router, pathname, searchParams])
   const [client, setClient] = useState<Client | null>(null)
   const [brand, setBrand] = useState<ClientBrand | null>(null)
   const [pattern, setPattern] = useState<ClientPattern | null>(null)
@@ -287,7 +320,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
         {TABS.map(tab => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => setTab(tab.key)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap ${
               activeTab === tab.key
                 ? 'border-brand text-ink'
@@ -325,10 +358,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
         <div className="space-y-4">
           <SubNav
             tabs={SUB_TABS.brand!}
-            active={activeSubTab.brand}
-            onChange={key => setActiveSubTab(s => ({ ...s, brand: key }))}
+            active={activeSub}
+            onChange={setSub}
           />
-          {activeSubTab.brand === 'brand_system' && (
+          {activeSub === 'brand_system' && (
             <BrandTab
               clientId={client.id}
               clientName={client.name}
@@ -336,8 +369,8 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
               onBrandUpdate={setBrand}
             />
           )}
-          {activeSubTab.brand === 'assets' && <AssetsTab clientId={client.id} />}
-          {activeSubTab.brand === 'style' && <StyleLibraryTab clientId={client.id} />}
+          {activeSub === 'assets' && <AssetsTab clientId={client.id} />}
+          {activeSub === 'style' && <StyleLibraryTab clientId={client.id} />}
         </div>
       )}
 
@@ -349,12 +382,12 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
         <div className="space-y-4">
           <SubNav
             tabs={SUB_TABS.performance!}
-            active={activeSubTab.performance}
-            onChange={key => setActiveSubTab(s => ({ ...s, performance: key }))}
+            active={activeSub}
+            onChange={setSub}
           />
-          {activeSubTab.performance === 'social' && <MetricsTab clientId={client.id} />}
-          {activeSubTab.performance === 'reviews' && <ReviewsTab clientId={client.id} />}
-          {activeSubTab.performance === 'website' && <WebsiteTab clientId={client.id} />}
+          {activeSub === 'social' && <MetricsTab clientId={client.id} />}
+          {activeSub === 'reviews' && <ReviewsTab clientId={client.id} />}
+          {activeSub === 'website' && <WebsiteTab clientId={client.id} />}
         </div>
       )}
 
@@ -362,11 +395,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
         <div className="space-y-4">
           <SubNav
             tabs={SUB_TABS.notes!}
-            active={activeSubTab.notes}
-            onChange={key => setActiveSubTab(s => ({ ...s, notes: key }))}
+            active={activeSub}
+            onChange={setSub}
           />
-          {activeSubTab.notes === 'am_notes' && <NotesTab clientId={client.id} />}
-          {activeSubTab.notes === 'dashboard_notes' && <DashboardNotesTab clientId={client.id} />}
+          {activeSub === 'am_notes' && <NotesTab clientId={client.id} />}
+          {activeSub === 'dashboard_notes' && <DashboardNotesTab clientId={client.id} />}
         </div>
       )}
 
@@ -374,11 +407,11 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
         <div className="space-y-4">
           <SubNav
             tabs={SUB_TABS.settings!}
-            active={activeSubTab.settings}
-            onChange={key => setActiveSubTab(s => ({ ...s, settings: key }))}
+            active={activeSub}
+            onChange={setSub}
           />
-          {activeSubTab.settings === 'connections' && <ConnectionsTab clientId={client.id} />}
-          {activeSubTab.settings === 'data_sync' && (
+          {activeSub === 'connections' && <ConnectionsTab clientId={client.id} />}
+          {activeSub === 'data_sync' && (
             <div className="space-y-8">
               <SyncControls clientId={client.id} />
               <div>
@@ -606,63 +639,18 @@ function OverviewTab({
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* ── Main column ──────────────────────────────────────────── */}
       <div className="lg:col-span-2 space-y-6">
-        {/* Client Info */}
-        <Card title="Client Information">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <InlineField label="Client Name" value={draft.name} onChange={v => updateDraft({ name: v })} />
-            <InlineField label="Industry" value={draft.industry ?? ''} onChange={v => updateDraft({ industry: v || null })} />
-            <InlineField label="Location" value={draft.location ?? ''} onChange={v => updateDraft({ location: v || null })} />
-            <InlineField label="Website" value={draft.website ?? ''} onChange={v => updateDraft({ website: v || null })} />
-            <InlineField label="Primary Contact" value={draft.primary_contact ?? ''} onChange={v => updateDraft({ primary_contact: v || null })} />
-            <InlineField label="Email" value={draft.email ?? ''} onChange={v => updateDraft({ email: v || null })} />
-            <InlineField label="Phone" value={draft.phone ?? ''} onChange={v => updateDraft({ phone: v || null })} />
-            <InlineField label="Onboarding Date" value={draft.onboarding_date ?? ''} onChange={v => updateDraft({ onboarding_date: v || null })} type="date" />
+        {dirty && (
+          <div className="flex justify-end">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 flex items-center gap-2 transition-colors disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save changes
+            </button>
           </div>
-
-          {dirty && (
-            <div className="flex justify-end mt-4 pt-4 border-t border-ink-6">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 flex items-center gap-2 transition-colors disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Changes
-              </button>
-            </div>
-          )}
-        </Card>
-
-        {/* Social Accounts */}
-        <Card title="Social Accounts">
-          <div className="space-y-3">
-            {(['instagram', 'tiktok', 'linkedin', 'facebook', 'gbp'] as const).map(platform => {
-              const val = (draft.socials as Record<string, string | undefined>)[platform] ?? ''
-              return (
-                <div key={platform} className="flex items-center gap-3">
-                  <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide w-20 flex-shrink-0">{platform === 'gbp' ? 'GBP' : platform}</span>
-                  <input
-                    type="text"
-                    value={val}
-                    onChange={e => updateSocial(platform, e.target.value)}
-                    placeholder={platform === 'gbp' ? 'Google Business Profile URL' : `@handle or URL`}
-                    className="flex-1 border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
-                  />
-                  {val && (
-                    <a
-                      href={socialUrl(platform, val)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-ink-4 hover:text-brand transition-colors flex-shrink-0"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </Card>
+        )}
 
         {/* Services */}
         <Card title="Active Services">
@@ -883,74 +871,6 @@ function OverviewTab({
           initialAllotments={draft.allotments ?? {}}
         />
 
-        {/* Brand Quick View */}
-        {brand && (
-          <Card title="Brand Quick View">
-            <div className="space-y-3">
-              {/* Colors */}
-              <div>
-                <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide">Colors</span>
-                <div className="flex gap-2 mt-1.5">
-                  {[brand.primary_color, brand.secondary_color, brand.accent_color].filter(Boolean).map((c, i) => (
-                    <div key={i} className="group relative">
-                      <div
-                        className="w-8 h-8 rounded-lg border border-ink-6 cursor-pointer"
-                        style={{ backgroundColor: c! }}
-                        title={c!}
-                      />
-                      <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] text-ink-4 font-mono opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                        {c}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Fonts */}
-              {(brand.font_display || brand.font_body) && (
-                <div className="pt-2">
-                  <span className="text-[11px] text-ink-4 font-medium uppercase tracking-wide">Fonts</span>
-                  <div className="mt-1 space-y-1">
-                    {brand.font_display && <p className="text-sm text-ink">{brand.font_display} <span className="text-ink-4">(display)</span></p>}
-                    {brand.font_body && <p className="text-sm text-ink">{brand.font_body} <span className="text-ink-4">(body)</span></p>}
-                  </div>
-                </div>
-              )}
-
-              {/* Style pills */}
-              <div className="flex flex-wrap gap-1.5 pt-2">
-                {brand.visual_style && (
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-bg-2 text-ink-3">{brand.visual_style.replace(/_/g, ' ')}</span>
-                )}
-                {brand.depth_style && (
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-bg-2 text-ink-3">{brand.depth_style.replace(/_/g, ' ')}</span>
-                )}
-                {brand.edge_treatment && brand.edge_treatment !== 'none' && (
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-bg-2 text-ink-3">{brand.edge_treatment.replace(/_/g, ' ')}</span>
-                )}
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {/* Notes */}
-        <Card title="Notes">
-          <div className="relative">
-            <textarea
-              value={draft.notes ?? ''}
-              onChange={e => { updateDraft({ notes: e.target.value }); setDirty(false) }}
-              onBlur={handleNotesBlur}
-              placeholder="Internal notes about this client..."
-              rows={5}
-              className="w-full border border-ink-6 rounded-lg px-3 py-2.5 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand resize-none"
-            />
-            {notesSaving && (
-              <span className="absolute bottom-3 right-3 text-[10px] text-ink-4 flex items-center gap-1">
-                <Loader2 className="w-3 h-3 animate-spin" /> Saving...
-              </span>
-            )}
-          </div>
-        </Card>
       </div>
     </div>
   )
