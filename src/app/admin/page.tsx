@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ScheduledPostsPanel } from '@/components/admin/scheduled-posts-panel'
+import CrossClientFeed from '@/components/admin/cross-client-feed'
 import {
   Users,
   DollarSign,
@@ -389,43 +390,10 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-2 gap-3">
-        {/* Recent Activity */}
-        <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
-          <div className="p-5 border-b border-ink-6">
-            <h2 className="font-[family-name:var(--font-display)] text-lg text-ink">Recent Activity</h2>
-          </div>
-          <div className="divide-y divide-ink-6">
-            {loading
-              ? Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="px-5 py-3.5 flex items-start gap-3">
-                    <Skeleton className="w-2 h-2 rounded-full mt-1.5 shrink-0" />
-                    <div className="flex-1 space-y-1.5">
-                      <Skeleton className="w-3/4 h-3.5" />
-                      <Skeleton className="w-1/2 h-3" />
-                    </div>
-                  </div>
-                ))
-              : activity.length === 0
-                ? (
-                    <div className="px-5 py-8 text-center text-ink-4 text-sm">No recent activity</div>
-                  )
-                : activity.map((entry) => (
-                    <div key={entry.id} className="px-5 py-3.5 flex items-start gap-3">
-                      <div className="w-2 h-2 rounded-full bg-brand-dark mt-1.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-ink truncate">
-                          <span className="font-medium">{entry.business_name}</span>
-                          {' -- '}
-                          {entry.description || actionTypeLabels[entry.action_type] || entry.action_type}
-                        </p>
-                        <p className="text-xs text-ink-4 mt-0.5">{timeAgo(entry.created_at)}</p>
-                      </div>
-                    </div>
-                  ))}
-          </div>
-        </div>
+      {/* Activity across clients — merged event-sourced feed */}
+      <CrossClientFeed />
 
+      <div className="grid lg:grid-cols-2 gap-3">
         {/* Client Health */}
         <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
           <div className="flex items-center justify-between p-5 border-b border-ink-6">
