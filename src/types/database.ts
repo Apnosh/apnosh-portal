@@ -1557,6 +1557,35 @@ export interface ScheduledPost {
   updated_at: string
 }
 
+// Tasks / work-items (migration 058). One table, two audiences — admin
+// tasks and client-facing asks share the same row but are filtered by
+// `assignee_type` + `visible_to_client`.
+export type ClientTaskStatus = 'todo' | 'doing' | 'done' | 'canceled'
+export type ClientTaskSource = 'manual' | 'auto_nlp' | 'auto_invoice' | 'template'
+export type ClientTaskAssigneeType = 'admin' | 'client'
+
+export interface ClientTask {
+  id: string
+  client_id: string
+  title: string
+  body: string | null
+  status: ClientTaskStatus
+  snoozed_until: string | null
+  due_at: string | null
+  assignee_type: ClientTaskAssigneeType | null
+  assignee_id: string | null
+  visible_to_client: boolean
+  interaction_id: string | null
+  invoice_id: string | null
+  content_id: string | null
+  source: ClientTaskSource
+  created_by: string | null
+  completed_by: string | null
+  created_at: string
+  updated_at: string
+  completed_at: string | null
+}
+
 // Extended monthly report with client-portal fields (migration 020 additions)
 export interface ClientMonthlyReport {
   id: string

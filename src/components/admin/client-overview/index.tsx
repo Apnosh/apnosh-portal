@@ -29,6 +29,7 @@ import ContactsCard from './contacts-card'
 import AtAGlanceCard from './at-a-glance-card'
 import NotesCard from './notes-card'
 import SocialsCard from './socials-card'
+import TasksCard from './tasks-card'
 import LogInteractionModal from './log-interaction-modal'
 import { StripeBillingCard } from '@/components/admin/stripe-billing-card'
 
@@ -159,6 +160,8 @@ export default function ClientOverview({ client, editContent, onClientUpdate }: 
 
         {/* Right: stacked cards */}
         <div className="space-y-4">
+          <TasksCard clientId={client.id} />
+
           <AtAGlanceCard
             retainerAmountCents={stats.retainerAmountCents}
             retainerStatus={stats.retainerStatus}

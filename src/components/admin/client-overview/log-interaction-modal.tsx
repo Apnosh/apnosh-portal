@@ -19,12 +19,13 @@
  * is too long.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   X, Calendar, MessageSquare, Phone, Mail, StickyNote, Smile, Meh, Frown,
-  Clock, CheckCircle2, Loader2, AlertTriangle,
+  Clock, CheckCircle2, Loader2, AlertTriangle, ListTodo, Sparkles,
 } from 'lucide-react'
+import { detectFollowup } from '@/lib/task-nlp'
 
 type InteractionKind = 'meeting' | 'call' | 'email' | 'text' | 'note' | 'other'
 type Sentiment = 'positive' | 'neutral' | 'negative' | null
@@ -53,7 +54,15 @@ export default function LogInteractionModal({ clientId, onClose, onSaved }: Prop
   const [outcome, setOutcome] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [createTaskChecked, setCreateTaskChecked] = useState(true)
   const summaryRef = useRef<HTMLInputElement>(null)
+
+  // Watch outcome + body for follow-up phrasing. If we spot one, we'll
+  // offer to auto-create a task on submit.
+  const followup = useMemo(
+    () => detectFollowup(`${outcome} ${body}`.trim()),
+    [outcome, body]
+  )
 
   useEffect(() => {
     // Auto-focus the summary field when the modal opens
@@ -73,22 +82,41 @@ export default function LogInteractionModal({ clientId, onClose, onSaved }: Prop
     setSubmitting(true); setError(null)
 
     const supabase = createClient()
-    const { error: insertErr } = await supabase.from('client_interactions').insert({
-      client_id: clientId,
-      kind,
-      summary: summary.trim(),
-      body: body.trim() || null,
-      occurred_at: new Date(occurredAt).toISOString(),
-      duration_minutes: duration ? parseInt(duration) || null : null,
-      sentiment,
-      outcome: outcome.trim() || null,
-    })
+    const { data: inserted, error: insertErr } = await supabase
+      .from('client_interactions')
+      .insert({
+        client_id: clientId,
+        kind,
+        summary: summary.trim(),
+        body: body.trim() || null,
+        occurred_at: new Date(occurredAt).toISOString(),
+        duration_minutes: duration ? parseInt(duration) || null : null,
+        sentiment,
+        outcome: outcome.trim() || null,
+      })
+      .select('id')
+      .maybeSingle()
 
-    setSubmitting(false)
     if (insertErr) {
+      setSubmitting(false)
       setError(insertErr.message)
       return
     }
+
+    // If we detected a follow-up intent and the admin didn't uncheck the
+    // "create task" option, spawn the task linked back to this interaction.
+    if (followup && createTaskChecked) {
+      await supabase.from('client_tasks').insert({
+        client_id: clientId,
+        title: followup.title,
+        due_at: followup.due_at.toISOString(),
+        assignee_type: 'admin',
+        source: 'auto_nlp',
+        interaction_id: (inserted as { id: string } | null)?.id ?? null,
+      })
+    }
+
+    setSubmitting(false)
     onSaved()
     onClose()
   }
@@ -234,6 +262,32 @@ export default function LogInteractionModal({ clientId, onClose, onSaved }: Prop
               </div>
             </div>
           </div>
+
+          {/* Follow-up detector: if we spotted something like "follow up
+              in 2 weeks" or "next Tuesday" in outcome/body, offer to
+              auto-create a task. */}
+          {followup && (
+            <label className="flex items-start gap-2 p-2.5 rounded-lg bg-brand-tint/30 border border-brand/20 cursor-pointer hover:bg-brand-tint/40 transition-colors">
+              <input
+                type="checkbox"
+                checked={createTaskChecked}
+                onChange={e => setCreateTaskChecked(e.target.checked)}
+                className="mt-0.5"
+              />
+              <div className="flex-1 text-[12px] leading-snug">
+                <div className="inline-flex items-center gap-1 font-medium text-brand-dark">
+                  <Sparkles className="w-3 h-3" />
+                  Create follow-up task
+                </div>
+                <div className="text-ink-3 mt-0.5">
+                  <span className="font-medium text-ink-2">{followup.title}</span>
+                  <span className="text-ink-4"> · due {followup.due_at.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                </div>
+                <div className="text-[10px] text-ink-4 mt-0.5 italic">matched &ldquo;{followup.matched}&rdquo;</div>
+              </div>
+              <ListTodo className="w-3.5 h-3.5 text-brand-dark mt-0.5 flex-shrink-0" />
+            </label>
+          )}
 
           {error && (
             <div className="flex items-start gap-2 text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
