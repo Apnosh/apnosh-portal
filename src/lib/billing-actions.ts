@@ -70,6 +70,9 @@ export async function createStripeCustomerForClient(args: {
     postal_code: string   // required for Stripe Tax
     country?: string
   }
+  /** Optional override for where invoices go. Persisted to
+   *  clients.billing_email if provided. Falls back to clients.email. */
+  billingEmail?: string
 }): Promise<ActionResult<{ stripeCustomerId: string }>> {
   const auth = await requireAdmin()
   if (!auth.ok) return { success: false, error: auth.error }
@@ -83,21 +86,34 @@ export async function createStripeCustomerForClient(args: {
 
   const { data: client, error: clientErr } = await admin
     .from('clients')
-    .select('id, name, email, phone')
+    .select('id, name, email, phone, billing_email')
     .eq('id', args.clientId)
     .maybeSingle()
 
   if (clientErr || !client) {
     return { success: false, error: clientErr?.message || 'Client not found' }
   }
-  if (!client.email) {
-    return { success: false, error: 'Client has no email on file -- add one before setting up Stripe.' }
+
+  // Persist the override when provided (or clear it when explicitly empty).
+  if (args.billingEmail !== undefined) {
+    const trimmed = args.billingEmail.trim()
+    await admin.from('clients').update({ billing_email: trimmed || null }).eq('id', client.id)
+    client.billing_email = trimmed || null
+  }
+
+  // Priority: explicit override > clients.billing_email > clients.email.
+  const invoiceEmail = (args.billingEmail?.trim())
+    || client.billing_email
+    || client.email
+
+  if (!invoiceEmail) {
+    return { success: false, error: 'No email on file -- enter a billing email or add one to the client record first.' }
   }
 
   try {
     const stripeCustomerId = await getOrCreateStripeCustomerForClient({
       clientId: client.id,
-      email: client.email,
+      email: invoiceEmail,
       name: client.name,
       phone: client.phone ?? undefined,
       address: args.address,
@@ -110,6 +126,60 @@ export async function createStripeCustomerForClient(args: {
     const msg = err instanceof Error ? err.message : 'Failed to create Stripe customer'
     return { success: false, error: msg }
   }
+}
+
+// ---------------------------------------------------------------------------
+// updateBillingEmail -- change where invoices go without re-running setup.
+// Also syncs the change to the existing Stripe customer.
+// ---------------------------------------------------------------------------
+
+export async function updateBillingEmail(
+  clientId: string,
+  billingEmail: string,
+): Promise<ActionResult> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const trimmed = billingEmail.trim()
+  const admin = getAdminSupabase()
+
+  // Persist to clients row
+  const { error: updateErr } = await admin
+    .from('clients')
+    .update({ billing_email: trimmed || null })
+    .eq('id', clientId)
+  if (updateErr) return { success: false, error: updateErr.message }
+
+  // Sync to Stripe if a customer exists
+  const { data: bc } = await admin
+    .from('billing_customers')
+    .select('stripe_customer_id')
+    .eq('client_id', clientId)
+    .maybeSingle()
+  const stripeId = (bc as { stripe_customer_id?: string } | null)?.stripe_customer_id
+
+  if (stripeId) {
+    const { data: client } = await admin
+      .from('clients')
+      .select('email')
+      .eq('id', clientId)
+      .maybeSingle()
+    const fallback = (client as { email?: string } | null)?.email ?? ''
+    const target = trimmed || fallback
+    if (target) {
+      try {
+        await stripe.customers.update(stripeId, { email: target })
+      } catch (err) {
+        return {
+          success: false,
+          error: 'Saved locally but Stripe sync failed: ' + (err instanceof Error ? err.message : 'unknown'),
+        }
+      }
+    }
+  }
+
+  revalidatePath(`/admin/clients/${clientId}`)
+  return { success: true }
 }
 
 // ---------------------------------------------------------------------------

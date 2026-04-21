@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   createStripeCustomerForClient,
+  updateBillingEmail,
   startMonthlyRetainer,
   cancelSubscription,
   createOneTimeInvoice,
@@ -132,6 +133,17 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [products, setProducts] = useState<ProductRow[]>([])
 
+  // Pre-fill data: address from client_profiles, email from clients row.
+  // Used to populate the setup form on first open.
+  const [prefill, setPrefill] = useState<{
+    line1: string
+    city: string
+    state: string
+    zip: string
+    contactEmail: string
+    billingEmail: string
+  } | null>(null)
+
   const [showRetainerForm, setShowRetainerForm] = useState(false)
   const [showInvoiceForm, setShowInvoiceForm] = useState(false)
   const [showSetupForm, setShowSetupForm] = useState(false)
@@ -144,17 +156,33 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
     setLoading(true)
     const supabase = createClient()
 
-    const [bcRes, subRes, invRes, prodRes] = await Promise.all([
+    const [bcRes, subRes, invRes, prodRes, clientRes, profileRes] = await Promise.all([
       supabase.from('billing_customers').select('id, stripe_customer_id, payment_method_brand, payment_method_last4').eq('client_id', clientId).maybeSingle(),
       supabase.from('subscriptions').select('id, plan_name, amount_cents, status, collection_method, current_period_end, cancel_at_period_end').eq('client_id', clientId).in('status', ['active', 'trialing', 'past_due', 'paused', 'incomplete']).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('invoices').select('id, invoice_number, type, status, total_cents, issued_at, paid_at, due_at, hosted_invoice_url').eq('client_id', clientId).order('created_at', { ascending: false }).limit(20),
       supabase.from('products').select('id, name, category, amount_cents, billing_type').eq('active', true).in('category', ['reel', 'addon', 'website', 'gbp']).order('amount_cents', { ascending: false }),
+      supabase.from('clients').select('email, billing_email').eq('id', clientId).maybeSingle(),
+      supabase.from('client_profiles').select('full_address, city, state, zip').eq('client_id', clientId).maybeSingle(),
     ])
 
     setBillingCustomer(bcRes.data as BillingCustomerRow | null)
     setSubscription(subRes.data as SubscriptionRow | null)
     setInvoices((invRes.data ?? []) as InvoiceRow[])
     setProducts((prodRes.data ?? []) as ProductRow[])
+
+    // Build prefill object from whatever we have. Defaults kept empty
+    // strings (not undefined) so form inputs stay controlled.
+    const cl = clientRes.data as { email?: string; billing_email?: string } | null
+    const pr = profileRes.data as { full_address?: string; city?: string; state?: string; zip?: string } | null
+    setPrefill({
+      line1: pr?.full_address ?? '',
+      city: pr?.city ?? '',
+      state: pr?.state || 'WA',
+      zip: pr?.zip ?? '',
+      contactEmail: cl?.email ?? '',
+      billingEmail: cl?.billing_email ?? '',
+    })
+
     setLoading(false)
   }, [clientId])
 
@@ -176,18 +204,23 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
 
   // ----- Action handlers -----
 
-  async function onSetupStripe(address: {
-    line1?: string
-    line2?: string
-    city?: string
-    state: string
-    postal_code: string
-  }) {
+  async function onSetupStripe(
+    address: { line1?: string; line2?: string; city?: string; state: string; postal_code: string },
+    billingEmail: string,
+  ) {
     setBusyAction('setup'); setError(null); setNotice(null)
-    const result = await createStripeCustomerForClient({ clientId, address })
+    const result = await createStripeCustomerForClient({ clientId, address, billingEmail })
     setBusyAction(null)
     if (!result.success) setError(result.error)
     else { setNotice('Stripe customer created.'); setShowSetupForm(false); load() }
+  }
+
+  async function onUpdateBillingEmail(newEmail: string) {
+    setBusyAction('billing_email'); setError(null); setNotice(null)
+    const result = await updateBillingEmail(clientId, newEmail)
+    setBusyAction(null)
+    if (!result.success) setError(result.error)
+    else { setNotice('Billing email updated.'); load() }
   }
 
   async function onCancelSubscription(atPeriodEnd: boolean) {
@@ -304,12 +337,21 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
           onClose={() => setShowSetupForm(false)}
           onSubmit={onSetupStripe}
           busy={busyAction === 'setup'}
+          prefill={prefill}
         />
       )}
 
       {/* STATE 2+: has Stripe customer */}
       {hasCustomer && (
         <div className="space-y-4">
+          {/* Billing email — click to edit */}
+          <BillingEmailRow
+            currentBillingEmail={prefill?.billingEmail ?? ''}
+            contactEmail={prefill?.contactEmail ?? ''}
+            onSave={onUpdateBillingEmail}
+            busy={busyAction === 'billing_email'}
+          />
+
           {/* Payment method on file */}
           <div className="bg-bg-2 rounded-lg p-3">
             <span className="text-[10px] font-medium text-ink-4 uppercase tracking-wide">Payment method</span>
@@ -485,74 +527,211 @@ const US_STATES: Array<{ code: string; name: string }> = [
   { code: 'DC', name: 'Washington DC' },
 ]
 
-function SetupBillingForm({
-  onClose, onSubmit, busy,
+/**
+ * Inline-editable billing email row. Shows the effective address (with
+ * fallback to contact email), lets admin click to edit, saves to
+ * billing_email and syncs to Stripe.
+ */
+function BillingEmailRow({
+  currentBillingEmail, contactEmail, onSave, busy,
 }: {
-  onClose: () => void
-  onSubmit: (addr: { line1?: string; city?: string; state: string; postal_code: string }) => Promise<void>
+  currentBillingEmail: string
+  contactEmail: string
+  onSave: (email: string) => Promise<void>
   busy: boolean
 }) {
-  const [line1, setLine1] = useState('')
-  const [city, setCity] = useState('')
-  const [state, setState] = useState('WA') // default to WA since most clients here
-  const [postal, setPostal] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(currentBillingEmail || contactEmail || '')
+  useEffect(() => {
+    setDraft(currentBillingEmail || contactEmail || '')
+  }, [currentBillingEmail, contactEmail])
+
+  const effective = currentBillingEmail || contactEmail
+  const isOverride = currentBillingEmail && currentBillingEmail !== contactEmail
+
+  async function commit() {
+    await onSave(draft)
+    setEditing(false)
+  }
+
+  return (
+    <div className="bg-bg-2 rounded-lg p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <span className="text-[10px] font-medium text-ink-4 uppercase tracking-wide">Invoices go to</span>
+          {editing ? (
+            <div className="flex items-center gap-2 mt-1.5">
+              <input
+                type="email"
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); void commit() }
+                  if (e.key === 'Escape') { e.preventDefault(); setEditing(false); setDraft(currentBillingEmail || contactEmail || '') }
+                }}
+                className="flex-1 min-w-0 px-2 py-1 border border-brand rounded text-sm bg-white"
+              />
+              <button
+                onClick={commit}
+                disabled={busy}
+                className="text-[11px] font-medium text-brand-dark hover:underline disabled:opacity-50"
+              >
+                {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
+              </button>
+              <button
+                onClick={() => { setEditing(false); setDraft(currentBillingEmail || contactEmail || '') }}
+                className="text-[11px] text-ink-4 hover:text-ink"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm text-ink mt-0.5 font-mono break-all">
+              {effective || <span className="text-ink-4">Not set</span>}
+            </p>
+          )}
+          {!editing && isOverride && (
+            <p className="text-[10.5px] text-ink-4 mt-0.5">
+              Override · contact email is <span className="font-mono">{contactEmail}</span>
+            </p>
+          )}
+        </div>
+        {!editing && (
+          <button
+            onClick={() => setEditing(true)}
+            className="text-[11px] text-ink-4 hover:text-brand-dark font-medium"
+          >
+            Edit
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SetupBillingForm({
+  onClose, onSubmit, busy, prefill,
+}: {
+  onClose: () => void
+  onSubmit: (
+    addr: { line1?: string; city?: string; state: string; postal_code: string },
+    billingEmail: string,
+  ) => Promise<void>
+  busy: boolean
+  prefill: {
+    line1: string; city: string; state: string; zip: string
+    contactEmail: string; billingEmail: string
+  } | null
+}) {
+  const [line1, setLine1] = useState(prefill?.line1 ?? '')
+  const [city, setCity] = useState(prefill?.city ?? '')
+  const [state, setState] = useState(prefill?.state || 'WA')
+  const [postal, setPostal] = useState(prefill?.zip ?? '')
+  // Billing email defaults to the existing billing_email override if set,
+  // otherwise falls back to the general contact email.
+  const [billingEmail, setBillingEmail] = useState(
+    prefill?.billingEmail || prefill?.contactEmail || ''
+  )
   const [err, setErr] = useState<string | null>(null)
+
+  // Re-hydrate whenever the prefill prop arrives (loads async)
+  useEffect(() => {
+    if (!prefill) return
+    setLine1(prev => prev || prefill.line1)
+    setCity(prev => prev || prefill.city)
+    setState(prev => prev || prefill.state || 'WA')
+    setPostal(prev => prev || prefill.zip)
+    setBillingEmail(prev => prev || prefill.billingEmail || prefill.contactEmail)
+  }, [prefill])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!state || !postal) { setErr('State and ZIP are required'); return }
+    if (!billingEmail.trim()) { setErr('Billing email is required so Stripe knows where to send invoices'); return }
     setErr(null)
     await onSubmit({
       line1: line1 || undefined,
       city: city || undefined,
       state,
       postal_code: postal,
-    })
+    }, billingEmail.trim())
   }
+
+  const contactEmail = prefill?.contactEmail
+  const isOverridingContact = contactEmail && billingEmail.trim() && billingEmail.trim() !== contactEmail
 
   return (
     <form onSubmit={handleSubmit} className="border border-ink-6 rounded-lg p-3 space-y-3 bg-bg-2">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium text-ink-3 uppercase tracking-wide">Billing address</span>
+        <span className="text-[11px] font-medium text-ink-3 uppercase tracking-wide">Set up Stripe billing</span>
         <button type="button" onClick={onClose} className="text-ink-4 hover:text-ink"><X className="w-3.5 h-3.5" /></button>
       </div>
       <p className="text-[11px] text-ink-4 leading-snug">
-        Used for sales tax calculation on invoices. State + ZIP are required; line 1 and city are optional
-        but show on the invoice PDF.
+        Fields pre-fill from the client&apos;s profile. Billing email is where Stripe sends invoices — it can
+        differ from the main contact email.
       </p>
-      <input
-        type="text"
-        placeholder="Street address (optional)"
-        value={line1}
-        onChange={e => setLine1(e.target.value)}
-        className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
-      />
-      <div className="grid grid-cols-2 gap-2">
+
+      {/* Billing email — the new field */}
+      <div className="space-y-1">
+        <label className="text-[10.5px] font-semibold text-ink-3 uppercase tracking-wide">Billing email</label>
         <input
-          type="text"
-          placeholder="City (optional)"
-          value={city}
-          onChange={e => setCity(e.target.value)}
-          className="px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
-        />
-        <input
-          type="text"
-          placeholder="ZIP *"
-          value={postal}
-          onChange={e => setPostal(e.target.value)}
+          type="email"
+          value={billingEmail}
+          onChange={e => setBillingEmail(e.target.value)}
+          placeholder="billing@company.com"
           required
-          className="px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
+          className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
         />
+        {isOverridingContact && (
+          <p className="text-[10.5px] text-ink-4">
+            Overriding contact email <span className="font-mono">{contactEmail}</span>. Stored on the client
+            record so future invoices also use this address.
+          </p>
+        )}
       </div>
-      <select
-        value={state}
-        onChange={e => setState(e.target.value)}
-        className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
-      >
-        {US_STATES.map(s => (
-          <option key={s.code} value={s.code}>{s.name}</option>
-        ))}
-      </select>
+
+      {/* Address section */}
+      <div className="pt-2 border-t border-ink-6 space-y-2">
+        <label className="text-[10.5px] font-semibold text-ink-3 uppercase tracking-wide block">Billing address</label>
+        <p className="text-[10.5px] text-ink-4 leading-snug">
+          State + ZIP are required (sales tax). Street + city appear on the invoice PDF.
+        </p>
+        <input
+          type="text"
+          placeholder="Street address"
+          value={line1}
+          onChange={e => setLine1(e.target.value)}
+          className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            type="text"
+            placeholder="City"
+            value={city}
+            onChange={e => setCity(e.target.value)}
+            className="px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
+          />
+          <input
+            type="text"
+            placeholder="ZIP *"
+            value={postal}
+            onChange={e => setPostal(e.target.value)}
+            required
+            className="px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
+          />
+        </div>
+        <select
+          value={state}
+          onChange={e => setState(e.target.value)}
+          className="w-full px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
+        >
+          {US_STATES.map(s => (
+            <option key={s.code} value={s.code}>{s.name}</option>
+          ))}
+        </select>
+      </div>
+
       {err && <p className="text-[12px] text-red-700">{err}</p>}
       <div className="flex gap-2">
         <button
