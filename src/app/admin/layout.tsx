@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -75,6 +76,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return pathname.startsWith(href)
   }
 
+  // Overdue / due-today task counts for the sidebar badge on "Today".
+  // Polled every 60s + re-fetched on pathname change so completing a
+  // task updates the count within a click or a minute.
+  const [overdueCount, setOverdueCount] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const supabase = createClient()
+      const endOfToday = new Date()
+      endOfToday.setHours(23, 59, 59, 999)
+      const { count } = await supabase
+        .from('client_tasks')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['todo', 'doing'])
+        .lte('due_at', endOfToday.toISOString())
+      if (!cancelled) setOverdueCount(count ?? 0)
+    }
+    void load()
+    const t = setInterval(() => void load(), 60_000)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [pathname])
+
   return (
     <ToastProvider>
     <RealtimeProvider>
@@ -118,6 +141,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   >
                     <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
                     <span className="flex-1">{item.label}</span>
+                    {item.href === '/admin/today' && overdueCount > 0 && (
+                      <span
+                        className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center"
+                        title={`${overdueCount} task${overdueCount === 1 ? '' : 's'} due today or overdue`}
+                      >
+                        {overdueCount > 99 ? '99+' : overdueCount}
+                      </span>
+                    )}
                   </Link>
                 ))}
               </div>
