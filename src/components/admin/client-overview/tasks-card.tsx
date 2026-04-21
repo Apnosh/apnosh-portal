@@ -91,12 +91,16 @@ export default function TasksCard({ clientId }: { clientId: string }) {
   const done = tasks.filter(t => t.status === 'done').slice(0, 5)
 
   return (
-    <div className="bg-white rounded-xl border border-ink-6 p-4">
+    <div className="bg-white rounded-xl border border-ink-6 shadow-sm p-5 h-full flex flex-col">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">
-          Tasks
-          {active.length > 0 && <span className="ml-1.5 text-ink-4 normal-case tracking-normal">({active.length})</span>}
-        </h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">Tasks</h3>
+          {active.length > 0 && (
+            <span className="text-[10px] font-semibold text-ink-4 bg-bg-2 rounded-full px-1.5 py-0.5 tabular-nums">
+              {active.length}
+            </span>
+          )}
+        </div>
         <div className="relative">
           <button
             type="button"
@@ -135,7 +139,11 @@ export default function TasksCard({ clientId }: { clientId: string }) {
           <Loader2 className="w-4 h-4 animate-spin text-ink-4" />
         </div>
       ) : active.length === 0 && done.length === 0 ? (
-        <p className="text-[12px] text-ink-4 py-2">No tasks. Quiet client — nice.</p>
+        <div className="flex-1 flex flex-col items-center justify-center py-8 text-center">
+          <CheckCircle2 className="w-6 h-6 text-ink-5 mb-2" />
+          <p className="text-[12.5px] text-ink-3 font-medium">All caught up</p>
+          <p className="text-[11px] text-ink-4 mt-0.5">No open tasks for this client</p>
+        </div>
       ) : (
         <div className="space-y-1.5">
           {active.map(t => {

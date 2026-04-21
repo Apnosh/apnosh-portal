@@ -282,10 +282,13 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-ink-6">
+    <div className="bg-white rounded-xl border border-ink-6 shadow-sm">
       {/* Header + filter tabs */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-ink-6">
-        <h2 className="text-sm font-semibold text-ink">Activity</h2>
+        <div>
+          <h2 className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">Activity</h2>
+          <p className="text-[11px] text-ink-4 mt-0.5">Last 90 days across every touchpoint</p>
+        </div>
         <div className="inline-flex bg-bg-2 rounded-lg p-0.5 text-[11px]">
           {(['all', 'client', 'billing', 'content'] as const).map(f => (
             <button
@@ -303,8 +306,12 @@ export default function ActivityTimeline({ clientId }: { clientId: string }) {
 
       {/* Timeline */}
       {filtered.length === 0 ? (
-        <div className="py-12 text-center text-ink-4 text-sm">
-          No activity in the last 90 days.
+        <div className="py-16 text-center">
+          <Clock className="w-6 h-6 text-ink-5 mx-auto mb-2" />
+          <p className="text-[13px] text-ink-3 font-medium">Nothing here yet</p>
+          <p className="text-[12px] text-ink-4 mt-0.5">
+            Log a meeting from the hero to start the timeline
+          </p>
         </div>
       ) : (
         <div className="p-5 space-y-6">

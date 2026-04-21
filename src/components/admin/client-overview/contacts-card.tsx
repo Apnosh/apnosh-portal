@@ -76,12 +76,16 @@ export default function ContactsCard({ clientId }: { clientId: string }) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-ink-6 p-4">
+    <div className="bg-white rounded-xl border border-ink-6 shadow-sm p-5 h-full flex flex-col">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">
-          Contacts
-          {contacts.length > 0 && <span className="ml-1.5 text-ink-4 normal-case tracking-normal">({contacts.length})</span>}
-        </h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-[11px] font-semibold text-ink-3 uppercase tracking-wide">Contacts</h3>
+          {contacts.length > 0 && (
+            <span className="text-[10px] font-semibold text-ink-4 bg-bg-2 rounded-full px-1.5 py-0.5 tabular-nums">
+              {contacts.length}
+            </span>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => setAddOpen(true)}
@@ -96,7 +100,11 @@ export default function ContactsCard({ clientId }: { clientId: string }) {
           <Loader2 className="w-4 h-4 animate-spin text-ink-4" />
         </div>
       ) : contacts.length === 0 ? (
-        <p className="text-[12px] text-ink-4 py-2">No contacts yet.</p>
+        <div className="flex-1 flex flex-col items-center justify-center py-6 text-center">
+          <User className="w-6 h-6 text-ink-5 mb-2" />
+          <p className="text-[12.5px] text-ink-3 font-medium">No contacts yet</p>
+          <p className="text-[11px] text-ink-4 mt-0.5">Add the people we work with at this client</p>
+        </div>
       ) : (
         <div className="space-y-3">
           {contacts.map(contact => (

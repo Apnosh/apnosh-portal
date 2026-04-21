@@ -285,34 +285,19 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      {/* ── Persistent Header ──────────────────────────────────────── */}
-      <div className="flex items-start gap-4">
-        <Link href="/admin/clients" className="text-ink-4 hover:text-ink transition-colors mt-1.5">
-          <ArrowLeft className="w-5 h-5" />
+      {/* Breadcrumb — kept minimal since the Overview Hero shows identity.
+          On non-overview tabs we show the client name inline with the back
+          link so admins know where they are without a second hero. */}
+      <div className="flex items-center gap-2 text-[13px]">
+        <Link
+          href="/admin/clients"
+          className="inline-flex items-center gap-1.5 text-ink-4 hover:text-ink transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Clients
         </Link>
-        <div className="flex items-center gap-3 flex-1">
-          {brand?.logo_url ? (
-            <img src={brand.logo_url} alt={client.name} className="w-12 h-12 rounded-xl object-cover" />
-          ) : (
-            <div className="w-12 h-12 rounded-xl bg-brand-tint flex items-center justify-center">
-              <span className="text-brand-dark text-base font-bold">{initials(client.name)}</span>
-            </div>
-          )}
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">{client.name}</h1>
-              {client.tier && (
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${TIER_STYLES[client.tier] ?? ''}`}>
-                  {client.tier}
-                </span>
-              )}
-              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${BILLING_STYLES[client.billing_status]}`}>
-                {client.billing_status}
-              </span>
-            </div>
-            <p className="text-ink-3 text-sm">{[client.industry, client.location].filter(Boolean).join(' \u00b7 ') || 'No details'}</p>
-          </div>
-        </div>
+        <span className="text-ink-5">/</span>
+        <span className="text-ink-2 font-medium truncate">{client.name}</span>
       </div>
 
       {/* ── Tabs ───────────────────────────────────────────────────── */}
@@ -875,7 +860,7 @@ function OverviewTab({
     </div>
   )
 
-  return <ClientOverview client={client} editContent={editPanelContent} onClientUpdate={handleClientUpdate} />
+  return <ClientOverview client={client} brand={brand} editContent={editPanelContent} onClientUpdate={handleClientUpdate} />
 }
 
 /* ------------------------------------------------------------------ */
