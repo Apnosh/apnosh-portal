@@ -387,7 +387,14 @@ export async function createOneTimeInvoice(args: {
    * here since one-time invoices have no future billing period.
    */
   discount?: Omit<DiscountInput, 'duration' | 'durationMonths'>
-}): Promise<ActionResult<{ invoiceId: string; hostedUrl: string | null }>> {
+}): Promise<ActionResult<{
+  invoiceId: string
+  stripeInvoiceId: string
+  hostedUrl: string | null
+  totalCents: number
+  taxCents: number
+  subtotalCents: number
+}>> {
   const auth = await requireAdmin()
   if (!auth.ok) return { success: false, error: auth.error }
 
@@ -451,20 +458,19 @@ export async function createOneTimeInvoice(args: {
       })
     }
 
-    // Step 3: finalize -- this moves status draft -> open and tells Stripe
-    // to send the hosted invoice email.
+    // Step 3: finalize WITHOUT sending. This moves status draft -> open,
+    // assigns a permanent invoice number, and runs tax calculation so
+    // the hosted URL shows final numbers. Admin gets to review before
+    // the client receives the email via a separate sendInvoicePreview call.
     const finalized = await stripe.invoices.finalizeInvoice(invoice.id, {
-      auto_advance: true,
+      auto_advance: false,
     })
 
-    // Step 4: send it (Stripe emails the client the hosted invoice link).
-    const sent = await stripe.invoices.sendInvoice(finalized.id)
-
-    // Step 5: re-fetch to get the authoritative finalized invoice.
-    // The sendInvoice response sometimes has stale totals depending on
-    // when Stripe runs post-processing (tax calculation, discount app).
-    // A fresh GET gives the final numbers every time.
-    const authoritative = await stripe.invoices.retrieve(sent.id, {
+    // Step 4: re-fetch to get the authoritative finalized invoice.
+    // Stripe's tax calculation + discount application happen during
+    // finalize and are sometimes stale on the finalize response itself;
+    // a fresh GET always gives the final numbers.
+    const authoritative = await stripe.invoices.retrieve(finalized.id, {
       expand: ['lines'],
     })
 
@@ -496,9 +502,24 @@ export async function createOneTimeInvoice(args: {
 
     revalidatePath(`/admin/clients/${args.clientId}`)
     revalidatePath('/admin/billing')
+
+    // Resolve our local DB row so the UI can find it for Send / Void actions
+    const { data: dbRow } = await admin
+      .from('invoices')
+      .select('id')
+      .eq('stripe_invoice_id', authoritative.id)
+      .maybeSingle()
+
     return {
       success: true,
-      data: { invoiceId: sent.id, hostedUrl: sent.hosted_invoice_url ?? null },
+      data: {
+        invoiceId: (dbRow as { id: string } | null)?.id ?? authoritative.id,
+        stripeInvoiceId: authoritative.id,
+        hostedUrl: authoritative.hosted_invoice_url ?? null,
+        totalCents: authoritative.total ?? 0,
+        taxCents: authoritative.tax ?? 0,
+        subtotalCents: authoritative.subtotal ?? 0,
+      },
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to create invoice'

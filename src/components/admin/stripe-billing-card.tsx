@@ -465,8 +465,10 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
             <CreateInvoiceForm
               clientId={clientId}
               products={products}
+              billingEmail={prefill?.billingEmail || prefill?.contactEmail || ''}
               onClose={() => setShowInvoiceForm(false)}
-              onDone={() => { setShowInvoiceForm(false); load(); setNotice('Invoice sent. Stripe emailed the client.') }}
+              onDone={() => { setShowInvoiceForm(false); load() }}
+              onSent={() => setNotice('Invoice sent. Stripe emailed the client.')}
             />
           )}
         </div>
@@ -1003,12 +1005,14 @@ function StartRetainerForm({
 }
 
 function CreateInvoiceForm({
-  clientId, products, onClose, onDone,
+  clientId, products, billingEmail, onClose, onDone, onSent,
 }: {
   clientId: string
   products: ProductRow[]
+  billingEmail: string
   onClose: () => void
   onDone: () => void
+  onSent: () => void
 }) {
   const [lines, setLines] = useState<InvoiceLineInput[]>([
     { description: '', quantity: 1, unitAmountDollars: 0, serviceCategory: 'custom' },
@@ -1019,6 +1023,19 @@ function CreateInvoiceForm({
   const [discount, setDiscount] = useState<DiscountInput | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Preview state: once the invoice is created in Stripe (finalized but
+  // not sent), we swap the form UI for a review pane with the hosted URL
+  // and Send / Discard buttons.
+  const [preview, setPreview] = useState<{
+    invoiceId: string
+    stripeInvoiceId: string
+    hostedUrl: string | null
+    totalCents: number
+    taxCents: number
+    subtotalCents: number
+  } | null>(null)
+  const [busyAction, setBusyAction] = useState<'send' | 'discard' | null>(null)
 
   const subtotal = useMemo(
     () => lines.reduce((sum, l) => sum + (l.unitAmountDollars || 0) * (l.quantity || 0), 0),
@@ -1090,8 +1107,120 @@ function CreateInvoiceForm({
       discount: discount ? { type: discount.type, value: discount.value, name: discount.name } : undefined,
     })
     setSubmitting(false)
-    if (!result.success) setError(result.error)
-    else onDone()
+    if (!result.success) { setError(result.error); return }
+    // Enter preview mode — invoice exists in Stripe but client hasn't been
+    // emailed yet. Admin reviews + approves or discards.
+    setPreview(result.data!)
+  }
+
+  async function handleSendPreview() {
+    if (!preview) return
+    setBusyAction('send'); setError(null)
+    const r = await resendInvoice(preview.invoiceId)
+    setBusyAction(null)
+    if (!r.success) { setError(r.error); return }
+    onSent()
+    onDone()
+  }
+
+  async function handleDiscardPreview() {
+    if (!preview) return
+    if (!confirm('Discard this invoice? It will be voided in Stripe. The client was never notified.')) return
+    setBusyAction('discard'); setError(null)
+    const r = await voidInvoice(preview.invoiceId)
+    setBusyAction(null)
+    if (!r.success) { setError(r.error); return }
+    onDone()
+  }
+
+  // ── Preview mode ─────────────────────────────────────────────────
+  // Invoice created in Stripe but client hasn't been emailed yet.
+  // Admin reviews the real hosted invoice and then sends or discards.
+  if (preview) {
+    return (
+      <div className="border border-ink-6 rounded-lg p-4 space-y-4 bg-white">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center flex-shrink-0">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-ink">Preview ready · not sent yet</h3>
+            <p className="text-[12px] text-ink-3 mt-0.5">
+              The invoice exists in Stripe but the client hasn&apos;t been emailed. Review it,
+              then send or discard.
+            </p>
+          </div>
+        </div>
+
+        {/* Numbers summary from Stripe's authoritative calculation */}
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="bg-bg-2 rounded-lg p-3">
+            <div className="text-[10px] text-ink-4 uppercase tracking-wide">Subtotal</div>
+            <div className="text-[15px] font-semibold text-ink tabular-nums mt-1">
+              ${(preview.subtotalCents / 100).toFixed(2)}
+            </div>
+          </div>
+          <div className="bg-bg-2 rounded-lg p-3">
+            <div className="text-[10px] text-ink-4 uppercase tracking-wide">Tax</div>
+            <div className="text-[15px] font-semibold text-ink tabular-nums mt-1">
+              ${(preview.taxCents / 100).toFixed(2)}
+            </div>
+          </div>
+          <div className="bg-brand-tint/40 rounded-lg p-3 border border-brand/20">
+            <div className="text-[10px] text-brand-dark uppercase tracking-wide font-semibold">Total</div>
+            <div className="text-[15px] font-semibold text-brand-dark tabular-nums mt-1">
+              ${(preview.totalCents / 100).toFixed(2)}
+            </div>
+          </div>
+        </div>
+
+        {/* Link to view the Stripe-hosted invoice exactly as the client will see it */}
+        {preview.hostedUrl && (
+          <a
+            href={preview.hostedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block w-full text-center bg-white hover:bg-bg-2 border border-ink-6 rounded-lg px-3 py-2.5 text-sm font-medium text-ink transition-colors"
+          >
+            Open preview in Stripe ↗
+          </a>
+        )}
+
+        {billingEmail && (
+          <p className="text-[12px] text-ink-3 leading-snug text-center">
+            On &ldquo;Send to client&rdquo; Stripe will email <span className="font-mono">{billingEmail}</span>.
+          </p>
+        )}
+
+        {error && (
+          <div className="flex items-start gap-2 text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleSendPreview}
+            disabled={busyAction !== null}
+            className="flex-1 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-3 py-2.5 flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {busyAction === 'send' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            Send to client
+          </button>
+          <button
+            type="button"
+            onClick={handleDiscardPreview}
+            disabled={busyAction !== null}
+            className="border border-ink-6 hover:border-red-300 text-red-600 hover:bg-red-50 text-sm font-medium rounded-lg px-3 py-2.5 flex items-center gap-2 disabled:opacity-50"
+          >
+            {busyAction === 'discard' ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+            Discard
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -1241,14 +1370,17 @@ function CreateInvoiceForm({
       />
 
       {error && <p className="text-[12px] text-red-700">{error}</p>}
+      <p className="text-[11px] text-ink-4 leading-snug">
+        Creates a preview in Stripe — you&apos;ll review the final invoice before the client is emailed.
+      </p>
       <div className="flex gap-2">
         <button
           type="submit"
           disabled={submitting}
           className="flex-1 bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-3 py-2 flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          Send invoice
+          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+          Create preview
         </button>
         <button type="button" onClick={onClose} className="text-sm text-ink-3 hover:text-ink px-3">
           Cancel
