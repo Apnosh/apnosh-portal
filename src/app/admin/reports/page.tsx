@@ -3,7 +3,11 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { DollarSign, Users, TrendingUp, Calculator, FileBarChart, ChevronRight } from 'lucide-react'
+import {
+  DollarSign, Users, TrendingUp, Calculator, FileBarChart, ChevronRight,
+  UserPlus, UserMinus, CalendarClock, PieChart, Wallet,
+} from 'lucide-react'
+import type { BusinessMetrics } from '@/types/database'
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -101,6 +105,7 @@ export default function ReportsPage() {
   const [clients, setClients] = useState<ClientRow[]>([])
   const [services, setServices] = useState<ServiceCount[]>([])
   const [monthly, setMonthly] = useState<MonthlyRevenue[]>([])
+  const [growth, setGrowth] = useState<BusinessMetrics | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -260,8 +265,37 @@ export default function ReportsPage() {
     load()
   }, [])
 
+  useEffect(() => {
+    const supabase = createClient()
+
+    async function loadGrowth() {
+      const { data, error } = await supabase
+        .from('business_metrics')
+        .select('*')
+        .maybeSingle()
+
+      if (error) {
+        console.error('business_metrics error:', error.message)
+        return
+      }
+      setGrowth(data as BusinessMetrics | null)
+    }
+
+    loadGrowth()
+  }, [])
+
   const maxServiceCount = services.length > 0 ? Math.max(...services.map(s => s.count)) : 1
   const maxMonthly = monthly.length > 0 ? Math.max(...monthly.map(m => m.total)) : 1
+
+  const growthCards = growth
+    ? [
+        { label: 'New clients (30d)',        value: String(growth.acquired_30d_count),                     icon: UserPlus,       color: 'bg-emerald-50 text-emerald-600' },
+        { label: 'Lost clients (30d)',       value: String(growth.churned_30d_count),                      icon: UserMinus,      color: 'bg-rose-50 text-rose-600' },
+        { label: 'Renewals next 60d',        value: String(growth.renewals_next_60d),                      icon: CalendarClock,  color: 'bg-amber-50 text-amber-600' },
+        { label: 'Top client share',         value: `${Number(growth.top3_share_pct ?? 0).toFixed(0)}%`,   icon: PieChart,       color: 'bg-sky-50 text-sky-600' },
+        { label: 'Avg acquisition cost',     value: fmt((Number(growth.avg_cac_cents_90d ?? 0)) / 100),    icon: Wallet,         color: 'bg-indigo-50 text-indigo-600' },
+      ]
+    : []
 
   const statCards = stats
     ? [
@@ -311,6 +345,24 @@ export default function ReportsPage() {
           </div>
         )}
       </div>
+
+      {/* Growth signals */}
+      {growth && (
+        <div>
+          <h2 className="text-sm font-semibold text-ink mb-3">Growth</h2>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            {growthCards.map(card => (
+              <div key={card.label} className="bg-white rounded-xl border border-ink-6 p-5">
+                <div className={`w-8 h-8 rounded-lg ${card.color} flex items-center justify-center mb-3`}>
+                  <card.icon className="w-4 h-4" />
+                </div>
+                <div className="font-[family-name:var(--font-display)] text-2xl text-ink">{card.value}</div>
+                <div className="text-ink-3 text-sm mt-0.5">{card.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Client Health */}
       <div>

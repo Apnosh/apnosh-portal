@@ -887,6 +887,15 @@ export type FeedbackType = 'approval' | 'revision' | 'comment'
 export type StyleLibraryStatus = 'approved' | 'archived'
 export type ClientAssetType = 'logo' | 'photo' | 'graphic' | 'social_proof' | 'other'
 
+export type LeadSource =
+  | 'referral' | 'inbound_web' | 'outbound' | 'event' | 'partnership' | 'other'
+
+export type ContractTerm =
+  | 'month_to_month' | 'quarterly' | 'annual' | 'custom'
+
+export type ChurnReason =
+  | 'price' | 'outcome' | 'consolidation' | 'closed_business' | 'paused' | 'other'
+
 export interface Client {
   id: string
   name: string
@@ -912,8 +921,44 @@ export interface Client {
   notes: string | null
   allotments: ClientAllotments
   goals: string[]
+  // Acquisition + lifecycle (migration 064)
+  lead_source: LeadSource | null
+  lead_source_detail: string | null
+  referred_by_client_id: string | null
+  acquisition_cost_cents: number | null
+  contract_term: ContractTerm | null
+  contract_renewal_date: string | null
+  contract_auto_renew: boolean
+  churn_date: string | null
+  churn_reason: ChurnReason | null
+  churn_notes: string | null
   created_at: string
   updated_at: string
+}
+
+export type LifecycleEventType =
+  | 'acquired' | 'upgraded' | 'downgraded' | 'paused' | 'reactivated' | 'churned'
+
+export interface ClientLifecycleEvent {
+  id: string
+  client_id: string
+  event_type: LifecycleEventType
+  event_date: string
+  mrr_delta_cents: number
+  notes: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface BusinessMetrics {
+  active_client_count: number
+  mrr_cents: number
+  arr_cents: number
+  acquired_30d_count: number
+  churned_30d_count: number
+  renewals_next_60d: number
+  top3_share_pct: number
+  avg_cac_cents_90d: number
 }
 
 export type ServiceArea = 'social' | 'website' | 'local_seo' | 'email_sms'
