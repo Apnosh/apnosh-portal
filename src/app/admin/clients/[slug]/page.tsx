@@ -540,6 +540,16 @@ function OverviewTab({
         monthly_rate: draft.monthly_rate,
         billing_status: draft.billing_status,
         onboarding_date: draft.onboarding_date,
+        // Acquisition & lifecycle (migration 064)
+        lead_source: draft.lead_source,
+        lead_source_detail: draft.lead_source_detail,
+        acquisition_cost_cents: draft.acquisition_cost_cents,
+        contract_term: draft.contract_term,
+        contract_renewal_date: draft.contract_renewal_date,
+        contract_auto_renew: draft.contract_auto_renew,
+        churn_date: draft.churn_date,
+        churn_reason: draft.churn_reason,
+        churn_notes: draft.churn_notes,
       })
       .eq('id', client.id)
 
@@ -849,6 +859,132 @@ function OverviewTab({
 
         {/* Stripe Billing is rendered in the new overview sidebar (above).
             Kept out of the edit panel to avoid duplication. */}
+
+        {/* Acquisition & Lifecycle (migration 064) */}
+        <Card title="Acquisition & Lifecycle">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">Lead Source</label>
+                <select
+                  value={draft.lead_source ?? ''}
+                  onChange={e => updateDraft({ lead_source: (e.target.value || null) as typeof draft.lead_source })}
+                  className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                >
+                  <option value="">—</option>
+                  <option value="referral">Referral</option>
+                  <option value="inbound_web">Inbound (web)</option>
+                  <option value="outbound">Outbound</option>
+                  <option value="event">Event</option>
+                  <option value="partnership">Partnership</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">Source Detail</label>
+                <input
+                  type="text"
+                  value={draft.lead_source_detail ?? ''}
+                  onChange={e => updateDraft({ lead_source_detail: e.target.value || null })}
+                  placeholder="e.g. Referred by Hong Kong Market"
+                  className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">Acquisition Cost ($)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={draft.acquisition_cost_cents != null ? draft.acquisition_cost_cents / 100 : ''}
+                  onChange={e => updateDraft({
+                    acquisition_cost_cents: e.target.value === '' ? null : Math.round(Number(e.target.value) * 100),
+                  })}
+                  placeholder="0"
+                  className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">Contract Term</label>
+                <select
+                  value={draft.contract_term ?? ''}
+                  onChange={e => updateDraft({ contract_term: (e.target.value || null) as typeof draft.contract_term })}
+                  className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                >
+                  <option value="">—</option>
+                  <option value="month_to_month">Month-to-month</option>
+                  <option value="quarterly">Quarterly</option>
+                  <option value="annual">Annual</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">Renewal / Review Date</label>
+                <input
+                  type="date"
+                  value={draft.contract_renewal_date ?? ''}
+                  onChange={e => updateDraft({ contract_renewal_date: e.target.value || null })}
+                  className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                />
+              </div>
+              <div className="flex items-end pb-2">
+                <label className="inline-flex items-center gap-2 text-sm text-ink cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={draft.contract_auto_renew ?? true}
+                    onChange={e => updateDraft({ contract_auto_renew: e.target.checked })}
+                    className="w-4 h-4 rounded border-ink-6 text-brand focus:ring-brand/30"
+                  />
+                  Auto-renew
+                </label>
+              </div>
+            </div>
+
+            {/* Churn — only shown when they've actually left */}
+            <details className="pt-3 border-t border-ink-6">
+              <summary className="text-[11px] text-ink-4 font-medium uppercase tracking-wide cursor-pointer hover:text-ink-3">
+                Churn details (if client has left)
+              </summary>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">Churn Date</label>
+                  <input
+                    type="date"
+                    value={draft.churn_date ?? ''}
+                    onChange={e => updateDraft({ churn_date: e.target.value || null })}
+                    className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">Churn Reason</label>
+                  <select
+                    value={draft.churn_reason ?? ''}
+                    onChange={e => updateDraft({ churn_reason: (e.target.value || null) as typeof draft.churn_reason })}
+                    className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink bg-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+                  >
+                    <option value="">—</option>
+                    <option value="price">Price</option>
+                    <option value="outcome">Outcome / results</option>
+                    <option value="consolidation">Consolidation</option>
+                    <option value="closed_business">Closed business</option>
+                    <option value="paused">Paused</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">Churn Notes</label>
+                  <textarea
+                    value={draft.churn_notes ?? ''}
+                    onChange={e => updateDraft({ churn_notes: e.target.value || null })}
+                    rows={3}
+                    placeholder="Context for why they left..."
+                    className="w-full border border-ink-6 rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand resize-none"
+                  />
+                </div>
+              </div>
+            </details>
+          </div>
+        </Card>
 
         {/* Service Allotments */}
         <ServiceAllotmentsCard
