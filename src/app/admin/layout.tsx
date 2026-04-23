@@ -27,15 +27,20 @@ const navSections = [
     ],
   },
   {
-    label: 'Content',
+    label: 'Production',
     items: [
       { label: 'Content Engine', href: '/admin/content-engine', icon: Sparkles },
       { label: 'Orders', href: '/admin/orders', icon: ShoppingBag },
       { label: 'Pipeline', href: '/admin/pipeline', icon: Kanban },
       { label: 'Queue', href: '/admin/queue', icon: ListTodo },
+      { label: 'Publish', href: '/admin/publish', icon: Send },
+    ],
+  },
+  {
+    label: 'Live',
+    items: [
       { label: 'Calendar', href: '/admin/calendar', icon: Calendar },
       { label: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
-      { label: 'Publish', href: '/admin/publish', icon: Send },
       { label: 'Social Inbox', href: '/admin/inbox', icon: MessageCircle },
     ],
   },
@@ -44,13 +49,13 @@ const navSections = [
     items: [
       { label: 'Agreements', href: '/admin/agreements', icon: FileText },
       { label: 'Billing', href: '/admin/billing', icon: CreditCard },
+      { label: 'Reports', href: '/admin/reports', icon: FileBarChart },
     ],
   },
   {
     label: 'Communications',
     items: [
       { label: 'Messages', href: '/admin/messages', icon: MessageSquare },
-      { label: 'Reports', href: '/admin/reports', icon: FileBarChart },
     ],
   },
   {

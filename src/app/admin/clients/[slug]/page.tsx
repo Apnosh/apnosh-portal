@@ -8,6 +8,7 @@ import {
   Building2, Palette, Image, BookOpen, ListTodo,
   Globe, MapPin, Mail, Phone, User, X, Check,
   BarChart3, Star, MessageSquare, RefreshCw, FileText, UserCircle,
+  Activity,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import BrandTab from './tabs/brand-tab'
@@ -22,6 +23,7 @@ import DashboardNotesTab from './tabs/dashboard-notes-tab'
 import SyncControls from './tabs/sync-controls'
 import ProfileTab from './tabs/profile-tab'
 import DocsTab from './tabs/docs-tab'
+import TimelineTab from './tabs/timeline-tab'
 import ClientOverview from '@/components/admin/client-overview'
 import WebsiteTab from './tabs/website-tab'
 import { StripeBillingCard } from '@/components/admin/stripe-billing-card'
@@ -41,6 +43,7 @@ import type {
 type Tab =
   | 'overview'
   | 'profile'
+  | 'timeline'       // NEW — every call, email, meeting, note
   | 'docs'
   | 'brand'          // Brand System + Assets + Style Library
   | 'content'        // Content Queue (future: calendar, pipeline)
@@ -51,6 +54,7 @@ type Tab =
 const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
   { key: 'overview',    label: 'Overview',    icon: Building2 },
   { key: 'profile',     label: 'Profile',     icon: UserCircle },
+  { key: 'timeline',    label: 'Timeline',    icon: Activity },
   { key: 'docs',        label: 'Docs',        icon: FileText },
   { key: 'brand',       label: 'Brand',       icon: Palette },
   { key: 'content',     label: 'Content',     icon: ListTodo },
@@ -332,6 +336,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
 
       {activeTab === 'profile' && (
         <ProfileTab clientId={client.id} />
+      )}
+
+      {activeTab === 'timeline' && (
+        <TimelineTab clientId={client.id} />
       )}
 
       {activeTab === 'docs' && (
