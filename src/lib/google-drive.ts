@@ -109,6 +109,22 @@ export async function exportGoogleDocAsText(
 }
 
 /**
+ * Download a binary/text file from Drive as a string. Use this for
+ * non-Google-native files (CSV, txt, etc.) where we want the raw bytes.
+ */
+export async function downloadFileAsText(
+  accessToken: string,
+  fileId: string,
+): Promise<string | null> {
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) return null
+  return await res.text()
+}
+
+/**
  * Human-friendly label for a MIME type.
  */
 export function describeMime(mime: string): { label: string; category: 'doc' | 'sheet' | 'slides' | 'image' | 'video' | 'pdf' | 'folder' | 'other' } {
