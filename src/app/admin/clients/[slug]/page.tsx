@@ -16,6 +16,7 @@ import AssetsTab from './tabs/assets-tab'
 import StyleLibraryTab from './tabs/style-library-tab'
 import QueueTab from './tabs/queue-tab'
 import MetricsTab from './tabs/metrics-tab'
+import LocalSeoTab from './tabs/local-seo-tab'
 import ReviewsTab from './tabs/reviews-tab'
 import NotesTab from './tabs/notes-tab'
 import ConnectionsTab from './tabs/connections-tab'
@@ -74,9 +75,10 @@ const SUB_TABS: Partial<Record<Tab, SubTab[]>> = {
     { key: 'style',        label: 'Style Library' },
   ],
   performance: [
-    { key: 'social',  label: 'Social Metrics' },
-    { key: 'reviews', label: 'Reviews' },
-    { key: 'website', label: 'Website' },
+    { key: 'social',    label: 'Social Metrics' },
+    { key: 'local_seo', label: 'Local SEO' },
+    { key: 'reviews',   label: 'Reviews' },
+    { key: 'website',   label: 'Website' },
   ],
   notes: [
     { key: 'am_notes',        label: 'AM Notes' },
@@ -379,6 +381,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
             onChange={setSub}
           />
           {activeSub === 'social' && <MetricsTab clientId={client.id} />}
+          {activeSub === 'local_seo' && <LocalSeoTab clientId={client.id} clientSlug={client.slug} />}
           {activeSub === 'reviews' && <ReviewsTab clientId={client.id} />}
           {activeSub === 'website' && <WebsiteTab clientId={client.id} />}
         </div>
