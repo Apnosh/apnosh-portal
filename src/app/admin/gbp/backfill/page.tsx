@@ -1,216 +1,118 @@
 'use client'
 
 /**
- * Bulk GBP backfill page -- one upload covers every managed location.
+ * Bulk GBP backfill page.
  *
- * Flow:
- *   1. Admin drops the Looker Studio CSV (1 file, all locations, all days)
- *   2. Client-side parser normalizes columns -> LookerGbpRow[]
- *   3. Server previews -> which locations matched which clients
- *   4. Admin confirms -> server upserts into gbp_metrics
+ * Accepts MULTIPLE files in one go. Each file can be:
+ *   - GMB Insights "Local Reports" CSV from Business Profile Manager
+ *     (aggregate over the report range — date is read from filename)
+ *   - Looker Studio GBP daily CSV (per-day rows)
  *
- * Looker Studio CSV column names vary based on the report config.
- * We fuzzy-match them at parse time so admins can use whatever
- * column order / labels come out of their report.
+ * Format is auto-detected via parseGbpCsvAuto. Rows from every file
+ * are pooled, previewed against the client roster, and upserted in
+ * one shot.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Upload, FileSpreadsheet, Check, AlertCircle, Users, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Upload, FileSpreadsheet, Check, AlertCircle, Users, AlertTriangle, X } from 'lucide-react'
 import {
   previewBackfill,
   runBackfill,
   type LookerGbpRow,
   type BackfillPreview,
 } from '@/lib/gbp-backfill-actions'
-
-// ---------------------------------------------------------------------------
-// CSV header -> logical field. Patterns are case-insensitive and match
-// Looker Studio's default Business Profile connector headers as well as
-// common renames.
-// ---------------------------------------------------------------------------
-
-type Field =
-  | 'date' | 'location_name'
-  | 'impressions_search_mobile' | 'impressions_search_desktop'
-  | 'impressions_maps_mobile'   | 'impressions_maps_desktop'
-  | 'impressions_total'
-  | 'website_clicks' | 'calls' | 'directions' | 'conversations' | 'bookings'
-  | 'photo_views' | 'photo_count' | 'post_views' | 'post_clicks'
-
-const PATTERNS: Array<{ field: Field; re: RegExp }> = [
-  { field: 'date', re: /^(date|day|period|metric\s*date)$/i },
-  { field: 'location_name', re: /^(business[_\s]*name|location[_\s]*name|location|name)$/i },
-
-  { field: 'impressions_search_mobile', re: /search.*mobile|mobile.*search/i },
-  { field: 'impressions_search_desktop', re: /search.*desktop|desktop.*search/i },
-  { field: 'impressions_maps_mobile', re: /maps.*mobile|mobile.*maps/i },
-  { field: 'impressions_maps_desktop', re: /maps.*desktop|desktop.*maps/i },
-  { field: 'impressions_total', re: /^(total[_\s]*impressions?|impressions?[_\s]*total|views?|total[_\s]*views?)$/i },
-
-  { field: 'website_clicks', re: /website/i },
-  { field: 'calls', re: /^(calls?|phone[_\s]*calls?|call[_\s]*clicks?)$/i },
-  { field: 'directions', re: /direction/i },
-  { field: 'conversations', re: /conversation|message/i },
-  { field: 'bookings', re: /booking/i },
-
-  { field: 'photo_views', re: /photo[_\s]*view/i },
-  { field: 'photo_count', re: /photo[_\s]*count|photos?$/i },
-  { field: 'post_views', re: /post[_\s]*view/i },
-  { field: 'post_clicks', re: /post[_\s]*click/i },
-]
-
-function parseCSV(text: string): string[][] {
-  const lines = text.split(/\r?\n/).filter(l => l.trim())
-  return lines.map(line => {
-    const cells: string[] = []
-    let current = ''
-    let inQuotes = false
-    for (const ch of line) {
-      if (ch === '"') { inQuotes = !inQuotes; continue }
-      if (ch === ',' && !inQuotes) { cells.push(current.trim()); current = ''; continue }
-      current += ch
-    }
-    cells.push(current.trim())
-    return cells
-  })
-}
-
-function normalizeDate(raw: string): string | null {
-  if (!raw) return null
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
-  const mdy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
-  if (mdy) {
-    const [, m, d, y] = mdy
-    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
-  }
-  // YYYYMMDD (Looker often outputs this)
-  const ymd = raw.match(/^(\d{4})(\d{2})(\d{2})$/)
-  if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`
-  const d = new Date(raw)
-  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
-  return null
-}
-
-function parseIntLoose(v: string | undefined): number {
-  if (!v) return 0
-  const n = parseInt(v.replace(/[,\s]/g, ''))
-  return Number.isFinite(n) ? n : 0
-}
+import { parseGbpCsvAuto } from '@/lib/gbp-csv-parser'
 
 interface ParsedFile {
-  rows: LookerGbpRow[]
-  headerToField: Record<string, Field>
-  totalRows: number
-  errors: string[]
   filename: string
+  rows: LookerGbpRow[]
+  format: 'gmb_aggregate' | 'looker_daily' | 'unknown'
+  errors: string[]
+  dateFirst?: string
+  dateLast?: string
 }
 
-function parseLookerCsv(text: string, filename: string): ParsedFile {
-  const rawRows = parseCSV(text)
-  if (rawRows.length < 2) return { rows: [], headerToField: {}, totalRows: 0, errors: ['File has no data rows'], filename }
-
-  const headers = rawRows[0]
-  const headerToField: Record<string, Field> = {}
-  const fieldIdx: Partial<Record<Field, number>> = {}
-
-  headers.forEach((h, i) => {
-    const match = PATTERNS.find(p => p.re.test(h.trim()))
-    if (match && fieldIdx[match.field] === undefined) {
-      headerToField[h] = match.field
-      fieldIdx[match.field] = i
-    }
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = e => resolve(e.target?.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsText(file)
   })
-
-  if (fieldIdx.date === undefined) {
-    return { rows: [], headerToField, totalRows: 0, errors: ['Could not find a date column. Headers: ' + headers.join(', ')], filename }
-  }
-  if (fieldIdx.location_name === undefined) {
-    return { rows: [], headerToField, totalRows: 0, errors: ['Could not find a business/location name column. Headers: ' + headers.join(', ')], filename }
-  }
-
-  const rows: LookerGbpRow[] = []
-  const errors: string[] = []
-
-  for (let i = 1; i < rawRows.length; i++) {
-    const row = rawRows[i]
-    const rawDate = row[fieldIdx.date!]
-    const date = normalizeDate(rawDate)
-    const loc = row[fieldIdx.location_name!]?.trim()
-    if (!date || !loc) {
-      if (errors.length < 5) errors.push(`Row ${i + 1}: missing date or location`)
-      continue
-    }
-
-    const get = (f: Field) => fieldIdx[f] !== undefined ? parseIntLoose(row[fieldIdx[f]!]) : 0
-
-    rows.push({
-      date,
-      location_name: loc,
-      impressions_search_mobile: get('impressions_search_mobile'),
-      impressions_search_desktop: get('impressions_search_desktop'),
-      impressions_maps_mobile: get('impressions_maps_mobile'),
-      impressions_maps_desktop: get('impressions_maps_desktop'),
-      impressions_total: fieldIdx.impressions_total !== undefined ? get('impressions_total') : undefined,
-      website_clicks: get('website_clicks'),
-      calls: get('calls'),
-      directions: get('directions'),
-      conversations: get('conversations'),
-      bookings: get('bookings'),
-      photo_views: get('photo_views'),
-      photo_count: get('photo_count'),
-      post_views: get('post_views'),
-      post_clicks: get('post_clicks'),
-    })
-  }
-
-  return { rows, headerToField, totalRows: rawRows.length - 1, errors, filename }
 }
-
-// ---------------------------------------------------------------------------
 
 export default function BackfillPage() {
-  const [parsed, setParsed] = useState<ParsedFile | null>(null)
+  const [files, setFiles] = useState<ParsedFile[]>([])
   const [preview, setPreview] = useState<BackfillPreview | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
-  const handleFile = useCallback((file: File) => {
+  const allRows = files.flatMap(f => f.rows)
+  const totalRows = allRows.length
+
+  const handleFiles = useCallback(async (incoming: FileList | File[]) => {
     setResult(null); setPreview(null)
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const text = e.target?.result as string
-      const p = parseLookerCsv(text, file.name)
-      setParsed(p)
-      if (p.rows.length > 0) {
-        setBusy(true)
-        const res = await previewBackfill(p.rows)
-        setBusy(false)
-        if (res.success) setPreview(res.data)
-        else setResult({ ok: false, msg: res.error })
+    const list = Array.from(incoming)
+    const parsed: ParsedFile[] = []
+
+    for (const file of list) {
+      try {
+        const text = await readFileAsText(file)
+        const out = parseGbpCsvAuto(text, file.name)
+        const dates = out.rows.map(r => r.date).sort()
+        parsed.push({
+          filename: file.name,
+          rows: out.rows,
+          format: out.format,
+          errors: out.errors,
+          dateFirst: dates[0],
+          dateLast: dates[dates.length - 1],
+        })
+      } catch (e) {
+        parsed.push({
+          filename: file.name,
+          rows: [],
+          format: 'unknown',
+          errors: [(e as Error).message],
+        })
       }
     }
-    reader.readAsText(file)
+
+    setFiles(prev => [...prev, ...parsed])
   }, [])
 
-  const handleConfirm = async () => {
-    if (!parsed) return
+  const removeFile = (idx: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== idx))
+    setPreview(null)
+  }
+
+  const runPreview = useCallback(async () => {
+    if (allRows.length === 0) return
     setBusy(true)
-    const res = await runBackfill({ rows: parsed.rows, filename: parsed.filename, source: 'looker_csv' })
+    const res = await previewBackfill(allRows)
+    setBusy(false)
+    if (res.success) setPreview(res.data)
+    else setResult({ ok: false, msg: res.error })
+  }, [allRows])
+
+  const handleConfirm = async () => {
+    if (allRows.length === 0) return
+    setBusy(true)
+    const fname = files.length === 1 ? files[0].filename : `${files.length} files combined`
+    const res = await runBackfill({ rows: allRows, filename: fname, source: 'manual_upload' })
     setBusy(false)
     if (res.success) {
-      setResult({ ok: true, msg: `Imported ${res.data.imported} rows across ${preview?.locationsMatched.length ?? 0} clients. ${res.data.unmatched > 0 ? `${res.data.unmatched} unmatched rows skipped.` : ''}` })
-      setParsed(null); setPreview(null)
+      setResult({
+        ok: true,
+        msg: `Imported ${res.data.imported} rows across ${preview?.locationsMatched.length ?? 0} clients.${res.data.unmatched > 0 ? ` ${res.data.unmatched} unmatched rows skipped.` : ''}`,
+      })
+      setFiles([]); setPreview(null)
     } else {
       setResult({ ok: false, msg: res.error })
     }
   }
-
-  const mappedFields = useMemo(
-    () => parsed ? Object.values(parsed.headerToField) : [],
-    [parsed]
-  )
 
   return (
     <div className="max-w-4xl">
@@ -221,11 +123,10 @@ export default function BackfillPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-ink mb-1">GBP Bulk Backfill</h1>
         <p className="text-sm text-ink-3">
-          Upload one CSV export from Looker Studio covering every location. Rows are routed to each client automatically by business name.
+          Drop one or many CSVs from Google Business Profile Manager (Actions → Download → Insights) or Looker Studio. Each location is routed to the right client by business name automatically.
         </p>
       </div>
 
-      {/* Result banner */}
       {result && (
         <div className={`flex items-start gap-3 p-4 rounded-xl mb-6 ${result.ok ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
           {result.ok ? <Check className="w-5 h-5 text-emerald-600 mt-0.5" /> : <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />}
@@ -233,123 +134,148 @@ export default function BackfillPage() {
         </div>
       )}
 
-      {/* Dropzone */}
-      {!parsed && (
-        <div
-          className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors ${dragOver ? 'border-brand bg-brand-tint' : 'border-ink-5 hover:border-ink-4'}`}
-          onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={e => {
-            e.preventDefault(); setDragOver(false)
-            const file = e.dataTransfer.files[0]
-            if (file) handleFile(file)
-          }}
-        >
-          <Upload className="w-10 h-10 text-ink-4 mx-auto mb-4" />
-          <p className="text-sm font-medium text-ink mb-1">Drop the Looker Studio CSV here</p>
-          <p className="text-xs text-ink-3 mb-4">one file, every location, every day</p>
-          <label className="inline-block cursor-pointer px-4 py-2 bg-ink text-white text-sm font-medium rounded-lg hover:bg-ink-2">
-            Choose file
-            <input
-              type="file"
-              accept=".csv,.tsv,.txt"
-              className="hidden"
-              onChange={e => {
-                const f = e.target.files?.[0]
-                if (f) handleFile(f)
-              }}
-            />
-          </label>
+      {/* Dropzone -- always visible so admin can drop additional files */}
+      <div
+        className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors mb-6 ${dragOver ? 'border-brand bg-brand-tint' : 'border-ink-5 hover:border-ink-4'}`}
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={e => {
+          e.preventDefault(); setDragOver(false)
+          if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files)
+        }}
+      >
+        <Upload className="w-8 h-8 text-ink-4 mx-auto mb-3" />
+        <p className="text-sm font-medium text-ink mb-1">Drop one or many CSVs here</p>
+        <p className="text-xs text-ink-3 mb-3">monthly Insights exports, Looker daily exports — mix and match</p>
+        <label className="inline-block cursor-pointer px-4 py-2 bg-ink text-white text-sm font-medium rounded-lg hover:bg-ink-2">
+          Choose files
+          <input
+            type="file"
+            multiple
+            accept=".csv,.tsv,.txt"
+            className="hidden"
+            onChange={e => {
+              if (e.target.files?.length) handleFiles(e.target.files)
+            }}
+          />
+        </label>
+      </div>
+
+      {/* Parsed-files list */}
+      {files.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-ink">
+              {files.length} file{files.length === 1 ? '' : 's'} parsed · {totalRows.toLocaleString()} rows total
+            </h2>
+            {!preview && (
+              <button
+                onClick={runPreview}
+                disabled={busy || totalRows === 0}
+                className="px-4 py-1.5 bg-brand text-white text-xs font-medium rounded-lg hover:bg-brand-dark disabled:opacity-50"
+              >
+                {busy ? 'Matching...' : 'Preview match'}
+              </button>
+            )}
+          </div>
+          <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-bg-2 border-b border-ink-6">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium text-ink-3">File</th>
+                  <th className="text-left px-3 py-2 font-medium text-ink-3">Format</th>
+                  <th className="text-left px-3 py-2 font-medium text-ink-3">Date</th>
+                  <th className="text-right px-3 py-2 font-medium text-ink-3">Rows</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {files.map((f, i) => (
+                  <tr key={i} className="border-b border-ink-6 last:border-0">
+                    <td className="px-3 py-2 truncate max-w-xs" title={f.filename}>
+                      <FileSpreadsheet className="inline w-3 h-3 mr-1 text-ink-4" />
+                      {f.filename}
+                    </td>
+                    <td className="px-3 py-2">
+                      {f.format === 'gmb_aggregate' && <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">GMB monthly</span>}
+                      {f.format === 'looker_daily' && <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">Looker daily</span>}
+                      {f.format === 'unknown' && <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700">Unknown</span>}
+                    </td>
+                    <td className="px-3 py-2 text-ink-3">
+                      {f.dateFirst === f.dateLast ? f.dateFirst : `${f.dateFirst} → ${f.dateLast}`}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">{f.rows.length}</td>
+                    <td className="px-3 py-2">
+                      <button onClick={() => removeFile(i)} className="text-ink-3 hover:text-red-500">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* Parsed + preview */}
-      {parsed && (
-        <div className="space-y-6">
-          {parsed.errors.length > 0 && (
-            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm">
-              <strong>Parser warnings:</strong>
-              <ul className="mt-2 list-disc list-inside space-y-1">
-                {parsed.errors.map((e, i) => <li key={i}>{e}</li>)}
+      {/* Preview output */}
+      {preview && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-ink-6 p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <Users className="w-5 h-5 text-brand" />
+              <h2 className="text-sm font-bold">Matched locations ({preview.locationsMatched.length})</h2>
+            </div>
+            <div className="space-y-2">
+              {preview.locationsMatched.map(m => (
+                <div key={m.locationName} className="flex items-center justify-between p-3 rounded-lg bg-bg-2 text-sm">
+                  <div>
+                    <span className="font-medium">{m.locationName}</span>
+                    <span className="text-ink-3"> → {m.clientName}</span>
+                  </div>
+                  <div className="text-xs text-ink-3">
+                    {m.rowCount} rows · {m.dateFirst} → {m.dateLast}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {preview.locationsUnmatched.length > 0 && (
+            <div className="bg-white rounded-xl border border-amber-200 p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                <h2 className="text-sm font-bold text-amber-800">Unmatched locations ({preview.locationsUnmatched.length})</h2>
+              </div>
+              <p className="text-xs text-ink-3 mb-3">
+                These names didn&apos;t match any client. They&apos;ll be skipped on import.
+              </p>
+              <ul className="space-y-1 text-sm">
+                {preview.locationsUnmatched.map(u => (
+                  <li key={u.locationName} className="flex justify-between py-1">
+                    <span className="font-medium">{u.locationName}</span>
+                    <span className="text-ink-3 text-xs">{u.rowCount} rows</span>
+                  </li>
+                ))}
               </ul>
             </div>
           )}
 
-          <div className="bg-white rounded-xl border border-ink-6 p-5">
-            <div className="flex items-center gap-3 mb-4">
-              <FileSpreadsheet className="w-5 h-5 text-brand" />
-              <h2 className="text-sm font-bold">Parse summary</h2>
-            </div>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div><span className="text-ink-3">File:</span> <span className="font-medium">{parsed.filename}</span></div>
-              <div><span className="text-ink-3">Rows:</span> <span className="font-medium">{parsed.rows.length.toLocaleString()}</span></div>
-              <div><span className="text-ink-3">Fields mapped:</span> <span className="font-medium">{mappedFields.length}</span></div>
-            </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleConfirm}
+              disabled={busy || preview.locationsMatched.length === 0}
+              className="px-5 py-2.5 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-dark disabled:opacity-50"
+            >
+              {busy ? 'Importing...' : `Import ${preview.locationsMatched.reduce((a, m) => a + m.rowCount, 0).toLocaleString()} rows`}
+            </button>
+            <button
+              onClick={() => { setFiles([]); setPreview(null) }}
+              className="px-5 py-2.5 border border-ink-5 text-sm font-medium rounded-lg hover:bg-bg-2"
+            >
+              Start over
+            </button>
           </div>
-
-          {busy && !preview && (
-            <div className="text-sm text-ink-3">Matching locations to clients...</div>
-          )}
-
-          {preview && (
-            <>
-              <div className="bg-white rounded-xl border border-ink-6 p-5">
-                <div className="flex items-center gap-3 mb-4">
-                  <Users className="w-5 h-5 text-brand" />
-                  <h2 className="text-sm font-bold">Matched locations ({preview.locationsMatched.length})</h2>
-                </div>
-                <div className="space-y-2">
-                  {preview.locationsMatched.map(m => (
-                    <div key={m.locationName} className="flex items-center justify-between p-3 rounded-lg bg-bg-2 text-sm">
-                      <div>
-                        <span className="font-medium">{m.locationName}</span>
-                        <span className="text-ink-3"> → {m.clientName}</span>
-                      </div>
-                      <div className="text-xs text-ink-3">
-                        {m.rowCount} rows · {m.dateFirst} → {m.dateLast}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {preview.locationsUnmatched.length > 0 && (
-                <div className="bg-white rounded-xl border border-amber-200 p-5">
-                  <div className="flex items-center gap-3 mb-3">
-                    <AlertTriangle className="w-5 h-5 text-amber-500" />
-                    <h2 className="text-sm font-bold text-amber-800">Unmatched locations ({preview.locationsUnmatched.length})</h2>
-                  </div>
-                  <p className="text-xs text-ink-3 mb-3">
-                    These names didn&apos;t match any client. Either add the client first, or rename the client in Supabase so the business name aligns, then re-upload.
-                  </p>
-                  <ul className="space-y-1 text-sm">
-                    {preview.locationsUnmatched.map(u => (
-                      <li key={u.locationName} className="flex justify-between py-1">
-                        <span className="font-medium">{u.locationName}</span>
-                        <span className="text-ink-3 text-xs">{u.rowCount} rows will be skipped</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <button
-                  onClick={handleConfirm}
-                  disabled={busy || preview.locationsMatched.length === 0}
-                  className="px-5 py-2.5 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-dark disabled:opacity-50"
-                >
-                  {busy ? 'Importing...' : `Import ${preview.locationsMatched.reduce((a, m) => a + m.rowCount, 0).toLocaleString()} rows`}
-                </button>
-                <button
-                  onClick={() => { setParsed(null); setPreview(null) }}
-                  className="px-5 py-2.5 border border-ink-5 text-sm font-medium rounded-lg hover:bg-bg-2"
-                >
-                  Cancel
-                </button>
-              </div>
-            </>
-          )}
         </div>
       )}
     </div>

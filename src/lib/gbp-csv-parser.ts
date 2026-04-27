@@ -140,3 +140,105 @@ export function parseLookerCsv(text: string): ParsedCsv {
 
   return { rows, totalRows: rawRows.length - 1, errors }
 }
+
+// ---------------------------------------------------------------------------
+// GMB Insights "Local Reports" CSV (Business Profile Manager bulk export).
+//
+// This format is AGGREGATE: one row per location with totals over the
+// reporting period -- there is no per-day breakdown. To get a time
+// series, the admin downloads multiple monthly windows and we stamp
+// each row with the END date of its window so they line up on a chart.
+//
+// Filename carries the date range, e.g.:
+//   "GMB insights (Performance Report) - 2026-3-1 - 2026-3-31 - <hash>.csv"
+// Header row has the metric names; row 2 is a long human-readable
+// description (skipped). Data rows start at index 2.
+// ---------------------------------------------------------------------------
+
+export function extractDateRangeFromGmbFilename(
+  filename: string,
+): { start: string; end: string } | null {
+  const m = filename.match(/(\d{4})-(\d{1,2})-(\d{1,2})\s*-\s*(\d{4})-(\d{1,2})-(\d{1,2})/)
+  if (!m) return null
+  const pad2 = (s: string) => s.padStart(2, '0')
+  return {
+    start: `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`,
+    end:   `${m[4]}-${pad2(m[5])}-${pad2(m[6])}`,
+  }
+}
+
+export function parseGmbInsightsCsv(
+  text: string,
+  dateRange: { start: string; end: string },
+): ParsedCsv {
+  const rawRows = splitCsvRows(text)
+  if (rawRows.length < 3) {
+    return { rows: [], totalRows: 0, errors: ['File has too few rows for GMB Insights format'] }
+  }
+
+  const headers = rawRows[0].map(h => h.trim())
+  const idx: Record<string, number> = {}
+  headers.forEach((h, i) => { idx[h] = i })
+
+  // Sanity-check this really is the GMB Insights format
+  if (idx['Business name'] === undefined || idx['Google Search - Mobile'] === undefined) {
+    return { rows: [], totalRows: 0, errors: ['Not GMB Insights format (missing "Business name" / "Google Search - Mobile")'] }
+  }
+
+  const get = (row: string[], col: string): number => {
+    if (idx[col] === undefined) return 0
+    const raw = row[idx[col]]
+    if (!raw) return 0
+    const n = parseInt(raw.replace(/[,\s]/g, ''))
+    return Number.isFinite(n) ? n : 0
+  }
+
+  const rows: LookerGbpRow[] = []
+  // rawRows[0] = headers, rawRows[1] = description blurb (skip), data from index 2
+  for (let i = 2; i < rawRows.length; i++) {
+    const row = rawRows[i]
+    const name = row[idx['Business name']]?.trim()
+    if (!name) continue
+
+    const searchMobile = get(row, 'Google Search - Mobile')
+    const searchDesktop = get(row, 'Google Search - Desktop')
+    const mapsMobile = get(row, 'Google Maps - Mobile')
+    const mapsDesktop = get(row, 'Google Maps - Desktop')
+
+    rows.push({
+      // Stamp every row with the period's END date so monthly windows
+      // chart as one point per month at the month-end.
+      date: dateRange.end,
+      location_name: name,
+      impressions_search_mobile: searchMobile,
+      impressions_search_desktop: searchDesktop,
+      impressions_maps_mobile: mapsMobile,
+      impressions_maps_desktop: mapsDesktop,
+      impressions_total: searchMobile + searchDesktop + mapsMobile + mapsDesktop,
+      website_clicks: get(row, 'Website clicks'),
+      calls: get(row, 'Calls'),
+      directions: get(row, 'Directions'),
+      conversations: get(row, 'Messages'),
+      bookings: get(row, 'Bookings'),
+    })
+  }
+
+  return { rows, totalRows: rawRows.length - 2, errors: [] }
+}
+
+/**
+ * Auto-detecting parser: tries GMB Insights format first (using the
+ * filename's date range), falls back to Looker daily format.
+ */
+export function parseGbpCsvAuto(text: string, filename: string): ParsedCsv & {
+  format: 'gmb_aggregate' | 'looker_daily' | 'unknown'
+} {
+  const dateRange = extractDateRangeFromGmbFilename(filename)
+  if (dateRange) {
+    const gmb = parseGmbInsightsCsv(text, dateRange)
+    if (gmb.rows.length > 0) return { ...gmb, format: 'gmb_aggregate' }
+  }
+  const looker = parseLookerCsv(text)
+  if (looker.rows.length > 0) return { ...looker, format: 'looker_daily' }
+  return { ...looker, format: 'unknown' }
+}
