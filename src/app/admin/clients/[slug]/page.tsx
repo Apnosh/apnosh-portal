@@ -295,16 +295,44 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
       {/* Breadcrumb — kept minimal since the Overview Hero shows identity.
           On non-overview tabs we show the client name inline with the back
           link so admins know where they are without a second hero. */}
-      <div className="flex items-center gap-2 text-[13px]">
-        <Link
-          href="/admin/clients"
-          className="inline-flex items-center gap-1.5 text-ink-4 hover:text-ink transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Clients
-        </Link>
-        <span className="text-ink-5">/</span>
-        <span className="text-ink-2 font-medium truncate">{client.name}</span>
+      <div className="flex items-center justify-between gap-2 text-[13px] flex-wrap">
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/clients"
+            className="inline-flex items-center gap-1.5 text-ink-4 hover:text-ink transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Clients
+          </Link>
+          <span className="text-ink-5">/</span>
+          <span className="text-ink-2 font-medium truncate">{client.name}</span>
+        </div>
+        {/* Quick actions to operations pages */}
+        <div className="flex items-center gap-1.5">
+          <Link
+            href={`/admin/clients/${client.slug}/updates`}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-3 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Updates
+          </Link>
+          <Link
+            href={`/admin/clients/${client.slug}/site`}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-3 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            Site
+          </Link>
+          <Link
+            href={`/sites/${client.slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-3 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            View site
+          </Link>
+        </div>
       </div>
 
       {/* ── Tabs ───────────────────────────────────────────────────── */}
