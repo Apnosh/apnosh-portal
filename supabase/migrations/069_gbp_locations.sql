@@ -67,9 +67,15 @@ create index if not exists idx_gbp_metrics_location on gbp_metrics(gbp_location_
 -- (client_id, location_id, date) unique constraint stays as-is for
 -- backwards compat with rows that don't yet have a gbp_location_id;
 -- new rows we write will have both.
-create unique index if not exists uq_gbp_metrics_location_date
-  on gbp_metrics(gbp_location_id, date)
-  where gbp_location_id is not null;
+-- Full unique constraint (not partial) so ON CONFLICT (gbp_location_id, date)
+-- works via PostgREST upsert. Postgres treats NULLs as distinct by default,
+-- so legacy rows without a location_id don't conflict.
+do $$ begin
+  alter table gbp_metrics
+    add constraint uq_gbp_metrics_location_date
+    unique (gbp_location_id, date);
+exception when duplicate_object then null;
+end $$;
 
 -- ============================================================
 -- Trigger: keep gbp_metrics.client_id in sync with location's client

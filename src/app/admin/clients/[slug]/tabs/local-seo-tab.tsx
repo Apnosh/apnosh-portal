@@ -271,7 +271,7 @@ export default function LocalSeoTab({ clientId, clientSlug }: Props) {
             <h3 className="text-sm font-bold text-ink">By location ({locations.length})</h3>
           </div>
           <p className="text-xs text-ink-3 mb-4">
-            Last 30 days vs prior 30 days, ranked by impressions.
+            {currentPeriodLabel} vs {priorPeriodLabel}, ranked by impressions.
           </p>
           <div className="overflow-x-auto -mx-5">
             <table className="w-full text-xs">
