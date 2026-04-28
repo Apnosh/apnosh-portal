@@ -186,11 +186,26 @@ function LocationLoader({ children }: { children: React.ReactNode }) {
     if (clientLoading || !client?.id) return
     let cancelled = false
     console.log('[LocationLoader] fetching for client', client.id)
-    getClientLocations(client.id).then(rows => {
-      if (cancelled) return
-      console.log('[LocationLoader] got', rows.length, 'locations:', rows.map(r => r.location_name))
-      setLocations(rows)
-    }).catch(err => console.error('[LocationLoader] error:', err))
+    // Use the debug endpoint instead of the server action to avoid any
+    // potential server-action caching while we debug. Once verified, switch
+    // back to getClientLocations.
+    fetch(`/api/debug/locations?clientId=${client.id}`)
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return
+        console.log('[LocationLoader] debug API returned:', data)
+        const rows = (data.sample ?? []).map((l: any, idx: number) => ({
+          id: l.id,
+          location_name: l.location_name,
+          city: null,
+          state: null,
+          full_address: null,
+          is_primary: idx === 0,
+          is_active: true,
+          gbp_location_id: null,
+        }))
+        setLocations(rows)
+      }).catch(err => console.error('[LocationLoader] error:', err))
     return () => { cancelled = true }
   }, [client?.id, clientLoading])
 
