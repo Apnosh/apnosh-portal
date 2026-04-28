@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -14,6 +14,10 @@ import { CartProvider } from '@/lib/cart-context'
 import { ToastProvider } from '@/components/ui/toast'
 import { RealtimeProvider } from '@/lib/realtime'
 import { ClientProvider, useClient } from '@/lib/client-context'
+import { LocationProvider, useLocationContext } from '@/lib/dashboard/location-context'
+import { getClientLocations } from '@/lib/dashboard/get-client-locations'
+import LocationSelector from '@/components/dashboard/location-selector'
+import type { ClientLocation } from '@/lib/dashboard/location-helpers'
 import Notifications from '@/components/ui/notifications'
 import Breadcrumbs from '@/components/ui/breadcrumbs'
 import { ClientTabBar } from '@/components/ui/mobile-tab-bar'
@@ -157,11 +161,56 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <ToastProvider>
         <RealtimeProvider>
           <ClientProvider>
-            <DashboardShell>{children}</DashboardShell>
+            <Suspense fallback={null}>
+              <LocationLoader>
+                <DashboardShell>{children}</DashboardShell>
+              </LocationLoader>
+            </Suspense>
           </ClientProvider>
         </RealtimeProvider>
       </ToastProvider>
     </CartProvider>
+  )
+}
+
+/**
+ * Loads the client's locations once the client is resolved, then mounts the
+ * LocationProvider so every page below can read the current location selection.
+ * The LocationSelector itself lives in the header (see DashboardShell).
+ */
+function LocationLoader({ children }: { children: React.ReactNode }) {
+  const { client, loading: clientLoading } = useClient()
+  const [locations, setLocations] = useState<ClientLocation[]>([])
+
+  useEffect(() => {
+    if (clientLoading || !client?.id) return
+    let cancelled = false
+    getClientLocations(client.id).then(rows => {
+      if (!cancelled) setLocations(rows)
+    })
+    return () => { cancelled = true }
+  }, [client?.id, clientLoading])
+
+  return (
+    <LocationProvider clientId={client?.id ?? null} locations={locations}>
+      {children}
+    </LocationProvider>
+  )
+}
+
+/**
+ * Header component reading from LocationContext. Only renders the selector
+ * when the client has more than one location (the component itself returns
+ * null in that case, so this is just a thin wrapper).
+ */
+function HeaderLocationSelector() {
+  const { locations, selectedLocationId, setSelectedLocationId } = useLocationContext()
+  return (
+    <LocationSelector
+      locations={locations}
+      selectedLocationId={selectedLocationId}
+      onChange={setSelectedLocationId}
+    />
   )
 }
 
@@ -420,6 +469,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
           </button>
           <div className="flex-1" />
           <div className="flex items-center gap-3">
+            <HeaderLocationSelector />
             <Link href="/dashboard/messages" className="text-ink-4 hover:text-ink transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
               <MessageSquare className="w-5 h-5" />
             </Link>
