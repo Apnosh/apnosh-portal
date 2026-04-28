@@ -633,3 +633,112 @@ export async function getLocalSeoSummary(
     },
   }
 }
+
+// ---------------------------------------------------------------------------
+// Per-location breakdown -- powers the "By location" view in the Local SEO
+// tab so a multi-location client (IJ Sushi has 7, Vinason 5) can see which
+// of their locations is under/over-performing rather than just the aggregate.
+// ---------------------------------------------------------------------------
+
+export interface LocalSeoLocationRow {
+  locationId: string                // gbp_locations.id
+  locationName: string
+  storeCode: string
+  address: string | null
+  // Last-30d totals
+  impressions: number
+  calls: number
+  directions: number
+  websiteClicks: number
+  // Prior-30d for delta
+  impressionsPrev: number
+  callsPrev: number
+  directionsPrev: number
+  websiteClicksPrev: number
+  daysWithData: number
+}
+
+export async function getLocalSeoLocations(
+  clientId: string,
+): Promise<{ success: true; data: LocalSeoLocationRow[] } | { success: false; error: string }> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const admin = getAdminSupabase()
+
+  // 1. All locations for this client (status='assigned')
+  const { data: locs, error: locErr } = await admin
+    .from('gbp_locations')
+    .select('id, store_code, location_name, address')
+    .eq('client_id', clientId)
+    .eq('status', 'assigned')
+  if (locErr) return { success: false, error: locErr.message }
+  if (!locs || locs.length === 0) return { success: true, data: [] }
+
+  // 2. 60d of metrics for those locations
+  const today = new Date()
+  const d60 = new Date(today); d60.setDate(d60.getDate() - 60)
+  const cutoffIso = d60.toISOString().slice(0, 10)
+  const d30 = new Date(today); d30.setDate(d30.getDate() - 30)
+  const d30Iso = d30.toISOString().slice(0, 10)
+
+  const { data: metrics, error: metricsErr } = await admin
+    .from('gbp_metrics')
+    .select('gbp_location_id, date, impressions_total, calls, directions, website_clicks')
+    .in('gbp_location_id', locs.map(l => l.id))
+    .gte('date', cutoffIso)
+  if (metricsErr) return { success: false, error: metricsErr.message }
+
+  // 3. Roll up per-location, splitting current-30d vs prior-30d
+  const byLocation = new Map<string, {
+    imp: number; calls: number; dirs: number; web: number
+    impPrev: number; callsPrev: number; dirsPrev: number; webPrev: number
+    days: Set<string>
+  }>()
+  for (const l of locs) {
+    byLocation.set(l.id as string, {
+      imp: 0, calls: 0, dirs: 0, web: 0,
+      impPrev: 0, callsPrev: 0, dirsPrev: 0, webPrev: 0,
+      days: new Set(),
+    })
+  }
+  for (const m of metrics ?? []) {
+    const id = m.gbp_location_id as string
+    const bucket = byLocation.get(id)
+    if (!bucket) continue
+    const isCurrent = (m.date as string) >= d30Iso
+    const imp = (m.impressions_total as number) ?? 0
+    const calls = (m.calls as number) ?? 0
+    const dirs = (m.directions as number) ?? 0
+    const web = (m.website_clicks as number) ?? 0
+    if (isCurrent) {
+      bucket.imp += imp; bucket.calls += calls; bucket.dirs += dirs; bucket.web += web
+    } else {
+      bucket.impPrev += imp; bucket.callsPrev += calls; bucket.dirsPrev += dirs; bucket.webPrev += web
+    }
+    bucket.days.add(m.date as string)
+  }
+
+  const rows: LocalSeoLocationRow[] = locs.map(l => {
+    const b = byLocation.get(l.id as string)!
+    return {
+      locationId: l.id as string,
+      locationName: l.location_name as string,
+      storeCode: l.store_code as string,
+      address: (l.address as string | null) ?? null,
+      impressions: b.imp,
+      calls: b.calls,
+      directions: b.dirs,
+      websiteClicks: b.web,
+      impressionsPrev: b.impPrev,
+      callsPrev: b.callsPrev,
+      directionsPrev: b.dirsPrev,
+      websiteClicksPrev: b.webPrev,
+      daysWithData: b.days.size,
+    }
+  })
+
+  // Sort by current-period impressions, descending -- biggest movers up top
+  rows.sort((a, b) => b.impressions - a.impressions)
+  return { success: true, data: rows }
+}

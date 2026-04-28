@@ -10,8 +10,13 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Loader2, TrendingUp, TrendingDown, Minus, ExternalLink, Search, MapPin, Phone, Globe, Eye } from 'lucide-react'
-import { getLocalSeoSummary, type LocalSeoSummary } from '@/lib/gbp-backfill-actions'
+import { Loader2, TrendingUp, TrendingDown, Minus, ExternalLink, Search, MapPin, Phone, Globe, Eye, Building2 } from 'lucide-react'
+import {
+  getLocalSeoSummary,
+  getLocalSeoLocations,
+  type LocalSeoSummary,
+  type LocalSeoLocationRow,
+} from '@/lib/gbp-backfill-actions'
 import Link from 'next/link'
 
 interface Props { clientId: string; clientSlug: string }
@@ -77,15 +82,20 @@ function Sparkline({ points, height = 48 }: { points: number[]; height?: number 
 export default function LocalSeoTab({ clientId, clientSlug }: Props) {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<LocalSeoSummary | null>(null)
+  const [locations, setLocations] = useState<LocalSeoLocationRow[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let mounted = true
     setLoading(true)
-    getLocalSeoSummary(clientId, 90).then(res => {
+    Promise.all([
+      getLocalSeoSummary(clientId, 90),
+      getLocalSeoLocations(clientId),
+    ]).then(([summaryRes, locsRes]) => {
       if (!mounted) return
-      if (res.success) setData(res.data)
-      else setError(res.error)
+      if (summaryRes.success) setData(summaryRes.data)
+      else setError(summaryRes.error)
+      if (locsRes.success) setLocations(locsRes.data)
       setLoading(false)
     })
     return () => { mounted = false }
@@ -209,6 +219,64 @@ export default function LocalSeoTab({ clientId, clientSlug }: Props) {
           )
         })()}
       </div>
+
+      {/* By-location breakdown -- only meaningful for multi-location clients */}
+      {locations.length > 1 && (
+        <div className="rounded-xl border border-ink-6 bg-white p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <Building2 className="w-4 h-4 text-ink-3" />
+            <h3 className="text-sm font-bold text-ink">By location ({locations.length})</h3>
+          </div>
+          <p className="text-xs text-ink-3 mb-4">
+            Last 30 days vs prior 30 days, ranked by impressions.
+          </p>
+          <div className="overflow-x-auto -mx-5">
+            <table className="w-full text-xs">
+              <thead className="border-y border-ink-6 bg-bg-2">
+                <tr>
+                  <th className="text-left px-5 py-2 font-medium text-ink-3">Location</th>
+                  <th className="text-right px-2 py-2 font-medium text-ink-3">Impressions</th>
+                  <th className="text-right px-2 py-2 font-medium text-ink-3">Calls</th>
+                  <th className="text-right px-2 py-2 font-medium text-ink-3">Directions</th>
+                  <th className="text-right px-5 py-2 font-medium text-ink-3">Website</th>
+                </tr>
+              </thead>
+              <tbody>
+                {locations.map(loc => (
+                  <tr key={loc.locationId} className="border-b border-ink-6 last:border-0">
+                    <td className="px-5 py-2.5">
+                      <div className="font-medium text-ink truncate max-w-[280px]" title={loc.locationName}>
+                        {loc.locationName}
+                      </div>
+                      {loc.address && (
+                        <div className="text-[10px] text-ink-4 truncate max-w-[280px]" title={loc.address}>
+                          {loc.address}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-2 py-2.5 text-right">
+                      <div className="font-mono">{formatNum(loc.impressions)}</div>
+                      <div className="text-[10px]"><DeltaBadge curr={loc.impressions} prev={loc.impressionsPrev} /></div>
+                    </td>
+                    <td className="px-2 py-2.5 text-right">
+                      <div className="font-mono">{formatNum(loc.calls)}</div>
+                      <div className="text-[10px]"><DeltaBadge curr={loc.calls} prev={loc.callsPrev} /></div>
+                    </td>
+                    <td className="px-2 py-2.5 text-right">
+                      <div className="font-mono">{formatNum(loc.directions)}</div>
+                      <div className="text-[10px]"><DeltaBadge curr={loc.directions} prev={loc.directionsPrev} /></div>
+                    </td>
+                    <td className="px-5 py-2.5 text-right">
+                      <div className="font-mono">{formatNum(loc.websiteClicks)}</div>
+                      <div className="text-[10px]"><DeltaBadge curr={loc.websiteClicks} prev={loc.websiteClicksPrev} /></div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Top queries */}
       {topQueries.length > 0 && (
