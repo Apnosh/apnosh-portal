@@ -1,18 +1,24 @@
 'use client'
 
 /**
- * Admin form for editing Apnosh Site settings per client.
+ * Admin form for Apnosh Site settings.
  *
- * Sections:
- *   1. Branding -- tagline, hero photo, logo, colors, fonts
- *   2. Ordering -- order online, reservations, delivery
- *   3. Social -- IG, FB, TikTok URLs
- *   4. Publication -- publish toggle, custom domain
+ * IMPORTANT: this form ONLY handles things that are truly site-specific.
+ * Everything else (name, tagline, brand colors, fonts, logo, social
+ * handles, hours) flows from the canonical client tables -- edit those
+ * in their normal places (Brand tab, Connections, Updates) and the
+ * site auto-updates.
+ *
+ * Site-specific fields:
+ *   - Publication state (is the site live?)
+ *   - Custom domain (future: yourrestaurant.com -> CNAME apnoshsites.com)
+ *   - Order online URL (no clear home in clients yet)
+ *   - Reservation URL (no clear home in clients yet)
  */
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, CheckCircle2, AlertCircle, Globe, Sparkles } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, Globe, ExternalLink, Link2 } from 'lucide-react'
 import { upsertSiteSettings, type SiteSettings, type SiteSettingsInput } from '@/lib/site-settings/actions'
 
 interface Props {
@@ -21,31 +27,17 @@ interface Props {
   initial: SiteSettings | null
 }
 
-const DEFAULT_HEADING_FONTS = ['Playfair Display', 'Lora', 'Merriweather', 'DM Serif Display', 'Inter', 'Poppins']
-const DEFAULT_BODY_FONTS    = ['Inter', 'DM Sans', 'Lato', 'Source Sans Pro', 'Open Sans', 'Nunito']
-
-export default function SiteSettingsForm({ clientId, initial }: Props) {
+export default function SiteSettingsForm({ clientId, clientSlug, initial }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
   const [form, setForm] = useState<SiteSettingsInput>(() => ({
-    tagline: initial?.tagline ?? '',
-    heroPhotoUrl: initial?.heroPhotoUrl ?? '',
-    logoUrl: initial?.logoUrl ?? '',
-    primaryColor: initial?.primaryColor ?? '#2D4A22',
-    accentColor: initial?.accentColor ?? '#D97706',
-    backgroundColor: initial?.backgroundColor ?? '#FFFFFF',
-    textColor: initial?.textColor ?? '#1C1917',
-    headingFont: initial?.headingFont ?? 'Playfair Display',
-    bodyFont: initial?.bodyFont ?? 'Inter',
+    isPublished: initial?.isPublished ?? false,
+    customDomain: initial?.customDomain ?? '',
     orderOnlineUrl: initial?.orderOnlineUrl ?? '',
     reservationUrl: initial?.reservationUrl ?? '',
-    instagramUrl: initial?.instagramUrl ?? '',
-    facebookUrl: initial?.facebookUrl ?? '',
-    tiktokUrl: initial?.tiktokUrl ?? '',
-    isPublished: initial?.isPublished ?? false,
   }))
 
   const update = <K extends keyof SiteSettingsInput>(k: K, v: SiteSettingsInput[K]) => {
@@ -76,6 +68,21 @@ export default function SiteSettingsForm({ clientId, initial }: Props) {
         </div>
       )}
 
+      {/* ── Information note ──────────────────────────────────── */}
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+        <div className="flex items-start gap-2.5">
+          <CheckCircle2 className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+          <div className="text-sm text-blue-900">
+            <p className="font-medium mb-1">The site pulls from your client profile automatically</p>
+            <p className="text-blue-800 leading-relaxed">
+              Restaurant name, tagline, brand colors, fonts, logo, social handles, hours, and address all come
+              from the canonical sources (Brand tab, Profile, Connections, Updates). Edit them in their normal
+              places and the site updates. This page is just for site-specific things.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* ── Publication state ─────────────────────────────────── */}
       <Section title="Publication" icon={Globe}>
         <label className="flex items-start gap-3 cursor-pointer">
@@ -88,122 +95,52 @@ export default function SiteSettingsForm({ clientId, initial }: Props) {
           <div>
             <div className="text-sm font-medium text-ink">Site is live</div>
             <p className="text-xs text-ink-3 mt-0.5">
-              When checked, /sites/{initial?.id ? '...' : 'this-client'} is publicly accessible.
-              Uncheck to hide.
+              When checked, the site at{' '}
+              <code className="font-mono text-[11px] bg-bg-2 px-1 py-0.5 rounded">/sites/{clientSlug}</code>{' '}
+              is publicly accessible. Uncheck to hide while you set things up.
             </p>
           </div>
         </label>
       </Section>
 
-      {/* ── Branding ──────────────────────────────────────────── */}
-      <Section title="Branding" icon={Sparkles}>
-        <Field label="Tagline" hint="One sentence shown under the restaurant name">
+      {/* ── Custom domain ─────────────────────────────────────── */}
+      <Section title="Custom domain" icon={Link2}>
+        <Field
+          label="Domain"
+          hint="Future: point your own domain (yourrestaurant.com) at Apnosh via CNAME. Not yet active."
+        >
           <input
             type="text"
-            value={form.tagline ?? ''}
-            placeholder="Seattle's most-loved ramen since 2018"
-            onChange={e => update('tagline', e.target.value)}
+            value={form.customDomain ?? ''}
+            placeholder="yourrestaurant.com"
+            onChange={e => update('customDomain', e.target.value || null)}
             className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
+            disabled
           />
         </Field>
-
-        <Field label="Hero photo URL" hint="Full-bleed background image at the top of the site">
-          <input
-            type="url"
-            value={form.heroPhotoUrl ?? ''}
-            placeholder="https://..."
-            onChange={e => update('heroPhotoUrl', e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
-          />
-        </Field>
-
-        <Field label="Logo URL" hint="Optional brand logo">
-          <input
-            type="url"
-            value={form.logoUrl ?? ''}
-            placeholder="https://..."
-            onChange={e => update('logoUrl', e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
-          />
-        </Field>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <ColorField label="Primary" value={form.primaryColor ?? '#2D4A22'} onChange={v => update('primaryColor', v)} />
-          <ColorField label="Accent" value={form.accentColor ?? '#D97706'} onChange={v => update('accentColor', v)} />
-          <ColorField label="Background" value={form.backgroundColor ?? '#FFFFFF'} onChange={v => update('backgroundColor', v)} />
-          <ColorField label="Text" value={form.textColor ?? '#1C1917'} onChange={v => update('textColor', v)} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Heading font">
-            <select
-              value={form.headingFont ?? 'Playfair Display'}
-              onChange={e => update('headingFont', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
-            >
-              {DEFAULT_HEADING_FONTS.map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
-          </Field>
-          <Field label="Body font">
-            <select
-              value={form.bodyFont ?? 'Inter'}
-              onChange={e => update('bodyFont', e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
-            >
-              {DEFAULT_BODY_FONTS.map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
-          </Field>
-        </div>
       </Section>
 
-      {/* ── Ordering / Reservations ───────────────────────────── */}
-      <Section title="Ordering & reservations">
-        <Field label="Order online URL" hint="Toast / ChowNow / direct ordering">
+      {/* ── Ordering links ────────────────────────────────────── */}
+      <Section title="Action links" icon={ExternalLink}>
+        <p className="text-xs text-ink-3">
+          These show up as the primary CTAs on your site. Reservation gets priority over Order Online if both
+          are set.
+        </p>
+        <Field label="Order online URL" hint="Toast / ChowNow / direct ordering link">
           <input
             type="url"
             value={form.orderOnlineUrl ?? ''}
             placeholder="https://order.toasttab.com/..."
-            onChange={e => update('orderOnlineUrl', e.target.value)}
+            onChange={e => update('orderOnlineUrl', e.target.value || null)}
             className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
           />
         </Field>
-        <Field label="Reservation URL" hint="OpenTable / Resy / Tock">
+        <Field label="Reservation URL" hint="OpenTable / Resy / Tock link">
           <input
             type="url"
             value={form.reservationUrl ?? ''}
             placeholder="https://www.opentable.com/..."
-            onChange={e => update('reservationUrl', e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
-          />
-        </Field>
-      </Section>
-
-      {/* ── Social ────────────────────────────────────────────── */}
-      <Section title="Social">
-        <Field label="Instagram URL">
-          <input
-            type="url"
-            value={form.instagramUrl ?? ''}
-            placeholder="https://instagram.com/..."
-            onChange={e => update('instagramUrl', e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
-          />
-        </Field>
-        <Field label="Facebook URL">
-          <input
-            type="url"
-            value={form.facebookUrl ?? ''}
-            placeholder="https://facebook.com/..."
-            onChange={e => update('facebookUrl', e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
-          />
-        </Field>
-        <Field label="TikTok URL">
-          <input
-            type="url"
-            value={form.tiktokUrl ?? ''}
-            placeholder="https://tiktok.com/@..."
-            onChange={e => update('tiktokUrl', e.target.value)}
+            onChange={e => update('reservationUrl', e.target.value || null)}
             className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
           />
         </Field>
@@ -251,30 +188,6 @@ function Field({
       <label className="text-xs font-medium text-ink-3 block mb-1">{label}</label>
       {children}
       {hint && <p className="text-[10px] text-ink-4 mt-1">{hint}</p>}
-    </div>
-  )
-}
-
-function ColorField({
-  label, value, onChange,
-}: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <div>
-      <label className="text-[10px] font-medium text-ink-3 block mb-1">{label}</label>
-      <div className="flex gap-2 items-center">
-        <input
-          type="color"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          className="w-10 h-10 rounded border border-ink-5 cursor-pointer"
-        />
-        <input
-          type="text"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          className="flex-1 px-2 py-1.5 text-xs font-mono border border-ink-5 rounded"
-        />
-      </div>
     </div>
   )
 }

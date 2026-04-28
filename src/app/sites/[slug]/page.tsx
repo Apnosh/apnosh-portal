@@ -1,24 +1,21 @@
 /**
  * Apnosh Sites: a public restaurant website.
  *
- * Architecture:
- * - One Next.js page renders any restaurant by slug
- * - Pulls all data from Apnosh source-of-truth tables
- * - When admin updates hours / promotions / events in Apnosh, the
- *   site re-renders on next visit -- no manual website maintenance
+ * Architecture: ZERO duplication. Pulls every piece of data from the
+ * canonical source-of-truth table where it already lives:
  *
- * Components:
- *   <ActivePromo />     -- top banner if a promotion is active right now
- *   <Hero />            -- name, tagline, hero photo, CTAs
- *   <Hours />           -- weekly + special hours, today highlighted
- *   <UpcomingEvents />  -- next 30 days of events
- *   <Location />        -- address, phone, parking, accessibility
+ *   clients              -> name, slug, brief_description, website
+ *   client_brands        -> primary/secondary/accent colors, fonts, logo
+ *   gbp_locations        -> address, hours, special_hours
+ *   client_updates       -> active promotions, upcoming events
+ *   platform_connections -> Instagram / Facebook / TikTok URLs
+ *   site_settings        -> ONLY: is_published, custom_domain
  *
- * Future:
- *   <Menu />            -- when menu_items table is built
- *   <Photos />          -- gallery from connected GBP photos
- *   <Reviews />         -- recent GBP reviews
- *   <OrderOnline />     -- Toast / ChowNow / DoorDash links
+ * The principle: a restaurant manager edits their data ONCE in the
+ * Apnosh dashboard (brand colors in Brand tab, hours in Updates,
+ * social handles in connections). All those edits flow into this
+ * site automatically. site_settings is just "publish y/n" + custom
+ * domain configuration -- nothing presentational.
  */
 
 import { notFound } from 'next/navigation'
@@ -35,7 +32,8 @@ import UpcomingEvents from '@/components/sites/upcoming-events'
 
 interface PageProps { params: Promise<{ slug: string }> }
 
-// Re-validate every 60 seconds so updates from Apnosh appear quickly
+// Re-validate every 60 seconds; publishUpdate() also force-revalidates this path
+// so updates appear in seconds rather than waiting for the timer.
 export const revalidate = 60
 
 function adminDb() {
@@ -46,37 +44,67 @@ function adminDb() {
   )
 }
 
+interface ClientRow {
+  id: string
+  name: string
+  slug: string
+  brief_description: string | null
+  website: string | null
+}
+
+interface BrandRow {
+  primary_color: string | null
+  secondary_color: string | null
+  accent_color: string | null
+  font_display: string | null
+  font_body: string | null
+  logo_url: string | null
+  voice_notes: string | null
+}
+
+interface PlatformConnectionRow {
+  platform: string
+  profile_url: string | null
+  username: string | null
+}
+
 export default async function RestaurantSite({ params }: PageProps) {
   const { slug } = await params
   const db = adminDb()
 
   // 1. Resolve the client by slug
-  const { data: client } = await db
+  const { data: clientRaw } = await db
     .from('clients')
-    .select('id, name, primary_industry, brief_description, website')
+    .select('id, name, slug, brief_description, website')
     .eq('slug', slug)
     .maybeSingle()
-
+  const client = clientRaw as ClientRow | null
   if (!client) notFound()
 
-  // 2. Load site_settings (presentation layer: hero photo, colors, links)
-  const settings = await getPublicSiteSettings(client.id as string)
-  // Hide unpublished sites from the public unless settings is null (no settings = default-show
-  // for backwards compatibility while we migrate clients to explicit publishing)
+  // 2. Site publication state lives in site_settings -- but only that.
+  //    Everything else flows from canonical tables.
+  const settings = await getPublicSiteSettings(client.id)
   if (settings && !settings.isPublished) notFound()
 
-  // 3. Pull the primary location (for now, multi-location sites would
-  //    need a /sites/[slug]/[location] route)
+  // 3. Brand: pull colors / fonts / logo from client_brands
+  const { data: brandRaw } = await db
+    .from('client_brands')
+    .select('primary_color, secondary_color, accent_color, font_display, font_body, logo_url, voice_notes')
+    .eq('client_id', client.id)
+    .maybeSingle()
+  const brand = brandRaw as BrandRow | null
+
+  // 4. Primary location (multi-location sites would add /sites/[slug]/[location])
   const { data: location } = await db
     .from('gbp_locations')
-    .select('location_name, address, hours, special_hours, store_code')
+    .select('location_name, address, hours, special_hours')
     .eq('client_id', client.id)
     .eq('status', 'assigned')
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
 
-  // 4. Pull active promotion (one with valid_from <= now < valid_until)
+  // 5. Active promotion (valid_from <= now < valid_until)
   const now = new Date().toISOString()
   const { data: promoUpdates } = await db
     .from('client_updates')
@@ -93,7 +121,7 @@ export default async function RestaurantSite({ params }: PageProps) {
     return null
   })()
 
-  // 5. Pull upcoming events (start_at >= today, next 30 days)
+  // 6. Upcoming events (next 30 days)
   const { data: eventUpdates } = await db
     .from('client_updates')
     .select('payload')
@@ -111,7 +139,47 @@ export default async function RestaurantSite({ params }: PageProps) {
     .sort((a, b) => a.start_at.localeCompare(b.start_at))
     .slice(0, 5)
 
-  // Compose CTAs from site settings (preferred) with fallback to client.website
+  // 7. Social profile URLs from platform_connections
+  const { data: socialRaw } = await db
+    .from('platform_connections')
+    .select('platform, profile_url, username')
+    .eq('business_id', client.id)
+  const socials = (socialRaw as PlatformConnectionRow[] | null) ?? []
+  const findSocial = (p: string) => {
+    const row = socials.find(s => s.platform.toLowerCase() === p)
+    if (!row) return null
+    if (row.profile_url) return row.profile_url
+    if (row.username) {
+      // Construct from username if URL not stored
+      if (p === 'instagram') return `https://instagram.com/${row.username.replace(/^@/, '')}`
+      if (p === 'facebook')  return `https://facebook.com/${row.username}`
+      if (p === 'tiktok')    return `https://tiktok.com/@${row.username.replace(/^@/, '')}`
+    }
+    return null
+  }
+  const instagramUrl = findSocial('instagram')
+  const facebookUrl  = findSocial('facebook')
+  const tiktokUrl    = findSocial('tiktok')
+
+  // 8. Look for a hero photo: try brand_assets tagged 'hero', then fall back
+  //    to logo_url, then nothing. Future: dedicated photo gallery selection.
+  const { data: heroAsset } = await db
+    .from('brand_assets')
+    .select('url')
+    .eq('client_id', client.id)
+    .contains('tags', ['hero'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const heroPhotoUrl = (heroAsset?.url as string | undefined) ?? undefined
+
+  // ── Compose CTAs ────────────────────────────────────────────
+  // Primary CTA preference order:
+  //  1. Reservation link (if client has one configured)
+  //  2. Order online link (if configured)
+  //  3. Find us on the map
+  // Secondary fills the unused slot. We don't have reservation/order URLs in
+  // canonical tables yet, so they come from site_settings for now.
   const primaryCta = settings?.reservationUrl
     ? { label: 'Reserve a table', href: settings.reservationUrl }
     : settings?.orderOnlineUrl
@@ -126,15 +194,15 @@ export default async function RestaurantSite({ params }: PageProps) {
   const secondaryCta = settings?.orderOnlineUrl && settings?.reservationUrl
     ? { label: 'Order online', href: settings.orderOnlineUrl }
     : (client.website
-      ? { label: 'Visit website', href: client.website as string }
+      ? { label: 'Visit website', href: client.website }
       : undefined)
 
-  // Apply theme via inline CSS variables -- works even without site_settings (fallbacks)
+  // ── Theme: pull from client_brands ──────────────────────────
   const themeStyle: React.CSSProperties = {
-    ['--site-bg' as string]: settings?.backgroundColor ?? '#FFFFFF',
-    ['--site-text' as string]: settings?.textColor ?? '#1C1917',
-    ['--site-primary' as string]: settings?.primaryColor ?? '#2D4A22',
-    ['--site-accent' as string]: settings?.accentColor ?? '#D97706',
+    ['--site-bg' as string]: '#FFFFFF',
+    ['--site-text' as string]: '#1C1917',
+    ['--site-primary' as string]: brand?.primary_color ?? '#2D4A22',
+    ['--site-accent' as string]: brand?.accent_color ?? '#D97706',
   }
 
   return (
@@ -145,9 +213,9 @@ export default async function RestaurantSite({ params }: PageProps) {
       <ActivePromo promotion={activePromo} />
 
       <Hero
-        name={client.name as string}
-        tagline={settings?.tagline ?? (client.brief_description as string | undefined)}
-        heroPhotoUrl={settings?.heroPhotoUrl ?? undefined}
+        name={client.name}
+        tagline={client.brief_description ?? undefined}
+        heroPhotoUrl={heroPhotoUrl}
         primaryCta={primaryCta}
         secondaryCta={secondaryCta}
         activePromoName={activePromo?.name}
@@ -164,21 +232,21 @@ export default async function RestaurantSite({ params }: PageProps) {
 
       <Location
         address={location?.address as string | undefined}
-        websiteUrl={settings?.orderOnlineUrl ?? (client.website as string | undefined)}
+        websiteUrl={settings?.orderOnlineUrl ?? client.website ?? undefined}
       />
 
       <footer className="py-8 px-6 text-center text-xs text-stone-400 border-t border-stone-100">
-        <p>© {new Date().getFullYear()} {client.name as string}</p>
-        {(settings?.instagramUrl || settings?.facebookUrl || settings?.tiktokUrl) && (
+        <p>© {new Date().getFullYear()} {client.name}</p>
+        {(instagramUrl || facebookUrl || tiktokUrl) && (
           <p className="mt-2 flex items-center justify-center gap-3">
-            {settings?.instagramUrl && (
-              <a href={settings.instagramUrl} target="_blank" rel="noopener noreferrer" className="hover:text-stone-600">Instagram</a>
+            {instagramUrl && (
+              <a href={instagramUrl} target="_blank" rel="noopener noreferrer" className="hover:text-stone-600">Instagram</a>
             )}
-            {settings?.facebookUrl && (
-              <a href={settings.facebookUrl} target="_blank" rel="noopener noreferrer" className="hover:text-stone-600">Facebook</a>
+            {facebookUrl && (
+              <a href={facebookUrl} target="_blank" rel="noopener noreferrer" className="hover:text-stone-600">Facebook</a>
             )}
-            {settings?.tiktokUrl && (
-              <a href={settings.tiktokUrl} target="_blank" rel="noopener noreferrer" className="hover:text-stone-600">TikTok</a>
+            {tiktokUrl && (
+              <a href={tiktokUrl} target="_blank" rel="noopener noreferrer" className="hover:text-stone-600">TikTok</a>
             )}
           </p>
         )}
