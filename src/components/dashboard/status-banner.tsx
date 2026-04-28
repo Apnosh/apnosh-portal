@@ -33,7 +33,7 @@ export default function StatusBanner({ headline, businessName, pct, up }: Status
           <span style={{ color: up ? 'var(--db-up)' : 'var(--db-down)', fontWeight: 600 }}>
             {pct}
           </span>{' '}
-          this month
+          last 30 days
         </div>
       </div>
     </div>

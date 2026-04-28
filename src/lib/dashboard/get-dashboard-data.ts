@@ -72,14 +72,14 @@ export async function getDashboardData(
   if (!isNaN(visPct) && visPct < -10) {
     actionItems.push({
       icon: 'alert',
-      title: `Social reach dropped ${Math.abs(visPct)}% this month`,
+      title: `Social reach dropped ${Math.abs(visPct)}% in the last 30 days`,
       href: '/dashboard/social/performance',
     })
   }
   if (!isNaN(ftPct) && ftPct < -10) {
     actionItems.push({
       icon: 'alert',
-      title: `Foot traffic dropped ${Math.abs(ftPct)}% this month`,
+      title: `Foot traffic dropped ${Math.abs(ftPct)}% in the last 30 days`,
       href: '/dashboard/analytics',
     })
   }
