@@ -232,8 +232,12 @@ export function parseGmbInsightsCsv(
       website_clicks: get(row, 'Website clicks'),
       calls: get(row, 'Calls'),
       directions: get(row, 'Directions'),
-      conversations: get(row, 'Messages'),
-      bookings: get(row, 'Bookings'),
+      conversations: get(row, 'Messages') || get(row, 'Conversations'),
+      bookings: get(row, 'Bookings') || get(row, 'Bookings count'),
+      photo_views: get(row, 'Photo views') || get(row, 'Photos views'),
+      photo_count: get(row, 'Photo count') || get(row, 'Total photos'),
+      post_views: get(row, 'Post views') || get(row, 'Posts views'),
+      post_clicks: get(row, 'Post clicks') || get(row, 'Posts clicks'),
     })
   }
 

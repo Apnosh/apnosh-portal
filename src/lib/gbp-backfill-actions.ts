@@ -530,33 +530,47 @@ export interface LocalSeoDailyRow {
   post_views: number
 }
 
+export interface PeriodTotals {
+  impressions: number
+  impressionsSearch: number
+  impressionsMaps: number
+  actions: number
+  calls: number
+  directions: number
+  website: number
+  photoViews: number
+  postViews: number
+}
+
+export interface AnomalyCallout {
+  /** "calls", "impressions", etc. for icon selection */
+  metric: 'calls' | 'directions' | 'website' | 'impressions' | 'photo_views'
+  /** Headline like "Calls dropped 89% at IJ Sushi Alderwood mall" */
+  headline: string
+  /** Plain-English explainer */
+  body: string
+  /** Whether this is a positive or negative movement */
+  tone: 'good' | 'bad'
+  /** Sortable severity: bigger = more dramatic */
+  severity: number
+}
+
 export interface LocalSeoSummary {
   daysCovered: number
   lastSyncAt: string | null
   dateFirst: string | null
   dateLast: string | null
-  /**
-   * 'daily'   = one row per location per day (Looker / API)
-   * 'monthly' = one row per location per month-end (GMB Insights aggregate CSV)
-   * Drives whether KPI cards say "(30d)" vs "(March 2026)" and whether
-   * the trend chart renders as a line or bars.
-   */
   granularity: 'daily' | 'monthly'
-  /** Source of the most recent metric row (for the "data origin" line) */
   lastSource: string | null
-  totals30d: {
-    impressions: number; actions: number; calls: number; directions: number; website: number
-  }
-  totalsPrev30d: {
-    impressions: number; actions: number; calls: number; directions: number; website: number
-  }
-  /** Human-readable label for the current period: "March 2026" or "Last 30d" */
+  totals30d: PeriodTotals
+  totalsPrev30d: PeriodTotals
   currentPeriodLabel: string
-  /** Same for the prior period: "February 2026" or "Prior 30d" */
   priorPeriodLabel: string
   topQueries: Array<{ query: string; impressions: number }>
   /** Aggregated -- one entry per distinct date (sums all locations) */
   daily: LocalSeoDailyRow[]
+  /** Auto-detected callouts: biggest movers, worth admin attention */
+  anomalies: AnomalyCallout[]
 }
 
 function isMonthEnd(iso: string): boolean {
@@ -628,34 +642,48 @@ export async function getLocalSeoSummary(
   // - daily: rolling last 30d vs prior 30d
   // - monthly: most recent month-end vs the one before
   const today = new Date()
-  let totals30d: LocalSeoSummary['totals30d']
-  let totalsPrev30d: LocalSeoSummary['totalsPrev30d']
+  const emptyTotals: PeriodTotals = {
+    impressions: 0, impressionsSearch: 0, impressionsMaps: 0,
+    actions: 0, calls: 0, directions: 0, website: 0,
+    photoViews: 0, postViews: 0,
+  }
+  let totals30d: PeriodTotals = { ...emptyTotals }
+  let totalsPrev30d: PeriodTotals = { ...emptyTotals }
   let currentPeriodLabel = 'Last 30d'
   let priorPeriodLabel = 'Prior 30d'
 
   if (granularity === 'monthly' && daily.length > 0) {
-    const sumRow = (r: LocalSeoDailyRow | undefined) => r ? {
+    const fromRow = (r: LocalSeoDailyRow | undefined): PeriodTotals => r ? {
       impressions: r.impressions_total,
+      impressionsSearch: r.impressions_search,
+      impressionsMaps: r.impressions_maps,
       actions: r.calls + r.directions + r.website_clicks,
       calls: r.calls, directions: r.directions, website: r.website_clicks,
-    } : { impressions: 0, actions: 0, calls: 0, directions: 0, website: 0 }
+      photoViews: r.photo_views, postViews: r.post_views,
+    } : { ...emptyTotals }
     const last = daily[daily.length - 1]
     const prev = daily[daily.length - 2]
-    totals30d = sumRow(last)
-    totalsPrev30d = sumRow(prev)
+    totals30d = fromRow(last)
+    totalsPrev30d = fromRow(prev)
     currentPeriodLabel = monthLabel(last.date)
     priorPeriodLabel = prev ? monthLabel(prev.date) : 'No prior month'
   } else {
     const d30 = new Date(today); d30.setDate(d30.getDate() - 30)
     const d60 = new Date(today); d60.setDate(d60.getDate() - 60)
     const iso = (d: Date) => d.toISOString().slice(0, 10)
-    const sumWindow = (fromIso: string, toIso: string) => {
+    const sumWindow = (fromIso: string, toIso: string): PeriodTotals => {
       const win = daily.filter(r => r.date >= fromIso && r.date < toIso)
-      const imp = win.reduce((a, r) => a + r.impressions_total, 0)
-      const calls = win.reduce((a, r) => a + r.calls, 0)
-      const dirs = win.reduce((a, r) => a + r.directions, 0)
-      const web = win.reduce((a, r) => a + r.website_clicks, 0)
-      return { impressions: imp, actions: calls + dirs + web, calls, directions: dirs, website: web }
+      const sum = (k: keyof LocalSeoDailyRow) => win.reduce((a, r) => a + (r[k] as number), 0)
+      const calls = sum('calls'), dirs = sum('directions'), web = sum('website_clicks')
+      return {
+        impressions: sum('impressions_total'),
+        impressionsSearch: sum('impressions_search'),
+        impressionsMaps: sum('impressions_maps'),
+        actions: calls + dirs + web,
+        calls, directions: dirs, website: web,
+        photoViews: sum('photo_views'),
+        postViews: sum('post_views'),
+      }
     }
     totals30d = sumWindow(iso(d30), iso(new Date(today.getTime() + 86400000)))
     totalsPrev30d = sumWindow(iso(d60), iso(d30))
@@ -667,6 +695,104 @@ export async function getLocalSeoSummary(
     (b.date as string).localeCompare(a.date as string)
   )
   const lastSource = (sortedBySource[0]?.source as string | null) ?? null
+
+  // Anomaly detection -- find the per-location metrics with the biggest
+  // (signed) percent change from prior period. Surface the top 3 most
+  // dramatic, mixing positive and negative so admins see both wins and
+  // problems rather than only doom-and-gloom.
+  const anomalies: AnomalyCallout[] = []
+  if (granularity === 'monthly' && daily.length >= 2) {
+    // Need per-location detail to call out specific stores. Re-query.
+    const lastDate = daily[daily.length - 1].date
+    const prevDate = daily[daily.length - 2].date
+    const { data: locMetrics } = await admin
+      .from('gbp_metrics')
+      .select('gbp_location_id, date, impressions_total, calls, directions, website_clicks, photo_views')
+      .eq('client_id', clientId)
+      .in('date', [lastDate, prevDate])
+    const { data: locInfo } = await admin
+      .from('gbp_locations')
+      .select('id, location_name')
+      .eq('client_id', clientId)
+    const nameById = new Map<string, string>(
+      (locInfo ?? []).map(l => [l.id as string, l.location_name as string])
+    )
+
+    type Pair = { curr: number; prev: number }
+    const perLoc = new Map<string, {
+      impressions: Pair; calls: Pair; directions: Pair; website: Pair; photoViews: Pair
+    }>()
+    for (const m of locMetrics ?? []) {
+      const id = m.gbp_location_id as string | null
+      if (!id) continue
+      const isCurrent = (m.date as string) === lastDate
+      const bucket = perLoc.get(id) ?? {
+        impressions: { curr: 0, prev: 0 }, calls: { curr: 0, prev: 0 },
+        directions: { curr: 0, prev: 0 }, website: { curr: 0, prev: 0 },
+        photoViews: { curr: 0, prev: 0 },
+      }
+      const k = isCurrent ? 'curr' : 'prev'
+      bucket.impressions[k] += (m.impressions_total as number) ?? 0
+      bucket.calls[k]       += (m.calls as number) ?? 0
+      bucket.directions[k]  += (m.directions as number) ?? 0
+      bucket.website[k]     += (m.website_clicks as number) ?? 0
+      bucket.photoViews[k]  += (m.photo_views as number) ?? 0
+      perLoc.set(id, bucket)
+    }
+
+    // Score every (location, metric) combo by absolute percent change,
+    // weighted by absolute volume so a 100% jump on 1 call doesn't
+    // outrank a 30% jump on 100 calls. severity = |pct| * sqrt(maxVolume).
+    const candidates: Array<AnomalyCallout & { _key: string }> = []
+    const metricLabels: Record<string, { name: string; unit: string }> = {
+      impressions: { name: 'Impressions', unit: 'impressions' },
+      calls: { name: 'Calls', unit: 'calls' },
+      directions: { name: 'Directions', unit: 'directions' },
+      website: { name: 'Website clicks', unit: 'website clicks' },
+      photoViews: { name: 'Photo views', unit: 'photo views' },
+    }
+    const metricKey: Record<string, AnomalyCallout['metric']> = {
+      impressions: 'impressions', calls: 'calls', directions: 'directions',
+      website: 'website', photoViews: 'photo_views',
+    }
+    for (const [id, b] of perLoc) {
+      const name = nameById.get(id) ?? 'Unknown location'
+      for (const key of ['impressions', 'calls', 'directions', 'website', 'photoViews'] as const) {
+        const { curr, prev } = b[key]
+        if (prev === 0 && curr === 0) continue
+        // Skip tiny absolute volumes: don't call out 1 -> 0
+        if (Math.max(curr, prev) < 5) continue
+        const pct = prev === 0 ? 100 : ((curr - prev) / prev) * 100
+        if (Math.abs(pct) < 25) continue   // ignore movements under 25%
+        const tone: 'good' | 'bad' = pct >= 0 ? 'good' : 'bad'
+        const severity = Math.abs(pct) * Math.sqrt(Math.max(curr, prev))
+        const verb = tone === 'good' ? 'jumped' : 'dropped'
+        candidates.push({
+          _key: `${id}:${key}`,
+          metric: metricKey[key],
+          headline: `${metricLabels[key].name} ${verb} ${Math.abs(pct).toFixed(0)}% at ${name}`,
+          body: `${prev.toLocaleString()} ${metricLabels[key].unit} in ${priorPeriodLabel} → ${curr.toLocaleString()} in ${currentPeriodLabel}.`,
+          tone,
+          severity,
+        })
+      }
+    }
+    // Top 3 by severity, but try to mix at least one positive if available
+    candidates.sort((a, b) => b.severity - a.severity)
+    const picked: AnomalyCallout[] = []
+    let goodIncluded = false
+    for (const c of candidates) {
+      if (picked.length >= 3) break
+      if (c.tone === 'good') goodIncluded = true
+      picked.push({ metric: c.metric, headline: c.headline, body: c.body, tone: c.tone, severity: c.severity })
+    }
+    if (!goodIncluded && candidates.some(c => c.tone === 'good')) {
+      const goodOne = candidates.find(c => c.tone === 'good')!
+      if (picked.length >= 3) picked[2] = { metric: goodOne.metric, headline: goodOne.headline, body: goodOne.body, tone: goodOne.tone, severity: goodOne.severity }
+      else picked.push({ metric: goodOne.metric, headline: goodOne.headline, body: goodOne.body, tone: goodOne.tone, severity: goodOne.severity })
+    }
+    anomalies.push(...picked)
+  }
 
   // Aggregate top queries across the window
   const queryTotals = new Map<string, number>()
@@ -706,6 +832,7 @@ export async function getLocalSeoSummary(
       priorPeriodLabel,
       topQueries,
       daily,
+      anomalies,
     },
   }
 }
@@ -717,21 +844,23 @@ export async function getLocalSeoSummary(
 // ---------------------------------------------------------------------------
 
 export interface LocalSeoLocationRow {
-  locationId: string                // gbp_locations.id
+  locationId: string
   locationName: string
   storeCode: string
   address: string | null
-  // Last-30d totals
+  // Current-period totals
   impressions: number
   calls: number
   directions: number
   websiteClicks: number
-  // Prior-30d for delta
+  // Prior-period for delta
   impressionsPrev: number
   callsPrev: number
   directionsPrev: number
   websiteClicksPrev: number
   daysWithData: number
+  /** Monthly impressions for inline sparkline (oldest -> newest) */
+  trend: number[]
 }
 
 export async function getLocalSeoLocations(
@@ -758,45 +887,60 @@ export async function getLocalSeoLocations(
   const d30 = new Date(today); d30.setDate(d30.getDate() - 30)
   const d30Iso = d30.toISOString().slice(0, 10)
 
+  // Pull a full year of impressions for the inline sparkline trend.
+  const yearAgo = new Date(today); yearAgo.setDate(yearAgo.getDate() - 365)
+  const yearAgoIso = yearAgo.toISOString().slice(0, 10)
   const { data: metrics, error: metricsErr } = await admin
     .from('gbp_metrics')
     .select('gbp_location_id, date, impressions_total, calls, directions, website_clicks')
     .in('gbp_location_id', locs.map(l => l.id))
-    .gte('date', cutoffIso)
+    .gte('date', yearAgoIso < cutoffIso ? yearAgoIso : cutoffIso)
+    .order('date', { ascending: true })
   if (metricsErr) return { success: false, error: metricsErr.message }
 
-  // 3. Roll up per-location, splitting current-30d vs prior-30d
+  // 3. Roll up per-location, splitting current-30d vs prior-30d.
+  // Also keep a date->impressions map per location for the sparkline.
   const byLocation = new Map<string, {
     imp: number; calls: number; dirs: number; web: number
     impPrev: number; callsPrev: number; dirsPrev: number; webPrev: number
     days: Set<string>
+    trend: Map<string, number>   // date -> impressions
   }>()
   for (const l of locs) {
     byLocation.set(l.id as string, {
       imp: 0, calls: 0, dirs: 0, web: 0,
       impPrev: 0, callsPrev: 0, dirsPrev: 0, webPrev: 0,
       days: new Set(),
+      trend: new Map(),
     })
   }
   for (const m of metrics ?? []) {
     const id = m.gbp_location_id as string
     const bucket = byLocation.get(id)
     if (!bucket) continue
-    const isCurrent = (m.date as string) >= d30Iso
+    const date = m.date as string
     const imp = (m.impressions_total as number) ?? 0
-    const calls = (m.calls as number) ?? 0
-    const dirs = (m.directions as number) ?? 0
-    const web = (m.website_clicks as number) ?? 0
-    if (isCurrent) {
-      bucket.imp += imp; bucket.calls += calls; bucket.dirs += dirs; bucket.web += web
-    } else {
-      bucket.impPrev += imp; bucket.callsPrev += calls; bucket.dirsPrev += dirs; bucket.webPrev += web
+    bucket.trend.set(date, (bucket.trend.get(date) ?? 0) + imp)
+    // Only count rolling-30d window for the period totals
+    if (date >= cutoffIso) {
+      const calls = (m.calls as number) ?? 0
+      const dirs = (m.directions as number) ?? 0
+      const web = (m.website_clicks as number) ?? 0
+      const isCurrent = date >= d30Iso
+      if (isCurrent) {
+        bucket.imp += imp; bucket.calls += calls; bucket.dirs += dirs; bucket.web += web
+      } else {
+        bucket.impPrev += imp; bucket.callsPrev += calls; bucket.dirsPrev += dirs; bucket.webPrev += web
+      }
+      bucket.days.add(date)
     }
-    bucket.days.add(m.date as string)
   }
 
   const rows: LocalSeoLocationRow[] = locs.map(l => {
     const b = byLocation.get(l.id as string)!
+    const trend = [...b.trend.entries()]
+      .sort(([a], [c]) => a.localeCompare(c))
+      .map(([, v]) => v)
     return {
       locationId: l.id as string,
       locationName: l.location_name as string,
@@ -811,6 +955,7 @@ export async function getLocalSeoLocations(
       directionsPrev: b.dirsPrev,
       websiteClicksPrev: b.webPrev,
       daysWithData: b.days.size,
+      trend,
     }
   })
 
