@@ -49,6 +49,7 @@ const QUICK_ACTION_KEYS: QuickAction[] = ['hours', 'menu_item', 'promotion', 'ev
 export default function SiteManager({ overview, locations }: Props) {
   const router = useRouter()
   const [activeAction, setActiveAction] = useState<QuickAction | null>(null)
+  const [toast, setToast] = useState<{ msg: string } | null>(null)
 
   const siteLabel: Record<MySiteOverview['site']['siteType'], string> = {
     none: 'No site connected',
@@ -160,10 +161,24 @@ export default function SiteManager({ overview, locations }: Props) {
           locations={locations}
           onClose={() => setActiveAction(null)}
           onSuccess={() => {
+            const meta = ACTION_META[activeAction]
             setActiveAction(null)
+            setToast({ msg: `${meta.label.replace(/^./, c => c.toUpperCase())} published. Live across your connected platforms.` })
+            setTimeout(() => setToast(null), 6000)
             router.refresh()
           }}
         />
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 right-6 z-50 bg-ink text-white rounded-lg shadow-lg px-4 py-3 flex items-center gap-3 max-w-sm animate-in fade-in slide-in-from-bottom-2"
+        >
+          <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
+          <span className="text-sm">{toast.msg}</span>
+        </div>
       )}
     </div>
   )

@@ -169,7 +169,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { data: user, loading: userLoading } = useUser()
-  const { enrolledServices, loading: clientLoading } = useClient()
+  const { client, enrolledServices, loading: clientLoading } = useClient()
   const [approvalCount, setApprovalCount] = useState(0)
 
   // Fetch pending approval count
@@ -202,9 +202,13 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval)
   }, [])
 
-  const displayName = user?.full_name || 'User'
+  // Display name preference: explicit user name -> restaurant name -> email
+  // local-part -> 'User'. Avoids the generic "User · Client" label when the
+  // auth user record has no full_name set.
+  const emailLocal = user?.email?.split('@')[0]
+  const displayName = user?.full_name || client?.name || emailLocal || 'User'
   const initials = displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-  const roleLabel = user?.role === 'admin' ? 'Admin' : 'Client'
+  const roleLabel = user?.role === 'admin' ? 'Admin' : (client?.name ? client.name : 'Client')
 
   const isActive = (href: string, exact?: boolean) => {
     if (exact || href === '/dashboard') return pathname === href
