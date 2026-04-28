@@ -185,9 +185,12 @@ function LocationLoader({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (clientLoading || !client?.id) return
     let cancelled = false
+    console.log('[LocationLoader] fetching for client', client.id)
     getClientLocations(client.id).then(rows => {
-      if (!cancelled) setLocations(rows)
-    })
+      if (cancelled) return
+      console.log('[LocationLoader] got', rows.length, 'locations:', rows.map(r => r.location_name))
+      setLocations(rows)
+    }).catch(err => console.error('[LocationLoader] error:', err))
     return () => { cancelled = true }
   }, [client?.id, clientLoading])
 
