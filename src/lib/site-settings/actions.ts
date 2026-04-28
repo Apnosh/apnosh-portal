@@ -32,9 +32,25 @@ async function requireAdmin(): Promise<{ ok: true; userId: string } | { ok: fals
   return { ok: true, userId: user.id }
 }
 
+export type SiteType = 'none' | 'apnosh_generated' | 'apnosh_custom' | 'external_repo'
+
 export interface SiteSettings {
   id: string
   clientId: string
+  // Site backend type + connection info
+  siteType: SiteType
+  externalSiteUrl: string | null
+  externalRepoUrl: string | null
+  externalDeployHookUrl: string | null
+  externalApiKey: string | null
+  // Publication state
+  isPublished: boolean
+  customDomain: string | null
+  customDomainVerifiedAt: string | null
+  // Action links (still needed: not yet on canonical clients table)
+  orderOnlineUrl: string | null
+  reservationUrl: string | null
+  // Legacy / unused but kept for backwards compat
   tagline: string | null
   heroPhotoUrl: string | null
   logoUrl: string | null
@@ -44,21 +60,21 @@ export interface SiteSettings {
   textColor: string | null
   headingFont: string | null
   bodyFont: string | null
-  orderOnlineUrl: string | null
-  reservationUrl: string | null
   deliveryUrls: Record<string, string>
   instagramUrl: string | null
   facebookUrl: string | null
   tiktokUrl: string | null
-  isPublished: boolean
-  customDomain: string | null
-  customDomainVerifiedAt: string | null
 }
 
 function rowToSettings(row: Record<string, unknown>): SiteSettings {
   return {
     id: row.id as string,
     clientId: row.client_id as string,
+    siteType: ((row.site_type as SiteType | null) ?? 'none'),
+    externalSiteUrl: (row.external_site_url as string | null) ?? null,
+    externalRepoUrl: (row.external_repo_url as string | null) ?? null,
+    externalDeployHookUrl: (row.external_deploy_hook_url as string | null) ?? null,
+    externalApiKey: (row.external_api_key as string | null) ?? null,
     tagline: (row.tagline as string | null) ?? null,
     heroPhotoUrl: (row.hero_photo_url as string | null) ?? null,
     logoUrl: (row.logo_url as string | null) ?? null,
@@ -97,6 +113,19 @@ export async function getSiteSettings(clientId: string): Promise<
 }
 
 export interface SiteSettingsInput {
+  // Site backend
+  siteType?: SiteType
+  externalSiteUrl?: string | null
+  externalRepoUrl?: string | null
+  externalDeployHookUrl?: string | null
+  externalApiKey?: string | null
+  // Publication
+  isPublished?: boolean
+  customDomain?: string | null
+  // Action links
+  orderOnlineUrl?: string | null
+  reservationUrl?: string | null
+  // Legacy fields (still accepted but deprecated)
   tagline?: string | null
   heroPhotoUrl?: string | null
   logoUrl?: string | null
@@ -106,14 +135,10 @@ export interface SiteSettingsInput {
   textColor?: string | null
   headingFont?: string | null
   bodyFont?: string | null
-  orderOnlineUrl?: string | null
-  reservationUrl?: string | null
   deliveryUrls?: Record<string, string>
   instagramUrl?: string | null
   facebookUrl?: string | null
   tiktokUrl?: string | null
-  isPublished?: boolean
-  customDomain?: string | null
 }
 
 export async function upsertSiteSettings(
@@ -127,6 +152,11 @@ export async function upsertSiteSettings(
 
   // Translate camelCase -> snake_case for DB
   const dbRow: Record<string, unknown> = { client_id: clientId }
+  if (input.siteType !== undefined)              dbRow.site_type = input.siteType
+  if (input.externalSiteUrl !== undefined)       dbRow.external_site_url = input.externalSiteUrl
+  if (input.externalRepoUrl !== undefined)       dbRow.external_repo_url = input.externalRepoUrl
+  if (input.externalDeployHookUrl !== undefined) dbRow.external_deploy_hook_url = input.externalDeployHookUrl
+  if (input.externalApiKey !== undefined)        dbRow.external_api_key = input.externalApiKey
   if (input.tagline !== undefined)         dbRow.tagline = input.tagline
   if (input.heroPhotoUrl !== undefined)    dbRow.hero_photo_url = input.heroPhotoUrl
   if (input.logoUrl !== undefined)         dbRow.logo_url = input.logoUrl

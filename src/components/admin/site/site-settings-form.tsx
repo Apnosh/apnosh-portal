@@ -3,29 +3,71 @@
 /**
  * Admin form for Apnosh Site settings.
  *
- * IMPORTANT: this form ONLY handles things that are truly site-specific.
- * Everything else (name, tagline, brand colors, fonts, logo, social
- * handles, hours) flows from the canonical client tables -- edit those
- * in their normal places (Brand tab, Connections, Updates) and the
- * site auto-updates.
+ * The biggest decision: which backend renders this restaurant's site?
  *
- * Site-specific fields:
- *   - Publication state (is the site live?)
- *   - Custom domain (future: yourrestaurant.com -> CNAME apnoshsites.com)
- *   - Order online URL (no clear home in clients yet)
- *   - Reservation URL (no clear home in clients yet)
+ *   none              -> No site through Apnosh, client uses their existing one
+ *   apnosh_generated  -> Claude AI generates a unique site from their data
+ *   apnosh_custom     -> Apnosh team hand-codes a one-off Next.js page
+ *   external_repo     -> Client has their own GitHub + Vercel site,
+ *                        we connect via deploy hooks + public API
+ *
+ * Most other settings are inferred from canonical client tables. This
+ * form only stores presentation choices that don't fit elsewhere.
  */
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, CheckCircle2, AlertCircle, Globe, ExternalLink, Link2 } from 'lucide-react'
-import { upsertSiteSettings, type SiteSettings, type SiteSettingsInput } from '@/lib/site-settings/actions'
+import {
+  Loader2, CheckCircle2, AlertCircle, Globe, ExternalLink, Link2,
+  Sparkles, Code, Server, Slash,
+} from 'lucide-react'
+import {
+  upsertSiteSettings,
+  type SiteSettings, type SiteSettingsInput, type SiteType,
+} from '@/lib/site-settings/actions'
 
 interface Props {
   clientId: string
   clientSlug: string
   initial: SiteSettings | null
 }
+
+const SITE_TYPES: Array<{
+  value: SiteType
+  label: string
+  description: string
+  icon: typeof Globe
+  status: 'available' | 'coming_soon' | 'admin_only'
+}> = [
+  {
+    value: 'none',
+    label: 'No site (marketing ops only)',
+    description: 'Client keeps their existing website. Apnosh handles GBP, social, reviews, email but does not host or generate a site.',
+    icon: Slash,
+    status: 'available',
+  },
+  {
+    value: 'apnosh_generated',
+    label: 'AI-generated site',
+    description: "Claude reads the client's brand voice, goals, target customer, photos, and generates a unique site. Re-generatable, editable per-section.",
+    icon: Sparkles,
+    status: 'coming_soon',
+  },
+  {
+    value: 'apnosh_custom',
+    label: 'Apnosh-built custom site',
+    description: 'Apnosh team hand-codes a one-off Next.js page for restaurants who want bespoke design. Updates still flow through canonical data.',
+    icon: Code,
+    status: 'admin_only',
+  },
+  {
+    value: 'external_repo',
+    label: 'External site (GitHub + Vercel)',
+    description: 'Client has their own site in their own repo. Apnosh fans out updates by triggering their Vercel deploy hook. Their site fetches data from our public API.',
+    icon: Server,
+    status: 'available',
+  },
+]
 
 export default function SiteSettingsForm({ clientId, clientSlug, initial }: Props) {
   const router = useRouter()
@@ -34,10 +76,15 @@ export default function SiteSettingsForm({ clientId, clientSlug, initial }: Prop
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
   const [form, setForm] = useState<SiteSettingsInput>(() => ({
+    siteType: initial?.siteType ?? 'none',
     isPublished: initial?.isPublished ?? false,
     customDomain: initial?.customDomain ?? '',
     orderOnlineUrl: initial?.orderOnlineUrl ?? '',
     reservationUrl: initial?.reservationUrl ?? '',
+    externalSiteUrl: initial?.externalSiteUrl ?? '',
+    externalRepoUrl: initial?.externalRepoUrl ?? '',
+    externalDeployHookUrl: initial?.externalDeployHookUrl ?? '',
+    externalApiKey: initial?.externalApiKey ?? '',
   }))
 
   const update = <K extends keyof SiteSettingsInput>(k: K, v: SiteSettingsInput[K]) => {
@@ -50,11 +97,16 @@ export default function SiteSettingsForm({ clientId, clientSlug, initial }: Prop
     const res = await upsertSiteSettings(clientId, form)
     setBusy(false)
     if (res.success) {
-      setMessage({ ok: true, text: 'Saved. Site updated.' })
+      setMessage({ ok: true, text: 'Saved.' })
       startTransition(() => router.refresh())
     } else {
       setMessage({ ok: false, text: res.error })
     }
+  }
+
+  const generateApiKey = () => {
+    const key = `apk_${crypto.randomUUID().replace(/-/g, '')}`
+    update('externalApiKey', key)
   }
 
   return (
@@ -68,83 +120,182 @@ export default function SiteSettingsForm({ clientId, clientSlug, initial }: Prop
         </div>
       )}
 
-      {/* ── Information note ──────────────────────────────────── */}
-      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-        <div className="flex items-start gap-2.5">
-          <CheckCircle2 className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-          <div className="text-sm text-blue-900">
-            <p className="font-medium mb-1">The site pulls from your client profile automatically</p>
-            <p className="text-blue-800 leading-relaxed">
-              Restaurant name, tagline, brand colors, fonts, logo, social handles, hours, and address all come
-              from the canonical sources (Brand tab, Profile, Connections, Updates). Edit them in their normal
-              places and the site updates. This page is just for site-specific things.
+      {/* ── Backend type picker ───────────────────────────────── */}
+      <Section title="Site backend" icon={Server}>
+        <p className="text-xs text-ink-3">How is this restaurant's website built?</p>
+        <div className="space-y-2">
+          {SITE_TYPES.map(t => {
+            const active = form.siteType === t.value
+            const disabled = t.status === 'coming_soon'
+            const Icon = t.icon
+            return (
+              <button
+                key={t.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => update('siteType', t.value)}
+                className={`w-full text-left p-3 rounded-lg border transition-colors flex items-start gap-3 ${
+                  active ? 'border-brand bg-brand/5' :
+                  disabled ? 'border-ink-6 bg-bg-2/50 opacity-60 cursor-not-allowed' :
+                  'border-ink-5 hover:border-ink-4 bg-white'
+                }`}
+              >
+                <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${active ? 'text-brand' : 'text-ink-3'}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-medium ${active ? 'text-ink' : 'text-ink-2'}`}>{t.label}</span>
+                    {t.status === 'coming_soon' && (
+                      <span className="text-[10px] uppercase tracking-wide text-amber-600 font-semibold">Coming soon</span>
+                    )}
+                    {t.status === 'admin_only' && (
+                      <span className="text-[10px] uppercase tracking-wide text-ink-4 font-semibold">Admin only</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-ink-3 mt-0.5 leading-snug">{t.description}</p>
+                </div>
+                {active && <CheckCircle2 className="w-4 h-4 text-brand shrink-0 mt-0.5" />}
+              </button>
+            )
+          })}
+        </div>
+      </Section>
+
+      {/* ── External-site config (only for external_repo) ─────── */}
+      {form.siteType === 'external_repo' && (
+        <Section title="External site connection" icon={ExternalLink}>
+          <Field
+            label="Public site URL"
+            hint="Where the live site is. Used for the View Site link."
+          >
+            <input
+              type="url"
+              value={form.externalSiteUrl ?? ''}
+              placeholder="https://yourrestaurant.com"
+              onChange={e => update('externalSiteUrl', e.target.value || null)}
+              className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
+            />
+          </Field>
+
+          <Field label="GitHub repository URL" hint="Optional, for reference">
+            <input
+              type="url"
+              value={form.externalRepoUrl ?? ''}
+              placeholder="https://github.com/yourorg/yourrestaurant-site"
+              onChange={e => update('externalRepoUrl', e.target.value || null)}
+              className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
+            />
+          </Field>
+
+          <Field
+            label="Vercel deploy hook URL"
+            hint="When updates publish, Apnosh POSTs here to trigger a rebuild. Get from Vercel project settings → Deploy Hooks."
+          >
+            <input
+              type="url"
+              value={form.externalDeployHookUrl ?? ''}
+              placeholder="https://api.vercel.com/v1/integrations/deploy/..."
+              onChange={e => update('externalDeployHookUrl', e.target.value || null)}
+              className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg font-mono text-xs"
+            />
+          </Field>
+
+          <Field
+            label="API key (optional)"
+            hint="Set this and add it to your site's env. Required for the public API to authorize fetches."
+          >
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={form.externalApiKey ?? ''}
+                placeholder="apk_..."
+                onChange={e => update('externalApiKey', e.target.value || null)}
+                className="flex-1 px-3 py-2 text-sm border border-ink-5 rounded-lg font-mono text-xs"
+              />
+              <button
+                type="button"
+                onClick={generateApiKey}
+                className="px-3 py-2 text-xs border border-ink-5 rounded-lg hover:bg-bg-2"
+              >
+                Generate
+              </button>
+            </div>
+          </Field>
+
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+            <p className="font-semibold mb-1">External site integration</p>
+            <p className="mb-2">Your external site fetches canonical data from:</p>
+            <code className="block bg-white px-2 py-1 rounded font-mono text-[11px] mb-2">
+              GET https://portal.apnosh.com/api/public/sites/{clientSlug}
+            </code>
+            <p className="mb-2">If you set an API key above, send it as <code className="font-mono">X-Apnosh-Key</code>.</p>
+            <p>The endpoint returns hours, events, promotions, brand data, and social links. Apnosh POSTs to your deploy hook when updates happen.</p>
+          </div>
+        </Section>
+      )}
+
+      {/* ── AI generation (placeholder for now) ───────────────── */}
+      {form.siteType === 'apnosh_generated' && (
+        <Section title="AI site generation" icon={Sparkles}>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            <p className="font-semibold mb-1">Coming soon</p>
+            <p className="leading-snug">
+              The AI generation system reads the client's brand voice, goals, target audience, brand colors,
+              photos, and competitive context, then asks Claude to generate a unique site config. Build is
+              planned for next session.
             </p>
           </div>
-        </div>
-      </div>
+        </Section>
+      )}
 
       {/* ── Publication state ─────────────────────────────────── */}
-      <Section title="Publication" icon={Globe}>
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={form.isPublished ?? false}
-            onChange={e => update('isPublished', e.target.checked)}
-            className="w-4 h-4 mt-0.5"
-          />
-          <div>
-            <div className="text-sm font-medium text-ink">Site is live</div>
-            <p className="text-xs text-ink-3 mt-0.5">
-              When checked, the site at{' '}
-              <code className="font-mono text-[11px] bg-bg-2 px-1 py-0.5 rounded">/sites/{clientSlug}</code>{' '}
-              is publicly accessible. Uncheck to hide while you set things up.
-            </p>
-          </div>
-        </label>
-      </Section>
+      {form.siteType !== 'none' && (
+        <Section title="Publication" icon={Globe}>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.isPublished ?? false}
+              onChange={e => update('isPublished', e.target.checked)}
+              className="w-4 h-4 mt-0.5"
+            />
+            <div>
+              <div className="text-sm font-medium text-ink">Site is live</div>
+              <p className="text-xs text-ink-3 mt-0.5">
+                {form.siteType === 'external_repo'
+                  ? 'When checked, Apnosh will trigger your deploy hook on every update.'
+                  : `When checked, /sites/${clientSlug} is publicly accessible.`}
+              </p>
+            </div>
+          </label>
+        </Section>
+      )}
 
-      {/* ── Custom domain ─────────────────────────────────────── */}
-      <Section title="Custom domain" icon={Link2}>
-        <Field
-          label="Domain"
-          hint="Future: point your own domain (yourrestaurant.com) at Apnosh via CNAME. Not yet active."
-        >
-          <input
-            type="text"
-            value={form.customDomain ?? ''}
-            placeholder="yourrestaurant.com"
-            onChange={e => update('customDomain', e.target.value || null)}
-            className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
-            disabled
-          />
-        </Field>
-      </Section>
-
-      {/* ── Ordering links ────────────────────────────────────── */}
-      <Section title="Action links" icon={ExternalLink}>
-        <p className="text-xs text-ink-3">
-          These show up as the primary CTAs on your site. Reservation gets priority over Order Online if both
-          are set.
-        </p>
-        <Field label="Order online URL" hint="Toast / ChowNow / direct ordering link">
-          <input
-            type="url"
-            value={form.orderOnlineUrl ?? ''}
-            placeholder="https://order.toasttab.com/..."
-            onChange={e => update('orderOnlineUrl', e.target.value || null)}
-            className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
-          />
-        </Field>
-        <Field label="Reservation URL" hint="OpenTable / Resy / Tock link">
-          <input
-            type="url"
-            value={form.reservationUrl ?? ''}
-            placeholder="https://www.opentable.com/..."
-            onChange={e => update('reservationUrl', e.target.value || null)}
-            className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
-          />
-        </Field>
-      </Section>
+      {/* ── Action links ──────────────────────────────────────── */}
+      {form.siteType !== 'none' && (
+        <Section title="Action links" icon={Link2}>
+          <p className="text-xs text-ink-3">
+            Used as primary CTAs on the site (Apnosh-hosted) or available via API for external sites to
+            consume.
+          </p>
+          <Field label="Order online URL">
+            <input
+              type="url"
+              value={form.orderOnlineUrl ?? ''}
+              placeholder="https://order.toasttab.com/..."
+              onChange={e => update('orderOnlineUrl', e.target.value || null)}
+              className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
+            />
+          </Field>
+          <Field label="Reservation URL">
+            <input
+              type="url"
+              value={form.reservationUrl ?? ''}
+              placeholder="https://www.opentable.com/..."
+              onChange={e => update('reservationUrl', e.target.value || null)}
+              className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
+            />
+          </Field>
+        </Section>
+      )}
 
       <div className="flex justify-end pt-2">
         <button

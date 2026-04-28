@@ -319,34 +319,70 @@ async function fanoutToWebsite(clientId: string): Promise<{
   skipped?: boolean
 }> {
   const db = adminDb()
-  // Get the client slug for the public URL
   const { data: client } = await db
     .from('clients').select('slug').eq('id', clientId).maybeSingle()
   if (!client?.slug) {
     return { success: true, skipped: true, error: 'Client has no slug' }
   }
 
-  // Check if site is published
+  // Check site type + publication state
   const { data: settings } = await db
     .from('site_settings')
-    .select('is_published')
+    .select('site_type, is_published, external_deploy_hook_url, external_site_url')
     .eq('client_id', clientId)
     .maybeSingle()
-  if (!settings?.is_published) {
-    return { success: true, skipped: true, error: 'Apnosh Site not yet published' }
+
+  const siteType = (settings?.site_type as string | null) ?? 'none'
+
+  if (siteType === 'none') {
+    return { success: true, skipped: true, error: 'Client has no site configured' }
   }
 
-  // Trigger ISR revalidation. Next.js will refetch source-of-truth on
-  // the next request and serve fresh content.
-  try {
-    revalidatePath(`/sites/${client.slug as string}`)
-    return {
-      success: true,
-      externalUrl: `/sites/${client.slug as string}`,
-    }
-  } catch (e) {
-    return { success: false, error: e instanceof Error ? e.message : 'Revalidation failed' }
+  if (!settings?.is_published) {
+    return { success: true, skipped: true, error: 'Site is not yet published' }
   }
+
+  // Apnosh-hosted sites: revalidate the cached page
+  if (siteType === 'apnosh_generated' || siteType === 'apnosh_custom') {
+    try {
+      revalidatePath(`/sites/${client.slug as string}`)
+      return {
+        success: true,
+        externalUrl: `/sites/${client.slug as string}`,
+      }
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Revalidation failed' }
+    }
+  }
+
+  // External repo sites: POST to their deploy hook so they rebuild + refetch
+  if (siteType === 'external_repo') {
+    const hookUrl = settings?.external_deploy_hook_url as string | null
+    if (!hookUrl) {
+      return {
+        success: true,
+        skipped: true,
+        error: 'External site has no deploy hook configured',
+      }
+    }
+    try {
+      const res = await fetch(hookUrl, { method: 'POST' })
+      if (!res.ok) {
+        return {
+          success: false,
+          error: `Deploy hook returned ${res.status}: ${(await res.text()).slice(0, 200)}`,
+        }
+      }
+      return {
+        success: true,
+        externalUrl: (settings?.external_site_url as string | null) ?? undefined,
+      }
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Deploy hook call failed' }
+    }
+  }
+
+  return { success: true, skipped: true, error: `Unknown site_type: ${siteType}` }
 }
 
 // ───────────────────────────────────────────────────────────────
