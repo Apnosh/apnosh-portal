@@ -48,12 +48,12 @@ export async function getLocalSeoView(
   }
 
   const now = new Date()
-  const thisMonthStart = startOfMonth(now)
-  const lastMonthStart = startOfMonth(addMonths(now, -1))
-  const lastMonthFullEnd = endOfMonth(addMonths(now, -1))
-  // Same-day-window comparison to avoid mid-month trend distortion
-  const lastMonthSameDay = new Date(lastMonthStart)
-  lastMonthSameDay.setDate(Math.min(now.getDate(), lastMonthFullEnd.getDate()))
+  // Rolling 30-day windows. Calendar months break for clients whose data
+  // syncs lag a few days: "this month" can be empty mid-month even when
+  // the prior 30 days has plenty of data.
+  const thisMonthStart = addDays(now, -30)
+  const lastMonthStart = addDays(now, -60)
+  const lastMonthSameDay = addDays(now, -31)
 
   const yearAgo = addDays(now, -365)
 

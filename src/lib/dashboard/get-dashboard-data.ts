@@ -114,9 +114,12 @@ async function buildVisibilityView(
   bizType: string = 'restaurant'
 ): Promise<DashboardView> {
   const now = new Date()
-  const thisMonthStart = startOfMonth(now)
-  const lastMonthStart = startOfMonth(addMonths(now, -1))
-  const lastMonthEnd = endOfMonth(addMonths(now, -1))
+  // Use rolling 30-day windows (same pattern as the AI Operator + MCP).
+  // Calendar months break for clients whose data was loaded historically:
+  // "this month" can be empty even when last 30 days has plenty of data.
+  const thisMonthStart = addDays(now, -30)
+  const lastMonthStart = addDays(now, -60)
+  const lastMonthEnd = addDays(now, -31)
 
   // Fetch all social metrics for last 365 days
   const yearAgo = addDays(now, -365)
@@ -214,7 +217,7 @@ async function buildVisibilityView(
     num: fmtNum(thisReach),
     unit: 'people',
     pct: (isUp ? '+' : '') + pctChange + '%',
-    pctFull: (isUp ? '+' : '') + pctChange + '% from last month',
+    pctFull: (isUp ? '+' : '') + pctChange + '% vs prior 30 days',
     bdtitle: "What's driving visibility",
     bmy: thisReach,
     bmavg: benchmark?.avg ?? 0,
@@ -238,9 +241,10 @@ async function buildFootTrafficView(
   bizType: string = 'restaurant'
 ): Promise<DashboardView> {
   const now = new Date()
-  const thisMonthStart = startOfMonth(now)
-  const lastMonthStart = startOfMonth(addMonths(now, -1))
-  const lastMonthEnd = endOfMonth(addMonths(now, -1))
+  // Rolling 30-day windows -- see comment on buildVisibilityView.
+  const thisMonthStart = addDays(now, -30)
+  const lastMonthStart = addDays(now, -60)
+  const lastMonthEnd = addDays(now, -31)
 
   const yearAgo = addDays(now, -365)
   const { data: metrics } = await supabase
@@ -331,7 +335,7 @@ async function buildFootTrafficView(
     num: fmtNum(thisActions),
     unit: 'actions',
     pct: (isUp ? '+' : '') + pctChange + '%',
-    pctFull: (isUp ? '+' : '') + pctChange + '% from last month',
+    pctFull: (isUp ? '+' : '') + pctChange + '% vs prior 30 days',
     bdtitle: "What's driving foot traffic",
     bmy: thisActions,
     bmavg: benchmark?.avg ?? 0,

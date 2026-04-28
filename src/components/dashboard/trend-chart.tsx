@@ -18,7 +18,11 @@ const TIME_RANGES: TimeRange[] = ['1W', '1M', '3M', '6M', '1Y']
 
 function fmtY(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
-  return n.toString()
+  // Round to whole numbers when >= 1; round to 2 decimals when < 1.
+  // Avoids "0.30000000000000004" floating-point garbage from step accumulation.
+  if (Math.abs(n) >= 1) return Math.round(n).toString()
+  if (n === 0) return '0'
+  return Number(n.toFixed(2)).toString()
 }
 
 export default function TrendChart({ data, timeRange, onTimeRangeChange, up, unit }: TrendChartProps) {

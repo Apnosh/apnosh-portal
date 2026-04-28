@@ -25,16 +25,12 @@ export async function getWebsiteView(clientId: string): Promise<DashboardView | 
   const supabase = await createClient()
 
   const now = new Date()
-  const thisMonthStart = startOfMonth(now)
-
-  // Same-day-window comparison so the MoM trend is fair mid-month.
-  // If today is April 16, we compare Apr 1-16 vs Mar 1-16 (not the full month).
-  // If the previous month is shorter (e.g. we're on Mar 31 comparing to Feb),
-  // we clamp to the last day of the previous month.
-  const lastMonthStart = startOfMonth(addMonths(now, -1))
-  const lastMonthFullEnd = endOfMonth(addMonths(now, -1))
-  const lastMonthSameDay = new Date(lastMonthStart)
-  lastMonthSameDay.setDate(Math.min(now.getDate(), lastMonthFullEnd.getDate()))
+  // Rolling 30-day windows. Calendar months break for clients whose data
+  // syncs lag a few days: "this month" can be empty mid-month even when
+  // the prior 30 days has plenty of data.
+  const thisMonthStart = addDays(now, -30)
+  const lastMonthStart = addDays(now, -60)
+  const lastMonthSameDay = addDays(now, -31)
 
   // Pull a year of daily rows for chart + trend
   const yearAgo = addDays(now, -365)
