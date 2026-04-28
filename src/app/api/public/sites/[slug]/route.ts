@@ -136,7 +136,38 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
     .limit(1)
     .maybeSingle()
 
-  // 9. Content field overrides (typed copy edits the client published).
+  // 9. Menu items -- structured menu (banh mi, boba, espresso, sauces etc.)
+  // Returned grouped by category to match how customer site templates
+  // typically render. Modifiers and items are separated so a section
+  // (e.g. "Boba") can show items + a sub-list of toppings.
+  const { data: menuRows } = await db
+    .from('menu_items')
+    .select('id, category, kind, name, description, price_cents, photo_url, display_order, is_available, is_featured, available_location_ids')
+    .eq('client_id', client.id)
+    .eq('is_available', true)
+    .order('category', { ascending: true })
+    .order('display_order', { ascending: true })
+    .order('name', { ascending: true })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const menuItem = (r: any) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    price_cents: r.price_cents,
+    price: r.price_cents != null ? `$${(r.price_cents / 100).toFixed(2).replace(/\.00$/, '')}` : null,
+    photoUrl: r.photo_url,
+    isFeatured: !!r.is_featured,
+    locationIds: r.available_location_ids ?? [],
+  })
+  const menu: Record<string, { items: ReturnType<typeof menuItem>[]; modifiers: ReturnType<typeof menuItem>[] }> = {}
+  for (const r of menuRows ?? []) {
+    const cat = r.category as string
+    if (!menu[cat]) menu[cat] = { items: [], modifiers: [] }
+    if (r.kind === 'modifier') menu[cat].modifiers.push(menuItem(r))
+    else menu[cat].items.push(menuItem(r))
+  }
+
+  // 10. Content field overrides (typed copy edits the client published).
   // Returned as a flat object keyed by field_key for easy template lookup,
   // e.g. content['hero.subhead']. Customer site uses this with fallback
   // to its own default copy.
@@ -166,6 +197,7 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
       upcomingEvents,
       social,
       heroPhotoUrl: (heroAsset?.url as string | null) ?? null,
+      menu,
       content,
       meta: {
         siteType: settings?.site_type ?? 'none',

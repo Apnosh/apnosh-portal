@@ -11,8 +11,10 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getMySiteOverview, getMyLocations } from '@/lib/dashboard/my-site-actions'
 import { getMyContentFields } from '@/lib/dashboard/content-actions'
+import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
 import SiteManager from '@/components/dashboard/website/site-manager'
 import ContentEditor from '@/components/dashboard/website/content-editor'
+import MenuEditor from '@/components/dashboard/website/menu-editor'
 
 export default async function MySitePage() {
   const overviewRes = await getMySiteOverview()
@@ -25,6 +27,8 @@ export default async function MySitePage() {
   const contentRes = await getMyContentFields()
   const contentFields = contentRes.success ? contentRes.data.fields : []
   const hasContentSchema = contentRes.success ? contentRes.data.hasSchema : false
+  const menuRes = await listMyMenuItems()
+  const menuItems = menuRes.success ? menuRes.data : []
 
   return (
     <div className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20">
@@ -49,6 +53,10 @@ export default async function MySitePage() {
           <ContentEditor fields={contentFields} />
         </div>
       )}
+
+      <div className="mt-8">
+        <MenuEditor initialItems={menuItems} />
+      </div>
     </div>
   )
 }
