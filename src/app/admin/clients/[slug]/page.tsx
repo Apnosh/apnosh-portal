@@ -26,6 +26,7 @@ import ProfileTab from './tabs/profile-tab'
 import DocsTab from './tabs/docs-tab'
 import TimelineTab from './tabs/timeline-tab'
 import ClientOverview from '@/components/admin/client-overview'
+import GbpOnboardingBanner from '@/components/admin/gbp-onboarding-banner'
 import WebsiteTab from './tabs/website-tab'
 import { StripeBillingCard } from '@/components/admin/stripe-billing-card'
 import type {
@@ -323,6 +324,9 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
           </button>
         ))}
       </div>
+
+      {/* ── GBP onboarding banner (only shows when not connected) ── */}
+      <GbpOnboardingBanner clientId={client.id} />
 
       {/* ── Tab Content ────────────────────────────────────────────── */}
       {activeTab === 'overview' && (

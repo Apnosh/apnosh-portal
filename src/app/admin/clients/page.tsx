@@ -8,6 +8,9 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { Client, ClientBillingStatus } from '@/types/database'
+import GbpStatusBadge from '@/components/admin/gbp-status-badge'
+import { getAllClientGbpStatusesAction } from '@/lib/gbp-onboarding-actions'
+import type { ClientGbpStatus } from '@/lib/gbp-status'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -16,6 +19,7 @@ import type { Client, ClientBillingStatus } from '@/types/database'
 interface ClientCard extends Client {
   logo_url: string | null
   pending_queue: number
+  gbp_status: ClientGbpStatus | null
 }
 
 /* ------------------------------------------------------------------ */
@@ -498,10 +502,15 @@ export default function AdminClientsPage() {
       queueMap.set(q.client_id, (queueMap.get(q.client_id) ?? 0) + 1)
     }
 
+    // Bulk-load GBP connection status (server action)
+    const gbpRes = await getAllClientGbpStatusesAction()
+    const gbpMap: Record<string, ClientGbpStatus> = gbpRes.success ? gbpRes.data : {}
+
     const cards: ClientCard[] = clientRows.map(c => ({
       ...c,
       logo_url: logoMap.get(c.id) ?? null,
       pending_queue: queueMap.get(c.id) ?? 0,
+      gbp_status: gbpMap[c.id] ?? null,
     }))
 
     setClients(cards)
@@ -675,11 +684,16 @@ export default function AdminClientsPage() {
                     </span>
                   )}
                 </div>
-                {client.pending_queue > 0 && (
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
-                    {client.pending_queue} pending
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {client.pending_queue > 0 && (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
+                      {client.pending_queue} pending
+                    </span>
+                  )}
+                  {client.gbp_status && (
+                    <GbpStatusBadge status={client.gbp_status.status} size="xs" showLabel={false} />
+                  )}
+                </div>
               </div>
             </Link>
           ))}
