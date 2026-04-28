@@ -46,6 +46,37 @@ async function requireAdmin(): Promise<{ ok: true; userId: string } | { ok: fals
   return { ok: true, userId: user.id }
 }
 
+/**
+ * Auth check for both admin AND the client_user belonging to clientId.
+ * Use for actions that a restaurant manager should be able to do on
+ * their own data (quick updates from the client dashboard).
+ */
+async function requireAdminOrClient(clientId: string): Promise<
+  { ok: true; userId: string; isAdmin: boolean } | { ok: false; error: string }
+> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated' }
+
+  // Admins can do anything
+  const { data: profile } = await supabase
+    .from('profiles').select('role').eq('id', user.id).maybeSingle()
+  if (profile && ['admin', 'super_admin'].includes(profile.role)) {
+    return { ok: true, userId: user.id, isAdmin: true }
+  }
+
+  // Otherwise must be a client_user for this client
+  const db = adminDb()
+  const { data: cu } = await db
+    .from('client_users')
+    .select('client_id')
+    .eq('auth_user_id', user.id)
+    .eq('client_id', clientId)
+    .maybeSingle()
+  if (!cu) return { ok: false, error: 'Not authorized for this client' }
+  return { ok: true, userId: user.id, isAdmin: false }
+}
+
 // ───────────────────────────────────────────────────────────────
 // createUpdate -- record an update in draft state
 // ───────────────────────────────────────────────────────────────
@@ -62,7 +93,7 @@ export async function createUpdate(args: {
 }): Promise<
   { success: true; data: { id: string } } | { success: false; error: string }
 > {
-  const auth = await requireAdmin()
+  const auth = await requireAdminOrClient(args.clientId)
   if (!auth.ok) return { success: false, error: auth.error }
 
   const targets = args.targets ?? DEFAULT_TARGETS[args.type]
@@ -110,15 +141,15 @@ export async function publishUpdate(updateId: string): Promise<
   | { success: true; data: { fanoutResults: { target: FanoutTarget; status: string; error?: string }[] } }
   | { success: false; error: string }
 > {
-  const auth = await requireAdmin()
-  if (!auth.ok) return { success: false, error: auth.error }
-
   const db = adminDb()
 
-  // 1. Load the update + fanout rows
+  // 1. Load the update + fanout rows (need client_id to check authorization)
   const { data: update, error: updErr } = await db
     .from('client_updates').select('*').eq('id', updateId).maybeSingle()
   if (updErr || !update) return { success: false, error: updErr?.message ?? 'Update not found' }
+
+  const auth = await requireAdminOrClient(update.client_id as string)
+  if (!auth.ok) return { success: false, error: auth.error }
 
   if (update.status === 'published') {
     return { success: false, error: 'Update is already published' }

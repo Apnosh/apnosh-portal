@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, Activity, ListTodo, BarChart3, ChevronRight, Globe } from 'lucide-react'
+import { Plus, Activity, ListTodo, BarChart3, ChevronRight, Globe, Settings2 } from 'lucide-react'
 import type { TimeRange, DashboardView } from '@/types/dashboard'
 import { getWebsiteView } from '@/lib/dashboard/get-website-view'
 import { useClient } from '@/lib/client-context'
@@ -149,6 +149,23 @@ export default function WebsiteOverviewPage() {
         <h2 className="text-[15px] font-bold mb-3" style={{ color: 'var(--db-black)' }}>
           Website tools
         </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <Link
+            href="/dashboard/website/manage"
+            className="bg-white rounded-xl border-2 border-brand/30 p-4 flex items-center justify-between hover:border-brand hover:shadow-sm transition"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(74, 189, 152, 0.1)' }}>
+                <Settings2 className="w-5 h-5" style={{ color: '#4abd98' }} />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-ink">Manage your site</div>
+                <div className="text-xs text-ink-4">Update hours, menu, promos and more</div>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-ink-4" />
+          </Link>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Link
             href="/dashboard/website/health"
