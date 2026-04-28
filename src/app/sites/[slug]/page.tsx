@@ -26,6 +26,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import type {
   WeeklyHours, SpecialHoursEntry, PromotionPayload, EventPayload,
 } from '@/lib/updates/types'
+import { getPublicSiteSettings } from '@/lib/site-settings/actions'
 import Hero from '@/components/sites/hero'
 import Hours from '@/components/sites/hours'
 import Location from '@/components/sites/location'
@@ -58,7 +59,13 @@ export default async function RestaurantSite({ params }: PageProps) {
 
   if (!client) notFound()
 
-  // 2. Pull the primary location (for now, multi-location sites would
+  // 2. Load site_settings (presentation layer: hero photo, colors, links)
+  const settings = await getPublicSiteSettings(client.id as string)
+  // Hide unpublished sites from the public unless settings is null (no settings = default-show
+  // for backwards compatibility while we migrate clients to explicit publishing)
+  if (settings && !settings.isPublished) notFound()
+
+  // 3. Pull the primary location (for now, multi-location sites would
   //    need a /sites/[slug]/[location] route)
   const { data: location } = await db
     .from('gbp_locations')
@@ -69,7 +76,7 @@ export default async function RestaurantSite({ params }: PageProps) {
     .limit(1)
     .maybeSingle()
 
-  // 3. Pull active promotion (one with valid_from <= now < valid_until)
+  // 4. Pull active promotion (one with valid_from <= now < valid_until)
   const now = new Date().toISOString()
   const { data: promoUpdates } = await db
     .from('client_updates')
@@ -86,7 +93,7 @@ export default async function RestaurantSite({ params }: PageProps) {
     return null
   })()
 
-  // 4. Pull upcoming events (start_at >= today, next 30 days)
+  // 5. Pull upcoming events (start_at >= today, next 30 days)
   const { data: eventUpdates } = await db
     .from('client_updates')
     .select('payload')
@@ -104,26 +111,45 @@ export default async function RestaurantSite({ params }: PageProps) {
     .sort((a, b) => a.start_at.localeCompare(b.start_at))
     .slice(0, 5)
 
+  // Compose CTAs from site settings (preferred) with fallback to client.website
+  const primaryCta = settings?.reservationUrl
+    ? { label: 'Reserve a table', href: settings.reservationUrl }
+    : settings?.orderOnlineUrl
+    ? { label: 'Order online', href: settings.orderOnlineUrl }
+    : location?.address
+    ? {
+        label: 'Find us',
+        href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.address as string)}`,
+      }
+    : undefined
+
+  const secondaryCta = settings?.orderOnlineUrl && settings?.reservationUrl
+    ? { label: 'Order online', href: settings.orderOnlineUrl }
+    : (client.website
+      ? { label: 'Visit website', href: client.website as string }
+      : undefined)
+
+  // Apply theme via inline CSS variables -- works even without site_settings (fallbacks)
+  const themeStyle: React.CSSProperties = {
+    ['--site-bg' as string]: settings?.backgroundColor ?? '#FFFFFF',
+    ['--site-text' as string]: settings?.textColor ?? '#1C1917',
+    ['--site-primary' as string]: settings?.primaryColor ?? '#2D4A22',
+    ['--site-accent' as string]: settings?.accentColor ?? '#D97706',
+  }
+
   return (
-    <main className="bg-white text-stone-900">
+    <main
+      className="text-stone-900"
+      style={{ ...themeStyle, backgroundColor: 'var(--site-bg)', color: 'var(--site-text)' }}
+    >
       <ActivePromo promotion={activePromo} />
 
       <Hero
         name={client.name as string}
-        tagline={client.brief_description as string | undefined}
-        primaryCta={
-          location?.address
-            ? {
-                label: 'Find us',
-                href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.address as string)}`,
-              }
-            : undefined
-        }
-        secondaryCta={
-          client.website
-            ? { label: 'Order online', href: client.website as string }
-            : undefined
-        }
+        tagline={settings?.tagline ?? (client.brief_description as string | undefined)}
+        heroPhotoUrl={settings?.heroPhotoUrl ?? undefined}
+        primaryCta={primaryCta}
+        secondaryCta={secondaryCta}
         activePromoName={activePromo?.name}
       />
 
@@ -138,12 +164,25 @@ export default async function RestaurantSite({ params }: PageProps) {
 
       <Location
         address={location?.address as string | undefined}
-        websiteUrl={client.website as string | undefined}
+        websiteUrl={settings?.orderOnlineUrl ?? (client.website as string | undefined)}
       />
 
       <footer className="py-8 px-6 text-center text-xs text-stone-400 border-t border-stone-100">
         <p>© {new Date().getFullYear()} {client.name as string}</p>
-        <p className="mt-1">Powered by <a href="https://apnosh.com" className="hover:text-stone-600">Apnosh</a></p>
+        {(settings?.instagramUrl || settings?.facebookUrl || settings?.tiktokUrl) && (
+          <p className="mt-2 flex items-center justify-center gap-3">
+            {settings?.instagramUrl && (
+              <a href={settings.instagramUrl} target="_blank" rel="noopener noreferrer" className="hover:text-stone-600">Instagram</a>
+            )}
+            {settings?.facebookUrl && (
+              <a href={settings.facebookUrl} target="_blank" rel="noopener noreferrer" className="hover:text-stone-600">Facebook</a>
+            )}
+            {settings?.tiktokUrl && (
+              <a href={settings.tiktokUrl} target="_blank" rel="noopener noreferrer" className="hover:text-stone-600">TikTok</a>
+            )}
+          </p>
+        )}
+        <p className="mt-2">Powered by <a href="https://apnosh.com" className="hover:text-stone-600">Apnosh</a></p>
       </footer>
     </main>
   )

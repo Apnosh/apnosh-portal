@@ -307,6 +307,49 @@ async function applyClosureToSourceOfTruth(
 }
 
 // ───────────────────────────────────────────────────────────────
+// Website fanout -- Apnosh Sites reads source-of-truth, so we just
+// trigger ISR revalidation to bust the page cache.
+// ───────────────────────────────────────────────────────────────
+
+async function fanoutToWebsite(clientId: string): Promise<{
+  success: boolean
+  externalId?: string
+  externalUrl?: string
+  error?: string
+  skipped?: boolean
+}> {
+  const db = adminDb()
+  // Get the client slug for the public URL
+  const { data: client } = await db
+    .from('clients').select('slug').eq('id', clientId).maybeSingle()
+  if (!client?.slug) {
+    return { success: true, skipped: true, error: 'Client has no slug' }
+  }
+
+  // Check if site is published
+  const { data: settings } = await db
+    .from('site_settings')
+    .select('is_published')
+    .eq('client_id', clientId)
+    .maybeSingle()
+  if (!settings?.is_published) {
+    return { success: true, skipped: true, error: 'Apnosh Site not yet published' }
+  }
+
+  // Trigger ISR revalidation. Next.js will refetch source-of-truth on
+  // the next request and serve fresh content.
+  try {
+    revalidatePath(`/sites/${client.slug as string}`)
+    return {
+      success: true,
+      externalUrl: `/sites/${client.slug as string}`,
+    }
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'Revalidation failed' }
+  }
+}
+
+// ───────────────────────────────────────────────────────────────
 // Per-target fanout dispatch
 // ───────────────────────────────────────────────────────────────
 
@@ -326,11 +369,16 @@ async function runFanout(
       case 'gbp':
         result = await fanoutToGbp(update as Parameters<typeof fanoutToGbp>[0])
         break
+      case 'website':
+        // Apnosh Sites reads from source-of-truth (gbp_locations + client_updates),
+        // so a "fanout" is just triggering an ISR revalidation. The actual data
+        // change has already happened in source-of-truth.
+        result = await fanoutToWebsite(update.client_id)
+        break
       // Other targets will be added incrementally:
       // case 'yelp':      result = await fanoutToYelp(update); break
       // case 'facebook':  result = await fanoutToFacebook(update); break
       // case 'instagram': result = await fanoutToInstagram(update); break
-      // case 'website':   result = await fanoutToWebsite(update); break
       // case 'email':     result = await fanoutToEmail(update); break
       default:
         result = { success: true, skipped: true, error: `Target ${target} not yet implemented` }
