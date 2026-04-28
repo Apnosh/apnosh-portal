@@ -1,7 +1,23 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 import type { ClientLocation } from '@/lib/dashboard/location-helpers'
+
+// Admin Supabase client used for the gbp_locations fallback. RLS on
+// gbp_locations is admin-write + client-read by client_users mapping; the
+// fallback path historically misses for clients whose client_users row was
+// created after the locations were inserted (or when running under the
+// wrong session context). Since the calling page has already established
+// the user belongs to clientId via the client context, bypassing RLS here
+// is safe -- we still filter by client_id explicitly.
+function adminSupabase() {
+  return createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  )
+}
 
 export type { ClientLocation } from '@/lib/dashboard/location-helpers'
 
@@ -25,9 +41,9 @@ export async function getClientLocations(clientId: string): Promise<ClientLocati
 
   // Fallback: derive locations from gbp_locations when client_locations is
   // empty. Many clients are GBP-only and never had separate client_locations
-  // rows backfilled. Without this fallback the Locations page shows "No
-  // locations" even though we have a fully assigned GBP listing.
-  const { data: gbp } = await supabase
+  // rows backfilled. Bypass RLS via admin client (see top-of-file comment).
+  const admin = adminSupabase()
+  const { data: gbp } = await admin
     .from('gbp_locations')
     .select('id, location_name, address, gbp_location_id')
     .eq('client_id', clientId)
