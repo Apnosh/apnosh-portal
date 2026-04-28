@@ -185,27 +185,17 @@ function LocationLoader({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (clientLoading || !client?.id) return
     let cancelled = false
-    console.log('[LocationLoader] fetching for client', client.id)
-    // Use the debug endpoint instead of the server action to avoid any
-    // potential server-action caching while we debug. Once verified, switch
-    // back to getClientLocations.
-    fetch(`/api/debug/locations?clientId=${client.id}`)
+    // Fetch the client's locations via the public locations API. We use a
+    // plain GET endpoint instead of the getClientLocations server action
+    // because Next.js was caching the action's result aggressively across
+    // deploys, masking the gbp_locations fallback path.
+    fetch(`/api/dashboard/locations?clientId=${client.id}`)
       .then(r => r.json())
       .then(data => {
         if (cancelled) return
-        console.log('[LocationLoader] debug API returned:', data)
-        const rows = (data.sample ?? []).map((l: any, idx: number) => ({
-          id: l.id,
-          location_name: l.location_name,
-          city: null,
-          state: null,
-          full_address: null,
-          is_primary: idx === 0,
-          is_active: true,
-          gbp_location_id: null,
-        }))
-        setLocations(rows)
-      }).catch(err => console.error('[LocationLoader] error:', err))
+        setLocations(Array.isArray(data.locations) ? data.locations : [])
+      })
+      .catch(() => { /* non-fatal: selector hides itself when N <= 1 */ })
     return () => { cancelled = true }
   }, [client?.id, clientLoading])
 

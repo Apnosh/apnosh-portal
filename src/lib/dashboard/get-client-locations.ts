@@ -37,20 +37,18 @@ export async function getClientLocations(clientId: string): Promise<ClientLocati
     .order('location_name', { ascending: true })
 
   const fromClient = (data ?? []).filter(l => l.is_active !== false) as ClientLocation[]
-  console.log('[getClientLocations]', clientId, 'client_locations:', fromClient.length)
   if (fromClient.length > 0) return fromClient
 
   // Fallback: derive locations from gbp_locations when client_locations is
   // empty. Many clients are GBP-only and never had separate client_locations
   // rows backfilled. Bypass RLS via admin client (see top-of-file comment).
   const admin = adminSupabase()
-  const { data: gbp, error: gbpErr } = await admin
+  const { data: gbp } = await admin
     .from('gbp_locations')
-    .select('id, location_name, address, gbp_location_id, client_id, status')
+    .select('id, location_name, address, gbp_location_id')
     .eq('client_id', clientId)
     .eq('status', 'assigned')
     .order('created_at', { ascending: true })
-  console.log('[getClientLocations]', clientId, 'gbp_locations:', gbp?.length ?? 0, 'err:', gbpErr?.message ?? 'none', 'rows:', JSON.stringify(gbp?.map(g => g.location_name)))
 
   return (gbp ?? []).map((l, idx) => ({
     id: l.id as string,
