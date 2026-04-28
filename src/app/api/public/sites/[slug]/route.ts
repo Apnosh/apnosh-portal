@@ -160,7 +160,10 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
     },
     {
       headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        // No CDN caching: external sites only refetch at build time (or via ISR
+        // if they choose), and the deploy hook fires whenever data changes. Any
+        // CDN cache here would mask freshly-published updates from the next build.
+        'Cache-Control': 'no-store',
       },
     },
   )
