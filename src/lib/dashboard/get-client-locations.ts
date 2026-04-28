@@ -20,5 +20,28 @@ export async function getClientLocations(clientId: string): Promise<ClientLocati
     .order('is_primary', { ascending: false })
     .order('location_name', { ascending: true })
 
-  return (data ?? []).filter(l => l.is_active !== false) as ClientLocation[]
+  const fromClient = (data ?? []).filter(l => l.is_active !== false) as ClientLocation[]
+  if (fromClient.length > 0) return fromClient
+
+  // Fallback: derive locations from gbp_locations when client_locations is
+  // empty. Many clients are GBP-only and never had separate client_locations
+  // rows backfilled. Without this fallback the Locations page shows "No
+  // locations" even though we have a fully assigned GBP listing.
+  const { data: gbp } = await supabase
+    .from('gbp_locations')
+    .select('id, location_name, address, gbp_location_id')
+    .eq('client_id', clientId)
+    .eq('status', 'assigned')
+    .order('created_at', { ascending: true })
+
+  return (gbp ?? []).map((l, idx) => ({
+    id: l.id as string,
+    location_name: (l.location_name as string) ?? 'Primary location',
+    city: null,
+    state: null,
+    full_address: (l.address as string | null) ?? null,
+    is_primary: idx === 0,
+    is_active: true,
+    gbp_location_id: (l.gbp_location_id as string | null) ?? null,
+  }))
 }
