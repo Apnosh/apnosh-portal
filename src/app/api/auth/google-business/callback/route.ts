@@ -5,8 +5,17 @@ import { exchangeGBPCode } from '@/lib/google'
 /**
  * GET /api/auth/google-business/callback
  *
- * Google redirects here after the user authorizes GBP access.
- * Stores a pending channel_connections row, redirects to location picker.
+ * Two flows share this single redirect URI (we only registered one
+ * with Google's OAuth client):
+ *
+ *   1. Per-client flow (state.clientId set): user is connecting their
+ *      own restaurant's GBP. Token lands in channel_connections with
+ *      status='pending', and they continue to the location picker.
+ *
+ *   2. Agency flow (state.mode === 'agency'): an admin granted
+ *      Apnosh-wide GBP access via apnosh@gmail.com which holds
+ *      Manager on all 21 locations. Token lands in the single-row
+ *      `integrations` table so the daily cron can use it.
  */
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code')
@@ -20,7 +29,14 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  let state: { clientId: string; userId: string; returnTo?: string; popup?: boolean }
+  type State = {
+    clientId?: string
+    userId: string
+    returnTo?: string
+    popup?: boolean
+    mode?: 'agency'
+  }
+  let state: State
   try {
     state = JSON.parse(Buffer.from(stateParam, 'base64url').toString())
   } catch {
@@ -38,9 +54,63 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeGBPCode(code)
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
-    // Pending connection — user will select location next.
-    // See note in /api/auth/google/callback about the expression index -- we
-    // delete then insert instead of using upsert with onConflict.
+    // ============================================================
+    // Agency flow: store in `integrations` table, redirect to admin.
+    // ============================================================
+    if (state.mode === 'agency') {
+      // Try to capture which Google account granted (helpful for the
+      // admin UI showing "Connected as foo@gmail.com").
+      let granterEmail: string | null = null
+      try {
+        const profileRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+          headers: { Authorization: `Bearer ${tokens.access_token}` },
+        })
+        if (profileRes.ok) {
+          const profile = await profileRes.json() as { email?: string }
+          granterEmail = profile.email ?? null
+        }
+      } catch { /* non-fatal */ }
+
+      // Upsert manually since (provider) is the unique key on integrations
+      const { data: existing } = await supabase
+        .from('integrations')
+        .select('id')
+        .eq('provider', 'google_business')
+        .maybeSingle()
+
+      const row = {
+        provider: 'google_business',
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token || null,
+        token_expires_at: expiresAt,
+        metadata: {
+          email: granterEmail,
+          scopes: tokens.scope?.split(' ') ?? [],
+        },
+        granted_by: state.userId,
+        updated_at: new Date().toISOString(),
+      }
+
+      if (existing) {
+        await supabase.from('integrations').update(row).eq('id', existing.id)
+      } else {
+        await supabase.from('integrations').insert(row)
+      }
+
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/admin/settings?gbp_connected=1`
+      )
+    }
+
+    // ============================================================
+    // Per-client flow (existing): pending row, location picker.
+    // ============================================================
+    if (!state.clientId) {
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent('Missing clientId in state')}`
+      )
+    }
+
     await supabase
       .from('channel_connections')
       .delete()

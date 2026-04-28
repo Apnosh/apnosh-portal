@@ -17,9 +17,13 @@ export const GSC_SCOPES = [
   'https://www.googleapis.com/auth/webmasters.readonly',
 ] as const
 
-// Scope for Google Business Profile
+// Scope for Google Business Profile.
+// userinfo.email is added so callbacks can capture which Google
+// account granted access (useful when the agency Google account
+// differs from the portal admin email).
 export const GBP_SCOPES = [
   'https://www.googleapis.com/auth/business.manage',
+  'https://www.googleapis.com/auth/userinfo.email',
 ] as const
 
 // Read-only scope for Google Drive. Includes docs.readonly so we can

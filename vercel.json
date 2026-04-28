@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/gbp-ingest",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/gbp-api-sync",
+      "schedule": "30 14 * * *"
     }
   ]
 }
