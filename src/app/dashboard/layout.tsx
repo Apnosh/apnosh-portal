@@ -74,6 +74,7 @@ const navSections: NavSection[] = [
         serviceArea: 'website',
         children: [
           { label: 'Performance', href: '/dashboard/website', exact: true },
+          { label: 'Manage site', href: '/dashboard/website/manage' },
           { label: 'Full details', href: '/dashboard/website/traffic' },
           { label: 'Site Health', href: '/dashboard/website/health' },
           { label: 'Request a change', href: '/dashboard/website/requests/new' },
