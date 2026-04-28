@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 071: Unified updates system
+-- Migration 071: Unified client_updates system
 -- ============================================================
 -- Restaurants make hundreds of operational changes per year:
 -- update hours, add a menu item, run a promotion, host an event,
@@ -13,7 +13,7 @@
 -- updated in 30 seconds."
 --
 -- Source of truth lives on the entity that owns it (gbp_locations
--- for hours, future menu_items table for menu, etc). The updates
+-- for hours, future menu_items table for menu, etc). The client_updates
 -- table is the EVENT log + fanout coordinator, not the canonical
 -- state.
 -- ============================================================
@@ -30,8 +30,8 @@ comment on column gbp_locations.hours is
 comment on column gbp_locations.special_hours is
   'Holiday/special hours overrides. JSON array: [{ date: "2026-12-24", hours: [{open, close}] | [], note }]';
 
--- ── The unified updates table ─────────────────────────────────
-create table if not exists updates (
+-- ── The unified client_updates table ─────────────────────────────────
+create table if not exists client_updates (
   id uuid primary key default gen_random_uuid(),
   client_id uuid not null references clients(id) on delete cascade,
   -- nullable: when null, applies to all locations of the client
@@ -41,7 +41,7 @@ create table if not exists updates (
     'hours', 'menu_item', 'promotion', 'event', 'closure', 'asset', 'info'
   )),
 
-  -- Type-specific data. See payload schema docs in src/lib/updates/types.ts
+  -- Type-specific data. See payload schema docs in src/lib/client_updates/types.ts
   payload jsonb not null,
 
   -- Lifecycle
@@ -73,15 +73,15 @@ create table if not exists updates (
   ))
 );
 
-create index if not exists idx_updates_client_status on updates(client_id, status);
-create index if not exists idx_updates_location on updates(location_id) where location_id is not null;
-create index if not exists idx_updates_scheduled on updates(scheduled_for) where status = 'scheduled';
-create index if not exists idx_updates_type_created on updates(type, created_at desc);
+create index if not exists idx_client_updates_client_status on client_updates(client_id, status);
+create index if not exists idx_client_updates_location on client_updates(location_id) where location_id is not null;
+create index if not exists idx_client_updates_scheduled on client_updates(scheduled_for) where status = 'scheduled';
+create index if not exists idx_client_updates_type_created on client_updates(type, created_at desc);
 
 -- ── Per-platform fanout tracking ──────────────────────────────
-create table if not exists update_fanouts (
+create table if not exists client_update_fanouts (
   id uuid primary key default gen_random_uuid(),
-  update_id uuid not null references updates(id) on delete cascade,
+  update_id uuid not null references client_updates(id) on delete cascade,
   target text not null check (target in (
     'gbp', 'yelp', 'facebook', 'instagram', 'website', 'email', 'sms', 'pos'
   )),
@@ -106,12 +106,12 @@ create table if not exists update_fanouts (
   unique(update_id, target)
 );
 
-create index if not exists idx_update_fanouts_status on update_fanouts(status);
-create index if not exists idx_update_fanouts_pending on update_fanouts(status, next_retry_at)
+create index if not exists idx_client_update_fanouts_status on client_update_fanouts(status);
+create index if not exists idx_client_update_fanouts_pending on client_update_fanouts(status, next_retry_at)
   where status in ('pending', 'rate_limited', 'failed');
 
--- ── Auto-update updated_at on updates table ───────────────────
-create or replace function updates_set_updated_at()
+-- ── Auto-update updated_at on client_updates table ───────────────────
+create or replace function client_updates_set_updated_at()
 returns trigger language plpgsql as $$
 begin
   new.updated_at = now();
@@ -119,26 +119,26 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_updates_updated_at on updates;
-create trigger trg_updates_updated_at
-  before update on updates
-  for each row execute function updates_set_updated_at();
+drop trigger if exists trg_client_updates_updated_at on client_updates;
+create trigger trg_client_updates_updated_at
+  before update on client_updates
+  for each row execute function client_updates_set_updated_at();
 
 -- ── RLS ───────────────────────────────────────────────────────
-alter table updates enable row level security;
-alter table update_fanouts enable row level security;
+alter table client_updates enable row level security;
+alter table client_update_fanouts enable row level security;
 
 do $$ begin
-  create policy "admins manage updates"
-    on updates for all
+  create policy "admins manage client_updates"
+    on client_updates for all
     using (is_admin())
     with check (is_admin());
 exception when duplicate_object then null;
 end $$;
 
 do $$ begin
-  create policy "clients read their updates"
-    on updates for select
+  create policy "clients read their client_updates"
+    on client_updates for select
     using (
       client_id in (
         select client_id from client_users where auth_user_id = auth.uid()
@@ -148,19 +148,19 @@ exception when duplicate_object then null;
 end $$;
 
 do $$ begin
-  create policy "admins manage update_fanouts"
-    on update_fanouts for all
+  create policy "admins manage client_update_fanouts"
+    on client_update_fanouts for all
     using (is_admin())
     with check (is_admin());
 exception when duplicate_object then null;
 end $$;
 
 do $$ begin
-  create policy "clients read their update_fanouts"
-    on update_fanouts for select
+  create policy "clients read their client_update_fanouts"
+    on client_update_fanouts for select
     using (
       update_id in (
-        select id from updates where client_id in (
+        select id from client_updates where client_id in (
           select client_id from client_users where auth_user_id = auth.uid()
         )
       )

@@ -69,7 +69,7 @@ export async function createUpdate(args: {
 
   const db = adminDb()
   const { data, error } = await db
-    .from('updates')
+    .from('client_updates')
     .insert({
       client_id: args.clientId,
       location_id: args.locationId ?? null,
@@ -89,7 +89,7 @@ export async function createUpdate(args: {
 
   // Pre-create fanout rows for every target so we can show "pending" UI immediately
   if (targets.length > 0) {
-    await db.from('update_fanouts').insert(
+    await db.from('client_update_fanouts').insert(
       targets.map(target => ({
         update_id: data.id as string,
         target,
@@ -117,7 +117,7 @@ export async function publishUpdate(updateId: string): Promise<
 
   // 1. Load the update + fanout rows
   const { data: update, error: updErr } = await db
-    .from('updates').select('*').eq('id', updateId).maybeSingle()
+    .from('client_updates').select('*').eq('id', updateId).maybeSingle()
   if (updErr || !update) return { success: false, error: updErr?.message ?? 'Update not found' }
 
   if (update.status === 'published') {
@@ -128,7 +128,7 @@ export async function publishUpdate(updateId: string): Promise<
   }
 
   // Mark the update as publishing
-  await db.from('updates').update({ status: 'publishing' }).eq('id', updateId)
+  await db.from('client_updates').update({ status: 'publishing' }).eq('id', updateId)
 
   // 2. Apply source-of-truth change first (e.g. update gbp_locations.hours)
   // This means the canonical state changes BEFORE we try to push to platforms.
@@ -136,7 +136,7 @@ export async function publishUpdate(updateId: string): Promise<
   if (update.type === 'hours') {
     const stResult = await applyHoursToSourceOfTruth(update)
     if (!stResult.success) {
-      await db.from('updates').update({ status: 'failed' }).eq('id', updateId)
+      await db.from('client_updates').update({ status: 'failed' }).eq('id', updateId)
       return { success: false, error: stResult.error }
     }
   }
@@ -152,7 +152,7 @@ export async function publishUpdate(updateId: string): Promise<
   const anyFailed = fanoutResults.some(r => r.status === 'failed')
   const finalStatus = allSucceeded ? 'published' : anyFailed ? 'failed' : 'publishing'
 
-  await db.from('updates').update({
+  await db.from('client_updates').update({
     status: finalStatus,
     published_at: allSucceeded ? new Date().toISOString() : null,
   }).eq('id', updateId)
@@ -239,7 +239,7 @@ async function runFanout(
   update: { id: string; type: string; client_id: string; location_id: string | null; payload: unknown },
 ): Promise<{ target: FanoutTarget; status: 'success' | 'failed' | 'skipped'; error?: string }> {
   const db = adminDb()
-  await db.from('update_fanouts')
+  await db.from('client_update_fanouts')
     .update({ status: 'in_progress', attempted_at: new Date().toISOString() })
     .eq('update_id', updateId).eq('target', target)
 
@@ -260,7 +260,7 @@ async function runFanout(
     }
 
     const status = result.skipped ? 'skipped' : result.success ? 'success' : 'failed'
-    await db.from('update_fanouts').update({
+    await db.from('client_update_fanouts').update({
       status,
       external_id: result.externalId ?? null,
       external_url: result.externalUrl ?? null,
@@ -271,7 +271,7 @@ async function runFanout(
     return { target, status, error: result.error }
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'
-    await db.from('update_fanouts').update({
+    await db.from('client_update_fanouts').update({
       status: 'failed',
       error_message: message,
       completed_at: new Date().toISOString(),
@@ -291,10 +291,10 @@ export async function retryFanout(updateId: string, target: FanoutTarget): Promi
   if (!auth.ok) return { success: false, error: auth.error }
 
   const db = adminDb()
-  const { data: update } = await db.from('updates').select('*').eq('id', updateId).maybeSingle()
+  const { data: update } = await db.from('client_updates').select('*').eq('id', updateId).maybeSingle()
   if (!update) return { success: false, error: 'Update not found' }
 
-  await db.from('update_fanouts').update({
+  await db.from('client_update_fanouts').update({
     retry_count: db.rpc('increment'),
     status: 'pending',
   }).eq('update_id', updateId).eq('target', target)
@@ -317,7 +317,7 @@ export async function listUpdates(clientId: string, limit = 50): Promise<
 
   const db = adminDb()
   const { data: updates, error } = await db
-    .from('updates')
+    .from('client_updates')
     .select('*')
     .eq('client_id', clientId)
     .order('created_at', { ascending: false })
@@ -326,7 +326,7 @@ export async function listUpdates(clientId: string, limit = 50): Promise<
 
   const updateIds = (updates ?? []).map(u => u.id as string)
   const { data: fanouts } = await db
-    .from('update_fanouts')
+    .from('client_update_fanouts')
     .select('*')
     .in('update_id', updateIds)
 
