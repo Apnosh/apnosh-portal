@@ -84,7 +84,9 @@ export default async function RestaurantSite({ params }: PageProps) {
   // 2. Site publication state lives in site_settings -- but only that.
   //    Everything else flows from canonical tables.
   const settings = await getPublicSiteSettings(client.id)
-  if (settings && !settings.isPublished) notFound()
+  if (settings && !settings.isPublished) {
+    return <UnpublishedPlaceholder name={client.name} slug={client.slug} />
+  }
 
   // 3. Brand: pull colors / fonts / logo from client_brands
   const { data: brandRaw } = await db
@@ -252,6 +254,38 @@ export default async function RestaurantSite({ params }: PageProps) {
         )}
         <p className="mt-2">Powered by <a href="https://apnosh.com" className="hover:text-stone-600">Apnosh</a></p>
       </footer>
+    </main>
+  )
+}
+
+// ── Unpublished state shown to admins/visitors when toggle is off ──
+function UnpublishedPlaceholder({ name, slug }: { name: string; slug: string }) {
+  return (
+    <main className="min-h-screen bg-stone-50 flex items-center justify-center p-6">
+      <div className="max-w-md w-full bg-white rounded-2xl border border-stone-200 p-8 text-center">
+        <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-amber-100 flex items-center justify-center">
+          <svg
+            xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            className="w-6 h-6 text-amber-600"
+          >
+            <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h1 className="text-xl font-bold text-stone-900 mb-2">
+          {name} site is not yet published
+        </h1>
+        <p className="text-sm text-stone-600 mb-6">
+          The Apnosh Site for this restaurant is configured but not yet live. Toggle &ldquo;Site is live&rdquo;
+          in the admin to publish it.
+        </p>
+        <a
+          href={`/admin/clients/${slug}/site`}
+          className="inline-block px-4 py-2 bg-stone-900 text-white text-sm font-medium rounded-lg hover:bg-stone-800"
+        >
+          Open site settings →
+        </a>
+      </div>
     </main>
   )
 }
