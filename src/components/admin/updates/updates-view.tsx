@@ -18,13 +18,14 @@ import {
 import { createUpdate, publishUpdate, retryFanout } from '@/lib/updates/actions'
 import type {
   UpdateRecord, UpdateFanoutRecord, FanoutTarget, WeeklyHours, DayKey,
-  HoursPayload, ClosurePayload, MenuItemPayload, PromotionPayload, UpdateType,
+  HoursPayload, ClosurePayload, MenuItemPayload, PromotionPayload, EventPayload, UpdateType,
 } from '@/lib/updates/types'
 import { DEFAULT_TARGETS } from '@/lib/updates/types'
 import HoursEditor from './hours-editor'
 import ClosureForm from './closure-form'
 import MenuItemForm from './menu-item-form'
 import PromotionForm from './promotion-form'
+import EventForm from './event-form'
 
 interface Location {
   id: string
@@ -67,6 +68,7 @@ export default function UpdatesView({
   const [closure, setClosure] = useState<ClosurePayload>(() => buildDefaultClosure())
   const [menuItem, setMenuItem] = useState<MenuItemPayload>(() => buildDefaultMenuItem())
   const [promotion, setPromotion] = useState<PromotionPayload>(() => buildDefaultPromotion())
+  const [event, setEvent] = useState<EventPayload>(() => buildDefaultEvent())
   const [targets, setTargets] = useState<FanoutTarget[]>(DEFAULT_TARGETS.hours)
   const [busy, setBusy] = useState(false)
   const [, startTransition] = useTransition()
@@ -80,7 +82,7 @@ export default function UpdatesView({
     setBusy(true)
     setResultMessage(null)
 
-    let payload: HoursPayload | ClosurePayload | MenuItemPayload | PromotionPayload
+    let payload: HoursPayload | ClosurePayload | MenuItemPayload | PromotionPayload | EventPayload
     let summary: string
     if (updateType === 'hours') {
       payload = { scope: 'regular', weekly } as HoursPayload
@@ -110,6 +112,14 @@ export default function UpdatesView({
       }
       payload = promotion
       summary = `Promotion: ${promotion.name}`
+    } else if (updateType === 'event') {
+      if (!event.name || !event.start_at || !event.end_at) {
+        setBusy(false)
+        setResultMessage({ ok: false, msg: 'Event needs a name and start/end time' })
+        return
+      }
+      payload = event
+      summary = `Event: ${event.name}`
     } else {
       setBusy(false)
       setResultMessage({ ok: false, msg: 'Type not implemented yet' })
@@ -212,7 +222,8 @@ export default function UpdatesView({
               <option value="closure">Closure (planned or emergency)</option>
               <option value="menu_item">Menu item</option>
               <option value="promotion">Promotion (deal, happy hour, LTO)</option>
-              {/* Future: event, asset, info */}
+              <option value="event">Event (dinner, tasting, live music)</option>
+              {/* Future: asset, info */}
             </select>
           </div>
 
@@ -228,6 +239,9 @@ export default function UpdatesView({
           )}
           {updateType === 'promotion' && (
             <PromotionForm payload={promotion} onChange={setPromotion} />
+          )}
+          {updateType === 'event' && (
+            <EventForm payload={event} onChange={setEvent} />
           )}
 
           {/* Targets */}
@@ -488,5 +502,20 @@ function buildDefaultPromotion(): PromotionPayload {
     discount_type: 'percent',
     valid_from: now.toISOString(),
     valid_until: ends.toISOString(),
+  }
+}
+
+function buildDefaultEvent(): EventPayload {
+  // Default: 7 days from now, 7-9pm
+  const start = new Date()
+  start.setDate(start.getDate() + 7)
+  start.setHours(19, 0, 0, 0)
+  const end = new Date(start)
+  end.setHours(21, 0, 0, 0)
+  return {
+    name: '',
+    description: '',
+    start_at: start.toISOString(),
+    end_at: end.toISOString(),
   }
 }
