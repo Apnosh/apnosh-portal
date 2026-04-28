@@ -238,6 +238,8 @@ export function parseGmbInsightsCsv(
       photo_count: get(row, 'Photo count') || get(row, 'Total photos'),
       post_views: get(row, 'Post views') || get(row, 'Posts views'),
       post_clicks: get(row, 'Post clicks') || get(row, 'Posts clicks'),
+      food_orders: get(row, 'Food orders'),
+      food_menu_clicks: get(row, 'Food menu clicks'),
     })
   }
 

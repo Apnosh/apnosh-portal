@@ -23,7 +23,7 @@ import { useEffect, useState } from 'react'
 import {
   Loader2, TrendingUp, TrendingDown, Minus, ExternalLink, Search, MapPin, Phone,
   Globe, Eye, Building2, Image as ImageIcon, MessageCircle, ArrowUpRight,
-  ArrowDownRight, Sparkles,
+  ArrowDownRight, Sparkles, UtensilsCrossed, BookOpen,
 } from 'lucide-react'
 import {
   getLocalSeoSummary,
@@ -47,6 +47,13 @@ function formatNum(n: number): string {
 function pctChange(curr: number, prev: number): number | null {
   if (prev === 0) return curr === 0 ? 0 : null
   return ((curr - prev) / prev) * 100
+}
+
+// Hide a KPI card when both periods are zero -- avoids cluttering the
+// dashboard with metrics that the data source doesn't supply (e.g. monthly
+// CSVs don't include photo views, so showing "0 / vs 0" is just noise).
+function hasNonZero(a: number, b: number): boolean {
+  return a > 0 || b > 0
 }
 
 // ─── Reusable bits ────────────────────────────────────────────────────────
@@ -297,20 +304,39 @@ export default function LocalSeoTab({ clientId, clientSlug }: Props) {
         </div>
       )}
 
-      {/* ── KPI grid: Discovery row + Action row ───────────────────────── */}
+      {/* ── KPI grid: Discovery / Action / Restaurant rows ─────────────── */}
       <div>
         <div className="text-[10px] font-semibold tracking-wider uppercase text-ink-4 mb-2 ml-1">Discovery</div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+        <div className={`grid gap-3 mb-4 grid-cols-2 md:grid-cols-${[true, hasNonZero(totals30d.photoViews, totalsPrev30d.photoViews), hasNonZero(totals30d.postViews, totalsPrev30d.postViews)].filter(Boolean).length}`}>
           <MetricCard label="Impressions" icon={Eye} curr={totals30d.impressions} prev={totalsPrev30d.impressions} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
-          <MetricCard label="Photo views" icon={ImageIcon} curr={totals30d.photoViews} prev={totalsPrev30d.photoViews} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
-          <MetricCard label="Post views" icon={MessageCircle} curr={totals30d.postViews} prev={totalsPrev30d.postViews} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
+          {hasNonZero(totals30d.photoViews, totalsPrev30d.photoViews) && (
+            <MetricCard label="Photo views" icon={ImageIcon} curr={totals30d.photoViews} prev={totalsPrev30d.photoViews} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
+          )}
+          {hasNonZero(totals30d.postViews, totalsPrev30d.postViews) && (
+            <MetricCard label="Post views" icon={MessageCircle} curr={totals30d.postViews} prev={totalsPrev30d.postViews} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
+          )}
         </div>
+
         <div className="text-[10px] font-semibold tracking-wider uppercase text-ink-4 mb-2 ml-1">Action</div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <MetricCard label="Website clicks" icon={Globe} curr={totals30d.website} prev={totalsPrev30d.website} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
           <MetricCard label="Phone calls" icon={Phone} curr={totals30d.calls} prev={totalsPrev30d.calls} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
           <MetricCard label="Directions" icon={MapPin} curr={totals30d.directions} prev={totalsPrev30d.directions} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
         </div>
+
+        {(hasNonZero(totals30d.foodOrders, totalsPrev30d.foodOrders) || hasNonZero(totals30d.foodMenuClicks, totalsPrev30d.foodMenuClicks)) && (
+          <>
+            <div className="text-[10px] font-semibold tracking-wider uppercase text-ink-4 mb-2 mt-4 ml-1">Restaurant</div>
+            <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
+              {hasNonZero(totals30d.foodMenuClicks, totalsPrev30d.foodMenuClicks) && (
+                <MetricCard label="Menu clicks" icon={BookOpen} curr={totals30d.foodMenuClicks} prev={totalsPrev30d.foodMenuClicks} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
+              )}
+              {hasNonZero(totals30d.foodOrders, totalsPrev30d.foodOrders) && (
+                <MetricCard label="Food orders" icon={UtensilsCrossed} curr={totals30d.foodOrders} prev={totalsPrev30d.foodOrders} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Trend + Search/Maps split ──────────────────────────────────── */}

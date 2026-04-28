@@ -77,6 +77,10 @@ export interface LookerGbpRow {
 
   // Search queries that surfaced the location that day
   top_queries?: Array<{ query: string; impressions: number }>
+
+  // Restaurant-specific (in GMB monthly CSV)
+  food_orders?: number
+  food_menu_clicks?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -456,6 +460,8 @@ export async function runBackfill(args: {
       post_clicks: r.post_clicks ?? 0,
       conversations: r.conversations ?? 0,
       bookings: r.bookings ?? 0,
+      food_orders: r.food_orders ?? 0,
+      food_menu_clicks: r.food_menu_clicks ?? 0,
       top_queries: r.top_queries ?? null,
       source,
     })
@@ -528,6 +534,8 @@ export interface LocalSeoDailyRow {
   directions: number
   photo_views: number
   post_views: number
+  food_orders: number
+  food_menu_clicks: number
 }
 
 export interface PeriodTotals {
@@ -540,6 +548,8 @@ export interface PeriodTotals {
   website: number
   photoViews: number
   postViews: number
+  foodOrders: number
+  foodMenuClicks: number
 }
 
 export interface AnomalyCallout {
@@ -599,12 +609,46 @@ export async function getLocalSeoSummary(
   cutoff.setDate(cutoff.getDate() - days)
   const cutoffIso = cutoff.toISOString().slice(0, 10)
 
-  const { data: rows, error } = await admin
+  // Defensive select: food_orders/food_menu_clicks were added in 070 but
+  // are optional. Try with them; if the column doesn't exist (migration
+  // not run), fall back to the bare select.
+  type MetricRow = {
+    date: string
+    impressions_total: number | null
+    impressions_search_mobile: number | null
+    impressions_search_desktop: number | null
+    impressions_maps_mobile: number | null
+    impressions_maps_desktop: number | null
+    website_clicks: number | null
+    calls: number | null
+    directions: number | null
+    photo_views: number | null
+    post_views: number | null
+    food_orders?: number | null
+    food_menu_clicks?: number | null
+    top_queries: unknown
+    source: string | null
+  }
+  let rows: MetricRow[] | null = null
+  let error: { message: string } | null = null
+  const tryFood = await admin
     .from('gbp_metrics')
-    .select('date, impressions_total, impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, website_clicks, calls, directions, photo_views, post_views, top_queries, source')
+    .select('date, impressions_total, impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, website_clicks, calls, directions, photo_views, post_views, food_orders, food_menu_clicks, top_queries, source')
     .eq('client_id', clientId)
     .gte('date', cutoffIso)
     .order('date', { ascending: true })
+  if (tryFood.error) {
+    const fallback = await admin
+      .from('gbp_metrics')
+      .select('date, impressions_total, impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, website_clicks, calls, directions, photo_views, post_views, top_queries, source')
+      .eq('client_id', clientId)
+      .gte('date', cutoffIso)
+      .order('date', { ascending: true })
+    rows = (fallback.data ?? []) as unknown as MetricRow[]
+    if (fallback.error) error = { message: fallback.error.message }
+  } else {
+    rows = (tryFood.data ?? []) as unknown as MetricRow[]
+  }
 
   if (error) return { success: false, error: error.message }
 
@@ -618,6 +662,7 @@ export async function getLocalSeoSummary(
       date,
       impressions_total: 0, impressions_search: 0, impressions_maps: 0,
       website_clicks: 0, calls: 0, directions: 0, photo_views: 0, post_views: 0,
+      food_orders: 0, food_menu_clicks: 0,
     }
     existing.impressions_total += (r.impressions_total as number) ?? 0
     existing.impressions_search += ((r.impressions_search_mobile as number) ?? 0) + ((r.impressions_search_desktop as number) ?? 0)
@@ -627,6 +672,8 @@ export async function getLocalSeoSummary(
     existing.directions += (r.directions as number) ?? 0
     existing.photo_views += (r.photo_views as number) ?? 0
     existing.post_views += (r.post_views as number) ?? 0
+    existing.food_orders += (r.food_orders as number) ?? 0
+    existing.food_menu_clicks += (r.food_menu_clicks as number) ?? 0
     byDate.set(date, existing)
   }
   const daily: LocalSeoDailyRow[] = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date))
@@ -645,7 +692,7 @@ export async function getLocalSeoSummary(
   const emptyTotals: PeriodTotals = {
     impressions: 0, impressionsSearch: 0, impressionsMaps: 0,
     actions: 0, calls: 0, directions: 0, website: 0,
-    photoViews: 0, postViews: 0,
+    photoViews: 0, postViews: 0, foodOrders: 0, foodMenuClicks: 0,
   }
   let totals30d: PeriodTotals = { ...emptyTotals }
   let totalsPrev30d: PeriodTotals = { ...emptyTotals }
@@ -660,6 +707,7 @@ export async function getLocalSeoSummary(
       actions: r.calls + r.directions + r.website_clicks,
       calls: r.calls, directions: r.directions, website: r.website_clicks,
       photoViews: r.photo_views, postViews: r.post_views,
+      foodOrders: r.food_orders, foodMenuClicks: r.food_menu_clicks,
     } : { ...emptyTotals }
     const last = daily[daily.length - 1]
     const prev = daily[daily.length - 2]
@@ -683,6 +731,8 @@ export async function getLocalSeoSummary(
         calls, directions: dirs, website: web,
         photoViews: sum('photo_views'),
         postViews: sum('post_views'),
+        foodOrders: sum('food_orders'),
+        foodMenuClicks: sum('food_menu_clicks'),
       }
     }
     totals30d = sumWindow(iso(d30), iso(new Date(today.getTime() + 86400000)))
