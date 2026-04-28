@@ -199,8 +199,18 @@ export async function previewBackfill(
   if (rows.length === 0) return { success: false, error: 'No rows to import' }
 
   const admin = getAdminSupabase()
-  const { data: clientsRaw } = await admin.from('clients').select('id, name, slug, gbp_location_aliases')
-  const clients = (clientsRaw ?? []) as ClientRow[]
+  // Defensively select aliases only if the column exists -- migration 068
+  // adds it but is optional. Fallback to bare select if it's missing.
+  type ClientWithAliases = { id: string; name: string; slug: string; gbp_location_aliases?: string[] | null }
+  let clientsRaw: ClientWithAliases[] = []
+  const tryWithAliases = await admin.from('clients').select('id, name, slug, gbp_location_aliases')
+  if (tryWithAliases.error) {
+    const fallback = await admin.from('clients').select('id, name, slug')
+    clientsRaw = (fallback.data ?? []) as unknown as ClientWithAliases[]
+  } else {
+    clientsRaw = (tryWithAliases.data ?? []) as unknown as ClientWithAliases[]
+  }
+  const clients = clientsRaw as ClientRow[]
 
   // Group rows by store_code
   const byStoreCode = new Map<string, { rows: LookerGbpRow[]; name: string; address: string | null }>()
