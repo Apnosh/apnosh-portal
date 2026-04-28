@@ -28,7 +28,7 @@ function adminDb(): AdminDb {
 export async function buildClientContext(clientId: string): Promise<ClientContext | null> {
   const db = adminDb()
 
-  const { data: clientRaw } = await db
+  const { data: clientRaw, error: clientErr } = await db
     .from('clients')
     .select(`
       id, name, slug, industry, brief_description,
@@ -36,6 +36,10 @@ export async function buildClientContext(clientId: string): Promise<ClientContex
     `)
     .eq('id', clientId)
     .maybeSingle()
+  if (clientErr) {
+    console.error('[operator/context] clients select failed:', clientErr)
+    return null
+  }
   if (!clientRaw) return null
 
   const { data: brand } = await db

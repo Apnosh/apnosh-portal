@@ -98,14 +98,21 @@ export async function analyzeClient(args: {
   const runId = run.id as string
 
   // 2. Build full context
-  const context = await buildClientContext(args.clientId)
+  let context: Awaited<ReturnType<typeof buildClientContext>> = null
+  let contextErr: string | null = null
+  try {
+    context = await buildClientContext(args.clientId)
+  } catch (e) {
+    contextErr = e instanceof Error ? e.message : 'Failed to build context'
+  }
   if (!context) {
+    const msg = contextErr ?? 'Client not found or context build failed (check server logs)'
     await db.from('agent_runs').update({
       status: 'failed',
-      error_message: 'Client not found',
+      error_message: msg,
       completed_at: new Date().toISOString(),
     }).eq('id', runId)
-    return { success: false, error: 'Client not found', agentRunId: runId }
+    return { success: false, error: msg, agentRunId: runId }
   }
 
   // 3. Call Claude
