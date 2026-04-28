@@ -31,7 +31,7 @@ export async function buildClientContext(clientId: string): Promise<ClientContex
   const { data: clientRaw, error: clientErr } = await db
     .from('clients')
     .select(`
-      id, name, slug, industry, brief_description,
+      id, name, slug, industry,
       goals, target_audience, content_pillars, competitors
     `)
     .eq('id', clientId)
@@ -130,7 +130,7 @@ export async function buildClientContext(clientId: string): Promise<ClientContex
       name: clientRaw.name as string,
       slug: clientRaw.slug as string,
       primary_industry: (clientRaw.industry as string | null) ?? null,
-      brief_description: (clientRaw.brief_description as string | null) ?? null,
+      brief_description: null,
       goals: clientRaw.goals,
       target_audience: clientRaw.target_audience,
       content_pillars: clientRaw.content_pillars,
