@@ -22,7 +22,7 @@ function adminDb(): AdminDb {
   ) as AdminDb
 }
 
-const MODEL = 'claude-sonnet-4-5-20250929'
+const MODEL = 'claude-sonnet-4-20250514'
 
 const SYSTEM_PROMPT = `You are the AI Marketing Operator for restaurants on the Apnosh platform.
 Your job is to analyze each restaurant's recent performance, brand context,
