@@ -10,7 +10,7 @@
 import type { LookerGbpRow } from '@/lib/gbp-backfill-actions'
 
 type Field =
-  | 'date' | 'location_name'
+  | 'date' | 'location_name' | 'store_code' | 'address'
   | 'impressions_search_mobile' | 'impressions_search_desktop'
   | 'impressions_maps_mobile'   | 'impressions_maps_desktop'
   | 'impressions_total'
@@ -20,6 +20,8 @@ type Field =
 const PATTERNS: Array<{ field: Field; re: RegExp }> = [
   { field: 'date', re: /^(date|day|period|metric\s*date)$/i },
   { field: 'location_name', re: /^(business[_\s]*name|location[_\s]*name|location|name)$/i },
+  { field: 'store_code', re: /^(store[_\s]*code|location[_\s]*id|place[_\s]*id)$/i },
+  { field: 'address', re: /^(address|street[_\s]*address|location[_\s]*address)$/i },
   { field: 'impressions_search_mobile', re: /search.*mobile|mobile.*search/i },
   { field: 'impressions_search_desktop', re: /search.*desktop|desktop.*search/i },
   { field: 'impressions_maps_mobile', re: /maps.*mobile|mobile.*maps/i },
@@ -117,10 +119,13 @@ export function parseLookerCsv(text: string): ParsedCsv {
     }
 
     const get = (f: Field) => fieldIdx[f] !== undefined ? parseIntLoose(row[fieldIdx[f]!]) : 0
+    const getStr = (f: Field) => fieldIdx[f] !== undefined ? row[fieldIdx[f]!]?.trim() || undefined : undefined
 
     rows.push({
       date,
       location_name: loc,
+      store_code: getStr('store_code'),
+      address: getStr('address'),
       impressions_search_mobile: get('impressions_search_mobile'),
       impressions_search_desktop: get('impressions_search_desktop'),
       impressions_maps_mobile: get('impressions_maps_mobile'),
@@ -193,6 +198,13 @@ export function parseGmbInsightsCsv(
     return Number.isFinite(n) ? n : 0
   }
 
+  // GMB exports include "Store code" (Google's stable ID) and "Address".
+  // Both are optional in older exports but present in current downloads.
+  const getStr = (row: string[], col: string): string | undefined => {
+    if (idx[col] === undefined) return undefined
+    return row[idx[col]]?.trim() || undefined
+  }
+
   const rows: LookerGbpRow[] = []
   // rawRows[0] = headers, rawRows[1] = description blurb (skip), data from index 2
   for (let i = 2; i < rawRows.length; i++) {
@@ -210,6 +222,8 @@ export function parseGmbInsightsCsv(
       // chart as one point per month at the month-end.
       date: dateRange.end,
       location_name: name,
+      store_code: getStr(row, 'Store code') ?? getStr(row, 'Store Code'),
+      address: getStr(row, 'Address'),
       impressions_search_mobile: searchMobile,
       impressions_search_desktop: searchDesktop,
       impressions_maps_mobile: mapsMobile,

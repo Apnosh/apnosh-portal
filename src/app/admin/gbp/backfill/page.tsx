@@ -13,14 +13,16 @@
  * one shot.
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Upload, FileSpreadsheet, Check, AlertCircle, Users, AlertTriangle, X } from 'lucide-react'
+import { ArrowLeft, Upload, FileSpreadsheet, Check, AlertCircle, Users, AlertTriangle, X, Building2, EyeOff } from 'lucide-react'
 import {
   previewBackfill,
   runBackfill,
+  applyLocationAssignments,
   type LookerGbpRow,
   type BackfillPreview,
+  type LocationAssignment,
 } from '@/lib/gbp-backfill-actions'
 import { parseGbpCsvAuto } from '@/lib/gbp-csv-parser'
 
@@ -48,6 +50,22 @@ export default function BackfillPage() {
   const [dragOver, setDragOver] = useState(false)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  // Admin's pending decisions for the "needs assignment" bucket
+  const [decisions, setDecisions] = useState<Record<string, { action: 'assign' | 'skip'; clientId: string }>>({})
+
+  // Whenever a fresh preview lands, pre-seed decisions with the suggested
+  // client (best fuzzy guess). Admin can change or override.
+  useEffect(() => {
+    if (!preview) return
+    const initial: Record<string, { action: 'assign' | 'skip'; clientId: string }> = {}
+    for (const loc of preview.needsAssignment) {
+      initial[loc.id] = {
+        action: loc.suggestedClientId ? 'assign' : 'skip',
+        clientId: loc.suggestedClientId ?? '',
+      }
+    }
+    setDecisions(initial)
+  }, [preview])
 
   const allRows = files.flatMap(f => f.rows)
   const totalRows = allRows.length
@@ -98,17 +116,54 @@ export default function BackfillPage() {
   }, [allRows])
 
   const handleConfirm = async () => {
+    if (!preview) return
     if (allRows.length === 0) return
+
+    // Validate: every needs-assignment location must have a decision
+    const assignments: LocationAssignment[] = []
+    for (const loc of preview.needsAssignment) {
+      const d = decisions[loc.id]
+      if (!d) {
+        setResult({ ok: false, msg: `Missing decision for "${loc.locationName}"` })
+        return
+      }
+      if (d.action === 'assign' && !d.clientId) {
+        setResult({ ok: false, msg: `Pick a client for "${loc.locationName}" or mark it as Skip` })
+        return
+      }
+      assignments.push({
+        locationId: loc.id,
+        action: d.action,
+        clientId: d.action === 'assign' ? d.clientId : undefined,
+      })
+    }
+
     setBusy(true)
+
+    // Step 1: persist the admin's decisions
+    if (assignments.length > 0) {
+      const ar = await applyLocationAssignments(assignments)
+      if (!ar.success) {
+        setBusy(false)
+        setResult({ ok: false, msg: ar.error })
+        return
+      }
+    }
+
+    // Step 2: import the metrics
     const fname = files.length === 1 ? files[0].filename : `${files.length} files combined`
     const res = await runBackfill({ rows: allRows, filename: fname, source: 'manual_upload' })
     setBusy(false)
     if (res.success) {
+      const willImportClients = new Set(preview.willImport.map(l => l.clientId)).size
+      const newlyAssigned = assignments.filter(a => a.action === 'assign').length
       setResult({
         ok: true,
-        msg: `Imported ${res.data.imported} rows across ${preview?.locationsMatched.length ?? 0} clients.${res.data.unmatched > 0 ? ` ${res.data.unmatched} unmatched rows skipped.` : ''}`,
+        msg: `Imported ${res.data.imported} rows across ${willImportClients + newlyAssigned} location${willImportClients + newlyAssigned === 1 ? '' : 's'}.` +
+          (res.data.skipped > 0 ? ` ${res.data.skipped} rows skipped (locations marked skip).` : '') +
+          (res.data.unmatched > 0 ? ` ${res.data.unmatched} rows unmatched.` : ''),
       })
-      setFiles([]); setPreview(null)
+      setFiles([]); setPreview(null); setDecisions({})
     } else {
       setResult({ ok: false, msg: res.error })
     }
@@ -218,44 +273,109 @@ export default function BackfillPage() {
         </div>
       )}
 
-      {/* Preview output */}
+      {/* Preview output -- three buckets */}
       {preview && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-ink-6 p-5">
-            <div className="flex items-center gap-3 mb-4">
-              <Users className="w-5 h-5 text-brand" />
-              <h2 className="text-sm font-bold">Matched locations ({preview.locationsMatched.length})</h2>
-            </div>
-            <div className="space-y-2">
-              {preview.locationsMatched.map(m => (
-                <div key={m.locationName} className="flex items-center justify-between p-3 rounded-lg bg-bg-2 text-sm">
-                  <div>
-                    <span className="font-medium">{m.locationName}</span>
-                    <span className="text-ink-3"> → {m.clientName}</span>
-                  </div>
-                  <div className="text-xs text-ink-3">
-                    {m.rowCount} rows · {m.dateFirst} → {m.dateLast}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {preview.locationsUnmatched.length > 0 && (
+          {/* Needs assignment: per-location dropdown */}
+          {preview.needsAssignment.length > 0 && (
             <div className="bg-white rounded-xl border border-amber-200 p-5">
               <div className="flex items-center gap-3 mb-3">
                 <AlertTriangle className="w-5 h-5 text-amber-500" />
-                <h2 className="text-sm font-bold text-amber-800">Unmatched locations ({preview.locationsUnmatched.length})</h2>
+                <h2 className="text-sm font-bold text-amber-800">
+                  Needs assignment ({preview.needsAssignment.length})
+                </h2>
               </div>
-              <p className="text-xs text-ink-3 mb-3">
-                These names didn&apos;t match any client. They&apos;ll be skipped on import.
+              <p className="text-xs text-ink-3 mb-4">
+                These Google Business Profile locations are new. Pick which client owns each, or skip
+                permanently if it&apos;s not a client. Your choice is saved — future imports route
+                automatically.
               </p>
-              <ul className="space-y-1 text-sm">
-                {preview.locationsUnmatched.map(u => (
-                  <li key={u.locationName} className="flex justify-between py-1">
-                    <span className="font-medium">{u.locationName}</span>
-                    <span className="text-ink-3 text-xs">{u.rowCount} rows</span>
-                  </li>
+              <div className="space-y-3">
+                {preview.needsAssignment.map(loc => {
+                  const d = decisions[loc.id] ?? { action: 'skip', clientId: '' }
+                  return (
+                    <div key={loc.id} className="border border-ink-6 rounded-lg p-3">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm text-ink truncate" title={loc.locationName}>
+                            {loc.locationName}
+                          </div>
+                          {loc.address && (
+                            <div className="text-xs text-ink-3 truncate">{loc.address}</div>
+                          )}
+                          <div className="text-xs text-ink-3 mt-0.5">
+                            <code className="font-mono text-[10px]">{loc.storeCode}</code> · {loc.rowCount} rows
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <select
+                          value={d.action === 'assign' ? d.clientId : '__skip__'}
+                          onChange={e => {
+                            const v = e.target.value
+                            if (v === '__skip__') {
+                              setDecisions(prev => ({ ...prev, [loc.id]: { action: 'skip', clientId: '' } }))
+                            } else {
+                              setDecisions(prev => ({ ...prev, [loc.id]: { action: 'assign', clientId: v } }))
+                            }
+                          }}
+                          className="flex-1 px-3 py-1.5 text-xs border border-ink-5 rounded-lg"
+                        >
+                          <option value="">— Pick a client —</option>
+                          {preview.clients.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}{loc.suggestedClientId === c.id ? '  ← suggested' : ''}
+                            </option>
+                          ))}
+                          <option value="__skip__">⊘ Skip (not my client, ignore forever)</option>
+                        </select>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Will import: already-mapped locations */}
+          {preview.willImport.length > 0 && (
+            <div className="bg-white rounded-xl border border-ink-6 p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <Users className="w-5 h-5 text-emerald-600" />
+                <h2 className="text-sm font-bold">
+                  Will import ({preview.willImport.length} location{preview.willImport.length === 1 ? '' : 's'})
+                </h2>
+              </div>
+              <div className="space-y-1.5">
+                {preview.willImport.map(m => (
+                  <div key={m.id} className="flex items-center justify-between p-2.5 rounded-lg bg-bg-2 text-sm">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Building2 className="w-3.5 h-3.5 text-ink-4 shrink-0" />
+                      <span className="font-medium truncate" title={m.locationName}>{m.locationName}</span>
+                      <span className="text-ink-3 shrink-0"> → {m.clientName}</span>
+                    </div>
+                    <div className="text-xs text-ink-3 shrink-0">{m.rowCount} rows</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Will skip: previously-marked-skip locations */}
+          {preview.willSkip.length > 0 && (
+            <div className="bg-white rounded-xl border border-ink-6 p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <EyeOff className="w-5 h-5 text-ink-4" />
+                <h2 className="text-sm font-bold text-ink-3">
+                  Permanently skipped ({preview.willSkip.length})
+                </h2>
+              </div>
+              <p className="text-xs text-ink-3 mb-2">
+                These locations were marked &ldquo;not a client&rdquo; in a previous import.
+              </p>
+              <ul className="text-sm">
+                {preview.willSkip.map(s => (
+                  <li key={s.id} className="text-ink-3 py-0.5">{s.locationName}</li>
                 ))}
               </ul>
             </div>
@@ -264,13 +384,13 @@ export default function BackfillPage() {
           <div className="flex gap-3">
             <button
               onClick={handleConfirm}
-              disabled={busy || preview.locationsMatched.length === 0}
+              disabled={busy || (preview.willImport.length === 0 && preview.needsAssignment.length === 0)}
               className="px-5 py-2.5 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-dark disabled:opacity-50"
             >
-              {busy ? 'Importing...' : `Import ${preview.locationsMatched.reduce((a, m) => a + m.rowCount, 0).toLocaleString()} rows`}
+              {busy ? 'Importing...' : `Import ${preview.totalRows.toLocaleString()} rows`}
             </button>
             <button
-              onClick={() => { setFiles([]); setPreview(null) }}
+              onClick={() => { setFiles([]); setPreview(null); setDecisions({}) }}
               className="px-5 py-2.5 border border-ink-5 text-sm font-medium rounded-lg hover:bg-bg-2"
             >
               Start over

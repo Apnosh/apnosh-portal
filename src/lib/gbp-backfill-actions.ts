@@ -45,6 +45,15 @@ export interface LookerGbpRow {
   date: string
   /** Business Profile location name as it appears in Looker (e.g. "Anchovies & Salt") */
   location_name: string
+  /**
+   * Google's stable store_code. Present in GMB Insights "Local Reports" CSVs
+   * (column "Store code") and in API responses. Optional only because legacy
+   * Looker daily exports pre-2024 don't always include it. When present we
+   * route deterministically; when absent we fall back to fuzzy name matching.
+   */
+  store_code?: string
+  /** Optional address from the CSV "Address" column, used for display in admin UI */
+  address?: string
 
   // Impressions (split by surface + platform where available)
   impressions_search_mobile?: number
@@ -85,10 +94,17 @@ function normalizeForMatch(s: string): string {
     .trim()
 }
 
-interface ClientRow { id: string; name: string; slug: string }
+interface ClientRow { id: string; name: string; slug: string; gbp_location_aliases?: string[] | null }
 
 function scoreMatch(locationName: string, client: ClientRow): number {
   const a = normalizeForMatch(locationName)
+
+  // Aliases are an exact-match shortcut: if the admin set one, treat it
+  // as authoritative regardless of how different from client.name.
+  for (const alias of client.gbp_location_aliases ?? []) {
+    if (normalizeForMatch(alias) === a) return 1
+  }
+
   const b = normalizeForMatch(client.name)
   if (a === b) return 1
   if (a.includes(b) || b.includes(a)) return 0.85
@@ -114,23 +130,65 @@ function findBestClient(locationName: string, clients: ClientRow[]): ClientRow |
 }
 
 // ---------------------------------------------------------------------------
-// Preview -- group rows by location, show what would match, unmatched
-// locations flagged so admin can fix the name in the DB before running.
+// Store_code resolution
 // ---------------------------------------------------------------------------
+// Modern GMB Insights CSVs include "Store code" (Google's stable ID).
+// Older Looker daily exports might not. For rows missing store_code we
+// generate a stable synthetic key from the location name so legacy data
+// still flows through the same gbp_locations pipeline (just less precise:
+// if the name changes, a new synthetic key would be generated and
+// produce a duplicate location row -- the admin can merge in the UI).
+// ---------------------------------------------------------------------------
+
+function resolveStoreCode(r: LookerGbpRow): string {
+  if (r.store_code && r.store_code.trim()) return r.store_code.trim()
+  const slug = r.location_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return `synthetic:${slug}`
+}
+
+// ---------------------------------------------------------------------------
+// Preview -- group rows by store_code, classify each unique location into:
+//   1. Will import   (location.status='assigned') -- silent, just import
+//   2. Skipped       (location.status='skipped')  -- silent, ignored
+//   3. Needs claim   (no row OR status='unassigned') -- admin assigns
+//
+// Side effect: for any unseen store_code, we upsert a gbp_locations row
+// with status='unassigned' so the UI has a stable ID to send back when
+// the admin clicks "Assign to client X".
+// ---------------------------------------------------------------------------
+
+export interface PendingLocation {
+  /** gbp_locations.id (stable across the preview/run round-trip) */
+  id: string
+  storeCode: string
+  locationName: string
+  address: string | null
+  rowCount: number
+  /** First date observed in this CSV for this location */
+  dateFirst: string
+  /** Last date observed */
+  dateLast: string
+  /** Best fuzzy-match guess so we can pre-select in the dropdown */
+  suggestedClientId: string | null
+}
+
+export interface AssignedLocation extends PendingLocation {
+  clientId: string
+  clientName: string
+}
 
 export interface BackfillPreview {
   totalRows: number
   dateRangeStart: string
   dateRangeEnd: string
-  locationsMatched: Array<{
-    locationName: string
-    clientId: string
-    clientName: string
-    rowCount: number
-    dateFirst: string
-    dateLast: string
-  }>
-  locationsUnmatched: Array<{ locationName: string; rowCount: number }>
+  /** Locations already mapped to a client; will import without prompting */
+  willImport: AssignedLocation[]
+  /** Locations the admin previously marked "skip"; silently ignored */
+  willSkip: PendingLocation[]
+  /** New or never-claimed locations; admin must assign or skip */
+  needsAssignment: PendingLocation[]
+  /** All clients, for populating the assignment dropdown */
+  clients: Array<{ id: string; name: string; slug: string }>
 }
 
 export async function previewBackfill(
@@ -141,34 +199,109 @@ export async function previewBackfill(
   if (rows.length === 0) return { success: false, error: 'No rows to import' }
 
   const admin = getAdminSupabase()
-  const { data: clientsRaw } = await admin.from('clients').select('id, name, slug')
+  const { data: clientsRaw } = await admin.from('clients').select('id, name, slug, gbp_location_aliases')
   const clients = (clientsRaw ?? []) as ClientRow[]
 
-  const byLocation = new Map<string, LookerGbpRow[]>()
+  // Group rows by store_code
+  const byStoreCode = new Map<string, { rows: LookerGbpRow[]; name: string; address: string | null }>()
   for (const r of rows) {
-    const key = r.location_name.trim()
-    if (!byLocation.has(key)) byLocation.set(key, [])
-    byLocation.get(key)!.push(r)
+    const code = resolveStoreCode(r)
+    let entry = byStoreCode.get(code)
+    if (!entry) {
+      entry = { rows: [], name: r.location_name, address: r.address ?? null }
+      byStoreCode.set(code, entry)
+    }
+    entry.rows.push(r)
+    // Use the most recent row's name/address (CSVs are usually time-ordered)
+    if (r.location_name) entry.name = r.location_name
+    if (r.address) entry.address = r.address
   }
 
-  const matched: BackfillPreview['locationsMatched'] = []
-  const unmatched: BackfillPreview['locationsUnmatched'] = []
+  // Bulk fetch existing gbp_locations
+  const storeCodes = [...byStoreCode.keys()]
+  const { data: existingLocs } = await admin
+    .from('gbp_locations')
+    .select('id, store_code, client_id, status, location_name')
+    .in('store_code', storeCodes)
+  const existingByCode = new Map<string, {
+    id: string; client_id: string | null; status: string; location_name: string
+  }>(
+    (existingLocs ?? []).map(l => [l.store_code as string, {
+      id: l.id as string,
+      client_id: (l.client_id as string | null) ?? null,
+      status: l.status as string,
+      location_name: l.location_name as string,
+    }])
+  )
 
-  for (const [loc, locRows] of byLocation) {
-    const client = findBestClient(loc, clients)
-    const dates = locRows.map(r => r.date).sort()
-    if (client) {
-      matched.push({
-        locationName: loc,
-        clientId: client.id,
-        clientName: client.name,
-        rowCount: locRows.length,
-        dateFirst: dates[0],
-        dateLast: dates[dates.length - 1],
-      })
+  // Upsert any new store_codes as 'unassigned'. This guarantees every
+  // location in the preview has a real gbp_locations.id we can pass to
+  // assignLocations() in the next step.
+  const toUpsert: Array<{
+    store_code: string; location_name: string; address: string | null
+  }> = []
+  for (const [code, info] of byStoreCode) {
+    if (!existingByCode.has(code)) {
+      toUpsert.push({ store_code: code, location_name: info.name, address: info.address })
     } else {
-      unmatched.push({ locationName: loc, rowCount: locRows.length })
+      // Refresh last_seen and any name drift
+      await admin
+        .from('gbp_locations')
+        .update({ location_name: info.name, last_seen_at: new Date().toISOString() })
+        .eq('store_code', code)
     }
+  }
+  if (toUpsert.length > 0) {
+    const { data: inserted } = await admin
+      .from('gbp_locations')
+      .upsert(toUpsert, { onConflict: 'store_code' })
+      .select('id, store_code, status, client_id, location_name')
+    for (const row of inserted ?? []) {
+      existingByCode.set(row.store_code as string, {
+        id: row.id as string,
+        client_id: (row.client_id as string | null) ?? null,
+        status: row.status as string,
+        location_name: row.location_name as string,
+      })
+    }
+  }
+
+  const willImport: AssignedLocation[] = []
+  const willSkip: PendingLocation[] = []
+  const needsAssignment: PendingLocation[] = []
+  const clientById = new Map(clients.map(c => [c.id, c]))
+
+  for (const [code, info] of byStoreCode) {
+    const loc = existingByCode.get(code)!
+    const dates = info.rows.map(r => r.date).sort()
+    const base: PendingLocation = {
+      id: loc.id,
+      storeCode: code,
+      locationName: info.name,
+      address: info.address,
+      rowCount: info.rows.length,
+      dateFirst: dates[0],
+      dateLast: dates[dates.length - 1],
+      suggestedClientId: null,
+    }
+
+    if (loc.status === 'assigned' && loc.client_id) {
+      const client = clientById.get(loc.client_id)
+      if (client) {
+        willImport.push({ ...base, clientId: client.id, clientName: client.name })
+        continue
+      }
+      // Edge case: location is assigned but client was deleted. Treat as needs_assignment.
+    }
+
+    if (loc.status === 'skipped') {
+      willSkip.push(base)
+      continue
+    }
+
+    // Suggest a client via fuzzy match for the dropdown's default
+    const guess = findBestClient(info.name, clients)
+    needsAssignment.push({ ...base, suggestedClientId: guess?.id ?? null })
   }
 
   const allDates = rows.map(r => r.date).sort()
@@ -178,10 +311,59 @@ export async function previewBackfill(
       totalRows: rows.length,
       dateRangeStart: allDates[0],
       dateRangeEnd: allDates[allDates.length - 1],
-      locationsMatched: matched.sort((a, b) => b.rowCount - a.rowCount),
-      locationsUnmatched: unmatched,
+      willImport: willImport.sort((a, b) => b.rowCount - a.rowCount),
+      willSkip,
+      needsAssignment: needsAssignment.sort((a, b) => b.rowCount - a.rowCount),
+      clients: clients.map(c => ({ id: c.id, name: c.name, slug: c.slug })),
     },
   }
+}
+
+// ---------------------------------------------------------------------------
+// Assign locations -- the admin's decisions about each unclaimed location.
+// Called between preview and run.
+// ---------------------------------------------------------------------------
+
+export interface LocationAssignment {
+  /** gbp_locations.id from the preview */
+  locationId: string
+  action: 'assign' | 'skip'
+  /** Required when action='assign' */
+  clientId?: string
+}
+
+export async function applyLocationAssignments(
+  assignments: LocationAssignment[],
+): Promise<{ success: true } | { success: false; error: string }> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const admin = getAdminSupabase()
+  for (const a of assignments) {
+    if (a.action === 'assign') {
+      if (!a.clientId) return { success: false, error: 'Missing clientId for assign' }
+      const { error } = await admin
+        .from('gbp_locations')
+        .update({
+          client_id: a.clientId,
+          status: 'assigned',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', a.locationId)
+      if (error) return { success: false, error: error.message }
+    } else {
+      const { error } = await admin
+        .from('gbp_locations')
+        .update({
+          client_id: null,
+          status: 'skipped',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', a.locationId)
+      if (error) return { success: false, error: error.message }
+    }
+  }
+  return { success: true }
 }
 
 // ---------------------------------------------------------------------------
@@ -192,9 +374,10 @@ export async function previewBackfill(
 export async function runBackfill(args: {
   rows: LookerGbpRow[]
   filename?: string
-  source?: 'looker_csv' | 'manual_upload'
+  source?: 'looker_csv' | 'manual_upload' | 'gmb_aggregate'
 }): Promise<{ success: true; data: {
   imported: number
+  skipped: number
   unmatched: number
   jobId: string
 } } | { success: false; error: string }> {
@@ -203,109 +386,110 @@ export async function runBackfill(args: {
   if (args.rows.length === 0) return { success: false, error: 'No rows to import' }
 
   const admin = getAdminSupabase()
-  const { data: clientsRaw } = await admin.from('clients').select('id, name, slug')
-  const clients = (clientsRaw ?? []) as ClientRow[]
-
   const source = args.source ?? 'looker_csv'
 
-  // Bucket rows by resolved client_id so we can upsert in a few big batches
-  // rather than one call per row.
-  const byClient = new Map<string, LookerGbpRow[]>()
-  const unmatchedLocations = new Set<string>()
-  const matchedLocations = new Set<string>()
+  // Resolve every row's location via store_code -> gbp_locations
+  const storeCodes = [...new Set(args.rows.map(resolveStoreCode))]
+  const { data: locs, error: locErr } = await admin
+    .from('gbp_locations')
+    .select('id, store_code, client_id, status')
+    .in('store_code', storeCodes)
+  if (locErr) return { success: false, error: locErr.message }
+
+  const locByCode = new Map<string, { id: string; client_id: string | null; status: string }>(
+    (locs ?? []).map(l => [l.store_code as string, {
+      id: l.id as string,
+      client_id: (l.client_id as string | null) ?? null,
+      status: l.status as string,
+    }])
+  )
+
+  // Partition rows
+  let imported = 0
+  let skipped = 0
+  let unmatched = 0
+  const upsertRows: Array<Record<string, unknown>> = []
+  const touchedClients = new Set<string>()
 
   for (const r of args.rows) {
-    const client = findBestClient(r.location_name, clients)
-    if (!client) {
-      unmatchedLocations.add(r.location_name)
-      continue
-    }
-    matchedLocations.add(r.location_name)
-    if (!byClient.has(client.id)) byClient.set(client.id, [])
-    byClient.get(client.id)!.push(r)
+    const code = resolveStoreCode(r)
+    const loc = locByCode.get(code)
+    if (!loc) { unmatched++; continue }
+    if (loc.status === 'skipped') { skipped++; continue }
+    if (loc.status !== 'assigned' || !loc.client_id) { unmatched++; continue }
+
+    const total = r.impressions_total ?? (
+      (r.impressions_search_mobile ?? 0) +
+      (r.impressions_search_desktop ?? 0) +
+      (r.impressions_maps_mobile ?? 0) +
+      (r.impressions_maps_desktop ?? 0)
+    )
+    upsertRows.push({
+      // gbp_metrics_sync_client_id() trigger sets client_id from the location
+      gbp_location_id: loc.id,
+      // Legacy text location_id kept populated for backwards-compat queries
+      location_id: code,
+      location_name: r.location_name,
+      date: r.date,
+      directions: r.directions ?? 0,
+      calls: r.calls ?? 0,
+      website_clicks: r.website_clicks ?? 0,
+      search_views: total,
+      impressions_search_mobile: r.impressions_search_mobile ?? 0,
+      impressions_search_desktop: r.impressions_search_desktop ?? 0,
+      impressions_maps_mobile: r.impressions_maps_mobile ?? 0,
+      impressions_maps_desktop: r.impressions_maps_desktop ?? 0,
+      impressions_total: total,
+      photo_views: r.photo_views ?? 0,
+      photo_count: r.photo_count ?? 0,
+      post_views: r.post_views ?? 0,
+      post_clicks: r.post_clicks ?? 0,
+      conversations: r.conversations ?? 0,
+      bookings: r.bookings ?? 0,
+      top_queries: r.top_queries ?? null,
+      source,
+    })
+    touchedClients.add(loc.client_id)
   }
 
-  let imported = 0
-  const allDates = args.rows.map(r => r.date).sort()
-  const rangeStart = allDates[0]
-  const rangeEnd = allDates[allDates.length - 1]
+  // Bulk upsert keyed by (gbp_location_id, date) -- one row per location-day
+  for (let i = 0; i < upsertRows.length; i += 500) {
+    const chunk = upsertRows.slice(i, i + 500)
+    const { error } = await admin
+      .from('gbp_metrics')
+      .upsert(chunk, { onConflict: 'gbp_location_id,date' })
+    if (error) {
+      return { success: false, error: `Import failed at row ${i}: ${error.message}` }
+    }
+    imported += chunk.length
+  }
 
-  for (const [clientId, clientRows] of byClient) {
-    const locName = clientRows[0].location_name
-    const locationId = `loc_${locName.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 50)}`
-
-    // Make sure a gbp_connections row exists so the client tab can
-    // show "last synced X".
+  // Refresh last_sync_at on a per-client gbp_connections row so existing
+  // "last synced X" UIs keep working without immediately rewriting them.
+  for (const clientId of touchedClients) {
     await admin.from('gbp_connections').upsert({
       client_id: clientId,
-      location_id: locationId,
-      location_name: locName,
+      location_id: 'agency_csv_import',
+      location_name: 'CSV Import (agency)',
       connection_type: 'csv_import',
       last_sync_at: new Date().toISOString(),
       sync_status: 'active',
     }, { onConflict: 'client_id,location_id' })
-
-    // Build the full metric rows. `search_views` kept for back-compat;
-    // new rich columns populated directly.
-    const upsertRows = clientRows.map(r => {
-      const total = r.impressions_total ?? (
-        (r.impressions_search_mobile ?? 0) +
-        (r.impressions_search_desktop ?? 0) +
-        (r.impressions_maps_mobile ?? 0) +
-        (r.impressions_maps_desktop ?? 0)
-      )
-      return {
-        client_id: clientId,
-        location_id: locationId,
-        location_name: locName,
-        date: r.date,
-        directions: r.directions ?? 0,
-        calls: r.calls ?? 0,
-        website_clicks: r.website_clicks ?? 0,
-        search_views: total, // legacy column -- keep populated
-        impressions_search_mobile: r.impressions_search_mobile ?? 0,
-        impressions_search_desktop: r.impressions_search_desktop ?? 0,
-        impressions_maps_mobile: r.impressions_maps_mobile ?? 0,
-        impressions_maps_desktop: r.impressions_maps_desktop ?? 0,
-        impressions_total: total,
-        photo_views: r.photo_views ?? 0,
-        photo_count: r.photo_count ?? 0,
-        post_views: r.post_views ?? 0,
-        post_clicks: r.post_clicks ?? 0,
-        conversations: r.conversations ?? 0,
-        bookings: r.bookings ?? 0,
-        top_queries: r.top_queries ?? null,
-        source,
-      }
-    })
-
-    // Chunk to stay under PostgREST's row limit
-    for (let i = 0; i < upsertRows.length; i += 500) {
-      const chunk = upsertRows.slice(i, i + 500)
-      const { error } = await admin
-        .from('gbp_metrics')
-        .upsert(chunk, { onConflict: 'client_id,location_id,date' })
-      if (error) {
-        return { success: false, error: `Import failed at row ${i}: ${error.message}` }
-      }
-      imported += chunk.length
-    }
-
     revalidatePath(`/admin/clients/${clientId}`)
   }
 
-  // Record the job for audit
+  const allDates = args.rows.map(r => r.date).sort()
   const { data: job } = await admin.from('gbp_backfill_jobs').insert({
     uploaded_by: auth.userId,
     source,
     filename: args.filename ?? null,
     row_count: args.rows.length,
     matched_rows: imported,
-    unmatched_rows: args.rows.length - imported,
-    unmatched_locations: [...unmatchedLocations],
-    date_range_start: rangeStart,
-    date_range_end: rangeEnd,
-    client_ids: [...byClient.keys()],
+    unmatched_rows: unmatched,
+    unmatched_locations: [],
+    date_range_start: allDates[0],
+    date_range_end: allDates[allDates.length - 1],
+    client_ids: [...touchedClients],
   }).select('id').maybeSingle()
 
   revalidatePath('/admin/gbp/backfill')
@@ -313,7 +497,8 @@ export async function runBackfill(args: {
     success: true,
     data: {
       imported,
-      unmatched: args.rows.length - imported,
+      skipped,
+      unmatched,
       jobId: (job as { id: string } | null)?.id ?? '',
     },
   }
