@@ -15,7 +15,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Type, Edit3, X, Loader2, AlertTriangle, CheckCircle2, Sparkles,
+  Type, Edit3, X, Loader2, AlertTriangle, CheckCircle2, Sparkles, RotateCcw,
 } from 'lucide-react'
 import {
   updateMyContent, voiceCheck,
@@ -131,6 +131,7 @@ function EditModal({
   const overLimit = max !== undefined && value.length > max
   const underLimit = min !== undefined && value.length < min
   const dirty = value !== field.value
+  const canResetToDefault = field.hasOverride && field.default !== undefined && value !== field.default
 
   const handleVoiceCheck = async () => {
     if (!dirty) return
@@ -235,6 +236,21 @@ function EditModal({
             </div>
           )}
 
+          {/* Diff: shows old vs new when the value has changed. Helps the
+              client see what they're about to publish before clicking save. */}
+          {dirty && (
+            <div className="mt-4 rounded-md border border-ink-6 bg-bg-2 p-3 text-xs space-y-2">
+              <div>
+                <div className="uppercase tracking-wide text-ink-4 mb-1 text-[10px]">Currently live</div>
+                <p className="text-ink-3 line-through decoration-red-300/70">{field.value || '(empty)'}</p>
+              </div>
+              <div>
+                <div className="uppercase tracking-wide text-ink-4 mb-1 text-[10px]">After publish</div>
+                <p className="text-ink font-medium">{value || '(empty)'}</p>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="mt-3 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
               {error}
@@ -242,7 +258,20 @@ function EditModal({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-ink-6 bg-bg-2">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-ink-6 bg-bg-2">
+          <div>
+            {canResetToDefault && (
+              <button
+                onClick={() => { setValue(field.default ?? ''); setVoice(null) }}
+                disabled={busy}
+                className="text-xs text-ink-3 hover:text-ink inline-flex items-center gap-1"
+                title="Reset this field back to the design's default copy"
+              >
+                <RotateCcw className="w-3 h-3" /> Reset to default
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
           <button
             onClick={onClose}
             disabled={busy}
@@ -269,6 +298,7 @@ function EditModal({
               Save & publish
             </button>
           )}
+          </div>
         </div>
       </div>
     </div>

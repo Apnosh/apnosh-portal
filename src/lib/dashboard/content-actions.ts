@@ -190,10 +190,17 @@ export interface VoiceCheckResult {
  * Soft voice check. Returns advisory warning + optional suggestion.
  * Never blocks.
  *
- * Implementation note: this is currently a lightweight rule-based pass
- * (forbid_punctuation from schema + brand voice keyword scan). A future
- * iteration calls Claude with the brand voice notes + value for richer
- * advisory feedback. Both should be ADVISORY, not blocking.
+ * Two-pass:
+ *   1. Cheap synchronous rules (schema-level forbid_punctuation, blatant
+ *      brand-voice violations from voice_notes keywords). Catches the
+ *      obvious cases without an API call.
+ *   2. Claude pass for nuanced voice judgment. Reads voice_notes + value
+ *      and returns a one-line warning + optional rewrite, OR a clean
+ *      "looks on-brand."
+ *
+ * The AI pass is what makes this different from a Webflow-style CMS.
+ * It's also what makes the system get smarter over time as we feed
+ * voice_overrides back into voice_notes refinement.
  */
 export async function voiceCheck(
   fieldKey: string,
@@ -204,16 +211,18 @@ export async function voiceCheck(
 
   const db = adminDb()
 
-  // Load schema again to know per-field forbid_punctuation
-  const { data: settings } = await db
-    .from('site_settings')
-    .select('external_site_url')
-    .eq('client_id', auth.clientId)
-    .maybeSingle()
-  const schema = await fetchClientContentSchema((settings?.external_site_url as string | null) ?? null)
+  // Pull schema + brand context
+  const [settingsRes, brandRes] = await Promise.all([
+    db.from('site_settings').select('external_site_url').eq('client_id', auth.clientId).maybeSingle(),
+    db.from('client_brands').select('voice_notes').eq('client_id', auth.clientId).maybeSingle(),
+  ])
+  const schema = await fetchClientContentSchema(
+    (settingsRes.data?.external_site_url as string | null) ?? null,
+  )
   const field = schema?.fields.find(f => f.key === fieldKey)
+  const voiceNotes = (brandRes.data?.voice_notes as string | null) ?? null
 
-  // 1. Forbid-punctuation rule from schema
+  // Pass 1 -- cheap rules
   const forbid = field?.constraints?.forbidPunctuation ?? []
   for (const ch of forbid) {
     if (value.includes(ch)) {
@@ -223,31 +232,71 @@ export async function voiceCheck(
       }
     }
   }
-
-  // 2. Brand voice notes scan (lightweight)
-  const { data: brand } = await db
-    .from('client_brands')
-    .select('voice_notes')
-    .eq('client_id', auth.clientId)
-    .maybeSingle()
-  const voiceNotes = ((brand?.voice_notes as string | null) ?? '').toLowerCase()
-  if (voiceNotes.includes('no exclamation') && value.includes('!')) {
+  if (voiceNotes && /no exclamation/i.test(voiceNotes) && value.includes('!')) {
     return {
       warning: 'Your brand voice says "no exclamation points." This draft has one.',
       suggestion: value.replaceAll('!', '.'),
     }
   }
-  if (voiceNotes.includes('plain-spoken') || voiceNotes.includes('plain spoken')) {
-    // Flag obvious marketing-speak
-    const flags = ['leverage', 'synergy', 'cutting-edge', 'next level', 'best in class']
-    for (const f of flags) {
-      if (value.toLowerCase().includes(f)) {
-        return {
-          warning: `Your brand voice is plain-spoken. "${f}" reads as marketing-speak.`,
-          suggestion: null,
-        }
+
+  // Pass 2 -- Claude. Skip if no API key, no voice_notes (nothing to compare
+  // against), or value is identical to the field default (likely no change).
+  if (!process.env.ANTHROPIC_API_KEY || !voiceNotes || !field) {
+    return { warning: null, suggestion: null }
+  }
+  if (value.trim() === (field.default ?? '').trim()) {
+    return { warning: null, suggestion: null }
+  }
+
+  try {
+    const Anthropic = (await import('@anthropic-ai/sdk')).default
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const resp = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 250,
+      system: [
+        'You are a brand voice consultant.',
+        'Given a brand\'s voice notes and a single piece of website copy, decide if the copy is on-brand.',
+        'Output STRICT JSON only -- no prose outside the JSON object. Schema:',
+        '  { "ok": true } if the copy is on-brand',
+        '  { "ok": false, "warning": "<one short sentence explaining the mismatch>", "suggestion": "<optional rewrite, same meaning, same length, on-brand>" }',
+        'Rules:',
+        '- Be liberal. If the copy is reasonable, return ok:true.',
+        '- Only flag clear voice mismatches (tone, register, vocabulary).',
+        '- Do not flag spelling or grammar.',
+        '- Suggestions must be the same approximate length and meaning, not a different message.',
+      ].join('\n'),
+      messages: [
+        {
+          role: 'user',
+          content: [
+            `Field: "${field.label}" (${field.description ?? 'no description'})`,
+            '',
+            'Brand voice notes:',
+            voiceNotes,
+            '',
+            'Copy to evaluate:',
+            value,
+          ].join('\n'),
+        },
+      ],
+    })
+    const block = resp.content.find(b => b.type === 'text')
+    const raw = block && 'text' in block ? block.text : ''
+    const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim()
+    const parsed = JSON.parse(cleaned)
+    if (parsed?.ok === true) return { warning: null, suggestion: null }
+    if (parsed?.ok === false) {
+      return {
+        warning: typeof parsed.warning === 'string' ? parsed.warning : 'This may not match your brand voice.',
+        suggestion: typeof parsed.suggestion === 'string' && parsed.suggestion.trim().length > 0
+          ? parsed.suggestion.trim()
+          : null,
       }
     }
+  } catch (e) {
+    // AI failure is non-fatal -- voice check stays advisory. Log and fall through.
+    console.warn('[voiceCheck] AI pass failed:', e instanceof Error ? e.message : e)
   }
 
   return { warning: null, suggestion: null }
