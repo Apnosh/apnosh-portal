@@ -19,6 +19,7 @@ import {
   Loader2, X, CheckCircle2, ArrowRight,
 } from 'lucide-react'
 import { createMyUpdate, type MySiteOverview, type MyLocation } from '@/lib/dashboard/my-site-actions'
+import { useLocationContext } from '@/lib/dashboard/location-context'
 import HoursEditor from '@/components/admin/updates/hours-editor'
 import MenuItemForm from '@/components/admin/updates/menu-item-form'
 import PromotionForm from '@/components/admin/updates/promotion-form'
@@ -198,8 +199,22 @@ function QuickEditModal({
   const [error, setError] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
+  // Pull the currently-selected location from the global selector so the
+  // modal opens with the user's existing context (if they're scoped to
+  // Mountlake Terrace globally, that's the default for new updates too).
+  const { selectedLocationId } = useLocationContext()
+
+  // Whether this update type ALLOWS an "All locations" option.
+  // Hours are per-location only; everything else can be brand-wide.
+  const supportsAllLocations = action !== 'hours'
+
   // Per-form state, all initialized to defaults
-  const [locationId, setLocationId] = useState<string>(locations[0]?.id ?? '')
+  // For 'hours' we must pick one specific location; default to global selection
+  // or first location. For other types, null = "All locations".
+  const [locationId, setLocationId] = useState<string | null>(() => {
+    if (action === 'hours') return selectedLocationId ?? locations[0]?.id ?? ''
+    return selectedLocationId
+  })
   const [hours, setHours] = useState<WeeklyHours>(() => buildDefaultHours(locations[0]))
   const [menuItem, setMenuItem] = useState<MenuItemPayload>(buildDefaultMenuItem)
   const [promotion, setPromotion] = useState<PromotionPayload>(buildDefaultPromotion)
@@ -214,10 +229,12 @@ function QuickEditModal({
     let summary = ''
     let locId: string | null = null
 
+    // locId carries the user's "Apply to" choice. null = all locations.
+    locId = locationId ?? null
+
     switch (action) {
       case 'hours':
-        if (!locationId) { setError('Pick a location'); setBusy(false); return }
-        locId = locationId
+        if (!locId) { setError('Pick a location'); setBusy(false); return }
         payload = { scope: 'regular', weekly: hours }
         summary = 'Hours updated'
         break
@@ -234,7 +251,6 @@ function QuickEditModal({
         summary = `Event: ${event.name || 'new event'}`
         break
       case 'closure':
-        if (locations[0]?.id) locId = locations[0].id
         payload = closure
         summary = closure.reason ? `Closure: ${closure.reason}` : 'Closure'
         break
@@ -266,25 +282,35 @@ function QuickEditModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
-          {action === 'hours' && (
-            <>
-              {locations.length > 1 && (
-                <div className="mb-4">
-                  <label className="text-xs font-medium text-ink-3 block mb-1">Location</label>
-                  <select
-                    value={locationId}
-                    onChange={e => setLocationId(e.target.value)}
-                    className="w-full rounded-md border border-ink-6 px-3 py-2 text-sm"
-                  >
-                    {locations.map(l => (
-                      <option key={l.id} value={l.id}>{l.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <HoursEditor weekly={hours} onChange={setHours} />
-            </>
+          {/* Apply-to picker: shown whenever the client has multiple locations.
+              Hours must target one specific location; everything else can be
+              brand-wide ("All locations") or scoped to a single store. */}
+          {locations.length > 1 && (
+            <div className="mb-4">
+              <label className="text-xs font-medium text-ink-3 block mb-1">Apply to</label>
+              <select
+                value={locationId ?? '__all__'}
+                onChange={e => setLocationId(e.target.value === '__all__' ? null : e.target.value)}
+                className="w-full rounded-md border border-ink-6 px-3 py-2 text-sm"
+              >
+                {supportsAllLocations && (
+                  <option value="__all__">All locations</option>
+                )}
+                {locations.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-ink-4 mt-1">
+                {action === 'hours'
+                  ? 'Hours are per-location. Pick which one this change applies to.'
+                  : locationId
+                    ? `Only the ${locations.find(l => l.id === locationId)?.name} listing will receive this update.`
+                    : 'This update will be published for every connected location.'}
+              </p>
+            </div>
           )}
+
+          {action === 'hours' && <HoursEditor weekly={hours} onChange={setHours} />}
           {action === 'menu_item' && <MenuItemForm payload={menuItem} onChange={setMenuItem} />}
           {action === 'promotion' && <PromotionForm payload={promotion} onChange={setPromotion} />}
           {action === 'event' && <EventForm payload={event} onChange={setEvent} />}
