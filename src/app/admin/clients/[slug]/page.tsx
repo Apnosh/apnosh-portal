@@ -8,7 +8,7 @@ import {
   Building2, Palette, Image, BookOpen, ListTodo,
   Globe, MapPin, Mail, Phone, User, X, Check,
   BarChart3, Star, MessageSquare, RefreshCw, FileText, UserCircle,
-  Activity,
+  Activity, Sparkles,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import BrandTab from './tabs/brand-tab'
@@ -309,6 +309,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
         </div>
         {/* Quick actions to operations pages */}
         <div className="flex items-center gap-1.5">
+          <Link
+            href={`/admin/clients/${client.slug}/operator`}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-3 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Operator
+          </Link>
           <Link
             href={`/admin/clients/${client.slug}/updates`}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-3 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
