@@ -151,7 +151,7 @@ export async function createUpdate(args: {
 // publishUpdate -- trigger fanout for an existing update
 // ───────────────────────────────────────────────────────────────
 
-export async function publishUpdate(updateId: string): Promise<
+export async function publishUpdate(updateId: string, options?: { actor?: 'service' }): Promise<
   | { success: true; data: { fanoutResults: { target: FanoutTarget; status: string; error?: string }[] } }
   | { success: false; error: string }
 > {
@@ -162,8 +162,12 @@ export async function publishUpdate(updateId: string): Promise<
     .from('client_updates').select('*').eq('id', updateId).maybeSingle()
   if (updErr || !update) return { success: false, error: updErr?.message ?? 'Update not found' }
 
-  const auth = await requireAdminOrClient(update.client_id as string)
-  if (!auth.ok) return { success: false, error: auth.error }
+  // 'service' actor = trusted internal caller (MCP server, cron, etc.) that
+  // has already authenticated through its own mechanism. Skip session auth.
+  if (options?.actor !== 'service') {
+    const auth = await requireAdminOrClient(update.client_id as string)
+    if (!auth.ok) return { success: false, error: auth.error }
+  }
 
   if (update.status === 'published') {
     return { success: false, error: 'Update is already published' }
