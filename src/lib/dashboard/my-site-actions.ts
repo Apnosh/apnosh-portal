@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient, SupabaseClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { createUpdate, publishUpdate } from '@/lib/updates/actions'
+import { getPermission, clientSelfServeTypes } from '@/lib/updates/policy'
 import type { UpdateType, UpdatePayload, FanoutTarget, UpdateRecord } from '@/lib/updates/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,6 +70,8 @@ export interface MySiteOverview {
     publishedAt: string | null
     status: string
   }>
+  /** Update types the client can publish themselves without admin review. */
+  selfServeTypes: UpdateType[]
 }
 
 export async function getMySiteOverview(): Promise<
@@ -135,6 +138,7 @@ export async function getMySiteOverview(): Promise<
         publishedAt: (u.published_at as string | null) ?? null,
         status: u.status as string,
       })),
+      selfServeTypes: clientSelfServeTypes(),
     },
   }
 }
@@ -142,10 +146,6 @@ export async function getMySiteOverview(): Promise<
 // ────────────────────────────────────────────────────────────────
 // createMyUpdate -- client creates + publishes a quick update
 // ────────────────────────────────────────────────────────────────
-
-const ALLOWED_TYPES: UpdateType[] = [
-  'hours', 'menu_item', 'promotion', 'event', 'closure', 'info',
-]
 
 export async function createMyUpdate(args: {
   type: UpdateType
@@ -160,8 +160,17 @@ export async function createMyUpdate(args: {
   const auth = await requireClientUser()
   if (!auth.ok) return { success: false, error: auth.error }
 
-  if (!ALLOWED_TYPES.includes(args.type)) {
-    return { success: false, error: `Update type '${args.type}' not allowed for self-serve` }
+  // Policy enforcement: only types where client permission is 'direct' can
+  // be self-served. Anything else (info, asset, social_post) routes through
+  // the change-request flow and is not creatable here.
+  const perm = getPermission(args.type, 'client')
+  if (perm !== 'direct') {
+    return {
+      success: false,
+      error: perm === 'request'
+        ? `${args.type} changes need to go through a change request -- /dashboard/website/requests/new`
+        : `${args.type} is not allowed for self-serve`,
+    }
   }
 
   const created = await createUpdate({

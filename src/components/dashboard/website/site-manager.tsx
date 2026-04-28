@@ -44,6 +44,8 @@ const ACTION_META: Record<QuickAction, { label: string; sub: string; Icon: typeo
   closure:    { label: 'Mark closure',  sub: 'Holiday or unplanned', Icon: AlertCircle },
 }
 
+const QUICK_ACTION_KEYS: QuickAction[] = ['hours', 'menu_item', 'promotion', 'event', 'closure']
+
 export default function SiteManager({ overview, locations }: Props) {
   const router = useRouter()
   const [activeAction, setActiveAction] = useState<QuickAction | null>(null)
@@ -95,7 +97,9 @@ export default function SiteManager({ overview, locations }: Props) {
           Changes here push to your website, Google, and connected platforms automatically.
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {(Object.keys(ACTION_META) as QuickAction[]).map(key => {
+          {QUICK_ACTION_KEYS
+            .filter(k => overview.selfServeTypes.includes(k))
+            .map(key => {
             const meta = ACTION_META[key]
             const Icon = meta.Icon
             return (

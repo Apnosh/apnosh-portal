@@ -21,6 +21,7 @@ import type {
   FanoutTarget, HoursPayload, WeeklyHours, SpecialHoursEntry, ClosurePayload,
 } from './types'
 import { DEFAULT_TARGETS } from './types'
+import { filterConnectedTargets } from './policy'
 import { fanoutToGbp } from './fanout/gbp'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,7 +97,11 @@ export async function createUpdate(args: {
   const auth = await requireAdminOrClient(args.clientId)
   if (!auth.ok) return { success: false, error: auth.error }
 
-  const targets = args.targets ?? DEFAULT_TARGETS[args.type]
+  // Default targets per type, then filter to channels actually connected
+  // for this client. Anything dropped is recorded as a skipped fanout so
+  // the UI can show "no connection -- not sent" instead of silent omission.
+  const requested = args.targets ?? DEFAULT_TARGETS[args.type]
+  const { keep, dropped } = await filterConnectedTargets(args.clientId, requested)
 
   const db = adminDb()
   const { data, error } = await db
@@ -106,7 +111,7 @@ export async function createUpdate(args: {
       location_id: args.locationId ?? null,
       type: args.type,
       payload: args.payload,
-      targets,
+      targets: keep,
       scheduled_for: args.scheduledFor ?? null,
       summary: args.summary ?? null,
       approval_required: args.approvalRequired ?? false,
@@ -118,15 +123,24 @@ export async function createUpdate(args: {
 
   if (error) return { success: false, error: error.message }
 
-  // Pre-create fanout rows for every target so we can show "pending" UI immediately
-  if (targets.length > 0) {
-    await db.from('client_update_fanouts').insert(
-      targets.map(target => ({
-        update_id: data.id as string,
-        target,
-        status: 'pending',
-      })),
-    )
+  // Pre-create fanout rows. Connected targets start as pending; dropped
+  // targets are recorded as skipped with a "not connected" reason so the
+  // operator UI shows them rather than hiding the gap silently.
+  const fanoutRows = [
+    ...keep.map(target => ({
+      update_id: data.id as string,
+      target,
+      status: 'pending' as const,
+    })),
+    ...dropped.map(target => ({
+      update_id: data.id as string,
+      target,
+      status: 'skipped' as const,
+      error_message: `${target} is not connected for this client`,
+    })),
+  ]
+  if (fanoutRows.length > 0) {
+    await db.from('client_update_fanouts').insert(fanoutRows)
   }
 
   revalidatePath(`/admin/clients/${args.clientId}`)
