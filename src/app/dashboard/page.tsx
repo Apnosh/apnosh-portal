@@ -165,11 +165,19 @@ export default function DashboardPage() {
             </svg>
           </div>
           <h2 className="text-[20px] font-bold mb-2" style={{ color: 'var(--db-black)' }}>
-            Getting your data ready
+            Connect your accounts to see numbers
           </h2>
-          <p className="text-[14px] max-w-sm mx-auto" style={{ color: 'var(--db-ink-3)' }}>
-            Your numbers will show up here soon. Give it about 48 hours.
+          <p className="text-[14px] max-w-sm mx-auto mb-6" style={{ color: 'var(--db-ink-3)' }}>
+            Once your Google Business and social accounts are wired up,
+            your visibility and foot traffic numbers show up here.
           </p>
+          <a
+            href="/dashboard/connected-accounts"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
+            style={{ background: '#4abd98' }}
+          >
+            Connect accounts
+          </a>
         </div>
       </div>
     )

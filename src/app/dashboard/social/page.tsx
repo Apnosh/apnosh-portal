@@ -159,11 +159,19 @@ export default function SocialOverviewPage() {
             </svg>
           </div>
           <h2 className="text-[20px] font-bold mb-2" style={{ color: 'var(--db-black)' }}>
-            Getting your social data ready
+            Connect your social accounts
           </h2>
-          <p className="text-[14px] max-w-sm mx-auto" style={{ color: 'var(--db-ink-3)' }}>
-            Your social media numbers will show up here soon.
+          <p className="text-[14px] max-w-sm mx-auto mb-6" style={{ color: 'var(--db-ink-3)' }}>
+            Once Instagram, Facebook, or TikTok is connected, your reach,
+            engagement, and follower trends will show up here.
           </p>
+          <a
+            href="/dashboard/connected-accounts"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
+            style={{ background: '#4abd98' }}
+          >
+            Connect accounts
+          </a>
         </div>
       </div>
     )
