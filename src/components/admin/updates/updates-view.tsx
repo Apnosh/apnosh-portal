@@ -17,10 +17,13 @@ import {
 } from 'lucide-react'
 import { createUpdate, publishUpdate, retryFanout } from '@/lib/updates/actions'
 import type {
-  UpdateRecord, UpdateFanoutRecord, FanoutTarget, WeeklyHours, DayKey, HoursPayload,
+  UpdateRecord, UpdateFanoutRecord, FanoutTarget, WeeklyHours, DayKey,
+  HoursPayload, ClosurePayload, MenuItemPayload, UpdateType,
 } from '@/lib/updates/types'
 import { DEFAULT_TARGETS } from '@/lib/updates/types'
 import HoursEditor from './hours-editor'
+import ClosureForm from './closure-form'
+import MenuItemForm from './menu-item-form'
 
 interface Location {
   id: string
@@ -58,8 +61,10 @@ export default function UpdatesView({
   const [showCreate, setShowCreate] = useState(initialUpdates.length === 0)
 
   const [selectedLocation, setSelectedLocation] = useState<string>(locations[0]?.id ?? '')
-  const [updateType, setUpdateType] = useState<'hours'>('hours')
+  const [updateType, setUpdateType] = useState<UpdateType>('hours')
   const [weekly, setWeekly] = useState<WeeklyHours>(() => buildDefaultHours(locations[0]))
+  const [closure, setClosure] = useState<ClosurePayload>(() => buildDefaultClosure())
+  const [menuItem, setMenuItem] = useState<MenuItemPayload>(() => buildDefaultMenuItem())
   const [targets, setTargets] = useState<FanoutTarget[]>(DEFAULT_TARGETS.hours)
   const [busy, setBusy] = useState(false)
   const [, startTransition] = useTransition()
@@ -73,15 +78,41 @@ export default function UpdatesView({
     setBusy(true)
     setResultMessage(null)
 
-    const payload: HoursPayload = { scope: 'regular', weekly }
+    let payload: HoursPayload | ClosurePayload | MenuItemPayload
+    let summary: string
+    if (updateType === 'hours') {
+      payload = { scope: 'regular', weekly } as HoursPayload
+      summary = 'Updated regular hours'
+    } else if (updateType === 'closure') {
+      // Validate closure
+      if (!closure.starts_at || !closure.ends_at) {
+        setBusy(false)
+        setResultMessage({ ok: false, msg: 'Pick a closure date range' })
+        return
+      }
+      payload = closure
+      summary = `${closure.kind === 'emergency' ? 'Emergency closure' : 'Closure'}: ${closure.reason || 'no reason given'}`
+    } else if (updateType === 'menu_item') {
+      if (!menuItem.item.name) {
+        setBusy(false)
+        setResultMessage({ ok: false, msg: 'Menu item name is required' })
+        return
+      }
+      payload = menuItem
+      summary = `${menuItem.action === 'add' ? 'New' : menuItem.action === 'update' ? 'Updated' : 'Removed'} menu item: ${menuItem.item.name}`
+    } else {
+      setBusy(false)
+      setResultMessage({ ok: false, msg: 'Type not implemented yet' })
+      return
+    }
 
     const created = await createUpdate({
       clientId,
       locationId: selectedLocation,
-      type: 'hours',
+      type: updateType,
       payload,
       targets,
-      summary: 'Updated regular hours',
+      summary,
     })
 
     if (!created.success) {
@@ -155,22 +186,34 @@ export default function UpdatesView({
             </div>
           )}
 
-          {/* Type picker (only hours for now) */}
+          {/* Type picker */}
           <div>
             <label className="text-xs font-medium text-ink-3 block mb-1">Type</label>
             <select
               value={updateType}
-              onChange={e => setUpdateType(e.target.value as 'hours')}
+              onChange={e => {
+                const t = e.target.value as UpdateType
+                setUpdateType(t)
+                setTargets(DEFAULT_TARGETS[t])
+              }}
               className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg"
             >
               <option value="hours">Hours change</option>
-              {/* Future: <option value="menu_item">New menu item</option>, etc. */}
+              <option value="closure">Closure (planned or emergency)</option>
+              <option value="menu_item">Menu item</option>
+              {/* Future: promotion, event, asset, info */}
             </select>
           </div>
 
-          {/* Hours editor */}
+          {/* Type-specific form */}
           {updateType === 'hours' && (
             <HoursEditor weekly={weekly} onChange={setWeekly} />
+          )}
+          {updateType === 'closure' && (
+            <ClosureForm payload={closure} onChange={setClosure} />
+          )}
+          {updateType === 'menu_item' && (
+            <MenuItemForm payload={menuItem} onChange={setMenuItem} />
           )}
 
           {/* Targets */}
@@ -389,5 +432,33 @@ function seedTypicalHours(): WeeklyHours {
     fri: [{ open: '11:00', close: '23:00' }],
     sat: [{ open: '11:00', close: '23:00' }],
     sun: [{ open: '11:00', close: '21:00' }],
+  }
+}
+
+function buildDefaultClosure(): ClosurePayload {
+  // Default to "tomorrow, all day" -- common case for next-day announcements
+  const now = new Date()
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  tomorrow.setHours(0, 0, 0, 0)
+  const dayAfter = new Date(tomorrow)
+  dayAfter.setDate(dayAfter.getDate() + 1)
+  return {
+    starts_at: tomorrow.toISOString(),
+    ends_at: dayAfter.toISOString(),
+    kind: 'planned',
+    reason: '',
+    customer_message: '',
+  }
+}
+
+function buildDefaultMenuItem(): MenuItemPayload {
+  return {
+    action: 'add',
+    item: {
+      name: '',
+      description: '',
+      availability: 'always',
+    },
   }
 }

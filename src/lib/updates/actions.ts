@@ -18,7 +18,7 @@ import { createClient as createAdminClient, SupabaseClient } from '@supabase/sup
 import { revalidatePath } from 'next/cache'
 import type {
   UpdateType, UpdatePayload, UpdateRecord, UpdateFanoutRecord,
-  FanoutTarget, HoursPayload, WeeklyHours, SpecialHoursEntry,
+  FanoutTarget, HoursPayload, WeeklyHours, SpecialHoursEntry, ClosurePayload,
 } from './types'
 import { DEFAULT_TARGETS } from './types'
 import { fanoutToGbp } from './fanout/gbp'
@@ -139,7 +139,15 @@ export async function publishUpdate(updateId: string): Promise<
       await db.from('client_updates').update({ status: 'failed' }).eq('id', updateId)
       return { success: false, error: stResult.error }
     }
+  } else if (update.type === 'closure') {
+    const stResult = await applyClosureToSourceOfTruth(update)
+    if (!stResult.success) {
+      await db.from('client_updates').update({ status: 'failed' }).eq('id', updateId)
+      return { success: false, error: stResult.error }
+    }
   }
+  // menu_item, promotion, event, asset, info: no source-of-truth update needed
+  // (these are announcements; future menu_items table will be the SoT for menu)
 
   // 3. Fanout to each target platform in parallel
   const targets = (update.targets ?? []) as FanoutTarget[]
@@ -224,6 +232,75 @@ async function applyHoursToSourceOfTruth(
         .eq('id', locId)
       if (error) return { success: false, error: error.message }
     }
+  }
+
+  return { success: true }
+}
+
+async function applyClosureToSourceOfTruth(
+  update: { id: string; location_id: string | null; client_id: string; payload: ClosurePayload },
+): Promise<{ success: true } | { success: false; error: string }> {
+  const db = adminDb()
+  const payload = update.payload
+
+  // Resolve target locations
+  let locationIds: string[]
+  if (update.location_id) {
+    locationIds = [update.location_id]
+  } else {
+    const { data: locs } = await db
+      .from('gbp_locations')
+      .select('id')
+      .eq('client_id', update.client_id)
+      .eq('status', 'assigned')
+    locationIds = (locs ?? []).map(l => l.id as string)
+  }
+
+  if (locationIds.length === 0) {
+    return { success: false, error: 'No locations to close' }
+  }
+
+  // Build special_hours entries: one entry per day in the range, all closed
+  const startDate = new Date(payload.starts_at)
+  const endDate = new Date(payload.ends_at)
+  const note = payload.reason || (payload.kind === 'emergency' ? 'Emergency closure' : 'Closed')
+
+  const entries: SpecialHoursEntry[] = []
+  // Iterate inclusive range, day by day. UTC to avoid timezone drift.
+  const cursor = new Date(Date.UTC(
+    startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate(),
+  ))
+  const end = new Date(Date.UTC(
+    endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate(),
+  ))
+  while (cursor.getTime() <= end.getTime()) {
+    entries.push({
+      date: cursor.toISOString().slice(0, 10),
+      hours: [], // closed
+      note,
+    })
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+
+  // Merge into each location's special_hours, replacing any existing entries
+  // for the same dates.
+  for (const locId of locationIds) {
+    const { data: loc } = await db
+      .from('gbp_locations')
+      .select('special_hours')
+      .eq('id', locId)
+      .maybeSingle()
+    const existing = ((loc?.special_hours as SpecialHoursEntry[]) ?? [])
+    const incomingDates = new Set(entries.map(e => e.date))
+    const merged = [
+      ...existing.filter(e => !incomingDates.has(e.date)),
+      ...entries,
+    ].sort((a, b) => a.date.localeCompare(b.date))
+    const { error } = await db
+      .from('gbp_locations')
+      .update({ special_hours: merged })
+      .eq('id', locId)
+    if (error) return { success: false, error: error.message }
   }
 
   return { success: true }

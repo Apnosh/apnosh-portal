@@ -14,7 +14,7 @@
 
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { getAgencyAccessToken } from '@/lib/gbp-agency'
-import type { HoursPayload, WeeklyHours, DayKey } from '../types'
+import type { HoursPayload, WeeklyHours, DayKey, ClosurePayload, SpecialHoursEntry } from '../types'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -103,16 +103,55 @@ export async function fanoutToGbp(update: UpdateInput): Promise<FanoutResult> {
   switch (update.type) {
     case 'hours':
       return await fanoutHours(update)
+    case 'closure':
+      return await fanoutClosure(update)
     case 'menu_item':
     case 'promotion':
     case 'event':
-    case 'closure':
     case 'asset':
     case 'info':
       return { success: true, skipped: true, error: `${update.type} fanout not yet implemented for GBP` }
     default:
       return { success: false, error: `Unknown update type: ${update.type}` }
   }
+}
+
+// ── Closure fanout ────────────────────────────────────────────
+// Closures translate to specialHours periods on GBP (closed for date range).
+async function fanoutClosure(update: UpdateInput): Promise<FanoutResult> {
+  const payload = update.payload as ClosurePayload
+  if (!update.location_id) {
+    return { success: false, error: 'Closure update requires a specific location_id' }
+  }
+
+  const tok = await getAgencyAccessToken()
+  if (!tok) return { success: false, error: 'GBP agency token not connected' }
+
+  const resourceName = await resolveGbpResourceName(update.location_id)
+  if (!resourceName) {
+    return { success: true, skipped: true, error: 'Location has no GBP resource (synthetic store_code)' }
+  }
+
+  // Build per-day closed entries from the date range
+  const startDate = new Date(payload.starts_at)
+  const endDate = new Date(payload.ends_at)
+  const entries: SpecialHoursEntry[] = []
+  const cursor = new Date(Date.UTC(
+    startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate(),
+  ))
+  const end = new Date(Date.UTC(
+    endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate(),
+  ))
+  while (cursor.getTime() <= end.getTime()) {
+    entries.push({
+      date: cursor.toISOString().slice(0, 10),
+      hours: [],
+      note: payload.reason,
+    })
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+
+  return await patchSpecialHours(tok.accessToken, resourceName, entries)
 }
 
 // ── Hours fanout ──────────────────────────────────────────────
