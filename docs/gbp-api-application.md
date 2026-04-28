@@ -123,11 +123,63 @@ We need approximately 125 API calls per day at steady state (21 locations × ~6 
 
 ## OAuth scopes requested
 
+For OAuth verification, we recommend submitting **`business.manage` only** as a first pass. Drive scopes can stay in Testing mode initially (the 3 test users covers internal use) and submit separately once the GBP scope is approved. This narrows the reviewer's surface area by 75%.
+
+### Per-scope justification (paste into the verification form)
+
+**`https://www.googleapis.com/auth/business.manage`** — sensitive
+
 ```
-https://www.googleapis.com/auth/business.manage
+We use this scope read-only to fetch each managed location's daily
+performance metrics (impressions on Google Search and Google Maps,
+phone calls, direction requests, website clicks, message conversations,
+photo views) via the Business Profile Performance API and display them
+in the client's private Local SEO dashboard at portal.apnosh.com.
+
+We never write, modify, or delete any Business Profile content via
+this API. Edits to listings remain manual through the standard Business
+Profile Manager interface. Specifically we call only:
+  - accounts.list (read)
+  - accounts.locations.list (read, narrow readMask)
+  - locations.fetchMultiDailyMetricsTimeSeries (read)
+
+Each restaurant operator sees only their own location's data through
+row-level security. We never aggregate across clients, never sell or
+share data, never use it for advertising, never train ML models on it.
+Full data handling at portal.apnosh.com/about/local-seo and
+portal.apnosh.com/privacy.
 ```
 
-Justification: this is the minimum scope required to call the Business Profile Performance API. We use it in read-only patterns; we do not modify, write, or delete anything via the API.
+### Drive scopes (defer to a second submission)
+
+**`https://www.googleapis.com/auth/drive.readonly`** — sensitive
+
+```
+We read documents from a small set of client folders the agency admin
+explicitly links via the portal (one Drive folder per client). Used to
+populate brand guidelines, content briefs, and campaign assets into the
+client's portal pages. We never browse the user's full Drive -- the
+admin's UI requires pasting a specific folder URL, and we only read
+items inside that folder.
+```
+
+**`https://www.googleapis.com/auth/documents.readonly`** — sensitive
+
+```
+We extract plain-text content from the Google Docs inside the linked
+client folders to power AI-assisted brief generation. Same scoping as
+drive.readonly: only documents in the explicitly-linked folder, never
+the user's broader Docs library.
+```
+
+**`https://www.googleapis.com/auth/userinfo.email`** — non-sensitive
+
+```
+We display which Google account granted access on the admin
+Integrations page so the agency owner can confirm the correct account
+is connected. Stored in the integrations table as a non-PII display
+field; never shared with end users.
+```
 
 ---
 
