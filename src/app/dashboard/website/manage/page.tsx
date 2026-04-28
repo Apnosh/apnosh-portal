@@ -10,7 +10,9 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { getMySiteOverview, getMyLocations } from '@/lib/dashboard/my-site-actions'
+import { getMyContentFields } from '@/lib/dashboard/content-actions'
 import SiteManager from '@/components/dashboard/website/site-manager'
+import ContentEditor from '@/components/dashboard/website/content-editor'
 
 export default async function MySitePage() {
   const overviewRes = await getMySiteOverview()
@@ -20,6 +22,9 @@ export default async function MySitePage() {
   }
   const locationsRes = await getMyLocations()
   const locations = locationsRes.success ? locationsRes.data : []
+  const contentRes = await getMyContentFields()
+  const contentFields = contentRes.success ? contentRes.data.fields : []
+  const hasContentSchema = contentRes.success ? contentRes.data.hasSchema : false
 
   return (
     <div className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20">
@@ -38,6 +43,12 @@ export default async function MySitePage() {
       </div>
 
       <SiteManager overview={overviewRes.data} locations={locations} />
+
+      {hasContentSchema && contentFields.length > 0 && (
+        <div className="mt-8">
+          <ContentEditor fields={contentFields} />
+        </div>
+      )}
     </div>
   )
 }

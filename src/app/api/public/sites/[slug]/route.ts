@@ -136,6 +136,19 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
     .limit(1)
     .maybeSingle()
 
+  // 9. Content field overrides (typed copy edits the client published).
+  // Returned as a flat object keyed by field_key for easy template lookup,
+  // e.g. content['hero.subhead']. Customer site uses this with fallback
+  // to its own default copy.
+  const { data: contentRows } = await db
+    .from('client_content_fields')
+    .select('field_key, value')
+    .eq('client_id', client.id)
+  const content: Record<string, string> = {}
+  for (const r of contentRows ?? []) {
+    content[r.field_key as string] = r.value as string
+  }
+
   return NextResponse.json(
     {
       client: {
@@ -153,6 +166,7 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
       upcomingEvents,
       social,
       heroPhotoUrl: (heroAsset?.url as string | null) ?? null,
+      content,
       meta: {
         siteType: settings?.site_type ?? 'none',
         generatedAt: new Date().toISOString(),
