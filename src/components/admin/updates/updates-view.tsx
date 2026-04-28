@@ -18,12 +18,13 @@ import {
 import { createUpdate, publishUpdate, retryFanout } from '@/lib/updates/actions'
 import type {
   UpdateRecord, UpdateFanoutRecord, FanoutTarget, WeeklyHours, DayKey,
-  HoursPayload, ClosurePayload, MenuItemPayload, UpdateType,
+  HoursPayload, ClosurePayload, MenuItemPayload, PromotionPayload, UpdateType,
 } from '@/lib/updates/types'
 import { DEFAULT_TARGETS } from '@/lib/updates/types'
 import HoursEditor from './hours-editor'
 import ClosureForm from './closure-form'
 import MenuItemForm from './menu-item-form'
+import PromotionForm from './promotion-form'
 
 interface Location {
   id: string
@@ -65,6 +66,7 @@ export default function UpdatesView({
   const [weekly, setWeekly] = useState<WeeklyHours>(() => buildDefaultHours(locations[0]))
   const [closure, setClosure] = useState<ClosurePayload>(() => buildDefaultClosure())
   const [menuItem, setMenuItem] = useState<MenuItemPayload>(() => buildDefaultMenuItem())
+  const [promotion, setPromotion] = useState<PromotionPayload>(() => buildDefaultPromotion())
   const [targets, setTargets] = useState<FanoutTarget[]>(DEFAULT_TARGETS.hours)
   const [busy, setBusy] = useState(false)
   const [, startTransition] = useTransition()
@@ -78,7 +80,7 @@ export default function UpdatesView({
     setBusy(true)
     setResultMessage(null)
 
-    let payload: HoursPayload | ClosurePayload | MenuItemPayload
+    let payload: HoursPayload | ClosurePayload | MenuItemPayload | PromotionPayload
     let summary: string
     if (updateType === 'hours') {
       payload = { scope: 'regular', weekly } as HoursPayload
@@ -100,6 +102,14 @@ export default function UpdatesView({
       }
       payload = menuItem
       summary = `${menuItem.action === 'add' ? 'New' : menuItem.action === 'update' ? 'Updated' : 'Removed'} menu item: ${menuItem.item.name}`
+    } else if (updateType === 'promotion') {
+      if (!promotion.name || !promotion.valid_from || !promotion.valid_until) {
+        setBusy(false)
+        setResultMessage({ ok: false, msg: 'Promotion needs a name and valid date range' })
+        return
+      }
+      payload = promotion
+      summary = `Promotion: ${promotion.name}`
     } else {
       setBusy(false)
       setResultMessage({ ok: false, msg: 'Type not implemented yet' })
@@ -201,7 +211,8 @@ export default function UpdatesView({
               <option value="hours">Hours change</option>
               <option value="closure">Closure (planned or emergency)</option>
               <option value="menu_item">Menu item</option>
-              {/* Future: promotion, event, asset, info */}
+              <option value="promotion">Promotion (deal, happy hour, LTO)</option>
+              {/* Future: event, asset, info */}
             </select>
           </div>
 
@@ -214,6 +225,9 @@ export default function UpdatesView({
           )}
           {updateType === 'menu_item' && (
             <MenuItemForm payload={menuItem} onChange={setMenuItem} />
+          )}
+          {updateType === 'promotion' && (
+            <PromotionForm payload={promotion} onChange={setPromotion} />
           )}
 
           {/* Targets */}
@@ -460,5 +474,19 @@ function buildDefaultMenuItem(): MenuItemPayload {
       description: '',
       availability: 'always',
     },
+  }
+}
+
+function buildDefaultPromotion(): PromotionPayload {
+  // Default to "starts today, ends in 7 days"
+  const now = new Date()
+  const ends = new Date(now)
+  ends.setDate(ends.getDate() + 7)
+  return {
+    name: '',
+    description: '',
+    discount_type: 'percent',
+    valid_from: now.toISOString(),
+    valid_until: ends.toISOString(),
   }
 }
