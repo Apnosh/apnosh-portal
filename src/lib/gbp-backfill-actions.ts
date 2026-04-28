@@ -535,14 +535,42 @@ export interface LocalSeoSummary {
   lastSyncAt: string | null
   dateFirst: string | null
   dateLast: string | null
+  /**
+   * 'daily'   = one row per location per day (Looker / API)
+   * 'monthly' = one row per location per month-end (GMB Insights aggregate CSV)
+   * Drives whether KPI cards say "(30d)" vs "(March 2026)" and whether
+   * the trend chart renders as a line or bars.
+   */
+  granularity: 'daily' | 'monthly'
+  /** Source of the most recent metric row (for the "data origin" line) */
+  lastSource: string | null
   totals30d: {
     impressions: number; actions: number; calls: number; directions: number; website: number
   }
   totalsPrev30d: {
     impressions: number; actions: number; calls: number; directions: number; website: number
   }
+  /** Human-readable label for the current period: "March 2026" or "Last 30d" */
+  currentPeriodLabel: string
+  /** Same for the prior period: "February 2026" or "Prior 30d" */
+  priorPeriodLabel: string
   topQueries: Array<{ query: string; impressions: number }>
+  /** Aggregated -- one entry per distinct date (sums all locations) */
   daily: LocalSeoDailyRow[]
+}
+
+function isMonthEnd(iso: string): boolean {
+  // Parse as UTC to avoid timezone bouncing
+  const d = new Date(iso + 'T00:00:00Z')
+  if (isNaN(d.getTime())) return false
+  const next = new Date(d)
+  next.setUTCDate(next.getUTCDate() + 1)
+  return next.getUTCDate() === 1
+}
+
+function monthLabel(iso: string): string {
+  const d = new Date(iso + 'T00:00:00Z')
+  return d.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 }
 
 export async function getLocalSeoSummary(
@@ -559,42 +587,86 @@ export async function getLocalSeoSummary(
 
   const { data: rows, error } = await admin
     .from('gbp_metrics')
-    .select('date, impressions_total, impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, website_clicks, calls, directions, photo_views, post_views, top_queries')
+    .select('date, impressions_total, impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, website_clicks, calls, directions, photo_views, post_views, top_queries, source')
     .eq('client_id', clientId)
     .gte('date', cutoffIso)
     .order('date', { ascending: true })
 
   if (error) return { success: false, error: error.message }
 
-  const daily: LocalSeoDailyRow[] = (rows ?? []).map(r => ({
-    date: r.date,
-    impressions_total: r.impressions_total ?? 0,
-    impressions_search: (r.impressions_search_mobile ?? 0) + (r.impressions_search_desktop ?? 0),
-    impressions_maps: (r.impressions_maps_mobile ?? 0) + (r.impressions_maps_desktop ?? 0),
-    website_clicks: r.website_clicks ?? 0,
-    calls: r.calls ?? 0,
-    directions: r.directions ?? 0,
-    photo_views: r.photo_views ?? 0,
-    post_views: r.post_views ?? 0,
-  }))
+  // Aggregate by date -- multiple locations on the same day collapse to a
+  // single chartable point. Without this, a 7-location client gets 7 spikes
+  // per day and the trend chart is unreadable.
+  const byDate = new Map<string, LocalSeoDailyRow>()
+  for (const r of rows ?? []) {
+    const date = r.date as string
+    const existing = byDate.get(date) ?? {
+      date,
+      impressions_total: 0, impressions_search: 0, impressions_maps: 0,
+      website_clicks: 0, calls: 0, directions: 0, photo_views: 0, post_views: 0,
+    }
+    existing.impressions_total += (r.impressions_total as number) ?? 0
+    existing.impressions_search += ((r.impressions_search_mobile as number) ?? 0) + ((r.impressions_search_desktop as number) ?? 0)
+    existing.impressions_maps += ((r.impressions_maps_mobile as number) ?? 0) + ((r.impressions_maps_desktop as number) ?? 0)
+    existing.website_clicks += (r.website_clicks as number) ?? 0
+    existing.calls += (r.calls as number) ?? 0
+    existing.directions += (r.directions as number) ?? 0
+    existing.photo_views += (r.photo_views as number) ?? 0
+    existing.post_views += (r.post_views as number) ?? 0
+    byDate.set(date, existing)
+  }
+  const daily: LocalSeoDailyRow[] = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date))
 
-  // Window totals: last 30 days vs the 30 days before that
+  // Granularity detection: if every distinct date in the window is a
+  // month-end date, it's a monthly aggregate (GMB Insights). Otherwise
+  // assume daily (Looker / API).
+  const granularity: 'daily' | 'monthly' = daily.length > 0 && daily.every(d => isMonthEnd(d.date))
+    ? 'monthly'
+    : 'daily'
+
+  // Window totals: depends on granularity.
+  // - daily: rolling last 30d vs prior 30d
+  // - monthly: most recent month-end vs the one before
   const today = new Date()
-  const d30 = new Date(today); d30.setDate(d30.getDate() - 30)
-  const d60 = new Date(today); d60.setDate(d60.getDate() - 60)
-  const iso = (d: Date) => d.toISOString().slice(0, 10)
+  let totals30d: LocalSeoSummary['totals30d']
+  let totalsPrev30d: LocalSeoSummary['totalsPrev30d']
+  let currentPeriodLabel = 'Last 30d'
+  let priorPeriodLabel = 'Prior 30d'
 
-  const sumWindow = (fromIso: string, toIso: string) => {
-    const win = daily.filter(r => r.date >= fromIso && r.date < toIso)
-    const imp = win.reduce((a, r) => a + r.impressions_total, 0)
-    const calls = win.reduce((a, r) => a + r.calls, 0)
-    const dirs = win.reduce((a, r) => a + r.directions, 0)
-    const web = win.reduce((a, r) => a + r.website_clicks, 0)
-    return { impressions: imp, actions: calls + dirs + web, calls, directions: dirs, website: web }
+  if (granularity === 'monthly' && daily.length > 0) {
+    const sumRow = (r: LocalSeoDailyRow | undefined) => r ? {
+      impressions: r.impressions_total,
+      actions: r.calls + r.directions + r.website_clicks,
+      calls: r.calls, directions: r.directions, website: r.website_clicks,
+    } : { impressions: 0, actions: 0, calls: 0, directions: 0, website: 0 }
+    const last = daily[daily.length - 1]
+    const prev = daily[daily.length - 2]
+    totals30d = sumRow(last)
+    totalsPrev30d = sumRow(prev)
+    currentPeriodLabel = monthLabel(last.date)
+    priorPeriodLabel = prev ? monthLabel(prev.date) : 'No prior month'
+  } else {
+    const d30 = new Date(today); d30.setDate(d30.getDate() - 30)
+    const d60 = new Date(today); d60.setDate(d60.getDate() - 60)
+    const iso = (d: Date) => d.toISOString().slice(0, 10)
+    const sumWindow = (fromIso: string, toIso: string) => {
+      const win = daily.filter(r => r.date >= fromIso && r.date < toIso)
+      const imp = win.reduce((a, r) => a + r.impressions_total, 0)
+      const calls = win.reduce((a, r) => a + r.calls, 0)
+      const dirs = win.reduce((a, r) => a + r.directions, 0)
+      const web = win.reduce((a, r) => a + r.website_clicks, 0)
+      return { impressions: imp, actions: calls + dirs + web, calls, directions: dirs, website: web }
+    }
+    totals30d = sumWindow(iso(d30), iso(new Date(today.getTime() + 86400000)))
+    totalsPrev30d = sumWindow(iso(d60), iso(d30))
   }
 
-  const totals30d = sumWindow(iso(d30), iso(new Date(today.getTime() + 86400000)))
-  const totalsPrev30d = sumWindow(iso(d60), iso(d30))
+  // Last source -- look at the most recent row to know if data came from
+  // CSV upload vs API. Drives the banner copy.
+  const sortedBySource = (rows ?? []).slice().sort((a, b) =>
+    (b.date as string).localeCompare(a.date as string)
+  )
+  const lastSource = (sortedBySource[0]?.source as string | null) ?? null
 
   // Aggregate top queries across the window
   const queryTotals = new Map<string, number>()
@@ -626,8 +698,12 @@ export async function getLocalSeoSummary(
       lastSyncAt,
       dateFirst: daily[0]?.date ?? null,
       dateLast: daily[daily.length - 1]?.date ?? null,
+      granularity,
+      lastSource,
       totals30d,
       totalsPrev30d,
+      currentPeriodLabel,
+      priorPeriodLabel,
       topQueries,
       daily,
     },

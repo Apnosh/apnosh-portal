@@ -30,6 +30,7 @@ function adminDb(): AdminDb {
 }
 
 export type GbpStatus = 'never' | 'pending' | 'connected' | 'lost'
+export type GbpDataOrigin = 'csv' | 'api' | null
 
 export interface ClientGbpStatus {
   clientId: string
@@ -38,6 +39,12 @@ export interface ClientGbpStatus {
   lastSyncAt: string | null
   lastMetricDate: string | null
   locationName: string | null
+  /**
+   * Where the most recent metric row came from. Used by the banner to
+   * differentiate "API connection lost" (alarming) from "no recent CSV
+   * upload" (informational). null = no metrics at all.
+   */
+  dataOrigin: GbpDataOrigin
 }
 
 const RECENT_METRIC_DAYS = 14
@@ -53,7 +60,7 @@ export async function getAllClientGbpStatuses(): Promise<Map<string, ClientGbpSt
     db.from('clients').select('id, gbp_invite_sent_at'),
     db.from('gbp_connections').select('client_id, location_name, last_sync_at, sync_status'),
     db.from('gbp_metrics')
-      .select('client_id, date')
+      .select('client_id, date, source')
       .order('date', { ascending: false }),
   ])
 
@@ -66,7 +73,7 @@ export async function getAllClientGbpStatuses(): Promise<Map<string, ClientGbpSt
     last_sync_at: string | null
     sync_status: string | null
   }>
-  const metrics = (metricsRes.data ?? []) as Array<{ client_id: string; date: string }>
+  const metrics = (metricsRes.data ?? []) as Array<{ client_id: string; date: string; source: string | null }>
 
   // Build lookup: latest connection per client
   const latestConn = new Map<string, typeof connections[number]>()
@@ -81,13 +88,16 @@ export async function getAllClientGbpStatuses(): Promise<Map<string, ClientGbpSt
     }
   }
 
-  // Latest metric date per client (metrics are pre-sorted desc by date)
-  const latestMetric = new Map<string, string>()
+  // Latest metric date + source per client (metrics are pre-sorted desc by date)
+  const latestMetric = new Map<string, { date: string; source: string | null }>()
   for (const m of metrics) {
     if (!latestMetric.has(m.client_id)) {
-      latestMetric.set(m.client_id, m.date)
+      latestMetric.set(m.client_id, { date: m.date, source: m.source })
     }
   }
+
+  const isCsvSource = (s: string | null): boolean =>
+    s === 'looker_csv' || s === 'manual_upload' || s === 'gmb_aggregate'
 
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - RECENT_METRIC_DAYS)
@@ -96,12 +106,25 @@ export async function getAllClientGbpStatuses(): Promise<Map<string, ClientGbpSt
   const out = new Map<string, ClientGbpStatus>()
   for (const cl of clients) {
     const conn = latestConn.get(cl.id)
-    const lastMetric = latestMetric.get(cl.id) ?? null
+    const lastMetricRow = latestMetric.get(cl.id) ?? null
+    const lastMetricDate = lastMetricRow?.date ?? null
+    const dataOrigin: GbpDataOrigin = lastMetricRow
+      ? (isCsvSource(lastMetricRow.source) ? 'csv' : 'api')
+      : null
+
+    // For CSV-imported data, use a wider freshness window. Monthly aggregates
+    // come in once a month, so a 14-day cutoff would always be "lost". Use
+    // 35 days for CSV (slightly more than a month) so a fresh upload counts
+    // as connected.
+    const csvCutoff = new Date()
+    csvCutoff.setDate(csvCutoff.getDate() - 35)
+    const csvCutoffIso = csvCutoff.toISOString().slice(0, 10)
+    const effectiveCutoff = dataOrigin === 'csv' ? csvCutoffIso : cutoffIso
 
     let status: GbpStatus
     if (!conn) {
       status = cl.gbp_invite_sent_at ? 'pending' : 'never'
-    } else if (lastMetric && lastMetric >= cutoffIso) {
+    } else if (lastMetricDate && lastMetricDate >= effectiveCutoff) {
       status = 'connected'
     } else {
       status = 'lost'
@@ -112,8 +135,9 @@ export async function getAllClientGbpStatuses(): Promise<Map<string, ClientGbpSt
       status,
       inviteSentAt: cl.gbp_invite_sent_at ?? null,
       lastSyncAt: conn?.last_sync_at ?? null,
-      lastMetricDate: lastMetric,
+      lastMetricDate,
       locationName: conn?.location_name ?? null,
+      dataOrigin,
     })
   }
 

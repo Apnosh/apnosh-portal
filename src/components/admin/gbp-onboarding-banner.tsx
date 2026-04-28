@@ -94,13 +94,17 @@ export default function GbpOnboardingBanner({ clientId }: Props) {
     },
     lost: {
       Icon: AlertCircle,
-      bg: 'bg-red-50 border-red-200',
-      iconColor: 'text-red-600',
-      title: 'GBP access lost',
-      body: status.lastMetricDate
-        ? `No new metrics since ${status.lastMetricDate}. The client may have removed Apnosh as a Manager, or our agency token may need re-authentication.`
-        : 'Connection broken. Try reconnecting from /admin/integrations or re-invite the client.',
-      cta: 'Reconnect / re-invite',
+      bg: status.dataOrigin === 'csv' ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200',
+      iconColor: status.dataOrigin === 'csv' ? 'text-amber-600' : 'text-red-600',
+      title: status.dataOrigin === 'csv'
+        ? 'CSV data is getting stale'
+        : 'GBP access lost',
+      body: status.dataOrigin === 'csv'
+        ? `Last CSV upload covers up to ${status.lastMetricDate}. Upload a fresh GMB Insights export to keep the dashboard current, or connect the GBP API to automate it.`
+        : status.lastMetricDate
+          ? `No new metrics since ${status.lastMetricDate}. The client may have removed Apnosh as a Manager, or our agency token may need re-authentication.`
+          : 'Connection broken. Try reconnecting from /admin/integrations or re-invite the client.',
+      cta: status.dataOrigin === 'csv' ? 'Upload more data' : 'Reconnect / re-invite',
     },
   } as const
 

@@ -48,8 +48,12 @@ function DeltaBadge({ curr, prev }: { curr: number; prev: number }) {
 }
 
 function MetricCard({
-  label, icon: Icon, curr, prev,
-}: { label: string; icon: React.ComponentType<{ className?: string }>; curr: number; prev: number }) {
+  label, icon: Icon, curr, prev, currentPeriodLabel, priorPeriodLabel,
+}: {
+  label: string; icon: React.ComponentType<{ className?: string }>
+  curr: number; prev: number
+  currentPeriodLabel: string; priorPeriodLabel: string
+}) {
   return (
     <div className="rounded-xl border border-ink-6 bg-white p-5">
       <div className="flex items-center justify-between mb-3">
@@ -58,7 +62,36 @@ function MetricCard({
       </div>
       <div className="text-2xl font-bold text-ink">{formatNum(curr)}</div>
       <div className="text-xs text-ink-3 mt-0.5">{label}</div>
-      <div className="text-[10px] text-ink-4 mt-2">vs {formatNum(prev)} prior 30d</div>
+      <div className="text-[10px] text-ink-4 mt-2 leading-tight">
+        {currentPeriodLabel}
+        <br />
+        vs {formatNum(prev)} ({priorPeriodLabel})
+      </div>
+    </div>
+  )
+}
+
+// Monthly bar chart -- use when data is one point per month-end.
+function MonthlyBars({ daily, height = 80 }: { daily: { date: string; impressions_total: number }[]; height?: number }) {
+  if (daily.length < 1) return <div className="h-20 text-xs text-ink-4 flex items-center">no data</div>
+  const max = Math.max(...daily.map(d => d.impressions_total), 1)
+  const monthLabel = (iso: string) => new Date(iso + 'T00:00:00Z').toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
+  return (
+    <div className="flex items-end gap-3" style={{ height: height + 28 }}>
+      {daily.map(d => {
+        const h = (d.impressions_total / max) * height
+        return (
+          <div key={d.date} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+            <div className="text-[10px] font-mono text-ink-3 truncate w-full text-center" title={`${d.impressions_total.toLocaleString()} impressions`}>
+              {d.impressions_total >= 1000 ? `${(d.impressions_total / 1000).toFixed(1)}K` : d.impressions_total}
+            </div>
+            <div className="w-full bg-brand/15 rounded-t-md relative" style={{ height: h }}>
+              <div className="absolute inset-x-0 bottom-0 bg-brand rounded-t-md" style={{ height: h }} />
+            </div>
+            <div className="text-[10px] text-ink-3">{monthLabel(d.date)}</div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -135,33 +168,43 @@ export default function LocalSeoTab({ clientId, clientSlug }: Props) {
     )
   }
 
-  const { totals30d, totalsPrev30d, topQueries, daily, lastSyncAt, dateFirst, dateLast } = data
+  const { totals30d, totalsPrev30d, topQueries, daily, lastSyncAt, dateFirst, dateLast, granularity, currentPeriodLabel, priorPeriodLabel } = data
+  const distinctDates = daily.length  // already aggregated by date in the action
 
   return (
     <div className="space-y-6">
       {/* Header strip */}
       <div className="flex items-center justify-between text-xs text-ink-3">
         <div>
-          Coverage: <span className="font-medium text-ink">{dateFirst}</span> → <span className="font-medium text-ink">{dateLast}</span> ({data.daysCovered} days)
+          Coverage: <span className="font-medium text-ink">{dateFirst}</span> → <span className="font-medium text-ink">{dateLast}</span>
+          {' '}({distinctDates} {granularity === 'monthly' ? (distinctDates === 1 ? 'month' : 'months') : (distinctDates === 1 ? 'day' : 'days')})
         </div>
         {lastSyncAt && <div>Last sync: {new Date(lastSyncAt).toLocaleString()}</div>}
       </div>
 
       {/* KPI row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <MetricCard label="Impressions (30d)" icon={Eye} curr={totals30d.impressions} prev={totalsPrev30d.impressions} />
-        <MetricCard label="Website clicks"   icon={Globe} curr={totals30d.website} prev={totalsPrev30d.website} />
-        <MetricCard label="Phone calls"      icon={Phone} curr={totals30d.calls} prev={totalsPrev30d.calls} />
-        <MetricCard label="Directions"       icon={MapPin} curr={totals30d.directions} prev={totalsPrev30d.directions} />
+        <MetricCard label="Impressions" icon={Eye} curr={totals30d.impressions} prev={totalsPrev30d.impressions} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
+        <MetricCard label="Website clicks"   icon={Globe} curr={totals30d.website} prev={totalsPrev30d.website} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
+        <MetricCard label="Phone calls"      icon={Phone} curr={totals30d.calls} prev={totalsPrev30d.calls} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
+        <MetricCard label="Directions"       icon={MapPin} curr={totals30d.directions} prev={totalsPrev30d.directions} currentPeriodLabel={currentPeriodLabel} priorPeriodLabel={priorPeriodLabel} />
       </div>
 
-      {/* Trend chart */}
+      {/* Trend chart -- bars for monthly, sparkline for daily */}
       <div className="rounded-xl border border-ink-6 bg-white p-5">
         <h3 className="text-sm font-bold text-ink mb-1">Impressions trend</h3>
-        <p className="text-xs text-ink-3 mb-4">Daily total impressions across Search + Maps</p>
-        <div className="text-brand">
-          <Sparkline points={daily.map(d => d.impressions_total)} height={80} />
-        </div>
+        <p className="text-xs text-ink-3 mb-4">
+          {granularity === 'monthly'
+            ? 'Monthly total impressions across Search + Maps'
+            : 'Daily total impressions across Search + Maps'}
+        </p>
+        {granularity === 'monthly' ? (
+          <MonthlyBars daily={daily} height={80} />
+        ) : (
+          <div className="text-brand">
+            <Sparkline points={daily.map(d => d.impressions_total)} height={80} />
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-ink-6 text-sm">
           <div>
             <div className="text-xs text-ink-3 mb-1">From Search</div>
@@ -176,7 +219,7 @@ export default function LocalSeoTab({ clientId, clientSlug }: Props) {
 
       {/* Engagement funnel */}
       <div className="rounded-xl border border-ink-6 bg-white p-5">
-        <h3 className="text-sm font-bold text-ink mb-1">Engagement funnel (last 30 days)</h3>
+        <h3 className="text-sm font-bold text-ink mb-1">Engagement funnel ({currentPeriodLabel})</h3>
         <p className="text-xs text-ink-3 mb-4">How many impressions turn into customer actions</p>
         {(() => {
           const imp = totals30d.impressions
@@ -197,7 +240,7 @@ export default function LocalSeoTab({ clientId, clientSlug }: Props) {
                   {actions.toLocaleString()} actions from {imp.toLocaleString()} impressions
                   <br />
                   <span className={delta >= 0 ? 'text-emerald-600' : 'text-red-500'}>
-                    {delta >= 0 ? '+' : ''}{delta.toFixed(2)}pp vs prior 30d
+                    {delta >= 0 ? '+' : ''}{delta.toFixed(2)}pp vs {priorPeriodLabel}
                   </span>
                 </div>
               </div>
