@@ -209,3 +209,122 @@ export async function getPublicSiteSettings(clientId: string): Promise<SiteSetti
     .maybeSingle()
   return data ? rowToSettings(data) : null
 }
+
+// ────────────────────────────────────────────────────────────────
+// testExternalSiteConnection -- validate the wiring for an external_repo
+// site without publishing a real update.
+//
+// Checks:
+//   1. Settings present (URL, deploy hook, optional API key)
+//   2. external_site_url is reachable (HEAD request, follows redirects)
+//   3. Public API endpoint returns 200 when called with the configured key
+//   4. Deploy hook responds (POST). NOTE: this triggers a real deploy --
+//      use `dryRun: true` to skip this step.
+// ────────────────────────────────────────────────────────────────
+
+export interface ExternalConnectionTestResult {
+  settings: { ok: boolean; detail: string }
+  externalSiteReachable: { ok: boolean; status?: number; detail: string }
+  publicApi: { ok: boolean; status?: number; detail: string }
+  deployHook: { ok: boolean; status?: number; detail: string; skipped?: boolean }
+}
+
+export async function testExternalSiteConnection(
+  clientId: string,
+  options?: { dryRun?: boolean },
+): Promise<{ success: true; data: ExternalConnectionTestResult } | { success: false; error: string }> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const db = adminDb()
+  const { data: client } = await db
+    .from('clients')
+    .select('slug')
+    .eq('id', clientId)
+    .maybeSingle()
+  if (!client?.slug) return { success: false, error: 'Client not found' }
+
+  const { data: settings } = await db
+    .from('site_settings')
+    .select('site_type, external_site_url, external_deploy_hook_url, external_api_key')
+    .eq('client_id', clientId)
+    .maybeSingle()
+
+  const result: ExternalConnectionTestResult = {
+    settings: { ok: false, detail: 'Not configured' },
+    externalSiteReachable: { ok: false, detail: 'Not tested' },
+    publicApi: { ok: false, detail: 'Not tested' },
+    deployHook: { ok: false, detail: 'Not tested' },
+  }
+
+  // 1. Settings check
+  if ((settings?.site_type as string) !== 'external_repo') {
+    result.settings.detail = `site_type is "${settings?.site_type ?? 'none'}", expected "external_repo"`
+    return { success: true, data: result }
+  }
+  const siteUrl = settings?.external_site_url as string | null
+  const hookUrl = settings?.external_deploy_hook_url as string | null
+  const apiKey = settings?.external_api_key as string | null
+  const missing: string[] = []
+  if (!siteUrl) missing.push('external_site_url')
+  if (!hookUrl) missing.push('external_deploy_hook_url')
+  if (missing.length > 0) {
+    result.settings.detail = `Missing: ${missing.join(', ')}`
+    return { success: true, data: result }
+  }
+  result.settings = { ok: true, detail: `external_repo configured${apiKey ? ' with API key' : ' (no API key)'}` }
+
+  // 2. External site reachable
+  try {
+    const res = await fetch(siteUrl!, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(8000) })
+    result.externalSiteReachable = {
+      ok: res.ok,
+      status: res.status,
+      detail: res.ok ? `${res.status} OK` : `${res.status} ${res.statusText}`,
+    }
+  } catch (e) {
+    result.externalSiteReachable.detail = e instanceof Error ? e.message : 'Fetch failed'
+  }
+
+  // 3. Public API
+  const apiUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://portal.apnosh.com'}/api/public/sites/${client.slug as string}`
+  try {
+    const res = await fetch(apiUrl, {
+      headers: apiKey ? { 'X-Apnosh-Key': apiKey } : {},
+      signal: AbortSignal.timeout(8000),
+    })
+    if (res.ok) {
+      result.publicApi = { ok: true, status: res.status, detail: `${res.status} OK -- canonical data flowing` }
+    } else {
+      const body = await res.text().catch(() => '')
+      result.publicApi = {
+        ok: false,
+        status: res.status,
+        detail: `${res.status} ${res.statusText}: ${body.slice(0, 120)}`,
+      }
+    }
+  } catch (e) {
+    result.publicApi.detail = e instanceof Error ? e.message : 'API fetch failed'
+  }
+
+  // 4. Deploy hook (optional, triggers real deploy)
+  if (options?.dryRun) {
+    result.deployHook = { ok: true, skipped: true, detail: 'Skipped (dry run)' }
+  } else {
+    try {
+      const res = await fetch(hookUrl!, { method: 'POST', signal: AbortSignal.timeout(15000) })
+      const body = await res.text().catch(() => '')
+      result.deployHook = {
+        ok: res.ok,
+        status: res.status,
+        detail: res.ok
+          ? `${res.status} -- deploy triggered`
+          : `${res.status} ${res.statusText}: ${body.slice(0, 120)}`,
+      }
+    } catch (e) {
+      result.deployHook.detail = e instanceof Error ? e.message : 'Hook fetch failed'
+    }
+  }
+
+  return { success: true, data: result }
+}

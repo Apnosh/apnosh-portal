@@ -38,11 +38,14 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
   const db = adminDb()
 
   // 1. Resolve client
-  const { data: client } = await db
+  const { data: client, error: clientErr } = await db
     .from('clients')
-    .select('id, name, slug, brief_description, website')
+    .select('id, name, slug, website')
     .eq('slug', slug)
     .maybeSingle()
+  if (clientErr) {
+    return NextResponse.json({ error: 'lookup_failed', detail: clientErr.message }, { status: 500 })
+  }
   if (!client) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
   }
@@ -139,7 +142,7 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
         id: client.id,
         name: client.name,
         slug: client.slug,
-        description: client.brief_description,
+        description: null,
         website: client.website,
       },
       brand: brand ?? null,

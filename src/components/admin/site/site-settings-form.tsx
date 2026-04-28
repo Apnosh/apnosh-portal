@@ -19,11 +19,12 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Loader2, CheckCircle2, AlertCircle, Globe, ExternalLink, Link2,
-  Sparkles, Code, Server, Slash,
+  Sparkles, Code, Server, Slash, Plug, XCircle, FastForward,
 } from 'lucide-react'
 import {
-  upsertSiteSettings,
+  upsertSiteSettings, testExternalSiteConnection,
   type SiteSettings, type SiteSettingsInput, type SiteType,
+  type ExternalConnectionTestResult,
 } from '@/lib/site-settings/actions'
 
 interface Props {
@@ -230,6 +231,8 @@ export default function SiteSettingsForm({ clientId, clientSlug, initial }: Prop
             <p className="mb-2">If you set an API key above, send it as <code className="font-mono">X-Apnosh-Key</code>.</p>
             <p>The endpoint returns hours, events, promotions, brand data, and social links. Apnosh POSTs to your deploy hook when updates happen.</p>
           </div>
+
+          <ConnectionTester clientId={clientId} />
         </Section>
       )}
 
@@ -340,5 +343,98 @@ function Field({
       {children}
       {hint && <p className="text-[10px] text-ink-4 mt-1">{hint}</p>}
     </div>
+  )
+}
+
+// ── Connection tester ──────────────────────────────────────────
+
+function ConnectionTester({ clientId }: { clientId: string }) {
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<ExternalConnectionTestResult | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [lastDryRun, setLastDryRun] = useState(true)
+
+  const run = async (dryRun: boolean) => {
+    setBusy(true)
+    setErrorMsg(null)
+    setLastDryRun(dryRun)
+    const res = await testExternalSiteConnection(clientId, { dryRun })
+    setBusy(false)
+    if (res.success) {
+      setResult(res.data)
+    } else {
+      setErrorMsg(res.error)
+      setResult(null)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-ink-6 bg-white p-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-sm font-semibold text-ink flex items-center gap-1.5">
+            <Plug className="w-4 h-4 text-ink-3" /> Connection test
+          </p>
+          <p className="text-[11px] text-ink-3 mt-0.5">
+            Save first, then test. Dry run skips the deploy hook (no rebuild).
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => run(true)}
+            disabled={busy}
+            className="px-3 py-1.5 rounded-md border border-ink-5 text-xs font-medium hover:bg-bg-2 disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            {busy && lastDryRun
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <FastForward className="w-3.5 h-3.5" />}
+            Test (dry)
+          </button>
+          <button
+            type="button"
+            onClick={() => run(false)}
+            disabled={busy}
+            className="px-3 py-1.5 rounded-md bg-ink text-white text-xs font-medium hover:bg-ink/90 disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            {busy && !lastDryRun
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Plug className="w-3.5 h-3.5" />}
+            Test full
+          </button>
+        </div>
+      </div>
+
+      {errorMsg && (
+        <div className="mt-3 text-xs rounded-md px-3 py-2 bg-red-50 text-red-700">
+          {errorMsg}
+        </div>
+      )}
+
+      {result && (
+        <ul className="mt-3 space-y-1.5">
+          <ResultRow label="Settings"          ok={result.settings.ok}              detail={result.settings.detail} />
+          <ResultRow label="External site"     ok={result.externalSiteReachable.ok} detail={result.externalSiteReachable.detail} />
+          <ResultRow label="Public API"        ok={result.publicApi.ok}             detail={result.publicApi.detail} />
+          <ResultRow label="Deploy hook"       ok={result.deployHook.ok}            detail={result.deployHook.detail} skipped={result.deployHook.skipped} />
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function ResultRow({
+  label, ok, detail, skipped,
+}: { label: string; ok: boolean; detail: string; skipped?: boolean }) {
+  const Icon = skipped ? FastForward : ok ? CheckCircle2 : XCircle
+  const color = skipped ? 'text-ink-3' : ok ? 'text-green-600' : 'text-red-600'
+  return (
+    <li className="flex items-start gap-2 text-xs">
+      <Icon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${color}`} />
+      <div className="min-w-0">
+        <span className="font-medium text-ink">{label}: </span>
+        <span className="text-ink-3">{detail}</span>
+      </div>
+    </li>
   )
 }

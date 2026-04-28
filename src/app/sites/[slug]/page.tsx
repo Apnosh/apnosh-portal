@@ -48,7 +48,7 @@ interface ClientRow {
   id: string
   name: string
   slug: string
-  brief_description: string | null
+  brief_description?: string | null
   website: string | null
 }
 
@@ -75,7 +75,7 @@ export default async function RestaurantSite({ params }: PageProps) {
   // 1. Resolve the client by slug
   const { data: clientRaw } = await db
     .from('clients')
-    .select('id, name, slug, brief_description, website')
+    .select('id, name, slug, website')
     .eq('slug', slug)
     .maybeSingle()
   const client = clientRaw as ClientRow | null
