@@ -8,14 +8,21 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { getMyContentFields } from '@/lib/dashboard/content-actions'
+import { getMyContentFields, getMyDashboardConfig } from '@/lib/dashboard/content-actions'
 import { getMySiteOverview } from '@/lib/dashboard/my-site-actions'
 import ContentEditor from '@/components/dashboard/website/content-editor'
+import FeatureDisabled from '@/components/dashboard/website/hub/feature-disabled'
 
 export default async function CopyPage() {
-  const overviewRes = await getMySiteOverview()
+  const [overviewRes, configRes, contentRes] = await Promise.all([
+    getMySiteOverview(),
+    getMyDashboardConfig(),
+    getMyContentFields(),
+  ])
   if (!overviewRes.success) redirect('/dashboard/website')
-  const contentRes = await getMyContentFields()
+  if (configRes.success && !configRes.data.features.includes('copy')) {
+    return <FeatureDisabled featureLabel="Pages & copy" />
+  }
   const allFields = contentRes.success ? contentRes.data.fields : []
   const hasSchema = contentRes.success ? contentRes.data.hasSchema : false
   // Text + toggle (visibility) fields only -- photos belong on /photos.

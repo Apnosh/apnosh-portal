@@ -7,12 +7,20 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { listMySpecials } from '@/lib/dashboard/specials-actions'
 import { getMySiteOverview } from '@/lib/dashboard/my-site-actions'
+import { getMyDashboardConfig } from '@/lib/dashboard/content-actions'
 import SpecialsEditor from '@/components/dashboard/website/specials-editor'
+import FeatureDisabled from '@/components/dashboard/website/hub/feature-disabled'
 
 export default async function SpecialsPage() {
-  const overviewRes = await getMySiteOverview()
+  const [overviewRes, configRes, specialsRes] = await Promise.all([
+    getMySiteOverview(),
+    getMyDashboardConfig(),
+    listMySpecials(),
+  ])
   if (!overviewRes.success) redirect('/dashboard/website')
-  const specialsRes = await listMySpecials()
+  if (configRes.success && !configRes.data.features.includes('specials')) {
+    return <FeatureDisabled featureLabel="Daily specials" />
+  }
   const specials = specialsRes.success ? specialsRes.data : []
 
   return (

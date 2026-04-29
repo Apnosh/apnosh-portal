@@ -80,8 +80,19 @@ export interface ContentFieldSchema {
   required?: boolean
 }
 
+// Feature flags + their literal list live in dashboard-features.ts because
+// 'use server' files can only export async functions (no type re-exports
+// either, even type-only). Consumers import from dashboard-features directly.
+import { ALL_FEATURES, type DashboardFeature } from './dashboard-features'
+
 export interface ContentSchemaResponse {
   version: number
+  /** Industry/category — used for analytics + scaffolding new sites. Free-form. */
+  vertical?: string
+  /** Optional override for client.name shown in the dashboard. */
+  displayName?: string
+  /** Which content tiles + editor pages this site supports. Default: all. */
+  features?: DashboardFeature[]
   fields: ContentFieldSchema[]
 }
 
@@ -106,13 +117,73 @@ async function fetchClientContentSchema(siteUrl: string | null): Promise<Content
     if (!res.ok) return null
     const data = await res.json()
     if (!Array.isArray(data?.fields)) return null
-    return { version: Number(data.version ?? 1), fields: data.fields as ContentFieldSchema[] }
+    // Validate features against the known list; drop unknowns silently so a
+    // typo in apnosh-content.json doesn't break the dashboard.
+    const rawFeatures = Array.isArray(data?.features) ? (data.features as unknown[]) : null
+    const features = rawFeatures
+      ? (rawFeatures.filter((f): f is DashboardFeature =>
+          typeof f === 'string' && (ALL_FEATURES as string[]).includes(f),
+        ))
+      : undefined
+    return {
+      version: Number(data.version ?? 1),
+      vertical: typeof data.vertical === 'string' ? data.vertical : undefined,
+      displayName: typeof data.displayName === 'string' ? data.displayName : undefined,
+      features,
+      fields: data.fields as ContentFieldSchema[],
+    }
   } catch {
     return null
   }
 }
 
 // ─── Public actions ───────────────────────────────────────────────
+
+export interface DashboardConfig {
+  /** Resolved feature flags: the customer's declared list, or all features when unset. */
+  features: DashboardFeature[]
+  /** Free-form vertical (e.g. 'restaurant', 'salon') -- null when not declared. */
+  vertical: string | null
+  /** Display name override for the dashboard (falls back to client.name elsewhere). */
+  displayName: string | null
+  /** True when the customer site published a usable apnosh-content.json. */
+  hasContentSchema: boolean
+}
+
+/**
+ * Resolve which features (tiles/editor pages) this client's dashboard should
+ * expose. The customer site is the source of truth: it declares `features`
+ * in apnosh-content.json. When unset, all features are enabled.
+ *
+ * Pre-existing sites with no schema get the full feature set so we don't
+ * regress their UX while they migrate.
+ */
+export async function getMyDashboardConfig(): Promise<
+  { success: true; data: DashboardConfig } | { success: false; error: string }
+> {
+  const auth = await requireClientUser()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const db = adminDb()
+  const { data: settings } = await db
+    .from('site_settings')
+    .select('external_site_url')
+    .eq('client_id', auth.clientId)
+    .maybeSingle()
+  const schema = await fetchClientContentSchema(
+    (settings?.external_site_url as string | null) ?? null,
+  )
+
+  return {
+    success: true,
+    data: {
+      features: schema?.features ?? ALL_FEATURES,
+      vertical: schema?.vertical ?? null,
+      displayName: schema?.displayName ?? null,
+      hasContentSchema: !!schema,
+    },
+  }
+}
 
 /**
  * Get the editable fields for the signed-in client's site, merged with any

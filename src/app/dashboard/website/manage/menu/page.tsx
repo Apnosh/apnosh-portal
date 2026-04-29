@@ -10,12 +10,23 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
 import { getMySiteOverview } from '@/lib/dashboard/my-site-actions'
+import { getMyDashboardConfig } from '@/lib/dashboard/content-actions'
 import MenuEditor from '@/components/dashboard/website/menu-editor'
+import FeatureDisabled from '@/components/dashboard/website/hub/feature-disabled'
 
 export default async function MenuPage() {
-  const overviewRes = await getMySiteOverview()
+  const [overviewRes, configRes, menuRes] = await Promise.all([
+    getMySiteOverview(),
+    getMyDashboardConfig(),
+    listMyMenuItems(),
+  ])
   if (!overviewRes.success) redirect('/dashboard/website')
-  const menuRes = await listMyMenuItems()
+  // Feature gate: if the customer site didn't declare 'menu' in apnosh-content.json,
+  // the editor isn't appropriate for their vertical (e.g. salon). Show a friendly
+  // disabled state instead of an empty editor.
+  if (configRes.success && !configRes.data.features.includes('menu')) {
+    return <FeatureDisabled featureLabel="Menu" />
+  }
   const menuItems = menuRes.success ? menuRes.data : []
 
   return (

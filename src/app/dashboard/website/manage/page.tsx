@@ -23,17 +23,18 @@ import {
   ArrowLeft, UtensilsCrossed, Tag, Type, Image as ImageIcon,
 } from 'lucide-react'
 import { getMySiteOverview, getMyLocations } from '@/lib/dashboard/my-site-actions'
-import { getMyContentFields } from '@/lib/dashboard/content-actions'
+import { getMyContentFields, getMyDashboardConfig } from '@/lib/dashboard/content-actions'
 import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
 import { listMySpecials } from '@/lib/dashboard/specials-actions'
 import SiteManager from '@/components/dashboard/website/site-manager'
 import ContentTile from '@/components/dashboard/website/hub/content-tile'
 
 export default async function MySitePage() {
-  // All four loads run in parallel, then we render the hub with previews.
-  const [overviewRes, locationsRes, contentRes, menuRes, specialsRes] = await Promise.all([
+  // All loads run in parallel, then we render the hub with previews.
+  const [overviewRes, locationsRes, configRes, contentRes, menuRes, specialsRes] = await Promise.all([
     getMySiteOverview(),
     getMyLocations(),
+    getMyDashboardConfig(),
     getMyContentFields(),
     listMyMenuItems(),
     listMySpecials(),
@@ -47,6 +48,9 @@ export default async function MySitePage() {
   const hasContentSchema = contentRes.success ? contentRes.data.hasSchema : false
   const menuItems = menuRes.success ? menuRes.data : []
   const specials = specialsRes.success ? specialsRes.data : []
+  // Resolve which tiles to render. Customer site decides via apnosh-content.json
+  // `features` array; falls back to all features when not declared.
+  const enabled = new Set(configRes.success ? configRes.data.features : ['menu', 'specials', 'copy', 'photos'])
 
   // ── Tile previews (cheap derivations off the loaded data) ──────────
   const copyFields = allFields.filter(f => f.type !== 'asset')
@@ -87,68 +91,81 @@ export default async function MySitePage() {
           Click a tile to focus on one area at a time.
         </p>
         <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-          <ContentTile
-            href="/dashboard/website/manage/menu"
-            icon={UtensilsCrossed}
-            title="Menu"
-            summary="Prices, items, modifiers, featured picks."
-            badges={
-              menuItems.length > 0
-                ? [
-                    `${menuItems.length} item${menuItems.length === 1 ? '' : 's'}`,
-                    `${menuCategories} ${menuCategories === 1 ? 'category' : 'categories'}`,
-                    ...(menuFeatured > 0 ? [`${menuFeatured} featured`] : []),
-                  ]
-                : ['No items yet']
-            }
-          />
-          <ContentTile
-            href="/dashboard/website/manage/specials"
-            icon={Tag}
-            title="Daily specials"
-            summary="Recurring deals and combos. Hides when empty."
-            badges={
-              specials.length > 0
-                ? [
-                    `${specialsActive} active`,
-                    ...(specialsWithPhotos > 0 ? [`${specialsWithPhotos} with photo${specialsWithPhotos === 1 ? '' : 's'}`] : []),
-                  ]
-                : ['None yet']
-            }
-          />
-          <ContentTile
-            href="/dashboard/website/manage/copy"
-            icon={Type}
-            title="Pages & copy"
-            summary="Wording, taglines, section visibility."
-            badges={
-              hasContentSchema
-                ? copyFields.length > 0
+          {enabled.has('menu') && (
+            <ContentTile
+              href="/dashboard/website/manage/menu"
+              icon={UtensilsCrossed}
+              title="Menu"
+              summary="Prices, items, modifiers, featured picks."
+              badges={
+                menuItems.length > 0
                   ? [
-                      `${copyFields.length} field${copyFields.length === 1 ? '' : 's'}`,
-                      ...(copyEdited > 0 ? [`${copyEdited} edited`] : []),
+                      `${menuItems.length} item${menuItems.length === 1 ? '' : 's'}`,
+                      `${menuCategories} ${menuCategories === 1 ? 'category' : 'categories'}`,
+                      ...(menuFeatured > 0 ? [`${menuFeatured} featured`] : []),
                     ]
-                  : ['No copy fields']
-                : ['Site has no schema']
-            }
-          />
-          <ContentTile
-            href="/dashboard/website/manage/photos"
-            icon={ImageIcon}
-            title="Photos"
-            summary="Logo, hero photo, about photo, etc."
-            badges={
-              hasContentSchema
-                ? photoFields.length > 0
+                  : ['No items yet']
+              }
+            />
+          )}
+          {enabled.has('specials') && (
+            <ContentTile
+              href="/dashboard/website/manage/specials"
+              icon={Tag}
+              title="Daily specials"
+              summary="Recurring deals and combos. Hides when empty."
+              badges={
+                specials.length > 0
                   ? [
-                      `${photoFields.length} slot${photoFields.length === 1 ? '' : 's'}`,
-                      ...(photoEdited > 0 ? [`${photoEdited} replaced`] : []),
+                      `${specialsActive} active`,
+                      ...(specialsWithPhotos > 0 ? [`${specialsWithPhotos} with photo${specialsWithPhotos === 1 ? '' : 's'}`] : []),
                     ]
-                  : ['No photo slots']
-                : ['Site has no schema']
-            }
-          />
+                  : ['None yet']
+              }
+            />
+          )}
+          {enabled.has('copy') && (
+            <ContentTile
+              href="/dashboard/website/manage/copy"
+              icon={Type}
+              title="Pages & copy"
+              summary="Wording, taglines, section visibility."
+              badges={
+                hasContentSchema
+                  ? copyFields.length > 0
+                    ? [
+                        `${copyFields.length} field${copyFields.length === 1 ? '' : 's'}`,
+                        ...(copyEdited > 0 ? [`${copyEdited} edited`] : []),
+                      ]
+                    : ['No copy fields']
+                  : ['Site has no schema']
+              }
+            />
+          )}
+          {enabled.has('photos') && (
+            <ContentTile
+              href="/dashboard/website/manage/photos"
+              icon={ImageIcon}
+              title="Photos"
+              summary="Logo, hero photo, about photo, etc."
+              badges={
+                hasContentSchema
+                  ? photoFields.length > 0
+                    ? [
+                        `${photoFields.length} slot${photoFields.length === 1 ? '' : 's'}`,
+                        ...(photoEdited > 0 ? [`${photoEdited} replaced`] : []),
+                      ]
+                    : ['No photo slots']
+                  : ['Site has no schema']
+              }
+            />
+          )}
         </div>
+        {enabled.size === 0 && (
+          <div className="rounded-xl border border-dashed border-ink-6 bg-white p-6 text-center text-sm text-ink-3">
+            Your site hasn&apos;t declared any editable content yet. Send us a request to get set up.
+          </div>
+        )}
       </section>
     </div>
   )

@@ -196,3 +196,68 @@ applies to `external_repo` clients only — sites we don't own.
 For `apnosh_custom` and `apnosh_generated`, the principle still holds in
 spirit (data + design are separate concerns), but the implementation lives
 in the Apnosh portal codebase, not in a customer repo.
+
+---
+
+## The schema contract: `apnosh-content.json`
+
+Every customer site publishes one schema file at `/apnosh-content.json`.
+This file is the single source of truth for what the dashboard exposes to
+the client. **The customer site declares; the dashboard renders.**
+
+### Minimum shape
+
+```json
+{
+  "version": 1,
+  "vertical": "restaurant",
+  "displayName": "Yellow Bee",
+  "features": ["menu", "specials", "copy", "photos"],
+  "fields": []
+}
+```
+
+| Key | Required | What it does |
+|---|---|---|
+| `version` | yes | Bump when the format changes incompatibly. |
+| `vertical` | no | Free-form string (`restaurant`, `salon`, `gym`, `cafe`). Used for analytics + scaffolding. |
+| `displayName` | no | Override for `client.name` in the dashboard header. |
+| `features` | no | Which dashboard tiles to expose. Defaults to all when omitted. |
+| `fields` | yes | Array of editable copy/asset/toggle fields. Empty array is valid. |
+
+### `features` — the dashboard render contract
+
+The dashboard's manage-site hub looks at this list to decide which tiles
+to render. A salon's schema might say `["copy", "photos"]` and never see
+the Menu or Specials tiles. A restaurant says `["menu", "specials", "copy", "photos"]`.
+
+Currently recognized features (extend in `src/lib/dashboard/content-actions.ts → DashboardFeature`):
+
+- `menu` — restaurant-style menu (uses `menu_items` table)
+- `specials` — recurring daily specials (uses `client_specials` table)
+- `copy` — text + toggle fields from `fields[]`
+- `photos` — asset fields from `fields[]`
+
+When a feature isn't in the list, its tile is hidden AND visiting its URL
+directly shows a "feature not enabled" page (graceful, not 404).
+
+### How to add a new feature type
+
+1. Add a case to `DashboardFeature` in `content-actions.ts`.
+2. Build the editor component + sub-page under `dashboard/website/manage/<feature>`.
+3. Add a tile to the manage-site hub.
+4. Document the new feature here.
+5. Customer sites that need it add the string to their `features` array.
+
+The tile + sub-page show automatically for sites that opt in. Sites that
+don't declare the feature see no change. Backwards-compatible by design.
+
+### Why the customer site owns the schema
+
+Two reasons:
+
+1. **It versions with the customer's design.** A schema change is a deploy
+   to the customer site, same as any other content change. No drift between
+   what the dashboard offers and what the customer site renders.
+2. **It scales without portal code per client.** New site, new schema file,
+   the dashboard adapts automatically. The portal stays generic.
