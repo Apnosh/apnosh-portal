@@ -59,15 +59,15 @@ async function requireClientUser(): Promise<
 
 // ─── Schema types ─────────────────────────────────────────────────
 
-export type ContentFieldType = 'text' | 'asset'
+export type ContentFieldType = 'text' | 'asset' | 'toggle'
 
 export interface ContentFieldSchema {
   key: string                          // 'hero.subhead' or 'header.logo'
   page?: string                        // 'home', 'about', etc. (for grouping)
   label: string                        // 'Hero subhead'
   description?: string
-  type?: ContentFieldType              // 'text' (default) | 'asset' (image URL)
-  default?: string                     // fallback if no override (default copy or default image URL)
+  type?: ContentFieldType              // 'text' (default) | 'asset' (image URL) | 'toggle' ('true'/'false')
+  default?: string                     // fallback if no override (default copy / default image URL / 'true'|'false' for toggle)
   constraints?: {
     minChars?: number
     maxChars?: number
@@ -180,6 +180,11 @@ export async function getMyContentFields(): Promise<
  */
 function validateHardConstraints(value: string, field: ContentFieldSchema): string | null {
   if (field.required && !value.trim()) return 'This field is required'
+  // Toggle fields are boolean strings.
+  if (field.type === 'toggle') {
+    if (value !== 'true' && value !== 'false') return 'Toggle must be true or false'
+    return null
+  }
   // Asset fields are image URLs -- skip length and HTML checks.
   if (field.type === 'asset') {
     if (value && !/^https?:\/\//i.test(value) && !value.startsWith('/')) {

@@ -16,7 +16,7 @@ import { useState, useRef, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Type, Edit3, X, Loader2, AlertTriangle, CheckCircle2, Sparkles, RotateCcw,
-  Image as ImageIcon, Upload,
+  Image as ImageIcon, Upload, Eye, EyeOff,
 } from 'lucide-react'
 import {
   updateMyContent, voiceCheck,
@@ -60,6 +60,9 @@ export default function ContentEditor({ fields }: Props) {
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium text-ink mb-0.5 flex items-center gap-2">
                       {f.type === 'asset' && <ImageIcon className="w-3.5 h-3.5 text-ink-3" />}
+                      {f.type === 'toggle' && (f.value === 'false'
+                        ? <EyeOff className="w-3.5 h-3.5 text-ink-3" />
+                        : <Eye className="w-3.5 h-3.5 text-ink-3" />)}
                       {f.label}
                       {f.hasOverride && (
                         <span className="text-[10px] uppercase tracking-wide text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded">
@@ -80,16 +83,31 @@ export default function ContentEditor({ fields }: Props) {
                       ) : (
                         <p className="text-sm text-ink-3 italic">(no image)</p>
                       )
+                    ) : f.type === 'toggle' ? (
+                      <p className="text-sm text-ink-3 italic">
+                        {f.value === 'false' ? 'Hidden on your site' : 'Visible on your site'}
+                      </p>
                     ) : (
                       <p className="text-sm text-ink-3 italic line-clamp-2">{f.value || '(empty)'}</p>
                     )}
                   </div>
-                  <button
-                    onClick={() => setEditing(f)}
-                    className="px-3 py-1.5 rounded-md border border-ink-6 text-xs font-medium hover:bg-bg-2 inline-flex items-center gap-1.5 shrink-0"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" /> Edit
-                  </button>
+                  {f.type === 'toggle' ? (
+                    <ToggleSwitch
+                      field={f}
+                      onSaved={msg => {
+                        setToast(msg)
+                        setTimeout(() => setToast(null), 6000)
+                        router.refresh()
+                      }}
+                    />
+                  ) : (
+                    <button
+                      onClick={() => setEditing(f)}
+                      className="px-3 py-1.5 rounded-md border border-ink-6 text-xs font-medium hover:bg-bg-2 inline-flex items-center gap-1.5 shrink-0"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" /> Edit
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -344,6 +362,45 @@ function EditModal({
         </div>
       </div>
     </div>
+  )
+}
+
+// ─── Toggle switch (section visibility) ────────────────────────────
+
+function ToggleSwitch({
+  field, onSaved,
+}: {
+  field: ContentFieldWithValue
+  onSaved: (msg: string) => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const visible = field.value !== 'false'
+
+  const handleClick = async () => {
+    if (busy) return
+    setBusy(true)
+    const next = visible ? 'false' : 'true'
+    const res = await updateMyContent({ fieldKey: field.key, value: next })
+    setBusy(false)
+    if (res.success) {
+      onSaved(`"${field.label}" ${next === 'true' ? 'shown' : 'hidden'}. Live shortly.`)
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={busy}
+      role="switch"
+      aria-checked={visible}
+      title={visible ? 'Click to hide on site' : 'Click to show on site'}
+      className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${visible ? 'bg-ink' : 'bg-ink-6'}`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${visible ? 'translate-x-6' : 'translate-x-1'}`}
+      />
+    </button>
   )
 }
 
