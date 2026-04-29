@@ -14,6 +14,7 @@ import { CartProvider } from '@/lib/cart-context'
 import { ToastProvider } from '@/components/ui/toast'
 import { RealtimeProvider } from '@/lib/realtime'
 import { ClientProvider, useClient } from '@/lib/client-context'
+import SentryUserContext from '@/components/sentry-user-context'
 import { LocationProvider, useLocationContext } from '@/lib/dashboard/location-context'
 import { getClientLocations } from '@/lib/dashboard/get-client-locations'
 import LocationSelector from '@/components/dashboard/location-selector'
@@ -161,6 +162,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <ToastProvider>
         <RealtimeProvider>
           <ClientProvider>
+            <SentryUserContext />
             <Suspense fallback={null}>
               <LocationLoader>
                 <DashboardShell>{children}</DashboardShell>

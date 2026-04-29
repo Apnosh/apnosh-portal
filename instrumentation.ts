@@ -1,0 +1,20 @@
+/**
+ * Next.js instrumentation hook -- runs once at server start.
+ *
+ * Loads the right Sentry config based on which runtime the request landed
+ * on (Node vs Edge). Required for Sentry's Next.js SDK to capture
+ * server-side errors.
+ */
+
+import * as Sentry from '@sentry/nextjs'
+
+export async function register() {
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    await import('./sentry.server.config')
+  }
+  if (process.env.NEXT_RUNTIME === 'edge') {
+    await import('./sentry.edge.config')
+  }
+}
+
+export const onRequestError = Sentry.captureRequestError

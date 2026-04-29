@@ -1,4 +1,5 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
+import { withSentryConfig } from '@sentry/nextjs'
 
 const nextConfig: NextConfig = {
   // Allow loading social post thumbnails from Meta's CDNs. We use
@@ -13,6 +14,20 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'www.instagram.com' },
     ],
   },
-};
+}
 
-export default nextConfig;
+// withSentryConfig wires Sentry's webpack plugin so we get readable stack
+// traces in production (uploads source maps when SENTRY_AUTH_TOKEN is set)
+// and forwards client-side errors via a tunnel route to bypass ad blockers.
+// All of these are no-ops when env vars are missing -- builds keep working
+// in dev / preview without any Sentry credentials.
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: !process.env.CI,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  tunnelRoute: '/monitoring',
+  // Don't expose source maps publicly.
+  sourcemaps: { disable: false },
+  disableLogger: true,
+})
