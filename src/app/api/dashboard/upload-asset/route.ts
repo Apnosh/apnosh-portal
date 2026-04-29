@@ -10,7 +10,7 @@
  *
  * Constraints (server-side):
  *   - Max size 8MB (configurable via env)
- *   - Image MIME types only: jpeg, png, webp, gif, svg+xml
+ *   - Image MIME types only: jpeg, png, webp, gif, svg+xml, avif
  *
  * Path layout: <client_id>/asset-<timestamp>-<rand>.<ext>
  *
@@ -35,6 +35,9 @@ const ALLOWED_TYPES = new Set([
   'image/webp',
   'image/gif',
   'image/svg+xml',
+  'image/avif',
+  'image/heic',
+  'image/heif',
 ])
 
 function extFromMime(mime: string): string {
@@ -43,6 +46,9 @@ function extFromMime(mime: string): string {
   if (mime === 'image/webp') return 'webp'
   if (mime === 'image/gif') return 'gif'
   if (mime === 'image/svg+xml') return 'svg'
+  if (mime === 'image/avif') return 'avif'
+  if (mime === 'image/heic') return 'heic'
+  if (mime === 'image/heif') return 'heif'
   return 'bin'
 }
 

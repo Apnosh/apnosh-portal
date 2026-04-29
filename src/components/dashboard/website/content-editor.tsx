@@ -403,7 +403,7 @@ function AssetUploader({
           <input
             ref={inputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml,image/avif,image/heic,image/heif"
             className="hidden"
             onChange={e => {
               const f = e.target.files?.[0]
@@ -411,7 +411,7 @@ function AssetUploader({
             }}
           />
           <p className="text-[11px] text-ink-4 mt-1.5">
-            JPG, PNG, WEBP, GIF, or SVG. Max 8MB.
+            JPG, PNG, WEBP, GIF, SVG, AVIF, or HEIC. Max 8MB.
             {recommendedSize && <> Recommended: {recommendedSize}.</>}
             {aspect && <> Aspect: {aspect}.</>}
           </p>

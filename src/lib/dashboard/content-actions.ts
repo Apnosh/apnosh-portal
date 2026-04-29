@@ -153,11 +153,18 @@ export async function getMyContentFields(): Promise<
     })
   }
 
+  const siteUrl = (settings?.external_site_url as string | null) ?? null
   const fields: ContentFieldWithValue[] = schema.fields.map(f => {
     const ov = overrideMap.get(f.key)
+    let value = ov?.value ?? f.default ?? ''
+    // Asset fields with relative paths must be resolved against the customer's
+    // site URL so previews load in the dashboard (which lives on a different domain).
+    if (f.type === 'asset' && value.startsWith('/') && siteUrl) {
+      try { value = new URL(value, siteUrl).toString() } catch {}
+    }
     return {
       ...f,
-      value: ov?.value ?? f.default ?? '',
+      value,
       hasOverride: !!ov,
       lastEditedAt: ov?.lastEditedAt ?? null,
     }
