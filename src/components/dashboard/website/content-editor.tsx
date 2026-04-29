@@ -472,6 +472,13 @@ function AssetUploader({
             {recommendedSize && <> Recommended: {recommendedSize}.</>}
             {aspect && <> Aspect: {aspect}.</>}
           </p>
+          <input
+            type="url"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Or paste an image URL"
+            className="w-full mt-2 rounded-md border border-ink-6 px-3 py-1.5 text-xs"
+          />
         </div>
       </div>
       {err && (
