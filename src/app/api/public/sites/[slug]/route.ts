@@ -167,7 +167,28 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
     else menu[cat].items.push(menuItem(r))
   }
 
-  // 10. Content field overrides (typed copy edits the client published).
+  // 10. Daily specials (active recurring deals).
+  const { data: specialRows } = await db
+    .from('client_specials')
+    .select('id, title, tagline, time_window, price, save_label, includes, photo_url, display_order, available_location_ids')
+    .eq('client_id', client.id)
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
+    .order('title', { ascending: true })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const specials = (specialRows ?? []).map((r: any) => ({
+    id: r.id,
+    title: r.title,
+    tagline: r.tagline,
+    timeWindow: r.time_window,
+    price: r.price,
+    saveLabel: r.save_label,
+    includes: r.includes ?? [],
+    photoUrl: r.photo_url,
+    locationIds: r.available_location_ids ?? [],
+  }))
+
+  // 11. Content field overrides (typed copy edits the client published).
   // Returned as a flat object keyed by field_key for easy template lookup,
   // e.g. content['hero.subhead']. Customer site uses this with fallback
   // to its own default copy.
@@ -198,6 +219,7 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
       social,
       heroPhotoUrl: (heroAsset?.url as string | null) ?? null,
       menu,
+      specials,
       content,
       meta: {
         siteType: settings?.site_type ?? 'none',
