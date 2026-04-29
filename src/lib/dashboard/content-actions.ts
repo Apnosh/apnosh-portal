@@ -59,17 +59,23 @@ async function requireClientUser(): Promise<
 
 // ─── Schema types ─────────────────────────────────────────────────
 
+export type ContentFieldType = 'text' | 'asset'
+
 export interface ContentFieldSchema {
-  key: string                          // 'hero.subhead'
+  key: string                          // 'hero.subhead' or 'header.logo'
   page?: string                        // 'home', 'about', etc. (for grouping)
   label: string                        // 'Hero subhead'
   description?: string
-  default?: string                     // fallback if no override
+  type?: ContentFieldType              // 'text' (default) | 'asset' (image URL)
+  default?: string                     // fallback if no override (default copy or default image URL)
   constraints?: {
     minChars?: number
     maxChars?: number
     forbidPunctuation?: string[]       // ['!', '?'] etc.
     multiline?: boolean
+    // asset-only constraints
+    aspect?: string                    // e.g. '16:9', '1:1' -- advisory
+    recommendedSize?: string           // e.g. '1200x800' -- advisory
   }
   required?: boolean
 }
@@ -167,6 +173,13 @@ export async function getMyContentFields(): Promise<
  */
 function validateHardConstraints(value: string, field: ContentFieldSchema): string | null {
   if (field.required && !value.trim()) return 'This field is required'
+  // Asset fields are image URLs -- skip length and HTML checks.
+  if (field.type === 'asset') {
+    if (value && !/^https?:\/\//i.test(value) && !value.startsWith('/')) {
+      return 'Asset must be an http(s):// URL or absolute /path'
+    }
+    return null
+  }
   const c = field.constraints ?? {}
   if (c.minChars && value.length < c.minChars) {
     return `Too short (${value.length}/${c.minChars} min)`
