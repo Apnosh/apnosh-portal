@@ -13,6 +13,7 @@ import BenchmarkBar from '@/components/dashboard/benchmark-bar'
 import InsightCard from '@/components/dashboard/insight-card'
 import AMNote from '@/components/dashboard/am-note'
 import WaitingOnYou from '@/components/dashboard/waiting-on-you'
+import SetupChecklist from '@/components/dashboard/setup-checklist'
 
 export default function DashboardPage() {
   const { client, loading: clientLoading } = useClient()
@@ -188,6 +189,12 @@ export default function DashboardPage() {
       className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
+      {/* First-run setup checklist -- self-hides once all 3 milestones are met
+          (profile complete, accounts connected, first action taken) or when
+          dismissed. Sits ABOVE everything else so a brand-new client sees a
+          clear path forward instead of empty metrics. */}
+      <SetupChecklist />
+
       {/* Anything we need from you — renders nothing if no open client-visible tasks */}
       {client?.id && (
         <div className="db-fade db-d1 mb-4">
