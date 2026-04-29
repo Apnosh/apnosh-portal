@@ -47,55 +47,77 @@ interface NavSection {
   items: NavItem[]
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Sidebar config (v1)
+//
+// Trimmed from ~30 visible items to ~13 for a typical client. We hide
+// surfaces that are: half-built (mock data, coming-soon shells), thin
+// hubs that just link to children, or duplicates. The pages themselves
+// stay in the codebase -- only the nav exposure is gated.
+//
+// See docs/CLIENT-DASHBOARD-AUDIT.md for the full classification.
+//
+// Hidden for v1 (re-add when the underlying surface is ready):
+//   /dashboard/website (Performance hub -- thin)
+//   /dashboard/local-seo (Performance hub -- thin)
+//   /dashboard/local-seo/locations (placeholder, no data)
+//   /dashboard/analytics (redundant with local-seo)
+//   /dashboard/social (use the children directly)
+//   /dashboard/social/performance (duplicate)
+//   /dashboard/email-sms/performance (low value vs Overview)
+//   /dashboard/profile/strategy (advanced; revisit)
+//   /dashboard/reports (overlaps Weekly Briefs)
+//   /dashboard/approvals (rebuilding on real data; was mock)
+//   /dashboard/tools (coming-soon shells)
+//   /dashboard/calendar (becoming master calendar; rebuild)
+//   /dashboard/orders/* (off-path for v1 onboarding)
+//   /dashboard/goals (first-run only; surface as setup card)
+//   /dashboard/notifications (use the bell icon in header)
+// ─────────────────────────────────────────────────────────────────────
 const navSections: NavSection[] = [
   {
     label: null,
     items: [
-      { label: 'Executive Summary', href: '/dashboard', icon: LayoutDashboard, exact: true },
+      { label: 'Today', href: '/dashboard', icon: LayoutDashboard, exact: true },
     ],
   },
   {
     label: 'Services',
     items: [
       {
-        label: 'Social Media',
-        href: '/dashboard/social',
-        icon: Share2,
-        exact: false,
-        serviceArea: 'social',
-        children: [
-          { label: 'Performance', href: '/dashboard/social', exact: true },
-          { label: 'Review', href: '/dashboard/social/action-needed' },
-          { label: 'Calendar', href: '/dashboard/social/calendar' },
-          { label: 'Request content', href: '/dashboard/social/requests/new' },
-          { label: 'Requests', href: '/dashboard/social/requests' },
-        ],
-      },
-      {
         label: 'Website',
-        href: '/dashboard/website',
+        href: '/dashboard/website/manage',
         icon: Globe,
         exact: false,
         serviceArea: 'website',
         children: [
-          { label: 'Performance', href: '/dashboard/website', exact: true },
           { label: 'Manage site', href: '/dashboard/website/manage' },
-          { label: 'Full details', href: '/dashboard/website/traffic' },
+          { label: 'Traffic', href: '/dashboard/website/traffic' },
           { label: 'Site Health', href: '/dashboard/website/health' },
           { label: 'Request a change', href: '/dashboard/website/requests/new' },
           { label: 'Change Requests', href: '/dashboard/website/requests' },
         ],
       },
       {
+        label: 'Social Media',
+        href: '/dashboard/social/calendar',
+        icon: Share2,
+        exact: false,
+        serviceArea: 'social',
+        children: [
+          { label: 'Calendar', href: '/dashboard/social/calendar' },
+          { label: 'Action needed', href: '/dashboard/social/action-needed' },
+          { label: 'Request content', href: '/dashboard/social/requests/new' },
+          { label: 'Requests', href: '/dashboard/social/requests' },
+        ],
+      },
+      {
         label: 'Local SEO',
-        href: '/dashboard/local-seo',
+        href: '/dashboard/local-seo/reviews',
         icon: MapPin,
         exact: false,
         serviceArea: 'local_seo',
         children: [
-          { label: 'Performance', href: '/dashboard/local-seo', exact: true },
-          { label: 'Full details', href: '/dashboard/analytics' },
-          { label: 'Locations', href: '/dashboard/local-seo/locations' },
           { label: 'Reviews', href: '/dashboard/local-seo/reviews' },
         ],
       },
@@ -109,7 +131,6 @@ const navSections: NavSection[] = [
           { label: 'Overview', href: '/dashboard/email-sms', exact: true },
           { label: 'Campaigns', href: '/dashboard/email-sms/campaigns' },
           { label: 'List & Audience', href: '/dashboard/email-sms/list' },
-          { label: 'Performance', href: '/dashboard/email-sms/performance' },
         ],
       },
     ],
@@ -130,15 +151,9 @@ const navSections: NavSection[] = [
         exact: false,
       },
       {
-        label: 'Weekly Briefs',
+        label: 'Weekly briefs',
         href: '/dashboard/briefs',
         icon: Newspaper,
-        exact: false,
-      },
-      {
-        label: 'Reports',
-        href: '/dashboard/reports',
-        icon: FileBarChart,
         exact: false,
       },
     ],
@@ -146,10 +161,9 @@ const navSections: NavSection[] = [
 ]
 
 const bottomItems = [
-  { label: 'Business Profile', href: '/dashboard/profile', icon: Building2 },
-  { label: 'My Strategy', href: '/dashboard/profile/strategy', icon: Target },
-  { label: 'Brand Guidelines', href: '/dashboard/profile/brand-guidelines', icon: BookOpen },
-  { label: 'Connected Accounts', href: '/dashboard/connected-accounts', icon: Link2 },
+  { label: 'Business profile', href: '/dashboard/profile', icon: Building2 },
+  { label: 'Brand guidelines', href: '/dashboard/profile/brand-guidelines', icon: BookOpen },
+  { label: 'Connected accounts', href: '/dashboard/connected-accounts', icon: Link2 },
   { label: 'Agreements', href: '/dashboard/agreements', icon: FileText },
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },

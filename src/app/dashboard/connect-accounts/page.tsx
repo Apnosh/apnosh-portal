@@ -1,7 +1,13 @@
 import { redirect } from 'next/navigation'
 
-// Legacy route -- moved to /dashboard/connected-accounts
-// Preserves bookmarks and the onboarding `returnTo=/dashboard/connect-accounts` path.
-export default function LegacyConnectAccountsPage() {
+/**
+ * Legacy route. The "Connected Accounts" surface lives at
+ * /dashboard/connected-accounts now. Several Google OAuth callback handlers
+ * still redirect here mid-flow; this page just bounces them along.
+ *
+ * Once we update every OAuth callback to use the new path directly we can
+ * remove this stub.
+ */
+export default function LegacyConnectAccountsRedirect() {
   redirect('/dashboard/connected-accounts')
 }
