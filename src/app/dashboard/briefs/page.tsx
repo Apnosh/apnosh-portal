@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Newspaper, ChevronRight, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import EmptyState from '@/components/ui/empty-state'
+import { LoadingPage } from '@/components/ui/loading'
 import { createClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from '@/lib/realtime'
 import { useClient } from '@/lib/client-context'
@@ -69,12 +71,12 @@ export default function BriefsIndexPage() {
       </div>
 
       {briefs.length === 0 ? (
-        <div className="bg-white rounded-xl border border-ink-6 p-12 text-center">
-          <Newspaper className="w-6 h-6 text-ink-4 mx-auto mb-3" />
-          <p className="text-sm font-medium text-ink-2">No briefs yet</p>
-          <p className="text-xs text-ink-4 mt-1 max-w-xs mx-auto">
-            Your first weekly brief will land next Monday. We&apos;ll summarize your traffic, search performance, and conversions.
-          </p>
+        <div className="bg-white rounded-xl border border-ink-6">
+          <EmptyState
+            icon={Newspaper}
+            title="No briefs yet"
+            description="Your first weekly brief will land next Monday. We'll summarize your traffic, search performance, and conversions."
+          />
         </div>
       ) : (
         <div className="space-y-3">

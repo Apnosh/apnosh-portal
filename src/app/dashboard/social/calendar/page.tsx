@@ -13,6 +13,7 @@ import { useRealtimeRefresh } from '@/lib/realtime'
 import { submitClientFeedback } from '@/lib/client-portal-actions'
 import CalendarGrid, { type CalendarEntryWithBusiness } from '@/components/calendar/CalendarGrid'
 import type { ContentQueueItem, ContentQueueDraft, CalendarNote, Platform } from '@/types/database'
+import EmptyState from '@/components/ui/empty-state'
 
 const STATUS_FILTER_OPTIONS = [
   { id: 'all', label: 'All' },
@@ -243,10 +244,12 @@ export default function SocialCalendarPage() {
       {loading || clientLoading ? (
         <div className="bg-white rounded-xl border border-ink-6 p-5 h-96 animate-pulse" />
       ) : entries.length === 0 && monthNotes.length === 0 ? (
-        <div className="bg-white rounded-xl border border-ink-6 p-12 text-center">
-          <CalendarIcon className="w-6 h-6 text-ink-4 mx-auto mb-3" />
-          <p className="text-sm font-medium text-ink-2">No posts on the calendar</p>
-          <p className="text-xs text-ink-4 mt-1">Approved posts will show up here with their scheduled date.</p>
+        <div className="bg-white rounded-xl border border-ink-6">
+          <EmptyState
+            icon={CalendarIcon}
+            title="No posts on the calendar"
+            description="Approved posts will show up here with their scheduled date."
+          />
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-ink-6 p-4">

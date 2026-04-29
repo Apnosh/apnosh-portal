@@ -12,6 +12,7 @@ import { useClient } from '@/lib/client-context'
 import { useRealtimeRefresh } from '@/lib/realtime'
 import { submitClientFeedback } from '@/lib/client-portal-actions'
 import type { ContentQueueItem, ContentQueueDraft, ClientFeedbackEntry } from '@/types/database'
+import EmptyState from '@/components/ui/empty-state'
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime()
@@ -162,14 +163,12 @@ export default function ActionNeededPage() {
             </div>
 
             {pending.length === 0 ? (
-              <div className="bg-white rounded-xl border border-ink-6 p-10 text-center">
-                <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center mx-auto mb-3">
-                  <Check className="w-5 h-5 text-emerald-600" />
-                </div>
-                <p className="text-sm font-medium text-ink-2">You&apos;re all caught up</p>
-                <p className="text-xs text-ink-4 mt-1 max-w-sm mx-auto">
-                  Nothing needs your attention right now. We&apos;ll let you know as soon as something is ready for your review.
-                </p>
+              <div className="bg-white rounded-xl border border-ink-6">
+                <EmptyState
+                  icon={Check}
+                  title="You're all caught up"
+                  description="Nothing needs your attention right now. We'll let you know as soon as something is ready for your review."
+                />
               </div>
             ) : (
               <div className="space-y-3">
