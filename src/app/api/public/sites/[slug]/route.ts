@@ -201,6 +201,16 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
     content[r.field_key as string] = r.value as string
   }
 
+  // 12. Unified site_configs.published_data — the new source of truth.
+  // When present, templates should prefer this over the legacy fields
+  // above. Legacy fields stay for backwards compatibility during the
+  // transition.
+  const { data: siteConfig } = await db
+    .from('site_configs')
+    .select('vertical, template_id, published_data, version, published_at')
+    .eq('client_id', client.id)
+    .maybeSingle()
+
   return NextResponse.json(
     {
       client: {
@@ -221,6 +231,16 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
       menu,
       specials,
       content,
+      // New: full site config (preferred by templates that support it)
+      site: siteConfig?.published_data ?? null,
+      siteMeta: siteConfig
+        ? {
+            vertical: siteConfig.vertical,
+            templateId: siteConfig.template_id,
+            version: siteConfig.version,
+            publishedAt: siteConfig.published_at,
+          }
+        : null,
       meta: {
         siteType: settings?.site_type ?? 'none',
         generatedAt: new Date().toISOString(),

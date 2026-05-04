@@ -324,11 +324,19 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
             Updates
           </Link>
           <Link
+            href={`/admin/clients/${client.slug}/site-builder`}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-white bg-brand hover:bg-brand-dark rounded-md transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Site Builder
+          </Link>
+          <Link
             href={`/admin/clients/${client.slug}/site`}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-3 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-4 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
+            title="Legacy site settings (use Site Builder instead)"
           >
             <Globe className="w-3.5 h-3.5" />
-            Site
+            Site (legacy)
           </Link>
           <Link
             href={`/sites/${client.slug}`}
