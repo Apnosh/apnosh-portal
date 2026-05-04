@@ -22,6 +22,7 @@ import { SECTIONS, GROUPS, readinessScore, type SectionKey } from './sections'
 import BrandAssistPanel from './brand-assist-panel'
 import HistoryDrawer from './history-drawer'
 import AssetLibraryPicker from './asset-library-picker'
+import DesignStudioPanel from './design-studio-panel'
 import type { Brand } from '@/lib/site-schemas/shared'
 
 interface SiteBuilderFormProps {
@@ -286,10 +287,21 @@ export default function SiteBuilderForm({
       <div className="col-span-4">
         <div className="bg-white rounded-xl border border-ink-6 p-5">
           {activeSection === 'brand' && (
-            <BrandAssistPanel
-              brand={data.brand}
-              onApply={(patch) => handleSectionChange('brand', { ...data.brand, ...patch } as Brand)}
-            />
+            <>
+              <DesignStudioPanel
+                brand={data.brand}
+                businessContext={{
+                  displayName: data.identity.displayName,
+                  tagline: data.identity.tagline ?? undefined,
+                  vertical: data.identity.vertical,
+                }}
+                onApply={(patch) => handleSectionChange('brand', { ...data.brand, ...patch } as Brand)}
+              />
+              <BrandAssistPanel
+                brand={data.brand}
+                onApply={(patch) => handleSectionChange('brand', { ...data.brand, ...patch } as Brand)}
+              />
+            </>
           )}
           {activeSchema ? (
             <FieldRenderer

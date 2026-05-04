@@ -28,6 +28,33 @@ export const OptionalUrl = z
 
 export const RequiredUrl = z.string().trim().url('Must be a valid URL')
 
+// ----- Design system tokens -----
+
+export const DesignSystemSchema = z.object({
+  /** Corner roundness — sharp / soft / pillowy. */
+  radius: z.enum(['sharp', 'subtle', 'soft', 'pillowy']).describe('Corner radius profile'),
+  /** Density — airy = lots of whitespace, dense = packed editorial. */
+  density: z.enum(['airy', 'balanced', 'dense']).describe('Spacing density'),
+  /** Motion intensity — none / subtle / lively. */
+  motion: z.enum(['none', 'subtle', 'lively']).describe('Animation intensity'),
+  /** Photo treatment — natural / duotone / brand-tinted. */
+  photoTreatment: z.enum(['natural', 'duotone', 'tinted']).describe('How photos are styled'),
+  /** Surface preference — paper (light) or ink (dark). */
+  surface: z.enum(['light', 'dark', 'cream']).describe('Default page background'),
+  /** Type weight — leaner regular vs heavier black. */
+  typeWeight: z.enum(['regular', 'medium', 'bold', 'black']).describe('Display type weight'),
+})
+export type DesignSystem = z.infer<typeof DesignSystemSchema>
+
+export const DEFAULT_DESIGN_SYSTEM: DesignSystem = {
+  radius: 'subtle',
+  density: 'balanced',
+  motion: 'subtle',
+  photoTreatment: 'natural',
+  surface: 'cream',
+  typeWeight: 'regular',
+}
+
 // ----- Brand -----
 
 export const BrandSchema = z.object({
@@ -38,6 +65,7 @@ export const BrandSchema = z.object({
   fontBody: NonEmptyString.describe('Body font (paragraphs)'),
   logoUrl: OptionalUrl.describe('Logo image URL (transparent PNG preferred)'),
   voiceNotes: OptionalString.describe('How the brand sounds — tone notes for AI + writers'),
+  designSystem: DesignSystemSchema.optional().describe('Visual design tokens — radius, density, motion'),
 })
 export type Brand = z.infer<typeof BrandSchema>
 

@@ -19,17 +19,28 @@ export interface RestaurantBoldProps {
 export default function RestaurantBold({ site }: RestaurantBoldProps) {
   const brand = site.brand
   const reservationUrl = site.reservation.url || site.hero.primaryCta.url || '#'
+  const ds = brand.designSystem
 
   const cssVars: React.CSSProperties = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ['--rb-brand-color' as any]: brand.secondaryColor || brand.primaryColor,
     ['--rb-secondary-color' as any]: brand.primaryColor,
+    ['--rb-accent-color' as any]: brand.accentColor || '#F5EFE6',
     ['--rb-font-display' as any]: brand.fontDisplay,
     ['--rb-font-body' as any]: brand.fontBody,
   }
 
   return (
-    <div className={s.root} style={cssVars}>
+    <div
+      className={s.root}
+      style={cssVars}
+      data-radius={ds?.radius ?? 'subtle'}
+      data-density={ds?.density ?? 'balanced'}
+      data-motion={ds?.motion ?? 'subtle'}
+      data-surface={ds?.surface ?? 'cream'}
+      data-photo={ds?.photoTreatment ?? 'natural'}
+      data-type-weight={ds?.typeWeight ?? 'regular'}
+    >
       <NavBar site={site} />
       <Hero site={site} />
       <AyceSection site={site} />
