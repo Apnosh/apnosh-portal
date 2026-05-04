@@ -55,14 +55,35 @@ export default async function SiteBuilderPage({ params }: PageProps) {
           </p>
         )}
 
-        <Link
-          href={`/sites/${slug}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-ink-5 hover:bg-bg-2 shrink-0"
-        >
-          <ExternalLink className="w-3 h-3" /> Preview live site
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          <Link
+            href={`/preview/sites/${slug}?mode=draft`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-ink-5 hover:bg-bg-2"
+          >
+            <ExternalLink className="w-3 h-3" /> Open draft preview
+          </Link>
+          {config?.published_at && (
+            <Link
+              href={`/preview/sites/${slug}?mode=published`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+            >
+              <ExternalLink className="w-3 h-3" /> View published v{config.version}
+            </Link>
+          )}
+          <Link
+            href={`/sites/${slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium rounded-lg text-ink-4 hover:text-ink-3"
+            title="Old customer-site renderer (legacy data shape) — being replaced by Site Builder"
+          >
+            Legacy site
+          </Link>
+        </div>
       </header>
 
       <SiteBuilderForm
