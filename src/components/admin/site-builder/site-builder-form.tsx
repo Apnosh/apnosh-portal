@@ -34,6 +34,7 @@ import HistoryDrawer from './history-drawer'
 import AssetLibraryPicker from './asset-library-picker'
 import DesignStudioDrawer from './design-studio-drawer'
 import CommandPalette from './command-palette'
+import GenerateFromProfileButton from './generate-from-profile-button'
 import type { Brand } from '@/lib/site-schemas/shared'
 
 interface SiteBuilderFormProps {
@@ -136,6 +137,16 @@ export default function SiteBuilderForm({
   const activeSchema = schemaShape[activeSection]
   const activeSectionDef = SECTIONS.find(s => s.key === activeSection)
   const readiness = useMemo(() => readinessScore(data), [data])
+
+  // Detect a mostly-empty draft to surface "Generate from profile" prominently
+  const isFreshDraft = useMemo(() => {
+    return (
+      !data.identity.displayName?.trim() &&
+      !data.hero.headline?.trim() &&
+      data.locations.length === 0 &&
+      !data.about.body?.trim()
+    )
+  }, [data])
 
   // ----- Helpers -----
   function toggleGroup(key: string) {
@@ -256,6 +267,9 @@ export default function SiteBuilderForm({
             <Command className="w-3 h-3" />
             <kbd className="font-mono">K</kbd>
           </button>
+
+          {/* Generate from profile (Claude) */}
+          <GenerateFromProfileButton clientId={clientId} />
 
           {/* Design Studio */}
           <button
@@ -409,6 +423,15 @@ export default function SiteBuilderForm({
 
             {/* Form scroll area */}
             <div ref={formScrollRef} className="flex-1 overflow-y-auto px-5 py-4">
+              {isFreshDraft && activeSection === 'identity' && (
+                <div className="mb-4">
+                  <GenerateFromProfileButton
+                    clientId={clientId}
+                    variant="card"
+                    cardHint="This client's onboarding data is ready. Generate a complete first draft — hero, locations, AYCE, about, FAQs, SEO, voice — all tuned to their goals and audience. You can edit anything after."
+                  />
+                </div>
+              )}
               {activeSection === 'brand' && (
                 <BrandAssistPanel
                   brand={data.brand}
