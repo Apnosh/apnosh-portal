@@ -4,7 +4,9 @@
  */
 
 import { RestaurantSiteSchema, RESTAURANT_DEFAULTS } from './restaurant'
+import { RetailSiteSchema, RETAIL_DEFAULTS } from './retail'
 import type { RestaurantSite } from './restaurant'
+import type { RetailSite } from './retail'
 import type { ZodTypeAny } from 'zod'
 
 export type Vertical = 'restaurant' | 'retail' | 'services'
@@ -20,20 +22,23 @@ export const VERTICAL_REGISTRY: Record<Vertical, VerticalDefinition> = {
     schema: RestaurantSiteSchema,
     defaults: RESTAURANT_DEFAULTS,
     templates: [
-      { id: 'restaurant-bold', name: 'Bold (dark hero, red accents)' },
+      { id: 'restaurant-bold', name: 'Bold — dark hero, red accents' },
     ],
   },
   retail: {
-    schema: RestaurantSiteSchema, // placeholder — define retail.ts later
-    defaults: RESTAURANT_DEFAULTS,
-    templates: [],
+    schema: RetailSiteSchema,
+    defaults: RETAIL_DEFAULTS,
+    templates: [
+      { id: 'retail-grid', name: 'Grid — product-forward, minimal' },
+    ],
   },
   services: {
-    schema: RestaurantSiteSchema, // placeholder
+    schema: RestaurantSiteSchema, // placeholder — services.ts coming next
     defaults: RESTAURANT_DEFAULTS,
     templates: [],
   },
 }
 
 export { RestaurantSiteSchema, RESTAURANT_DEFAULTS }
-export type { RestaurantSite }
+export { RetailSiteSchema, RETAIL_DEFAULTS }
+export type { RestaurantSite, RetailSite }

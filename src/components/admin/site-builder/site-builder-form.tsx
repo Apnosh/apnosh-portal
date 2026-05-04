@@ -19,6 +19,10 @@ import { createClient } from '@/lib/supabase/client'
 import { FieldRenderer } from './field-renderer'
 import { UploadProvider, type UploadAssetFn } from './upload-context'
 import { SECTIONS, GROUPS, readinessScore, type SectionKey } from './sections'
+import BrandAssistPanel from './brand-assist-panel'
+import HistoryDrawer from './history-drawer'
+import AssetLibraryPicker from './asset-library-picker'
+import type { Brand } from '@/lib/site-schemas/shared'
 
 interface SiteBuilderFormProps {
   clientId: string
@@ -46,6 +50,9 @@ export default function SiteBuilderForm({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['identity', 'content', 'trust', 'configuration']))
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [previewKey, setPreviewKey] = useState<number>(0)
+  const [historyOpen, setHistoryOpen] = useState<boolean>(false)
+  const [libraryOpen, setLibraryOpen] = useState<boolean>(false)
+  const libraryPick = useRef<((url: string) => void) | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingPatch = useRef<Partial<RestaurantSite>>({})
 
@@ -122,6 +129,29 @@ export default function SiteBuilderForm({
     })
   }
 
+  /**
+   * Jump to a section by parsing labels like "Hero → Headline".
+   * Expands the section's group if collapsed and scrolls form to top.
+   */
+  function jumpToMissingItem(label: string) {
+    const sectionTitle = label.split('→')[0]?.trim().toLowerCase()
+    const target = SECTIONS.find(s => s.title.toLowerCase() === sectionTitle)
+    if (!target) return
+    setExpandedGroups(prev => new Set([...prev, target.group]))
+    setActiveSection(target.key)
+    // Scroll form panel into view
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    })
+  }
+
+  // Library opener — surfaces existing assets and resolves the picked URL
+  // back to the field that triggered it.
+  const openLibrary = useCallback((onPick: (url: string) => void) => {
+    libraryPick.current = onPick
+    setLibraryOpen(true)
+  }, [])
+
   // Upload handler — pushes to client-assets bucket, returns public URL
   const uploadAsset = useCallback<UploadAssetFn>(async (file) => {
     try {
@@ -140,7 +170,7 @@ export default function SiteBuilderForm({
   }, [clientId])
 
   return (
-    <UploadProvider upload={uploadAsset}>
+    <UploadProvider upload={uploadAsset} openLibrary={openLibrary}>
     <div className="grid grid-cols-12 gap-4">
       {/* Left rail: readiness + grouped section nav */}
       <aside className="col-span-2 space-y-3 sticky top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto pb-4">
@@ -255,6 +285,12 @@ export default function SiteBuilderForm({
       {/* Center: form */}
       <div className="col-span-4">
         <div className="bg-white rounded-xl border border-ink-6 p-5">
+          {activeSection === 'brand' && (
+            <BrandAssistPanel
+              brand={data.brand}
+              onApply={(patch) => handleSectionChange('brand', { ...data.brand, ...patch } as Brand)}
+            />
+          )}
           {activeSchema ? (
             <FieldRenderer
               key={activeSection}
@@ -278,8 +314,18 @@ export default function SiteBuilderForm({
                 <span className="font-medium">{readiness.missing.length} item{readiness.missing.length === 1 ? '' : 's'} to fix before publish</span>
                 <ChevronDown className="w-3 h-3 ml-auto group-open:rotate-180 transition-transform" />
               </summary>
-              <ul className="mt-2 ml-5 space-y-1 text-[11px] text-ink-3">
-                {readiness.missing.map((m, i) => <li key={i}>· {m}</li>)}
+              <ul className="mt-2 ml-5 space-y-1 text-[11px]">
+                {readiness.missing.map((m, i) => (
+                  <li key={i}>
+                    <button
+                      type="button"
+                      onClick={() => jumpToMissingItem(m)}
+                      className="text-ink-3 hover:text-brand hover:underline text-left"
+                    >
+                      · {m}
+                    </button>
+                  </li>
+                ))}
               </ul>
             </details>
           )}
@@ -303,9 +349,8 @@ export default function SiteBuilderForm({
               <ExternalLink className="w-3.5 h-3.5" /> Raw API
             </a>
             <button
-              disabled
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-ink-4 rounded-lg border border-ink-6 cursor-not-allowed"
-              title="History UI coming next"
+              onClick={() => setHistoryOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-ink-3 hover:text-ink rounded-lg border border-ink-6"
             >
               <History className="w-3.5 h-3.5" /> History
             </button>
@@ -363,6 +408,26 @@ export default function SiteBuilderForm({
         </div>
       </div>
     </div>
+    <HistoryDrawer
+      clientId={clientId}
+      clientSlug={clientSlug}
+      open={historyOpen}
+      onClose={() => setHistoryOpen(false)}
+      onReverted={() => {
+        // Trigger a reload — simplest approach: reload the page so server
+        // component fetches the new draft. The drawer closes itself first.
+        window.location.reload()
+      }}
+    />
+    <AssetLibraryPicker
+      clientId={clientId}
+      open={libraryOpen}
+      onClose={() => { setLibraryOpen(false); libraryPick.current = null }}
+      onPick={(url) => {
+        libraryPick.current?.(url)
+        libraryPick.current = null
+      }}
+    />
     </UploadProvider>
   )
 }

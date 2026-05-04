@@ -11,10 +11,10 @@
  */
 
 import { useRef, useState } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, Upload, Loader2, X } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronRight, Upload, Loader2, X, Image as ImageIcon } from 'lucide-react'
 import type { ZodTypeAny } from 'zod'
 import { introspect, humanizeFieldName, emptyValueFor } from './zod-introspect'
-import { useUploadAsset } from './upload-context'
+import { useUploadAsset, useOpenLibrary } from './upload-context'
 
 interface FieldRendererProps {
   schema: ZodTypeAny
@@ -385,6 +385,7 @@ function AssetField({
 }) {
   const v = (value as string | null) ?? ''
   const upload = useUploadAsset()
+  const openLibrary = useOpenLibrary()
   const fileInput = useRef<HTMLInputElement | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -453,6 +454,15 @@ function AssetField({
               {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
               {uploading ? 'Uploading…' : 'Upload'}
             </button>
+            {openLibrary && (
+              <button
+                type="button"
+                onClick={() => openLibrary((url) => onChange(url))}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-ink-3 hover:text-ink rounded border border-ink-6 hover:bg-bg-2"
+              >
+                <ImageIcon className="w-3 h-3" /> Library
+              </button>
+            )}
             {!upload && (
               <span className="text-[10px] text-ink-4 italic">Upload not configured</span>
             )}
