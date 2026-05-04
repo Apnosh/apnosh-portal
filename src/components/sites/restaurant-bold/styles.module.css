@@ -404,3 +404,177 @@
   color: var(--rb-ink-3);
   background: var(--rb-paper);
 }
+
+/* ---------- Animated brand mesh placeholder ---------- */
+.meshPlaceholder {
+  width: 100%; height: 100%;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 20% 20%, color-mix(in oklab, var(--rb-brand) 70%, transparent) 0%, transparent 50%),
+    radial-gradient(circle at 80% 30%, color-mix(in oklab, var(--rb-ink) 90%, transparent) 0%, transparent 60%),
+    radial-gradient(circle at 50% 80%, color-mix(in oklab, var(--rb-brand) 40%, transparent) 0%, transparent 55%),
+    linear-gradient(135deg, var(--rb-ink), color-mix(in oklab, var(--rb-brand) 30%, var(--rb-ink)));
+  animation: meshDrift 18s ease-in-out infinite alternate;
+}
+.meshPlaceholder::before {
+  content: ""; position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(45deg, transparent 0 14px, rgba(255,255,255,0.03) 14px 15px);
+  pointer-events: none;
+}
+.meshPlaceholderLabel {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: rgba(245,239,230,0.92);
+  font-family: var(--rb-font-display, "Anton");
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 32px;
+  text-shadow: 0 2px 16px rgba(0,0,0,0.5);
+}
+.meshPlaceholderLabel small {
+  display: block;
+  margin-top: 10px;
+  font-family: var(--rb-font-body, "DM Sans");
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  opacity: 0.8;
+}
+
+@keyframes meshDrift {
+  0%   { background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%; }
+  100% { background-position: 30% 40%, -20% 20%, 10% -30%, 0% 0%; }
+}
+
+/* Map-style placeholder for locations without photos */
+.mapPlaceholder {
+  width: 100%; height: 100%;
+  background:
+    linear-gradient(135deg, color-mix(in oklab, var(--rb-brand) 25%, var(--rb-ink)), var(--rb-ink)),
+    repeating-linear-gradient(0deg, transparent 0 28px, rgba(255,255,255,0.04) 28px 29px),
+    repeating-linear-gradient(90deg, transparent 0 28px, rgba(255,255,255,0.04) 28px 29px);
+  position: relative;
+}
+.mapPin {
+  position: absolute; top: 38%; left: 50%; transform: translate(-50%, -100%);
+  width: 28px; height: 38px;
+  background: var(--rb-brand);
+  clip-path: path('M14 0C6.27 0 0 6.27 0 14c0 10.5 14 24 14 24s14-13.5 14-24C28 6.27 21.73 0 14 0z');
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+}
+.mapPin::after {
+  content: ""; position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  width: 10px; height: 10px;
+  background: var(--rb-cream);
+  border-radius: 50%;
+}
+
+/* ---------- Testimonials ---------- */
+.testimonials { padding: clamp(48px, 8vw, 112px) 0; background: var(--rb-cream-2); }
+.testimonialsHeader { text-align: center; max-width: 720px; margin: 0 auto 56px; }
+.testimonialsHeader h2 { font-size: clamp(2rem, 4.6vw, 3.6rem); margin-top: 14px; }
+.testimonialsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+.testimonialCard {
+  background: var(--rb-paper);
+  border-radius: 18px;
+  padding: 32px 28px;
+  display: flex; flex-direction: column;
+  position: relative;
+  border: 1px solid var(--rb-ink-6);
+  transition: transform .25s ease, box-shadow .25s ease;
+}
+.testimonialCard:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,0.08); }
+.testimonialQuote::before {
+  content: "\201C";
+  display: block;
+  font-family: var(--rb-font-display, "Anton");
+  font-size: 4rem;
+  line-height: 0.6;
+  color: var(--rb-brand);
+  margin-bottom: 12px;
+}
+.testimonialBody { font-size: 1.05rem; line-height: 1.55; color: var(--rb-ink); margin: 0 0 24px; flex: 1; }
+.testimonialAuthor { display: flex; align-items: center; gap: 12px; margin-top: auto; }
+.testimonialAvatar {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--rb-brand), color-mix(in oklab, var(--rb-brand) 50%, var(--rb-ink)));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--rb-font-display, "Anton");
+  font-size: 1.1rem;
+  color: var(--rb-cream);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.testimonialAvatar img { width: 100%; height: 100%; object-fit: cover; }
+.testimonialAuthorMeta { display: flex; flex-direction: column; }
+.testimonialAuthorMeta strong {
+  font-family: var(--rb-font-display, "Anton");
+  font-size: 1rem; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.testimonialAuthorMeta span { font-size: 0.78rem; color: var(--rb-ink-3); letter-spacing: 0.04em; }
+.testimonialStars { display: flex; gap: 2px; margin-bottom: 12px; }
+.testimonialStar { color: var(--rb-gold); font-size: 0.95rem; }
+.testimonialStarMuted { color: var(--rb-ink-6); font-size: 0.95rem; }
+@media (max-width: 880px) { .testimonialsGrid { grid-template-columns: 1fr; } }
+
+/* ---------- Gallery ---------- */
+.gallery { padding: clamp(48px, 8vw, 112px) 0; background: var(--rb-paper); }
+.galleryHeader { max-width: 720px; margin: 0 0 40px; }
+.galleryHeader h2 { font-size: clamp(2rem, 4.6vw, 3.6rem); margin-top: 14px; }
+.galleryHeader p { color: var(--rb-ink-3); font-size: 1.05rem; max-width: 540px; margin-top: 12px; }
+.galleryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.galleryItem {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--rb-cream-2);
+  cursor: pointer;
+  transition: transform .25s ease;
+}
+.galleryItem:hover { transform: scale(1.02); }
+.galleryItem:nth-child(5n+1) { grid-column: span 2; aspect-ratio: 2 / 1; }
+.galleryItem img { width: 100%; height: 100%; object-fit: cover; transition: transform .4s ease; }
+.galleryItem:hover img { transform: scale(1.05); }
+.galleryCaption {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
+  color: var(--rb-cream);
+  padding: 16px;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+.galleryItem:hover .galleryCaption { opacity: 1; }
+@media (max-width: 880px) { .galleryGrid { grid-template-columns: repeat(2, 1fr); } .galleryItem:nth-child(5n+1) { grid-column: span 2; } }
+
+/* ---------- Animation primitives ---------- */
+.fadeUp { animation: fadeUp .8s cubic-bezier(.16,1,.3,1) both; }
+.fadeUp:nth-child(2) { animation-delay: .08s; }
+.fadeUp:nth-child(3) { animation-delay: .16s; }
+.fadeUp:nth-child(4) { animation-delay: .24s; }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fadeUp, .meshPlaceholder { animation: none; }
+}
+
+html { scroll-behavior: smooth; }

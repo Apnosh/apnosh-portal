@@ -11,13 +11,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, CheckCircle2, AlertCircle, Sparkles, ExternalLink, History, Monitor, Smartphone, RefreshCw } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, Sparkles, ExternalLink, History, Monitor, Smartphone, RefreshCw, ChevronDown, ChevronRight, Circle } from 'lucide-react'
 import { saveDraft, publishSite } from '@/lib/site-config/actions'
 import { RestaurantSiteSchema } from '@/lib/site-schemas'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 import { createClient } from '@/lib/supabase/client'
 import { FieldRenderer } from './field-renderer'
 import { UploadProvider, type UploadAssetFn } from './upload-context'
+import { SECTIONS, GROUPS, readinessScore, type SectionKey } from './sections'
 
 interface SiteBuilderFormProps {
   clientId: string
@@ -27,20 +28,8 @@ interface SiteBuilderFormProps {
   initialVersion: number
 }
 
-const SECTIONS: { key: keyof RestaurantSite; title: string; subtitle: string }[] = [
-  { key: 'identity',   title: 'Identity',     subtitle: 'Brand name, vertical, template' },
-  { key: 'brand',      title: 'Brand',        subtitle: 'Colors, fonts, logo, voice' },
-  { key: 'hero',       title: 'Hero',         subtitle: 'Top of the home page' },
-  { key: 'locations',  title: 'Locations',    subtitle: 'One card per physical place' },
-  { key: 'offerings',  title: 'Offerings',    subtitle: 'AYCE programs and menu categories' },
-  { key: 'about',      title: 'About',        subtitle: 'Story + values + photo' },
-  { key: 'contact',    title: 'Contact + FAQ',subtitle: 'Lead text and common questions' },
-  { key: 'reservation',title: 'Reservation',  subtitle: 'Where guests book' },
-  { key: 'social',     title: 'Social',       subtitle: 'Public profile links' },
-  { key: 'seo',        title: 'SEO',          subtitle: 'Title, description, share image' },
-  { key: 'statBand',   title: 'Stat Band',    subtitle: 'Big number strip on home (optional)' },
-  { key: 'footer',     title: 'Footer',       subtitle: 'Tagline + copyright' },
-]
+// SECTIONS, GROUPS, readinessScore now imported from ./sections so the
+// catalogue is shared between the form and any future readiness widgets.
 
 export default function SiteBuilderForm({
   clientId, clientSlug, initialData, initialPublishedAt, initialVersion,
@@ -53,7 +42,8 @@ export default function SiteBuilderForm({
   const [publishError, setPublishError] = useState<string | null>(null)
   const [publishedAt, setPublishedAt] = useState<string | null>(initialPublishedAt)
   const [version, setVersion] = useState<number>(initialVersion)
-  const [activeSection, setActiveSection] = useState<keyof RestaurantSite>('identity')
+  const [activeSection, setActiveSection] = useState<SectionKey>('identity')
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['identity', 'content', 'trust', 'configuration']))
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop')
   const [previewKey, setPreviewKey] = useState<number>(0)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -119,14 +109,18 @@ export default function SiteBuilderForm({
 
   const activeSchema = schemaShape[activeSection]
 
-  // Section completeness — check if section's data has any non-empty fields
-  const sectionFilled = useMemo(() => {
-    const out: Partial<Record<keyof RestaurantSite, boolean>> = {}
-    for (const sec of SECTIONS) {
-      out[sec.key] = isFilled(data[sec.key])
-    }
-    return out
-  }, [data])
+  // Readiness score + per-section completeness, computed from the validators
+  // declared in sections.ts
+  const readiness = useMemo(() => readinessScore(data), [data])
+
+  function toggleGroup(key: string) {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   // Upload handler — pushes to client-assets bucket, returns public URL
   const uploadAsset = useCallback<UploadAssetFn>(async (file) => {
@@ -148,38 +142,90 @@ export default function SiteBuilderForm({
   return (
     <UploadProvider upload={uploadAsset}>
     <div className="grid grid-cols-12 gap-4">
-      {/* Left rail: section nav */}
-      <aside className="col-span-2 space-y-1 sticky top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto pb-4">
-        {SECTIONS.map(s => {
-          const filled = sectionFilled[s.key]
-          return (
-            <button
-              key={s.key}
-              onClick={() => setActiveSection(s.key)}
-              className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-start gap-2 ${
-                activeSection === s.key
-                  ? 'bg-brand text-white'
-                  : 'hover:bg-bg-2 text-ink'
-              }`}
-            >
-              <span
-                className={`shrink-0 mt-1.5 inline-block w-1.5 h-1.5 rounded-full ${
-                  filled
-                    ? activeSection === s.key ? 'bg-white' : 'bg-emerald-500'
-                    : activeSection === s.key ? 'bg-white/40' : 'bg-ink-5'
-                }`}
-                title={filled ? 'Has content' : 'Empty'}
-              />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium">{s.title}</span>
-                <span className={`block text-[11px] truncate ${activeSection === s.key ? 'text-white/80' : 'text-ink-3'}`}>{s.subtitle}</span>
-              </span>
-            </button>
-          )
-        })}
+      {/* Left rail: readiness + grouped section nav */}
+      <aside className="col-span-2 space-y-3 sticky top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto pb-4">
+        {/* Readiness score card */}
+        <div className="bg-white border border-ink-6 rounded-xl p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-ink-4">Readiness</span>
+            <span className={`text-[11px] font-semibold ${readiness.score >= 80 ? 'text-emerald-600' : readiness.score >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+              {readiness.score}%
+            </span>
+          </div>
+          <div className="h-1.5 bg-ink-6 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-500 ${readiness.score >= 80 ? 'bg-emerald-500' : readiness.score >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+              style={{ width: `${readiness.score}%` }}
+            />
+          </div>
+          {readiness.missing.length > 0 ? (
+            <p className="text-[11px] text-ink-3 mt-2">
+              {readiness.missing.length} item{readiness.missing.length === 1 ? '' : 's'} to fix before publish
+            </p>
+          ) : (
+            <p className="text-[11px] text-emerald-600 mt-2 font-medium">Ready to publish</p>
+          )}
+        </div>
+
+        {/* Grouped section nav */}
+        <div className="space-y-1">
+          {GROUPS.map(group => {
+            const groupSections = SECTIONS.filter(s => s.group === group.key)
+            const isExpanded = expandedGroups.has(group.key)
+            const groupComplete = groupSections.filter(s => readiness.perSection[s.key]?.complete).length
+            return (
+              <div key={group.key}>
+                <button
+                  onClick={() => toggleGroup(group.key)}
+                  className="w-full flex items-center justify-between gap-1 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3 hover:text-ink"
+                >
+                  <span className="flex items-center gap-1">
+                    {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    {group.label}
+                  </span>
+                  <span className="text-ink-4 font-normal text-[10px]">{groupComplete}/{groupSections.length}</span>
+                </button>
+                {isExpanded && (
+                  <div className="space-y-0.5 pl-1">
+                    {groupSections.map(s => {
+                      const isActive = activeSection === s.key
+                      const meta = readiness.perSection[s.key]
+                      const hasIssues = meta && meta.missing.length > 0
+                      return (
+                        <button
+                          key={s.key}
+                          onClick={() => setActiveSection(s.key)}
+                          className={`w-full text-left px-2 py-1.5 rounded-md transition-colors flex items-start gap-2 ${
+                            isActive
+                              ? 'bg-brand text-white'
+                              : 'hover:bg-bg-2 text-ink'
+                          }`}
+                        >
+                          <span className={`shrink-0 mt-1 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full ${
+                            meta?.complete
+                              ? isActive ? 'bg-white text-brand' : 'bg-emerald-500 text-white'
+                              : hasIssues
+                                ? isActive ? 'bg-amber-200 text-brand' : 'bg-amber-400 text-white'
+                                : isActive ? 'border border-white/40' : 'border border-ink-5'
+                          }`}>
+                            {meta?.complete && <CheckCircle2 className="w-2.5 h-2.5" />}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[13px] font-medium leading-tight">{s.title}</span>
+                            <span className={`block text-[10px] truncate ${isActive ? 'text-white/80' : 'text-ink-3'}`}>{s.subtitle}</span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
 
         {/* Status footer */}
-        <div className="border-t border-ink-6 pt-3 mt-4 px-1">
+        <div className="border-t border-ink-6 pt-3 px-1">
           <div className="flex items-center gap-1.5 text-[11px]">
             {saving ? (
               <>
@@ -224,7 +270,20 @@ export default function SiteBuilderForm({
         </div>
 
         {/* Publish bar */}
-        <div className="bg-white rounded-xl border border-ink-6 p-4 mt-4 flex items-center justify-between gap-3 flex-wrap">
+        <div className="bg-white rounded-xl border border-ink-6 p-4 mt-4 space-y-3">
+          {readiness.missing.length > 0 && (
+            <details className="group">
+              <summary className="text-xs cursor-pointer flex items-center gap-2 text-amber-700 hover:text-amber-800 list-none">
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span className="font-medium">{readiness.missing.length} item{readiness.missing.length === 1 ? '' : 's'} to fix before publish</span>
+                <ChevronDown className="w-3 h-3 ml-auto group-open:rotate-180 transition-transform" />
+              </summary>
+              <ul className="mt-2 ml-5 space-y-1 text-[11px] text-ink-3">
+                {readiness.missing.map((m, i) => <li key={i}>· {m}</li>)}
+              </ul>
+            </details>
+          )}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="text-xs text-ink-3">
             {publishError ? (
               <span className="text-red-600 font-medium">{publishError}</span>
@@ -258,6 +317,7 @@ export default function SiteBuilderForm({
               {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {publishing ? 'Publishing…' : 'Publish'}
             </button>
+          </div>
           </div>
         </div>
       </div>
@@ -305,19 +365,6 @@ export default function SiteBuilderForm({
     </div>
     </UploadProvider>
   )
-}
-
-/** Detect whether a section's data has any user-entered content. */
-function isFilled(value: unknown): boolean {
-  if (value === null || value === undefined) return false
-  if (typeof value === 'string') return value.trim().length > 0
-  if (typeof value === 'number') return value !== 0
-  if (typeof value === 'boolean') return value
-  if (Array.isArray(value)) return value.length > 0 && value.some(isFilled)
-  if (typeof value === 'object') {
-    return Object.values(value as Record<string, unknown>).some(isFilled)
-  }
-  return false
 }
 
 function timeAgo(iso: string): string {

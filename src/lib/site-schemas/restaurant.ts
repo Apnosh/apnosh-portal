@@ -67,6 +67,42 @@ export const StatBandSchema = z.object({
 })
 export type StatBand = z.infer<typeof StatBandSchema>
 
+// ----- Testimonials / Press -----
+
+export const TestimonialSchema = z.object({
+  quote: NonEmptyString.max(280, 'Keep quotes punchy'),
+  author: NonEmptyString.max(60),
+  role: z.string().trim().max(80).optional().nullable().describe('Title, publication, or relationship'),
+  rating: z.coerce.number().int().min(1).max(5).optional().nullable().describe('Optional 1–5 star rating'),
+  source: z.enum(['google', 'yelp', 'tripadvisor', 'press', 'customer', 'other']).optional().nullable(),
+  photoUrl: OptionalUrl.describe('Optional reviewer photo or publication logo'),
+})
+export type Testimonial = z.infer<typeof TestimonialSchema>
+
+export const TestimonialsSchema = z.object({
+  enabled: z.boolean().describe('Show the testimonials section on the home page'),
+  heading: z.string().trim().max(80).optional().describe('Section title (e.g. "What guests are saying")'),
+  items: z.array(TestimonialSchema).max(12),
+})
+export type Testimonials = z.infer<typeof TestimonialsSchema>
+
+// ----- Gallery -----
+
+export const GalleryPhotoSchema = z.object({
+  url: NonEmptyString.describe('Photo URL'),
+  caption: z.string().trim().max(120).optional().nullable(),
+  alt: z.string().trim().max(180).optional().nullable().describe('Alt text for accessibility'),
+})
+export type GalleryPhoto = z.infer<typeof GalleryPhotoSchema>
+
+export const GallerySchema = z.object({
+  enabled: z.boolean().describe('Show the photo gallery section'),
+  heading: z.string().trim().max(80).optional(),
+  description: z.string().trim().max(220).optional(),
+  photos: z.array(GalleryPhotoSchema).max(24),
+})
+export type Gallery = z.infer<typeof GallerySchema>
+
 // ----- Footer -----
 
 export const FooterSchema = z.object({
@@ -84,6 +120,8 @@ export const RestaurantSiteSchema = z.object({
   locations: z.array(LocationSchema).min(1, 'At least one location is required'),
   offerings: OfferingsSchema,
   about: AboutSchema,
+  testimonials: TestimonialsSchema.optional(),
+  gallery: GallerySchema.optional(),
   contact: ContactSchema,
   reservation: ReservationSchema,
   social: SocialSchema,
@@ -139,6 +177,8 @@ export const RESTAURANT_DEFAULTS: RestaurantSite = {
     faqs: [],
   },
   reservation: { enabled: false, url: null, ctaLabel: 'Reserve a Table' },
+  testimonials: { enabled: false, heading: 'What guests are saying', items: [] },
+  gallery: { enabled: false, heading: 'Photos', description: '', photos: [] },
   social: {
     instagram: null, tiktok: null, facebook: null,
     twitter: null, youtube: null, linkedin: null,

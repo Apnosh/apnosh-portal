@@ -36,6 +36,12 @@ export default function RestaurantBold({ site }: RestaurantBoldProps) {
       <LocationsSection site={site} reservationUrl={reservationUrl} />
       {site.statBand?.enabled && site.statBand.stats.length > 0 && <StatBandSection statBand={site.statBand} />}
       <AboutSection site={site} />
+      {site.testimonials?.enabled && site.testimonials.items.length > 0 && (
+        <TestimonialsSection testimonials={site.testimonials} />
+      )}
+      {site.gallery?.enabled && site.gallery.photos.length > 0 && (
+        <GallerySection gallery={site.gallery} />
+      )}
       {site.contact.faqs.length > 0 && <FaqSection site={site} />}
       <CtaBand site={site} reservationUrl={reservationUrl} />
       <Footer site={site} />
@@ -98,8 +104,11 @@ function Hero({ site }: { site: RestaurantSite }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={hero.photoUrl} alt="" />
           ) : (
-            <div className={s.heroPlaceholder}>
-              {site.identity.tagline || 'Add a hero photo'}
+            <div className={s.meshPlaceholder}>
+              <div className={s.meshPlaceholderLabel}>
+                {site.identity.displayName || 'Your Brand'}
+                <small>Add a hero photo to make this yours</small>
+              </div>
             </div>
           )}
         </div>
@@ -178,10 +187,15 @@ function LocationsSection({ site, reservationUrl }: { site: RestaurantSite; rese
                   // eslint-disable-next-line @next/next/no-img-element
                   <img className={s.locationMediaImg} src={loc.photoUrl} alt="" />
                 ) : (
-                  <div className={s.locationLabel}>
-                    {loc.name}
-                    {loc.tagline && <small>{loc.tagline}</small>}
-                  </div>
+                  <>
+                    <div className={s.mapPlaceholder}>
+                      <span className={s.mapPin} aria-hidden="true" />
+                    </div>
+                    <div className={s.locationLabel}>
+                      {loc.name}
+                      {loc.tagline && <small>{loc.tagline}</small>}
+                    </div>
+                  </>
                 )}
               </div>
               <div className={s.locationBody}>
@@ -244,9 +258,16 @@ function AboutSection({ site }: { site: RestaurantSite }) {
             </div>
           </div>
           <div className={s.aboutMedia}>
-            {about.photoUrl && (
+            {about.photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img className={s.aboutMediaImg} src={about.photoUrl} alt="" />
+            ) : (
+              <div className={s.meshPlaceholder}>
+                <div className={s.meshPlaceholderLabel}>
+                  {site.identity.displayName?.split(' ')[0] || ''}
+                  <small>Add an about photo</small>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -359,4 +380,81 @@ function Footer({ site }: { site: RestaurantSite }) {
 
 function countLabel(n: number): string {
   return ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'][n] ?? String(n)
+}
+
+// ============================================================================
+// Testimonials
+// ============================================================================
+
+function TestimonialsSection({ testimonials }: { testimonials: NonNullable<RestaurantSite['testimonials']> }) {
+  return (
+    <section className={s.testimonials}>
+      <div className={s.container}>
+        <div className={s.testimonialsHeader}>
+          <span className={s.eyebrow}>Loved By</span>
+          <h2>{testimonials.heading || 'What guests are saying'}</h2>
+        </div>
+        <div className={s.testimonialsGrid}>
+          {testimonials.items.map((t, i) => (
+            <article key={i} className={`${s.testimonialCard} ${s.fadeUp}`}>
+              {t.rating && t.rating > 0 && (
+                <div className={s.testimonialStars}>
+                  {Array.from({ length: 5 }).map((_, j) => (
+                    <span key={j} className={j < t.rating! ? s.testimonialStar : s.testimonialStarMuted}>★</span>
+                  ))}
+                </div>
+              )}
+              <div className={s.testimonialQuote} />
+              <p className={s.testimonialBody}>{t.quote}</p>
+              <div className={s.testimonialAuthor}>
+                <div className={s.testimonialAvatar}>
+                  {t.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={t.photoUrl} alt="" />
+                  ) : (
+                    initials(t.author)
+                  )}
+                </div>
+                <div className={s.testimonialAuthorMeta}>
+                  <strong>{t.author}</strong>
+                  {t.role && <span>{t.role}</span>}
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function initials(name: string): string {
+  return name.split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() ?? '').join('')
+}
+
+// ============================================================================
+// Gallery
+// ============================================================================
+
+function GallerySection({ gallery }: { gallery: NonNullable<RestaurantSite['gallery']> }) {
+  return (
+    <section className={s.gallery}>
+      <div className={s.container}>
+        <div className={s.galleryHeader}>
+          <span className={s.eyebrow}>Photos</span>
+          <h2>{gallery.heading || 'Inside the room'}</h2>
+          {gallery.description && <p>{gallery.description}</p>}
+        </div>
+        <div className={s.galleryGrid}>
+          {gallery.photos.map((p, i) => (
+            <div key={i} className={s.galleryItem}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.url} alt={p.alt || ''} />
+              {p.caption && <div className={s.galleryCaption}>{p.caption}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
 }
