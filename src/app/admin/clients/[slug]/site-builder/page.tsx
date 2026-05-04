@@ -1,11 +1,12 @@
 /**
- * Admin Site Builder — unified one-page form for everything that drives a
- * client's website. Replaces the older /site/ page over time.
+ * Admin Site Builder — full-bleed three-pane workspace.
+ *
+ * The page itself is just a shell: data fetch + auth check, then hands
+ * to the SiteBuilderForm client component which owns layout, top bar,
+ * drawers, and the live preview.
  */
 
 import { notFound } from 'next/navigation'
-import Link from 'next/link'
-import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getDraft } from '@/lib/site-config/actions'
 import { RESTAURANT_DEFAULTS } from '@/lib/site-schemas'
@@ -28,67 +29,26 @@ export default async function SiteBuilderPage({ params }: PageProps) {
 
   const result = await getDraft(client.id, 'restaurant')
   const config = result.success ? result.data! : null
-
   const initialData: RestaurantSite = (config?.draft_data as RestaurantSite) ?? RESTAURANT_DEFAULTS
 
+  if (!result.success) {
+    return (
+      <div className="max-w-2xl mx-auto p-12 text-center">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+          <p className="text-sm text-red-700 font-medium mb-2">Could not load Site Builder</p>
+          <p className="text-xs text-red-600">{result.error}</p>
+          <p className="text-xs text-red-600 mt-2 italic">Make sure migration 079_site_configs.sql has been applied.</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="max-w-screen-2xl mx-auto px-6 py-6">
-      <Link
-        href={`/admin/clients/${slug}`}
-        className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink mb-4"
-      >
-        <ArrowLeft className="w-4 h-4" /> Back to {client.name}
-      </Link>
-
-      <header className="flex items-start justify-between gap-4 mb-6">
-        <div>
-          <div className="text-[11px] uppercase tracking-widest text-ink-4 font-semibold mb-1">Site Builder</div>
-          <h1 className="text-2xl font-bold text-ink">{client.name}</h1>
-          <p className="text-sm text-ink-3 mt-1">
-            One source of truth for everything the customer site renders. Edits auto-save to draft. Click Publish to push live.
-          </p>
-        </div>
-
-        {!result.success && (
-          <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg max-w-md">
-            Could not load: {result.error}. Did you apply migration 079_site_configs.sql in Supabase?
-          </p>
-        )}
-
-        <div className="flex items-center gap-2 shrink-0">
-          <Link
-            href={`/preview/sites/${slug}?mode=draft`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-ink-5 hover:bg-bg-2"
-          >
-            <ExternalLink className="w-3 h-3" /> Open draft preview
-          </Link>
-          {config?.published_at && (
-            <Link
-              href={`/preview/sites/${slug}?mode=published`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-            >
-              <ExternalLink className="w-3 h-3" /> View published v{config.version}
-            </Link>
-          )}
-          <Link
-            href={`/sites/${slug}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium rounded-lg text-ink-4 hover:text-ink-3"
-            title="Old customer-site renderer (legacy data shape) — being replaced by Site Builder"
-          >
-            Legacy site
-          </Link>
-        </div>
-      </header>
-
+    <div className="-m-6 lg:-m-8">{/* break out of admin layout padding */}
       <SiteBuilderForm
         clientId={client.id}
         clientSlug={client.slug}
+        clientName={client.name}
         initialData={initialData}
         initialPublishedAt={config?.published_at ?? null}
         initialVersion={config?.version ?? 0}
