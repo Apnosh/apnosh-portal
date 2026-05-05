@@ -11,8 +11,9 @@
 import { useEffect, useState, useMemo } from 'react'
 import {
   X, Loader2, FolderOpen, Image as ImageIcon, Check, AlertCircle,
-  Download, Sparkles,
+  Download, Sparkles, Plus, Link2, Trash2,
 } from 'lucide-react'
+import { addDriveFolder, removeDriveFolder } from '@/lib/drive-actions'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 
 interface DriveFile {
@@ -63,22 +64,61 @@ export default function DriveImportDrawer({ clientId, open, onClose, draftLocati
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<{ ok: number; failed: number } | null>(null)
 
-  useEffect(() => {
-    if (!open) return
+  // Add-folder state
+  const [addOpen, setAddOpen] = useState(false)
+  const [addUrl, setAddUrl] = useState('')
+  const [addLabel, setAddLabel] = useState('')
+  const [addBusy, setAddBusy] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
+
+  function refresh() {
     setLoading(true)
     setLoadError(null)
-    setSelections(new Map())
-    setImportResult(null)
     fetch(`/api/admin/drive-list?clientId=${encodeURIComponent(clientId)}`)
       .then(r => r.json())
       .then(json => {
         if (json.error) setLoadError(json.error)
         const fs = (json.folders ?? []) as LinkedFolder[]
         setFolders(fs)
-        if (fs.length > 0) setActiveFolderId(fs[0].id)
+        if (fs.length > 0 && !activeFolderId) setActiveFolderId(fs[0].id)
       })
       .catch(e => setLoadError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false))
+  }
+
+  async function linkFolder() {
+    if (!addUrl.trim()) return
+    setAddBusy(true)
+    setAddError(null)
+    const res = await addDriveFolder(clientId, addUrl.trim(), addLabel.trim() || undefined)
+    setAddBusy(false)
+    if (!res.success) {
+      setAddError(res.error ?? 'Failed to link folder')
+      return
+    }
+    setAddUrl('')
+    setAddLabel('')
+    setAddOpen(false)
+    refresh()
+  }
+
+  async function unlinkFolder(folderRowId: string) {
+    if (!confirm('Unlink this folder from this client? (Files in Drive aren\'t affected.)')) return
+    const res = await removeDriveFolder(folderRowId)
+    if (!res.success) {
+      setLoadError(res.error ?? 'Failed to unlink')
+      return
+    }
+    if (activeFolderId === folderRowId) setActiveFolderId(null)
+    refresh()
+  }
+
+  useEffect(() => {
+    if (!open) return
+    setSelections(new Map())
+    setImportResult(null)
+    refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, clientId])
 
   const activeFolder = useMemo(
@@ -213,10 +253,16 @@ export default function DriveImportDrawer({ clientId, open, onClose, draftLocati
             </div>
           </div>
         ) : folders.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center p-8 text-sm text-ink-3 text-center">
-            <div>
-              <p>No Drive folders linked to this client yet.</p>
-              <p className="text-xs mt-1">Link folders via the client&apos;s admin page → Drive section.</p>
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="max-w-sm w-full">
+              <p className="text-sm text-ink text-center mb-1">No Drive folders linked to this client yet.</p>
+              <p className="text-xs text-ink-3 text-center mb-4">Paste a Google Drive folder URL to link it.</p>
+              <InlineAddFolder
+                url={addUrl} setUrl={setAddUrl}
+                label={addLabel} setLabel={setAddLabel}
+                busy={addBusy} error={addError}
+                onSubmit={linkFolder}
+              />
             </div>
           </div>
         ) : (
@@ -225,24 +271,53 @@ export default function DriveImportDrawer({ clientId, open, onClose, draftLocati
             <div className="col-span-3 border-r border-ink-6 bg-bg-2/30 overflow-y-auto p-2 space-y-1">
               {folders.map(f => {
                 const isActive = activeFolderId === f.id
+                const hasError = !!f.error
                 return (
-                  <button
+                  <div
                     key={f.id}
-                    onClick={() => setActiveFolderId(f.id)}
-                    className={`w-full text-left p-2 rounded-md flex items-start gap-2 ${
+                    className={`group relative w-full p-2 rounded-md flex items-start gap-2 ${
                       isActive ? 'bg-brand text-white' : 'hover:bg-bg-2 text-ink'
                     }`}
                   >
-                    <FolderOpen className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[12px] font-semibold truncate">{f.label || 'Folder'}</div>
-                      <div className={`text-[10px] truncate ${isActive ? 'text-white/80' : 'text-ink-3'}`}>
-                        {f.error ? f.error : `${f.files.length} item${f.files.length === 1 ? '' : 's'}`}
+                    <button onClick={() => setActiveFolderId(f.id)} className="flex items-start gap-2 flex-1 min-w-0 text-left">
+                      <FolderOpen className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12px] font-semibold truncate">{f.label || 'Folder'}</div>
+                        <div className={`text-[10px] truncate ${isActive ? 'text-white/80' : hasError ? 'text-red-600' : 'text-ink-3'}`}>
+                          {hasError ? f.error : `${f.files.length} item${f.files.length === 1 ? '' : 's'}`}
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                    <button
+                      onClick={() => unlinkFolder(f.id)}
+                      className={`opacity-0 group-hover:opacity-100 ${isActive ? 'text-white/60 hover:text-white' : 'text-ink-4 hover:text-red-600'}`}
+                      title="Unlink folder"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
                 )
               })}
+
+              {/* Inline add-folder */}
+              {addOpen ? (
+                <div className="p-2 bg-white border border-ink-6 rounded-md space-y-2 mt-2">
+                  <InlineAddFolder
+                    url={addUrl} setUrl={setAddUrl}
+                    label={addLabel} setLabel={setAddLabel}
+                    busy={addBusy} error={addError}
+                    onSubmit={linkFolder}
+                    onCancel={() => { setAddOpen(false); setAddError(null); setAddUrl(''); setAddLabel('') }}
+                  />
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAddOpen(true)}
+                  className="w-full mt-2 inline-flex items-center justify-center gap-1 p-2 text-[11px] font-medium text-ink-3 hover:text-ink hover:bg-bg-2 border border-dashed border-ink-5 rounded-md"
+                >
+                  <Plus className="w-3 h-3" /> Link a folder
+                </button>
+              )}
             </div>
 
             {/* Files grid */}
@@ -338,5 +413,60 @@ export default function DriveImportDrawer({ clientId, open, onClose, draftLocati
         )}
       </aside>
     </>
+  )
+}
+
+function InlineAddFolder({
+  url, setUrl, label, setLabel, busy, error, onSubmit, onCancel,
+}: {
+  url: string
+  setUrl: (v: string) => void
+  label: string
+  setLabel: (v: string) => void
+  busy: boolean
+  error: string | null
+  onSubmit: () => void
+  onCancel?: () => void
+}) {
+  return (
+    <div className="space-y-2">
+      <div>
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 block mb-1">Drive folder URL</label>
+        <div className="flex gap-1.5 items-start">
+          <Link2 className="w-3 h-3 text-ink-4 mt-2 shrink-0" />
+          <input
+            type="url"
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            placeholder="https://drive.google.com/drive/folders/..."
+            className="flex-1 border border-ink-6 rounded px-2 py-1.5 text-[11px] focus:ring-2 focus:ring-brand/20 outline-none"
+          />
+        </div>
+      </div>
+      <div>
+        <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 block mb-1">Label (optional)</label>
+        <input
+          type="text"
+          value={label}
+          onChange={e => setLabel(e.target.value)}
+          placeholder="e.g. Food photography"
+          className="w-full border border-ink-6 rounded px-2 py-1.5 text-[11px] focus:ring-2 focus:ring-brand/20 outline-none"
+        />
+      </div>
+      {error && <p className="text-[11px] text-red-600">{error}</p>}
+      <div className="flex gap-1.5">
+        <button
+          onClick={onSubmit}
+          disabled={busy || !url.trim()}
+          className="flex-1 inline-flex items-center justify-center gap-1 bg-ink hover:bg-black text-white text-[11px] font-semibold rounded px-2 py-1.5 disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+          {busy ? 'Linking…' : 'Link folder'}
+        </button>
+        {onCancel && (
+          <button onClick={onCancel} className="text-[11px] text-ink-3 hover:text-ink px-2">Cancel</button>
+        )}
+      </div>
+    </div>
   )
 }
