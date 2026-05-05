@@ -1,0 +1,149 @@
+/* Shared design tokens for the composed renderer.
+   Per-section variant components inherit these — keeps CSS DRY across
+   the section library. Brand colors come from brand.* via inline CSS
+   custom properties on the root. */
+
+.root {
+  --c-brand: var(--c-brand-color, #CC0A0A);
+  --c-ink: var(--c-secondary-color, #0B0B0B);
+  --c-cream: var(--c-accent-color, #FAF6EF);
+  --c-cream-2: color-mix(in oklab, var(--c-cream) 70%, #FFFFFF 30%);
+  --c-paper: #FFFFFF;
+  --c-ink-3: #3A3A3A;
+  --c-ink-4: #6A6A6A;
+  --c-rule: color-mix(in oklab, var(--c-ink) 12%, var(--c-cream) 88%);
+  --c-gold: #C9A96E;
+
+  background: var(--c-cream);
+  color: var(--c-ink);
+  font-family: var(--c-font-body, "Inter"), system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.root h1, .root h2, .root h3, .root h4 {
+  font-family: var(--c-font-display, "Anton"), Impact, sans-serif;
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.005em;
+  margin: 0;
+}
+
+.container { max-width: 1280px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 56px); }
+.containerNarrow { max-width: 760px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 56px); }
+
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--c-brand);
+}
+.eyebrow::before {
+  content: ""; width: 28px; height: 2px;
+  background: currentColor;
+}
+.eyebrowOnDark { color: var(--c-cream); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px 22px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.86rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  transition: opacity .2s ease, transform .2s ease;
+}
+.btnPrimary { background: var(--c-brand); color: var(--c-cream); }
+.btnPrimary:hover { opacity: 0.92; transform: translateY(-1px); }
+.btnGhost { border: 1px solid currentColor; background: transparent; }
+.btnLg { padding: 18px 28px; font-size: 0.94rem; }
+
+/* ============================================================
+   NAV — used across all variants
+   ============================================================ */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(11,11,11,0.92);
+  color: var(--c-cream);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 14px 0;
+}
+.navInner { display: flex; align-items: center; justify-content: space-between; gap: 32px; }
+.navBrand {
+  font-family: var(--c-font-display, "Anton");
+  font-size: 1.5rem; letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c-cream); text-decoration: none;
+}
+.navBrand span { color: var(--c-brand); }
+.navLinks { display: flex; gap: 28px; align-items: center; }
+.navLinks a {
+  font-size: 0.78rem; font-weight: 600;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--c-cream); opacity: 0.85;
+  text-decoration: none;
+}
+.navLinks a:hover { opacity: 1; color: var(--c-brand); }
+.navCta {
+  background: var(--c-brand);
+  color: var(--c-cream) !important;
+  padding: 10px 16px;
+  border-radius: 6px;
+  opacity: 1 !important;
+}
+.navCta:hover { opacity: 0.92; }
+@media (max-width: 760px) { .navLinks > a:not(.navCta) { display: none; } }
+
+/* ============================================================
+   FOOTER — minimal default
+   ============================================================ */
+.footer {
+  background: var(--c-ink); color: var(--c-cream);
+  padding: clamp(60px, 8vw, 100px) 0 32px;
+}
+.footerInner {
+  display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 32px;
+}
+.footerBrand {
+  font-family: var(--c-font-display, "Anton");
+  font-size: 1.8rem; letter-spacing: 0.04em;
+  text-transform: uppercase; margin-bottom: 12px;
+}
+.footerBrand span { color: var(--c-brand); }
+.footerTagline { color: rgba(250,246,239,0.7); max-width: 340px; margin-bottom: 20px; }
+.footerSocials { display: flex; gap: 12px; }
+.footerSocials a {
+  width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 50%;
+  font-size: 0.74rem; letter-spacing: 0.06em;
+  color: rgba(250,246,239,0.7);
+  text-decoration: none;
+}
+.footerSocials a:hover { border-color: var(--c-brand); color: var(--c-cream); background: var(--c-brand); }
+.footerCol h5 {
+  font-family: var(--c-font-display, "Anton");
+  font-size: 0.86rem; letter-spacing: 0.18em;
+  text-transform: uppercase; opacity: 0.8;
+  margin-bottom: 14px;
+}
+.footerCol ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.footerCol a { color: rgba(250,246,239,0.7); text-decoration: none; font-size: 0.92rem; }
+.footerCol a:hover { color: var(--c-brand); }
+.footerBottom {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(250,246,239,0.1);
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  font-size: 0.74rem; letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(250,246,239,0.5);
+}
+@media (max-width: 760px) { .footerInner { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 480px) { .footerInner { grid-template-columns: 1fr; } }

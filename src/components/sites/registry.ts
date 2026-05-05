@@ -8,6 +8,11 @@ import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 import RestaurantBold from './restaurant-bold'
 import RestaurantEditorial from './restaurant-editorial'
 import RestaurantCinematic from './restaurant-cinematic'
+import RestaurantComposed from './restaurant-composed'
+import { HERO_VARIANT_DESCRIPTIONS } from './sections/hero'
+import { ABOUT_VARIANT_DESCRIPTIONS } from './sections/about'
+import { LOCATIONS_VARIANT_DESCRIPTIONS } from './sections/locations'
+import { AYCE_VARIANT_DESCRIPTIONS } from './sections/ayce'
 
 export interface TemplateDef {
   id: string
@@ -44,6 +49,14 @@ export const RESTAURANT_TEMPLATES: TemplateDef[] = [
     bestFor: 'Cocktail bars, omakase counters, speakeasies, steakhouses, high-end concepts with a sense of theater.',
     Component: RestaurantCinematic,
   },
+  {
+    id: 'restaurant-composed',
+    name: 'Composed (Premium)',
+    mood: 'Fully customizable — section-by-section variant composition',
+    description: 'No fixed layout. Picks a different variant per section (hero/about/locations/AYCE) for a unique site every time. Premium tier — Claude or AM composes the layout, supports per-section CSS overrides for the bespoke tier.',
+    bestFor: 'Premium-tier clients who want a site that doesn\'t look like a template at all.',
+    Component: RestaurantComposed,
+  },
 ]
 
 export function getTemplate(id: string | undefined | null): TemplateDef {
@@ -63,4 +76,33 @@ export function templateMenuPromptBlock(): string {
   lines.push('')
   lines.push('Each variant should pick a DIFFERENT templateId to maximize visual variety.')
   return lines.join('\n')
+}
+
+/** Section-variant catalogue for the "Composed" template (premium tier). */
+export function composedLayoutPromptBlock(): string {
+  const formatGroup = (title: string, descriptions: Record<string, string>) => {
+    const lines = [`### ${title}`]
+    for (const [id, desc] of Object.entries(descriptions)) {
+      lines.push(`- **${id}** — ${desc}`)
+    }
+    return lines.join('\n')
+  }
+  return [
+    '## Section variants (used when identity.templateId === "restaurant-composed")',
+    '',
+    'When using the Composed template, set `layout` on the site config to pick a variant per section. This produces a unique layout every time — variants below.',
+    '',
+    'Schema:',
+    '`layout: { hero: <heroId>, about: <aboutId>, locations: <locationsId>, ayce: <ayceId> }`',
+    '',
+    formatGroup('Hero', HERO_VARIANT_DESCRIPTIONS),
+    '',
+    formatGroup('About', ABOUT_VARIANT_DESCRIPTIONS),
+    '',
+    formatGroup('Locations', LOCATIONS_VARIANT_DESCRIPTIONS),
+    '',
+    formatGroup('AYCE / Offerings', AYCE_VARIANT_DESCRIPTIONS),
+    '',
+    'Mix variants thoughtfully — e.g. magazine hero + two-col-dropcap about + list-typographic locations + table ayce reads like an editorial spread; fullbleed hero + manifesto about + full-bleed-each locations + cinematic ayce reads like a luxe occasion-night brand.',
+  ].join('\n')
 }

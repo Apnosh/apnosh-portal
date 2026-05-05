@@ -25,7 +25,7 @@ import { STRATEGY_FIRST_INSTRUCTION, variantInstruction } from '@/lib/design-qua
 import { extractJsonFromClaude } from '@/lib/site-config/json-extract'
 import { logGeneration } from '@/lib/ai/log-generation'
 import { getGoldExamples, goldExamplesPromptSection } from '@/lib/ai/few-shot'
-import { templateMenuPromptBlock } from '@/components/sites/registry'
+import { templateMenuPromptBlock, composedLayoutPromptBlock } from '@/components/sites/registry'
 import crypto from 'node:crypto'
 
 // Opus generating 3 full RestaurantSite payloads can take 60-120s.
@@ -59,12 +59,15 @@ The JSON shape MUST be a complete RestaurantSite (every top-level key present). 
 If the operator listed sections in "preserve", copy those VERBATIM from the current draft into your output. Don't touch them.
 
 For multi-variant mode: each variant MUST push apart on:
-  - **Different identity.templateId** — pick a different one per variant from the available templates listed below. NEVER produce three variants with the same template. The templateId controls the entire visual layout — using different ones is the most important variable.
+  - **Different identity.templateId** — pick a different one per variant from the available templates listed below. At least ONE variant should use "restaurant-composed" with a thoughtfully picked layout map. NEVER produce three variants with the same template.
   - Different mood (luxe vs playful vs editorial)
   - Different design system tokens (radius, density, surface, type weight, photoTreatment)
   - Different hero structure (claim-first vs invitation-first vs sensory-first)
   - Different voice register (formal vs conversational vs poetic)
-NEVER produce three near-identical variants. The templateId difference is non-negotiable.`.trim()
+
+For "restaurant-composed" variants, ALSO output a complete \`layout\` object choosing one variant per section from the section-variant catalogue. Mix the variants to produce a layout the templates can't — e.g. magazine hero + manifesto about + full-bleed-each locations + cinematic ayce, or sensory hero + centered-narrative about + list-typographic locations + table ayce.
+
+NEVER produce three near-identical variants. Different layouts are non-negotiable.`.trim()
 
 export async function POST(req: NextRequest) {
   // Admin gate
@@ -110,6 +113,8 @@ export async function POST(req: NextRequest) {
     promptBlock,
     '',
     templateMenuPromptBlock(),
+    '',
+    composedLayoutPromptBlock(),
     '',
     goldSection,  // empty string if no examples; otherwise injected reference block
     '## Current draft (REFERENCE ONLY — only preserve sections explicitly listed below)',

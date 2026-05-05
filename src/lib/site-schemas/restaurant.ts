@@ -111,6 +111,27 @@ export const FooterSchema = z.object({
 })
 export type Footer = z.infer<typeof FooterSchema>
 
+// ----- Layout composition (Custom Compose tier) -----
+//
+// When identity.templateId === 'restaurant-composed', this map drives the
+// per-section variant choice. Each value is a variant slug from the
+// section-variants registry. Allows ~thousands of unique compositions
+// from a curated kit. Phase 2 (bespoke tier) will let clients override
+// individual sections with custom CSS — that goes in `customCss` below.
+
+export const LayoutSchema = z.object({
+  hero:      z.string().optional().describe('Hero variant slug (e.g. "split", "centered-manifesto", "asymmetric-magazine")'),
+  about:     z.string().optional().describe('About variant slug'),
+  locations: z.string().optional().describe('Locations variant slug'),
+  ayce:      z.string().optional().describe('AYCE variant slug'),
+  faq:       z.string().optional().describe('FAQ variant slug'),
+  footer:    z.string().optional().describe('Footer variant slug'),
+}).optional()
+export type Layout = z.infer<typeof LayoutSchema>
+
+/** Per-section CSS overrides — bespoke tier escape hatch. */
+export const CustomCssSchema = z.record(z.string(), z.string()).optional()
+
 // ----- Top-level Restaurant Site Config -----
 
 export const RestaurantSiteSchema = z.object({
@@ -128,6 +149,10 @@ export const RestaurantSiteSchema = z.object({
   seo: SeoSchema,
   statBand: StatBandSchema.optional(),
   footer: FooterSchema.optional(),
+  /** Section-by-section variant composition (Custom Compose / Bespoke tier). */
+  layout: LayoutSchema,
+  /** Per-section CSS overrides (Bespoke tier). Keyed by section name. */
+  customCss: CustomCssSchema,
 })
 
 export type RestaurantSite = z.infer<typeof RestaurantSiteSchema>
