@@ -9,10 +9,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
+import { markPicked, markApplied } from '@/lib/ai/log-generation'
 
 interface Body {
   clientId: string
   site: RestaurantSite
+  /** Generation row that produced this variant — marked picked + applied. */
+  generationId?: string
 }
 
 export async function POST(req: NextRequest) {
@@ -39,6 +42,14 @@ export async function POST(req: NextRequest) {
     .update({ draft_data: body.site })
     .eq('client_id', body.clientId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Mark the chosen variant — feeds the few-shot corpus + telemetry
+  if (body.generationId) {
+    await Promise.all([
+      markPicked(body.generationId),
+      markApplied(body.generationId),
+    ])
+  }
 
   return NextResponse.json({ success: true })
 }

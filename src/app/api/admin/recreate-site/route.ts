@@ -23,6 +23,9 @@ import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 import { withDesignPrinciples, callDesignModelWithFallback } from '@/lib/site-config/claude-config'
 import { STRATEGY_FIRST_INSTRUCTION, variantInstruction } from '@/lib/design-quality'
 import { extractJsonFromClaude } from '@/lib/site-config/json-extract'
+import { logGeneration } from '@/lib/ai/log-generation'
+import { getGoldExamples, goldExamplesPromptSection } from '@/lib/ai/few-shot'
+import crypto from 'node:crypto'
 
 // Opus generating 3 full RestaurantSite payloads can take 60-120s.
 // Default serverless timeout is 60s on Pro. Bump to the max (300s).
@@ -96,10 +99,15 @@ export async function POST(req: NextRequest) {
   const variantCount = Math.max(1, Math.min(3, body.variants ?? 3))
   const preserveList = body.preserve ?? []
 
+  // ===== Few-shot: pull reference gold examples for this vertical =====
+  const goldExamples = await getGoldExamples('restaurant', 3)
+  const goldSection = goldExamplesPromptSection(goldExamples)
+
   const userMessage = [
     '## Client onboarding context',
     promptBlock,
     '',
+    goldSection,  // empty string if no examples; otherwise injected reference block
     '## Current draft (REFERENCE ONLY — only preserve sections explicitly listed below)',
     '```json',
     currentDraft ? JSON.stringify(currentDraft, null, 2) : '(none)',
@@ -114,14 +122,14 @@ export async function POST(req: NextRequest) {
     variantCount > 1
       ? variantInstruction(variantCount)
       : 'Output a single complete RestaurantSite JSON now.',
-  ].join('\n')
+  ].filter(Boolean).join('\n')
 
+  const batchId = crypto.randomUUID()
+  const startedAt = Date.now()
   let raw: string
   let modelUsed: string
   try {
     const anthropic = new Anthropic()
-    // Variants mode produces 3 full RestaurantSite payloads + strategy
-    // blocks — bump tokens generously to avoid truncation.
     const maxTokens = variantCount >= 3 ? 32_000 : variantCount === 2 ? 24_000 : 12_000
     const result = await callDesignModelWithFallback({
       anthropic,
@@ -132,11 +140,23 @@ export async function POST(req: NextRequest) {
     raw = result.text
     modelUsed = result.model
   } catch (e) {
+    // Log the failure too — quality work needs error data
+    await logGeneration({
+      clientId: body.clientId,
+      taskType: 'recreate',
+      model: 'unknown',
+      inputSummary: { prompt: body.prompt, preserve: preserveList, variantCount, hasGoldExamples: goldExamples.length },
+      latencyMs: Date.now() - startedAt,
+      errorMessage: e instanceof Error ? e.message : String(e),
+      createdBy: user.id,
+      batchId,
+    })
     return NextResponse.json({
       error: 'Claude request failed',
       detail: e instanceof Error ? e.message : String(e),
     }, { status: 502 })
   }
+  const latencyMs = Date.now() - startedAt
 
   // Robust JSON extraction (handles strategy blocks, fences, truncation)
   const extracted = extractJsonFromClaude(raw)
@@ -157,17 +177,37 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(variantsRaw)) {
       return NextResponse.json({ error: 'Variants response missing variants[]', raw: raw.slice(0, 300) }, { status: 502 })
     }
+
+    // Log each variant individually so we can later track which was picked
+    const variantsOut = await Promise.all(variantsRaw.map(async (v, i) => {
+      const obj = v as { strategy?: string; site?: Record<string, unknown> }
+      const site = mergePreserved(obj.site ?? {}, currentDraft, preserveList)
+      const generationId = await logGeneration({
+        clientId: body.clientId,
+        taskType: 'recreate',
+        promptId: 'restaurant-recreate',
+        promptVersion: 'v1',
+        model: modelUsed,
+        inputSummary: { prompt: body.prompt, preserve: preserveList, variantCount, hasGoldExamples: goldExamples.length },
+        outputSummary: { strategy: obj.strategy, site } as Record<string, unknown>,
+        rawText: raw.length > 100_000 ? raw.slice(0, 100_000) : raw,
+        variantIndex: i,
+        batchId,
+        latencyMs,
+        createdBy: user.id,
+      })
+      return {
+        generationId,
+        strategy: obj.strategy ?? '',
+        site,
+      }
+    }))
+
     return NextResponse.json({
       success: true,
       mode: 'variants',
-      variants: variantsRaw.map((v) => {
-        const obj = v as { strategy?: string; site?: Record<string, unknown> }
-        const site = mergePreserved(obj.site ?? {}, currentDraft, preserveList)
-        return {
-          strategy: obj.strategy ?? '',
-          site,
-        }
-      }),
+      batchId,
+      variants: variantsOut,
     })
   }
 
@@ -190,10 +230,31 @@ export async function POST(req: NextRequest) {
     .eq('client_id', body.clientId)
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 })
 
+  const generationId = await logGeneration({
+    clientId: body.clientId,
+    taskType: 'recreate',
+    promptId: 'restaurant-recreate',
+    promptVersion: 'v1',
+    model: modelUsed,
+    inputSummary: { prompt: body.prompt, preserve: preserveList, variantCount: 1, hasGoldExamples: goldExamples.length },
+    outputSummary: { site } as Record<string, unknown>,
+    rawText: raw.length > 100_000 ? raw.slice(0, 100_000) : raw,
+    batchId,
+    latencyMs,
+    createdBy: user.id,
+  })
+  if (generationId) {
+    await Promise.all([
+      // Mark applied — this generation became the new draft
+      import('@/lib/ai/log-generation').then(m => m.markApplied(generationId)),
+    ])
+  }
+
   return NextResponse.json({
     success: true,
     mode: 'apply',
     site,
+    generationId,
   })
 }
 

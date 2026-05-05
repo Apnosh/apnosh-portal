@@ -68,7 +68,7 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
   const [variantCount, setVariantCount] = useState<1 | 2 | 3>(3)
 
   // Variants picker state
-  type Variant = { strategy: string; patch?: Record<string, unknown>; site: RestaurantSite }
+  type Variant = { strategy: string; patch?: Record<string, unknown>; site: RestaurantSite; generationId?: string | null }
   const [variants, setVariants] = useState<Variant[]>([])
   const [activeVariantIdx, setActiveVariantIdx] = useState<number>(0)
   const [applyingVariant, setApplyingVariant] = useState(false)
@@ -254,7 +254,7 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
       const res = await fetch('/api/admin/apply-variant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, site: v.site }),
+        body: JSON.stringify({ clientId, site: v.site, generationId: v.generationId }),
       })
       const json = await res.json()
       if (!res.ok || json.error) {

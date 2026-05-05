@@ -19,6 +19,8 @@ import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 import { PARSE_MODEL, withDesignPrinciples, callDesignModelWithFallback } from '@/lib/site-config/claude-config'
 import { STRATEGY_FIRST_INSTRUCTION, variantInstruction } from '@/lib/design-quality'
 import { extractJsonFromClaude } from '@/lib/site-config/json-extract'
+import { logGeneration, markApplied } from '@/lib/ai/log-generation'
+import crypto from 'node:crypto'
 
 export const maxDuration = 300
 
@@ -126,7 +128,10 @@ export async function POST(req: NextRequest) {
     system = withDesignPrinciples(`${SYSTEM_BASE}\n\n${STRATEGY_FIRST_INSTRUCTION}`)
   }
 
+  const batchId = crypto.randomUUID()
+  const startedAt = Date.now()
   let raw: string
+  let modelUsed: string = useOpus ? 'opus-fallback-chain' : PARSE_MODEL
   try {
     const anthropic = new Anthropic()
     const maxTokens = variantCount >= 3 ? 24_000 : variantCount === 2 ? 16_000 : 8_192
@@ -135,6 +140,7 @@ export async function POST(req: NextRequest) {
         anthropic, system, userMessage, maxTokens,
       })
       raw = result.text
+      modelUsed = result.model
     } else {
       const msg = await anthropic.messages.create({
         model: PARSE_MODEL,
@@ -148,11 +154,22 @@ export async function POST(req: NextRequest) {
         .join('\n')
     }
   } catch (e) {
+    await logGeneration({
+      clientId: body.clientId,
+      taskType: 'refine',
+      model: modelUsed,
+      inputSummary: { prompt: body.prompt, scope, sections: body.sections, variantCount, quality },
+      latencyMs: Date.now() - startedAt,
+      errorMessage: e instanceof Error ? e.message : String(e),
+      createdBy: user.id,
+      batchId,
+    })
     return NextResponse.json({
       error: 'Claude request failed',
       detail: e instanceof Error ? e.message : String(e),
     }, { status: 502 })
   }
+  const latencyMs = Date.now() - startedAt
 
   const extracted = extractJsonFromClaude(raw)
   if ('error' in extracted) {
@@ -170,18 +187,37 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(variantsRaw)) {
       return NextResponse.json({ error: 'Variants response missing variants[]', raw: raw.slice(0, 300) }, { status: 502 })
     }
+
+    const variantsOut = await Promise.all(variantsRaw.map(async (v, i) => {
+      const obj = v as { strategy?: string; site?: Record<string, unknown> }
+      const merged = deepMerge(currentDraft as unknown, obj.site ?? {}) as RestaurantSite
+      const generationId = await logGeneration({
+        clientId: body.clientId,
+        taskType: 'refine',
+        promptId: 'restaurant-refine',
+        promptVersion: 'v1',
+        model: modelUsed,
+        inputSummary: { prompt: body.prompt, scope, sections: body.sections, variantCount, quality },
+        outputSummary: { strategy: obj.strategy, patch: obj.site } as Record<string, unknown>,
+        rawText: raw.length > 100_000 ? raw.slice(0, 100_000) : raw,
+        variantIndex: i,
+        batchId,
+        latencyMs,
+        createdBy: user.id,
+      })
+      return {
+        generationId,
+        strategy: obj.strategy ?? '',
+        patch: obj.site ?? {},
+        site: merged,
+      }
+    }))
+
     return NextResponse.json({
       success: true,
       mode: 'variants',
-      variants: variantsRaw.map((v) => {
-        const obj = v as { strategy?: string; site?: Record<string, unknown> }
-        const merged = deepMerge(currentDraft as unknown, obj.site ?? {}) as RestaurantSite
-        return {
-          strategy: obj.strategy ?? '',
-          patch: obj.site ?? {},
-          site: merged,
-        }
-      }),
+      batchId,
+      variants: variantsOut,
     })
   }
 
@@ -203,11 +239,27 @@ export async function POST(req: NextRequest) {
     .eq('client_id', body.clientId)
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 })
 
+  const generationId = await logGeneration({
+    clientId: body.clientId,
+    taskType: 'refine',
+    promptId: 'restaurant-refine',
+    promptVersion: 'v1',
+    model: modelUsed,
+    inputSummary: { prompt: body.prompt, scope, sections: body.sections, variantCount: 1, quality },
+    outputSummary: { patch, site: merged } as Record<string, unknown>,
+    rawText: raw.length > 100_000 ? raw.slice(0, 100_000) : raw,
+    batchId,
+    latencyMs,
+    createdBy: user.id,
+  })
+  if (generationId) await markApplied(generationId)
+
   return NextResponse.json({
     success: true,
     mode: 'apply',
     patch,
     site: merged,
+    generationId,
   })
 }
 

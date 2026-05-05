@@ -261,7 +261,7 @@ export async function publishSite(
   if (pubErr) return { success: false, error: pubErr.message }
 
   // History snapshot
-  const { error: histErr } = await admin
+  const { data: histRow, error: histErr } = await admin
     .from('site_publish_history')
     .insert({
       client_id: clientId,
@@ -270,7 +270,33 @@ export async function publishSite(
       published_by: user.id,
       notes: notes ?? null,
     })
+    .select('id')
+    .single()
   if (histErr) console.warn('[publishSite] history insert failed:', histErr.message)
+
+  // Link the most recently-applied generation to this publish so the
+  // few-shot corpus knows which Claude run produced the published site.
+  if (histRow?.id) {
+    try {
+      const { data: lastApplied } = await admin
+        .from('ai_generations')
+        .select('id')
+        .eq('client_id', clientId)
+        .eq('applied', true)
+        .is('published_history_id', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (lastApplied?.id) {
+        await admin
+          .from('ai_generations')
+          .update({ published_history_id: histRow.id })
+          .eq('id', lastApplied.id)
+      }
+    } catch (e) {
+      console.warn('[publishSite] link to ai_generations failed:', (e as Error).message)
+    }
+  }
 
   // Fire deploy hook (best-effort)
   await fireDeployHook(clientId).catch(e =>

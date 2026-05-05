@@ -17,6 +17,8 @@ import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 import { withDesignPrinciples, callDesignModelWithFallback } from '@/lib/site-config/claude-config'
 import { STRATEGY_FIRST_INSTRUCTION } from '@/lib/design-quality'
 import { extractJsonFromClaude } from '@/lib/site-config/json-extract'
+import { logGeneration, markApplied } from '@/lib/ai/log-generation'
+import crypto from 'node:crypto'
 
 export const maxDuration = 300
 
@@ -126,7 +128,10 @@ export async function POST(req: NextRequest) {
   const promptBlock = contextToPromptBlock(ctx)
 
   // 2. Call Claude (Opus + strategy-first + design principles for top quality)
+  const batchId = crypto.randomUUID()
+  const startedAt = Date.now()
   let raw: string
+  let modelUsed = 'opus-fallback-chain'
   try {
     const anthropic = new Anthropic()
     const result = await callDesignModelWithFallback({
@@ -136,12 +141,24 @@ export async function POST(req: NextRequest) {
       maxTokens: 12_000,
     })
     raw = result.text
+    modelUsed = result.model
   } catch (e) {
+    await logGeneration({
+      clientId: body.clientId,
+      taskType: 'generate',
+      model: modelUsed,
+      inputSummary: { source: 'profile' },
+      latencyMs: Date.now() - startedAt,
+      errorMessage: e instanceof Error ? e.message : String(e),
+      createdBy: user.id,
+      batchId,
+    })
     return NextResponse.json({
       error: 'Claude request failed',
       detail: e instanceof Error ? e.message : String(e),
     }, { status: 502 })
   }
+  const latencyMs = Date.now() - startedAt
 
   // 3. Extract JSON
   const extracted = extractJsonFromClaude(raw)
@@ -206,7 +223,22 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true, site: validated })
+  const generationId = await logGeneration({
+    clientId: body.clientId,
+    taskType: 'generate',
+    promptId: 'restaurant-generate',
+    promptVersion: 'v1',
+    model: modelUsed,
+    inputSummary: { source: 'profile', clientName: ctx.client.name },
+    outputSummary: { site: validated } as Record<string, unknown>,
+    rawText: raw.length > 100_000 ? raw.slice(0, 100_000) : raw,
+    batchId,
+    latencyMs,
+    createdBy: user.id,
+  })
+  if (generationId) await markApplied(generationId)
+
+  return NextResponse.json({ success: true, site: validated, generationId })
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
