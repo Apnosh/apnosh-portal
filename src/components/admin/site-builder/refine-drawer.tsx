@@ -14,7 +14,7 @@
 
 import { useState } from 'react'
 import {
-  X, Loader2, Sparkles, Globe, Wand2, Check, AlertTriangle, ChevronDown, Link2,
+  X, Loader2, Sparkles, Globe, Wand2, Check, AlertTriangle, ChevronDown, Link2, Plus, Trash2,
 } from 'lucide-react'
 import { SECTIONS } from './sections'
 import type { SectionKey } from './sections'
@@ -44,7 +44,16 @@ const SOURCE_KINDS = [
   { id: 'menu',    label: 'Menu page',      hint: 'Pull menu categories + AYCE programs' },
   { id: 'gbp',     label: 'Google profile', hint: 'Pull address, hours, recent reviews' },
   { id: 'social',  label: 'Social profile', hint: 'Pull voice cues + tagline ideas' },
+  { id: 'press',   label: 'Press article',  hint: 'Pull testimonials from press feature' },
 ] as const
+
+type SourceKind = typeof SOURCE_KINDS[number]['id']
+
+interface SourceRow {
+  id: string
+  url: string
+  kind: SourceKind
+}
 
 export default function RefineDrawer({ clientId, open, onClose, initialSection }: Props) {
   const [tab, setTab] = useState<'refine' | 'source'>('refine')
@@ -54,9 +63,20 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
   const [scope, setScope] = useState<'site' | 'section'>(initialSection ? 'section' : 'site')
   const [section, setSection] = useState<SectionKey | null>(initialSection ?? null)
 
-  // Source state
-  const [url, setUrl] = useState('')
-  const [kind, setKind] = useState<typeof SOURCE_KINDS[number]['id']>('auto')
+  // Source state — multiple URL rows, each with its own kind
+  const [sourceRows, setSourceRows] = useState<SourceRow[]>([
+    { id: rid(), url: '', kind: 'auto' },
+  ])
+
+  function addSourceRow() {
+    setSourceRows(rows => [...rows, { id: rid(), url: '', kind: 'auto' }])
+  }
+  function updateSourceRow(id: string, patch: Partial<SourceRow>) {
+    setSourceRows(rows => rows.map(r => r.id === id ? { ...r, ...patch } : r))
+  }
+  function removeSourceRow(id: string) {
+    setSourceRows(rows => rows.length > 1 ? rows.filter(r => r.id !== id) : rows)
+  }
 
   // Shared state
   const [running, setRunning] = useState(false)
@@ -95,7 +115,11 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
   }
 
   async function runSource() {
-    if (!url.trim()) return
+    const validSources = sourceRows
+      .map(r => ({ url: r.url.trim(), kind: r.kind }))
+      .filter(r => r.url.length > 0)
+    if (validSources.length === 0) return
+
     setRunning(true); setError(null); setSuccess(null); setPatchPreview(null)
     try {
       const res = await fetch('/api/admin/extract-from-url', {
@@ -103,8 +127,7 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           clientId,
-          url: url.trim(),
-          kind,
+          sources: validSources,
           apply: true,
         }),
       })
@@ -113,8 +136,11 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
         setError(json.error || `HTTP ${res.status}`)
       } else {
         setPatchPreview(json.patch)
-        setSuccess(`Pulled ${json.kind ?? 'content'}. ${describePatch(json.patch)}`)
-        setTimeout(() => window.location.reload(), 1500)
+        const okCount = (json.sources as Array<{ error: string | null }> | undefined)?.filter(s => !s.error).length ?? validSources.length
+        const failCount = validSources.length - okCount
+        const failNote = failCount > 0 ? ` (${failCount} source${failCount === 1 ? '' : 's'} failed to fetch)` : ''
+        setSuccess(`Pulled from ${okCount} source${okCount === 1 ? '' : 's'}${failNote}. ${describePatch(json.patch)}`)
+        setTimeout(() => window.location.reload(), 1800)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error')
@@ -230,60 +256,86 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
           {tab === 'source' && (
             <>
               <div>
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 block mb-1.5">Source URL</label>
-                <div className="flex gap-2">
-                  <Link2 className="w-3.5 h-3.5 text-ink-4 mt-2.5 ml-1" />
-                  <input
-                    type="url"
-                    value={url}
-                    onChange={e => setUrl(e.target.value)}
-                    placeholder="dosikbbq.com / menu URL / Google Maps link / Instagram profile…"
-                    className="flex-1 border border-ink-6 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand/20 outline-none"
-                  />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4">Sources ({sourceRows.length}/6)</label>
+                  <button
+                    onClick={addSourceRow}
+                    disabled={sourceRows.length >= 6}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-brand hover:text-brand-dark disabled:opacity-40"
+                  >
+                    <Plus className="w-3 h-3" /> Add another
+                  </button>
                 </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 block mb-1.5">Source type</label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {SOURCE_KINDS.map(k => (
-                    <button
-                      key={k.id}
-                      onClick={() => setKind(k.id)}
-                      className={`text-left p-2 rounded border ${
-                        kind === k.id
-                          ? 'border-brand bg-brand/5 ring-1 ring-brand'
-                          : 'border-ink-6 hover:border-ink-5 bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[12px] font-semibold text-ink">{k.label}</span>
-                        {kind === k.id && <Check className="w-3 h-3 text-brand" />}
+                <div className="space-y-2">
+                  {sourceRows.map((row, idx) => (
+                    <div key={row.id} className="border border-ink-6 rounded-lg p-2.5 space-y-2 bg-white">
+                      <div className="flex items-start gap-2">
+                        <div className="w-5 h-5 rounded-full bg-bg-2 text-ink-3 flex items-center justify-center text-[10px] font-bold shrink-0 mt-1">
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1 flex gap-1.5">
+                          <Link2 className="w-3.5 h-3.5 text-ink-4 mt-2 shrink-0" />
+                          <input
+                            type="url"
+                            value={row.url}
+                            onChange={e => updateSourceRow(row.id, { url: e.target.value })}
+                            placeholder={examplePlaceholder(idx)}
+                            className="flex-1 border border-ink-6 rounded px-2 py-1.5 text-[12px] focus:ring-2 focus:ring-brand/20 outline-none"
+                          />
+                        </div>
+                        {sourceRows.length > 1 && (
+                          <button
+                            onClick={() => removeSourceRow(row.id)}
+                            className="text-ink-4 hover:text-red-600 mt-1 shrink-0"
+                            aria-label="Remove source"
+                            title="Remove"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
-                      <p className="text-[10px] text-ink-3 mt-0.5">{k.hint}</p>
-                    </button>
+                      <div className="flex flex-wrap gap-1 ml-7">
+                        {SOURCE_KINDS.map(k => (
+                          <button
+                            key={k.id}
+                            onClick={() => updateSourceRow(row.id, { kind: k.id })}
+                            className={`text-[10px] font-medium px-2 py-0.5 rounded ${
+                              row.kind === k.id
+                                ? 'bg-ink text-white'
+                                : 'bg-bg-2 text-ink-3 hover:text-ink hover:bg-ink-6'
+                            }`}
+                            title={k.hint}
+                          >
+                            {k.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
 
               <div className="text-[11px] text-ink-3 bg-bg-2/40 border border-ink-6 rounded-lg p-3">
-                <strong className="text-ink">What we&apos;ll pull:</strong>
+                <strong className="text-ink">Add as many as you have:</strong>
                 <ul className="mt-1.5 ml-4 list-disc space-y-0.5">
-                  <li>Tagline + about story (existing site)</li>
-                  <li>Menu categories + AYCE programs (menu page)</li>
-                  <li>Address, hours, reviews (Google profile)</li>
-                  <li>Voice cues + tagline ideas (social bio)</li>
+                  <li>The current website (homepage)</li>
+                  <li>The menu page or PDF</li>
+                  <li>Google Maps / Business Profile listing</li>
+                  <li>Instagram / TikTok / Facebook profile</li>
+                  <li>Press features (Eater, Seattle Times, etc.)</li>
                 </ul>
-                <p className="mt-2 italic">We never invent content. If a field isn&apos;t visible, it&apos;s left alone.</p>
+                <p className="mt-2 italic">All sources are sent to Claude in one pass so it can reconcile across them. We never invent content — fields not visible are left alone.</p>
               </div>
 
               <button
                 onClick={runSource}
-                disabled={!url.trim() || running}
+                disabled={running || sourceRows.every(r => !r.url.trim())}
                 className="w-full bg-ink hover:bg-black text-white text-sm font-semibold rounded-lg px-4 py-2.5 flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
-                {running ? 'Pulling…' : 'Pull + apply'}
+                {running
+                  ? `Pulling from ${sourceRows.filter(r => r.url.trim()).length}…`
+                  : `Pull from ${sourceRows.filter(r => r.url.trim()).length || 0} source${sourceRows.filter(r => r.url.trim()).length === 1 ? '' : 's'} + apply`}
               </button>
             </>
           )}
@@ -325,4 +377,20 @@ function describePatch(patch: unknown): string {
   if (keys.length === 1) return `Updated ${keys[0]}.`
   if (keys.length <= 3) return `Updated ${keys.join(', ')}.`
   return `Updated ${keys.length} sections.`
+}
+
+function rid(): string {
+  return Math.random().toString(36).slice(2, 9)
+}
+
+const PLACEHOLDERS = [
+  'dosikbbq.com',
+  'dosikbbq.com/menu/',
+  'maps.google.com/...',
+  'instagram.com/dosikbbq',
+  'eater.com/seattle/...',
+  'yelp.com/biz/...',
+]
+function examplePlaceholder(idx: number): string {
+  return PLACEHOLDERS[idx] ?? 'https://...'
 }

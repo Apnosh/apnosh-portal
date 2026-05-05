@@ -1,12 +1,16 @@
 /**
- * Pull content from an external URL (existing website, menu page, GBP
- * listing, social profile) and extract it into a partial RestaurantSite
- * update.
+ * Pull content from one or more external URLs (existing website, menu page,
+ * GBP listing, social profile, press, etc.) and extract them into a partial
+ * RestaurantSite update.
+ *
+ * Multi-source mode lets the operator paste a website + menu + Google
+ * profile in one call. We fetch all in parallel, label each block by kind,
+ * and send to Claude in a single combined prompt so it can reason
+ * holistically (e.g. menu items inform the hero promise).
  *
  * Strategy:
- *   1. Server-side fetch the URL. Strip HTML to readable text (basic).
- *   2. Send to Claude with the kind hint ("website" / "menu" / "gbp" /
- *      "social") so it knows what shape to extract.
+ *   1. Server-side fetch each URL. Strip HTML to readable text (basic).
+ *   2. Send to Claude with a labeled multi-source block + scope hint.
  *   3. Apply as a draft update on the client's site_configs row.
  */
 
@@ -16,20 +20,38 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 
+type SourceKind = 'website' | 'menu' | 'gbp' | 'social' | 'press' | 'auto'
+
+interface SourceInput {
+  url: string
+  kind?: SourceKind
+}
+
 interface ExtractRequest {
   clientId: string
-  url: string
-  /** What kind of source — affects the extraction prompt. */
-  kind?: 'website' | 'menu' | 'gbp' | 'social' | 'auto'
+  /** Either a single URL+kind, or an array of sources. */
+  url?: string
+  kind?: SourceKind
+  sources?: SourceInput[]
   /** If present, only update these top-level sections. */
   scope?: (keyof RestaurantSite)[]
-  /** If true (default false), apply directly to draft. Else just return. */
+  /** If true (default true), apply directly to draft. Else just return. */
   apply?: boolean
 }
 
-const SYSTEM = `You are a content extraction assistant for a website builder. You receive raw text content scraped from a URL plus a "kind" hint, and you output a partial RestaurantSite JSON containing what you can confidently extract.
+interface FetchedSource {
+  url: string
+  kind: SourceKind
+  contentType: string
+  text: string
+  error?: string
+}
 
-NEVER fabricate. If a field isn't visible in the source content, omit it. Output STRICT JSON only — no markdown.
+const SYSTEM = `You are a content extraction assistant for a website builder. You receive raw text content scraped from one or more URLs (each labeled with a "kind" hint), and you output a partial RestaurantSite JSON containing what you can confidently extract across all sources.
+
+You may merge information from different sources — e.g. menu page populates offerings, GBP populates locations + testimonials, website populates about + FAQ, social populates voice cues. The same field from multiple sources should be reconciled (prefer the most authoritative source: GBP for hours, website for tagline, menu page for offerings).
+
+NEVER fabricate. If a field isn't visible in any source, omit it. Output STRICT JSON only — no markdown.
 
 Allowed top-level keys (include only those you have content for):
   identity, brand, hero, locations, offerings, about, testimonials,
@@ -43,16 +65,19 @@ Per kind:
   contact info.
 
 "menu" — menu page or PDF text. Extract: offerings.categories with
-  populated category descriptions if visible. (Detailed item rows
-  belong in the menu_items table — out of scope here, but list the
-  top categories you see.) Map AYCE programs into offerings.ayce.
+  populated category descriptions if visible. Map AYCE programs into
+  offerings.ayce.
 
-"gbp" — Google Business Profile page or listing. Extract:
+"gbp" — Google Business Profile or Maps listing. Extract:
   locations[*].address, hours, phone, googleMapsUrl. Pull testimonials
-  from reviews if visible (use rating, author, source: "google").
+  from reviews if visible (rating, author, source: "google").
 
 "social" — Instagram bio, TikTok bio, LinkedIn page. Extract: voice
-  cues for brand.voiceNotes, hero.eyebrow + tagline candidates.
+  cues for brand.voiceNotes, hero.eyebrow + tagline candidates, social
+  URLs.
+
+"press" — press article or feature. Extract: testimonials with
+  source: "press", quote verbatim.
 
 Constraints:
 - All hex colors valid #RRGGBB
@@ -76,65 +101,91 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null) as ExtractRequest | null
-  if (!body?.clientId || !body.url?.trim()) {
-    return NextResponse.json({ error: 'clientId and url are required' }, { status: 400 })
+  if (!body?.clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 })
+
+  // Normalize to array of sources
+  const inputs: SourceInput[] = body.sources?.length
+    ? body.sources
+    : body.url
+      ? [{ url: body.url, kind: body.kind }]
+      : []
+
+  if (inputs.length === 0) {
+    return NextResponse.json({ error: 'At least one URL is required' }, { status: 400 })
   }
 
-  const url = normalizeUrl(body.url)
-  if (!url) return NextResponse.json({ error: 'Invalid URL' }, { status: 400 })
+  // Cap to a reasonable number to keep prompt budget sane
+  const capped = inputs.slice(0, 6)
 
-  // 1. Fetch
-  let pageText: string
-  let contentType = ''
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Apnosh-SiteBuilder/1.0)',
-        Accept: 'text/html,*/*',
-      },
-      signal: AbortSignal.timeout(15_000),
-    })
-    if (!res.ok) {
-      return NextResponse.json({ error: `Source returned HTTP ${res.status}` }, { status: 502 })
+  // 1. Fetch all in parallel
+  const fetched: FetchedSource[] = await Promise.all(capped.map(async (src) => {
+    const url = normalizeUrl(src.url)
+    if (!url) return { url: src.url, kind: src.kind ?? 'auto', contentType: '', text: '', error: 'Invalid URL' }
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; Apnosh-SiteBuilder/1.0)',
+          Accept: 'text/html,*/*',
+        },
+        signal: AbortSignal.timeout(15_000),
+      })
+      if (!res.ok) {
+        return { url, kind: src.kind ?? 'auto', contentType: '', text: '', error: `HTTP ${res.status}` }
+      }
+      const contentType = res.headers.get('content-type') ?? ''
+      const raw = await res.text()
+      const text = htmlToText(raw)
+      const kind = src.kind === 'auto' || !src.kind ? autoDetectKind(url, text) : src.kind
+      return { url, kind, contentType, text }
+    } catch (e) {
+      return {
+        url,
+        kind: src.kind ?? 'auto',
+        contentType: '',
+        text: '',
+        error: e instanceof Error ? e.message : String(e),
+      }
     }
-    contentType = res.headers.get('content-type') ?? ''
-    const raw = await res.text()
-    pageText = htmlToText(raw).slice(0, 60_000) // cap for token budget
-  } catch (e) {
+  }))
+
+  const ok = fetched.filter(f => !f.error && f.text.trim())
+  if (ok.length === 0) {
     return NextResponse.json({
-      error: 'Could not fetch URL',
-      detail: e instanceof Error ? e.message : String(e),
-    }, { status: 502 })
+      error: 'No sources returned readable text',
+      sources: fetched.map(f => ({ url: f.url, kind: f.kind, error: f.error || 'empty' })),
+    }, { status: 422 })
   }
 
-  if (!pageText.trim()) {
-    return NextResponse.json({ error: 'Source page returned no readable text' }, { status: 422 })
-  }
-
-  // 2. Detect kind if auto
-  const kind = body.kind === 'auto' || !body.kind ? autoDetectKind(url, pageText) : body.kind
+  // 2. Token budget — each source gets roughly equal share, capped at 50KB each
+  const perSourceCap = Math.max(8_000, Math.floor(80_000 / ok.length))
+  const blocks = ok.map((f, i) => {
+    const truncated = f.text.length > perSourceCap
+      ? f.text.slice(0, perSourceCap) + '\n…[truncated]'
+      : f.text
+    return `### Source ${i + 1} (kind: ${f.kind}) — ${f.url}\n${truncated}`
+  }).join('\n\n---\n\n')
 
   const scopeHint = body.scope?.length
     ? `Restrict your output to these top-level keys ONLY: ${body.scope.join(', ')}.`
-    : 'Output every top-level key you have content for.'
+    : 'Output every top-level key you have content for across all sources.'
 
   const userMessage = [
-    `## Source URL\n${url}`,
-    `## Source kind\n${kind}`,
-    `## Content type\n${contentType}`,
-    `## Scope\n${scopeHint}`,
-    '## Extracted page text (truncated)',
-    pageText,
+    `## Sources (${ok.length})`,
+    blocks,
     '',
-    'Output the partial RestaurantSite JSON now.',
+    '## Scope',
+    scopeHint,
+    '',
+    'Output the partial RestaurantSite JSON now. Reconcile across sources if multiple cover the same field.',
   ].join('\n')
 
+  // 3. Single Claude call across all sources
   let raw: string
   try {
     const anthropic = new Anthropic()
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 6144,
+      max_tokens: 8192,
       system: SYSTEM,
       messages: [{ role: 'user', content: userMessage }],
     })
@@ -149,7 +200,7 @@ export async function POST(req: NextRequest) {
     }, { status: 502 })
   }
 
-  // 3. Parse
+  // 4. Parse JSON
   const jsonMatch = raw.match(/\{[\s\S]*\}/)
   if (!jsonMatch) {
     return NextResponse.json({ error: 'Claude returned non-JSON', raw: raw.slice(0, 300) }, { status: 502 })
@@ -164,7 +215,7 @@ export async function POST(req: NextRequest) {
     }, { status: 502 })
   }
 
-  // 4. Apply if requested
+  // 5. Apply if requested
   let appliedSite: RestaurantSite | null = null
   if (body.apply !== false) {
     const admin = createAdminClient()
@@ -188,7 +239,12 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    kind,
+    sources: fetched.map(f => ({
+      url: f.url,
+      kind: f.kind,
+      bytes: f.text.length,
+      error: f.error ?? null,
+    })),
     patch,
     site: appliedSite,
   })
@@ -208,11 +264,16 @@ function normalizeUrl(input: string): string | null {
   }
 }
 
-function autoDetectKind(url: string, text: string): ExtractRequest['kind'] {
+function autoDetectKind(url: string, text: string): SourceKind {
   const u = url.toLowerCase()
   if (u.includes('/menu') || u.endsWith('.pdf') || /menu/.test(text.slice(0, 1000).toLowerCase())) return 'menu'
-  if (u.includes('google.com/maps') || u.includes('business.google.com')) return 'gbp'
-  if (u.includes('instagram.com') || u.includes('tiktok.com') || u.includes('facebook.com') || u.includes('linkedin.com')) return 'social'
+  if (u.includes('google.com/maps') || u.includes('business.google.com') || u.includes('g.page/')) return 'gbp'
+  if (
+    u.includes('instagram.com') || u.includes('tiktok.com') ||
+    u.includes('facebook.com') || u.includes('linkedin.com') ||
+    u.includes('twitter.com') || u.includes('x.com')
+  ) return 'social'
+  if (u.includes('eater.com') || u.includes('seattletimes.com') || /press|review/.test(text.slice(0, 500).toLowerCase())) return 'press'
   return 'website'
 }
 
