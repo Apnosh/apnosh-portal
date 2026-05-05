@@ -16,12 +16,18 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { RestaurantSiteSchema } from '@/lib/site-schemas'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
+import { DESIGN_MODEL, PARSE_MODEL, withDesignPrinciples } from '@/lib/site-config/claude-config'
+import { STRATEGY_FIRST_INSTRUCTION, variantInstruction } from '@/lib/design-quality'
 
 interface RefineRequest {
   clientId: string
   prompt: string
   scope?: 'site' | 'section' | 'section-list'
   sections?: (keyof RestaurantSite)[]
+  /** Number of distinct variants to produce. 1 = direct apply, 2-3 = pick. */
+  variants?: number
+  /** "best" = Opus + strategy-first (slower, higher quality). "fast" = Sonnet single-shot. Default "best". */
+  quality?: 'best' | 'fast'
 }
 
 const SYSTEM_BASE = `You are a world-class brand designer + copywriter refining an existing website draft.
@@ -90,6 +96,10 @@ export async function POST(req: NextRequest) {
       ? `Edit ONLY these sections: ${sections.map(s => `"${s}"`).join(', ')}. Keys at the top level of your output must be from this list.`
       : 'You may edit any section. Edit only what the instruction implies.'
 
+  const variantCount = Math.max(1, Math.min(3, body.variants ?? 1))
+  const quality = body.quality ?? 'best'
+  const useOpus = quality === 'best'
+
   const userMessage = [
     '## Current draft',
     '```json',
@@ -102,16 +112,24 @@ export async function POST(req: NextRequest) {
     '## Scope',
     scopeHint,
     '',
-    'Output the partial JSON update now. Only changed keys.',
+    variantCount > 1
+      ? variantInstruction(variantCount)
+      : 'Output the partial JSON update now. Only changed keys.',
   ].join('\n')
+
+  // System prompt: layer in design principles + strategy-first when high-quality
+  let system = SYSTEM_BASE
+  if (useOpus) {
+    system = withDesignPrinciples(`${SYSTEM_BASE}\n\n${STRATEGY_FIRST_INSTRUCTION}`)
+  }
 
   let raw: string
   try {
     const anthropic = new Anthropic()
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 8192,
-      system: SYSTEM_BASE,
+      model: useOpus ? DESIGN_MODEL : PARSE_MODEL,
+      max_tokens: variantCount > 1 ? 16384 : 8192,
+      system,
       messages: [{ role: 'user', content: userMessage }],
     })
     raw = msg.content
@@ -130,9 +148,9 @@ export async function POST(req: NextRequest) {
   if (!jsonMatch) {
     return NextResponse.json({ error: 'Claude returned non-JSON', raw: raw.slice(0, 300) }, { status: 502 })
   }
-  let patch: Record<string, unknown>
+  let parsed: Record<string, unknown>
   try {
-    patch = JSON.parse(jsonMatch[0])
+    parsed = JSON.parse(jsonMatch[0])
   } catch (e) {
     return NextResponse.json({
       error: 'JSON parse failed',
@@ -140,16 +158,39 @@ export async function POST(req: NextRequest) {
     }, { status: 502 })
   }
 
-  // Deep-merge onto current draft
-  const merged = deepMerge(currentDraft as unknown, patch) as RestaurantSite
+  // ----- Multi-variant mode: return options without persisting -----
+  if (variantCount > 1) {
+    const variantsRaw = parsed.variants
+    if (!Array.isArray(variantsRaw)) {
+      return NextResponse.json({ error: 'Variants response missing variants[]', raw: raw.slice(0, 300) }, { status: 502 })
+    }
+    return NextResponse.json({
+      success: true,
+      mode: 'variants',
+      variants: variantsRaw.map((v) => {
+        const obj = v as { strategy?: string; site?: Record<string, unknown> }
+        const merged = deepMerge(currentDraft as unknown, obj.site ?? {}) as RestaurantSite
+        return {
+          strategy: obj.strategy ?? '',
+          patch: obj.site ?? {},
+          site: merged,
+        }
+      }),
+    })
+  }
 
-  // Soft validate (don't reject; refines often produce partial schemas)
+  // ----- Single-shot mode: deep-merge + persist (legacy fast path) -----
+  // Strip the strategy block if present (Opus mode); we just want the JSON patch
+  const patch = parsed.site && typeof parsed.site === 'object'
+    ? parsed.site as Record<string, unknown>
+    : parsed
+
+  const merged = deepMerge(currentDraft as unknown, patch) as RestaurantSite
   const result = RestaurantSiteSchema.safeParse(merged)
   if (!result.success) {
     console.warn('[refine-site] validation issues:', JSON.stringify(result.error.issues.slice(0, 5), null, 2))
   }
 
-  // Persist
   const { error: upErr } = await admin
     .from('site_configs')
     .update({ draft_data: merged })
@@ -158,8 +199,9 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    patch,           // what Claude changed
-    site: merged,    // full new draft
+    mode: 'apply',
+    patch,
+    site: merged,
   })
 }
 

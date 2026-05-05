@@ -14,6 +14,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { gatherClientContext, contextToPromptBlock } from '@/lib/site-config/gather-context'
 import { RestaurantSiteSchema, RESTAURANT_DEFAULTS } from '@/lib/site-schemas'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
+import { DESIGN_MODEL, withDesignPrinciples } from '@/lib/site-config/claude-config'
+import { STRATEGY_FIRST_INSTRUCTION } from '@/lib/design-quality'
 
 const SYSTEM = `You are a world-class brand designer + copywriter producing a complete website spec for a small business.
 
@@ -120,17 +122,17 @@ export async function POST(req: NextRequest) {
   }
   const promptBlock = contextToPromptBlock(ctx)
 
-  // 2. Call Claude
+  // 2. Call Claude (Opus + strategy-first + design principles for top quality)
   let raw: string
   try {
     const anthropic = new Anthropic()
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: DESIGN_MODEL,
       max_tokens: 8192,
-      system: SYSTEM,
+      system: withDesignPrinciples(`${SYSTEM}\n\n${STRATEGY_FIRST_INSTRUCTION}`),
       messages: [{
         role: 'user',
-        content: `${promptBlock}\n\n---\nGenerate the full RestaurantSite JSON now. Use every piece of context above. Output JSON only.`,
+        content: `${promptBlock}\n\n---\nThink through strategy first, then output the JSON. Use every piece of context above.`,
       }],
     })
     raw = msg.content

@@ -14,8 +14,9 @@
 
 import { useState } from 'react'
 import {
-  X, Loader2, Sparkles, Globe, Wand2, Check, AlertTriangle, ChevronDown, Link2, Plus, Trash2, Compass, ShieldCheck, ShieldAlert,
+  X, Loader2, Sparkles, Globe, Wand2, Check, AlertTriangle, ChevronDown, Link2, Plus, Trash2, Compass, Zap, Award,
 } from 'lucide-react'
+import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 import { SECTIONS } from './sections'
 import type { SectionKey } from './sections'
 
@@ -62,6 +63,14 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
   const [prompt, setPrompt] = useState('')
   const [scope, setScope] = useState<'site' | 'section'>(initialSection ? 'section' : 'site')
   const [section, setSection] = useState<SectionKey | null>(initialSection ?? null)
+  const [quality, setQuality] = useState<'best' | 'fast'>('best')
+  const [variantCount, setVariantCount] = useState<1 | 2 | 3>(3)
+
+  // Variants picker state
+  type Variant = { strategy: string; patch: Record<string, unknown>; site: RestaurantSite }
+  const [variants, setVariants] = useState<Variant[]>([])
+  const [activeVariantIdx, setActiveVariantIdx] = useState<number>(0)
+  const [applyingVariant, setApplyingVariant] = useState(false)
 
   // Source state — multiple URL rows, each with its own kind
   const [sourceRows, setSourceRows] = useState<SourceRow[]>([
@@ -127,7 +136,7 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
 
   async function runRefine() {
     if (!prompt.trim()) return
-    setRunning(true); setError(null); setSuccess(null); setPatchPreview(null)
+    setRunning(true); setError(null); setSuccess(null); setPatchPreview(null); setVariants([])
     try {
       const res = await fetch('/api/admin/refine-site', {
         method: 'POST',
@@ -137,11 +146,17 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
           prompt: prompt.trim(),
           scope: scope === 'section' && section ? 'section' : 'site',
           sections: scope === 'section' && section ? [section] : undefined,
+          variants: variantCount,
+          quality,
         }),
       })
       const json = await res.json()
       if (!res.ok || json.error) {
         setError(json.error || `HTTP ${res.status}`)
+      } else if (json.mode === 'variants' && Array.isArray(json.variants)) {
+        setVariants(json.variants as Variant[])
+        setActiveVariantIdx(0)
+        setSuccess(`${json.variants.length} variants ready — pick one below`)
       } else {
         setPatchPreview(json.patch)
         setSuccess(`Updated. ${describePatch(json.patch)}`)
@@ -151,6 +166,30 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
       setError(e instanceof Error ? e.message : 'Network error')
     }
     setRunning(false)
+  }
+
+  async function applyVariant(idx: number) {
+    const v = variants[idx]
+    if (!v) return
+    setApplyingVariant(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/apply-variant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, site: v.site }),
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        setError(json.error || `HTTP ${res.status}`)
+      } else {
+        setSuccess('Variant applied. Reloading…')
+        setTimeout(() => window.location.reload(), 800)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error')
+    }
+    setApplyingVariant(false)
   }
 
   async function runSource() {
@@ -281,14 +320,109 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
                 </div>
               </div>
 
+              {/* Quality + variants */}
+              <div className="bg-bg-2/50 border border-ink-6 rounded-lg p-3 space-y-2.5">
+                <div>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 block mb-1.5">Design quality</label>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setQuality('best')}
+                      className={`flex-1 inline-flex items-center justify-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded ${quality === 'best' ? 'bg-ink text-white' : 'bg-white border border-ink-6 text-ink-3'}`}
+                    >
+                      <Award className="w-3 h-3" /> Best (Opus, slower)
+                    </button>
+                    <button
+                      onClick={() => setQuality('fast')}
+                      className={`flex-1 inline-flex items-center justify-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded ${quality === 'fast' ? 'bg-ink text-white' : 'bg-white border border-ink-6 text-ink-3'}`}
+                    >
+                      <Zap className="w-3 h-3" /> Fast (Sonnet)
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-ink-3 mt-1.5 italic">
+                    {quality === 'best'
+                      ? 'Strategic design pass with Opus — better headlines, voice, hierarchy.'
+                      : 'One-shot Sonnet — quick iterations, lower fidelity.'}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 block mb-1.5">Variants</label>
+                  <div className="flex gap-1">
+                    {([1, 2, 3] as const).map(n => (
+                      <button
+                        key={n}
+                        onClick={() => setVariantCount(n)}
+                        className={`flex-1 text-[11px] font-medium px-2.5 py-1.5 rounded ${variantCount === n ? 'bg-ink text-white' : 'bg-white border border-ink-6 text-ink-3'}`}
+                      >
+                        {n === 1 ? 'Apply directly' : `${n} options`}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-ink-3 mt-1.5 italic">
+                    {variantCount === 1
+                      ? 'Direct apply — the only result is saved as your new draft.'
+                      : `Claude generates ${variantCount} distinct directions and you pick the best one.`}
+                  </p>
+                </div>
+              </div>
+
               <button
                 onClick={runRefine}
                 disabled={!prompt.trim() || running || (scope === 'section' && !section)}
                 className="w-full bg-ink hover:bg-black text-white text-sm font-semibold rounded-lg px-4 py-2.5 flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {running ? 'Refining…' : 'Refine draft'}
+                {running
+                  ? (variantCount > 1 ? 'Generating options…' : 'Refining…')
+                  : (variantCount > 1 ? `Generate ${variantCount} options` : 'Refine draft')}
               </button>
+
+              {/* Variants picker */}
+              {variants.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[11px] uppercase tracking-wider text-ink-4 font-semibold">Pick a direction</p>
+                  <div className="space-y-2">
+                    {variants.map((v, i) => {
+                      const isActive = activeVariantIdx === i
+                      return (
+                        <article
+                          key={i}
+                          className={`border rounded-lg p-3 cursor-pointer transition ${
+                            isActive ? 'border-brand bg-brand/5 ring-1 ring-brand' : 'border-ink-6 hover:border-ink-5 bg-white'
+                          }`}
+                          onClick={() => setActiveVariantIdx(i)}
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                              isActive ? 'bg-brand text-white' : 'bg-bg-2 text-ink-3'
+                            }`}>{String.fromCharCode(65 + i)}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[11px] text-ink-3 leading-snug line-clamp-3">{v.strategy}</p>
+                              {/* Quick swatches if brand patched */}
+                              {(v.patch as { brand?: { primaryColor?: string; secondaryColor?: string; accentColor?: string } })?.brand && (
+                                <div className="flex gap-1 mt-1.5">
+                                  {(['primaryColor', 'secondaryColor', 'accentColor'] as const).map(k => {
+                                    const c = (v.patch as { brand?: Record<string, string> })?.brand?.[k]
+                                    return c ? <span key={k} className="w-3 h-3 rounded-sm border border-ink-6" style={{ backgroundColor: c }} /> : null
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                  <button
+                    onClick={() => applyVariant(activeVariantIdx)}
+                    disabled={applyingVariant}
+                    className="w-full bg-brand hover:bg-brand-dark text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {applyingVariant ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    Apply option {String.fromCharCode(65 + activeVariantIdx)}
+                  </button>
+                </div>
+              )}
             </>
           )}
 
