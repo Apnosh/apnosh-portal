@@ -34,22 +34,54 @@ interface BespokeRequest {
   notes?: string
 }
 
-const SYSTEM = `You are a world-class brand designer + senior front-end engineer producing a COMPLETE custom-coded restaurant website as a single HTML document.
+const SYSTEM = `You are a world-class brand designer + senior front-end engineer producing a COMPLETE custom-coded restaurant website as a single HTML document for a SPECIFIC client.
+
+You will receive:
+1. Rich onboarding context about THIS client (goals, voice, customer types, why-choose, tone tags, photo style, brand colors, locations, signature items)
+2. Their existing website's actual text content (so you can see how they currently speak)
+3. Recent customer reviews verbatim
+4. Optional reference URLs for inspiration
+5. The operator's design brief
+
+Treat all of this as ground truth. The site must feel like an evolution of THIS specific client's identity, not a generic restaurant template.
+
+CRITICAL — anchor every choice in the client's actual identity:
+- Use the brand colors from the Visual brand block as the primary palette (primary_color, secondary_color, accent_color)
+- Use the brand fonts from the profile when specified
+- Use brand quotes from voice_notes / custom_tone VERBATIM somewhere prominent on the page
+- Lead the hero with the unique_differentiator from the profile
+- Reference actual location names, addresses, phone numbers, hours from the locations block
+- Pull testimonial quotes verbatim from the recent_reviews context — do NOT invent reviews
+- Use the customer_types when reasoning about who the site should speak to
+- Use the why_choose list as the actual content for the "why this restaurant" section
+- Use signature_items / main_offerings to populate the menu/offerings section
+- Honor the tone_tags + custom_tone in every line of copy
 
 Output: ONE complete, valid HTML document, starting with <!DOCTYPE html>. Inline all CSS in a single <style> block in the <head>. NO external CSS dependencies except Google Fonts (which you may load via <link>). Use only vanilla HTML + CSS — no JavaScript framework, no React, no build step required.
 
-Design freedom: this is the bespoke premium tier. Every detail is customizable. You should:
-- Design a visual identity that feels uniquely tailored to THIS specific client
-- Use sophisticated layout techniques: CSS Grid, asymmetric compositions, full-bleed photography, large typography, sticky elements, scroll-triggered transitions where appropriate (CSS-only)
-- Use rich typography: Google Fonts loaded via <link>, considered type scale, font-feature-settings
-- Use thoughtful color systems: 5-7 colors with proper contrast, gradients where appropriate
-- Use micro-interactions: hover states, smooth transitions on all interactive elements
-- Honor brand voice in every line of copy — do NOT use generic restaurant phrases
-- Lead with the client's actual differentiator from their profile
-- Include all standard sections: nav, hero, locations, offerings/menu, about, FAQ, footer
-- AVOID generic patterns: "welcome to", "best in town", "passion-driven", "where friends become family"
+Design freedom — use sophisticated techniques:
+- CSS Grid, asymmetric compositions, full-bleed photography
+- Large typography, font-feature-settings (ss01, oldstyle-nums on hours/numbers)
+- Considered type scale: hero 7-9rem, h2 3-5rem, body 1rem-1.15rem
+- Thoughtful color systems with proper contrast (WCAG AA minimum)
+- Micro-interactions: hover states, smooth transitions, restrained motion
+- Real photo placeholders using brand-tinted CSS gradients (NEVER stock images, NEVER unsplash, NEVER lorem ipsum images)
+- Sticky elements, scroll-snap, view-transitions where they earn their place
 
-Quality bar: this should look like a $30K branding agency website, not a template. If it looks like every other restaurant site, you've failed.
+Standard sections (order thoughtfully): nav, hero, intro statement, about, offerings/menu, locations (one per location), image breaker, testimonials, FAQ, footer.
+
+AVOID at all costs:
+- Generic restaurant phrases: "welcome to", "best in town", "passion-driven", "where friends become family", "premier dining experience", "authentic flavors"
+- Stock unsplash/pexels imagery (use brand-tinted CSS gradient placeholders instead)
+- Card-heavy SaaS layouts
+- Fake testimonials (use real ones from the reviews context, or omit testimonials entirely)
+- Cookie-cutter "About us" / "Why choose us" framing
+- Newsletter signups in the hero
+- Carousel sliders
+- Star-counter widgets
+- Emoji as decoration
+
+Quality bar: this should look like a $30K branding agency website that the client could publish today. Every line of copy should sound like THIS client wrote it. Every visual choice should feel deliberate, anchored in their actual brand. If a stranger visited the site, they should be able to tell what makes this place specifically different from every other restaurant in 3 seconds.
 
 The output must be ONLY the complete HTML document. No markdown fences, no commentary outside the HTML, no JSON wrapper. Just <!DOCTYPE html>...</html>.`.trim()
 
@@ -79,7 +111,31 @@ export async function POST(req: NextRequest) {
   const goldExamples = await getGoldExamples('restaurant', 2)
   const goldSection = goldExamplesPromptSection(goldExamples)
 
-  // Fetch reference URLs (extract text content for Claude to reason about)
+  // Auto-fetch the client's existing website — anchors the new design in
+  // their actual current voice (which we want to evolve, not replace).
+  let existingSiteText = ''
+  if (ctx.client.website) {
+    try {
+      const res = await fetch(ctx.client.website, {
+        headers: { 'User-Agent': 'Mozilla/5.0 Apnosh-Bespoke/1.0' },
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (res.ok) {
+        const html = await res.text()
+        existingSiteText = html
+          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 10_000)
+      }
+    } catch {
+      // skip silently
+    }
+  }
+
+  // Fetch operator-provided reference URLs (separate from auto-fetched existing site)
   const refContent: string[] = []
   if (body.referenceUrls && body.referenceUrls.length > 0) {
     await Promise.all(body.referenceUrls.slice(0, 4).map(async (url) => {
@@ -108,14 +164,20 @@ export async function POST(req: NextRequest) {
     '## Client onboarding context',
     promptBlock,
     '',
+    existingSiteText && '## Existing website content — current voice + claims (evolve this, do not contradict it)',
+    existingSiteText && `Source: ${ctx.client.website}`,
+    existingSiteText && existingSiteText,
+    existingSiteText && '',
     goldSection,
-    refContent.length > 0 ? '## Reference sites (study these for inspiration on layout, voice, density)' : '',
+    refContent.length > 0 ? '## External reference sites (study for inspiration on layout, voice, density — NOT to copy)' : '',
     refContent.length > 0 ? refContent.join('\n\n') : '',
     '',
     '## Operator design brief',
     body.brief.trim(),
     '',
-    'Generate the complete HTML document now. ONLY output the HTML — no preamble, no JSON, no commentary, no markdown fences. Start with <!DOCTYPE html>.',
+    'Generate the complete HTML document now. Anchor every choice (palette, typography, voice, hero copy, location descriptions, FAQs) in the client onboarding context above — that is THE source of truth for who this client is. Do not invent details that contradict it.',
+    '',
+    'ONLY output the HTML — no preamble, no JSON, no commentary, no markdown fences. Start with <!DOCTYPE html>.',
   ].filter(Boolean).join('\n')
 
   const batchId = crypto.randomUUID()

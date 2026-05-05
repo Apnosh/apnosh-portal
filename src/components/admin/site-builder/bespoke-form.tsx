@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react'
-import { Loader2, Sparkles, Plus, Trash2, Link2, RefreshCw, ExternalLink, AlertTriangle, Check } from 'lucide-react'
+import { Loader2, Sparkles, Plus, Trash2, Link2, RefreshCw, ExternalLink, AlertTriangle, Check, Wand2 } from 'lucide-react'
 import GenerationProgressModal from './generation-progress-modal'
 
 interface Props {
@@ -42,6 +42,32 @@ export default function BespokeForm({
   const [previewKey, setPreviewKey] = useState(0)
   const [version, setVersion] = useState<number | null>(currentVersion)
   const [generatedAt, setGeneratedAt] = useState<string | null>(currentGeneratedAt)
+  const [composing, setComposing] = useState(false)
+  const [composerDirection, setComposerDirection] = useState('')
+
+  async function composeBriefFromProfile() {
+    setComposing(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/bespoke-compose-brief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId,
+          direction: composerDirection.trim() || undefined,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        setError([json.error, json.detail].filter(Boolean).join(' — ') || `HTTP ${res.status}`)
+      } else {
+        setBrief(json.brief)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error')
+    }
+    setComposing(false)
+  }
 
   function addRef() {
     if (refUrls.length >= 4) return
@@ -117,17 +143,45 @@ export default function BespokeForm({
           </div>
         )}
 
+        {/* Brief composer card */}
+        <div className="bg-gradient-to-br from-brand/5 via-white to-brand/5 border border-brand/30 rounded-xl p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <Wand2 className="w-4 h-4 text-brand mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-[12px] font-semibold text-ink">Compose brief from profile</p>
+              <p className="text-[11px] text-ink-3 mt-0.5">
+                Generate a deeply-tailored brief from {clientName}&apos;s onboarding data + existing website. Uses their actual goals, voice, customer types, brand colors, and offerings.
+              </p>
+            </div>
+          </div>
+          <input
+            type="text"
+            value={composerDirection}
+            onChange={e => setComposerDirection(e.target.value)}
+            placeholder="Optional: bias the brief (e.g. 'lean editorial', 'more playful', 'cocktail bar mood')"
+            className="w-full text-[12px] border border-ink-6 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-brand/20 outline-none"
+          />
+          <button
+            onClick={composeBriefFromProfile}
+            disabled={composing}
+            className="w-full bg-ink hover:bg-black text-white text-[11px] font-semibold rounded-md px-3 py-2 flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            {composing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+            {composing ? 'Composing brief…' : brief ? 'Recompose brief' : 'Compose brief from profile'}
+          </button>
+        </div>
+
         {/* Brief */}
         <div>
           <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 block mb-1.5">Design brief</label>
           <textarea
             value={brief}
             onChange={e => setBrief(e.target.value)}
-            placeholder='e.g. "Upscale Korean steakhouse with a waterfront destination feel. Lead with Alki at sunset. Editorial typography, oversized italic serif headlines, deep ink + warm gold + cream. Sparing copy. Big photography. The site should feel like a weekend reservation worth driving for."'
-            className="w-full min-h-[200px] border border-ink-6 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand/20 outline-none resize-y"
+            placeholder='Click "Compose brief from profile" above to auto-generate a brief tuned to this client, or write your own. Be specific: name the mood, the typography family, the color story, the photographic feel.'
+            className="w-full min-h-[280px] border border-ink-6 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand/20 outline-none resize-y font-mono leading-relaxed"
           />
           <p className="text-[10px] text-ink-3 italic mt-1.5">
-            Be specific. Name the mood, the typography family, the color story, the photographic feel. Claude has full design freedom — your brief is the only constraint.
+            Claude reads the client&apos;s profile + existing website automatically — your brief biases the design direction on top of that ground truth.
           </p>
         </div>
 
