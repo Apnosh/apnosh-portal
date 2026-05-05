@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState, useMemo } from 'react'
-import { Search, Layers, Wand2, History, ExternalLink, Sparkles, ArrowRight } from 'lucide-react'
+import { Search, Layers, Wand2, History, ExternalLink, Sparkles, ArrowRight, Globe } from 'lucide-react'
 import { SECTIONS } from './sections'
 import type { SectionKey } from './sections'
 
@@ -15,7 +15,7 @@ export interface CommandAction {
   label: string
   hint?: string
   shortcut?: string
-  icon: 'section' | 'design' | 'history' | 'preview' | 'publish'
+  icon: 'section' | 'design' | 'history' | 'preview' | 'publish' | 'refine' | 'source'
   run: () => void
 }
 
@@ -27,10 +27,11 @@ interface Props {
   onOpenHistory: () => void
   onPreview: () => void
   onPublish: () => void
+  onRefine?: () => void
 }
 
 export default function CommandPalette({
-  open, onClose, onJump, onOpenDesignStudio, onOpenHistory, onPreview, onPublish,
+  open, onClose, onJump, onOpenDesignStudio, onOpenHistory, onPreview, onPublish, onRefine,
 }: Props) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
@@ -54,13 +55,14 @@ export default function CommandPalette({
       run: () => onJump(s.key),
     }))
     const quickActions: CommandAction[] = [
+      ...(onRefine ? [{ id: 'refine', label: 'Refine with prompt', hint: 'Or pull content from a URL',     icon: 'refine'  as const, shortcut: '⌘R', run: onRefine }] : []),
       { id: 'design', label: 'Open Design Studio',  hint: 'Generate, presets, fine-tune', icon: 'design',  shortcut: '⌘D', run: onOpenDesignStudio },
       { id: 'history', label: 'Publish history',    hint: 'View + revert past versions',  icon: 'history', run: onOpenHistory },
       { id: 'preview', label: 'Open preview tab',   hint: 'Full page in new tab',         icon: 'preview', run: onPreview },
       { id: 'publish', label: 'Publish now',        hint: 'Promote draft to live',        icon: 'publish', shortcut: '⌘↵', run: onPublish },
     ]
     return [...quickActions, ...sectionActions]
-  }, [onJump, onOpenDesignStudio, onOpenHistory, onPreview, onPublish])
+  }, [onJump, onOpenDesignStudio, onOpenHistory, onPreview, onPublish, onRefine])
 
   const filtered = useMemo(() => {
     if (!query.trim()) return actions
@@ -157,5 +159,7 @@ function CmdIcon({ kind, active }: { kind: CommandAction['icon']; active: boolea
     case 'history': return <History className={cn} />
     case 'preview': return <ExternalLink className={cn} />
     case 'publish': return <Sparkles className={cn} />
+    case 'refine':  return <Sparkles className={cn} />
+    case 'source':  return <Globe className={cn} />
   }
 }

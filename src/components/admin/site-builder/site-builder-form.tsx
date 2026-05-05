@@ -35,6 +35,7 @@ import AssetLibraryPicker from './asset-library-picker'
 import DesignStudioDrawer from './design-studio-drawer'
 import CommandPalette from './command-palette'
 import GenerateFromProfileButton from './generate-from-profile-button'
+import RefineDrawer from './refine-drawer'
 import type { Brand } from '@/lib/site-schemas/shared'
 
 interface SiteBuilderFormProps {
@@ -72,6 +73,8 @@ export default function SiteBuilderForm({
   const [previewKey, setPreviewKey] = useState<number>(0)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [studioOpen, setStudioOpen] = useState(false)
+  const [refineOpen, setRefineOpen] = useState(false)
+  const [refineForSection, setRefineForSection] = useState<SectionKey | undefined>(undefined)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const libraryPick = useRef<((url: string) => void) | null>(null)
@@ -202,6 +205,8 @@ export default function SiteBuilderForm({
       if (cmd && e.key === 'k') { e.preventDefault(); setPaletteOpen(true) }
       // ⌘D — design studio
       else if (cmd && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); setStudioOpen(true) }
+      // ⌘R — refine drawer (intercept page reload)
+      else if (cmd && (e.key === 'r' || e.key === 'R') && !e.shiftKey) { e.preventDefault(); setRefineForSection(undefined); setRefineOpen(true) }
       // ⌘↵ — publish
       else if (cmd && e.key === 'Enter') { e.preventDefault(); handlePublish() }
     }
@@ -270,6 +275,15 @@ export default function SiteBuilderForm({
 
           {/* Generate from profile (Claude) */}
           <GenerateFromProfileButton clientId={clientId} />
+
+          {/* Refine (prompt + pull sources) */}
+          <button
+            onClick={() => { setRefineForSection(undefined); setRefineOpen(true) }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-md text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:opacity-90"
+            title="Refine with a prompt or pull from a source URL"
+          >
+            <Sparkles className="w-3.5 h-3.5" /> Refine
+          </button>
 
           {/* Design Studio */}
           <button
@@ -397,14 +411,23 @@ export default function SiteBuilderForm({
                 <h2 className="text-base font-bold text-ink leading-tight">{activeSectionDef?.title ?? ''}</h2>
                 <p className="text-[12px] text-ink-3 mt-0.5">{activeSectionDef?.subtitle ?? ''}</p>
               </div>
-              {activeSection === 'brand' && (
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
-                  onClick={() => setStudioOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md text-white bg-brand hover:bg-brand-dark shrink-0"
+                  onClick={() => { setRefineForSection(activeSection); setRefineOpen(true) }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md text-violet-700 bg-violet-50 border border-violet-200 hover:bg-violet-100"
+                  title="Refine this section with a prompt"
                 >
-                  <Wand2 className="w-3 h-3" /> Design
+                  <Sparkles className="w-3 h-3" /> Refine
                 </button>
-              )}
+                {activeSection === 'brand' && (
+                  <button
+                    onClick={() => setStudioOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md text-white bg-brand hover:bg-brand-dark"
+                  >
+                    <Wand2 className="w-3 h-3" /> Design
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Missing-items inline alert */}
@@ -584,6 +607,13 @@ export default function SiteBuilderForm({
         onOpenHistory={() => setHistoryOpen(true)}
         onPreview={() => window.open(`/preview/sites/${clientSlug}?mode=${previewMode}`, '_blank')}
         onPublish={handlePublish}
+        onRefine={() => { setRefineForSection(undefined); setRefineOpen(true) }}
+      />
+      <RefineDrawer
+        clientId={clientId}
+        open={refineOpen}
+        onClose={() => setRefineOpen(false)}
+        initialSection={refineForSection}
       />
     </UploadProvider>
   )
