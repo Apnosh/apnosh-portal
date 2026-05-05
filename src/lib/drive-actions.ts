@@ -36,7 +36,8 @@ async function requireAdmin(): Promise<string | null> {
 /**
  * Fetch the current access token for Drive, refreshing if expired.
  */
-async function getValidDriveToken(): Promise<string | null> {
+/** Returns either a valid access_token, or an error code/message. */
+async function getValidDriveTokenOrError(): Promise<{ token: string } | { error: string }> {
   const db = adminDb()
   const { data } = await db.from('integrations').select('*').eq('provider', 'google_drive').maybeSingle()
   const row = data as {
@@ -44,13 +45,19 @@ async function getValidDriveToken(): Promise<string | null> {
     refresh_token: string | null
     token_expires_at: string | null
   } | null
-  if (!row) return null
+  if (!row) return { error: 'no_integration' }
 
   const expiresAt = row.token_expires_at ? new Date(row.token_expires_at).getTime() : 0
   const bufferMs = 60 * 1000
-  if (expiresAt - Date.now() > bufferMs) return row.access_token
+  if (expiresAt - Date.now() > bufferMs) return { token: row.access_token }
 
-  if (!row.refresh_token) return null
+  if (!row.refresh_token) return { error: 'token_expired_no_refresh' }
+
+  // Surface env-misconfig early so we don't send empty creds to Google
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return { error: 'oauth_env_missing' }
+  }
+
   try {
     const refreshed = await refreshAccessToken(row.refresh_token)
     const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
@@ -59,11 +66,17 @@ async function getValidDriveToken(): Promise<string | null> {
       token_expires_at: newExpiresAt,
       updated_at: new Date().toISOString(),
     }).eq('provider', 'google_drive')
-    return refreshed.access_token
+    return { token: refreshed.access_token }
   } catch (e) {
-    console.error('[drive] token refresh failed:', (e as Error).message)
-    return null
+    const msg = (e as Error).message
+    console.error('[drive] token refresh failed:', msg)
+    return { error: `refresh_failed: ${msg}` }
   }
+}
+
+async function getValidDriveToken(): Promise<string | null> {
+  const r = await getValidDriveTokenOrError()
+  return 'token' in r ? r.token : null
 }
 
 /**
@@ -114,18 +127,23 @@ export async function listClientDriveFolders(clientId: string): Promise<{
 
   if (linkRows.length === 0) return { folders: [] }
 
-  const token = await getValidDriveToken()
-  if (!token) {
-    // Return folders with no files so the UI can still show labels
+  const tokenResult = await getValidDriveTokenOrError()
+  if ('error' in tokenResult) {
+    const reason =
+      tokenResult.error === 'no_integration' ? 'Drive not connected'
+      : tokenResult.error === 'token_expired_no_refresh' ? 'Drive token expired (no refresh token saved). Reconnect via Settings → Integrations.'
+      : tokenResult.error === 'oauth_env_missing' ? 'Drive integration is misconfigured: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env vars are missing in production.'
+      : `Drive token refresh failed: ${tokenResult.error.replace('refresh_failed: ', '')}. Try reconnecting via Settings → Integrations.`
     return {
       folders: linkRows.map(r => ({
         id: r.id, folderId: r.folder_id, folderUrl: r.folder_url,
         label: r.label, sortOrder: r.sort_order, files: [],
-        error: 'Drive not connected',
+        error: reason,
       })),
-      error: 'Drive not connected',
+      error: reason,
     }
   }
+  const token = tokenResult.token
 
   const folders = await Promise.all(linkRows.map(async r => {
     try {
