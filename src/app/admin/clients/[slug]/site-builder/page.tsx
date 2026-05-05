@@ -44,7 +44,10 @@ export default async function SiteBuilderPage({ params }: PageProps) {
   }
 
   return (
-    <div className="-m-6 lg:-m-8">{/* break out of admin layout padding */}
+    // Negative margins match admin layout's main padding (p-4 lg:p-6) AND
+    // pull above the Breadcrumbs row so we get a full-bleed workspace
+    // immediately below the admin top bar.
+    <div className="-m-4 lg:-m-6 -mt-10 lg:-mt-12">
       <SiteBuilderForm
         clientId={client.id}
         clientSlug={client.slug}

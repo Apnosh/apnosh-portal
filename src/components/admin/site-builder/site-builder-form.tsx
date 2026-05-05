@@ -224,7 +224,7 @@ export default function SiteBuilderForm({
 
   return (
     <UploadProvider upload={uploadAsset} openLibrary={openLibrary}>
-      <div className="flex flex-col h-[calc(100vh-1rem)] bg-bg-2/30">
+      <div className="flex flex-col h-[calc(100dvh-3.5rem)] bg-bg-2/30">
         {/* ============ TOP BAR ============ */}
         <header className="flex items-center gap-3 px-4 py-2.5 bg-white border-b border-ink-6 shrink-0">
           <Link
