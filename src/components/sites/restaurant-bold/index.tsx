@@ -47,13 +47,13 @@ export default function RestaurantBold({ site }: RestaurantBoldProps) {
       <LocationsSection site={site} reservationUrl={reservationUrl} />
       {site.statBand?.enabled && site.statBand.stats.length > 0 && <StatBandSection statBand={site.statBand} />}
       <AboutSection site={site} />
-      {site.testimonials?.enabled && site.testimonials.items.length > 0 && (
+      {site.testimonials?.enabled && (site.testimonials.items?.length ?? 0) > 0 && (
         <TestimonialsSection testimonials={site.testimonials} />
       )}
-      {site.gallery?.enabled && site.gallery.photos.length > 0 && (
+      {site.gallery?.enabled && (site.gallery.photos?.length ?? 0) > 0 && (
         <GallerySection gallery={site.gallery} />
       )}
-      {site.contact.faqs.length > 0 && <FaqSection site={site} />}
+      {(site.contact?.faqs?.length ?? 0) > 0 && <FaqSection site={site} />}
       <CtaBand site={site} reservationUrl={reservationUrl} />
       <Footer site={site} />
     </div>
@@ -129,8 +129,31 @@ function Hero({ site }: { site: RestaurantSite }) {
 }
 
 function AyceSection({ site }: { site: RestaurantSite }) {
-  const premium = site.offerings.ayce?.premium
-  const supreme = site.offerings.ayce?.supreme
+  // Tolerate two shapes Claude sometimes returns:
+  //   1. Canonical: ayce: { premium: {...}, supreme: {...} }
+  //   2. Array fallback: ayce: [{ name, description, ... }, ...]
+  // Coerce array form into the object form so downstream rendering works.
+  const ayceRaw = site.offerings.ayce as unknown
+  let premium = (ayceRaw && typeof ayceRaw === 'object' && !Array.isArray(ayceRaw))
+    ? (ayceRaw as { premium?: NonNullable<RestaurantSite['offerings']['ayce']['premium']> }).premium
+    : undefined
+  let supreme = (ayceRaw && typeof ayceRaw === 'object' && !Array.isArray(ayceRaw))
+    ? (ayceRaw as { supreme?: NonNullable<RestaurantSite['offerings']['ayce']['supreme']> }).supreme
+    : undefined
+  if (Array.isArray(ayceRaw)) {
+    const arr = ayceRaw as Array<{ name?: string; description?: string; meatCount?: number; sideCount?: number; highlights?: string[] }>
+    const findMatch = (kw: string) => arr.find(a => (a.name ?? '').toLowerCase().includes(kw))
+    const toProg = (a: typeof arr[number] | undefined) => a ? {
+      enabled: true,
+      name: a.name ?? 'AYCE',
+      subtitle: a.description ?? '',
+      meatCount: a.meatCount ?? 0,
+      sideCount: a.sideCount ?? 0,
+      highlights: a.highlights ?? [],
+    } : undefined
+    premium = toProg(findMatch('premium')) ?? toProg(arr[0])
+    supreme = toProg(findMatch('supreme')) ?? toProg(arr[1])
+  }
   const anyEnabled = (premium?.enabled || supreme?.enabled)
   if (!anyEnabled) return null
 
@@ -191,8 +214,12 @@ function LocationsSection({ site, reservationUrl }: { site: RestaurantSite; rese
         </div>
 
         <div className={s.locationsGrid} style={site.locations.length === 1 ? { gridTemplateColumns: 'minmax(0, 700px)', justifyContent: 'center' } : undefined}>
-          {site.locations.map(loc => (
-            <article key={loc.id} className={s.locationCard}>
+          {site.locations.map(loc => {
+            // Defensive defaults — Claude sometimes omits arrays
+            const hours = Array.isArray(loc.hours) ? loc.hours : []
+            const features = Array.isArray(loc.features) ? loc.features : []
+            return (
+            <article key={loc.id ?? loc.name} className={s.locationCard}>
               <div className={s.locationMedia}>
                 {loc.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -212,14 +239,14 @@ function LocationsSection({ site, reservationUrl }: { site: RestaurantSite; rese
               <div className={s.locationBody}>
                 <p className={s.locationAddress}>{loc.address} · {loc.city}, {loc.state} {loc.zip}</p>
                 {loc.phone && <a href={`tel:${loc.phoneHref || loc.phone}`} className={s.locationPhone}>{loc.phone}</a>}
-                {loc.hours.length > 0 && (
+                {hours.length > 0 && (
                   <ul className={s.locationHours}>
-                    {loc.hours.map((h, i) => <li key={i}><span>{h.label}</span><span>{h.value}</span></li>)}
+                    {hours.map((h, i) => <li key={i}><span>{h.label}</span><span>{h.value}</span></li>)}
                   </ul>
                 )}
-                {loc.features.length > 0 && (
+                {features.length > 0 && (
                   <ul className={s.locationFeatures}>
-                    {loc.features.map((f, i) => <li key={i}>{f}</li>)}
+                    {features.map((f, i) => <li key={i}>{f}</li>)}
                   </ul>
                 )}
                 <div className={s.locationCta}>
@@ -228,7 +255,8 @@ function LocationsSection({ site, reservationUrl }: { site: RestaurantSite; rese
                 </div>
               </div>
             </article>
-          ))}
+            )
+          })}
         </div>
       </div>
     </section>
@@ -236,10 +264,11 @@ function LocationsSection({ site, reservationUrl }: { site: RestaurantSite; rese
 }
 
 function StatBandSection({ statBand }: { statBand: NonNullable<RestaurantSite['statBand']> }) {
+  const stats = Array.isArray(statBand.stats) ? statBand.stats : []
   return (
     <section className={s.statBand}>
       <div className={`${s.container} ${s.statInner}`}>
-        {statBand.stats.map((stat, i) => (
+        {stats.map((stat, i) => (
           <div key={i}>
             <div className={s.statValue}>{stat.value}</div>
             <div className={s.statLabel}>{stat.label}</div>
@@ -251,8 +280,9 @@ function StatBandSection({ statBand }: { statBand: NonNullable<RestaurantSite['s
 }
 
 function AboutSection({ site }: { site: RestaurantSite }) {
-  const { about } = site
-  if (!about.headline && !about.body && about.values.length === 0) return null
+  const about = site.about ?? { headline: '', body: '', values: [], photoUrl: null }
+  const values = Array.isArray(about.values) ? about.values : []
+  if (!about.headline && !about.body && values.length === 0) return null
   const paragraphs = (about.body || '').split('\n\n').filter(p => p.trim().length > 0)
 
   return (
@@ -283,9 +313,9 @@ function AboutSection({ site }: { site: RestaurantSite }) {
           </div>
         </div>
 
-        {about.values.length > 0 && (
+        {values.length > 0 && (
           <div className={s.aboutValues}>
-            {about.values.map((v, i) => (
+            {values.map((v, i) => (
               <div key={i} className={s.aboutValue}>
                 <h4>{v.title}</h4>
                 <p>{v.body}</p>
@@ -299,14 +329,16 @@ function AboutSection({ site }: { site: RestaurantSite }) {
 }
 
 function FaqSection({ site }: { site: RestaurantSite }) {
+  const contact = site.contact ?? { intro: '', faqs: [] }
+  const faqs = Array.isArray(contact.faqs) ? contact.faqs : []
   return (
     <section id="contact" className={`${s.section} ${s.sectionCream}`}>
       <div className={`${s.container} ${s.containerTight}`}>
         <span className={s.eyebrow}>Common Questions</span>
         <h2 style={{ marginTop: 14, marginBottom: 28, fontSize: 'clamp(2rem, 4.6vw, 3.2rem)' }}>Contact.</h2>
-        {site.contact.intro && <p style={{ color: 'var(--rb-ink-3)', fontSize: '1.05rem', marginBottom: 32 }}>{site.contact.intro}</p>}
+        {contact.intro && <p style={{ color: 'var(--rb-ink-3)', fontSize: '1.05rem', marginBottom: 32 }}>{contact.intro}</p>}
         <div className={s.faq}>
-          {site.contact.faqs.map((f, i) => (
+          {faqs.map((f, i) => (
             <div key={i} className={s.faqItem}>
               <p className={s.faqQ}>{f.q}</p>
               <p className={s.faqA}>{f.a}</p>
@@ -337,6 +369,9 @@ function Footer({ site }: { site: RestaurantSite }) {
   const parts = name.split(' ')
   const first = parts[0] ?? name
   const rest = parts.slice(1).join(' ')
+  const locations = Array.isArray(site.locations) ? site.locations : []
+  const faqs = Array.isArray(site.contact?.faqs) ? site.contact.faqs : []
+  const social = site.social ?? { instagram: null, tiktok: null, facebook: null, twitter: null, youtube: null, linkedin: null }
 
   return (
     <footer className={s.footer}>
@@ -345,17 +380,17 @@ function Footer({ site }: { site: RestaurantSite }) {
           <div className={s.footerBrand}>{first} {rest && <span>{rest}</span>}</div>
           {site.footer?.tagline && <p className={s.footerTagline}>{site.footer.tagline}</p>}
           <div className={s.footerSocials}>
-            {site.social.instagram && <a href={site.social.instagram} aria-label="Instagram" target="_blank" rel="noopener">IG</a>}
-            {site.social.tiktok && <a href={site.social.tiktok} aria-label="TikTok" target="_blank" rel="noopener">TT</a>}
-            {site.social.facebook && <a href={site.social.facebook} aria-label="Facebook" target="_blank" rel="noopener">FB</a>}
-            {site.social.youtube && <a href={site.social.youtube} aria-label="YouTube" target="_blank" rel="noopener">YT</a>}
+            {social.instagram && <a href={social.instagram} aria-label="Instagram" target="_blank" rel="noopener">IG</a>}
+            {social.tiktok && <a href={social.tiktok} aria-label="TikTok" target="_blank" rel="noopener">TT</a>}
+            {social.facebook && <a href={social.facebook} aria-label="Facebook" target="_blank" rel="noopener">FB</a>}
+            {social.youtube && <a href={social.youtube} aria-label="YouTube" target="_blank" rel="noopener">YT</a>}
           </div>
         </div>
 
         <div>
           <h5>Visit</h5>
           <ul className={s.footerList}>
-            {site.locations.map(loc => <li key={loc.id}><a href={`#${loc.id}`}>{loc.name}</a></li>)}
+            {locations.map((loc, i) => <li key={loc.id ?? i}><a href={`#${loc.id ?? ''}`}>{loc.name}</a></li>)}
           </ul>
         </div>
 
@@ -364,8 +399,8 @@ function Footer({ site }: { site: RestaurantSite }) {
           <ul className={s.footerList}>
             <li><a href="#menu">Menu</a></li>
             <li><a href="#about">About</a></li>
-            {site.contact.faqs.length > 0 && <li><a href="#contact">Contact</a></li>}
-            {site.reservation.enabled && site.reservation.url && (
+            {faqs.length > 0 && <li><a href="#contact">Contact</a></li>}
+            {site.reservation?.enabled && site.reservation.url && (
               <li><a href={site.reservation.url}>Reserve</a></li>
             )}
           </ul>
@@ -374,8 +409,8 @@ function Footer({ site }: { site: RestaurantSite }) {
         <div>
           <h5>Reach us</h5>
           <ul className={s.footerList}>
-            {site.locations.map(loc => loc.phone && (
-              <li key={loc.id}>{loc.name} · <a href={`tel:${loc.phoneHref || loc.phone}`}>{loc.phone}</a></li>
+            {locations.map((loc, i) => loc.phone && (
+              <li key={loc.id ?? i}>{loc.name} · <a href={`tel:${loc.phoneHref || loc.phone}`}>{loc.phone}</a></li>
             ))}
           </ul>
         </div>
@@ -398,6 +433,7 @@ function countLabel(n: number): string {
 // ============================================================================
 
 function TestimonialsSection({ testimonials }: { testimonials: NonNullable<RestaurantSite['testimonials']> }) {
+  const items = Array.isArray(testimonials.items) ? testimonials.items : []
   return (
     <section className={s.testimonials}>
       <div className={s.container}>
@@ -406,7 +442,7 @@ function TestimonialsSection({ testimonials }: { testimonials: NonNullable<Resta
           <h2>{testimonials.heading || 'What guests are saying'}</h2>
         </div>
         <div className={s.testimonialsGrid}>
-          {testimonials.items.map((t, i) => (
+          {items.map((t, i) => (
             <article key={i} className={`${s.testimonialCard} ${s.fadeUp}`}>
               {t.rating && t.rating > 0 && (
                 <div className={s.testimonialStars}>
@@ -448,6 +484,7 @@ function initials(name: string): string {
 // ============================================================================
 
 function GallerySection({ gallery }: { gallery: NonNullable<RestaurantSite['gallery']> }) {
+  const photos = Array.isArray(gallery.photos) ? gallery.photos : []
   return (
     <section className={s.gallery}>
       <div className={s.container}>
@@ -457,7 +494,7 @@ function GallerySection({ gallery }: { gallery: NonNullable<RestaurantSite['gall
           {gallery.description && <p>{gallery.description}</p>}
         </div>
         <div className={s.galleryGrid}>
-          {gallery.photos.map((p, i) => (
+          {photos.map((p, i) => (
             <div key={i} className={s.galleryItem}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={p.url} alt={p.alt || ''} />
