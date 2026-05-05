@@ -125,6 +125,24 @@ export async function downloadFileAsText(
 }
 
 /**
+ * Download a Drive file as raw bytes. Returns the buffer + content-type so
+ * callers can re-upload to other storage backends (e.g. Supabase storage).
+ */
+export async function downloadFileAsBuffer(
+  accessToken: string,
+  fileId: string,
+): Promise<{ buffer: ArrayBuffer; contentType: string } | null> {
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) return null
+  const buffer = await res.arrayBuffer()
+  const contentType = res.headers.get('content-type') ?? 'application/octet-stream'
+  return { buffer, contentType }
+}
+
+/**
  * Human-friendly label for a MIME type.
  */
 export function describeMime(mime: string): { label: string; category: 'doc' | 'sheet' | 'slides' | 'image' | 'video' | 'pdf' | 'folder' | 'other' } {

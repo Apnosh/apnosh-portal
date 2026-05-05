@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Loader2, CheckCircle2, AlertCircle, Sparkles, ExternalLink, History,
   Monitor, Smartphone, Tablet, RefreshCw, ChevronDown, ChevronRight,
-  Wand2, ArrowLeft, Command, RotateCcw,
+  Wand2, ArrowLeft, Command, RotateCcw, FolderOpen,
 } from 'lucide-react'
 import Link from 'next/link'
 import { saveDraft, publishSite } from '@/lib/site-config/actions'
@@ -36,6 +36,7 @@ import DesignStudioDrawer from './design-studio-drawer'
 import CommandPalette from './command-palette'
 import GenerateFromProfileButton from './generate-from-profile-button'
 import RefineDrawer from './refine-drawer'
+import DriveImportDrawer from './drive-import-drawer'
 import type { Brand } from '@/lib/site-schemas/shared'
 
 interface SiteBuilderFormProps {
@@ -75,6 +76,7 @@ export default function SiteBuilderForm({
   const [studioOpen, setStudioOpen] = useState(false)
   const [refineOpen, setRefineOpen] = useState(false)
   const [refineForSection, setRefineForSection] = useState<SectionKey | undefined>(undefined)
+  const [driveOpen, setDriveOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const libraryPick = useRef<((url: string) => void) | null>(null)
@@ -283,6 +285,15 @@ export default function SiteBuilderForm({
             title="Refine with a prompt or pull from a source URL"
           >
             <Sparkles className="w-3.5 h-3.5" /> Refine
+          </button>
+
+          {/* Drive import */}
+          <button
+            onClick={() => setDriveOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-md text-white bg-gradient-to-r from-blue-600 to-cyan-600 hover:opacity-90"
+            title="Import photos from Google Drive"
+          >
+            <FolderOpen className="w-3.5 h-3.5" /> Drive
           </button>
 
           {/* Design Studio */}
@@ -614,6 +625,12 @@ export default function SiteBuilderForm({
         open={refineOpen}
         onClose={() => setRefineOpen(false)}
         initialSection={refineForSection}
+      />
+      <DriveImportDrawer
+        clientId={clientId}
+        open={driveOpen}
+        onClose={() => setDriveOpen(false)}
+        draftLocations={data.locations}
       />
     </UploadProvider>
   )
