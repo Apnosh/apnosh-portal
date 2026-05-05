@@ -193,11 +193,23 @@ export default function DriveImportDrawer({ clientId, open, onClose, draftLocati
               <p className="text-sm text-red-700 font-medium flex items-center gap-1.5">
                 <AlertCircle className="w-4 h-4" /> {loadError}
               </p>
-              <p className="text-xs text-red-600 mt-2">
-                {loadError.toLowerCase().includes('not connected')
-                  ? 'Connect Drive in Settings → Integrations, then come back.'
-                  : 'Try linking a Drive folder to this client first.'}
-              </p>
+              {loadError.toLowerCase().includes('not connected') ? (
+                <>
+                  <p className="text-xs text-red-600 mt-2">
+                    Authorize the Apnosh team&apos;s Google Drive access once, then this works for every client.
+                  </p>
+                  <a
+                    href="/admin/integrations"
+                    target="_blank"
+                    rel="noopener"
+                    className="mt-3 inline-flex items-center gap-1.5 bg-red-700 hover:bg-red-800 text-white text-[12px] font-semibold rounded-md px-3 py-1.5"
+                  >
+                    Connect Drive →
+                  </a>
+                </>
+              ) : (
+                <p className="text-xs text-red-600 mt-2">Try linking a Drive folder to this client first.</p>
+              )}
             </div>
           </div>
         ) : folders.length === 0 ? (
