@@ -30,8 +30,10 @@ export const DESIGN_MODEL = DESIGN_MODELS[0]
 export const PARSE_MODEL = 'claude-sonnet-4-20250514'
 
 /**
- * Try DESIGN_MODELS in order until one succeeds. Returns both the model
- * that worked and the response. Errors only if every model fails.
+ * Try DESIGN_MODELS in order until one succeeds. Uses STREAMING because
+ * the Anthropic SDK rejects non-streaming requests that may exceed 10
+ * minutes — Opus + 32K tokens can. We accumulate the streamed text and
+ * return it once the stream completes.
  */
 export async function callDesignModelWithFallback(args: {
   anthropic: Anthropic
@@ -42,13 +44,15 @@ export async function callDesignModelWithFallback(args: {
   let lastErr: Error | null = null
   for (const model of DESIGN_MODELS) {
     try {
-      const msg = await args.anthropic.messages.create({
+      const stream = args.anthropic.messages.stream({
         model,
         max_tokens: args.maxTokens,
         system: args.system,
         messages: [{ role: 'user', content: args.userMessage }],
       })
-      const text = msg.content
+      // Wait for the full message and pull the text content blocks.
+      const final = await stream.finalMessage()
+      const text = final.content
         .filter(c => c.type === 'text')
         .map(c => (c as { type: 'text'; text: string }).text)
         .join('\n')
@@ -56,12 +60,10 @@ export async function callDesignModelWithFallback(args: {
     } catch (e) {
       lastErr = e instanceof Error ? e : new Error(String(e))
       console.warn(`[claude-config] model ${model} failed:`, lastErr.message)
-      // Don't fall through on auth/billing errors — retry won't help
       const m = lastErr.message.toLowerCase()
       if (m.includes('authentication') || m.includes('api_key') || m.includes('credit') || m.includes('billing')) {
         throw lastErr
       }
-      // Otherwise continue to next model
     }
   }
   throw lastErr ?? new Error('All design models failed')
