@@ -16,6 +16,7 @@ import { RestaurantSiteSchema, RESTAURANT_DEFAULTS } from '@/lib/site-schemas'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 import { DESIGN_MODEL, withDesignPrinciples } from '@/lib/site-config/claude-config'
 import { STRATEGY_FIRST_INSTRUCTION } from '@/lib/design-quality'
+import { extractJsonFromClaude } from '@/lib/site-config/json-extract'
 
 const SYSTEM = `You are a world-class brand designer + copywriter producing a complete website spec for a small business.
 
@@ -147,21 +148,14 @@ export async function POST(req: NextRequest) {
   }
 
   // 3. Extract JSON
-  const jsonMatch = raw.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    return NextResponse.json({ error: 'Claude returned non-JSON', raw: raw.slice(0, 300) }, { status: 502 })
-  }
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(jsonMatch[0])
-  } catch (e) {
+  const extracted = extractJsonFromClaude(raw)
+  if ('error' in extracted) {
     return NextResponse.json({
-      error: 'Failed to parse Claude JSON',
-      detail: e instanceof Error ? e.message : String(e),
-      raw: jsonMatch[0].slice(0, 300),
+      error: extracted.error,
+      raw: extracted.raw,
     }, { status: 502 })
   }
+  const parsed = extracted.json
 
   // 4. Schema validate (lenient — fall back to defaults for any missing field)
   let validated: RestaurantSite

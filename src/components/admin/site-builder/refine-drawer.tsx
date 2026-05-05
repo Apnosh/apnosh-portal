@@ -17,6 +17,7 @@ import {
   X, Loader2, Sparkles, Globe, Wand2, Check, AlertTriangle, ChevronDown, Link2, Plus, Trash2, Compass, Zap, Award,
 } from 'lucide-react'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
+import GenerationProgressModal, { PROGRESS_STEPS } from './generation-progress-modal'
 import { SECTIONS } from './sections'
 import type { SectionKey } from './sections'
 
@@ -144,11 +145,33 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
   const [success, setSuccess] = useState<string | null>(null)
   const [patchPreview, setPatchPreview] = useState<unknown>(null)
 
+  // Progress modal state — track which kind of generation is in flight
+  type ProgressKind = 'refine' | 'recreate' | 'source' | null
+  const [progressKind, setProgressKind] = useState<ProgressKind>(null)
+  const [progressDone, setProgressDone] = useState(false)
+  const progressOpen = progressKind !== null
+  const progressSteps =
+    progressKind === 'recreate' ? PROGRESS_STEPS.recreate :
+    progressKind === 'refine'   ? PROGRESS_STEPS.refine :
+    progressKind === 'source'   ? PROGRESS_STEPS.source :
+    PROGRESS_STEPS.refine
+  const progressTitle =
+    progressKind === 'recreate' ? 'Re-creating site with Claude' :
+    progressKind === 'source'   ? 'Pulling content from sources' :
+    'Refining with Claude'
+  const progressSuccess =
+    progressKind === 'recreate'
+      ? (variants.length > 1 ? 'Options ready — pick one in the drawer.' : 'Site recreated. Reloading…')
+      : progressKind === 'source'
+        ? 'Sources merged into draft. Reloading…'
+        : (variants.length > 1 ? 'Options ready — pick one in the drawer.' : 'Refinement applied. Reloading…')
+
   if (!open) return null
 
   async function runRefine() {
     if (!prompt.trim()) return
     setRunning(true); setError(null); setSuccess(null); setPatchPreview(null); setVariants([])
+    setProgressKind('refine'); setProgressDone(false)
     try {
       const res = await fetch('/api/admin/refine-site', {
         method: 'POST',
@@ -169,13 +192,17 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
         setVariants(json.variants as Variant[])
         setActiveVariantIdx(0)
         setSuccess(`${json.variants.length} variants ready — pick one below`)
+        setProgressDone(true)
+        setTimeout(() => setProgressKind(null), 1500)
       } else {
         setPatchPreview(json.patch)
         setSuccess(`Updated. ${describePatch(json.patch)}`)
+        setProgressDone(true)
         setTimeout(() => window.location.reload(), 1500)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error')
+      setProgressKind(null)
     }
     setRunning(false)
   }
@@ -183,6 +210,7 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
   async function runRecreate() {
     if (!recreatePrompt.trim()) return
     setRunning(true); setError(null); setSuccess(null); setVariants([])
+    setProgressKind('recreate'); setProgressDone(false)
     try {
       const res = await fetch('/api/admin/recreate-site', {
         method: 'POST',
@@ -201,12 +229,16 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
         setVariants(json.variants as Variant[])
         setActiveVariantIdx(0)
         setSuccess(`${json.variants.length} fresh directions ready — pick one below`)
+        setProgressDone(true)
+        setTimeout(() => setProgressKind(null), 1500)
       } else {
         setSuccess('Site recreated. Reloading…')
+        setProgressDone(true)
         setTimeout(() => window.location.reload(), 1000)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error')
+      setProgressKind(null)
     }
     setRunning(false)
   }
@@ -242,6 +274,7 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
     if (validSources.length === 0) return
 
     setRunning(true); setError(null); setSuccess(null); setPatchPreview(null)
+    setProgressKind('source'); setProgressDone(false)
     try {
       const res = await fetch('/api/admin/extract-from-url', {
         method: 'POST',
@@ -261,10 +294,12 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
         const failCount = validSources.length - okCount
         const failNote = failCount > 0 ? ` (${failCount} source${failCount === 1 ? '' : 's'} failed to fetch)` : ''
         setSuccess(`Pulled from ${okCount} source${okCount === 1 ? '' : 's'}${failNote}. ${describePatch(json.patch)}`)
+        setProgressDone(true)
         setTimeout(() => window.location.reload(), 1800)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error')
+      setProgressKind(null)
     }
     setRunning(false)
   }
@@ -787,6 +822,17 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
           ) : null}
         </div>
       </aside>
+
+      <GenerationProgressModal
+        open={progressOpen}
+        steps={progressSteps}
+        running={running}
+        done={progressDone}
+        error={error}
+        title={progressTitle}
+        successMessage={progressSuccess}
+        onClose={() => { setProgressKind(null); setProgressDone(false) }}
+      />
     </>
   )
 }

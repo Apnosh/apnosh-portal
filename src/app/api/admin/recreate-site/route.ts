@@ -22,6 +22,7 @@ import { RestaurantSiteSchema, RESTAURANT_DEFAULTS } from '@/lib/site-schemas'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 import { DESIGN_MODEL, withDesignPrinciples } from '@/lib/site-config/claude-config'
 import { STRATEGY_FIRST_INSTRUCTION, variantInstruction } from '@/lib/design-quality'
+import { extractJsonFromClaude } from '@/lib/site-config/json-extract'
 
 interface RecreateRequest {
   clientId: string
@@ -114,9 +115,12 @@ export async function POST(req: NextRequest) {
   let raw: string
   try {
     const anthropic = new Anthropic()
+    // Variants mode produces 3 full RestaurantSite payloads + strategy
+    // blocks — bump tokens generously to avoid truncation.
+    const maxTokens = variantCount >= 3 ? 32_000 : variantCount === 2 ? 24_000 : 12_000
     const msg = await anthropic.messages.create({
       model: DESIGN_MODEL,
-      max_tokens: variantCount > 1 ? 16384 : 8192,
+      max_tokens: maxTokens,
       system: withDesignPrinciples(`${SYSTEM}\n\n${STRATEGY_FIRST_INSTRUCTION}`),
       messages: [{ role: 'user', content: userMessage }],
     })
@@ -131,20 +135,16 @@ export async function POST(req: NextRequest) {
     }, { status: 502 })
   }
 
-  // Parse
-  const jsonMatch = raw.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    return NextResponse.json({ error: 'Claude returned non-JSON', raw: raw.slice(0, 300) }, { status: 502 })
-  }
-  let parsed: Record<string, unknown>
-  try {
-    parsed = JSON.parse(jsonMatch[0])
-  } catch (e) {
+  // Robust JSON extraction (handles strategy blocks, fences, truncation)
+  const extracted = extractJsonFromClaude(raw)
+  if ('error' in extracted) {
     return NextResponse.json({
-      error: 'JSON parse failed',
-      detail: e instanceof Error ? e.message : String(e),
+      error: extracted.error,
+      raw: extracted.raw,
+      hint: 'If this keeps happening, try fewer variants (1 or 2) or a more focused prompt.',
     }, { status: 502 })
   }
+  const parsed = extracted.json as Record<string, unknown>
 
   // ----- Multi-variant: return choices, don't persist -----
   if (variantCount > 1) {

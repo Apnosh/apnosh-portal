@@ -18,6 +18,7 @@ import { RestaurantSiteSchema } from '@/lib/site-schemas'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 import { DESIGN_MODEL, PARSE_MODEL, withDesignPrinciples } from '@/lib/site-config/claude-config'
 import { STRATEGY_FIRST_INSTRUCTION, variantInstruction } from '@/lib/design-quality'
+import { extractJsonFromClaude } from '@/lib/site-config/json-extract'
 
 interface RefineRequest {
   clientId: string
@@ -126,9 +127,10 @@ export async function POST(req: NextRequest) {
   let raw: string
   try {
     const anthropic = new Anthropic()
+    const maxTokens = variantCount >= 3 ? 24_000 : variantCount === 2 ? 16_000 : 8_192
     const msg = await anthropic.messages.create({
       model: useOpus ? DESIGN_MODEL : PARSE_MODEL,
-      max_tokens: variantCount > 1 ? 16384 : 8192,
+      max_tokens: maxTokens,
       system,
       messages: [{ role: 'user', content: userMessage }],
     })
@@ -143,20 +145,15 @@ export async function POST(req: NextRequest) {
     }, { status: 502 })
   }
 
-  // Parse JSON
-  const jsonMatch = raw.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    return NextResponse.json({ error: 'Claude returned non-JSON', raw: raw.slice(0, 300) }, { status: 502 })
-  }
-  let parsed: Record<string, unknown>
-  try {
-    parsed = JSON.parse(jsonMatch[0])
-  } catch (e) {
+  const extracted = extractJsonFromClaude(raw)
+  if ('error' in extracted) {
     return NextResponse.json({
-      error: 'JSON parse failed',
-      detail: e instanceof Error ? e.message : String(e),
+      error: extracted.error,
+      raw: extracted.raw,
+      hint: 'Try fewer variants or a more focused prompt.',
     }, { status: 502 })
   }
+  const parsed = extracted.json as Record<string, unknown>
 
   // ----- Multi-variant mode: return options without persisting -----
   if (variantCount > 1) {

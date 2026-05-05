@@ -7,7 +7,8 @@
  */
 
 import { useState } from 'react'
-import { Loader2, Sparkles, CheckCircle2, AlertTriangle, X } from 'lucide-react'
+import { Loader2, Sparkles } from 'lucide-react'
+import GenerationProgressModal, { PROGRESS_STEPS } from './generation-progress-modal'
 
 interface Props {
   clientId: string
@@ -19,20 +20,10 @@ interface Props {
   cardHint?: string
 }
 
-const STEPS = [
-  'Reading client profile',
-  'Composing brand voice',
-  'Drafting hero copy',
-  'Tailoring locations + offerings',
-  'Generating about story + values',
-  'Polishing FAQs + SEO',
-]
-
 export default function GenerateFromProfileButton({
   clientId, variant = 'minimal', onGenerated, cardHint,
 }: Props) {
   const [open, setOpen] = useState(false)
-  const [step, setStep] = useState(0)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
@@ -42,12 +33,6 @@ export default function GenerateFromProfileButton({
     setRunning(true)
     setError(null)
     setDone(false)
-    setStep(0)
-
-    // Step animation independent of network call
-    const stepTimer = setInterval(() => {
-      setStep(s => Math.min(s + 1, STEPS.length - 1))
-    }, 1500)
 
     try {
       const res = await fetch('/api/admin/generate-site', {
@@ -55,24 +40,19 @@ export default function GenerateFromProfileButton({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId }),
       })
-      clearInterval(stepTimer)
       const json = await res.json().catch(() => null) as { error?: string; detail?: string } | null
       if (!res.ok) {
         setError(json?.error || `HTTP ${res.status}`)
         setRunning(false)
         return
       }
-      setStep(STEPS.length - 1)
       setDone(true)
       setRunning(false)
-
-      // Trigger reload after a short victory pause
       setTimeout(() => {
         if (onGenerated) onGenerated()
         else window.location.reload()
       }, 1200)
     } catch (e) {
-      clearInterval(stepTimer)
       setError(e instanceof Error ? e.message : 'Network error')
       setRunning(false)
     }
@@ -100,7 +80,16 @@ export default function GenerateFromProfileButton({
             </div>
           </div>
         </div>
-        <ProgressModal open={open} step={step} done={done} error={error} onClose={() => setOpen(false)} />
+        <GenerationProgressModal
+          open={open}
+          steps={PROGRESS_STEPS.generate}
+          running={running}
+          done={done}
+          error={error}
+          title="Generating site from profile"
+          successMessage="Reloading the Site Builder with your new draft…"
+          onClose={() => setOpen(false)}
+        />
       </>
     )
   }
@@ -116,72 +105,17 @@ export default function GenerateFromProfileButton({
         {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
         Generate from profile
       </button>
-      <ProgressModal open={open} step={step} done={done} error={error} onClose={() => setOpen(false)} />
+      <GenerationProgressModal
+        open={open}
+        steps={PROGRESS_STEPS.generate}
+        running={running}
+        done={done}
+        error={error}
+        title="Generating site from profile"
+        successMessage="Reloading the Site Builder with your new draft…"
+        onClose={() => setOpen(false)}
+      />
     </>
   )
 }
 
-function ProgressModal({
-  open, step, done, error, onClose,
-}: {
-  open: boolean
-  step: number
-  done: boolean
-  error: string | null
-  onClose: () => void
-}) {
-  if (!open) return null
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/40 z-50" onClick={done || error ? onClose : undefined} />
-      <div className="fixed top-[20vh] left-1/2 -translate-x-1/2 w-[480px] max-w-[92vw] bg-white rounded-2xl shadow-2xl z-50 p-6">
-        <div className="flex items-center justify-between gap-2 mb-4">
-          <div className="flex items-center gap-2">
-            <Sparkles className={`w-4 h-4 ${error ? 'text-red-600' : 'text-brand'}`} />
-            <h3 className="text-sm font-semibold text-ink">
-              {error ? 'Generation failed' : done ? 'Site generated' : 'Generating with Claude'}
-            </h3>
-          </div>
-          {(done || error) && (
-            <button onClick={onClose} className="text-ink-4 hover:text-ink p-1">
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {error ? (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-red-600 mt-0.5 shrink-0" />
-            <div className="text-xs text-red-700">{error}</div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {STEPS.map((label, i) => {
-              const isDone = done || i < step
-              const isActive = !done && i === step
-              return (
-                <div key={i} className="flex items-center gap-2 text-[12px]">
-                  <span className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
-                    isDone
-                      ? 'bg-emerald-500 text-white'
-                      : isActive
-                        ? 'bg-brand text-white'
-                        : 'bg-ink-6'
-                  }`}>
-                    {isDone ? <CheckCircle2 className="w-3 h-3" /> : isActive ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : null}
-                  </span>
-                  <span className={isDone || isActive ? 'text-ink' : 'text-ink-4'}>{label}</span>
-                </div>
-              )
-            })}
-            {done && (
-              <p className="text-[11px] text-ink-3 mt-3 italic">
-                Reloading the Site Builder with your new draft…
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-    </>
-  )
-}
