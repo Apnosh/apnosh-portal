@@ -134,7 +134,7 @@ export default function BespokeForm({
     deploymentUrl?: string | null
     deploymentReadyState?: string | null
     designerEmail?: string
-    designerGitBranchUsername?: string
+    designerGithubUsername?: string
     handedOffAt?: string
     syncedAt?: string | null
     latestCommit?: { sha: string; author: string; message: string; date: string } | null
@@ -143,7 +143,7 @@ export default function BespokeForm({
   const [handoffLoading, setHandoffLoading] = useState(false)
   const [handoffRunning, setHandoffRunning] = useState(false)
   const [designerEmail, setDesignerEmail] = useState('')
-  const [designerGitBranch, setDesignerGitBranch] = useState('')
+  const [designerGithub, setDesignerGithub] = useState('')
   const [handoffSyncing, setHandoffSyncing] = useState(false)
 
   useEffect(() => {
@@ -162,7 +162,7 @@ export default function BespokeForm({
   }
 
   async function runHandoff() {
-    if (!designerEmail.trim() || !designerGitBranch.trim()) return
+    if (!designerEmail.trim() || !designerGithub.trim()) return
     setHandoffRunning(true)
     setError(null)
     try {
@@ -172,7 +172,7 @@ export default function BespokeForm({
         body: JSON.stringify({
           clientId,
           designerEmail: designerEmail.trim(),
-          designerGitBranchUsername: designerGitBranch.trim().replace(/^@/, ''),
+          designerGithubUsername: designerGithub.trim().replace(/^@/, ''),
         }),
       })
       const json = await res.json()
@@ -637,7 +637,7 @@ export default function BespokeForm({
                   <div className="flex items-center gap-2">
                     <UserPlus className="w-3 h-3 text-ink-4 shrink-0" />
                     <span className="text-ink-3 truncate">
-                      {handoff.designerEmail} (@{handoff.designerGitBranchUsername})
+                      {handoff.designerEmail} (@{handoff.designerGithubUsername})
                     </span>
                   </div>
                   {handoff.latestCommit && (
@@ -671,14 +671,14 @@ export default function BespokeForm({
                 />
                 <input
                   type="text"
-                  value={designerGitBranch}
-                  onChange={e => setDesignerGitBranch(e.target.value)}
+                  value={designerGithub}
+                  onChange={e => setDesignerGithub(e.target.value)}
                   placeholder="Designer GitHub username (e.g. janedoe)"
                   className="w-full text-[12px] border border-ink-6 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-slate-500/20 outline-none font-mono"
                 />
                 <button
                   onClick={runHandoff}
-                  disabled={!designerEmail.trim() || !designerGitBranch.trim() || handoffRunning}
+                  disabled={!designerEmail.trim() || !designerGithub.trim() || handoffRunning}
                   className="w-full bg-slate-800 hover:bg-black text-white text-[11px] font-semibold rounded-md px-3 py-2 flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
                   {handoffRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : <GitBranch className="w-3 h-3" />}
