@@ -57,7 +57,7 @@ interface SourceRow {
 }
 
 export default function RefineDrawer({ clientId, open, onClose, initialSection }: Props) {
-  const [tab, setTab] = useState<'refine' | 'source'>('refine')
+  const [tab, setTab] = useState<'refine' | 'source' | 'recreate'>('refine')
 
   // Refine state
   const [prompt, setPrompt] = useState('')
@@ -67,10 +67,22 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
   const [variantCount, setVariantCount] = useState<1 | 2 | 3>(3)
 
   // Variants picker state
-  type Variant = { strategy: string; patch: Record<string, unknown>; site: RestaurantSite }
+  type Variant = { strategy: string; patch?: Record<string, unknown>; site: RestaurantSite }
   const [variants, setVariants] = useState<Variant[]>([])
   const [activeVariantIdx, setActiveVariantIdx] = useState<number>(0)
   const [applyingVariant, setApplyingVariant] = useState(false)
+
+  // Re-create state
+  const [recreatePrompt, setRecreatePrompt] = useState('')
+  const [recreateVariantCount, setRecreateVariantCount] = useState<1 | 2 | 3>(3)
+  const PRESERVE_OPTIONS: { key: SectionKey; label: string; hint: string }[] = [
+    { key: 'identity',   label: 'Identity',     hint: 'Display name, vertical, template' },
+    { key: 'brand',      label: 'Brand',        hint: 'Colors, fonts, design system' },
+    { key: 'locations',  label: 'Locations',    hint: 'Addresses, hours, phone' },
+    { key: 'social',     label: 'Social',       hint: 'IG / TikTok / FB profile URLs' },
+    { key: 'reservation',label: 'Reservation',  hint: 'Booking URL + label' },
+  ]
+  const [preserve, setPreserve] = useState<Set<SectionKey>>(new Set(['identity', 'locations', 'social', 'reservation']))
 
   // Source state — multiple URL rows, each with its own kind
   const [sourceRows, setSourceRows] = useState<SourceRow[]>([
@@ -168,6 +180,37 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
     setRunning(false)
   }
 
+  async function runRecreate() {
+    if (!recreatePrompt.trim()) return
+    setRunning(true); setError(null); setSuccess(null); setVariants([])
+    try {
+      const res = await fetch('/api/admin/recreate-site', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId,
+          prompt: recreatePrompt.trim(),
+          preserve: Array.from(preserve),
+          variants: recreateVariantCount,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        setError(json.error || `HTTP ${res.status}`)
+      } else if (json.mode === 'variants' && Array.isArray(json.variants)) {
+        setVariants(json.variants as Variant[])
+        setActiveVariantIdx(0)
+        setSuccess(`${json.variants.length} fresh directions ready — pick one below`)
+      } else {
+        setSuccess('Site recreated. Reloading…')
+        setTimeout(() => window.location.reload(), 1000)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error')
+    }
+    setRunning(false)
+  }
+
   async function applyVariant(idx: number) {
     const v = variants[idx]
     if (!v) return
@@ -247,19 +290,27 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
         <div className="flex border-b border-ink-6 bg-bg-2/50">
           <button
             onClick={() => setTab('refine')}
-            className={`flex-1 py-2.5 text-[12px] font-semibold flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2.5 text-[11px] font-semibold flex items-center justify-center gap-1.5 ${
               tab === 'refine' ? 'bg-white text-ink border-b-2 border-brand -mb-[2px]' : 'text-ink-3 hover:text-ink'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5" /> Refine with prompt
+            <Sparkles className="w-3.5 h-3.5" /> Refine
+          </button>
+          <button
+            onClick={() => setTab('recreate')}
+            className={`flex-1 py-2.5 text-[11px] font-semibold flex items-center justify-center gap-1.5 ${
+              tab === 'recreate' ? 'bg-white text-ink border-b-2 border-brand -mb-[2px]' : 'text-ink-3 hover:text-ink'
+            }`}
+          >
+            <Wand2 className="w-3.5 h-3.5" /> Re-create
           </button>
           <button
             onClick={() => setTab('source')}
-            className={`flex-1 py-2.5 text-[12px] font-semibold flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2.5 text-[11px] font-semibold flex items-center justify-center gap-1.5 ${
               tab === 'source' ? 'bg-white text-ink border-b-2 border-brand -mb-[2px]' : 'text-ink-3 hover:text-ink'
             }`}
           >
-            <Globe className="w-3.5 h-3.5" /> Pull from sources
+            <Globe className="w-3.5 h-3.5" /> Pull sources
           </button>
         </div>
 
@@ -417,6 +468,181 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
                     onClick={() => applyVariant(activeVariantIdx)}
                     disabled={applyingVariant}
                     className="w-full bg-brand hover:bg-brand-dark text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {applyingVariant ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    Apply option {String.fromCharCode(65 + activeVariantIdx)}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === 'recreate' && (
+            <>
+              <div className="bg-gradient-to-br from-amber-50 via-white to-amber-50 border border-amber-200 rounded-xl p-3">
+                <div className="flex items-start gap-2">
+                  <Wand2 className="w-4 h-4 text-amber-700 mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-[12px] font-semibold text-ink">Re-create from scratch</p>
+                    <p className="text-[11px] text-ink-3 mt-0.5">
+                      Fully regenerates every section — hero, about, FAQs, voice, design system. Use when Refine isn&apos;t aggressive enough.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Direction prompt */}
+              <div>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 block mb-1.5">Design direction</label>
+                <textarea
+                  value={recreatePrompt}
+                  onChange={e => setRecreatePrompt(e.target.value)}
+                  placeholder='e.g. "An upscale Korean steakhouse experience that leads with the Alki waterfront. Think wood, leather, low-light. Editorial copy, sparing words. Sunset is the hero."'
+                  className="w-full min-h-[120px] border border-ink-6 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand/20 outline-none resize-y"
+                />
+              </div>
+
+              {/* Quick prompts */}
+              <div>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 block mb-1.5">Big direction starters</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Upscale Michelin-guide editorial',
+                    'Late-night cocktail bar / speakeasy mood',
+                    'Bold neon Tokyo street energy',
+                    'Warm artisan bakery / farm-to-table',
+                    'Minimal modernist boutique',
+                    'Sports bar / late-night high-energy',
+                    'Beachfront luxe / occasion destination',
+                    'Playful pop / boba shop / college casual',
+                  ].map(q => (
+                    <button
+                      key={q}
+                      onClick={() => setRecreatePrompt(q)}
+                      className="text-[11px] px-2 py-1 rounded-full bg-bg-2 hover:bg-ink-6 text-ink-3 hover:text-ink"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preserve list */}
+              <div>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 block mb-1.5">Preserve verbatim</label>
+                <p className="text-[10px] text-ink-3 mb-2">Anything checked is kept as-is. Anything unchecked gets fully rewritten by Claude.</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {PRESERVE_OPTIONS.map(o => {
+                    const checked = preserve.has(o.key)
+                    return (
+                      <label
+                        key={o.key}
+                        className={`flex items-start gap-2 p-2 rounded border cursor-pointer ${
+                          checked ? 'border-brand bg-brand/5' : 'border-ink-6 hover:border-ink-5 bg-white'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={e => {
+                            const next = new Set(preserve)
+                            if (e.target.checked) next.add(o.key)
+                            else next.delete(o.key)
+                            setPreserve(next)
+                          }}
+                          className="mt-0.5 accent-current"
+                        />
+                        <div className="min-w-0">
+                          <div className="text-[12px] font-semibold text-ink">{o.label}</div>
+                          <div className="text-[10px] text-ink-3 truncate">{o.hint}</div>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Variants */}
+              <div>
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 block mb-1.5">Directions</label>
+                <div className="flex gap-1">
+                  {([1, 2, 3] as const).map(n => (
+                    <button
+                      key={n}
+                      onClick={() => setRecreateVariantCount(n)}
+                      className={`flex-1 text-[11px] font-medium px-2.5 py-1.5 rounded ${recreateVariantCount === n ? 'bg-ink text-white' : 'bg-white border border-ink-6 text-ink-3'}`}
+                    >
+                      {n === 1 ? 'Apply directly' : `${n} options`}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-ink-3 mt-1.5 italic">
+                  {recreateVariantCount === 1
+                    ? 'Direct replacement — only result is saved as your draft.'
+                    : `Claude generates ${recreateVariantCount} fundamentally different directions (different mood, design, voice, hierarchy).`}
+                </p>
+              </div>
+
+              <button
+                onClick={runRecreate}
+                disabled={!recreatePrompt.trim() || running}
+                className="w-full bg-gradient-to-r from-amber-700 to-orange-700 hover:opacity-90 text-white text-sm font-semibold rounded-lg px-4 py-2.5 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                {running
+                  ? (recreateVariantCount > 1 ? 'Generating fresh directions…' : 'Re-creating site…')
+                  : (recreateVariantCount > 1 ? `Re-create — ${recreateVariantCount} options` : 'Re-create site')}
+              </button>
+
+              {/* Variants picker (shared with refine tab) */}
+              {variants.length > 0 && (
+                <div className="space-y-2 pt-3 border-t border-ink-6">
+                  <p className="text-[11px] uppercase tracking-wider text-ink-4 font-semibold">Pick a direction</p>
+                  <div className="space-y-2">
+                    {variants.map((v, i) => {
+                      const isActive = activeVariantIdx === i
+                      const ds = (v.site?.brand as { designSystem?: { radius?: string; surface?: string; typeWeight?: string } })?.designSystem
+                      return (
+                        <article
+                          key={i}
+                          className={`border rounded-lg p-3 cursor-pointer transition ${
+                            isActive ? 'border-amber-600 bg-amber-50/40 ring-1 ring-amber-600' : 'border-ink-6 hover:border-ink-5 bg-white'
+                          }`}
+                          onClick={() => setActiveVariantIdx(i)}
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                              isActive ? 'bg-amber-600 text-white' : 'bg-bg-2 text-ink-3'
+                            }`}>{String.fromCharCode(65 + i)}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[11px] font-semibold text-ink leading-snug">
+                                {(v.site?.hero as { headline?: string })?.headline || 'Untitled direction'}
+                              </p>
+                              <p className="text-[11px] text-ink-3 leading-snug mt-0.5 line-clamp-2">{v.strategy}</p>
+                              <div className="flex items-center gap-2 mt-1.5">
+                                {/* Color swatches */}
+                                <div className="flex gap-0.5">
+                                  {(['primaryColor', 'secondaryColor', 'accentColor'] as const).map(k => {
+                                    const c = (v.site?.brand as unknown as Record<string, unknown>)?.[k] as string | undefined
+                                    return c ? <span key={k} className="w-3 h-3 rounded-sm border border-ink-6" style={{ backgroundColor: c }} /> : null
+                                  })}
+                                </div>
+                                {ds && (
+                                  <span className="text-[10px] text-ink-4 uppercase tracking-wider">
+                                    {[ds.radius, ds.surface, ds.typeWeight].filter(Boolean).join(' · ')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      )
+                    })}
+                  </div>
+                  <button
+                    onClick={() => applyVariant(activeVariantIdx)}
+                    disabled={applyingVariant}
+                    className="w-full bg-amber-700 hover:bg-amber-800 text-white text-sm font-semibold rounded-lg px-4 py-2 flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {applyingVariant ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                     Apply option {String.fromCharCode(65 + activeVariantIdx)}
