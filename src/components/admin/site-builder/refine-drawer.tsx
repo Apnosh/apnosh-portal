@@ -14,7 +14,7 @@
 
 import { useState } from 'react'
 import {
-  X, Loader2, Sparkles, Globe, Wand2, Check, AlertTriangle, ChevronDown, Link2, Plus, Trash2,
+  X, Loader2, Sparkles, Globe, Wand2, Check, AlertTriangle, ChevronDown, Link2, Plus, Trash2, Compass, ShieldCheck, ShieldAlert,
 } from 'lucide-react'
 import { SECTIONS } from './sections'
 import type { SectionKey } from './sections'
@@ -76,6 +76,45 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
   }
   function removeSourceRow(id: string) {
     setSourceRows(rows => rows.length > 1 ? rows.filter(r => r.id !== id) : rows)
+  }
+
+  // Auto-research state
+  const [discovering, setDiscovering] = useState(false)
+  const [discoverNote, setDiscoverNote] = useState<string | null>(null)
+
+  async function autoResearch() {
+    setDiscovering(true)
+    setError(null)
+    setDiscoverNote(null)
+    try {
+      const res = await fetch('/api/admin/discover-sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId }),
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        setError(json.error || `HTTP ${res.status}`)
+      } else {
+        type Discovered = { url: string; kind: SourceKind; verified: boolean; note?: string }
+        const discovered = (json.sources as Discovered[] | undefined) ?? []
+        if (discovered.length === 0) {
+          setDiscoverNote('No sources discovered. Make sure clients.website and clients.socials are filled in.')
+        } else {
+          // Replace the rows entirely with discovered URLs (capped at 6)
+          const newRows: SourceRow[] = discovered.slice(0, 6).map(d => ({
+            id: rid(),
+            url: d.url,
+            kind: d.kind,
+          }))
+          setSourceRows(newRows)
+          setDiscoverNote(`Found ${discovered.length} candidate${discovered.length === 1 ? '' : 's'}. ${json.summary?.verified ?? 0} verified online. Review + adjust, then pull.`)
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error')
+    }
+    setDiscovering(false)
   }
 
   // Shared state
@@ -255,6 +294,28 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
 
           {tab === 'source' && (
             <>
+              {/* Auto-research */}
+              <div className="bg-gradient-to-br from-brand/5 via-white to-brand/5 border border-brand/30 rounded-xl p-3">
+                <div className="flex items-start gap-2">
+                  <Compass className="w-4 h-4 text-brand mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-[12px] font-semibold text-ink">Auto-research from profile</p>
+                    <p className="text-[11px] text-ink-3 mt-0.5">We&apos;ll find their website, menu page, social profiles, and Google listing automatically — no copy-pasting URLs.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={autoResearch}
+                  disabled={discovering}
+                  className="w-full mt-2 bg-ink hover:bg-black text-white text-[11px] font-semibold rounded-md px-3 py-1.5 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {discovering ? <Loader2 className="w-3 h-3 animate-spin" /> : <Compass className="w-3 h-3" />}
+                  {discovering ? 'Researching…' : 'Auto-research sources'}
+                </button>
+                {discoverNote && (
+                  <p className="text-[11px] text-ink-3 mt-2 italic">{discoverNote}</p>
+                )}
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-ink-4">Sources ({sourceRows.length}/6)</label>
