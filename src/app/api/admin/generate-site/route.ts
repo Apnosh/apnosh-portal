@@ -14,9 +14,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { gatherClientContext, contextToPromptBlock } from '@/lib/site-config/gather-context'
 import { RestaurantSiteSchema, RESTAURANT_DEFAULTS } from '@/lib/site-schemas'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
-import { DESIGN_MODEL, withDesignPrinciples } from '@/lib/site-config/claude-config'
+import { withDesignPrinciples, callDesignModelWithFallback } from '@/lib/site-config/claude-config'
 import { STRATEGY_FIRST_INSTRUCTION } from '@/lib/design-quality'
 import { extractJsonFromClaude } from '@/lib/site-config/json-extract'
+
+export const maxDuration = 300
 
 const SYSTEM = `You are a world-class brand designer + copywriter producing a complete website spec for a small business.
 
@@ -127,19 +129,13 @@ export async function POST(req: NextRequest) {
   let raw: string
   try {
     const anthropic = new Anthropic()
-    const msg = await anthropic.messages.create({
-      model: DESIGN_MODEL,
-      max_tokens: 8192,
+    const result = await callDesignModelWithFallback({
+      anthropic,
       system: withDesignPrinciples(`${SYSTEM}\n\n${STRATEGY_FIRST_INSTRUCTION}`),
-      messages: [{
-        role: 'user',
-        content: `${promptBlock}\n\n---\nThink through strategy first, then output the JSON. Use every piece of context above.`,
-      }],
+      userMessage: `${promptBlock}\n\n---\nThink through strategy first, then output the JSON. Use every piece of context above.`,
+      maxTokens: 12_000,
     })
-    raw = msg.content
-      .filter(c => c.type === 'text')
-      .map(c => (c as { type: 'text'; text: string }).text)
-      .join('\n')
+    raw = result.text
   } catch (e) {
     return NextResponse.json({
       error: 'Claude request failed',

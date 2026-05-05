@@ -20,9 +20,13 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { gatherClientContext, contextToPromptBlock } from '@/lib/site-config/gather-context'
 import { RestaurantSiteSchema, RESTAURANT_DEFAULTS } from '@/lib/site-schemas'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
-import { DESIGN_MODEL, withDesignPrinciples } from '@/lib/site-config/claude-config'
+import { withDesignPrinciples, callDesignModelWithFallback } from '@/lib/site-config/claude-config'
 import { STRATEGY_FIRST_INSTRUCTION, variantInstruction } from '@/lib/design-quality'
 import { extractJsonFromClaude } from '@/lib/site-config/json-extract'
+
+// Opus generating 3 full RestaurantSite payloads can take 60-120s.
+// Default serverless timeout is 60s on Pro. Bump to the max (300s).
+export const maxDuration = 300
 
 interface RecreateRequest {
   clientId: string
@@ -113,21 +117,20 @@ export async function POST(req: NextRequest) {
   ].join('\n')
 
   let raw: string
+  let modelUsed: string
   try {
     const anthropic = new Anthropic()
     // Variants mode produces 3 full RestaurantSite payloads + strategy
     // blocks — bump tokens generously to avoid truncation.
     const maxTokens = variantCount >= 3 ? 32_000 : variantCount === 2 ? 24_000 : 12_000
-    const msg = await anthropic.messages.create({
-      model: DESIGN_MODEL,
-      max_tokens: maxTokens,
+    const result = await callDesignModelWithFallback({
+      anthropic,
       system: withDesignPrinciples(`${SYSTEM}\n\n${STRATEGY_FIRST_INSTRUCTION}`),
-      messages: [{ role: 'user', content: userMessage }],
+      userMessage,
+      maxTokens,
     })
-    raw = msg.content
-      .filter(c => c.type === 'text')
-      .map(c => (c as { type: 'text'; text: string }).text)
-      .join('\n')
+    raw = result.text
+    modelUsed = result.model
   } catch (e) {
     return NextResponse.json({
       error: 'Claude request failed',
@@ -145,6 +148,8 @@ export async function POST(req: NextRequest) {
     }, { status: 502 })
   }
   const parsed = extracted.json as Record<string, unknown>
+
+  console.log(`[recreate-site] generated using ${modelUsed}`)
 
   // ----- Multi-variant: return choices, don't persist -----
   if (variantCount > 1) {

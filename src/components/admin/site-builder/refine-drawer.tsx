@@ -187,7 +187,8 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
       })
       const json = await res.json()
       if (!res.ok || json.error) {
-        setError(json.error || `HTTP ${res.status}`)
+        const fullErr = [json.error, json.detail, json.hint].filter(Boolean).join(' — ')
+        setError(fullErr || `HTTP ${res.status}`)
       } else if (json.mode === 'variants' && Array.isArray(json.variants)) {
         setVariants(json.variants as Variant[])
         setActiveVariantIdx(0)
@@ -224,7 +225,8 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
       })
       const json = await res.json()
       if (!res.ok || json.error) {
-        setError(json.error || `HTTP ${res.status}`)
+        const fullErr = [json.error, json.detail, json.hint].filter(Boolean).join(' — ')
+        setError(fullErr || `HTTP ${res.status}`)
       } else if (json.mode === 'variants' && Array.isArray(json.variants)) {
         setVariants(json.variants as Variant[])
         setActiveVariantIdx(0)
@@ -287,7 +289,8 @@ export default function RefineDrawer({ clientId, open, onClose, initialSection }
       })
       const json = await res.json()
       if (!res.ok || json.error) {
-        setError(json.error || `HTTP ${res.status}`)
+        const fullErr = [json.error, json.detail, json.hint].filter(Boolean).join(' — ')
+        setError(fullErr || `HTTP ${res.status}`)
       } else {
         setPatchPreview(json.patch)
         const okCount = (json.sources as Array<{ error: string | null }> | undefined)?.filter(s => !s.error).length ?? validSources.length

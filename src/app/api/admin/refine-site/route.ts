@@ -16,9 +16,11 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { RestaurantSiteSchema } from '@/lib/site-schemas'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
-import { DESIGN_MODEL, PARSE_MODEL, withDesignPrinciples } from '@/lib/site-config/claude-config'
+import { PARSE_MODEL, withDesignPrinciples, callDesignModelWithFallback } from '@/lib/site-config/claude-config'
 import { STRATEGY_FIRST_INSTRUCTION, variantInstruction } from '@/lib/design-quality'
 import { extractJsonFromClaude } from '@/lib/site-config/json-extract'
+
+export const maxDuration = 300
 
 interface RefineRequest {
   clientId: string
@@ -128,16 +130,23 @@ export async function POST(req: NextRequest) {
   try {
     const anthropic = new Anthropic()
     const maxTokens = variantCount >= 3 ? 24_000 : variantCount === 2 ? 16_000 : 8_192
-    const msg = await anthropic.messages.create({
-      model: useOpus ? DESIGN_MODEL : PARSE_MODEL,
-      max_tokens: maxTokens,
-      system,
-      messages: [{ role: 'user', content: userMessage }],
-    })
-    raw = msg.content
-      .filter(c => c.type === 'text')
-      .map(c => (c as { type: 'text'; text: string }).text)
-      .join('\n')
+    if (useOpus) {
+      const result = await callDesignModelWithFallback({
+        anthropic, system, userMessage, maxTokens,
+      })
+      raw = result.text
+    } else {
+      const msg = await anthropic.messages.create({
+        model: PARSE_MODEL,
+        max_tokens: maxTokens,
+        system,
+        messages: [{ role: 'user', content: userMessage }],
+      })
+      raw = msg.content
+        .filter(c => c.type === 'text')
+        .map(c => (c as { type: 'text'; text: string }).text)
+        .join('\n')
+    }
   } catch (e) {
     return NextResponse.json({
       error: 'Claude request failed',
