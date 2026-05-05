@@ -11,7 +11,7 @@
 
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import RestaurantBold from '@/components/sites/restaurant-bold'
+import { getTemplate } from '@/components/sites/registry'
 import { RESTAURANT_DEFAULTS } from '@/lib/site-schemas'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 
@@ -44,6 +44,10 @@ export default async function PreviewPage({ params, searchParams }: PageProps) {
     (mode === 'published' ? (row?.published_data as RestaurantSite | null) : (row?.draft_data as RestaurantSite | null))
     ?? RESTAURANT_DEFAULTS
 
+  // Pick template based on identity.templateId (falls back to restaurant-bold)
+  const tpl = getTemplate(data.identity?.templateId)
+  const Template = tpl.Component
+
   return (
     <>
       {/* Reset body styles so the template controls everything */}
@@ -61,8 +65,11 @@ export default async function PreviewPage({ params, searchParams }: PageProps) {
           z-index: 100;
         }
       `}} />
-      <div className="preview-banner">{mode === 'published' ? 'Live · Published' : 'Draft preview'}</div>
-      <RestaurantBold site={data} />
+      <div className="preview-banner">
+        {mode === 'published' ? 'Live · Published' : 'Draft preview'}
+        <span style={{ marginLeft: 8, opacity: 0.75, fontWeight: 400 }}>· {tpl.name}</span>
+      </div>
+      <Template site={data} />
     </>
   )
 }
