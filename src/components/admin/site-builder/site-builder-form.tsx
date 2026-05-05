@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Loader2, CheckCircle2, AlertCircle, Sparkles, ExternalLink, History,
   Monitor, Smartphone, Tablet, RefreshCw, ChevronDown, ChevronRight,
-  Wand2, ArrowLeft, Command, RotateCcw, FolderOpen,
+  Wand2, ArrowLeft, Command, RotateCcw, FolderOpen, Crown,
 } from 'lucide-react'
 import Link from 'next/link'
 import { saveDraft, publishSite } from '@/lib/site-config/actions'
@@ -295,6 +295,15 @@ export default function SiteBuilderForm({
           >
             <FolderOpen className="w-3.5 h-3.5" /> Drive
           </button>
+
+          {/* Bespoke (Premium) */}
+          <Link
+            href={`/admin/clients/${clientSlug}/bespoke`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-md text-white bg-gradient-to-r from-amber-700 to-orange-700 hover:opacity-90"
+            title="Bespoke premium tier — Claude codes a custom site from scratch"
+          >
+            <Crown className="w-3.5 h-3.5" /> Bespoke
+          </Link>
 
           {/* Design Studio */}
           <button
