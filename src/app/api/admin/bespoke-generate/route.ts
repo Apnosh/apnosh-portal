@@ -23,6 +23,7 @@ import { gatherClientContext, contextToPromptBlock } from '@/lib/site-config/gat
 import { withDesignPrinciples, callDesignModelWithFallback } from '@/lib/site-config/claude-config'
 import { logGeneration } from '@/lib/ai/log-generation'
 import { getGoldExamples, goldExamplesPromptSection } from '@/lib/ai/few-shot'
+import { loadMoodboard, moodboardPromptBlock } from '@/lib/ai/moodboard-context'
 import crypto from 'node:crypto'
 
 export const maxDuration = 300
@@ -70,6 +71,8 @@ Design freedom — use sophisticated techniques:
 
 Standard sections (order thoughtfully): nav, hero, intro statement, about, offerings/menu, locations (one per location), image breaker, testimonials, FAQ, footer.
 
+CRITICAL — mark each top-level section with a stable id so it can be regenerated independently. Use this exact attribute on every top-level <section> (or equivalent <header>/<footer>) element: data-section="<name>" where <name> is one of: nav, hero, intro, about, offerings, locations, breaker, testimonials, faq, footer. Each name must appear AT MOST ONCE. Example: <section data-section="hero" class="...">...</section>. This is non-negotiable — the AM regenerates sections individually using these markers.
+
 AVOID at all costs:
 - Generic restaurant phrases: "welcome to", "best in town", "passion-driven", "where friends become family", "premier dining experience", "authentic flavors"
 - Stock unsplash/pexels imagery (use brand-tinted CSS gradient placeholders instead)
@@ -110,6 +113,11 @@ export async function POST(req: NextRequest) {
   const promptBlock = contextToPromptBlock(ctx)
   const goldExamples = await getGoldExamples('restaurant', 2)
   const goldSection = goldExamplesPromptSection(goldExamples)
+
+  // Persistent moodboard — inspiration items the AM/designer has saved
+  // for this client over time. Compounds quality across iterations.
+  const moodboardItems = await loadMoodboard(body.clientId)
+  const moodboardSection = await moodboardPromptBlock(moodboardItems)
 
   // Auto-fetch the client's existing website — anchors the new design in
   // their actual current voice (which we want to evolve, not replace).
@@ -169,6 +177,7 @@ export async function POST(req: NextRequest) {
     existingSiteText && existingSiteText,
     existingSiteText && '',
     goldSection,
+    moodboardSection,
     refContent.length > 0 ? '## External reference sites (study for inspiration on layout, voice, density — NOT to copy)' : '',
     refContent.length > 0 ? refContent.join('\n\n') : '',
     '',

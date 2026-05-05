@@ -19,6 +19,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 import { gatherClientContext, contextToPromptBlock } from '@/lib/site-config/gather-context'
 import { withDesignPrinciples, callDesignModelWithFallback } from '@/lib/site-config/claude-config'
+import { loadMoodboard, moodboardPromptBlock } from '@/lib/ai/moodboard-context'
 
 export const maxDuration = 120
 
@@ -109,6 +110,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Persistent moodboard — inspiration items saved for this client
+  const moodboardItems = await loadMoodboard(body.clientId)
+  const moodboardSection = await moodboardPromptBlock(moodboardItems)
+
   const userMessage = [
     '## Client onboarding context',
     promptBlock,
@@ -116,6 +121,7 @@ export async function POST(req: NextRequest) {
     existingSiteText && '## Existing website content (their current voice + claims)',
     existingSiteText && existingSiteText,
     '',
+    moodboardSection,
     body.direction && '## Operator direction (bias the brief toward this)',
     body.direction && body.direction.trim(),
     '',
