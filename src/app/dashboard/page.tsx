@@ -1,6 +1,24 @@
 'use client'
 
+/**
+ * Dashboard — operator's marketing tool, not a managed-service report.
+ *
+ * Hierarchy (phone-first, top to bottom):
+ *   1. Today's brief         — AI-generated 60-80 word morning briefing
+ *   2. Quick actions         — 4 buttons to start common tasks
+ *   3. Decisions to make     — items waiting for owner approval
+ *   4. Your performance      — 3 pulse metrics, glanceable
+ *   5. What's working        — AI insights with actionable suggestions
+ *   6. Your marketing week   — proof of momentum, last 7 days
+ *   7. Detailed analytics    — collapsed; the old chart-heavy view
+ *
+ * Old components (HeroMetric, TrendChart, MetricGrid, BenchmarkBar,
+ * ViewSelector, StatusBanner, AMNote) live behind the analytics
+ * collapse so power users can still drill in.
+ */
+
 import { useState, useEffect } from 'react'
+import { ChevronDown } from 'lucide-react'
 import type { ViewType, TimeRange, DashboardView, DashboardData } from '@/types/dashboard'
 import { getDashboardData } from '@/lib/dashboard/get-dashboard-data'
 import { useClient } from '@/lib/client-context'
@@ -11,9 +29,12 @@ import TrendChart from '@/components/dashboard/trend-chart'
 import MetricGrid from '@/components/dashboard/metric-grid'
 import BenchmarkBar from '@/components/dashboard/benchmark-bar'
 import InsightCard from '@/components/dashboard/insight-card'
-import AMNote from '@/components/dashboard/am-note'
 import WaitingOnYou from '@/components/dashboard/waiting-on-you'
 import SetupChecklist from '@/components/dashboard/setup-checklist'
+import TodaysBrief from '@/components/dashboard/todays-brief'
+import QuickActions from '@/components/dashboard/quick-actions'
+import YourMarketingWeek from '@/components/dashboard/your-marketing-week'
+import PulseCards, { type PulseCard } from '@/components/dashboard/pulse-cards'
 
 export default function DashboardPage() {
   const { client, loading: clientLoading } = useClient()
@@ -21,6 +42,7 @@ export default function DashboardPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>('1W')
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [analyticsOpen, setAnalyticsOpen] = useState(false)
 
   useEffect(() => {
     async function loadData() {
@@ -58,8 +80,8 @@ export default function DashboardPage() {
     )
   }
 
-  // No client or no data - show welcoming empty state
-  if (!dashboardData) {
+  // Welcoming empty state for clients with no data yet
+  if (!dashboardData || !client?.id) {
     return (
       <div
         className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20"
@@ -75,59 +97,18 @@ export default function DashboardPage() {
             </svg>
           </div>
           <h2 className="text-[20px] font-bold mb-2" style={{ color: 'var(--db-black, #111)' }}>
-            We're setting up your dashboard
+            Setting up your tools
           </h2>
           <p className="text-[14px] max-w-md mx-auto mb-10" style={{ color: 'var(--db-ink-3, #888)' }}>
-            Your performance data will appear here once your accounts are connected and content starts going out. Your account manager will help you get started.
+            Connect your accounts and your daily brief, performance numbers, and approvals queue all show up here.
           </p>
-
-          <div className="max-w-sm mx-auto text-left space-y-4 mb-10">
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--db-ink-3, #888)' }}>What to expect</p>
-            {[
-              "We'll connect your social accounts",
-              'Performance data starts flowing within 24-48 hours',
-              "You'll see your metrics, insights, and trends right here",
-            ].map((text, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <span
-                  className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                  style={{ background: '#4abd98' }}
-                >
-                  {i + 1}
-                </span>
-                <span className="text-sm pt-0.5" style={{ color: 'var(--db-ink-2, #555)' }}>{text}</span>
-              </div>
-            ))}
-          </div>
-
           <a
-            href="/dashboard/connect-accounts"
+            href="/dashboard/connected-accounts"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
             style={{ background: '#4abd98' }}
           >
             Connect your accounts
           </a>
-
-          {/* Coming Soon channels */}
-          <div className="mt-16 max-w-lg mx-auto">
-            <p className="text-xs font-semibold uppercase tracking-wider text-center mb-4" style={{ color: 'var(--db-ink-3, #888)' }}>Coming soon to your dashboard</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {[
-                { icon: '📊', label: 'Paid Ads', desc: 'Google & Meta ad performance' },
-                { icon: '🍽️', label: 'Reservations', desc: 'Booking trends' },
-                { icon: '📦', label: 'Online Orders', desc: 'DoorDash, Uber Eats' },
-                { icon: '📞', label: 'Call Tracking', desc: 'Calls by source' },
-                { icon: '📧', label: 'Email Campaigns', desc: 'Opens, clicks, revenue' },
-                { icon: '🔍', label: 'SEO Rankings', desc: 'Search positions' },
-              ].map((item) => (
-                <div key={item.label} className="rounded-lg border p-3 text-center opacity-60" style={{ borderColor: '#e5e5e5' }}>
-                  <span className="text-lg">{item.icon}</span>
-                  <p className="text-xs font-medium mt-1" style={{ color: 'var(--db-ink-2, #555)' }}>{item.label}</p>
-                  <p className="text-[10px] mt-0.5" style={{ color: 'var(--db-ink-3, #888)' }}>{item.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     )
@@ -146,117 +127,74 @@ export default function DashboardPage() {
     return n.toLocaleString()
   }
 
-  // No metrics data yet
-  if (view.num === '---') {
-    return (
-      <div
-        className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20"
-        style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
-      >
-        <div className="db-fade db-d2">
-          <ViewSelector current={currentView} onChange={handleViewChange} />
-        </div>
-        <div className="db-fade db-d3 text-center py-20">
-          <div
-            className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center"
-            style={{ background: 'var(--db-up-bg)' }}
-          >
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--db-up)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-            </svg>
-          </div>
-          <h2 className="text-[20px] font-bold mb-2" style={{ color: 'var(--db-black)' }}>
-            Connect your accounts to see numbers
-          </h2>
-          <p className="text-[14px] max-w-sm mx-auto mb-6" style={{ color: 'var(--db-ink-3)' }}>
-            Once your Google Business and social accounts are wired up,
-            your visibility and foot traffic numbers show up here.
-          </p>
-          <a
-            href="/dashboard/connected-accounts"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
-            style={{ background: '#4abd98' }}
-          >
-            Connect accounts
-          </a>
-        </div>
-      </div>
-    )
-  }
+  // Build pulse cards from existing dashboard data
+  const visPct = parseInt(dashboardData.visibility.pct.replace(/[^\d-]/g, '')) || 0
+  const ftPct = parseInt(dashboardData.footTraffic.pct.replace(/[^\d-]/g, '')) || 0
+
+  const pulseCards: PulseCard[] = [
+    {
+      label: 'Your reach',
+      value: dashboardData.visibility.num !== '---' ? dashboardData.visibility.num : '—',
+      delta: dashboardData.visibility.pct === '---' ? '—' : dashboardData.visibility.pct,
+      up: dashboardData.visibility.num === '---' ? null : dashboardData.visibility.up,
+      subtitle: 'People who saw your content',
+      href: '/dashboard/social',
+      alert: visPct < -15,
+    },
+    {
+      label: 'Your visibility',
+      value: dashboardData.footTraffic.num !== '---' ? dashboardData.footTraffic.num : '—',
+      delta: dashboardData.footTraffic.pct === '---' ? '—' : dashboardData.footTraffic.pct,
+      up: dashboardData.footTraffic.num === '---' ? null : dashboardData.footTraffic.up,
+      subtitle: 'People searching for you',
+      href: '/dashboard/local-seo',
+      alert: ftPct < -15,
+    },
+    {
+      label: 'Decisions',
+      value: String(dashboardData.pendingApprovals),
+      delta: dashboardData.pendingApprovals > 0 ? 'open' : 'clear',
+      up: dashboardData.pendingApprovals === 0 ? true : null,
+      subtitle: dashboardData.pendingApprovals === 1 ? 'Item waiting on you' : 'Items waiting on you',
+      href: '/dashboard/approvals',
+      alert: dashboardData.pendingApprovals >= 5,
+    },
+  ]
 
   return (
     <div
       className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
-      {/* First-run setup checklist -- self-hides once all 3 milestones are met
-          (profile complete, accounts connected, first action taken) or when
-          dismissed. Sits ABOVE everything else so a brand-new client sees a
-          clear path forward instead of empty metrics. */}
+      {/* First-run setup checklist — self-hides once milestones are met */}
       <SetupChecklist />
 
-      {/* Anything we need from you — renders nothing if no open client-visible tasks */}
-      {client?.id && (
-        <div className="db-fade db-d1 mb-4">
-          <WaitingOnYou clientId={client.id} />
-        </div>
-      )}
-
-      {/* How you're doing */}
+      {/* 1. Today's brief — AI-generated morning briefing */}
       <div className="db-fade db-d1">
-        <StatusBanner
-          headline={view.headline}
-          businessName={dashboardData.businessName}
-          pct={view.pct}
-          up={view.up}
-        />
+        <TodaysBrief clientId={client.id} />
       </div>
 
-      {/* Pick what to look at */}
+      {/* 2. Quick actions — start a common task */}
       <div className="db-fade db-d2">
-        <ViewSelector current={currentView} onChange={handleViewChange} />
+        <QuickActions clientId={client.id} />
       </div>
 
-      {/* Your main number */}
-      <div className="db-fade db-d3">
-        <HeroMetric ctx={view.ctx} num={view.num} pctFull={view.pctFull} up={view.up} />
+      {/* 3. Decisions to make — owner-approval queue (was "Waiting on you") */}
+      <div className="db-fade db-d3 mb-4">
+        <WaitingOnYou clientId={client.id} />
       </div>
 
-      {/* Your trend over time */}
+      {/* 4. Your performance — 3 pulse metrics, glanceable */}
       <div className="db-fade db-d4">
-        <TrendChart
-          data={view.chartData}
-          timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
-          up={view.up}
-          unit={view.unit}
-        />
+        <PulseCards cards={pulseCards} />
       </div>
 
-      {/* The breakdown */}
-      <div className="db-fade db-d5">
-        <MetricGrid title={view.bdtitle} metrics={view.metrics} />
-      </div>
-
-      {/* How you compare */}
-      <div className="db-fade db-d6">
-        <BenchmarkBar
-          yourValue={view.bmy}
-          avgValue={view.bmavg}
-          maxValue={view.bmmax}
-          rank={view.rank}
-          yourFormatted={fmtBenchmark(view.bmy)}
-          avgFormatted={fmtBenchmark(view.bmavg)}
-          animationKey={currentView}
-        />
-      </div>
-
-      {/* What we noticed */}
+      {/* 5. What's working — AI insights, only renders if there's something */}
       {view.insights.length > 0 && (
-        <div className="db-fade db-d6 pb-8 mb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
-          <h2 className="text-[15px] font-bold mb-3" style={{ color: 'var(--db-black)' }}>
-            What we noticed
-          </h2>
+        <div className="db-fade db-d5 rounded-xl p-5 mb-4 border bg-white" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+          <h3 className="text-[11px] font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--db-ink-3, #888)' }}>
+            What&apos;s working
+          </h3>
           <div className="flex flex-col gap-2.5">
             {view.insights.map((ins, i) => (
               <InsightCard key={i} icon={ins.icon} title={ins.title} subtitle={ins.subtitle} />
@@ -265,17 +203,73 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* From your account manager */}
-      {view.am.note && (
-        <div className="db-fade db-d7">
-          <AMNote
-            name={view.am.name}
-            initials={view.am.initials}
-            role={view.am.role}
-            note={view.am.note}
+      {/* 6. Your marketing this week — proof of momentum */}
+      <div className="db-fade db-d6">
+        <YourMarketingWeek clientId={client.id} />
+      </div>
+
+      {/* 7. Detailed analytics — collapsed by default */}
+      <div className="db-fade db-d7 mt-2">
+        <button
+          onClick={() => setAnalyticsOpen(o => !o)}
+          className="w-full flex items-center justify-between rounded-xl p-4 border bg-white hover:bg-bg-2 transition-colors"
+          style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+        >
+          <span className="text-[13px] font-semibold" style={{ color: 'var(--db-black, #111)' }}>
+            View detailed analytics
+          </span>
+          <ChevronDown
+            className={`w-4 h-4 text-ink-4 transition-transform ${analyticsOpen ? 'rotate-180' : ''}`}
           />
-        </div>
-      )}
+        </button>
+
+        {analyticsOpen && (
+          <div className="mt-4 space-y-4 pb-4">
+            <StatusBanner
+              headline={view.headline}
+              businessName={dashboardData.businessName}
+              pct={view.pct}
+              up={view.up}
+            />
+            <ViewSelector current={currentView} onChange={handleViewChange} />
+            {view.num === '---' ? (
+              <div className="text-center py-12 rounded-xl border bg-white" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+                <p className="text-[13px]" style={{ color: 'var(--db-ink-3, #888)' }}>
+                  Connect your accounts to see numbers.
+                </p>
+                <a
+                  href="/dashboard/connected-accounts"
+                  className="inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-lg text-[12px] font-semibold text-white"
+                  style={{ background: '#4abd98' }}
+                >
+                  Connect accounts
+                </a>
+              </div>
+            ) : (
+              <>
+                <HeroMetric ctx={view.ctx} num={view.num} pctFull={view.pctFull} up={view.up} />
+                <TrendChart
+                  data={view.chartData}
+                  timeRange={timeRange}
+                  onTimeRangeChange={setTimeRange}
+                  up={view.up}
+                  unit={view.unit}
+                />
+                <MetricGrid title={view.bdtitle} metrics={view.metrics} />
+                <BenchmarkBar
+                  yourValue={view.bmy}
+                  avgValue={view.bmavg}
+                  maxValue={view.bmmax}
+                  rank={view.rank}
+                  yourFormatted={fmtBenchmark(view.bmy)}
+                  avgFormatted={fmtBenchmark(view.bmavg)}
+                  animationKey={currentView}
+                />
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

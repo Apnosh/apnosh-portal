@@ -7,7 +7,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export type TaskType = 'generate' | 'recreate' | 'refine' | 'extract' | 'design' | 'critique' | 'judge'
+export type TaskType = 'generate' | 'recreate' | 'refine' | 'extract' | 'design' | 'critique' | 'judge' | 'dashboard_brief'
 
 export interface LogGenerationInput {
   clientId?: string | null
