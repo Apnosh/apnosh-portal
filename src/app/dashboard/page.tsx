@@ -34,6 +34,7 @@ import SetupChecklist from '@/components/dashboard/setup-checklist'
 import TodaysBrief from '@/components/dashboard/todays-brief'
 import QuickActions from '@/components/dashboard/quick-actions'
 import YourMarketingWeek from '@/components/dashboard/your-marketing-week'
+import YourReviews from '@/components/dashboard/your-reviews'
 import PulseCards, { type PulseCard } from '@/components/dashboard/pulse-cards'
 
 export default function DashboardPage() {
@@ -43,6 +44,7 @@ export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [analyticsOpen, setAnalyticsOpen] = useState(false)
+  const [pulseCards, setPulseCards] = useState<PulseCard[] | null>(null)
 
   useEffect(() => {
     async function loadData() {
@@ -67,6 +69,22 @@ export default function DashboardPage() {
 
     loadData()
   }, [client?.id, clientLoading])
+
+  // Fetch the three pulse cards in parallel with the rest of the dashboard.
+  // Lives outside loadData so the rest of the page renders even if pulse
+  // is slow.
+  useEffect(() => {
+    if (!client?.id) return
+    let cancelled = false
+    fetch(`/api/dashboard/pulse?clientId=${encodeURIComponent(client.id)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !data) return
+        setPulseCards([data.customers, data.reputation, data.reach])
+      })
+      .catch(() => { /* silent — cards stay in loading state */ })
+    return () => { cancelled = true }
+  }, [client?.id])
 
   if (loading) {
     return (
@@ -127,38 +145,12 @@ export default function DashboardPage() {
     return n.toLocaleString()
   }
 
-  // Build pulse cards from existing dashboard data
-  const visPct = parseInt(dashboardData.visibility.pct.replace(/[^\d-]/g, '')) || 0
-  const ftPct = parseInt(dashboardData.footTraffic.pct.replace(/[^\d-]/g, '')) || 0
-
-  const pulseCards: PulseCard[] = [
-    {
-      label: 'Your reach',
-      value: dashboardData.visibility.num !== '---' ? dashboardData.visibility.num : '—',
-      delta: dashboardData.visibility.pct === '---' ? '—' : dashboardData.visibility.pct,
-      up: dashboardData.visibility.num === '---' ? null : dashboardData.visibility.up,
-      subtitle: 'People who saw your content',
-      href: '/dashboard/social',
-      alert: visPct < -15,
-    },
-    {
-      label: 'Your visibility',
-      value: dashboardData.footTraffic.num !== '---' ? dashboardData.footTraffic.num : '—',
-      delta: dashboardData.footTraffic.pct === '---' ? '—' : dashboardData.footTraffic.pct,
-      up: dashboardData.footTraffic.num === '---' ? null : dashboardData.footTraffic.up,
-      subtitle: 'People searching for you',
-      href: '/dashboard/local-seo',
-      alert: ftPct < -15,
-    },
-    {
-      label: 'Decisions',
-      value: String(dashboardData.pendingApprovals),
-      delta: dashboardData.pendingApprovals > 0 ? 'open' : 'clear',
-      up: dashboardData.pendingApprovals === 0 ? true : null,
-      subtitle: dashboardData.pendingApprovals === 1 ? 'Item waiting on you' : 'Items waiting on you',
-      href: '/dashboard/approvals',
-      alert: dashboardData.pendingApprovals >= 5,
-    },
+  // Pulse cards come from /api/dashboard/pulse (loaded in effect above).
+  // While loading, render three skeleton cards so the layout doesn't shift.
+  const pulseCardsToRender: PulseCard[] = pulseCards ?? [
+    { label: 'Your customers', state: 'loading', subtitle: '', href: '/dashboard/local-seo' },
+    { label: 'Your reputation', state: 'loading', subtitle: '', href: '/dashboard/social' },
+    { label: 'Your reach', state: 'loading', subtitle: '', href: '/dashboard/social' },
   ]
 
   return (
@@ -186,7 +178,12 @@ export default function DashboardPage() {
 
       {/* 4. Your performance — 3 pulse metrics, glanceable */}
       <div className="db-fade db-d4">
-        <PulseCards cards={pulseCards} />
+        <PulseCards cards={pulseCardsToRender} />
+      </div>
+
+      {/* 4b. Your reviews — last 5 across all sources */}
+      <div className="db-fade db-d4">
+        <YourReviews clientId={client.id} />
       </div>
 
       {/* 5. What's working — AI insights, only renders if there's something */}

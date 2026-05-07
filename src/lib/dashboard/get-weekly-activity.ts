@@ -39,9 +39,9 @@ export async function getWeeklyActivity(clientId: string): Promise<WeeklyActivit
       .gte('created_at', since),
     admin
       .from('reviews')
-      .select('id, response_text, response_at')
+      .select('id, response_text, responded_at')
       .eq('client_id', clientId)
-      .gte('response_at', since)
+      .gte('responded_at', since)
       .not('response_text', 'is', null),
     admin
       .from('social_metrics')

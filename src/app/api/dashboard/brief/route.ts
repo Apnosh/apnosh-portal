@@ -60,13 +60,25 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
   // Verify the user is allowed to read briefs for this client. Admins can read any;
-  // a client user must be linked to this client.
+  // a client user must be linked to this client (either profiles.client_id OR a
+  // membership row in client_users — we check both to be tolerant of how clients
+  // are linked across the app).
   const { data: profile } = await supabase
     .from('profiles')
     .select('role, client_id')
     .eq('id', user.id)
     .maybeSingle()
-  if (profile?.role !== 'admin' && profile?.client_id !== body.clientId) {
+  let authorized = profile?.role === 'admin' || profile?.client_id === body.clientId
+  if (!authorized) {
+    const { data: membership } = await supabase
+      .from('client_users')
+      .select('client_id')
+      .eq('user_id', user.id)
+      .eq('client_id', body.clientId)
+      .maybeSingle()
+    if (membership) authorized = true
+  }
+  if (!authorized) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 
@@ -114,7 +126,7 @@ export async function POST(req: NextRequest) {
   const [socialThis, socialPrev, reviewsThis, generationsThis, pendingApprovals] = await Promise.all([
     admin.from('social_metrics').select('reach, impressions, profile_visits').eq('client_id', body.clientId).gte('date', fmt(d7)),
     admin.from('social_metrics').select('reach, impressions, profile_visits').eq('client_id', body.clientId).gte('date', fmt(d14)).lt('date', fmt(d7)),
-    admin.from('reviews').select('rating, created_at').eq('client_id', body.clientId).gte('created_at', d7.toISOString()),
+    admin.from('reviews').select('rating, posted_at').eq('client_id', body.clientId).gte('posted_at', d7.toISOString()),
     admin.from('ai_generations').select('task_type, applied').eq('client_id', body.clientId).gte('created_at', d7.toISOString()).eq('applied', true),
     admin.from('deliverables').select('id', { count: 'exact', head: true }).eq('business_id', body.clientId).eq('status', 'client_review'),
   ])
@@ -155,39 +167,48 @@ export async function POST(req: NextRequest) {
     `Today: ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`,
   ].filter(Boolean).join('\n')
 
-  // Generate
+  // Build deterministic fallback text up front so we can race against Claude
+  const fallbackText = (() => {
+    const parts: string[] = []
+    if (reachChangePct !== null && Math.abs(reachChangePct) >= 10) {
+      parts.push(`${reachChangePct < 0 ? 'Quiet' : 'Strong'} week on social — reach ${reachChangePct >= 0 ? 'up' : 'down'} ${Math.abs(reachChangePct)}% vs last week.`)
+    } else if (thisReach > 0) {
+      parts.push(`Holding steady this week.`)
+    } else {
+      parts.push(`All quiet on the marketing front.`)
+    }
+    if (newReviewCount > 0) parts.push(`${newReviewCount} new review${newReviewCount === 1 ? '' : 's'} (${avgStar?.toFixed(1) ?? '?'}★ avg).`)
+    if (postsApplied > 0) parts.push(`You shipped ${postsApplied} pieces of content.`)
+    if (approvalsCount > 0) parts.push(`${approvalsCount} item${approvalsCount === 1 ? '' : 's'} waiting for your approval.`)
+    else parts.push(`Nothing waiting on you right now.`)
+    return parts.join(' ')
+  })()
+
+  // Generate. Race Claude against a 6-second timeout — if Claude is slow,
+  // serve the deterministic fallback so the dashboard never hangs.
   let text = ''
   let modelUsed = 'claude-sonnet'
   const startedAt = Date.now()
   try {
     const anthropic = new Anthropic()
-    const result = await anthropic.messages.create({
+    const claudePromise = anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 400,
       system: SYSTEM,
       messages: [{ role: 'user', content: `Here's the data for today's brief:\n\n${dataBlock}\n\nWrite the brief.` }],
     })
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6_000))
+    const result = await Promise.race([claudePromise, timeoutPromise])
+    if (!result) throw new Error('Claude timeout (6s) — using fallback')
     const block = result.content[0]
     text = block.type === 'text' ? block.text.trim() : ''
     modelUsed = result.model
   } catch (e) {
-    // On Claude failure, return a deterministic fallback so the UI never breaks
-    text = (() => {
-      const parts: string[] = []
-      if (reachChangePct !== null && Math.abs(reachChangePct) >= 10) {
-        parts.push(`${reachChangePct < 0 ? 'Quiet' : 'Strong'} week on social — reach ${reachChangePct >= 0 ? 'up' : 'down'} ${Math.abs(reachChangePct)}% vs last week.`)
-      } else {
-        parts.push(`Holding steady this week.`)
-      }
-      if (newReviewCount > 0) parts.push(`${newReviewCount} new review${newReviewCount === 1 ? '' : 's'} (${avgStar?.toFixed(1) ?? '?'}★ avg).`)
-      if (postsApplied > 0) parts.push(`You shipped ${postsApplied} pieces of content.`)
-      if (approvalsCount > 0) parts.push(`${approvalsCount} item${approvalsCount === 1 ? '' : 's'} waiting for your approval.`)
-      else parts.push(`Nothing waiting on you right now.`)
-      return parts.join(' ')
-    })()
+    text = fallbackText
     modelUsed = 'fallback-template'
     void e
   }
+  if (!text) text = fallbackText
 
   // Log the generation (this also acts as our cache)
   await logGeneration({

@@ -1,12 +1,12 @@
 /**
- * GET /api/dashboard/weekly?clientId=...
- * Returns the past-7-days marketing activity for the dashboard's
- * "Your marketing this week" card. Wrapper around the server-only
- * helper getWeeklyActivity so the client component can fetch it.
+ * GET /api/dashboard/pulse?clientId=...
+ * Returns the three pulse cards (Customers, Reputation, Reach) ready
+ * to render. Server-side computes both "live" and "no-data" states so
+ * the dashboard never alarms on missing connections.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getWeeklyActivity } from '@/lib/dashboard/get-weekly-activity'
+import { getPulseData } from '@/lib/dashboard/get-pulse-data'
 
 export async function GET(req: NextRequest) {
   const clientId = req.nextUrl.searchParams.get('clientId')
@@ -35,6 +35,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 
-  const activity = await getWeeklyActivity(clientId)
-  return NextResponse.json(activity)
+  const data = await getPulseData(clientId)
+  return NextResponse.json(data)
 }
