@@ -19,10 +19,17 @@ interface Counts {
   pendingApprovals: number
 }
 
-export default function QuickActions({ clientId }: { clientId: string }) {
-  const [counts, setCounts] = useState<Counts>({ unansweredReviews: 0, pendingApprovals: 0 })
+export default function QuickActions({
+  clientId,
+  initialCounts,
+}: {
+  clientId: string
+  initialCounts?: Counts
+}) {
+  const [counts, setCounts] = useState<Counts>(initialCounts ?? { unansweredReviews: 0, pendingApprovals: 0 })
 
   useEffect(() => {
+    if (initialCounts) return // parent batch already loaded counts
     async function load() {
       const supabase = createClient()
       const [reviews, approvals] = await Promise.all([
@@ -43,7 +50,7 @@ export default function QuickActions({ clientId }: { clientId: string }) {
       })
     }
     load().catch(() => { /* silent */ })
-  }, [clientId])
+  }, [clientId, initialCounts])
 
   const actions: { href: string; label: string; icon: React.ReactNode; count?: number }[] = [
     { href: '/dashboard/social', label: 'New post', icon: <Plus className="w-4 h-4" /> },

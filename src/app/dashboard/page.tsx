@@ -37,6 +37,23 @@ import YourMarketingWeek from '@/components/dashboard/your-marketing-week'
 import YourReviews from '@/components/dashboard/your-reviews'
 import PulseCards, { type PulseCard } from '@/components/dashboard/pulse-cards'
 
+interface DashboardLoadResult {
+  pulse: { customers: PulseCard; reputation: PulseCard; reach: PulseCard }
+  weekly: { items: { label: string; detail?: string; icon: string }[] }
+  reviews: Array<{
+    id: string
+    source: string
+    rating: number
+    author_name: string | null
+    review_text: string | null
+    posted_at: string
+    responded_at: string | null
+  }>
+  brief: { text: string; generatedAt: string; model: string; cached: boolean } | null
+  counts: { unansweredReviews: number; pendingApprovals: number }
+  tasks: unknown[]
+}
+
 export default function DashboardPage() {
   const { client, loading: clientLoading } = useClient()
   const [currentView, setCurrentView] = useState<ViewType>('visibility')
@@ -44,7 +61,7 @@ export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [analyticsOpen, setAnalyticsOpen] = useState(false)
-  const [pulseCards, setPulseCards] = useState<PulseCard[] | null>(null)
+  const [bundle, setBundle] = useState<DashboardLoadResult | null>(null)
 
   useEffect(() => {
     async function loadData() {
@@ -70,19 +87,19 @@ export default function DashboardPage() {
     loadData()
   }, [client?.id, clientLoading])
 
-  // Fetch the three pulse cards in parallel with the rest of the dashboard.
-  // Lives outside loadData so the rest of the page renders even if pulse
-  // is slow.
+  // Single consolidated fetch — replaces 8+ independent component-level
+  // fetches with one batched server-side load. This is the difference
+  // between a dashboard that feels instant and one that feels sluggish.
   useEffect(() => {
     if (!client?.id) return
     let cancelled = false
-    fetch(`/api/dashboard/pulse?clientId=${encodeURIComponent(client.id)}`)
+    fetch(`/api/dashboard/load?clientId=${encodeURIComponent(client.id)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (cancelled || !data) return
-        setPulseCards([data.customers, data.reputation, data.reach])
+        setBundle(data as DashboardLoadResult)
       })
-      .catch(() => { /* silent — cards stay in loading state */ })
+      .catch(() => { /* silent — components fall back to their own fetches */ })
     return () => { cancelled = true }
   }, [client?.id])
 
@@ -145,13 +162,15 @@ export default function DashboardPage() {
     return n.toLocaleString()
   }
 
-  // Pulse cards come from /api/dashboard/pulse (loaded in effect above).
-  // While loading, render three skeleton cards so the layout doesn't shift.
-  const pulseCardsToRender: PulseCard[] = pulseCards ?? [
-    { label: 'Your customers', state: 'loading', subtitle: '', href: '/dashboard/local-seo' },
-    { label: 'Your reputation', state: 'loading', subtitle: '', href: '/dashboard/social' },
-    { label: 'Your reach', state: 'loading', subtitle: '', href: '/dashboard/social' },
-  ]
+  // Pulse cards come from the bundle. While loading, render three skeleton
+  // cards so the layout doesn't shift.
+  const pulseCardsToRender: PulseCard[] = bundle
+    ? [bundle.pulse.customers, bundle.pulse.reputation, bundle.pulse.reach]
+    : [
+        { label: 'Your customers', state: 'loading', subtitle: '', href: '/dashboard/local-seo' },
+        { label: 'Your reputation', state: 'loading', subtitle: '', href: '/dashboard/social' },
+        { label: 'Your reach', state: 'loading', subtitle: '', href: '/dashboard/social' },
+      ]
 
   return (
     <div
@@ -163,12 +182,12 @@ export default function DashboardPage() {
 
       {/* 1. Today's brief — AI-generated morning briefing */}
       <div className="db-fade db-d1">
-        <TodaysBrief clientId={client.id} />
+        <TodaysBrief clientId={client.id} initialBrief={bundle ? bundle.brief : undefined} />
       </div>
 
       {/* 2. Quick actions — start a common task */}
       <div className="db-fade db-d2">
-        <QuickActions clientId={client.id} />
+        <QuickActions clientId={client.id} initialCounts={bundle?.counts} />
       </div>
 
       {/* 3. Decisions to make — owner-approval queue (was "Waiting on you") */}
@@ -183,7 +202,7 @@ export default function DashboardPage() {
 
       {/* 4b. Your reviews — last 5 across all sources */}
       <div className="db-fade db-d4">
-        <YourReviews clientId={client.id} />
+        <YourReviews clientId={client.id} initialReviews={bundle?.reviews} />
       </div>
 
       {/* 5. What's working — AI insights, only renders if there's something */}
@@ -202,7 +221,7 @@ export default function DashboardPage() {
 
       {/* 6. Your marketing this week — proof of momentum */}
       <div className="db-fade db-d6">
-        <YourMarketingWeek clientId={client.id} />
+        <YourMarketingWeek clientId={client.id} initialItems={bundle ? bundle.weekly.items as { label: string; detail?: string; icon: 'check' | 'message' | 'image' | 'star' | 'megaphone' | 'sparkle' }[] : undefined} />
       </div>
 
       {/* 7. Detailed analytics — collapsed by default */}

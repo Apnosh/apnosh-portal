@@ -19,9 +19,18 @@ interface BriefData {
   cached: boolean
 }
 
-export default function TodaysBrief({ clientId }: { clientId: string }) {
-  const [brief, setBrief] = useState<BriefData | null>(null)
-  const [loading, setLoading] = useState(true)
+export default function TodaysBrief({
+  clientId,
+  initialBrief,
+}: {
+  clientId: string
+  /** When provided, skips the initial fetch (parent already loaded the brief in a batch). */
+  initialBrief?: BriefData | null
+}) {
+  const [brief, setBrief] = useState<BriefData | null>(initialBrief ?? null)
+  // If parent provided initialBrief (even null = no cache), we don't show a loading state — we
+  // either render the cached brief or kick off a background generation silently.
+  const [loading, setLoading] = useState(initialBrief === undefined)
   const [refreshing, setRefreshing] = useState(false)
 
   async function load(refresh = false) {
@@ -43,6 +52,15 @@ export default function TodaysBrief({ clientId }: { clientId: string }) {
   }
 
   useEffect(() => {
+    if (initialBrief !== undefined) {
+      // Parent passed a value (cached or null). If null, kick off a background generation
+      // so the next page load has a cache hit, but don't show a loading skeleton to the user.
+      if (initialBrief === null) {
+        load(false).catch(() => { /* silent */ })
+      }
+      return
+    }
+    // No parent batch — do the legacy fetch path
     load(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId])
@@ -60,7 +78,23 @@ export default function TodaysBrief({ clientId }: { clientId: string }) {
     )
   }
 
-  if (!brief) return null
+  // No cached brief and parent batch didn't pass one — render an unobtrusive
+  // "Composing your brief" placeholder while the background generation runs.
+  if (!brief) {
+    return (
+      <div className="rounded-xl p-5 mb-4 bg-white border" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+        <div className="flex items-center gap-2 mb-2">
+          <Sparkles className="w-4 h-4 text-amber-600" />
+          <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'var(--db-ink-3, #888)' }}>
+            Today&apos;s brief
+          </span>
+        </div>
+        <p className="text-[13px] italic" style={{ color: 'var(--db-ink-3, #888)' }}>
+          Composing your brief — this only happens once a day, ~5 seconds.
+        </p>
+      </div>
+    )
+  }
 
   const generated = new Date(brief.generatedAt)
   const isToday = generated.toDateString() === new Date().toDateString()

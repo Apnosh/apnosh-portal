@@ -26,10 +26,17 @@ const ICONS: Record<WeeklyActivityItem['icon'], React.ReactNode> = {
   sparkle: <Sparkles className="w-3.5 h-3.5" />,
 }
 
-export default function YourMarketingWeek({ clientId }: { clientId: string }) {
-  const [items, setItems] = useState<WeeklyActivityItem[] | null>(null)
+export default function YourMarketingWeek({
+  clientId,
+  initialItems,
+}: {
+  clientId: string
+  initialItems?: WeeklyActivityItem[]
+}) {
+  const [items, setItems] = useState<WeeklyActivityItem[] | null>(initialItems ?? null)
 
   useEffect(() => {
+    if (initialItems !== undefined) return // parent batch already loaded
     async function load() {
       try {
         const res = await fetch(`/api/dashboard/weekly?clientId=${encodeURIComponent(clientId)}`)
@@ -42,7 +49,7 @@ export default function YourMarketingWeek({ clientId }: { clientId: string }) {
       }
     }
     load()
-  }, [clientId])
+  }, [clientId, initialItems])
 
   if (items === null) {
     return (

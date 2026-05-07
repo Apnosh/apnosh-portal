@@ -43,10 +43,17 @@ function timeAgo(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export default function YourReviews({ clientId }: { clientId: string }) {
-  const [reviews, setReviews] = useState<Review[] | null>(null)
+export default function YourReviews({
+  clientId,
+  initialReviews,
+}: {
+  clientId: string
+  initialReviews?: Review[]
+}) {
+  const [reviews, setReviews] = useState<Review[] | null>(initialReviews ?? null)
 
   useEffect(() => {
+    if (initialReviews !== undefined) return // parent batch already loaded
     async function load() {
       const supabase = createClient()
       const { data } = await supabase
@@ -58,7 +65,7 @@ export default function YourReviews({ clientId }: { clientId: string }) {
       setReviews((data ?? []) as Review[])
     }
     load().catch(() => setReviews([]))
-  }, [clientId])
+  }, [clientId, initialReviews])
 
   if (reviews === null) {
     return (
