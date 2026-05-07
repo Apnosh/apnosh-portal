@@ -21,14 +21,42 @@ const ClientContext = createContext<ClientContextValue>({
   refresh: async () => {},
 })
 
+// Cache key + TTL — keeps client data across navigations within the same
+// browser session so every page click doesn't re-fetch.
+const CACHE_KEY = 'apnosh:client-context:v1'
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes — refresh in background after this
+
+interface CachedShape {
+  client: Client | null
+  cachedAt: number
+}
+
+function readCache(): CachedShape | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as CachedShape
+  } catch { return null }
+}
+
+function writeCache(client: Client | null): void {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ client, cachedAt: Date.now() }))
+  } catch { /* quota exceeded etc — ignore */ }
+}
+
 export function ClientProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
-  const [client, setClient] = useState<Client | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Start with cached value if we have it — page renders instantly with
+  // last-known client, then refreshes in background if stale.
+  const [client, setClient] = useState<Client | null>(() => readCache()?.client ?? null)
+  const [loading, setLoading] = useState(() => readCache() === null)
 
   const refresh = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
+    if (!user) { setLoading(false); writeCache(null); return }
 
     // Resolve via dashboard (businesses.client_id) first
     const { data: business } = await supabase
@@ -49,7 +77,7 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
       if (clientUser?.client_id) clientId = clientUser.client_id
     }
 
-    if (!clientId) { setLoading(false); return }
+    if (!clientId) { setLoading(false); writeCache(null); return }
 
     const { data: clientRow } = await supabase
       .from('clients')
@@ -57,11 +85,21 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
       .eq('id', clientId)
       .maybeSingle()
 
-    if (clientRow) setClient(clientRow as Client)
+    if (clientRow) {
+      setClient(clientRow as Client)
+      writeCache(clientRow as Client)
+    }
     setLoading(false)
   }, [supabase])
 
   useEffect(() => {
+    const cached = readCache()
+    const fresh = cached && Date.now() - cached.cachedAt < CACHE_TTL_MS
+    if (fresh) {
+      // We already painted with cached value; nothing to do until cache expires.
+      return
+    }
+    // No cache or stale — fetch (in background if we have a stale value to show)
     refresh()
   }, [refresh])
 
