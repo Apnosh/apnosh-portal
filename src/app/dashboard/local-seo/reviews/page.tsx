@@ -9,6 +9,8 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from '@/lib/realtime'
 import { useClient } from '@/lib/client-context'
+import { getReviewsPerformance, type ReviewsPerformance } from '@/lib/dashboard/get-channel-performance'
+import ChannelHero from '@/components/dashboard/channel-hero'
 import type { Review, ReviewSource } from '@/types/database'
 
 const SOURCE_LABEL: Record<ReviewSource, string> = {
@@ -52,6 +54,7 @@ export default function ReviewsPage() {
   const { client, loading: clientLoading } = useClient()
 
   const [reviews, setReviews] = useState<Review[]>([])
+  const [perf, setPerf] = useState<ReviewsPerformance | null>(null)
   const [loading, setLoading] = useState(true)
 
   const [sourceFilter, setSourceFilter] = useState<ReviewSource | 'all'>('all')
@@ -61,13 +64,17 @@ export default function ReviewsPage() {
   const load = useCallback(async () => {
     if (!client?.id) { setLoading(false); return }
 
-    const { data } = await supabase
-      .from('reviews')
-      .select('*')
-      .eq('client_id', client.id)
-      .order('posted_at', { ascending: false })
+    const [reviewsRes, perfRes] = await Promise.all([
+      supabase
+        .from('reviews')
+        .select('*')
+        .eq('client_id', client.id)
+        .order('posted_at', { ascending: false }),
+      getReviewsPerformance(client.id).catch(() => null),
+    ])
 
-    setReviews((data ?? []) as Review[])
+    setReviews((reviewsRes.data ?? []) as Review[])
+    setPerf(perfRes)
     setLoading(false)
   }, [client?.id, supabase])
 
@@ -131,6 +138,11 @@ export default function ReviewsPage() {
           <p className="text-ink-3 text-sm mt-0.5">Every review across every platform, with our responses.</p>
         </div>
       </div>
+
+      {/* Performance hero — average star, new-review count, response rate */}
+      {perf && (
+        <ChannelHero title="Reviews performance · last 30 days" summary={perf.summary} metrics={perf.metrics} />
+      )}
 
       {!hasData ? (
         <div className="bg-white rounded-xl border border-ink-6 p-12 text-center">

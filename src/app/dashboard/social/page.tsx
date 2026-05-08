@@ -5,8 +5,10 @@ import type { DashboardData } from '@/types/dashboard'
 import { getDashboardData } from '@/lib/dashboard/get-dashboard-data'
 import { getSocialBreakdown, type SocialDailyRow } from '@/lib/dashboard/get-social-breakdown'
 import { getSocialPosts, type SocialPost } from '@/lib/dashboard/get-social-posts'
+import { getPostsPerformance, type PostsPerformance } from '@/lib/dashboard/get-channel-performance'
 import { useClient } from '@/lib/client-context'
 import StatusBanner from '@/components/dashboard/status-banner'
+import ChannelHero from '@/components/dashboard/channel-hero'
 import SocialOverview from '@/components/dashboard/social-overview'
 import {
   AtAGlance,
@@ -30,6 +32,7 @@ export default function SocialOverviewPage() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [breakdown, setBreakdown] = useState<{ rows: SocialDailyRow[]; platforms: string[] } | null>(null)
   const [posts, setPosts] = useState<SocialPost[]>([])
+  const [perf, setPerf] = useState<PostsPerformance | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Tab state -- read from URL on first mount, fall back to localStorage, then
@@ -69,15 +72,17 @@ export default function SocialOverviewPage() {
 
       if (client?.id) {
         try {
-          const [data, bd, p] = await Promise.all([
+          const [data, bd, p, pf] = await Promise.all([
             getDashboardData(client.id),
             getSocialBreakdown(client.id),
             getSocialPosts(client.id, 90),
+            getPostsPerformance(client.id),
           ])
           if (data) {
             setDashboardData(data)
             setBreakdown({ rows: bd.rows, platforms: bd.platforms })
             setPosts(p)
+            setPerf(pf)
             setLoading(false)
             return
           }
@@ -89,6 +94,7 @@ export default function SocialOverviewPage() {
       setDashboardData(null)
       setBreakdown(null)
       setPosts([])
+      setPerf(null)
       setLoading(false)
     }
 
@@ -191,6 +197,13 @@ export default function SocialOverviewPage() {
           up={view.up}
         />
       </div>
+
+      {/* Performance hero — three glanceable metrics with sparklines */}
+      {perf && (
+        <div className="db-fade db-d1 mt-2">
+          <ChannelHero title="Posts performance · last 7 days" summary={perf.summary} metrics={perf.metrics} />
+        </div>
+      )}
 
       {/* Tab switcher */}
       <div className="db-fade db-d2 mt-4 mb-6 flex items-center gap-2 border-b border-ink-6 overflow-x-auto">

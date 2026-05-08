@@ -93,13 +93,18 @@ const navSections: NavSection[] = [
   {
     label: 'Publish',
     items: [
+      // Each channel routes to its analytics-overview page by default;
+      // operational sub-pages (calendar, drafts, etc.) are children.
+      // Default click answers "how is this channel doing?" first; the
+      // owner can then drill into the operational sub-pages.
       {
         label: 'Posts',
-        href: '/dashboard/social/calendar',
+        href: '/dashboard/social',  // performance overview, not calendar
         icon: Sparkles,
-        exact: false,
+        exact: true,
         serviceArea: 'social',
         children: [
+          { label: 'Performance', href: '/dashboard/social', exact: true },
           { label: 'Calendar', href: '/dashboard/social/calendar' },
           { label: 'Action needed', href: '/dashboard/social/action-needed' },
           { label: 'Request content', href: '/dashboard/social/requests/new' },
@@ -115,26 +120,26 @@ const navSections: NavSection[] = [
       },
       {
         label: 'Email & SMS',
-        href: '/dashboard/email-sms',
+        href: '/dashboard/email-sms',  // overview = performance first
         icon: Mail,
-        exact: false,
+        exact: true,
         serviceArea: 'email_sms',
         children: [
-          { label: 'Overview', href: '/dashboard/email-sms', exact: true },
+          { label: 'Performance', href: '/dashboard/email-sms', exact: true },
           { label: 'Campaigns', href: '/dashboard/email-sms/campaigns' },
           { label: 'List & Audience', href: '/dashboard/email-sms/list' },
         ],
       },
       {
         label: 'Website',
-        href: '/dashboard/website/manage',
+        href: '/dashboard/website/traffic',  // analytics-first instead of /manage
         icon: Globe,
         exact: false,
         serviceArea: 'website',
         children: [
-          { label: 'Manage site', href: '/dashboard/website/manage' },
           { label: 'Traffic', href: '/dashboard/website/traffic' },
           { label: 'Site Health', href: '/dashboard/website/health' },
+          { label: 'Manage site', href: '/dashboard/website/manage' },
           { label: 'Request a change', href: '/dashboard/website/requests/new' },
           { label: 'Change Requests', href: '/dashboard/website/requests' },
         ],
