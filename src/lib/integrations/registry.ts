@@ -10,12 +10,14 @@
  */
 import type { Connector, ConnectorChannel } from './types'
 import { metaFacebookConnector, metaInstagramConnector } from './meta-connector'
+import { gbpConnector } from './gbp-connector'
 
 export const connectorRegistry: Partial<Record<ConnectorChannel, Connector>> = {
   instagram: metaInstagramConnector,
   facebook: metaFacebookConnector,
-  // tiktok, linkedin, google_business_profile, google_analytics,
-  // google_search_console -- migrate one at a time per Q1 plan wk 3+.
+  google_business_profile: gbpConnector,
+  // tiktok, linkedin, google_analytics, google_search_console
+  // migrate one at a time per Q1 plan wk 3+.
 }
 
 export function getConnector(channel: string): Connector | undefined {
