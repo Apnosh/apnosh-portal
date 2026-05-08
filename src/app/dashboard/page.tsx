@@ -26,6 +26,7 @@ import InsightCard from '@/components/dashboard/insight-card'
 import WaitingOnYou from '@/components/dashboard/waiting-on-you'
 import SetupChecklist from '@/components/dashboard/setup-checklist'
 import TodaysBrief from '@/components/dashboard/todays-brief'
+import TonightStrip from '@/components/dashboard/tonight-strip'
 import QuickActions from '@/components/dashboard/quick-actions'
 import YourMarketingWeek from '@/components/dashboard/your-marketing-week'
 import YourReviews from '@/components/dashboard/your-reviews'
@@ -148,6 +149,13 @@ export default function DashboardPage() {
       {/* First-run setup checklist — self-hides once milestones are met */}
       <SetupChecklist />
 
+      {/* TONIGHT AT A GLANCE — answers "what kind of night am I gonna have?"
+          Spans the full width above the two-column grid. Hides itself when
+          there's nothing useful to surface (no location, no metrics). */}
+      <div className="db-fade db-d1">
+        <TonightStrip clientId={client.id} />
+      </div>
+
       {/* Two-column desktop layout above 1024px; single column below.
           LEFT (60%): the operational column — what to read, decide, act on.
           RIGHT (40%): the proof column — what shipped, what's next, where to drill. */}
@@ -156,7 +164,7 @@ export default function DashboardPage() {
         {/* ═════════════ LEFT COLUMN ═════════════ */}
         <div>
           {/* 1. Today's brief — AI-generated morning briefing */}
-          <div className="db-fade db-d1">
+          <div className="db-fade db-d2">
             <TodaysBrief clientId={client.id} initialBrief={bundle ? bundle.brief : undefined} />
           </div>
 
