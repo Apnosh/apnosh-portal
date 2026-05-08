@@ -265,37 +265,48 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { data: user, loading: userLoading } = useUser()
   const { client, enrolledServices, loading: clientLoading } = useClient()
-  const [approvalCount, setApprovalCount] = useState(0)
 
-  // Fetch pending approval count
+  // Sidebar badge counts. Reads from the consolidated /api/dashboard/load
+  // endpoint so we get inbox, reviews (and later messages) in one shot
+  // and use the same auth path that handles all client linkage types
+  // (admin / profile / business owner / client_users magic-link portal).
+  const [navCounts, setNavCounts] = useState<{ inbox: number; reviews: number; approvals: number }>({
+    inbox: 0,
+    reviews: 0,
+    approvals: 0,
+  })
+
   useEffect(() => {
-    async function fetchApprovalCount() {
-      const supabase = createClient()
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      if (!authUser) return
-
-      const { data: biz } = await supabase
-        .from('businesses')
-        .select('id')
-        .eq('owner_id', authUser.id)
-        .single()
-
-      if (!biz) return
-
-      const { count } = await supabase
-        .from('deliverables')
-        .select('id', { count: 'exact', head: true })
-        .eq('business_id', biz.id)
-        .eq('status', 'client_review')
-
-      setApprovalCount(count || 0)
+    if (!client?.id) return
+    let cancelled = false
+    async function fetchCounts() {
+      try {
+        const r = await fetch(`/api/dashboard/load?clientId=${encodeURIComponent(client!.id)}`)
+        if (!r.ok) return
+        const json = await r.json() as {
+          counts?: { unansweredReviews?: number; pendingApprovals?: number }
+          agenda?: Array<{ urgency: 'high' | 'medium' | 'low' }>
+        }
+        if (cancelled) return
+        const inbox = (json.agenda ?? []).filter(a => a.urgency === 'high' || a.urgency === 'medium').length
+        setNavCounts({
+          inbox,
+          reviews: json.counts?.unansweredReviews ?? 0,
+          approvals: json.counts?.pendingApprovals ?? 0,
+        })
+      } catch { /* silent */ }
     }
-    fetchApprovalCount()
+    fetchCounts()
+    const interval = setInterval(fetchCounts, 60_000)  // 60s — was 30s, eases server load
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [client?.id])
 
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchApprovalCount, 30_000)
-    return () => clearInterval(interval)
-  }, [])
+  // Map nav-item label/href to the right count.
+  function badgeFor(item: { label: string; href: string }): number {
+    if (item.label === 'Inbox' || item.href === '/dashboard/approvals') return navCounts.inbox
+    if (item.label === 'Reviews') return navCounts.reviews
+    return 0
+  }
 
   // Display name preference: explicit user name -> restaurant name -> email
   // local-part -> 'User'. Avoids the generic "User · Client" label when the
@@ -348,7 +359,8 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   const NavLink = ({ item }: { item: NavItem | { label: string; href: string; icon: typeof LayoutDashboard; exact?: boolean; serviceArea?: ServiceArea; children?: NavChildItem[] } }) => {
-    const showBadge = item.label === 'Approvals' && approvalCount > 0
+    const badgeCount = badgeFor(item)
+    const showBadge = badgeCount > 0
     const hasChildren = 'children' in item && item.children && item.children.length > 0
     const isExpanded = hasChildren && expandedItems.has(item.href)
     const active = isActive(item.href, item.exact)
@@ -367,6 +379,11 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             >
               <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
               <span className="flex-1">{item.label}</span>
+              {showBadge && (
+                <span className="min-w-[20px] h-5 flex items-center justify-center rounded-full bg-brand text-white text-[11px] font-bold px-1.5">
+                  {badgeCount > 99 ? '99+' : badgeCount}
+                </span>
+              )}
             </Link>
             <button
               onClick={e => { e.preventDefault(); toggleExpanded(item.href) }}
@@ -415,7 +432,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         <span className="flex-1">{item.label}</span>
         {showBadge && (
           <span className="min-w-[20px] h-5 flex items-center justify-center rounded-full bg-brand text-white text-[11px] font-bold px-1.5">
-            {approvalCount}
+            {badgeCount > 99 ? '99+' : badgeCount}
           </span>
         )}
       </Link>
