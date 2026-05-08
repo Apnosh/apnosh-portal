@@ -1,15 +1,19 @@
 /**
- * "Tonight at a glance" — the top-of-dashboard strip that answers
- * the busiest felt-need a restaurant owner has when they open the
- * app: "what kind of night am I gonna have?"
+ * "Today" strip — top-of-dashboard quick-glance for the marketing
+ * operator. Strictly marketing-focused: what's publishing today, what
+ * needs immediate attention, and the one-line trend signal for the week.
  *
- * Combines (in priority order):
- *   1. Weather for tonight (Open-Meteo, no API key required)
- *   2. A trend signal pulled from this week's pulse data
- *   3. A directional outlook ("walk-in friendly", "rain — quieter")
+ * Three cells, left to right:
+ *   1. Going out today — count + label of scheduled marketing items
+ *      publishing in the next 24 hours
+ *   2. Needs attention — single most urgent unread/unanswered/unapproved
+ *      item; tap to act
+ *   3. Trend signal — reach or customer-actions delta for the week
  *
- * No paid integrations needed for v1. Once we have OpenTable/Tock/Resy
- * wired in, we'll add reservation count to the response.
+ * No weather, no walk-in predictions, no operations data. Apnosh is the
+ * marketing co-pilot, not a restaurant business OS.
+ *
+ * Edge-cached for 5 minutes since "scheduled today" can shift quickly.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,97 +21,46 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPulseData } from '@/lib/dashboard/get-pulse-data'
 
-export const revalidate = 1800 // 30 min cache on Vercel's edge
+export const revalidate = 300
 
-type WeatherIcon = 'sun' | 'cloud' | 'rain' | 'snow' | 'storm' | 'fog' | 'partly-cloudy'
-
-interface TonightData {
-  weather: {
-    tempF: number
-    condition: string  // "Clear", "Light rain", etc.
-    icon: WeatherIcon
-    rainChance: number // 0-100
+interface TodayData {
+  scheduled: {
+    count: number
+    nextLabel: string  // e.g. "Weekend brunch reel · 5pm"
+    nextAt: string | null  // ISO time of next item
+  }
+  attention: {
+    label: string
+    href: string
+    urgency: 'high' | 'medium' | 'low'
   } | null
-  outlook: string // one-sentence directional read
   signal: {
-    label: string  // "Reach this week"
-    value: string  // "+22%"
+    label: string
+    value: string
     up: boolean | null
   } | null
-  /** ISO timestamp; UI uses this for the "Updated 6:30pm" label */
   generatedAt: string
 }
 
-function decodeWeatherCode(code: number): { condition: string; icon: WeatherIcon } {
-  // Open-Meteo WMO weather codes — collapsed to the 7 we care about
-  if (code === 0) return { condition: 'Clear', icon: 'sun' }
-  if (code === 1 || code === 2) return { condition: 'Partly cloudy', icon: 'partly-cloudy' }
-  if (code === 3) return { condition: 'Overcast', icon: 'cloud' }
-  if (code === 45 || code === 48) return { condition: 'Foggy', icon: 'fog' }
-  if (code >= 51 && code <= 67) return { condition: 'Rain', icon: 'rain' }
-  if (code >= 71 && code <= 86) return { condition: 'Snow', icon: 'snow' }
-  if (code >= 80 && code <= 82) return { condition: 'Showers', icon: 'rain' }
-  if (code >= 95 && code <= 99) return { condition: 'Thunderstorms', icon: 'storm' }
-  return { condition: 'Cloudy', icon: 'cloud' }
+function timeLabel(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const sameDay = d.toDateString() === now.toDateString()
+  if (sameDay) {
+    const hr = d.getHours()
+    const min = d.getMinutes()
+    const m = hr % 12 === 0 ? 12 : hr % 12
+    const ampm = hr >= 12 ? 'pm' : 'am'
+    return `${m}${min ? ':' + String(min).padStart(2, '0') : ''}${ampm}`
+  }
+  // Next-day or later — show day-of-week
+  return d.toLocaleDateString('en-US', { weekday: 'short', hour: 'numeric' })
 }
 
-async function geocode(locationText: string): Promise<{ lat: number; lon: number } | null> {
-  try {
-    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locationText)}&count=1&language=en&format=json`
-    const res = await fetch(url, { next: { revalidate: 86400 } }) // cache 24h per location
-    if (!res.ok) return null
-    const json = await res.json() as { results?: Array<{ latitude: number; longitude: number }> }
-    if (!json.results?.[0]) return null
-    return { lat: json.results[0].latitude, lon: json.results[0].longitude }
-  } catch {
-    return null
-  }
-}
-
-async function fetchWeather(lat: number, lon: number): Promise<TonightData['weather']> {
-  try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&hourly=precipitation_probability&temperature_unit=fahrenheit&forecast_hours=12&timezone=auto`
-    const res = await fetch(url, { next: { revalidate: 1800 } })
-    if (!res.ok) return null
-    const json = await res.json() as {
-      current?: { temperature_2m: number; weather_code: number }
-      hourly?: { precipitation_probability: number[] }
-    }
-    if (!json.current) return null
-
-    // Peak rain chance over the next 12 hours = "is tonight going to be wet"
-    const peakRain = Math.max(0, ...(json.hourly?.precipitation_probability ?? [0]))
-
-    const { condition, icon } = decodeWeatherCode(json.current.weather_code)
-    return {
-      tempF: Math.round(json.current.temperature_2m),
-      condition,
-      icon,
-      rainChance: peakRain,
-    }
-  } catch {
-    return null
-  }
-}
-
-function composeOutlook(weather: TonightData['weather'], pulseDelta: number | null): string {
-  // Heuristic one-liner. Order: weather risk first, then trend, then default.
-  if (weather && weather.rainChance >= 60) {
-    return `Heavy rain expected — restaurants typically see 15-20% lower walk-ins. Push delivery channels.`
-  }
-  if (weather && weather.rainChance >= 30) {
-    return `Some rain forecast — light dip in walk-ins likely. Solid night for cozy posts.`
-  }
-  if (weather && weather.condition === 'Clear' && weather.tempF >= 70 && weather.tempF <= 85) {
-    return `Clear and ${weather.tempF}° — patio weather. Walk-ins should be strong.`
-  }
-  if (pulseDelta !== null && pulseDelta >= 15) {
-    return `Reach is up ${pulseDelta}% this week — momentum on your side tonight.`
-  }
-  if (pulseDelta !== null && pulseDelta <= -15) {
-    return `Reach is down ${Math.abs(pulseDelta)}% this week — consider boosting tonight's post.`
-  }
-  return `Standard night ahead. Nothing unusual on the radar.`
+function snippet(text: string | null, max = 32): string {
+  if (!text) return 'Scheduled post'
+  const t = text.trim().replace(/\s+/g, ' ')
+  return t.length <= max ? t : t.slice(0, max - 1).trim() + '…'
 }
 
 export async function GET(req: NextRequest) {
@@ -121,37 +74,79 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = createAdminClient()
-  const { data: client } = await admin
-    .from('clients')
-    .select('location')
-    .eq('id', clientId)
-    .maybeSingle()
+  const now = new Date()
+  const in24h = new Date(now.getTime() + 24 * 3600 * 1000)
 
-  // Parallel: weather + pulse signal
-  const [weather, pulse] = await Promise.all([
-    (async () => {
-      const locationText = client?.location || 'Seattle'
-      const coords = await geocode(locationText)
-      if (!coords) return null
-      return fetchWeather(coords.lat, coords.lon)
-    })(),
+  // Parallel: scheduled posts (next 24h) · unanswered review · pending approvals · pulse
+  const [scheduledRow, unansweredRow, approvalsRow, pulse] = await Promise.all([
+    admin
+      .from('scheduled_posts')
+      .select('id, text, scheduled_for, platforms')
+      .eq('client_id', clientId)
+      .eq('status', 'scheduled')
+      .gte('scheduled_for', now.toISOString())
+      .lte('scheduled_for', in24h.toISOString())
+      .order('scheduled_for', { ascending: true })
+      .limit(5),
+    admin
+      .from('reviews')
+      .select('id, rating, posted_at')
+      .eq('client_id', clientId)
+      .is('response_text', null)
+      .order('rating', { ascending: true })  // worst first
+      .order('posted_at', { ascending: false })
+      .limit(1),
+    admin
+      .from('deliverables')
+      .select('id', { count: 'exact', head: true })
+      .eq('business_id', clientId)
+      .eq('status', 'client_review'),
     getPulseData(clientId).catch(() => null),
   ])
 
-  // Pull a single trend signal from pulse data (prefer reach, fall back to customers)
-  let signal: TonightData['signal'] = null
-  let pulseDelta: number | null = null
+  const scheduled = scheduledRow.data ?? []
+  const next = scheduled[0]
+  const scheduledData: TodayData['scheduled'] = next
+    ? {
+        count: scheduled.length,
+        nextLabel: `${snippet(next.text)} · ${timeLabel(next.scheduled_for)}`,
+        nextAt: next.scheduled_for,
+      }
+    : { count: 0, nextLabel: 'Nothing queued for today', nextAt: null }
+
+  // Pick the single most-urgent attention item
+  let attention: TodayData['attention'] = null
+  const lowReview = unansweredRow.data?.[0]
+  const approvalCount = approvalsRow.count ?? 0
+  if (lowReview && lowReview.rating <= 3) {
+    attention = {
+      label: `${lowReview.rating}★ review needs reply`,
+      href: '/dashboard/local-seo/reviews',
+      urgency: 'high',
+    }
+  } else if (approvalCount > 0) {
+    attention = {
+      label: `${approvalCount} item${approvalCount === 1 ? '' : 's'} to approve`,
+      href: '/dashboard/approvals',
+      urgency: approvalCount >= 3 ? 'high' : 'medium',
+    }
+  } else if (lowReview) {
+    attention = {
+      label: `New ${lowReview.rating}★ review — reply ready`,
+      href: '/dashboard/local-seo/reviews',
+      urgency: 'medium',
+    }
+  }
+
+  // Trend signal — prefer reach, fall back to customers
+  let signal: TodayData['signal'] = null
   if (pulse?.reach.state === 'live' && pulse.reach.delta) {
-    const pct = parseInt(pulse.reach.delta.replace(/[^\d-]/g, ''))
-    if (!isNaN(pct)) pulseDelta = pct
     signal = {
       label: 'Reach this week',
       value: pulse.reach.delta,
       up: pulse.reach.up ?? null,
     }
   } else if (pulse?.customers.state === 'live' && pulse.customers.delta) {
-    const pct = parseInt(pulse.customers.delta.replace(/[^\d-]/g, ''))
-    if (!isNaN(pct)) pulseDelta = pct
     signal = {
       label: 'Customer actions this week',
       value: pulse.customers.delta,
@@ -159,11 +154,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const outlook = composeOutlook(weather, pulseDelta)
-
-  const result: TonightData = {
-    weather,
-    outlook,
+  const result: TodayData = {
+    scheduled: scheduledData,
+    attention,
     signal,
     generatedAt: new Date().toISOString(),
   }

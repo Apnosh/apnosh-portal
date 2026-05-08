@@ -1,30 +1,38 @@
 'use client'
 
 /**
- * Tonight at a glance — top-of-dashboard strip.
- *
- * Answers the busiest felt-need a restaurant owner has when they open
- * the app: "what kind of night am I gonna have?"
+ * "Today" strip — top-of-dashboard quick-glance for the marketing
+ * operator. Strictly marketing-focused, no operations data.
  *
  * Three cells, left to right:
- *   1. Weather + temp + tonight's rain chance
- *   2. One-sentence outlook (AI-ish, heuristic-driven)
- *   3. Trend signal (reach or customer-actions delta this week)
+ *   1. Going out today  — what's queued to publish in the next 24h
+ *   2. Needs attention  — single most urgent unread/unanswered item
+ *   3. Trend signal     — reach or customer-actions delta this week
  *
- * Hides itself if /api/dashboard/tonight returns nothing useful.
+ * Hides itself when there's nothing in any of the three cells.
  */
 
 import { useEffect, useState } from 'react'
-import { Sun, Cloud, CloudRain, CloudSnow, CloudFog, CloudLightning, CloudSun, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react'
+import Link from 'next/link'
+import {
+  CalendarClock,
+  AlertTriangle,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
+} from 'lucide-react'
 
-interface TonightData {
-  weather: {
-    tempF: number
-    condition: string
-    icon: 'sun' | 'cloud' | 'rain' | 'snow' | 'storm' | 'fog' | 'partly-cloudy'
-    rainChance: number
+interface TodayData {
+  scheduled: {
+    count: number
+    nextLabel: string
+    nextAt: string | null
+  }
+  attention: {
+    label: string
+    href: string
+    urgency: 'high' | 'medium' | 'low'
   } | null
-  outlook: string
   signal: {
     label: string
     value: string
@@ -33,18 +41,8 @@ interface TonightData {
   generatedAt: string
 }
 
-const ICON_MAP: Record<NonNullable<TonightData['weather']>['icon'], React.ReactNode> = {
-  'sun': <Sun className="w-5 h-5 text-amber-500" />,
-  'partly-cloudy': <CloudSun className="w-5 h-5 text-amber-400" />,
-  'cloud': <Cloud className="w-5 h-5 text-slate-400" />,
-  'rain': <CloudRain className="w-5 h-5 text-sky-500" />,
-  'snow': <CloudSnow className="w-5 h-5 text-sky-300" />,
-  'storm': <CloudLightning className="w-5 h-5 text-violet-500" />,
-  'fog': <CloudFog className="w-5 h-5 text-slate-400" />,
-}
-
 export default function TonightStrip({ clientId }: { clientId: string }) {
-  const [data, setData] = useState<TonightData | null>(null)
+  const [data, setData] = useState<TodayData | null>(null)
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
@@ -52,7 +50,7 @@ export default function TonightStrip({ clientId }: { clientId: string }) {
     fetch(`/api/dashboard/tonight?clientId=${encodeURIComponent(clientId)}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (!cancelled && d) setData(d as TonightData)
+        if (!cancelled && d) setData(d as TodayData)
         if (!cancelled) setLoaded(true)
       })
       .catch(() => { if (!cancelled) setLoaded(true) })
@@ -68,62 +66,112 @@ export default function TonightStrip({ clientId }: { clientId: string }) {
     )
   }
 
-  // No useful data — hide entirely
-  if (!data || (!data.weather && !data.signal)) return null
+  // Hide if nothing useful
+  if (!data) return null
+  const hasScheduled = data.scheduled.count > 0
+  const hasAttention = data.attention !== null
+  const hasSignal = data.signal !== null
+  if (!hasScheduled && !hasAttention && !hasSignal) return null
 
   return (
     <div
-      className="rounded-xl p-4 mb-4 border bg-gradient-to-br from-white via-white to-sky-50/40"
+      className="rounded-xl p-4 mb-4 border bg-white"
       style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
     >
-      <div className="flex items-center gap-1.5 mb-2">
+      <div className="flex items-center gap-1.5 mb-2.5">
         <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'var(--db-ink-3, #888)' }}>
-          Tonight at a glance
+          Today
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr_auto] gap-x-4 gap-y-2 items-center">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2 items-start">
 
-        {/* Weather */}
-        {data.weather ? (
-          <div className="flex items-center gap-2.5">
-            <div className="shrink-0">{ICON_MAP[data.weather.icon]}</div>
-            <div>
-              <div className="text-[16px] font-bold leading-tight" style={{ color: 'var(--db-black, #111)' }}>
-                {data.weather.tempF}°
-              </div>
-              <div className="text-[11px]" style={{ color: 'var(--db-ink-3, #888)' }}>
-                {data.weather.condition}
-                {data.weather.rainChance >= 30 && (
-                  <> · {data.weather.rainChance}% rain</>
-                )}
-              </div>
+        {/* Going out today */}
+        <div className="flex items-start gap-2.5 min-w-0">
+          <CalendarClock className="w-4 h-4 mt-0.5 shrink-0" style={{ color: 'var(--db-ink-3, #888)' }} />
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--db-ink-3, #888)' }}>
+              Going out today
             </div>
+            {hasScheduled ? (
+              <Link
+                href="/dashboard/calendar"
+                className="text-[13px] font-semibold leading-snug truncate block hover:text-emerald-700"
+                style={{ color: 'var(--db-black, #111)' }}
+              >
+                {data.scheduled.count > 1 && (
+                  <span className="text-emerald-700 mr-1">{data.scheduled.count}×</span>
+                )}
+                {data.scheduled.nextLabel}
+              </Link>
+            ) : (
+              <Link
+                href="/dashboard/social"
+                className="text-[12px] italic hover:text-emerald-700"
+                style={{ color: 'var(--db-ink-3, #888)' }}
+              >
+                Nothing queued — draft a post →
+              </Link>
+            )}
           </div>
-        ) : (
-          <div />
-        )}
+        </div>
 
-        {/* Outlook (one sentence) */}
-        <div className="text-[13px] leading-snug min-w-0" style={{ color: 'var(--db-ink-2, #555)' }}>
-          {data.outlook}
+        {/* Needs attention */}
+        <div className="flex items-start gap-2.5 min-w-0">
+          {hasAttention ? (
+            <>
+              <AlertTriangle
+                className={`w-4 h-4 mt-0.5 shrink-0 ${
+                  data.attention!.urgency === 'high' ? 'text-rose-500' :
+                  data.attention!.urgency === 'medium' ? 'text-amber-500' :
+                  'text-ink-3'
+                }`}
+              />
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--db-ink-3, #888)' }}>
+                  Needs attention
+                </div>
+                <Link
+                  href={data.attention!.href}
+                  className="text-[13px] font-semibold leading-snug hover:text-emerald-700"
+                  style={{ color: 'var(--db-black, #111)' }}
+                >
+                  {data.attention!.label} →
+                </Link>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="w-4 h-4 mt-0.5 shrink-0 rounded-full bg-emerald-100 flex items-center justify-center">
+                <span className="text-emerald-600 text-[9px]">✓</span>
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--db-ink-3, #888)' }}>
+                  Inbox
+                </div>
+                <span className="text-[13px]" style={{ color: 'var(--db-ink-3, #888)' }}>
+                  All caught up
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Trend signal */}
-        {data.signal ? (
-          <div className="text-right">
-            <div className={`inline-flex items-center gap-1 text-[14px] font-bold ${
-              data.signal.up === true ? 'text-emerald-600' :
-              data.signal.up === false ? 'text-rose-600' :
+        {hasSignal ? (
+          <div className="text-right sm:text-left">
+            <div className="text-[10px] uppercase tracking-wider mb-0.5" style={{ color: 'var(--db-ink-3, #888)' }}>
+              {data.signal!.label}
+            </div>
+            <div className={`inline-flex items-center gap-1 text-[15px] font-bold ${
+              data.signal!.up === true ? 'text-emerald-600' :
+              data.signal!.up === false ? 'text-rose-600' :
               'text-ink-4'
             }`}>
-              {data.signal.up === true ? <ArrowUpRight className="w-3.5 h-3.5" /> :
-               data.signal.up === false ? <ArrowDownRight className="w-3.5 h-3.5" /> :
+              {data.signal!.up === true ? <ArrowUpRight className="w-3.5 h-3.5" /> :
+               data.signal!.up === false ? <ArrowDownRight className="w-3.5 h-3.5" /> :
                <Minus className="w-3.5 h-3.5" />}
-              {data.signal.value}
-            </div>
-            <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--db-ink-3, #888)' }}>
-              {data.signal.label}
+              {data.signal!.value}
             </div>
           </div>
         ) : (
