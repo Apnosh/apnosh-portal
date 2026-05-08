@@ -31,11 +31,14 @@ import Agenda, { type AgendaItem } from '@/components/dashboard/agenda'
 import YourMarketingWeek from '@/components/dashboard/your-marketing-week'
 import ComingUp, { type ComingUpItem } from '@/components/dashboard/coming-up'
 import PulseCards, { type PulseCard } from '@/components/dashboard/pulse-cards'
+import ServicesThisMonth from '@/components/dashboard/services-this-month'
+import type { ServiceMonthRow } from '@/lib/services/delivery-matrix'
 
 interface DashboardLoadResult {
   pulse: { customers: PulseCard; reputation: PulseCard; reach: PulseCard }
   weekly: { items: { label: string; detail?: string; icon: string }[] }
   agenda: AgendaItem[]
+  services: ServiceMonthRow[]
   comingUp: ComingUpItem[]
   reviews: unknown[]
   brief: { text: string; generatedAt: string; model: string; cached: boolean } | null
@@ -162,6 +165,11 @@ export default function DashboardPage() {
               pills={pills}
             />
           </div>
+
+          {/* 1b. Your services this month — delivered vs expected per service */}
+          {bundle && bundle.services.length > 0 && (
+            <ServicesThisMonth rows={bundle.services} />
+          )}
 
           {/* 2. Agenda (the operating surface — unified action list) */}
           <div className="db-fade db-d2">
