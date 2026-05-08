@@ -291,6 +291,9 @@ export default function TrendChart({ data, timeRange, onTimeRangeChange, up, uni
   }
 
   const d = data[timeRange]
+  // No-data state: empty series OR every value is 0. Render an honest
+  // empty-state instead of a phantom 0-0.3 chart that looks broken.
+  const hasData = !!d && d.data.length > 0 && d.data.some(v => v > 0)
 
   return (
     <div className="pb-10 mb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
@@ -312,8 +315,19 @@ export default function TrendChart({ data, timeRange, onTimeRangeChange, up, uni
         ))}
       </div>
 
-      {/* Chart container */}
-      <div
+      {!hasData && (
+        <div className="h-[400px] max-sm:h-[220px] flex items-center justify-center rounded-xl" style={{ background: 'var(--db-bg-2)' }}>
+          <div className="text-center px-8">
+            <p className="text-[14px] font-semibold mb-1" style={{ color: 'var(--db-ink-2, #555)' }}>No data for this period</p>
+            <p className="text-[12px]" style={{ color: 'var(--db-ink-3, #888)' }}>
+              Pick a longer range or check that {unit ? unit + ' tracking' : 'tracking'} is connected.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Chart container — only mounted when there is data */}
+      {hasData && <div
         ref={wrapRef}
         className="relative h-[400px] max-sm:h-[220px] max-sm:-mx-2 overflow-hidden"
         style={{ cursor: 'crosshair' }}
@@ -383,10 +397,10 @@ export default function TrendChart({ data, timeRange, onTimeRangeChange, up, uni
           />
           <div ref={tooltipSubRef} className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }} />
         </div>
-      </div>
+      </div>}
 
       {/* X-axis labels */}
-      {d && (
+      {hasData && d && (
         <div className="flex justify-between mt-2 px-2">
           {d.labels.map((l, i) => (
             <span key={i} className="text-[11px]" style={{ color: 'var(--db-ink-3)' }}>

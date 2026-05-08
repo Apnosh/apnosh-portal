@@ -19,21 +19,34 @@ export default function MetricCard({ metric }: MetricCardProps) {
         <span className="text-[12px] font-medium" style={{ color: 'var(--db-ink-3)' }}>
           {metric.label}
         </span>
-        <span
-          className="flex items-center gap-0.5 text-[12px] font-bold"
-          style={{ color: metric.up ? 'var(--db-up)' : 'var(--db-down)' }}
-        >
-          {metric.up ? (
+        {metric.trend === '—' ? (
+          <span
+            className="flex items-center gap-0.5 text-[12px] font-bold"
+            style={{ color: 'var(--db-ink-3)' }}
+            title="Not enough history for a comparable trend"
+          >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M5 8V2M5 2l3 3M5 2L2 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2 5h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
-          ) : (
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M5 2v6M5 8l3-3M5 8L2 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-          {metric.trend}
-        </span>
+            —
+          </span>
+        ) : (
+          <span
+            className="flex items-center gap-0.5 text-[12px] font-bold"
+            style={{ color: metric.up ? 'var(--db-up)' : 'var(--db-down)' }}
+          >
+            {metric.up ? (
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M5 8V2M5 2l3 3M5 2L2 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M5 2v6M5 8l3-3M5 8L2 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+            {metric.trend}
+          </span>
+        )}
       </div>
       <div
         className="text-[26px] font-bold leading-tight"

@@ -129,7 +129,7 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
         delta: `${reviewCount} new`,
         up: avgStar !== null ? avgStar >= 4.3 : null,
         subtitle: 'Last 30 days',
-        href: '/dashboard/social',
+        href: '/dashboard/local-seo/reviews',
         alert: avgStar !== null && avgStar < 3.8,
       }
 

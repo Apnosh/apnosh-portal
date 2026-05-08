@@ -654,8 +654,18 @@ function fmtNum(n: number): string {
   return n.toString()
 }
 
+/**
+ * Trend percent string for metric cards.
+ *
+ * Honest about lack of data:
+ *   - prev = 0 → "—" (we don't have enough history to compute a trend;
+ *     showing "+100%" was misleading because it implied real growth
+ *     when a single new event would also produce "+100%")
+ *   - prev < 5 (tiny base) → "—" (any change looks dramatic; not useful)
+ *   - otherwise the actual percent change, sign-prefixed
+ */
 function fmtPct(current: number, previous: number): string {
-  if (previous === 0) return current > 0 ? '+100%' : '0%'
+  if (previous < 5) return '—'
   const pct = Math.round(((current - previous) / previous) * 100)
   return (pct >= 0 ? '+' : '') + pct + '%'
 }

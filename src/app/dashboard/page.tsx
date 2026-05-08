@@ -8,26 +8,20 @@
  *   2. Quick actions         — 4 buttons to start common tasks
  *   3. Decisions to make     — items waiting for owner approval
  *   4. Your performance      — 3 pulse metrics, glanceable
+ *   4b. Your reviews         — last 5 across sources
  *   5. What's working        — AI insights with actionable suggestions
  *   6. Your marketing week   — proof of momentum, last 7 days
- *   7. Detailed analytics    — collapsed; the old chart-heavy view
  *
- * Old components (HeroMetric, TrendChart, MetricGrid, BenchmarkBar,
- * ViewSelector, StatusBanner, AMNote) live behind the analytics
- * collapse so power users can still drill in.
+ * Per-metric drilldowns live on focused pages (/dashboard/social,
+ * /dashboard/local-seo, /dashboard/local-seo/reviews) — each pulse
+ * card routes there directly. The previous "View detailed analytics"
+ * collapse is gone; chart-heavy analysis isn't a dashboard concern.
  */
 
-import { useState, useEffect } from 'react'
-import { ChevronDown } from 'lucide-react'
-import type { ViewType, TimeRange, DashboardView, DashboardData } from '@/types/dashboard'
+import { useEffect, useState } from 'react'
 import { getDashboardData } from '@/lib/dashboard/get-dashboard-data'
+import type { DashboardData, DashboardInsight } from '@/types/dashboard'
 import { useClient } from '@/lib/client-context'
-import StatusBanner from '@/components/dashboard/status-banner'
-import ViewSelector from '@/components/dashboard/view-selector'
-import HeroMetric from '@/components/dashboard/hero-metric'
-import TrendChart from '@/components/dashboard/trend-chart'
-import MetricGrid from '@/components/dashboard/metric-grid'
-import BenchmarkBar from '@/components/dashboard/benchmark-bar'
 import InsightCard from '@/components/dashboard/insight-card'
 import WaitingOnYou from '@/components/dashboard/waiting-on-you'
 import SetupChecklist from '@/components/dashboard/setup-checklist'
@@ -56,40 +50,10 @@ interface DashboardLoadResult {
 
 export default function DashboardPage() {
   const { client, loading: clientLoading } = useClient()
-  const [currentView, setCurrentView] = useState<ViewType>('visibility')
-  const [timeRange, setTimeRange] = useState<TimeRange>('1W')
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [analyticsOpen, setAnalyticsOpen] = useState(false)
   const [bundle, setBundle] = useState<DashboardLoadResult | null>(null)
+  const [insights, setInsights] = useState<DashboardInsight[] | null>(null)
 
-  useEffect(() => {
-    async function loadData() {
-      if (clientLoading) return
-
-      if (client?.id) {
-        try {
-          const data = await getDashboardData(client.id)
-          if (data) {
-            setDashboardData(data)
-            setLoading(false)
-            return
-          }
-        } catch (err) {
-          console.error('Failed to load dashboard data:', err)
-        }
-      }
-
-      setDashboardData(null)
-      setLoading(false)
-    }
-
-    loadData()
-  }, [client?.id, clientLoading])
-
-  // Single consolidated fetch — replaces 8+ independent component-level
-  // fetches with one batched server-side load. This is the difference
-  // between a dashboard that feels instant and one that feels sluggish.
+  // One consolidated fetch for everything the dashboard renders.
   useEffect(() => {
     if (!client?.id) return
     let cancelled = false
@@ -103,7 +67,25 @@ export default function DashboardPage() {
     return () => { cancelled = true }
   }, [client?.id])
 
-  if (loading) {
+  // Insights are computed by the legacy getDashboardData server action; we
+  // fetch them as a side-channel so the "What's working" card can render.
+  // When we build the per-metric narrative endpoint (Phase 2), this goes away.
+  useEffect(() => {
+    if (!client?.id) return
+    let cancelled = false
+    getDashboardData(client.id)
+      .then((data: DashboardData | null) => {
+        if (cancelled || !data) return
+        // Use whichever view has insights (visibility usually has more)
+        const merged = [...data.visibility.insights, ...data.footTraffic.insights]
+        setInsights(merged.slice(0, 3))
+      })
+      .catch(() => { /* silent */ })
+    return () => { cancelled = true }
+  }, [client?.id])
+
+  // Welcoming empty state for clients still resolving
+  if (clientLoading) {
     return (
       <div className="max-w-[840px] mx-auto px-8 max-sm:px-4 pt-12 text-center">
         <div className="animate-pulse space-y-4">
@@ -115,8 +97,7 @@ export default function DashboardPage() {
     )
   }
 
-  // Welcoming empty state for clients with no data yet
-  if (!dashboardData || !client?.id) {
+  if (!client?.id) {
     return (
       <div
         className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20"
@@ -149,26 +130,13 @@ export default function DashboardPage() {
     )
   }
 
-  const view: DashboardView =
-    currentView === 'visibility' ? dashboardData.visibility : dashboardData.footTraffic
-
-  const handleViewChange = (v: ViewType) => {
-    setCurrentView(v)
-    setTimeRange('1W')
-  }
-
-  const fmtBenchmark = (n: number): string => {
-    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
-    return n.toLocaleString()
-  }
-
   // Pulse cards come from the bundle. While loading, render three skeleton
   // cards so the layout doesn't shift.
   const pulseCardsToRender: PulseCard[] = bundle
     ? [bundle.pulse.customers, bundle.pulse.reputation, bundle.pulse.reach]
     : [
         { label: 'Your customers', state: 'loading', subtitle: '', href: '/dashboard/local-seo' },
-        { label: 'Your reputation', state: 'loading', subtitle: '', href: '/dashboard/social' },
+        { label: 'Your reputation', state: 'loading', subtitle: '', href: '/dashboard/local-seo/reviews' },
         { label: 'Your reach', state: 'loading', subtitle: '', href: '/dashboard/social' },
       ]
 
@@ -195,7 +163,7 @@ export default function DashboardPage() {
         <WaitingOnYou clientId={client.id} />
       </div>
 
-      {/* 4. Your performance — 3 pulse metrics, glanceable */}
+      {/* 4. Your performance — 3 pulse metrics, glanceable. Each routes to a focused drilldown page. */}
       <div className="db-fade db-d4">
         <PulseCards cards={pulseCardsToRender} />
       </div>
@@ -206,13 +174,13 @@ export default function DashboardPage() {
       </div>
 
       {/* 5. What's working — AI insights, only renders if there's something */}
-      {view.insights.length > 0 && (
+      {insights && insights.length > 0 && (
         <div className="db-fade db-d5 rounded-xl p-5 mb-4 border bg-white" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
           <h3 className="text-[11px] font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--db-ink-3, #888)' }}>
             What&apos;s working
           </h3>
           <div className="flex flex-col gap-2.5">
-            {view.insights.map((ins, i) => (
+            {insights.map((ins, i) => (
               <InsightCard key={i} icon={ins.icon} title={ins.title} subtitle={ins.subtitle} />
             ))}
           </div>
@@ -221,70 +189,14 @@ export default function DashboardPage() {
 
       {/* 6. Your marketing this week — proof of momentum */}
       <div className="db-fade db-d6">
-        <YourMarketingWeek clientId={client.id} initialItems={bundle ? bundle.weekly.items as { label: string; detail?: string; icon: 'check' | 'message' | 'image' | 'star' | 'megaphone' | 'sparkle' }[] : undefined} />
-      </div>
-
-      {/* 7. Detailed analytics — collapsed by default */}
-      <div className="db-fade db-d7 mt-2">
-        <button
-          onClick={() => setAnalyticsOpen(o => !o)}
-          className="w-full flex items-center justify-between rounded-xl p-4 border bg-white hover:bg-bg-2 transition-colors"
-          style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
-        >
-          <span className="text-[13px] font-semibold" style={{ color: 'var(--db-black, #111)' }}>
-            View detailed analytics
-          </span>
-          <ChevronDown
-            className={`w-4 h-4 text-ink-4 transition-transform ${analyticsOpen ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {analyticsOpen && (
-          <div className="mt-4 space-y-4 pb-4">
-            <StatusBanner
-              headline={view.headline}
-              businessName={dashboardData.businessName}
-              pct={view.pct}
-              up={view.up}
-            />
-            <ViewSelector current={currentView} onChange={handleViewChange} />
-            {view.num === '---' ? (
-              <div className="text-center py-12 rounded-xl border bg-white" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
-                <p className="text-[13px]" style={{ color: 'var(--db-ink-3, #888)' }}>
-                  Connect your accounts to see numbers.
-                </p>
-                <a
-                  href="/dashboard/connected-accounts"
-                  className="inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-lg text-[12px] font-semibold text-white"
-                  style={{ background: '#4abd98' }}
-                >
-                  Connect accounts
-                </a>
-              </div>
-            ) : (
-              <>
-                <HeroMetric ctx={view.ctx} num={view.num} pctFull={view.pctFull} up={view.up} />
-                <TrendChart
-                  data={view.chartData}
-                  timeRange={timeRange}
-                  onTimeRangeChange={setTimeRange}
-                  up={view.up}
-                  unit={view.unit}
-                />
-                <MetricGrid title={view.bdtitle} metrics={view.metrics} />
-                <BenchmarkBar
-                  yourValue={view.bmy}
-                  avgValue={view.bmavg}
-                  maxValue={view.bmmax}
-                  rank={view.rank}
-                  yourFormatted={fmtBenchmark(view.bmy)}
-                  avgFormatted={fmtBenchmark(view.bmavg)}
-                  animationKey={currentView}
-                />
-              </>
-            )}
-          </div>
-        )}
+        <YourMarketingWeek
+          clientId={client.id}
+          initialItems={
+            bundle
+              ? (bundle.weekly.items as { label: string; detail?: string; icon: 'check' | 'message' | 'image' | 'star' | 'megaphone' | 'sparkle' }[])
+              : undefined
+          }
+        />
       </div>
     </div>
   )

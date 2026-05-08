@@ -23,6 +23,7 @@ export default function BenchmarkBar({
 }: BenchmarkBarProps) {
   const youRef = useRef<HTMLDivElement>(null)
   const avgRef = useRef<HTMLDivElement>(null)
+  const noBenchmark = avgValue <= 0 || maxValue <= 0
 
   useEffect(() => {
     const youPct = Math.min((yourValue / maxValue) * 100, 100)
@@ -42,6 +43,24 @@ export default function BenchmarkBar({
       }, 100)
     }
   }, [yourValue, avgValue, maxValue, animationKey])
+
+  if (noBenchmark) {
+    return (
+      <div className="pb-8 mb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
+        <h2 className="text-[15px] font-bold mb-4" style={{ color: 'var(--db-black)' }}>
+          Compared to nearby businesses
+        </h2>
+        <div
+          className="rounded-[14px] p-5 text-center"
+          style={{ background: 'var(--db-bg-2)' }}
+        >
+          <p className="text-[13px]" style={{ color: 'var(--db-ink-3)' }}>
+            Benchmark data isn&apos;t available yet for your area. We&apos;ll surface it here once we have enough peer data.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="pb-8 mb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
