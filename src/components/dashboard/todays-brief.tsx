@@ -53,8 +53,12 @@ export default function TodaysBrief({
 
   useEffect(() => {
     if (initialBrief !== undefined) {
-      // Parent passed a value (cached or null). If null, kick off a background generation
-      // so the next page load has a cache hit, but don't show a loading skeleton to the user.
+      // Parent passed a value. Sync our state to it (covers the case
+      // where bundle starts undefined then transitions to {...} or null).
+      setBrief(initialBrief)
+      setLoading(false)
+      // If null = no cached brief, kick off background generation so
+      // tomorrow's load has a cache hit. Don't show a loading skeleton.
       if (initialBrief === null) {
         load(false).catch(() => { /* silent */ })
       }
@@ -63,7 +67,7 @@ export default function TodaysBrief({
     // No parent batch — do the legacy fetch path
     load(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId])
+  }, [clientId, initialBrief])
 
   if (loading) {
     return (

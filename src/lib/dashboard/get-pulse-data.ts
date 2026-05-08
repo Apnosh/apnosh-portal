@@ -101,10 +101,10 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
         label: 'Your customers',
         state: 'live',
         value: fmtCompact(customersThis),
-        ...fmtDelta(customersThis, customersPrev),
+        ...(customersPrev >= 20 ? fmtDelta(customersThis, customersPrev) : { delta: null, up: null }),
         subtitle: 'Calls, directions, bookings',
         href: '/dashboard/local-seo',
-        alert: customersPrev > 0 && (customersThis / customersPrev) < 0.7,
+        alert: customersPrev >= 20 && (customersThis / customersPrev) < 0.7,
       }
 
   // ---------- Reputation ----------
@@ -150,10 +150,13 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
         label: 'Your reach',
         state: 'live',
         value: fmtCompact(reachThis),
-        ...fmtDelta(reachThis, reachPrev),
+        // Only show a delta when prior week had meaningful volume — going
+        // from 5 to 0 doesn't deserve a "-100%" headline.
+        ...(reachPrev >= 50 ? fmtDelta(reachThis, reachPrev) : { delta: null, up: null }),
         subtitle: 'People who saw your content',
         href: '/dashboard/social',
-        alert: reachPrev > 0 && (reachThis / reachPrev) < 0.7,
+        // Only alarm if absolute volume is meaningful (≥100/week) AND it dropped >30%
+        alert: reachPrev >= 100 && (reachThis / reachPrev) < 0.7,
       }
 
   return { customers, reputation, reach }
