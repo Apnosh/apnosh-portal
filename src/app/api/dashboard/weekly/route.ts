@@ -5,34 +5,17 @@
  * helper getWeeklyActivity so the client component can fetch it.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { getWeeklyActivity } from '@/lib/dashboard/get-weekly-activity'
+import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 
 export async function GET(req: NextRequest) {
   const clientId = req.nextUrl.searchParams.get('clientId')
   if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 })
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, client_id')
-    .eq('id', user.id)
-    .maybeSingle()
-  let authorized = profile?.role === 'admin' || profile?.client_id === clientId
-  if (!authorized) {
-    const { data: membership } = await supabase
-      .from('client_users')
-      .select('client_id')
-      .eq('auth_user_id', user.id)
-      .eq('client_id', clientId)
-      .maybeSingle()
-    if (membership) authorized = true
-  }
-  if (!authorized) {
-    return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  const access = await checkClientAccess(clientId)
+  if (!access.authorized) {
+    const status = access.reason === 'unauthenticated' ? 401 : 403
+    return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status })
   }
 
   const activity = await getWeeklyActivity(clientId)

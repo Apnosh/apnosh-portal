@@ -13,9 +13,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logGeneration } from '@/lib/ai/log-generation'
+import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 
 export const maxDuration = 30
 
@@ -55,32 +55,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null) as BriefRequest | null
   if (!body?.clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 })
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-
-  // Verify the user is allowed to read briefs for this client. Admins can read any;
-  // a client user must be linked to this client (either profiles.client_id OR a
-  // membership row in client_users — we check both to be tolerant of how clients
-  // are linked across the app).
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, client_id')
-    .eq('id', user.id)
-    .maybeSingle()
-  let authorized = profile?.role === 'admin' || profile?.client_id === body.clientId
-  if (!authorized) {
-    const { data: membership } = await supabase
-      .from('client_users')
-      .select('client_id')
-      .eq('auth_user_id', user.id)
-      .eq('client_id', body.clientId)
-      .maybeSingle()
-    if (membership) authorized = true
+  const access = await checkClientAccess(body.clientId)
+  if (!access.authorized) {
+    const status = access.reason === 'unauthenticated' ? 401 : 403
+    return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status })
   }
-  if (!authorized) {
-    return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
-  }
+  const userId = access.userId!
 
   const admin = createAdminClient()
 
@@ -221,7 +201,7 @@ export async function POST(req: NextRequest) {
     outputSummary: { wordCount: text.split(/\s+/).length },
     rawText: text,
     latencyMs: Date.now() - startedAt,
-    createdBy: user.id,
+    createdBy: userId,
   })
 
   return NextResponse.json({
