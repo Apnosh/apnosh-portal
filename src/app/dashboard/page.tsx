@@ -1,49 +1,43 @@
 'use client'
 
 /**
- * Dashboard — operator's marketing tool, not a managed-service report.
+ * Dashboard — marketing operator's daily briefing.
  *
- * Hierarchy (phone-first, top to bottom):
- *   1. Today's brief         — AI-generated 60-80 word morning briefing
- *   2. Quick actions         — 4 buttons to start common tasks
- *   3. Decisions to make     — items waiting for owner approval
- *   4. Your performance      — 3 pulse metrics, glanceable
- *   4b. Your reviews         — last 5 across sources
- *   5. What's working        — AI insights with actionable suggestions
- *   6. Your marketing week   — proof of momentum, last 7 days
+ * Five sections, each with one job, no overlap.
  *
- * Per-metric drilldowns live on focused pages (/dashboard/social,
- * /dashboard/local-seo, /dashboard/local-seo/reviews) — each pulse
- * card routes there directly. The previous "View detailed analytics"
- * collapse is gone; chart-heavy analysis isn't a dashboard concern.
+ *   1. Brief + status pills    — AI brief paragraph with 3 inline stats
+ *                                 (scheduled today / needs you / trend)
+ *   2. Agenda                  — unified action list (reviews, approvals,
+ *                                 broken integrations, drafts, suggestions)
+ *   3. Pulse                   — 3 metrics with sparklines (drilldown)
+ *   4. This week               — proof of momentum, last 7 days
+ *   5. Coming up               — marketing calendar, content opportunities
+ *
+ * Strictly marketing-only. No operations data: no weather, no walk-in
+ * forecasts, no reservation counts. Apnosh is the marketing co-pilot.
+ *
+ * Two-column on desktop above 1024px:
+ *   LEFT (60%): Brief → Agenda → Pulse
+ *   RIGHT (40%): This week → Coming up
  */
 
 import { useEffect, useState } from 'react'
 import { getDashboardData } from '@/lib/dashboard/get-dashboard-data'
-import type { DashboardData, DashboardInsight } from '@/types/dashboard'
+import type { DashboardData } from '@/types/dashboard'
 import { useClient } from '@/lib/client-context'
-import InsightCard from '@/components/dashboard/insight-card'
-import WaitingOnYou from '@/components/dashboard/waiting-on-you'
 import SetupChecklist from '@/components/dashboard/setup-checklist'
-import TodaysBrief from '@/components/dashboard/todays-brief'
-import TonightStrip from '@/components/dashboard/tonight-strip'
-import QuickActions from '@/components/dashboard/quick-actions'
+import TodaysBrief, { type BriefPills } from '@/components/dashboard/todays-brief'
+import Agenda, { type AgendaItem } from '@/components/dashboard/agenda'
 import YourMarketingWeek from '@/components/dashboard/your-marketing-week'
-import YourReviews from '@/components/dashboard/your-reviews'
+import ComingUp, { type ComingUpItem } from '@/components/dashboard/coming-up'
 import PulseCards, { type PulseCard } from '@/components/dashboard/pulse-cards'
 
 interface DashboardLoadResult {
   pulse: { customers: PulseCard; reputation: PulseCard; reach: PulseCard }
   weekly: { items: { label: string; detail?: string; icon: string }[] }
-  reviews: Array<{
-    id: string
-    source: string
-    rating: number
-    author_name: string | null
-    review_text: string | null
-    posted_at: string
-    responded_at: string | null
-  }>
+  agenda: AgendaItem[]
+  comingUp: ComingUpItem[]
+  reviews: unknown[]
   brief: { text: string; generatedAt: string; model: string; cached: boolean } | null
   counts: { unansweredReviews: number; pendingApprovals: number }
   tasks: unknown[]
@@ -52,7 +46,6 @@ interface DashboardLoadResult {
 export default function DashboardPage() {
   const { client, loading: clientLoading } = useClient()
   const [bundle, setBundle] = useState<DashboardLoadResult | null>(null)
-  const [insights, setInsights] = useState<DashboardInsight[] | null>(null)
 
   // One consolidated fetch for everything the dashboard renders.
   useEffect(() => {
@@ -64,28 +57,27 @@ export default function DashboardPage() {
         if (cancelled || !data) return
         setBundle(data as DashboardLoadResult)
       })
-      .catch(() => { /* silent — components fall back to their own fetches */ })
+      .catch(() => { /* silent */ })
     return () => { cancelled = true }
   }, [client?.id])
 
-  // Insights are computed by the legacy getDashboardData server action; we
-  // fetch them as a side-channel so the "What's working" card can render.
-  // When we build the per-metric narrative endpoint (Phase 2), this goes away.
+  // Insights side-channel kept simple — used only to inform the brief
+  // pills' trend signal as a fallback when bundle lacks it.
+  const [trendFallback, setTrendFallback] = useState<{ value: string; up: boolean } | null>(null)
   useEffect(() => {
     if (!client?.id) return
     let cancelled = false
     getDashboardData(client.id)
       .then((data: DashboardData | null) => {
         if (cancelled || !data) return
-        // Use whichever view has insights (visibility usually has more)
-        const merged = [...data.visibility.insights, ...data.footTraffic.insights]
-        setInsights(merged.slice(0, 3))
+        const pct = data.visibility.pct
+        const up = data.visibility.up
+        if (pct && pct !== '---') setTrendFallback({ value: pct, up })
       })
       .catch(() => { /* silent */ })
     return () => { cancelled = true }
   }, [client?.id])
 
-  // Welcoming empty state for clients still resolving
   if (clientLoading) {
     return (
       <div className="max-w-[840px] mx-auto px-8 max-sm:px-4 pt-12 text-center">
@@ -105,14 +97,6 @@ export default function DashboardPage() {
         style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
       >
         <div className="text-center py-16">
-          <div
-            className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center"
-            style={{ background: 'rgba(74, 189, 152, 0.1)' }}
-          >
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4abd98" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-            </svg>
-          </div>
           <h2 className="text-[20px] font-bold mb-2" style={{ color: 'var(--db-black, #111)' }}>
             Setting up your tools
           </h2>
@@ -131,8 +115,7 @@ export default function DashboardPage() {
     )
   }
 
-  // Pulse cards come from the bundle. While loading, render three skeleton
-  // cards so the layout doesn't shift.
+  // Pulse cards from bundle, with skeletons while loading.
   const pulseCardsToRender: PulseCard[] = bundle
     ? [bundle.pulse.customers, bundle.pulse.reputation, bundle.pulse.reach]
     : [
@@ -141,72 +124,60 @@ export default function DashboardPage() {
         { label: 'Your reach', state: 'loading', subtitle: '', href: '/dashboard/social' },
       ]
 
+  // Brief pills — derived from the same bundle so we stay consistent.
+  const pills: BriefPills | null = bundle
+    ? {
+        scheduledToday: bundle.comingUp.filter(c => c.daysUntil === 0).reduce((acc, c) => acc + c.queuedCount, 0)
+          + bundle.agenda.filter(a => a.type === 'draft').length,
+        needsAttention: (() => {
+          const top = bundle.agenda.find(a => a.urgency === 'high') ?? bundle.agenda.find(a => a.urgency === 'medium')
+          if (!top) return null
+          return { label: top.label, href: top.href, urgency: top.urgency }
+        })(),
+        trend: bundle.pulse.reach.state === 'live' && bundle.pulse.reach.delta
+          ? { label: 'Reach this week', value: bundle.pulse.reach.delta, up: bundle.pulse.reach.up ?? null }
+          : bundle.pulse.customers.state === 'live' && bundle.pulse.customers.delta
+            ? { label: 'Customer actions this week', value: bundle.pulse.customers.delta, up: bundle.pulse.customers.up ?? null }
+            : trendFallback
+              ? { label: 'Reach this month', value: trendFallback.value, up: trendFallback.up }
+              : null,
+      }
+    : null
+
   return (
     <div
       className="max-w-[1280px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
-      {/* First-run setup checklist — self-hides once milestones are met */}
       <SetupChecklist />
 
-      {/* TONIGHT AT A GLANCE — answers "what kind of night am I gonna have?"
-          Spans the full width above the two-column grid. Hides itself when
-          there's nothing useful to surface (no location, no metrics). */}
-      <div className="db-fade db-d1">
-        <TonightStrip clientId={client.id} />
-      </div>
-
-      {/* Two-column desktop layout above 1024px; single column below.
-          LEFT (60%): the operational column — what to read, decide, act on.
-          RIGHT (40%): the proof column — what shipped, what's next, where to drill. */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-x-6 gap-y-0">
-
-        {/* ═════════════ LEFT COLUMN ═════════════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-x-6">
+        {/* ═════════════ LEFT — operational column ═════════════ */}
         <div>
-          {/* 1. Today's brief — AI-generated morning briefing */}
+          {/* 1. Brief + status pills (the lead) */}
+          <div className="db-fade db-d1">
+            <TodaysBrief
+              clientId={client.id}
+              initialBrief={bundle ? bundle.brief : undefined}
+              pills={pills}
+            />
+          </div>
+
+          {/* 2. Agenda (the operating surface — unified action list) */}
           <div className="db-fade db-d2">
-            <TodaysBrief clientId={client.id} initialBrief={bundle ? bundle.brief : undefined} />
+            <Agenda items={bundle ? bundle.agenda : null} />
           </div>
 
-          {/* 2. Quick actions */}
-          <div className="db-fade db-d2">
-            <QuickActions clientId={client.id} initialCounts={bundle?.counts} />
-          </div>
-
-          {/* 3. Decisions to make — owner-approval queue */}
-          <div className="db-fade db-d3 mb-4">
-            <WaitingOnYou clientId={client.id} />
-          </div>
-
-          {/* 4. Pulse cards with sparklines */}
-          <div className="db-fade db-d4">
+          {/* 3. Pulse (the proof — 3 sparkline metrics, drilldown on tap) */}
+          <div className="db-fade db-d3">
             <PulseCards cards={pulseCardsToRender} />
-          </div>
-
-          {/* 5. Reviews */}
-          <div className="db-fade db-d4">
-            <YourReviews clientId={client.id} initialReviews={bundle?.reviews} />
           </div>
         </div>
 
-        {/* ═════════════ RIGHT COLUMN ═════════════ */}
+        {/* ═════════════ RIGHT — context column ═════════════ */}
         <div>
-          {/* 6. What's working — AI insights */}
-          {insights && insights.length > 0 && (
-            <div className="db-fade db-d5 rounded-xl p-5 mb-4 border bg-white" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
-              <h3 className="text-[11px] font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--db-ink-3, #888)' }}>
-                What&apos;s working
-              </h3>
-              <div className="flex flex-col gap-2.5">
-                {insights.map((ins, i) => (
-                  <InsightCard key={i} icon={ins.icon} title={ins.title} subtitle={ins.subtitle} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 7. Your marketing this week */}
-          <div className="db-fade db-d6">
+          {/* 4. This week — proof of momentum */}
+          <div className="db-fade db-d4">
             <YourMarketingWeek
               clientId={client.id}
               initialItems={
@@ -217,44 +188,9 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* 8. Drill-down links */}
-          <div className="db-fade db-d7 grid grid-cols-1 gap-2">
-            <a
-              href="/dashboard/local-seo"
-              className="rounded-xl p-3 border bg-white hover:bg-bg-2 transition-colors text-[12px]"
-              style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
-            >
-              <div className="font-semibold mb-0.5" style={{ color: 'var(--db-black, #111)' }}>
-                Customer analytics →
-              </div>
-              <div style={{ color: 'var(--db-ink-3, #888)' }}>
-                Calls, directions, search performance
-              </div>
-            </a>
-            <a
-              href="/dashboard/local-seo/reviews"
-              className="rounded-xl p-3 border bg-white hover:bg-bg-2 transition-colors text-[12px]"
-              style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
-            >
-              <div className="font-semibold mb-0.5" style={{ color: 'var(--db-black, #111)' }}>
-                Review analytics →
-              </div>
-              <div style={{ color: 'var(--db-ink-3, #888)' }}>
-                Star trend, sentiment, response rate
-              </div>
-            </a>
-            <a
-              href="/dashboard/social"
-              className="rounded-xl p-3 border bg-white hover:bg-bg-2 transition-colors text-[12px]"
-              style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
-            >
-              <div className="font-semibold mb-0.5" style={{ color: 'var(--db-black, #111)' }}>
-                Social analytics →
-              </div>
-              <div style={{ color: 'var(--db-ink-3, #888)' }}>
-                Reach, impressions, engagement
-              </div>
-            </a>
+          {/* 5. Coming up — marketing calendar (content opportunities) */}
+          <div className="db-fade db-d5">
+            <ComingUp items={bundle ? bundle.comingUp : null} />
           </div>
         </div>
       </div>

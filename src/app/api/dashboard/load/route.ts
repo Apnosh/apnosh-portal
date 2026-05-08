@@ -20,6 +20,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPulseData } from '@/lib/dashboard/get-pulse-data'
 import { getWeeklyActivity } from '@/lib/dashboard/get-weekly-activity'
+import { getAgenda } from '@/lib/dashboard/get-agenda'
+import { getMarketingCalendar, daysUntil } from '@/lib/dashboard/marketing-calendar'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 
 export const maxDuration = 15
@@ -39,9 +41,10 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
   // Parallel: fire every query at once.
-  const [pulse, weekly, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow] = await Promise.all([
+  const [pulse, weekly, agenda, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
     getPulseData(clientId),
     getWeeklyActivity(clientId),
+    getAgenda(clientId),
     admin
       .from('reviews')
       .select('id, source, rating, author_name, review_text, posted_at, responded_at')
@@ -75,6 +78,15 @@ export async function GET(req: NextRequest) {
       .in('status', ['todo', 'doing'])
       .order('due_at', { ascending: true, nullsFirst: false })
       .limit(20),
+    // Pull all scheduled posts in the next 60 days so we can mark which
+    // marketing-calendar moments already have content queued.
+    admin
+      .from('scheduled_posts')
+      .select('scheduled_for')
+      .eq('client_id', clientId)
+      .in('status', ['scheduled', 'publishing'])
+      .gte('scheduled_for', new Date().toISOString())
+      .lte('scheduled_for', new Date(Date.now() + 60 * 86400000).toISOString()),
   ])
 
   // Filter out snoozed tasks
@@ -83,9 +95,33 @@ export async function GET(req: NextRequest) {
     !t.snoozed_until || new Date(t.snoozed_until).getTime() <= nowMs
   )
 
+  // Build comingUp by joining the static calendar against scheduled posts.
+  // For each event, count posts scheduled within ±2 days of the event date.
+  const calendar = getMarketingCalendar(new Date(), 60)
+  const queuedDates = (calendarQueuedRow.data ?? [])
+    .map(r => r.scheduled_for as string)
+    .filter(Boolean)
+  const comingUp = calendar.slice(0, 6).map(e => {
+    const eventTime = new Date(e.date).getTime()
+    const queuedCount = queuedDates.filter(d => {
+      const t = new Date(d).getTime()
+      return Math.abs(t - eventTime) <= 2 * 86400000
+    }).length
+    return {
+      date: e.date,
+      label: e.label,
+      hook: e.hook,
+      weight: e.weight,
+      daysUntil: daysUntil(e.date),
+      queuedCount,
+    }
+  })
+
   return NextResponse.json({
     pulse,
     weekly,
+    agenda,
+    comingUp,
     reviews: reviewsRow.data ?? [],
     brief: briefRow.data ? {
       text: briefRow.data.raw_text,

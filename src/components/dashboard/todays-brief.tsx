@@ -10,7 +10,8 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Sparkles, RefreshCw } from 'lucide-react'
+import Link from 'next/link'
+import { Sparkles, RefreshCw, CalendarClock, Inbox, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react'
 
 interface BriefData {
   text: string
@@ -19,13 +20,25 @@ interface BriefData {
   cached: boolean
 }
 
+export interface BriefPills {
+  /** Number of items publishing in next 24h */
+  scheduledToday: number
+  /** Single most-urgent attention item; null = "all caught up" */
+  needsAttention: { label: string; href: string; urgency: 'high' | 'medium' | 'low' } | null
+  /** Trend signal — typically "Reach this week" */
+  trend: { label: string; value: string; up: boolean | null } | null
+}
+
 export default function TodaysBrief({
   clientId,
   initialBrief,
+  pills,
 }: {
   clientId: string
   /** When provided, skips the initial fetch (parent already loaded the brief in a batch). */
   initialBrief?: BriefData | null
+  /** Optional 3-pill row beneath the brief paragraph. */
+  pills?: BriefPills | null
 }) {
   const [brief, setBrief] = useState<BriefData | null>(initialBrief ?? null)
   // If parent provided initialBrief (even null = no cache), we don't show a loading state — we
@@ -135,6 +148,85 @@ export default function TodaysBrief({
       >
         {brief.text}
       </p>
+
+      {pills && (
+        <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+          <Link
+            href="/dashboard/calendar"
+            className="flex items-start gap-1.5 hover:opacity-80"
+            title={pills.scheduledToday === 1 ? '1 item publishing today' : `${pills.scheduledToday} items publishing today`}
+          >
+            <CalendarClock className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: 'var(--db-ink-3, #888)' }} />
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--db-ink-3, #888)' }}>
+                Today
+              </div>
+              <div className="text-[12px] font-semibold truncate" style={{ color: 'var(--db-black, #111)' }}>
+                {pills.scheduledToday > 0 ? `${pills.scheduledToday} publishing` : 'Nothing queued'}
+              </div>
+            </div>
+          </Link>
+
+          {pills.needsAttention ? (
+            <Link
+              href={pills.needsAttention.href}
+              className="flex items-start gap-1.5 hover:opacity-80"
+            >
+              <Inbox
+                className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${
+                  pills.needsAttention.urgency === 'high' ? 'text-rose-500' :
+                  pills.needsAttention.urgency === 'medium' ? 'text-amber-500' :
+                  ''
+                }`}
+                style={pills.needsAttention.urgency === 'low' ? { color: 'var(--db-ink-3, #888)' } : undefined}
+              />
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--db-ink-3, #888)' }}>
+                  Needs you
+                </div>
+                <div className="text-[12px] font-semibold truncate" style={{ color: 'var(--db-black, #111)' }}>
+                  {pills.needsAttention.label}
+                </div>
+              </div>
+            </Link>
+          ) : (
+            <div className="flex items-start gap-1.5">
+              <Inbox className="w-3.5 h-3.5 mt-0.5 shrink-0 text-emerald-500" />
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--db-ink-3, #888)' }}>
+                  Inbox
+                </div>
+                <div className="text-[12px] font-semibold" style={{ color: 'var(--db-ink-3, #888)' }}>
+                  All caught up
+                </div>
+              </div>
+            </div>
+          )}
+
+          {pills.trend ? (
+            <div className="flex items-start gap-1.5">
+              {pills.trend.up === true ? <ArrowUpRight className="w-3.5 h-3.5 mt-0.5 shrink-0 text-emerald-600" /> :
+               pills.trend.up === false ? <ArrowDownRight className="w-3.5 h-3.5 mt-0.5 shrink-0 text-rose-500" /> :
+               <Minus className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: 'var(--db-ink-3, #888)' }} />}
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-wider truncate" style={{ color: 'var(--db-ink-3, #888)' }}>
+                  {pills.trend.label}
+                </div>
+                <div className={`text-[12px] font-semibold ${
+                  pills.trend.up === true ? 'text-emerald-600' :
+                  pills.trend.up === false ? 'text-rose-600' :
+                  ''
+                }`} style={pills.trend.up === null || pills.trend.up === undefined ? { color: 'var(--db-black, #111)' } : undefined}>
+                  {pills.trend.value}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div />
+          )}
+        </div>
+      )}
+
       <p className="text-[10px] mt-3" style={{ color: 'var(--db-ink-4, #aaa)' }}>
         {isToday ? `Generated ${generated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : `Generated ${generated.toLocaleDateString()}`}
         {' · '}AI assistant
