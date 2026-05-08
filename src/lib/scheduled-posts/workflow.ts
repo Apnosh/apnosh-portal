@@ -13,6 +13,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { transition } from '@/lib/workflow/transition'
+import { logEvent } from '@/lib/events/log'
 
 type ActorRole = 'admin' | 'strategist' | 'client' | 'system' | 'cron'
 
@@ -51,6 +52,16 @@ async function attachActor(postId: string, ctx: ActorContext): Promise<void> {
     .eq('id', latest.id)
 }
 
+const STATE_TO_EVENT: Record<string, string> = {
+  in_review: 'scheduled_post.submitted_for_review',
+  approved: 'scheduled_post.approved',
+  draft: 'scheduled_post.changes_requested',
+  scheduled: 'scheduled_post.scheduled',
+  published: 'scheduled_post.published',
+  failed: 'scheduled_post.failed',
+  canceled: 'scheduled_post.canceled',
+}
+
 async function move(
   postId: string,
   to: string,
@@ -65,7 +76,21 @@ async function move(
     actorId: ctx.actorId ?? null,
     patch,
   })
-  if (result.ok) await attachActor(postId, ctx)
+  if (result.ok) {
+    await attachActor(postId, ctx)
+    const eventType = STATE_TO_EVENT[to]
+    if (eventType && result.row) {
+      await logEvent({
+        clientId: result.row.client_id,
+        eventType,
+        subjectType: 'scheduled_post',
+        subjectId: postId,
+        actorId: ctx.actorId ?? null,
+        actorRole: ctx.actorRole,
+        payload: { postId, fromState: null, toState: to, reason: ctx.reason },
+      })
+    }
+  }
   return result
 }
 

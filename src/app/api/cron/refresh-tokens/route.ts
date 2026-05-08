@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getConnector } from '@/lib/integrations/registry'
 import type { ConnectionRow } from '@/lib/integrations/types'
+import { logEvent } from '@/lib/events/log'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -72,6 +73,15 @@ export async function GET(req: Request) {
         }
         if (result.refreshToken) update.refresh_token = result.refreshToken
         await admin.from('channel_connections').update(update).eq('id', row.id)
+        await logEvent({
+          clientId: row.client_id,
+          eventType: 'connection.token_rotated',
+          subjectType: 'channel_connection',
+          subjectId: row.id,
+          actorRole: 'cron',
+          payload: { channel: row.channel, status: 'rotated' },
+          summary: `${connector.label} token refreshed`,
+        })
         outcomes.push({ connectionId: row.id, channel: row.channel, status: 'rotated' })
         continue
       }
@@ -88,6 +98,21 @@ export async function GET(req: Request) {
         .from('channel_connections')
         .update({ status: newStatus, sync_error: result.error ?? 'Unknown refresh error' })
         .eq('id', row.id)
+      await logEvent({
+        clientId: row.client_id,
+        eventType: result.requiresReauth ? 'connection.reauth_required' : 'connection.token_rotated',
+        subjectType: 'channel_connection',
+        subjectId: row.id,
+        actorRole: 'cron',
+        payload: {
+          channel: row.channel,
+          status: result.requiresReauth ? 'reauth_required' : 'failed',
+          error: result.error,
+        },
+        summary: result.requiresReauth
+          ? `${connector.label} needs to be reconnected`
+          : `${connector.label} token refresh failed`,
+      })
       outcomes.push({
         connectionId: row.id,
         channel: row.channel,
