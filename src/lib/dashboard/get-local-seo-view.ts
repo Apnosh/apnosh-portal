@@ -128,8 +128,13 @@ export async function getLocalSeoView(
   // ---- Hero: total interactions (directions + calls + website_clicks)
   const thisInteractions = sumInteractions(thisMonthGbp)
   const lastInteractions = sumInteractions(lastMonthGbp)
-  const hasPrevData = lastInteractions > 0 || prevReviewCount > 0
-  const pctChange = lastInteractions > 0
+
+  // hasMeaningfulPrev: only treat last month as "comparable history" if it
+  // had genuinely substantive volume. Going from 1 to 0 is noise, not a
+  // crisis — previously this triggered "needs attention" with -100%.
+  const hasMeaningfulPrev = lastInteractions >= 20
+  const hasPrevData = hasMeaningfulPrev || prevReviewCount >= 3
+  const pctChange = hasMeaningfulPrev
     ? Math.round(((thisInteractions - lastInteractions) / lastInteractions) * 100)
     : 0
   const isUp = pctChange >= 0

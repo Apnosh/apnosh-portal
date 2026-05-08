@@ -145,7 +145,10 @@ async function buildVisibilityView(
 
   const thisReach = sumField(thisMonth, 'reach')
   const lastReach = sumField(lastMonth, 'reach')
-  const pctChange = lastReach > 0 ? Math.round(((thisReach - lastReach) / lastReach) * 100) : 0
+  // Only trust the percent change when prior period had meaningful volume.
+  // Below the threshold we treat it as "steady" so we don't alarm on noise.
+  const hasMeaningfulPrev = lastReach >= 50
+  const pctChange = hasMeaningfulPrev ? Math.round(((thisReach - lastReach) / lastReach) * 100) : 0
   const isUp = pctChange >= 0
 
   // Sparklines: last 12 weeks, weekly totals
@@ -273,7 +276,8 @@ async function buildFootTrafficView(
 
   const thisActions = sumField(thisMonth, 'actions')
   const lastActions = sumField(lastMonth, 'actions')
-  const pctChange = lastActions > 0 ? Math.round(((thisActions - lastActions) / lastActions) * 100) : 0
+  const hasMeaningfulPrev = lastActions >= 20
+  const pctChange = hasMeaningfulPrev ? Math.round(((thisActions - lastActions) / lastActions) * 100) : 0
   const isUp = pctChange >= 0
 
   const thisDirections = sumField(thisMonth, 'directions')

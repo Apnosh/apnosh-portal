@@ -198,6 +198,46 @@ export default function DashboardPage() {
           }
         />
       </div>
+
+      {/* 7. Want to go deeper — discoverable links to focused analytics pages */}
+      <div className="db-fade db-d7 mt-2 grid grid-cols-3 max-sm:grid-cols-1 gap-2">
+        <a
+          href="/dashboard/local-seo"
+          className="rounded-xl p-3 border bg-white hover:bg-bg-2 transition-colors text-[12px]"
+          style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+        >
+          <div className="font-semibold mb-0.5" style={{ color: 'var(--db-black, #111)' }}>
+            Customer analytics →
+          </div>
+          <div style={{ color: 'var(--db-ink-3, #888)' }}>
+            Calls, directions, search performance
+          </div>
+        </a>
+        <a
+          href="/dashboard/local-seo/reviews"
+          className="rounded-xl p-3 border bg-white hover:bg-bg-2 transition-colors text-[12px]"
+          style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+        >
+          <div className="font-semibold mb-0.5" style={{ color: 'var(--db-black, #111)' }}>
+            Review analytics →
+          </div>
+          <div style={{ color: 'var(--db-ink-3, #888)' }}>
+            Star trend, sentiment, response rate
+          </div>
+        </a>
+        <a
+          href="/dashboard/social"
+          className="rounded-xl p-3 border bg-white hover:bg-bg-2 transition-colors text-[12px]"
+          style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+        >
+          <div className="font-semibold mb-0.5" style={{ color: 'var(--db-black, #111)' }}>
+            Social analytics →
+          </div>
+          <div style={{ color: 'var(--db-ink-3, #888)' }}>
+            Reach, impressions, engagement
+          </div>
+        </a>
+      </div>
     </div>
   )
 }
