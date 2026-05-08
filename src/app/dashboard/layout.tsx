@@ -8,6 +8,7 @@ import {
   MessageSquare, Wrench, Building2, CreditCard, FileText, HelpCircle, Settings,
   Menu, X, ChevronDown, BookOpen, FileBarChart, ListTodo,
   Share2, Globe, MapPin, Mail, Image as ImageIcon, Target, Link2, Newspaper,
+  Inbox, Star, Sparkles, Palette,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { CartProvider } from '@/lib/cart-context'
@@ -74,16 +75,56 @@ interface NavSection {
 //   /dashboard/goals (first-run only; surface as setup card)
 //   /dashboard/notifications (use the bell icon in header)
 // ─────────────────────────────────────────────────────────────────────
+// Sidebar reorganized around marketing JOBS, not internal service-areas:
+//   Today / Inbox / Calendar    — daily destinations
+//   Publish (group)              — content channels
+//   Engage (group)               — customer-facing surfaces
+//   Brand (group)                — assets + guidelines combined
+// Settings + low-frequency items moved to bottomItems.
 const navSections: NavSection[] = [
   {
     label: null,
     items: [
       { label: 'Today', href: '/dashboard', icon: LayoutDashboard, exact: true },
+      { label: 'Inbox', href: '/dashboard/approvals', icon: Inbox, exact: false },
+      { label: 'Calendar', href: '/dashboard/social/calendar', icon: Calendar, exact: false },
     ],
   },
   {
-    label: 'Services',
+    label: 'Publish',
     items: [
+      {
+        label: 'Posts',
+        href: '/dashboard/social/calendar',
+        icon: Sparkles,
+        exact: false,
+        serviceArea: 'social',
+        children: [
+          { label: 'Calendar', href: '/dashboard/social/calendar' },
+          { label: 'Action needed', href: '/dashboard/social/action-needed' },
+          { label: 'Request content', href: '/dashboard/social/requests/new' },
+          { label: 'Requests', href: '/dashboard/social/requests' },
+        ],
+      },
+      {
+        label: 'Local SEO',
+        href: '/dashboard/local-seo',
+        icon: MapPin,
+        exact: false,
+        serviceArea: 'local_seo',
+      },
+      {
+        label: 'Email & SMS',
+        href: '/dashboard/email-sms',
+        icon: Mail,
+        exact: false,
+        serviceArea: 'email_sms',
+        children: [
+          { label: 'Overview', href: '/dashboard/email-sms', exact: true },
+          { label: 'Campaigns', href: '/dashboard/email-sms/campaigns' },
+          { label: 'List & Audience', href: '/dashboard/email-sms/list' },
+        ],
+      },
       {
         label: 'Website',
         href: '/dashboard/website/manage',
@@ -98,57 +139,37 @@ const navSections: NavSection[] = [
           { label: 'Change Requests', href: '/dashboard/website/requests' },
         ],
       },
+    ],
+  },
+  {
+    label: 'Engage',
+    items: [
       {
-        label: 'Social Media',
-        href: '/dashboard/social/calendar',
-        icon: Share2,
-        exact: false,
-        serviceArea: 'social',
-        children: [
-          { label: 'Calendar', href: '/dashboard/social/calendar' },
-          { label: 'Action needed', href: '/dashboard/social/action-needed' },
-          { label: 'Request content', href: '/dashboard/social/requests/new' },
-          { label: 'Requests', href: '/dashboard/social/requests' },
-        ],
-      },
-      {
-        label: 'Local SEO',
+        label: 'Reviews',
         href: '/dashboard/local-seo/reviews',
-        icon: MapPin,
+        icon: Star,
         exact: false,
-        serviceArea: 'local_seo',
-        children: [
-          { label: 'Reviews', href: '/dashboard/local-seo/reviews' },
-        ],
       },
       {
-        label: 'Email & SMS',
-        href: '/dashboard/email-sms',
-        icon: Mail,
+        label: 'Messages',
+        href: '/dashboard/messages',
+        icon: MessageSquare,
         exact: false,
-        serviceArea: 'email_sms',
-        children: [
-          { label: 'Overview', href: '/dashboard/email-sms', exact: true },
-          { label: 'Campaigns', href: '/dashboard/email-sms/campaigns' },
-          { label: 'List & Audience', href: '/dashboard/email-sms/list' },
-        ],
       },
     ],
   },
   {
     label: 'Brand',
     items: [
-      { label: 'Assets', href: '/dashboard/assets', icon: ImageIcon, exact: false },
-    ],
-  },
-  {
-    label: 'Communication',
-    items: [
       {
-        label: 'Messages',
-        href: '/dashboard/messages',
-        icon: MessageSquare,
+        label: 'Brand & Assets',
+        href: '/dashboard/assets',
+        icon: Palette,
         exact: false,
+        children: [
+          { label: 'Assets', href: '/dashboard/assets' },
+          { label: 'Brand guidelines', href: '/dashboard/profile/brand-guidelines' },
+        ],
       },
       {
         label: 'Weekly briefs',
@@ -160,12 +181,12 @@ const navSections: NavSection[] = [
   },
 ]
 
+// Footer items — low-frequency settings, kept compact in the bottom rail.
 const bottomItems = [
+  { label: 'Connections', href: '/dashboard/connected-accounts', icon: Link2 },
   { label: 'Business profile', href: '/dashboard/profile', icon: Building2 },
-  { label: 'Brand guidelines', href: '/dashboard/profile/brand-guidelines', icon: BookOpen },
-  { label: 'Connected accounts', href: '/dashboard/connected-accounts', icon: Link2 },
-  { label: 'Agreements', href: '/dashboard/agreements', icon: FileText },
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
+  { label: 'Agreements', href: '/dashboard/agreements', icon: FileText },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
   { label: 'Help', href: '/dashboard/help', icon: HelpCircle },
 ]
