@@ -137,10 +137,22 @@ create trigger scheduled_posts_log_transition
 
 -- 6) client_services.requires_client_approval -- per-client gate on
 -- whether posts must move through in_review before publishing.
-alter table client_services
-  add column if not exists requires_client_approval boolean not null default true;
-
-comment on column client_services.requires_client_approval is
-  'When true, scheduled_posts under this service must transition through '
-  '''in_review'' -> ''approved'' before scheduling. When false, the strategist '
-  'can move directly draft -> approved -> scheduled (trust mode).';
+-- Guarded so this migration applies cleanly even before the
+-- client_services table is introduced (see migration 089).
+do $$ begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'client_services'
+  ) then
+    execute $sql$
+      alter table client_services
+        add column if not exists requires_client_approval boolean not null default true
+    $sql$;
+    execute $sql$
+      comment on column client_services.requires_client_approval is
+        'When true, scheduled_posts under this service must transition through '
+        '''in_review'' -> ''approved'' before scheduling. When false, the strategist '
+        'can move directly draft -> approved -> scheduled (trust mode).'
+    $sql$;
+  end if;
+end $$;
