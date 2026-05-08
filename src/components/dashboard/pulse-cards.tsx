@@ -5,18 +5,19 @@
  * Owner-framing: "your customers", "your reputation", "your reach".
  *
  * Three states per card:
- *   - "live"      — has data, shows value + delta + alarm-when-bad
+ *   - "live"      — has data, shows value + delta + sparkline + alarm-when-bad
  *   - "no-data"   — connection missing or no rows yet; gray, neutral,
  *                   shows a "Connect →" CTA instead of "0 -100%"
  *   - "loading"   — skeleton
  *
- * Critical: never alarm a user about an empty data source. The previous
- * version showed "Your visibility: 0 -100%" with a red border, which
- * looked like a dying business when really the GBP just wasn't wired.
+ * Live cards optionally render a 14-day sparkline so the trend is
+ * visible at a glance — sparkline > number-with-arrow for "is the
+ * line going up or down" recognition speed.
  */
 
 import Link from 'next/link'
 import { ArrowUpRight, ArrowDownRight, Minus, Plug } from 'lucide-react'
+import Sparkline from './sparkline'
 
 export interface PulseCard {
   label: string
@@ -36,6 +37,8 @@ export interface PulseCard {
   connectLabel?: string
   /** Highlight if the metric is genuinely in trouble (live state only). */
   alert?: boolean
+  /** Optional 14-day daily series for a sparkline (live state only). */
+  series?: number[]
 }
 
 export default function PulseCards({ cards }: { cards: PulseCard[] }) {
@@ -82,6 +85,7 @@ export default function PulseCards({ cards }: { cards: PulseCard[] }) {
           c.up === null || c.up === undefined ? 'text-ink-4' :
           c.up ? 'text-emerald-600' : 'text-rose-600'
         const Arrow = c.up === null || c.up === undefined ? Minus : c.up ? ArrowUpRight : ArrowDownRight
+        const hasSeries = c.series && c.series.length > 1 && c.series.some(v => v > 0)
         return (
           <Link
             href={c.href}
@@ -101,6 +105,9 @@ export default function PulseCards({ cards }: { cards: PulseCard[] }) {
               )}
             </div>
             <p className="text-[11px] mt-1" style={{ color: 'var(--db-ink-3, #888)' }}>{c.subtitle}</p>
+            {hasSeries && (
+              <Sparkline data={c.series!} up={c.up !== false} height={28} />
+            )}
           </Link>
         )
       })}

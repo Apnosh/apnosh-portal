@@ -42,7 +42,9 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
   const d30 = new Date(now.getTime() - 30 * 86400000)
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
 
-  const [gbpThis, gbpPrev, reviewsRecent, socialThis, socialPrev] = await Promise.all([
+  // For sparklines we also pull the full 14-day daily series per metric.
+  const d14Date = fmt(d14)
+  const [gbpThis, gbpPrev, gbpDaily, reviewsRecent, socialThis, socialPrev, socialDaily] = await Promise.all([
     admin
       .from('gbp_metrics')
       .select('directions, calls, website_clicks, bookings, conversations')
@@ -54,6 +56,12 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
       .eq('client_id', clientId)
       .gte('date', fmt(d14))
       .lt('date', fmt(d7)),
+    admin
+      .from('gbp_metrics')
+      .select('date, directions, calls, website_clicks, bookings, conversations')
+      .eq('client_id', clientId)
+      .gte('date', d14Date)
+      .order('date', { ascending: true }),
     admin
       .from('reviews')
       .select('rating, posted_at')
@@ -70,7 +78,41 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
       .eq('client_id', clientId)
       .gte('date', fmt(d14))
       .lt('date', fmt(d7)),
+    admin
+      .from('social_metrics')
+      .select('date, reach')
+      .eq('client_id', clientId)
+      .gte('date', d14Date)
+      .order('date', { ascending: true }),
   ])
+
+  // Build a 14-element daily series for sparklines. Some days may have no
+  // row, so we zero-fill missing dates so the sparkline x-axis is even.
+  const buildDailySeries = <T extends { date: string }>(
+    rows: T[] | null,
+    valueOf: (r: T) => number,
+  ): number[] => {
+    const byDate = new Map<string, number>()
+    for (const r of rows ?? []) {
+      const d = (r.date as string).slice(0, 10)
+      byDate.set(d, (byDate.get(d) ?? 0) + valueOf(r))
+    }
+    const out: number[] = []
+    for (let i = 13; i >= 0; i--) {
+      const day = fmt(new Date(now.getTime() - i * 86400000))
+      out.push(byDate.get(day) ?? 0)
+    }
+    return out
+  }
+
+  const customersSeries = buildDailySeries(gbpDaily.data, (r) =>
+    Number(r.directions ?? 0) +
+    Number(r.calls ?? 0) +
+    Number(r.website_clicks ?? 0) +
+    Number(r.bookings ?? 0) +
+    Number(r.conversations ?? 0)
+  )
+  const reachSeries = buildDailySeries(socialDaily.data, (r) => Number(r.reach ?? 0))
 
   // ---------- Customers ----------
   const sumActions = (rows: { directions?: number | null; calls?: number | null; website_clicks?: number | null; bookings?: number | null; conversations?: number | null }[] | null): number =>
@@ -105,6 +147,7 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
         subtitle: 'Calls, directions, bookings',
         href: '/dashboard/local-seo',
         alert: customersPrev >= 20 && (customersThis / customersPrev) < 0.7,
+        series: customersSeries,
       }
 
   // ---------- Reputation ----------
@@ -157,6 +200,7 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
         href: '/dashboard/social',
         // Only alarm if absolute volume is meaningful (≥100/week) AND it dropped >30%
         alert: reachPrev >= 100 && (reachThis / reachPrev) < 0.7,
+        series: reachSeries,
       }
 
   return { customers, reputation, reach }
