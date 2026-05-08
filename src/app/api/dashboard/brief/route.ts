@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     const { data: membership } = await supabase
       .from('client_users')
       .select('client_id')
-      .eq('user_id', user.id)
+      .eq('auth_user_id', user.id)
       .eq('client_id', body.clientId)
       .maybeSingle()
     if (membership) authorized = true
