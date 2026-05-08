@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/run-operator",
       "schedule": "0 15 * * 1"
+    },
+    {
+      "path": "/api/cron/refresh-tokens",
+      "schedule": "0 9 * * *"
     }
   ]
 }
