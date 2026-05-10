@@ -37,3 +37,4 @@ No:
 | 0001 | Eight-goal catalog (not 10) | Accepted |
 | 0002 | Decline-to-sell cultural principle | Accepted |
 | 0003 | Goal layer precedes Q2 features | Accepted |
+| 0004 | Always run the 6-point alignment check (no exemptions) | Accepted |
