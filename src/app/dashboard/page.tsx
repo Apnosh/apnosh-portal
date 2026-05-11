@@ -30,6 +30,9 @@ import YourMarketingWeek from '@/components/dashboard/your-marketing-week'
 import ComingUp, { type ComingUpItem } from '@/components/dashboard/coming-up'
 import PulseCards, { type PulseCard } from '@/components/dashboard/pulse-cards'
 import GoalProgressCards, { type GoalCardData } from '@/components/dashboard/goal-progress-cards'
+import YourStrategist, { type StrategistCardData } from '@/components/dashboard/your-strategist'
+import PlaybookExplanations from '@/components/dashboard/playbook-explanations'
+import type { PlaybookExplanation } from '@/lib/dashboard/get-playbook-explanations'
 import ServicesThisMonth from '@/components/dashboard/services-this-month'
 import type { ServiceMonthRow } from '@/lib/services/delivery-matrix'
 
@@ -39,6 +42,8 @@ interface DashboardLoadResult {
   agenda: AgendaItem[]
   services: ServiceMonthRow[]
   goalCards: GoalCardData[]
+  strategist: StrategistCardData | null
+  playbooks: PlaybookExplanation[]
   comingUp: ComingUpItem[]
   reviews: unknown[]
   brief: { text: string; generatedAt: string; model: string; cached: boolean } | null
@@ -228,10 +233,20 @@ export default function DashboardPage() {
               : <PulseCards cards={pulseCardsToRender} />
             }
           </div>
+
+          {/* 3b. Playbook explanations -- "what we're doing for each goal" */}
+          {bundle && bundle.playbooks.length > 0 && (
+            <div className="db-fade db-d4">
+              <PlaybookExplanations explanations={bundle.playbooks} />
+            </div>
+          )}
         </div>
 
         {/* ═════════════ RIGHT — context column ═════════════ */}
         <div>
+          {/* Strategist relationship card (B4) -- visible top of right column. */}
+          <YourStrategist strategist={bundle ? bundle.strategist : null} />
+
           {/* 4. This week — proof of momentum */}
           <div className="db-fade db-d4">
             <YourMarketingWeek

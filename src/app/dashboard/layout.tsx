@@ -168,6 +168,12 @@ const navSections: NavSection[] = [
     label: 'Brand',
     items: [
       {
+        label: 'Your restaurant',
+        href: '/dashboard/restaurant',
+        icon: Building2,
+        exact: false,
+      },
+      {
         label: 'Brand & Assets',
         href: '/dashboard/assets',
         icon: Palette,
