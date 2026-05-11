@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { createQuoteInvoice } from '@/lib/admin/quote-invoice'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -127,6 +128,38 @@ export async function POST(
     },
   })
 
+  // On approval, fire-and-await the Stripe invoice creation. Failure
+  // here doesn't block the approval — the quote stays approved with
+  // payment_status remaining at 'not_required', strategist can retry
+  // by hitting the regenerate endpoint or invoicing manually.
+  if (body.action === 'approve') {
+    try {
+      const inv = await createQuoteInvoice(id)
+      // Refresh the row so the returned shape carries the invoice fields.
+      if (inv) {
+        const { data: refreshed } = await admin
+          .from('content_quotes')
+          .select('*')
+          .eq('id', id)
+          .single()
+        if (refreshed) {
+          Object.assign(updated, refreshed)
+        }
+      }
+    } catch (e) {
+      // Log to the events table so the strategist sees what happened.
+      await admin.from('events').insert({
+        client_id: quote.client_id,
+        event_type: 'quote.invoice_failed_to_create',
+        subject_type: 'content_quote',
+        subject_id: id,
+        actor_role: 'system',
+        summary: `Could not create Stripe invoice: ${e instanceof Error ? e.message : 'unknown'}`,
+        payload: {},
+      })
+    }
+  }
+
   // Return the shaped quote so the UI can update in place.
   return NextResponse.json({
     ok: true,
@@ -147,6 +180,10 @@ export async function POST(
       respondedAt: updated.responded_at,
       expiresAt: updated.expires_at,
       createdAt: updated.created_at,
+      paymentStatus: updated.payment_status ?? 'not_required',
+      stripeInvoiceHostedUrl: updated.stripe_invoice_hosted_url ?? null,
+      stripeInvoicePdfUrl: updated.stripe_invoice_pdf_url ?? null,
+      paidAt: updated.paid_at ?? null,
     },
   })
 }

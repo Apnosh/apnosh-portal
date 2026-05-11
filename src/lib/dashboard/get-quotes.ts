@@ -22,6 +22,9 @@ export interface QuoteLineItem {
   notes?: string
 }
 
+export type QuotePaymentStatus =
+  | 'not_required' | 'pending' | 'paid' | 'failed' | 'refunded' | 'voided'
+
 export interface ContentQuote {
   id: string
   clientId: string
@@ -39,6 +42,13 @@ export interface ContentQuote {
   respondedAt: string | null
   expiresAt: string | null
   createdAt: string
+  paymentStatus: QuotePaymentStatus
+  stripeInvoiceHostedUrl: string | null
+  stripeInvoicePdfUrl: string | null
+  amountDueCents: number | null
+  paidAt: string | null
+  paymentFailedAt: string | null
+  paymentFailureReason: string | null
 }
 
 const PENDING_STATUSES: QuoteStatus[] = ['sent', 'revising']
@@ -111,5 +121,12 @@ function toQuote(r: Record<string, unknown>): ContentQuote {
     respondedAt: (r.responded_at as string | null) ?? null,
     expiresAt: (r.expires_at as string | null) ?? null,
     createdAt: r.created_at as string,
+    paymentStatus: (r.payment_status as QuotePaymentStatus | null) ?? 'not_required',
+    stripeInvoiceHostedUrl: (r.stripe_invoice_hosted_url as string | null) ?? null,
+    stripeInvoicePdfUrl: (r.stripe_invoice_pdf_url as string | null) ?? null,
+    amountDueCents: (r.amount_due_cents as number | null) ?? null,
+    paidAt: (r.paid_at as string | null) ?? null,
+    paymentFailedAt: (r.payment_failed_at as string | null) ?? null,
+    paymentFailureReason: (r.payment_failure_reason as string | null) ?? null,
   }
 }

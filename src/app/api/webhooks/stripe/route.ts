@@ -462,6 +462,13 @@ async function handleInvoicePaid(supabase: AdminClient, invoice: Stripe.Invoice)
       .eq('stripe_subscription_id', subId)
       .eq('status', 'past_due')
   }
+
+  // If this invoice was created for a content_quote, mirror "paid"
+  // onto the quote row + log a quote.paid event.
+  if (invoice.metadata?.apnosh_quote_id && invoice.id) {
+    const { markQuotePaid } = await import('@/lib/admin/quote-invoice')
+    await markQuotePaid(invoice.id)
+  }
 }
 
 async function handleInvoiceFailed(supabase: AdminClient, invoice: Stripe.Invoice) {
@@ -474,10 +481,23 @@ async function handleInvoiceFailed(supabase: AdminClient, invoice: Stripe.Invoic
       .update({ status: 'past_due' })
       .eq('stripe_subscription_id', subId)
   }
+
+  // Mirror failure onto the quote.
+  if (invoice.metadata?.apnosh_quote_id && invoice.id) {
+    const { markQuoteFailed } = await import('@/lib/admin/quote-invoice')
+    const reason = invoice.last_finalization_error?.message
+      ?? 'Payment failed — see Stripe dashboard for details.'
+    await markQuoteFailed(invoice.id, reason)
+  }
 }
 
 async function handleInvoiceVoided(supabase: AdminClient, invoice: Stripe.Invoice) {
   await upsertInvoice(supabase, invoice, 'void')
+
+  if (invoice.metadata?.apnosh_quote_id && invoice.id) {
+    const { markQuoteVoided } = await import('@/lib/admin/quote-invoice')
+    await markQuoteVoided(invoice.id)
+  }
 }
 
 // ============================================================

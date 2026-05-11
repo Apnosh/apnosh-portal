@@ -15,9 +15,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, FileText, Check, X, MessageSquare, Loader2, Clock,
-  CheckCircle2, XCircle, Inbox,
+  CheckCircle2, XCircle, Inbox, CreditCard, ExternalLink, AlertCircle,
 } from 'lucide-react'
-import type { ContentQuote, QuoteStatus } from '@/lib/dashboard/get-quotes'
+import type { ContentQuote, QuoteStatus, QuotePaymentStatus } from '@/lib/dashboard/get-quotes'
 
 const STATUS_TONE: Record<QuoteStatus, { label: string; bg: string; text: string; Icon: React.ComponentType<{ className?: string }> }> = {
   draft:     { label: 'Draft',          bg: 'bg-ink-7',     text: 'text-ink-3',      Icon: FileText },
@@ -264,8 +264,118 @@ export default function QuoteView({ quote: initialQuote }: { quote: ContentQuote
           {quote.status === 'expired' && 'This quote expired without a response.'}
         </div>
       )}
+
+      {/* Payment status — only shown when an invoice exists */}
+      {quote.status === 'approved' && quote.paymentStatus !== 'not_required' && (
+        <PaymentCard quote={quote} />
+      )}
     </div>
   )
+}
+
+/* ─────────────────────────────── Payment card ─────────────────────────────── */
+
+const PAY_TONE: Record<QuotePaymentStatus, { label: string; bg: string; text: string; Icon: React.ComponentType<{ className?: string }> }> = {
+  not_required: { label: 'No charge',        bg: 'bg-ink-7',     text: 'text-ink-3',      Icon: Check },
+  pending:      { label: 'Awaiting payment', bg: 'bg-amber-50',  text: 'text-amber-700',  Icon: Clock },
+  paid:         { label: 'Paid',             bg: 'bg-emerald-50', text: 'text-emerald-700', Icon: CheckCircle2 },
+  failed:       { label: 'Payment failed',   bg: 'bg-rose-50',   text: 'text-rose-700',   Icon: AlertCircle },
+  refunded:     { label: 'Refunded',         bg: 'bg-ink-7',     text: 'text-ink-3',      Icon: Check },
+  voided:       { label: 'Voided',           bg: 'bg-ink-7',     text: 'text-ink-3',      Icon: XCircle },
+}
+
+function PaymentCard({ quote }: { quote: ContentQuote }) {
+  const tone = PAY_TONE[quote.paymentStatus]
+  const ToneIcon = tone.Icon
+  const isPending = quote.paymentStatus === 'pending'
+  const isPaid = quote.paymentStatus === 'paid'
+  const isFailed = quote.paymentStatus === 'failed'
+
+  return (
+    <section className="mt-5 rounded-2xl border bg-white p-5" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+      <div className="flex items-start gap-3">
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${tone.bg} ${tone.text}`}>
+          <CreditCard className="w-4.5 h-4.5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
+              Payment
+            </p>
+            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${tone.bg} ${tone.text}`}>
+              <ToneIcon className="w-2.5 h-2.5" />
+              {tone.label}
+            </span>
+          </div>
+
+          {isPending && (
+            <p className="text-[13px] text-ink-2 mt-1.5 leading-relaxed">
+              An invoice for <span className="font-semibold">${quote.total.toFixed(0)}</span> has been sent.
+              Pay via the secure Stripe page below.
+              {' '}Work begins once payment clears.
+            </p>
+          )}
+          {isPaid && (
+            <p className="text-[13px] text-ink-2 mt-1.5 leading-relaxed">
+              Paid <span className="font-semibold">${quote.total.toFixed(0)}</span>
+              {quote.paidAt && <span> on {formatDate(quote.paidAt)}</span>}.
+              Your strategist is on it.
+            </p>
+          )}
+          {isFailed && (
+            <p className="text-[13px] text-ink-2 mt-1.5 leading-relaxed">
+              The charge didn&rsquo;t go through.
+              {quote.paymentFailureReason && (
+                <span className="block text-[12px] text-rose-700 mt-1">{quote.paymentFailureReason}</span>
+              )}
+              {' '}Try again with a different card on the Stripe page.
+            </p>
+          )}
+
+          {(isPending || isFailed) && quote.stripeInvoiceHostedUrl && (
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <a
+                href={quote.stripeInvoiceHostedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-[13px] font-semibold bg-ink hover:bg-ink/90 text-white rounded-full px-4 py-2 transition-colors"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                Pay invoice
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              {quote.stripeInvoicePdfUrl && (
+                <a
+                  href={quote.stripeInvoicePdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-2 hover:text-ink"
+                >
+                  Download PDF
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+          )}
+          {isPaid && quote.stripeInvoicePdfUrl && (
+            <a
+              href={quote.stripeInvoicePdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-2 hover:text-ink mt-3"
+            >
+              Download receipt
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function Confirm({
