@@ -25,6 +25,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useClient } from '@/lib/client-context'
 import TodayHero from '@/components/dashboard/today-hero'
+import DashboardStats from '@/components/dashboard/dashboard-stats'
 import type { TodayHeroData } from '@/lib/dashboard/get-today-hero'
 import type { AgendaItem } from '@/components/dashboard/agenda'
 import ComingUp, { type ComingUpItem } from '@/components/dashboard/coming-up'
@@ -166,13 +167,23 @@ export default function DashboardPage() {
       className="max-w-[1280px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
+      {/* 5-second glance: 3 universal restaurant metrics with deltas.
+          Spans full width above the 2-column grid -- first thing the
+          owner sees, fastest read on the page. */}
+      {bundle && (
+        <DashboardStats
+          customers={bundle.pulse.customers}
+          reputation={bundle.pulse.reputation}
+          reach={bundle.pulse.reach}
+        />
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-x-6">
         {/* ═════════════ LEFT — the morning paper ═════════════ */}
         <div>
           {/* The Today hero owns the action surface end-to-end:
               headline -> AI narrative -> needs you -> shipping this week
-              -> recently. No more standalone agenda or numbers blocks --
-              the hero is the dashboard. */}
+              -> recently. */}
           <div className="db-fade db-d1">
             <TodayHero
               clientId={client.id}
