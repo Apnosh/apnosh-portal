@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { resolveEnrolledServices, hasService as hasServiceUtil } from '@/lib/service-access'
 import type { Client, ServiceArea } from '@/types/database'
@@ -56,6 +57,11 @@ function writeCache(client: Client | null, isAdmin: boolean): void {
 
 export function ClientProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
+  const searchParams = useSearchParams()
+  // Admins pick a client via this query param; non-admins ignore it.
+  // Re-resolving when it changes is how the picker hands control back
+  // to the rest of the app.
+  const urlClientId = searchParams?.get('clientId') ?? null
   const cached = typeof window !== 'undefined' ? readCache() : null
   const [client, setClient] = useState<Client | null>(cached?.client ?? null)
   const [isAdmin, setIsAdmin] = useState<boolean>(cached?.isAdmin ?? false)
@@ -133,13 +139,16 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const c = readCache()
-    const fresh = c && Date.now() - c.cachedAt < CACHE_TTL_MS
-    if (fresh) {
-      // Painted with cached value; nothing to do until cache expires.
-      return
-    }
+    const cachedFresh = c && Date.now() - c.cachedAt < CACHE_TTL_MS
+    // When admin's URL clientId no longer matches the cached client,
+    // we MUST re-resolve regardless of cache freshness — that's how
+    // the in-app picker hands control back. For non-admins, cache
+    // freshness rules as before.
+    const cachedAdminMismatch =
+      cachedFresh && c.isAdmin && (c.client?.id ?? null) !== urlClientId
+    if (cachedFresh && !cachedAdminMismatch) return
     refresh()
-  }, [refresh])
+  }, [refresh, urlClientId])
 
   const enrolledServices = resolveEnrolledServices(client?.services_active)
   const hasService = (area: ServiceArea) => hasServiceUtil(client?.services_active, area)
