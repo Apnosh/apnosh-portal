@@ -41,6 +41,16 @@ export default function DashboardStats({ customers, reputation, reach }: Props) 
   )
 }
 
+function parseCompact(s: string): number | null {
+  const m = s.match(/^([\d.]+)([kKmM]?)/)
+  if (!m) return null
+  const n = parseFloat(m[1])
+  if (isNaN(n)) return null
+  if (m[2] === 'k' || m[2] === 'K') return n * 1000
+  if (m[2] === 'm' || m[2] === 'M') return n * 1_000_000
+  return n
+}
+
 function StatTile({
   card, label, iconKey, connectHref,
 }: {
@@ -61,7 +71,12 @@ function StatTile({
     )
   }
 
-  if (card.state === 'no-data') {
+  // Treat live-with-zero-value as no-data visually. A giant "0" reads
+  // as broken; "—  Connect to track →" reads as "not set up yet."
+  const valueAsNumber = typeof card.value === 'string' ? parseCompact(card.value) : null
+  const effectivelyNoData = card.state === 'live' && (valueAsNumber === null || valueAsNumber === 0)
+
+  if (card.state === 'no-data' || effectivelyNoData) {
     return (
       <Link
         href={card.href ?? connectHref}

@@ -152,12 +152,14 @@ export default function TodayHero({
         </div>
       )}
 
-      {/* Content pipeline -- scheduled posts + in-progress deliverables */}
-      {hero.thisWeek.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-ink-7">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-2">
-            Content pipeline
-          </p>
+      {/* Content pipeline -- scheduled posts + in-progress deliverables.
+          Empty-state explains what'll show here so the structure of
+          the dashboard is visible from day 1. */}
+      <div className="mt-4 pt-4 border-t border-ink-7">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-2">
+          Content pipeline
+        </p>
+        {hero.thisWeek.length > 0 ? (
           <ul className="space-y-1.5">
             {hero.thisWeek.map((it, idx) => (
               <li key={idx}>
@@ -165,15 +167,21 @@ export default function TodayHero({
               </li>
             ))}
           </ul>
-        </div>
-      )}
-
-      {/* Recent activity (last 48h proof) */}
-      {hero.recentActivity.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-ink-7">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-2">
-            Recent activity
+        ) : (
+          <p className="text-[12px] text-ink-3 leading-relaxed">
+            Posts, designs, and other work-in-progress show up here as your
+            strategist starts drafting. First items typically appear within
+            48 hours of your kickoff call.
           </p>
+        )}
+      </div>
+
+      {/* Recent activity (last 48h proof). Empty state visible too. */}
+      <div className="mt-4 pt-4 border-t border-ink-7">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-2">
+          Recent activity
+        </p>
+        {hero.recentActivity.length > 0 ? (
           <ul className="space-y-1.5">
             {hero.recentActivity.map((it, idx) => (
               <li key={idx}>
@@ -181,8 +189,13 @@ export default function TodayHero({
               </li>
             ))}
           </ul>
-        </div>
-      )}
+        ) : (
+          <p className="text-[12px] text-ink-3 leading-relaxed">
+            Nothing in the last 48 hours. As your strategist drafts content,
+            replies to reviews, or runs campaigns, the activity log fills in here.
+          </p>
+        )}
+      </div>
 
       {/* Footer: brief metadata */}
       {brief && (
