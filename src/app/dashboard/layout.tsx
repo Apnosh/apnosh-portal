@@ -87,7 +87,7 @@ const navSections: NavSection[] = [
     items: [
       { label: 'Today', href: '/dashboard', icon: LayoutDashboard, exact: true },
       { label: 'Inbox', href: '/dashboard/inbox', icon: Inbox, exact: false },
-      { label: 'Calendar', href: '/dashboard/social/calendar', icon: Calendar, exact: false },
+      { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar, exact: false },
     ],
   },
   {
