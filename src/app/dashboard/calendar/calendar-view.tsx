@@ -16,11 +16,12 @@
  * Past days fade. Today highlights. Click any cell -> day detail.
  */
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, X,
   Send, Mail, Camera, Sparkles, ListTodo, ExternalLink,
+  Link2, Check, Copy, Rss,
 } from 'lucide-react'
 import type {
   CalendarEvent, CalendarCategory, CalendarEventKind, CalendarTone,
@@ -66,12 +67,24 @@ const TONE_CHIP: Record<CalendarTone, string> = {
 
 /* ─────────────────────────────── Root ─────────────────────────────── */
 
-export default function CalendarView({ events }: { events: CalendarEvent[] }) {
+interface CalendarViewProps {
+  events: CalendarEvent[]
+  clientCreatedAt?: string | null
+  subscribePath?: string
+}
+
+export default function CalendarView({
+  events,
+  clientCreatedAt = null,
+  subscribePath,
+}: CalendarViewProps) {
   const [view, setView] = useState<ViewMode>('runway')
+  const [windowStart, setWindowStart] = useState(() => startOfDay(new Date()))
   const [enabled, setEnabled] = useState<Record<CalendarCategory, boolean>>({
     publishing: true, production: true, task: true,
   })
   const [selected, setSelected] = useState<CalendarEvent | null>(null)
+  const [showSubscribe, setShowSubscribe] = useState(false)
 
   const filtered = useMemo(
     () => events.filter(e => enabled[e.category]),
@@ -84,11 +97,30 @@ export default function CalendarView({ events }: { events: CalendarEvent[] }) {
     return c
   }, [events])
 
+  function handleKpiClick(target: 'thisWeek' | 'nextWeek' | 'actionNeeded') {
+    if (target === 'thisWeek') {
+      setView('runway')
+      setWindowStart(startOfDay(new Date()))
+      setEnabled({ publishing: true, production: true, task: true })
+    } else if (target === 'nextWeek') {
+      setView('runway')
+      setWindowStart(addDays(startOfDay(new Date()), 7))
+      setEnabled({ publishing: true, production: true, task: true })
+    } else {
+      setView('agenda')
+      setEnabled({ publishing: false, production: false, task: true })
+    }
+  }
+
   return (
     <>
       <div className="max-w-7xl mx-auto py-7 px-4 lg:px-6">
         {/* Pulse */}
-        <Pulse events={events} />
+        <Pulse
+          events={events}
+          onKpiClick={handleKpiClick}
+          onSubscribe={subscribePath ? () => setShowSubscribe(true) : undefined}
+        />
 
         {/* Two-col layout: filter rail + canvas */}
         <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-6 lg:gap-8 mt-6">
@@ -120,10 +152,19 @@ export default function CalendarView({ events }: { events: CalendarEvent[] }) {
               </div>
             </div>
 
-            {filtered.length === 0 ? (
+            {filtered.length === 0 && events.length === 0 ? (
+              <EmptyState totalEvents={events.length} />
+            ) : filtered.length === 0 ? (
               <EmptyState totalEvents={events.length} />
             ) : view === 'runway' ? (
-              <RunwayView events={filtered} onSelect={setSelected} />
+              <RunwayView
+                events={filtered}
+                onSelect={setSelected}
+                windowStart={windowStart}
+                setWindowStart={setWindowStart}
+                clientCreatedAt={clientCreatedAt}
+                enabled={enabled}
+              />
             ) : view === 'agenda' ? (
               <AgendaView events={filtered} onSelect={setSelected} />
             ) : (
@@ -134,13 +175,22 @@ export default function CalendarView({ events }: { events: CalendarEvent[] }) {
       </div>
 
       {selected && <DetailSheet event={selected} onClose={() => setSelected(null)} />}
+      {showSubscribe && subscribePath && (
+        <SubscribeDialog path={subscribePath} onClose={() => setShowSubscribe(false)} />
+      )}
     </>
   )
 }
 
 /* ─────────────────────────────── Pulse ─────────────────────────────── */
 
-function Pulse({ events }: { events: CalendarEvent[] }) {
+function Pulse({
+  events, onKpiClick, onSubscribe,
+}: {
+  events: CalendarEvent[]
+  onKpiClick: (target: 'thisWeek' | 'nextWeek' | 'actionNeeded') => void
+  onSubscribe?: () => void
+}) {
   const stats = useMemo(() => {
     const now = Date.now()
     const in7 = now + 7 * 86_400_000
@@ -160,11 +210,22 @@ function Pulse({ events }: { events: CalendarEvent[] }) {
 
   return (
     <header>
-      <div className="flex items-center gap-2 mb-1">
-        <CalendarIcon className="w-4 h-4 text-ink-3" />
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-ink-3">
-          Calendar
-        </span>
+      <div className="flex items-center justify-between mb-1 gap-3">
+        <div className="flex items-center gap-2">
+          <CalendarIcon className="w-4 h-4 text-ink-3" />
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-ink-3">
+            Calendar
+          </span>
+        </div>
+        {onSubscribe && (
+          <button
+            onClick={onSubscribe}
+            className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-3 hover:text-ink border border-ink-6 hover:border-ink-5 rounded-full px-3 py-1 transition-colors"
+          >
+            <Rss className="w-3 h-3" />
+            Subscribe
+          </button>
+        )}
       </div>
       <h1 className="text-[28px] leading-tight font-bold text-ink tracking-tight">
         What&rsquo;s coming up
@@ -174,25 +235,31 @@ function Pulse({ events }: { events: CalendarEvent[] }) {
       </p>
 
       <div className="grid grid-cols-3 gap-3 mt-5 max-w-2xl">
-        <KpiTile label="This week" value={stats.thisWeek} />
-        <KpiTile label="Week after" value={stats.next7to14} />
+        <KpiTile label="This week" value={stats.thisWeek} onClick={() => onKpiClick('thisWeek')} />
+        <KpiTile label="Week after" value={stats.next7to14} onClick={() => onKpiClick('nextWeek')} />
         <KpiTile
           label="On you"
           value={stats.actionNeeded}
           tone={stats.actionNeeded > 0 ? 'rose' : 'neutral'}
+          onClick={() => onKpiClick('actionNeeded')}
         />
       </div>
     </header>
   )
 }
 
-function KpiTile({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: 'neutral' | 'rose' }) {
+function KpiTile({
+  label, value, tone = 'neutral', onClick,
+}: {
+  label: string; value: number; tone?: 'neutral' | 'rose'; onClick?: () => void
+}) {
   return (
-    <div
-      className="rounded-xl bg-white border px-4 py-3"
+    <button
+      onClick={onClick}
+      className="text-left rounded-xl bg-white border px-4 py-3 hover:shadow-sm hover:border-ink-5 transition-all group"
       style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
     >
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-4 mb-1">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-4 mb-1 group-hover:text-ink-3 transition-colors">
         {label}
       </p>
       <p className={`text-[26px] font-bold leading-none tracking-tight ${
@@ -200,7 +267,7 @@ function KpiTile({ label, value, tone = 'neutral' }: { label: string; value: num
       }`}>
         {value}
       </p>
-    </div>
+    </button>
   )
 }
 
@@ -285,13 +352,15 @@ function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode
 /* ────────────────────────────── Runway ────────────────────────────── */
 
 function RunwayView({
-  events, onSelect,
+  events, onSelect, windowStart, setWindowStart, clientCreatedAt, enabled,
 }: {
   events: CalendarEvent[]
   onSelect: (e: CalendarEvent) => void
+  windowStart: Date
+  setWindowStart: (d: Date) => void
+  clientCreatedAt: string | null
+  enabled: Record<CalendarCategory, boolean>
 }) {
-  const [windowStart, setWindowStart] = useState(() => startOfDay(new Date()))
-
   const days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(windowStart, i))
   }, [windowStart])
@@ -306,6 +375,22 @@ function RunwayView({
     }
     return map
   }, [events])
+
+  // Onboarding playbook: ghost chips on expected days during first 14
+  // days of the client's tenure. Only shows on cells with no real events.
+  const playbookByDayCategory = useMemo(() => {
+    const map = new Map<string, PlaybookMilestone>()
+    if (!clientCreatedAt) return map
+    const start = startOfDay(new Date(clientCreatedAt))
+    const ageDays = Math.floor((Date.now() - start.getTime()) / 86_400_000)
+    if (ageDays > 14) return map // Only nudge during first two weeks
+    for (const m of ONBOARDING_PLAYBOOK) {
+      const date = addDays(start, m.daysFromStart)
+      const k = `${dayKey(date)}|${m.category}`
+      if (!map.has(k)) map.set(k, m)
+    }
+    return map
+  }, [clientCreatedAt])
 
   const todayKey = dayKey(new Date())
   const windowLabel = `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
@@ -394,6 +479,9 @@ function RunwayView({
               {days.map(d => {
                 const k = dayKey(d)
                 const cellEvents = byDayCategory.get(`${k}|${cat}`) ?? []
+                const playbookHint = cellEvents.length === 0 && enabled[cat]
+                  ? playbookByDayCategory.get(`${k}|${cat}`)
+                  : undefined
                 const isPast = k < todayKey
                 const isToday = k === todayKey
                 return (
@@ -413,6 +501,9 @@ function RunwayView({
                         >
                           +{cellEvents.length - 3} more
                         </button>
+                      )}
+                      {playbookHint && (
+                        <PlaybookGhost milestone={playbookHint} />
                       )}
                     </div>
                   </div>
@@ -728,6 +819,153 @@ function DetailSheet({ event, onClose }: { event: CalendarEvent; onClose: () => 
               <ExternalLink className="w-3.5 h-3.5" />
             </Link>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ───────────────────────────── Playbook ───────────────────────────── */
+
+interface PlaybookMilestone {
+  daysFromStart: number
+  category: CalendarCategory
+  kind: CalendarEventKind
+  title: string
+  detail: string
+}
+
+const ONBOARDING_PLAYBOOK: PlaybookMilestone[] = [
+  { daysFromStart: 1,  category: 'task',       kind: 'task',    title: 'Kickoff call',           detail: 'Strategist intro and goals review' },
+  { daysFromStart: 3,  category: 'production', kind: 'content', title: 'Brand discovery',         detail: 'Logo, voice, and references collected' },
+  { daysFromStart: 7,  category: 'production', kind: 'shoot',   title: 'First photo / video day', detail: 'On-site shoot to build content library' },
+  { daysFromStart: 10, category: 'production', kind: 'content', title: 'First content batch',     detail: 'Draft posts ready for your review' },
+  { daysFromStart: 14, category: 'publishing', kind: 'post',    title: 'First posts go live',     detail: 'Initial cadence begins' },
+]
+
+function PlaybookGhost({ milestone }: { milestone: PlaybookMilestone }) {
+  const Icon = KIND_ICON[milestone.kind]
+  return (
+    <div
+      title={`${milestone.title} — ${milestone.detail} (planned)`}
+      className="flex items-center gap-1 rounded px-1.5 py-1 border border-dashed border-ink-5 text-ink-4 bg-white/40"
+    >
+      <Icon className="w-2.5 h-2.5 flex-shrink-0 opacity-60" />
+      <span className="text-[10px] italic truncate leading-tight">
+        {milestone.title}
+      </span>
+    </div>
+  )
+}
+
+/* ───────────────────────────── Subscribe dialog ───────────────────────────── */
+
+function SubscribeDialog({ path, onClose }: { path: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const fullUrl = useMemo(() => {
+    if (typeof window === 'undefined') return path
+    return `${window.location.origin}${path}`
+  }, [path])
+
+  // The webcal:// scheme triggers native subscribe dialogs in Apple
+  // Calendar and most desktop calendar apps. Google Cal needs the
+  // https URL pasted into its "Add by URL" field.
+  const webcalUrl = useMemo(() => {
+    if (typeof window === 'undefined') return path
+    return `webcal://${window.location.host}${path}`
+  }, [path])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(fullUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      inputRef.current?.select()
+    }
+  }
+
+  const googleAddUrl = `https://calendar.google.com/calendar/u/0/r/settings/addbyurl?cid=${encodeURIComponent(fullUrl)}`
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden">
+        <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+          <div className="flex items-center gap-2">
+            <Rss className="w-4 h-4 text-ink-3" />
+            <h2 className="text-[15px] font-semibold text-ink">Subscribe to your calendar</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-bg-2 text-ink-3" aria-label="Close">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          <p className="text-[13px] text-ink-2 leading-relaxed">
+            Add this feed to Google Calendar, Apple Calendar, or Outlook to see your posts,
+            shoots, and tasks alongside everything else on your calendar. Updates roughly
+            every 15 minutes.
+          </p>
+
+          <div>
+            <label className="text-[10px] font-semibold uppercase tracking-widest text-ink-4 block mb-1.5">
+              Calendar URL
+            </label>
+            <div className="flex items-stretch gap-2">
+              <input
+                ref={inputRef}
+                readOnly
+                value={fullUrl}
+                onClick={(e) => e.currentTarget.select()}
+                className="flex-1 min-w-0 text-[12px] font-mono bg-bg-2 border border-ink-6 rounded-md px-2.5 py-2 text-ink-2"
+              />
+              <button
+                onClick={copy}
+                className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 rounded-md border border-ink-6 hover:border-ink-5 bg-white text-ink-2 hover:text-ink transition-colors"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <a
+              href={googleAddUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-ink-6 hover:border-ink-5 hover:bg-bg-2 transition-colors"
+            >
+              <Link2 className="w-3.5 h-3.5 text-ink-3 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[12px] font-medium text-ink leading-tight">Add to Google Calendar</p>
+                <p className="text-[10px] text-ink-4 leading-tight mt-0.5">Opens settings page</p>
+              </div>
+            </a>
+            <a
+              href={webcalUrl}
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-ink-6 hover:border-ink-5 hover:bg-bg-2 transition-colors"
+            >
+              <Link2 className="w-3.5 h-3.5 text-ink-3 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[12px] font-medium text-ink leading-tight">Add to Apple Calendar</p>
+                <p className="text-[10px] text-ink-4 leading-tight mt-0.5">Opens native subscribe</p>
+              </div>
+            </a>
+          </div>
+
+          <p className="text-[11px] text-ink-4 leading-relaxed">
+            Keep this URL private. Anyone with the link can read your calendar.
+          </p>
         </div>
       </div>
     </div>

@@ -1,16 +1,21 @@
 /**
  * /dashboard/calendar — the unified calendar.
  *
- * One timeline of everything upcoming for the owner: scheduled posts,
- * email sends, filming days, planned content, owner tasks. Replaces
- * the old social-only content_calendar view (that single-source view
- * still exists at /dashboard/social/calendar for users who need to
- * drill into just social).
+ * One timeline of everything upcoming for the owner. Replaces the
+ * old social-only content_calendar view (still available at
+ * /dashboard/social/calendar for drill-down).
+ *
+ * Server work here:
+ *   - resolve clientId via businesses + client_users
+ *   - fetch unified calendar events
+ *   - fetch client.created_at (drives onboarding playbook overlay)
+ *   - sign clientId for the .ics subscribe URL
  */
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCalendar } from '@/lib/dashboard/get-calendar'
+import { signClientId } from '@/lib/calendar/feed-token'
 import CalendarView from './calendar-view'
 
 export const dynamic = 'force-dynamic'
@@ -43,6 +48,20 @@ export default async function CalendarPage() {
     )
   }
 
-  const events = await getCalendar(clientId)
-  return <CalendarView events={events} />
+  const [events, clientRow] = await Promise.all([
+    getCalendar(clientId),
+    supabase.from('clients').select('created_at').eq('id', clientId).maybeSingle(),
+  ])
+
+  const clientCreatedAt = (clientRow.data?.created_at as string | null) ?? null
+  const token = signClientId(clientId)
+  const subscribeUrl = `/api/calendar/feed?c=${encodeURIComponent(clientId)}&t=${token}`
+
+  return (
+    <CalendarView
+      events={events}
+      clientCreatedAt={clientCreatedAt}
+      subscribePath={subscribeUrl}
+    />
+  )
 }
