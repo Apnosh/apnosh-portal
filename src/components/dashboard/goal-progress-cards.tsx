@@ -46,23 +46,18 @@ const GOAL_ICONS: Record<GoalSlug, LucideIcon> = {
   grow_catering: Briefcase,
 }
 
+/**
+ * Renders metric cards for the dashboard "Your numbers" section.
+ * (Cards are keyed off active goals, so the data shown reflects what
+ * the owner cares about, but the visual framing is metrics-first --
+ * goals live in their own sidebar tab.)
+ */
 export default function GoalProgressCards({ cards }: { cards: GoalCardData[] }) {
   if (cards.length === 0) return null
-
   return (
-    <section className="mb-6">
-      <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-widest text-ink-3">
-          Your goals
-        </h2>
-        <Link href="/dashboard/goals" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800">
-          Edit goals →
-        </Link>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {cards.map(c => <Card key={c.slug} card={c} />)}
-      </div>
-    </section>
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {cards.map(c => <Card key={c.slug} card={c} />)}
+    </div>
   )
 }
 
@@ -80,11 +75,12 @@ function Card({ card }: { card: GoalCardData }) {
   }
 
   if (card.state === 'no-data') {
+    const trackLine = `We'll track ${card.signal?.toLowerCase() ?? 'progress'} once you're set up.`
     return (
       <div className="rounded-xl p-4 border-2 border-dashed bg-white" style={{ borderColor: 'var(--db-border, #d4e0db)' }}>
         <Header card={card} Icon={Icon} />
         <p className="text-[13px] text-ink-2 leading-relaxed mt-1.5">
-          We&apos;ll track {card.signal?.toLowerCase()} once you&apos;re set up.
+          {trackLine}
         </p>
         {card.benchmarkLine && (
           <p className="text-[11px] text-ink-3 mt-1.5 leading-snug">{card.benchmarkLine}</p>
