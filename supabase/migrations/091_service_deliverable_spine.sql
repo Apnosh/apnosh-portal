@@ -103,7 +103,7 @@ update deliverables d
    and se.deliverable_type = d.type
    and (
      select count(*) from client_services cs2
-     join service_expectations se2 on se2.service_slug = cs2.service_id::text
+     join service_expectations se2 on se2.service_slug = cs2.service_slug
      where cs2.client_id = d.client_id
        and cs2.status = 'active'
        and se2.deliverable_type = d.type
