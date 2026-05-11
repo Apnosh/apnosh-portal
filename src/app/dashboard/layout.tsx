@@ -211,14 +211,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <CartProvider>
       <ToastProvider>
         <RealtimeProvider>
-          <ClientProvider>
-            <SentryUserContext />
-            <Suspense fallback={null}>
+          {/* ClientProvider reads useSearchParams (for the admin
+              ?clientId= picker handoff) so it has to live inside a
+              Suspense boundary or static generation rejects the build. */}
+          <Suspense fallback={null}>
+            <ClientProvider>
+              <SentryUserContext />
               <LocationLoader>
                 <DashboardShell>{children}</DashboardShell>
               </LocationLoader>
-            </Suspense>
-          </ClientProvider>
+            </ClientProvider>
+          </Suspense>
         </RealtimeProvider>
       </ToastProvider>
     </CartProvider>
