@@ -135,6 +135,38 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     '/admin/billing':  'bg-amber-500',
   }
 
+  // Is the signed-in user an actual admin? Non-admin strategists hit
+  // /admin/clients/[slug] for client drill-in, and we render a slim
+  // strategist-only nav for them so they don't see admin-only items
+  // (Strategists, Settings, Billing, etc.) they can't access anyway.
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!user?.id) return
+    let cancelled = false
+    void createClient()
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setIsAdmin((data?.role as string | null) === 'admin')
+      })
+    return () => { cancelled = true }
+  }, [user?.id])
+
+  // Strategist-only nav: just a way back to /work. The drill-in page
+  // itself has its own internal nav (tabs across the client detail).
+  const strategistNav = [
+    {
+      label: 'Strategist',
+      items: [
+        { label: 'Your work', href: '/work/today', icon: CheckSquare },
+        { label: 'Your clients', href: '/work/clients', icon: Users },
+      ],
+    },
+  ]
+  const renderedNav = isAdmin === false ? strategistNav : navSections
+
   return (
     <ToastProvider>
     <RealtimeProvider>
@@ -149,8 +181,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             Apn<em className="text-brand italic">osh</em>
           </Link>
           <div className="flex items-center gap-2">
-            <span className="bg-brand/20 text-brand text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-              <Shield className="w-2.5 h-2.5" /> ADMIN
+            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+              isAdmin === false ? 'bg-emerald-500/20 text-emerald-300' : 'bg-brand/20 text-brand'
+            }`}>
+              <Shield className="w-2.5 h-2.5" /> {isAdmin === false ? 'STRATEGIST' : 'ADMIN'}
             </span>
             <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-white/40 hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center">
               <X className="w-5 h-5" />
@@ -159,7 +193,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         <nav className="flex-1 px-3 py-3 overflow-y-auto">
-          {navSections.map((section) => (
+          {renderedNav.map((section) => (
             <div key={section.label} className="mb-3">
               <div className="px-3 mb-1 text-[10px] font-semibold text-white/25 uppercase tracking-wider">
                 {section.label}
@@ -239,14 +273,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="flex items-center gap-2">
             {/* Quick Add */}
             <div className="relative">
-              <button
+              {/* Quick Add is admin-only. Non-admin strategists shouldn't see
+                  "New Client" / "New Invoice" — those are agency-wide. */}
+              {isAdmin !== false && <button
                 onClick={() => setQuickAddOpen(!quickAddOpen)}
                 className="w-8 h-8 rounded-lg bg-brand hover:bg-brand-dark text-white flex items-center justify-center transition-colors"
                 title="Quick add"
               >
                 <Plus className="w-4 h-4" />
-              </button>
-              {quickAddOpen && (
+              </button>}
+              {isAdmin !== false && quickAddOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setQuickAddOpen(false)} />
                   <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl border border-ink-6 shadow-lg shadow-black/8 z-50 py-1.5">

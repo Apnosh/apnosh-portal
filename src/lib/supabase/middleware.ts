@@ -38,6 +38,14 @@ export async function updateSession(request: NextRequest) {
   const isClientRoute = path.startsWith('/client')
   const isWorkRoute = path.startsWith('/work') || path.startsWith('/marketplace')
 
+  // A non-admin strategist's allow-list under /admin/*. They can drill
+  // into a single client's detail (/admin/clients/[slug]/...) because
+  // we don't have time to rebuild that 1200-line page under /work/*.
+  // RLS keeps the data scoped to their book. Everything else under
+  // /admin (the agency-wide pages — settings, billing, team, etc.) is
+  // off-limits and we redirect to /work/today.
+  const isAdminClientDetail = /^\/admin\/clients\/[^\/]+(\/|$)/.test(path)
+
   // ── Unauthenticated: redirect to login ──
   if (!user && (isDashboard || isAdminRoute || isOnboarding || isClientRoute || isWorkRoute)) {
     const url = request.nextUrl.clone()
@@ -103,9 +111,8 @@ export async function updateSession(request: NextRequest) {
       }
 
       // Block /admin for client portal users (admin-only area), UNLESS
-      // they also hold the strategist capability — strategists drill
-      // into client detail pages via /admin/clients/[slug]. RLS scopes
-      // the data they see to their assigned book.
+      // they hold the strategist capability AND the path is the client
+      // detail drill-in. All other /admin paths route them to /work.
       if (isAdminRoute) {
         const { data: cap } = await supabase
           .from('person_capabilities')
@@ -120,7 +127,12 @@ export async function updateSession(request: NextRequest) {
           url.pathname = '/dashboard'
           return NextResponse.redirect(url)
         }
-        // Strategist with client_user row → fall through, allow /admin access.
+        // Strategist: only the client detail drill-in is allowed.
+        if (!isAdminClientDetail) {
+          const url = request.nextUrl.clone()
+          url.pathname = '/work/today'
+          return NextResponse.redirect(url)
+        }
       }
 
       // Check if this client_user has completed onboarding via client_profiles
@@ -168,9 +180,9 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url)
       }
 
-      // Non-admin trying to access /admin -> allowed only if they're
-      // a strategist (drills into /admin/clients/[slug] from their
-      // /work/* surfaces). RLS scopes their data.
+      // Non-admin trying to access /admin -> only strategists, and
+      // only the client detail drill-in path. Everything else under
+      // /admin routes to /work/today.
       if (isAdminRoute && role !== 'admin') {
         const { data: cap } = await supabase
           .from('person_capabilities')
@@ -183,6 +195,29 @@ export async function updateSession(request: NextRequest) {
         if (!cap) {
           const url = request.nextUrl.clone()
           url.pathname = '/dashboard'
+          return NextResponse.redirect(url)
+        }
+        if (!isAdminClientDetail) {
+          const url = request.nextUrl.clone()
+          url.pathname = '/work/today'
+          return NextResponse.redirect(url)
+        }
+      }
+
+      // Non-admin strategist landing on /dashboard? Send them to their
+      // workday hub. /dashboard is the client portal — meaningless to
+      // a strategist.
+      if (isDashboard && role !== 'admin') {
+        const { data: cap } = await supabase
+          .from('person_capabilities')
+          .select('capability')
+          .eq('person_id', user.id)
+          .eq('capability', 'strategist')
+          .eq('status', 'active')
+          .maybeSingle()
+        if (cap) {
+          const url = request.nextUrl.clone()
+          url.pathname = '/work/today'
           return NextResponse.redirect(url)
         }
       }

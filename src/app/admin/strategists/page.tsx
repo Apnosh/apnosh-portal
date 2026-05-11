@@ -11,7 +11,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { UserPlus, Loader2, Check, X, Users, Mail } from 'lucide-react'
+import { UserPlus, Loader2, Check, X, Users, Mail, MoreVertical, UserMinus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 interface Strategist {
@@ -83,7 +83,7 @@ export default function StrategistsPage() {
         <EmptyState onInvite={() => setInviteOpen(true)} />
       ) : (
         <ul className="space-y-2">
-          {list.map(s => <StrategistRow key={s.personId} s={s} />)}
+          {list.map(s => <StrategistRow key={s.personId} s={s} onChanged={load} />)}
         </ul>
       )}
 
@@ -98,24 +98,78 @@ export default function StrategistsPage() {
   )
 }
 
-function StrategistRow({ s }: { s: Strategist }) {
+function StrategistRow({ s, onChanged }: { s: Strategist; onChanged: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [removing, setRemoving] = useState(false)
+
+  async function remove(hard: boolean) {
+    const msg = hard
+      ? `Permanently remove ${s.email}? This deletes their strategist role and all client assignments. Cannot be undone.`
+      : `Offboard ${s.email}? They keep their account but lose access to all assigned clients.`
+    if (!confirm(msg)) return
+    setRemoving(true)
+    await fetch(`/api/admin/strategists?personId=${encodeURIComponent(s.personId)}${hard ? '&hard=1' : ''}`, {
+      method: 'DELETE',
+    })
+    setRemoving(false)
+    setMenuOpen(false)
+    onChanged()
+  }
+
   return (
     <li
-      className="rounded-2xl border bg-white px-4 py-3 flex items-center justify-between gap-3"
+      className="rounded-2xl border bg-white px-4 py-3 flex items-center justify-between gap-3 relative"
       style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
     >
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 flex items-center justify-center text-[11px] font-semibold flex-shrink-0">
+        <div className={`w-9 h-9 rounded-full ring-1 flex items-center justify-center text-[11px] font-semibold flex-shrink-0 ${
+          s.status === 'active'
+            ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+            : 'bg-ink-7 text-ink-4 ring-ink-6'
+        }`}>
           {(s.email ?? '?')[0]?.toUpperCase() ?? '?'}
         </div>
         <div className="min-w-0">
           <p className="text-[14px] font-semibold text-ink truncate">{s.email ?? '(unknown email)'}</p>
           <p className="text-[11px] text-ink-4 truncate">
-            {s.status === 'active' ? 'Active' : s.status}
+            {s.status === 'active' ? 'Active' : s.status[0].toUpperCase() + s.status.slice(1)}
             {' · '}
             {s.assignedClients} client{s.assignedClients === 1 ? '' : 's'}
           </p>
         </div>
+      </div>
+      <div className="relative">
+        <button
+          onClick={() => setMenuOpen(o => !o)}
+          disabled={removing}
+          className="p-2 rounded-lg hover:bg-bg-2 text-ink-4 hover:text-ink"
+          aria-label="Strategist actions"
+        >
+          {removing ? <Loader2 className="w-4 h-4 animate-spin" /> : <MoreVertical className="w-4 h-4" />}
+        </button>
+        {menuOpen && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+            <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl border border-ink-6 shadow-lg z-50 py-1">
+              {s.status === 'active' && (
+                <button
+                  onClick={() => remove(false)}
+                  className="w-full text-left px-3 py-2 text-[13px] text-ink hover:bg-bg-2 inline-flex items-center gap-2"
+                >
+                  <UserMinus className="w-3.5 h-3.5 text-ink-4" />
+                  Offboard
+                </button>
+              )}
+              <button
+                onClick={() => remove(true)}
+                className="w-full text-left px-3 py-2 text-[13px] text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
+              >
+                <X className="w-3.5 h-3.5" />
+                Remove permanently
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </li>
   )

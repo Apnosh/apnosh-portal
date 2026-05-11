@@ -16,6 +16,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
+// DELETE handler exported below. Add an OPTIONS no-op for completeness.
+export async function OPTIONS() { return new NextResponse(null, { status: 204 }) }
+
 export const dynamic = 'force-dynamic'
 
 async function requireAdmin() {
@@ -128,4 +131,52 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, personId, assignedClients: clientIds.length })
+}
+
+/**
+ * DELETE /api/admin/strategists?personId=...&hard=0|1
+ *
+ * Default: soft-archive — flip capability status to 'offboarded' and
+ * close all role_assignments by setting ended_at = now(). Keeps audit
+ * trail (their historical work history is preserved).
+ *
+ * hard=1: physical delete of both rows. Use only when admin explicitly
+ * wants to remove someone from the system entirely.
+ */
+export async function DELETE(req: NextRequest) {
+  const gate = await requireAdmin()
+  if (!gate.ok) return NextResponse.json(gate.body, { status: gate.status })
+
+  const personId = req.nextUrl.searchParams.get('personId')
+  const hard = req.nextUrl.searchParams.get('hard') === '1'
+  if (!personId) return NextResponse.json({ error: 'personId required' }, { status: 400 })
+
+  const admin = createAdminClient()
+
+  if (hard) {
+    await admin
+      .from('role_assignments')
+      .delete()
+      .eq('person_id', personId)
+      .eq('role', 'strategist')
+    await admin
+      .from('person_capabilities')
+      .delete()
+      .eq('person_id', personId)
+      .eq('capability', 'strategist')
+  } else {
+    await admin
+      .from('role_assignments')
+      .update({ ended_at: new Date().toISOString() })
+      .eq('person_id', personId)
+      .eq('role', 'strategist')
+      .is('ended_at', null)
+    await admin
+      .from('person_capabilities')
+      .update({ status: 'offboarded' })
+      .eq('person_id', personId)
+      .eq('capability', 'strategist')
+  }
+
+  return NextResponse.json({ ok: true })
 }
