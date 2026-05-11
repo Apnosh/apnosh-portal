@@ -165,7 +165,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       ],
     },
   ]
-  const renderedNav = isAdmin === false ? strategistNav : navSections
+  // Default to the strategist nav until we explicitly confirm admin.
+  // Showing admin nav to a non-admin (even briefly) leaks options they
+  // can't use; the reverse just delays a beat of UI for real admins.
+  const renderedNav = isAdmin === true ? navSections : strategistNav
 
   return (
     <ToastProvider>
@@ -182,9 +185,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Link>
           <div className="flex items-center gap-2">
             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
-              isAdmin === false ? 'bg-emerald-500/20 text-emerald-300' : 'bg-brand/20 text-brand'
+              isAdmin === true ? 'bg-brand/20 text-brand' : 'bg-emerald-500/20 text-emerald-300'
             }`}>
-              <Shield className="w-2.5 h-2.5" /> {isAdmin === false ? 'STRATEGIST' : 'ADMIN'}
+              <Shield className="w-2.5 h-2.5" /> {isAdmin === true ? 'ADMIN' : 'STRATEGIST'}
             </span>
             <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-white/40 hover:text-white min-h-[44px] min-w-[44px] flex items-center justify-center">
               <X className="w-5 h-5" />
@@ -274,15 +277,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {/* Quick Add */}
             <div className="relative">
               {/* Quick Add is admin-only. Non-admin strategists shouldn't see
-                  "New Client" / "New Invoice" — those are agency-wide. */}
-              {isAdmin !== false && <button
+                  "New Client" / "New Invoice" — those are agency-wide.
+                  Default-hide until we confirm admin. */}
+              {isAdmin === true && <button
                 onClick={() => setQuickAddOpen(!quickAddOpen)}
                 className="w-8 h-8 rounded-lg bg-brand hover:bg-brand-dark text-white flex items-center justify-center transition-colors"
                 title="Quick add"
               >
                 <Plus className="w-4 h-4" />
               </button>}
-              {isAdmin !== false && quickAddOpen && (
+              {isAdmin === true && quickAddOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setQuickAddOpen(false)} />
                   <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl border border-ink-6 shadow-lg shadow-black/8 z-50 py-1.5">

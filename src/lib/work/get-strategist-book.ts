@@ -28,13 +28,14 @@ export async function getStrategistBook(): Promise<StrategistClientRow[]> {
 
   // Admin or strategist — RLS scopes the result. Admins see all,
   // strategists see only assigned. We do a single client query then
-  // overlay signals.
-  const { data: clients } = await supabase
+  // overlay signals. (clients has no logo_url column; logos live in
+  // brand_assets and we don't surface them on this list page.)
+  const { data: clients, error } = await supabase
     .from('clients')
-    .select('id, name, slug, tier, logo_url, billing_status')
+    .select('id, name, slug, tier, billing_status')
     .order('name')
 
-  if (!clients || clients.length === 0) return []
+  if (error || !clients || clients.length === 0) return []
 
   const ids = clients.map(c => c.id as string)
 
@@ -78,7 +79,7 @@ export async function getStrategistBook(): Promise<StrategistClientRow[]> {
     name: c.name as string,
     slug: c.slug as string,
     tier: (c.tier as string) ?? null,
-    logoUrl: (c.logo_url as string) ?? null,
+    logoUrl: null,
     billingStatus: (c.billing_status as string) ?? null,
     pendingTasks: taskCounts.get(c.id as string) ?? 0,
     draftQuotes: quoteCounts.get(c.id as string) ?? 0,
