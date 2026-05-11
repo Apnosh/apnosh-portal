@@ -24,6 +24,7 @@ import Notifications from '@/components/ui/notifications'
 import Breadcrumbs from '@/components/ui/breadcrumbs'
 import { ClientTabBar } from '@/components/ui/mobile-tab-bar'
 import QuickRequest from '@/components/ui/quick-request'
+import WorkspaceSwitcher from '@/components/dashboard/workspace-switcher'
 import { useUser, signOut } from '@/lib/supabase/hooks'
 
 import type { ServiceArea } from '@/types/database'
@@ -552,6 +553,9 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-ink-3 hover:text-ink min-h-[44px] min-w-[44px] flex items-center justify-center">
             <Menu className="w-5 h-5" />
           </button>
+          <div className="flex items-center gap-2">
+            <WorkspaceSwitcher />
+          </div>
           <div className="flex-1" />
           <div className="flex items-center gap-3">
             <HeaderLocationSelector />
