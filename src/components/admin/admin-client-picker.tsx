@@ -11,8 +11,9 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
-import { Calendar as CalendarIcon, ChevronRight } from 'lucide-react'
+import { Calendar as CalendarIcon, ChevronRight, Shield, ArrowUpRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 interface ClientRow {
@@ -63,13 +64,23 @@ export default function AdminClientPicker({
   return (
     <div className="max-w-4xl mx-auto py-10 px-4">
       <header className="mb-7">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-            <CalendarIcon className="w-4.5 h-4.5" />
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+              <CalendarIcon className="w-4.5 h-4.5" />
+            </div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
+              {eyebrow}
+            </p>
           </div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
-            {eyebrow}
-          </p>
+          <Link
+            href="/admin"
+            className="group inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-2 hover:text-ink bg-white border border-ink-6 hover:border-ink-4 hover:shadow-sm rounded-full px-3 py-1.5 transition-all"
+          >
+            <Shield className="w-3 h-3 text-emerald-600" />
+            Apnosh admin console
+            <ArrowUpRight className="w-3 h-3 text-ink-4 group-hover:text-ink-2 transition-colors" />
+          </Link>
         </div>
         <h1 className="text-[28px] sm:text-[30px] leading-tight font-bold text-ink tracking-tight">
           {title}
