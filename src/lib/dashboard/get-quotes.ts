@@ -81,12 +81,25 @@ export async function getQuote(quoteId: string, clientId: string): Promise<Conte
 }
 
 function toQuote(r: Record<string, unknown>): ContentQuote {
+  // Line items may have landed in DB with either camelCase (unitPrice, from
+  // raw AI output) or snake_case (unit_price, from the strategist quote
+  // builder). Normalize to unit_price on read so the renderer always works.
+  type RawItem = Partial<QuoteLineItem & { unitPrice: number; unit_price: number }>
+  const rawItems = (r.line_items as RawItem[] | null) ?? []
+  const lineItems: QuoteLineItem[] = rawItems.map(it => ({
+    label: String(it.label ?? ''),
+    qty: Number(it.qty ?? 0),
+    unit_price: Number(it.unit_price ?? it.unitPrice ?? 0),
+    total: Number(it.total ?? 0),
+    ...(it.notes ? { notes: String(it.notes) } : {}),
+  }))
+
   return {
     id: r.id as string,
     clientId: r.client_id as string,
     title: (r.title as string) ?? 'Quote',
     sourceRequestSummary: (r.source_request_summary as string | null) ?? null,
-    lineItems: ((r.line_items as QuoteLineItem[] | null) ?? []) as QuoteLineItem[],
+    lineItems,
     subtotal: r.subtotal != null ? Number(r.subtotal) : null,
     discount: r.discount != null ? Number(r.discount) : 0,
     total: Number(r.total ?? 0),

@@ -198,12 +198,24 @@ export async function suggestQuoteForRequest(input: SuggestInput): Promise<Quote
 
 function sanitizeQuote(q: unknown): SuggestedQuote | undefined {
   if (!q || typeof q !== 'object') return undefined
-  const sq = q as Partial<SuggestedQuote>
-  if (!sq.title || !Array.isArray(sq.lineItems) || sq.lineItems.length === 0) return undefined
-  const cleanItems = sq.lineItems
+  // The model is asked to emit camelCase but in practice can output
+  // either — accept both so downstream consumers never see undefined.
+  type Raw = {
+    title?: string
+    lineItems?: Array<Partial<{ label: string; qty: number; unitPrice: number; unit_price: number; total: number; notes: string }>>
+    line_items?: Array<Partial<{ label: string; qty: number; unitPrice: number; unit_price: number; total: number; notes: string }>>
+    strategistMessage?: string
+    strategist_message?: string
+    estimatedTurnaroundDays?: number
+    estimated_turnaround_days?: number
+  }
+  const sq = q as Raw
+  const rawItems = sq.lineItems ?? sq.line_items
+  if (!sq.title || !Array.isArray(rawItems) || rawItems.length === 0) return undefined
+  const cleanItems = rawItems
     .map(it => {
       const qty = Math.max(1, Math.floor(Number(it.qty ?? 0)))
-      const unitPrice = Math.max(0, Number(it.unitPrice ?? 0))
+      const unitPrice = Math.max(0, Number(it.unitPrice ?? it.unit_price ?? 0))
       const total = qty * unitPrice
       return {
         label: String(it.label ?? '').slice(0, 200),
@@ -218,7 +230,7 @@ function sanitizeQuote(q: unknown): SuggestedQuote | undefined {
   return {
     title: String(sq.title).slice(0, 200),
     lineItems: cleanItems,
-    strategistMessage: String(sq.strategistMessage ?? '').slice(0, 1000),
-    estimatedTurnaroundDays: Math.max(1, Math.min(60, Math.floor(Number(sq.estimatedTurnaroundDays ?? 5)))),
+    strategistMessage: String(sq.strategistMessage ?? sq.strategist_message ?? '').slice(0, 1000),
+    estimatedTurnaroundDays: Math.max(1, Math.min(60, Math.floor(Number(sq.estimatedTurnaroundDays ?? sq.estimated_turnaround_days ?? 5)))),
   }
 }
