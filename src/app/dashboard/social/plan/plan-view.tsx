@@ -145,6 +145,7 @@ function Pillars({ pillars }: { pillars: string[] }) {
 
 function KeyDates({ dates }: { dates: Array<{ date: string; label: string; note?: string }> }) {
   const today = new Date()
+  today.setHours(0, 0, 0, 0)
   return (
     <div className="mb-6">
       <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 mb-2">
@@ -152,7 +153,11 @@ function KeyDates({ dates }: { dates: Array<{ date: string; label: string; note?
       </p>
       <ul className="space-y-1.5">
         {dates.map((d, i) => {
-          const date = new Date(d.date)
+          // Parse YYYY-MM-DD as a LOCAL date (not UTC) so "2026-05-12"
+          // renders as May 12 in any timezone instead of slipping to May 11
+          // for users west of UTC.
+          const [y, mo, da] = (d.date as string).split('-').map(Number)
+          const date = new Date(y, (mo ?? 1) - 1, da ?? 1)
           const isPast = date < today
           const daysUntil = Math.round((date.getTime() - today.getTime()) / 86_400_000)
           return (

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import type { ClientTask } from '@/types/database'
 import TaskFormModal from '@/components/admin/tasks/task-form-modal'
+import StrategistRails from '@/components/admin/strategist-rails'
 
 interface AiAnalysis {
   recommendedAction: 'in_plan' | 'quote' | 'escalate'
@@ -164,6 +165,9 @@ export default function TodayPage() {
           New task
         </button>
       </div>
+
+      {/* Sent quotes + pending boost rails — independent of the task buckets */}
+      <StrategistRails />
 
       {loading ? (
         <div className="flex items-center justify-center py-16">

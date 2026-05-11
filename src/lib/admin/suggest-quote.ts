@@ -58,11 +58,42 @@ export interface SuggestInput {
   clientId: string
 }
 
+// Per-client soft rate limit on Anthropic calls. Default 30 / day / client.
+// Cheap insurance against a runaway loop. Override with
+// SUGGEST_QUOTE_DAILY_LIMIT env var; 0 disables the limit.
+const DAILY_LIMIT_DEFAULT = 30
+
 export async function suggestQuoteForRequest(input: SuggestInput): Promise<QuoteSuggestion | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
 
   // Pull plan state + rubric in parallel.
   const admin = createAdminClient()
+
+  // Rate limit: count today's quote-suggestion runs for this client.
+  // We use the events log (event_type = 'ai.quote_suggested') so we
+  // don't need a new table. Each successful call writes one event.
+  const limit = parseInt(process.env.SUGGEST_QUOTE_DAILY_LIMIT ?? `${DAILY_LIMIT_DEFAULT}`, 10) || 0
+  if (limit > 0) {
+    const dayStart = new Date()
+    dayStart.setHours(0, 0, 0, 0)
+    const { count } = await admin
+      .from('events')
+      .select('id', { count: 'exact', head: true })
+      .eq('client_id', input.clientId)
+      .eq('event_type', 'ai.quote_suggested')
+      .gte('occurred_at', dayStart.toISOString())
+    if ((count ?? 0) >= limit) {
+      // Log that we hit the cap so the strategist can see why no
+      // suggestion landed.
+      await admin.from('events').insert({
+        client_id: input.clientId,
+        event_type: 'ai.quote_suggestion_rate_limited',
+        actor_role: 'system',
+        summary: `Daily AI suggestion cap (${limit}) reached for this client`,
+      })
+      return null
+    }
+  }
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
   const [clientRow, usageRes, rubricRes] = await Promise.all([
     admin
@@ -182,6 +213,15 @@ export async function suggestQuoteForRequest(input: SuggestInput): Promise<Quote
     if (!p.recommendedAction || !['in_plan', 'quote', 'escalate'].includes(p.recommendedAction)) {
       return null
     }
+
+    // Tick the rate-limit counter (best-effort, non-blocking).
+    void admin.from('events').insert({
+      client_id: input.clientId,
+      event_type: 'ai.quote_suggested',
+      actor_role: 'system',
+      summary: `AI ${p.recommendedAction} (${Math.round((p.confidence ?? 0) * 100)}%)`,
+      payload: { action: p.recommendedAction, confidence: p.confidence ?? null },
+    })
 
     return {
       recommendedAction: p.recommendedAction,

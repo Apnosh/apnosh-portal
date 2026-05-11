@@ -23,7 +23,9 @@ import Link from 'next/link'
 import {
   Sparkles, ArrowLeft, Send, Check, Loader2, ChefHat, Calendar as CalendarIcon,
   Camera, Users, MessageCircle, Tag, MoreHorizontal, Globe, Music, Mic, MicOff,
+  Upload, X, Image as ImageIcon, Film, File as FileIcon,
 } from 'lucide-react'
+import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 
 type RequestType = 'new_dish' | 'event' | 'bts' | 'feature' | 'review' | 'promo' | 'other'
 
@@ -81,11 +83,23 @@ declare global {
   }
 }
 
+interface UploadedFile {
+  id: string
+  name: string
+  url: string
+  type: 'image' | 'video' | 'other'
+  sizeMB: number
+}
+
 export default function RequestForm({ clientId }: { clientId: string }) {
   const router = useRouter()
   const [type, setType] = useState<RequestType | null>(null)
   const [description, setDescription] = useState('')
   const [assetLinks, setAssetLinks] = useState('')
+  const [uploads, setUploads] = useState<UploadedFile[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [quickDate, setQuickDate] = useState<string>('No rush')
   const [customDate, setCustomDate] = useState<string>('')
   const [platforms, setPlatforms] = useState<string[]>([])
@@ -137,7 +151,69 @@ export default function RequestForm({ clientId }: { clientId: string }) {
 
   useEffect(() => () => { recognitionRef.current?.stop() }, [])
 
-  const canSubmit = description.trim().length >= 5 && !submitting
+  async function handleFiles(fileList: FileList | File[]) {
+    const files = Array.from(fileList)
+    if (files.length === 0) return
+    setUploading(true)
+    setError(null)
+    const supabase = createSupabaseClient()
+    const newUploads: UploadedFile[] = []
+    for (const file of files) {
+      try {
+        // 25 MB cap per file. Strategist can ask for bigger via Drive link.
+        if (file.size > 25 * 1024 * 1024) {
+          setError(`"${file.name}" is over 25 MB — paste a Drive/Dropbox link instead.`)
+          continue
+        }
+        const ext = file.name.split('.').pop() || 'bin'
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60)
+        const path = `${clientId}/requests/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`
+        const { error: upErr } = await supabase.storage
+          .from('client-assets')
+          .upload(path, file, { upsert: false, contentType: file.type || undefined })
+        if (upErr) {
+          setError(upErr.message)
+          continue
+        }
+        const { data: urlData } = supabase.storage.from('client-assets').getPublicUrl(path)
+        const url = urlData?.publicUrl
+        if (!url) continue
+        const kind: UploadedFile['type'] =
+          file.type.startsWith('image/') ? 'image' :
+          file.type.startsWith('video/') ? 'video' :
+          'other'
+        newUploads.push({
+          id: Math.random().toString(36).slice(2),
+          name: file.name,
+          url,
+          type: kind,
+          sizeMB: Math.round((file.size / (1024 * 1024)) * 10) / 10,
+        })
+      } catch (e) {
+        setError(e instanceof Error ? e.message : `Could not upload ${file.name}`)
+      }
+    }
+    setUploads(prev => [...prev, ...newUploads])
+    setUploading(false)
+  }
+
+  function removeUpload(id: string) {
+    setUploads(prev => prev.filter(u => u.id !== id))
+  }
+
+  function onPickFiles() {
+    fileInputRef.current?.click()
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragOver(false)
+    if (e.dataTransfer.files?.length) {
+      void handleFiles(e.dataTransfer.files)
+    }
+  }
+
+  const canSubmit = description.trim().length >= 5 && !submitting && !uploading
 
   function togglePlatform(id: string) {
     setPlatforms(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id]))
@@ -148,6 +224,12 @@ export default function RequestForm({ clientId }: { clientId: string }) {
     setSubmitting(true)
     setError(null)
     try {
+      // Merge uploaded file URLs with any pasted links.
+      const combinedAssets = [
+        ...uploads.map(u => `${u.url}  (uploaded: ${u.name})`),
+        ...(assetLinks.trim() ? [assetLinks.trim()] : []),
+      ].join('\n').trim() || null
+
       const res = await fetch('/api/social/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,7 +237,7 @@ export default function RequestForm({ clientId }: { clientId: string }) {
           clientId,
           type,
           description: description.trim(),
-          assetLinks: assetLinks.trim() || null,
+          assetLinks: combinedAssets,
           quickDate,
           customDate: customDate || null,
           platforms,
@@ -337,14 +419,93 @@ export default function RequestForm({ clientId }: { clientId: string }) {
         {/* 3. Photos / videos */}
         <Field
           label="Photos or videos"
-          hint="Paste links — Google Drive, Dropbox, iCloud, anything. One per line."
+          hint="Drag in files (25 MB max each) or paste cloud links."
         >
+          <div
+            onDrop={onDrop}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            className={`relative rounded-xl border-2 border-dashed transition-colors p-4 ${
+              dragOver
+                ? 'border-emerald-500 bg-emerald-50/40'
+                : 'border-ink-6 bg-white hover:border-ink-5'
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              onChange={(e) => e.target.files && handleFiles(e.target.files)}
+              className="hidden"
+            />
+
+            {uploads.length > 0 && (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-3">
+                {uploads.map(u => (
+                  <div
+                    key={u.id}
+                    className="relative aspect-square rounded-lg overflow-hidden bg-bg-2 group"
+                  >
+                    {u.type === 'image' ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={u.url} alt={u.name} className="absolute inset-0 w-full h-full object-cover" />
+                    ) : u.type === 'video' ? (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center">
+                        <Film className="w-6 h-6 text-ink-3 mb-1" />
+                        <p className="text-[10px] text-ink-3 truncate w-full px-1">{u.name}</p>
+                      </div>
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center">
+                        <FileIcon className="w-6 h-6 text-ink-3 mb-1" />
+                        <p className="text-[10px] text-ink-3 truncate w-full px-1">{u.name}</p>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeUpload(u.id)}
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label={`Remove ${u.name}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                    <p className="absolute bottom-1 right-1 text-[9px] font-medium text-white bg-black/60 px-1 rounded">
+                      {u.sizeMB} MB
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={onPickFiles}
+              disabled={uploading}
+              className="w-full inline-flex flex-col items-center justify-center gap-1 py-4 text-ink-3 hover:text-ink transition-colors disabled:opacity-60"
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <p className="text-[12px] font-medium">Uploading…</p>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-5 h-5" />
+                  <p className="text-[12px] font-medium">
+                    {uploads.length === 0 ? 'Drag files here, or click to pick' : 'Add more files'}
+                  </p>
+                  <p className="text-[10px] text-ink-4">Images and video, 25 MB max each</p>
+                </>
+              )}
+            </button>
+          </div>
+
           <textarea
             value={assetLinks}
             onChange={(e) => setAssetLinks(e.target.value)}
-            rows={3}
-            placeholder="https://photos.app.goo.gl/abc123&#10;https://www.dropbox.com/scl/fi/xyz"
-            className="w-full rounded-xl border bg-white p-4 text-[13px] font-mono text-ink leading-relaxed placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 transition-all resize-none"
+            rows={2}
+            placeholder="…or paste cloud links (Drive, Dropbox, iCloud), one per line"
+            className="w-full mt-2 rounded-xl border bg-white px-4 py-2.5 text-[12px] font-mono text-ink leading-relaxed placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 transition-all resize-none"
             style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
           />
         </Field>
