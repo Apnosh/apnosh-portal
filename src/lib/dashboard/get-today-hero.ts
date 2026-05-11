@@ -36,12 +36,16 @@ export interface NeedsYouItem {
 }
 
 export interface ThisWeekItem {
-  /** What's planned, e.g. "Monday: 2 Mother's Day posts (drafted)" */
+  /** Short label, e.g. "Mother's Day reel" or "Brand refresh" */
   label: string
   /** Optional detail */
   detail?: string
-  /** Status chip text, e.g. "Drafted", "Scheduled", "Shipped" */
-  status?: string
+  /** Type chip: post / email / video / design / deliverable */
+  type: 'post' | 'email' | 'video' | 'design' | 'deliverable'
+  /** Status chip, e.g. "Drafted", "Scheduled", "In review", "In progress" */
+  status: string
+  /** When (for upcoming): "Mon May 12" — null for ongoing/in-progress work */
+  when?: string
   /** Where the owner can review/approve */
   href?: string
 }
@@ -223,18 +227,49 @@ export async function getTodayHero(clientId: string): Promise<TodayHeroData> {
     })
   }
 
-  // ── thisWeek (proof of motion from the team) ────────────
+  // ── thisWeek (content pipeline + in-progress deliverables) ──
   const thisWeek: ThisWeekItem[] = []
+  // 1) upcoming scheduled posts
   for (const p of (weekPostsRow.data ?? [])) {
     const when = new Date(p.scheduled_for as string)
-    const day = when.toLocaleString('en-US', { weekday: 'long' })
-    const preview = ((p.text as string) ?? '').slice(0, 60).replace(/\s+/g, ' ')
+    const dayLabel = when.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+    const preview = ((p.text as string) ?? '').slice(0, 50).replace(/\s+/g, ' ')
     thisWeek.push({
-      label: `${day}: post${preview ? ` — "${preview}${(p.text as string).length > 60 ? '...' : ''}"` : ''}`,
+      label: preview ? `"${preview}${(p.text as string).length > 50 ? '...' : ''}"` : 'Scheduled post',
+      type: 'post',
       status: p.status === 'in_review' ? 'In review' : p.status === 'approved' ? 'Approved' : 'Scheduled',
+      when: dayLabel,
       href: '/dashboard/social/calendar',
     })
-    if (thisWeek.length >= 4) break
+    if (thisWeek.length >= 5) break
+  }
+  // 2) in-progress deliverables (design / video / etc. being made)
+  if (thisWeek.length < 6) {
+    const { data: inProgress } = await admin
+      .from('deliverables')
+      .select('id, type, title, status')
+      .eq('client_id', clientId)
+      .in('status', ['internal_review', 'in_progress', 'draft', 'revision_requested'])
+      .order('updated_at', { ascending: false })
+      .limit(6 - thisWeek.length)
+    for (const d of inProgress ?? []) {
+      const t = (d.type as string) ?? 'other'
+      const type: ThisWeekItem['type'] =
+        t.includes('video') ? 'video' :
+        t.includes('design') || t.includes('graphic') || t.includes('photo') ? 'design' :
+        t.includes('email') ? 'email' :
+        t.includes('social') || t.includes('post') ? 'post' : 'deliverable'
+      const statusLabel =
+        d.status === 'internal_review' ? 'In review' :
+        d.status === 'revision_requested' ? 'Revising' :
+        d.status === 'in_progress' ? 'In progress' : 'Drafting'
+      thisWeek.push({
+        label: (d.title as string) ?? `${humanize(t)} in progress`,
+        type,
+        status: statusLabel,
+        href: '/dashboard/approvals',
+      })
+    }
   }
 
   // ── goalLines (one-liner per active goal) ───────────────
@@ -328,4 +363,8 @@ export async function getTodayHero(clientId: string): Promise<TodayHeroData> {
     goalLines,
     computedAt: new Date().toISOString(),
   }
+}
+
+function humanize(s: string): string {
+  return s.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }

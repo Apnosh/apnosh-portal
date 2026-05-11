@@ -22,9 +22,10 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Sparkles, RefreshCw, AlertCircle, MessageSquare, CheckSquare, Plug,
-  ListTodo, Calendar, ChevronRight, Image as ImageIcon, User, Activity,
+  ListTodo, ChevronRight, Image as ImageIcon, User, Activity, Mail,
+  Video, FileText, Send,
 } from 'lucide-react'
-import type { TodayHeroData, NeedsYouItem, RecentActivityItem } from '@/lib/dashboard/get-today-hero'
+import type { TodayHeroData, NeedsYouItem, RecentActivityItem, ThisWeekItem } from '@/lib/dashboard/get-today-hero'
 
 interface InitialBrief {
   text: string
@@ -151,31 +152,16 @@ export default function TodayHero({
         </div>
       )}
 
-      {/* This week (upcoming, proof of motion) */}
+      {/* Content pipeline -- scheduled posts + in-progress deliverables */}
       {hero.thisWeek.length > 0 && (
         <div className="mt-4 pt-4 border-t border-ink-7">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-2">
-            Shipping this week
+            Content pipeline
           </p>
           <ul className="space-y-1.5">
             {hero.thisWeek.map((it, idx) => (
               <li key={idx}>
-                <Link
-                  href={it.href ?? '#'}
-                  className="flex items-start gap-2.5 -mx-2 px-2 py-1.5 rounded-md hover:bg-bg-2 transition-colors"
-                >
-                  <Calendar className="w-3.5 h-3.5 text-ink-4 flex-shrink-0 mt-1" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-ink leading-snug">
-                      {it.label}
-                    </p>
-                  </div>
-                  {it.status && (
-                    <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 flex-shrink-0">
-                      {it.status}
-                    </span>
-                  )}
-                </Link>
+                <ContentPipelineRow item={it} />
               </li>
             ))}
           </ul>
@@ -186,7 +172,7 @@ export default function TodayHero({
       {hero.recentActivity.length > 0 && (
         <div className="mt-4 pt-4 border-t border-ink-7">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-2">
-            Recently
+            Recent activity
           </p>
           <ul className="space-y-1.5">
             {hero.recentActivity.map((it, idx) => (
@@ -206,6 +192,56 @@ export default function TodayHero({
       )}
     </section>
   )
+}
+
+const TYPE_ICONS = {
+  post: Send,
+  email: Mail,
+  video: Video,
+  design: ImageIcon,
+  deliverable: FileText,
+}
+
+const TYPE_LABELS: Record<ThisWeekItem['type'], string> = {
+  post: 'Post',
+  email: 'Email',
+  video: 'Video',
+  design: 'Design',
+  deliverable: 'Work',
+}
+
+const STATUS_TONE: Record<string, string> = {
+  'Scheduled': 'bg-emerald-50 text-emerald-700',
+  'Approved': 'bg-emerald-50 text-emerald-700',
+  'In review': 'bg-amber-50 text-amber-700',
+  'Revising': 'bg-amber-50 text-amber-700',
+  'In progress': 'bg-sky-50 text-sky-700',
+  'Drafting': 'bg-ink-7 text-ink-3',
+}
+
+function ContentPipelineRow({ item }: { item: ThisWeekItem }) {
+  const Icon = TYPE_ICONS[item.type] ?? FileText
+  const statusClass = STATUS_TONE[item.status] ?? 'bg-ink-7 text-ink-3'
+  const inner = (
+    <div className="flex items-start gap-2.5 -mx-2 px-2 py-1.5 rounded-md hover:bg-bg-2 transition-colors">
+      <Icon className="w-3.5 h-3.5 text-ink-4 flex-shrink-0 mt-1" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-3">
+            {TYPE_LABELS[item.type]}
+          </span>
+          {item.when && (
+            <span className="text-[10px] text-ink-4">{item.when}</span>
+          )}
+        </div>
+        <p className="text-[13px] text-ink leading-snug">{item.label}</p>
+      </div>
+      <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${statusClass} flex-shrink-0 mt-0.5`}>
+        {item.status}
+      </span>
+    </div>
+  )
+  return item.href ? <Link href={item.href}>{inner}</Link> : inner
 }
 
 function RecentActivityRow({ item }: { item: RecentActivityItem }) {

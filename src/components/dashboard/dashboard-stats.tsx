@@ -19,6 +19,7 @@
 import Link from 'next/link'
 import { ArrowUpRight, ArrowDownRight, Minus, MapPin, Star, Megaphone } from 'lucide-react'
 import type { PulseCard } from './pulse-cards'
+import Sparkline from './sparkline'
 
 interface Props {
   customers: PulseCard
@@ -108,6 +109,11 @@ function StatTile({
         )}
       </div>
       <p className="text-[11px] text-ink-3 mt-1 leading-snug line-clamp-1">{card.subtitle}</p>
+      {card.series && card.series.length > 1 && card.series.some(v => v > 0) && (
+        <div className="mt-2 -mb-1">
+          <Sparkline data={card.series} up={card.up !== false} height={24} />
+        </div>
+      )}
     </Link>
   )
 }
