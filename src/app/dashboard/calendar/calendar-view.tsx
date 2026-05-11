@@ -1,19 +1,27 @@
 'use client'
 
 /**
- * Calendar view, redesigned around the operator (not the planner).
+ * Calendar view — month grid first, agenda as alternate.
  *
- * Reading order:
- *   1. Pulse — one-sentence narrative + 3 KPIs ("this week / next 7d / on you")
- *   2. Filter rail (desktop) — Google-Cal-style checkboxes with color dots
- *   3. Canvas — Runway (default), Agenda, or Month
- *   4. Detail sheet — slides in from right when you tap any event
+ * Layout:
+ *   [pulse band]   compact narrative + 3 KPI tiles, all clickable
+ *   [filter rail | main canvas]
+ *      ^^ desktop only; mobile uses chip row above the canvas
+ *   Main canvas: Month (default) or Agenda
+ *   Subscribe button top-right; opens an .ics dialog
  *
- * Colors: 3 categories, 3 hues. Kind disambiguated by icon.
- *   Publishing = sky · Production = amber · Tasks = rose
+ * Color = 3 categories (Publishing / Production / Tasks). Kind icons
+ * disambiguate inside that.
  *
- * Runway = 7-day horizontal timeline, days as columns, category as rows.
- * Past days fade. Today highlights. Click any cell -> day detail.
+ * Interactions:
+ *   - Click a chip      -> event detail sheet (right-slide)
+ *   - Click a day cell  -> day detail sheet listing every event that day
+ *   - +N more link      -> same day detail sheet
+ *   - Click KPI tile    -> jumps to the relevant view + filter
+ *
+ * Onboarding playbook ghosts appear on the relevant days during the
+ * first 14 days of a client's tenure, as dashed chips on cells where
+ * nothing real is scheduled.
  */
 
 import { useMemo, useState, useEffect, useRef } from 'react'
@@ -27,7 +35,7 @@ import type {
   CalendarEvent, CalendarCategory, CalendarEventKind, CalendarTone,
 } from '@/lib/dashboard/get-calendar'
 
-type ViewMode = 'runway' | 'agenda' | 'month'
+type ViewMode = 'month' | 'agenda'
 
 const CATEGORY_ORDER: CalendarCategory[] = ['publishing', 'production', 'task']
 
@@ -43,10 +51,12 @@ const CATEGORY_BLURB: Record<CalendarCategory, string> = {
   task: 'On your plate',
 }
 
-const CATEGORY_COLOR: Record<CalendarCategory, { bg: string; ring: string; text: string; dot: string; soft: string }> = {
-  publishing: { bg: 'bg-sky-50',    ring: 'ring-sky-200',    text: 'text-sky-700',    dot: 'bg-sky-500',    soft: 'bg-sky-100/60' },
-  production: { bg: 'bg-amber-50',  ring: 'ring-amber-200',  text: 'text-amber-700',  dot: 'bg-amber-500',  soft: 'bg-amber-100/60' },
-  task:       { bg: 'bg-rose-50',   ring: 'ring-rose-200',   text: 'text-rose-700',   dot: 'bg-rose-500',   soft: 'bg-rose-100/60' },
+const CATEGORY_COLOR: Record<CalendarCategory, {
+  bg: string; ring: string; text: string; dot: string; soft: string; bar: string;
+}> = {
+  publishing: { bg: 'bg-sky-50',    ring: 'ring-sky-200',    text: 'text-sky-700',    dot: 'bg-sky-500',    soft: 'bg-sky-100/60',    bar: 'border-l-sky-500' },
+  production: { bg: 'bg-amber-50',  ring: 'ring-amber-200',  text: 'text-amber-700',  dot: 'bg-amber-500',  soft: 'bg-amber-100/60',  bar: 'border-l-amber-500' },
+  task:       { bg: 'bg-rose-50',   ring: 'ring-rose-200',   text: 'text-rose-700',   dot: 'bg-rose-500',   soft: 'bg-rose-100/60',   bar: 'border-l-rose-500' },
 }
 
 const KIND_ICON: Record<CalendarEventKind, React.ComponentType<{ className?: string }>> = {
@@ -78,12 +88,16 @@ export default function CalendarView({
   clientCreatedAt = null,
   subscribePath,
 }: CalendarViewProps) {
-  const [view, setView] = useState<ViewMode>('runway')
-  const [windowStart, setWindowStart] = useState(() => startOfDay(new Date()))
+  const [view, setView] = useState<ViewMode>('month')
+  const [cursor, setCursor] = useState(() => {
+    const d = new Date()
+    return new Date(d.getFullYear(), d.getMonth(), 1)
+  })
   const [enabled, setEnabled] = useState<Record<CalendarCategory, boolean>>({
     publishing: true, production: true, task: true,
   })
   const [selected, setSelected] = useState<CalendarEvent | null>(null)
+  const [dayPanel, setDayPanel] = useState<Date | null>(null)
   const [showSubscribe, setShowSubscribe] = useState(false)
 
   const filtered = useMemo(
@@ -97,14 +111,31 @@ export default function CalendarView({
     return c
   }, [events])
 
+  // Onboarding playbook keyed by dayKey
+  const playbookByDay = useMemo(() => {
+    const m = new Map<string, PlaybookMilestone[]>()
+    if (!clientCreatedAt) return m
+    const start = startOfDay(new Date(clientCreatedAt))
+    const ageDays = Math.floor((Date.now() - start.getTime()) / 86_400_000)
+    if (ageDays > 14) return m
+    for (const ms of ONBOARDING_PLAYBOOK) {
+      const date = addDays(start, ms.daysFromStart)
+      const k = dayKey(date)
+      const arr = m.get(k) ?? []
+      arr.push(ms)
+      m.set(k, arr)
+    }
+    return m
+  }, [clientCreatedAt])
+
   function handleKpiClick(target: 'thisWeek' | 'nextWeek' | 'actionNeeded') {
     if (target === 'thisWeek') {
-      setView('runway')
-      setWindowStart(startOfDay(new Date()))
+      setView('month')
+      const today = new Date()
+      setCursor(new Date(today.getFullYear(), today.getMonth(), 1))
       setEnabled({ publishing: true, production: true, task: true })
     } else if (target === 'nextWeek') {
-      setView('runway')
-      setWindowStart(addDays(startOfDay(new Date()), 7))
+      setView('agenda')
       setEnabled({ publishing: true, production: true, task: true })
     } else {
       setView('agenda')
@@ -114,16 +145,38 @@ export default function CalendarView({
 
   return (
     <>
-      <div className="max-w-7xl mx-auto py-7 px-4 lg:px-6">
-        {/* Pulse */}
-        <Pulse
-          events={events}
-          onKpiClick={handleKpiClick}
-          onSubscribe={subscribePath ? () => setShowSubscribe(true) : undefined}
-        />
+      <div className="max-w-7xl mx-auto py-6 px-4 lg:px-6">
+        {/* Compact header */}
+        <header className="mb-5">
+          <div className="flex items-center justify-between gap-3 mb-1">
+            <div className="flex items-center gap-2">
+              <CalendarIcon className="w-4 h-4 text-ink-3" />
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-ink-3">
+                Calendar
+              </span>
+            </div>
+            {subscribePath && (
+              <button
+                onClick={() => setShowSubscribe(true)}
+                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-3 hover:text-ink border border-ink-6 hover:border-ink-5 rounded-full px-3 py-1 transition-colors"
+              >
+                <Rss className="w-3 h-3" />
+                Subscribe
+              </button>
+            )}
+          </div>
+          <h1 className="text-[24px] leading-tight font-bold text-ink tracking-tight">
+            What&rsquo;s coming up
+          </h1>
+          <p className="text-[13px] text-ink-2 mt-1.5 leading-relaxed max-w-2xl">
+            {composeNarrative(events)}
+          </p>
 
-        {/* Two-col layout: filter rail + canvas */}
-        <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-6 lg:gap-8 mt-6">
+          <PulseStrip events={events} onClick={handleKpiClick} />
+        </header>
+
+        {/* Two-col layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-6 lg:gap-8">
           <aside className="hidden lg:block">
             <FilterRail counts={counts} enabled={enabled} onToggle={(cat) =>
               setEnabled(e => ({ ...e, [cat]: !e[cat] }))
@@ -131,9 +184,8 @@ export default function CalendarView({
           </aside>
 
           <main className="min-w-0">
-            <div className="flex items-center justify-between mb-4 gap-3">
-              <ViewToggle view={view} onChange={setView} />
-              {/* Mobile category chips */}
+            <div className="flex items-center justify-between mb-3 gap-3">
+              {/* Mobile filter chips */}
               <div className="flex lg:hidden items-center gap-1 overflow-x-auto">
                 {CATEGORY_ORDER.map(cat => (
                   <button
@@ -150,31 +202,40 @@ export default function CalendarView({
                   </button>
                 ))}
               </div>
+              <div className="hidden lg:block" />
+
+              <ViewToggle view={view} onChange={setView} />
             </div>
 
             {filtered.length === 0 && events.length === 0 ? (
-              <EmptyState totalEvents={events.length} />
-            ) : filtered.length === 0 ? (
-              <EmptyState totalEvents={events.length} />
-            ) : view === 'runway' ? (
-              <RunwayView
+              <EmptyState />
+            ) : view === 'month' ? (
+              <MonthView
                 events={filtered}
-                onSelect={setSelected}
-                windowStart={windowStart}
-                setWindowStart={setWindowStart}
-                clientCreatedAt={clientCreatedAt}
+                cursor={cursor}
+                setCursor={setCursor}
+                onSelectEvent={setSelected}
+                onSelectDay={setDayPanel}
+                playbookByDay={playbookByDay}
                 enabled={enabled}
               />
-            ) : view === 'agenda' ? (
-              <AgendaView events={filtered} onSelect={setSelected} />
             ) : (
-              <MonthView events={filtered} onSelect={setSelected} />
+              <AgendaView events={filtered} onSelect={setSelected} />
             )}
           </main>
         </div>
       </div>
 
       {selected && <DetailSheet event={selected} onClose={() => setSelected(null)} />}
+      {dayPanel && (
+        <DaySheet
+          date={dayPanel}
+          events={filtered.filter(e => dayKey(new Date(e.startIso)) === dayKey(dayPanel))}
+          playbook={playbookByDay.get(dayKey(dayPanel)) ?? []}
+          onClose={() => setDayPanel(null)}
+          onSelectEvent={(e) => { setDayPanel(null); setSelected(e) }}
+        />
+      )}
       {showSubscribe && subscribePath && (
         <SubscribeDialog path={subscribePath} onClose={() => setShowSubscribe(false)} />
       )}
@@ -182,14 +243,13 @@ export default function CalendarView({
   )
 }
 
-/* ─────────────────────────────── Pulse ─────────────────────────────── */
+/* ─────────────────────────────── Pulse strip ─────────────────────────────── */
 
-function Pulse({
-  events, onKpiClick, onSubscribe,
+function PulseStrip({
+  events, onClick,
 }: {
   events: CalendarEvent[]
-  onKpiClick: (target: 'thisWeek' | 'nextWeek' | 'actionNeeded') => void
-  onSubscribe?: () => void
+  onClick: (target: 'thisWeek' | 'nextWeek' | 'actionNeeded') => void
 }) {
   const stats = useMemo(() => {
     const now = Date.now()
@@ -206,49 +266,21 @@ function Pulse({
     return { thisWeek, next7to14, actionNeeded }
   }, [events])
 
-  const narrative = useMemo(() => composeNarrative(events), [events])
-
   return (
-    <header>
-      <div className="flex items-center justify-between mb-1 gap-3">
-        <div className="flex items-center gap-2">
-          <CalendarIcon className="w-4 h-4 text-ink-3" />
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-ink-3">
-            Calendar
-          </span>
-        </div>
-        {onSubscribe && (
-          <button
-            onClick={onSubscribe}
-            className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-3 hover:text-ink border border-ink-6 hover:border-ink-5 rounded-full px-3 py-1 transition-colors"
-          >
-            <Rss className="w-3 h-3" />
-            Subscribe
-          </button>
-        )}
-      </div>
-      <h1 className="text-[28px] leading-tight font-bold text-ink tracking-tight">
-        What&rsquo;s coming up
-      </h1>
-      <p className="text-[14px] text-ink-2 mt-2 leading-relaxed max-w-2xl">
-        {narrative}
-      </p>
-
-      <div className="grid grid-cols-3 gap-3 mt-5 max-w-2xl">
-        <KpiTile label="This week" value={stats.thisWeek} onClick={() => onKpiClick('thisWeek')} />
-        <KpiTile label="Week after" value={stats.next7to14} onClick={() => onKpiClick('nextWeek')} />
-        <KpiTile
-          label="On you"
-          value={stats.actionNeeded}
-          tone={stats.actionNeeded > 0 ? 'rose' : 'neutral'}
-          onClick={() => onKpiClick('actionNeeded')}
-        />
-      </div>
-    </header>
+    <div className="flex flex-wrap items-center gap-2 mt-3">
+      <PulseTile label="This week" value={stats.thisWeek} onClick={() => onClick('thisWeek')} />
+      <PulseTile label="Week after" value={stats.next7to14} onClick={() => onClick('nextWeek')} />
+      <PulseTile
+        label="On you"
+        value={stats.actionNeeded}
+        tone={stats.actionNeeded > 0 ? 'rose' : 'neutral'}
+        onClick={() => onClick('actionNeeded')}
+      />
+    </div>
   )
 }
 
-function KpiTile({
+function PulseTile({
   label, value, tone = 'neutral', onClick,
 }: {
   label: string; value: number; tone?: 'neutral' | 'rose'; onClick?: () => void
@@ -256,17 +288,16 @@ function KpiTile({
   return (
     <button
       onClick={onClick}
-      className="text-left rounded-xl bg-white border px-4 py-3 hover:shadow-sm hover:border-ink-5 transition-all group"
-      style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+      className="inline-flex items-baseline gap-1.5 rounded-full bg-white border border-ink-6 hover:border-ink-5 px-3 py-1 transition-colors group"
     >
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-4 mb-1 group-hover:text-ink-3 transition-colors">
-        {label}
-      </p>
-      <p className={`text-[26px] font-bold leading-none tracking-tight ${
+      <span className={`text-[14px] font-bold tabular-nums leading-none ${
         tone === 'rose' && value > 0 ? 'text-rose-700' : 'text-ink'
       }`}>
         {value}
-      </p>
+      </span>
+      <span className="text-[11px] text-ink-3 group-hover:text-ink-2 transition-colors leading-none">
+        {label}
+      </span>
     </button>
   )
 }
@@ -326,9 +357,8 @@ function FilterRail({
 
 function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode) => void }) {
   const items: { v: ViewMode; label: string }[] = [
-    { v: 'runway', label: 'Runway' },
-    { v: 'agenda', label: 'Agenda' },
     { v: 'month',  label: 'Month'  },
+    { v: 'agenda', label: 'Agenda' },
   ]
   return (
     <div className="inline-flex bg-bg-2 rounded-lg p-0.5">
@@ -349,73 +379,56 @@ function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode
   )
 }
 
-/* ────────────────────────────── Runway ────────────────────────────── */
+/* ────────────────────────────── Month ────────────────────────────── */
 
-function RunwayView({
-  events, onSelect, windowStart, setWindowStart, clientCreatedAt, enabled,
+function MonthView({
+  events, cursor, setCursor, onSelectEvent, onSelectDay, playbookByDay, enabled,
 }: {
   events: CalendarEvent[]
-  onSelect: (e: CalendarEvent) => void
-  windowStart: Date
-  setWindowStart: (d: Date) => void
-  clientCreatedAt: string | null
+  cursor: Date
+  setCursor: (d: Date) => void
+  onSelectEvent: (e: CalendarEvent) => void
+  onSelectDay: (d: Date) => void
+  playbookByDay: Map<string, PlaybookMilestone[]>
   enabled: Record<CalendarCategory, boolean>
 }) {
-  const days = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => addDays(windowStart, i))
-  }, [windowStart])
-
-  const byDayCategory = useMemo(() => {
-    const map = new Map<string, CalendarEvent[]>()
+  const byDay = useMemo(() => {
+    const m = new Map<string, CalendarEvent[]>()
     for (const e of events) {
-      const k = `${dayKey(new Date(e.startIso))}|${e.category}`
-      const arr = map.get(k) ?? []
+      const k = dayKey(new Date(e.startIso))
+      const arr = m.get(k) ?? []
       arr.push(e)
-      map.set(k, arr)
+      m.set(k, arr)
     }
-    return map
+    return m
   }, [events])
 
-  // Onboarding playbook: ghost chips on expected days during first 14
-  // days of the client's tenure. Only shows on cells with no real events.
-  const playbookByDayCategory = useMemo(() => {
-    const map = new Map<string, PlaybookMilestone>()
-    if (!clientCreatedAt) return map
-    const start = startOfDay(new Date(clientCreatedAt))
-    const ageDays = Math.floor((Date.now() - start.getTime()) / 86_400_000)
-    if (ageDays > 14) return map // Only nudge during first two weeks
-    for (const m of ONBOARDING_PLAYBOOK) {
-      const date = addDays(start, m.daysFromStart)
-      const k = `${dayKey(date)}|${m.category}`
-      if (!map.has(k)) map.set(k, m)
-    }
-    return map
-  }, [clientCreatedAt])
-
+  const cells = useMemo(() => buildMonthCells(cursor), [cursor])
   const todayKey = dayKey(new Date())
-  const windowLabel = `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
 
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-[14px] font-semibold text-ink">{windowLabel}</h2>
+        <h2 className="text-[18px] font-bold text-ink tracking-tight">
+          {cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+        </h2>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setWindowStart(addDays(windowStart, -7))}
-            aria-label="Previous 7 days"
+            onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
+            aria-label="Previous month"
             className="p-1.5 rounded-md hover:bg-bg-2 text-ink-3"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setWindowStart(startOfDay(new Date()))}
+            onClick={() => setCursor(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}
             className="text-[11px] font-medium text-ink-3 hover:text-ink px-2"
           >
-            This week
+            Today
           </button>
           <button
-            onClick={() => setWindowStart(addDays(windowStart, 7))}
-            aria-label="Next 7 days"
+            onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
+            aria-label="Next month"
             className="p-1.5 rounded-md hover:bg-bg-2 text-ink-3"
           >
             <ChevronRight className="w-4 h-4" />
@@ -424,102 +437,90 @@ function RunwayView({
       </div>
 
       <div
-        className="rounded-xl border bg-white overflow-hidden"
+        className="rounded-2xl border bg-white overflow-hidden"
         style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
       >
-        {/* Day headers */}
-        <div className="grid border-b" style={{
-          gridTemplateColumns: 'minmax(110px, 140px) repeat(7, minmax(0, 1fr))',
-          borderColor: 'var(--db-border, #e5e5e5)',
-        }}>
-          <div className="" />
-          {days.map(d => {
-            const k = dayKey(d)
+        {/* Weekday headers */}
+        <div
+          className="grid grid-cols-7 border-b bg-bg-2/40"
+          style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+        >
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+            <div
+              key={d}
+              className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 text-center py-2.5"
+            >
+              {d}
+            </div>
+          ))}
+        </div>
+        {/* Grid */}
+        <div className="grid grid-cols-7">
+          {cells.map((c, idx) => {
+            const k = dayKey(c.date)
+            const dayEvents = byDay.get(k) ?? []
             const isToday = k === todayKey
             const isPast = k < todayKey
+            const playbook = (playbookByDay.get(k) ?? []).filter(p => enabled[p.category])
+            const playbookGhosts = dayEvents.length === 0 ? playbook : []
+            const visible = dayEvents.slice(0, 4)
+            const hidden = Math.max(0, dayEvents.length - 4)
+            const isLastRow = idx >= cells.length - 7
+            const isLastCol = idx % 7 === 6
             return (
               <div
-                key={k}
-                className={`text-center py-2.5 px-1 border-l ${isPast ? 'opacity-50' : ''}`}
+                key={idx}
+                onClick={() => onSelectDay(c.date)}
+                className={`relative min-h-[120px] sm:min-h-[140px] p-2 cursor-pointer hover:bg-bg-2/30 transition-colors ${
+                  !isLastCol ? 'border-r' : ''
+                } ${!isLastRow ? 'border-b' : ''} ${
+                  !c.inMonth ? 'bg-bg-2/30' : isPast ? 'opacity-60' : ''
+                }`}
                 style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
               >
-                <div className={`text-[10px] font-semibold uppercase tracking-wider ${isToday ? 'text-ink' : 'text-ink-4'}`}>
-                  {d.toLocaleDateString('en-US', { weekday: 'short' })}
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className={`text-[12px] font-semibold ${
+                    isToday
+                      ? 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-ink text-white'
+                      : c.inMonth ? 'text-ink' : 'text-ink-5'
+                  }`}>
+                    {c.date.getDate()}
+                  </span>
+                  {hidden > 0 && (
+                    <span className="text-[10px] text-ink-4 tabular-nums">
+                      +{hidden}
+                    </span>
+                  )}
                 </div>
-                <div className={`text-[15px] font-semibold mt-0.5 ${
-                  isToday ? 'inline-flex items-center justify-center w-7 h-7 rounded-full bg-ink text-white' : 'text-ink'
-                }`}>
-                  {d.getDate()}
+                <div className="space-y-1">
+                  {visible.map(ev => (
+                    <MonthChip
+                      key={ev.id}
+                      event={ev}
+                      onClick={(e) => { e.stopPropagation(); onSelectEvent(ev) }}
+                    />
+                  ))}
+                  {playbookGhosts.slice(0, 2).map((p, i) => (
+                    <PlaybookGhost key={`gh-${i}`} milestone={p} />
+                  ))}
                 </div>
               </div>
             )
           })}
         </div>
-
-        {/* Swimlanes */}
-        {CATEGORY_ORDER.map((cat, rowIdx) => {
-          const c = CATEGORY_COLOR[cat]
-          return (
-            <div
-              key={cat}
-              className={`grid ${rowIdx < CATEGORY_ORDER.length - 1 ? 'border-b' : ''}`}
-              style={{
-                gridTemplateColumns: 'minmax(110px, 140px) repeat(7, minmax(0, 1fr))',
-                borderColor: 'var(--db-border, #e5e5e5)',
-              }}
-            >
-              {/* Row label */}
-              <div className="flex items-center gap-2 px-3 py-3 border-r" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
-                <span className={`w-2 h-2 rounded-full ${c.dot}`} />
-                <span className="text-[12px] font-medium text-ink-2">
-                  {CATEGORY_LABEL[cat]}
-                </span>
-              </div>
-              {/* Day cells */}
-              {days.map(d => {
-                const k = dayKey(d)
-                const cellEvents = byDayCategory.get(`${k}|${cat}`) ?? []
-                const playbookHint = cellEvents.length === 0 && enabled[cat]
-                  ? playbookByDayCategory.get(`${k}|${cat}`)
-                  : undefined
-                const isPast = k < todayKey
-                const isToday = k === todayKey
-                return (
-                  <div
-                    key={k}
-                    className={`min-h-[88px] border-l p-1 ${isPast ? 'opacity-60' : ''} ${isToday ? c.soft : ''}`}
-                    style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
-                  >
-                    <div className="space-y-1">
-                      {cellEvents.slice(0, 3).map(ev => (
-                        <RunwayChip key={ev.id} event={ev} onClick={() => onSelect(ev)} />
-                      ))}
-                      {cellEvents.length > 3 && (
-                        <button
-                          onClick={() => onSelect(cellEvents[3])}
-                          className="text-[10px] text-ink-4 hover:text-ink-2 px-1"
-                        >
-                          +{cellEvents.length - 3} more
-                        </button>
-                      )}
-                      {playbookHint && (
-                        <PlaybookGhost milestone={playbookHint} />
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })}
       </div>
     </div>
   )
 }
 
-function RunwayChip({ event, onClick }: { event: CalendarEvent; onClick: () => void }) {
-  const Icon = KIND_ICON[event.kind]
+function MonthChip({
+  event, onClick,
+}: {
+  event: CalendarEvent
+  onClick: (e: React.MouseEvent) => void
+}) {
   const c = CATEGORY_COLOR[event.category]
+  const Icon = KIND_ICON[event.kind]
   return (
     <button
       onClick={onClick}
@@ -528,11 +529,11 @@ function RunwayChip({ event, onClick }: { event: CalendarEvent; onClick: () => v
     >
       <Icon className="w-2.5 h-2.5 flex-shrink-0" />
       {!event.allDay && (
-        <span className="text-[9px] font-medium tabular-nums flex-shrink-0">
+        <span className="text-[10px] font-medium tabular-nums flex-shrink-0">
           {formatTimeShort(event.startIso)}
         </span>
       )}
-      <span className="text-[10px] truncate leading-tight">
+      <span className="text-[11px] truncate leading-tight">
         {event.title}
       </span>
     </button>
@@ -619,118 +620,98 @@ function AgendaRow({ event, onClick }: { event: CalendarEvent; onClick: () => vo
   )
 }
 
-/* ────────────────────────────── Month ────────────────────────────── */
+/* ───────────────────────────── Day sheet ───────────────────────────── */
 
-function MonthView({
-  events, onSelect,
+function DaySheet({
+  date, events, playbook, onClose, onSelectEvent,
 }: {
+  date: Date
   events: CalendarEvent[]
-  onSelect: (e: CalendarEvent) => void
+  playbook: PlaybookMilestone[]
+  onClose: () => void
+  onSelectEvent: (e: CalendarEvent) => void
 }) {
-  const [cursor, setCursor] = useState(() => {
-    const d = new Date()
-    return new Date(d.getFullYear(), d.getMonth(), 1)
-  })
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
-  const byDay = useMemo(() => {
-    const m = new Map<string, CalendarEvent[]>()
-    for (const e of events) {
-      const k = dayKey(new Date(e.startIso))
-      const arr = m.get(k) ?? []
-      arr.push(e)
-      m.set(k, arr)
-    }
-    return m
-  }, [events])
-
-  const cells = useMemo(() => buildMonthCells(cursor), [cursor])
-  const todayKey = dayKey(new Date())
+  const isToday = dayKey(date) === dayKey(new Date())
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-[14px] font-semibold text-ink">
-          {cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-        </h2>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setCursor(c => new Date(c.getFullYear(), c.getMonth() - 1, 1))}
-            aria-label="Previous month"
-            className="p-1.5 rounded-md hover:bg-bg-2 text-ink-3"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setCursor(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}
-            className="text-[11px] font-medium text-ink-3 hover:text-ink px-2"
-          >
-            Today
-          </button>
-          <button
-            onClick={() => setCursor(c => new Date(c.getFullYear(), c.getMonth() + 1, 1))}
-            aria-label="Next month"
-            className="p-1.5 rounded-md hover:bg-bg-2 text-ink-3"
-          >
-            <ChevronRight className="w-4 h-4" />
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/20" onClick={onClose} />
+      <div className="absolute top-0 right-0 h-full w-full max-w-[440px] bg-white shadow-xl overflow-y-auto animate-in slide-in-from-right duration-200">
+        <div className="sticky top-0 bg-white border-b px-5 py-4 flex items-center justify-between" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-3 leading-none">
+              {date.toLocaleDateString('en-US', { weekday: 'long' })}
+              {isToday && (
+                <span className="ml-2 bg-ink text-white px-1.5 py-0.5 rounded text-[9px]">Today</span>
+              )}
+            </p>
+            <h2 className="text-[18px] font-bold text-ink mt-1 leading-none">
+              {date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+            </h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-bg-2 text-ink-3" aria-label="Close">
+            <X className="w-4 h-4" />
           </button>
         </div>
-      </div>
 
-      <div className="rounded-xl border bg-white overflow-hidden" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
-        <div className="grid grid-cols-7 border-b" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-            <div key={d} className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 text-center py-2">
-              {d}
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7">
-          {cells.map((c, idx) => {
-            const k = dayKey(c.date)
-            const dayEvents = byDay.get(k) ?? []
-            const isToday = k === todayKey
-            const isPast = k < todayKey
-            return (
-              <div
-                key={idx}
-                className={`min-h-[100px] border-r border-b p-1.5 ${
-                  !c.inMonth ? 'bg-bg-2/40' : isPast ? 'opacity-60' : ''
-                } ${idx % 7 === 6 ? 'border-r-0' : ''}`}
-                style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`text-[11px] font-semibold ${
-                    isToday ? 'inline-flex items-center justify-center w-5 h-5 rounded-full bg-ink text-white' :
-                    c.inMonth ? 'text-ink' : 'text-ink-5'
-                  }`}>
-                    {c.date.getDate()}
-                  </span>
-                  {dayEvents.length > 3 && (
-                    <span className="text-[9px] text-ink-4">+{dayEvents.length - 3}</span>
-                  )}
-                </div>
-                <div className="space-y-0.5">
-                  {dayEvents.slice(0, 3).map(ev => (
-                    <button
-                      key={ev.id}
-                      onClick={() => onSelect(ev)}
-                      className={`block w-full text-left text-[10px] leading-tight rounded px-1 py-0.5 truncate ${CATEGORY_COLOR[ev.category].bg} ${CATEGORY_COLOR[ev.category].text}`}
-                      title={ev.title}
+        <div className="p-5 space-y-3">
+          {events.length === 0 && playbook.length === 0 && (
+            <p className="text-[13px] text-ink-3 leading-relaxed">
+              Nothing scheduled for this day. As work gets queued, it&rsquo;ll show up here.
+            </p>
+          )}
+
+          {events.length > 0 && (
+            <ul className="space-y-2">
+              {events.map(ev => (
+                <AgendaRow key={ev.id} event={ev} onClick={() => onSelectEvent(ev)} />
+              ))}
+            </ul>
+          )}
+
+          {playbook.length > 0 && events.length === 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-4 mb-2">
+                Expected
+              </p>
+              <ul className="space-y-2">
+                {playbook.map((p, i) => {
+                  const Icon = KIND_ICON[p.kind]
+                  return (
+                    <li
+                      key={i}
+                      className="flex items-start gap-3 rounded-xl border border-dashed p-3.5"
+                      style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
                     >
-                      {ev.allDay ? '' : formatTimeShort(ev.startIso) + ' '}{ev.title}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
+                      <div className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 bg-bg-2 text-ink-3">
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-ink italic">{p.title}</p>
+                        <p className="text-[12px] text-ink-3 mt-0.5">{p.detail}</p>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+              <p className="text-[11px] text-ink-4 mt-3 italic">
+                Estimated from your onboarding plan. Replaced as real work gets scheduled.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-/* ───────────────────────────── Detail sheet ───────────────────────────── */
+/* ───────────────────────────── Event detail sheet ───────────────────────────── */
 
 function DetailSheet({ event, onClose }: { event: CalendarEvent; onClose: () => void }) {
   useEffect(() => {
@@ -869,9 +850,6 @@ function SubscribeDialog({ path, onClose }: { path: string; onClose: () => void 
     return `${window.location.origin}${path}`
   }, [path])
 
-  // The webcal:// scheme triggers native subscribe dialogs in Apple
-  // Calendar and most desktop calendar apps. Google Cal needs the
-  // https URL pasted into its "Add by URL" field.
   const webcalUrl = useMemo(() => {
     if (typeof window === 'undefined') return path
     return `webcal://${window.location.host}${path}`
@@ -974,35 +952,28 @@ function SubscribeDialog({ path, onClose }: { path: string; onClose: () => void 
 
 /* ───────────────────────────── Empty state ───────────────────────────── */
 
-function EmptyState({ totalEvents }: { totalEvents: number }) {
-  if (totalEvents === 0) {
-    return (
-      <div className="rounded-xl border bg-white p-10 text-center" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
-        <h2 className="text-base font-semibold text-ink mb-1.5">Nothing on the calendar yet</h2>
-        <p className="text-sm text-ink-3 max-w-md mx-auto leading-relaxed mb-6">
-          As your strategist schedules posts, books filming days, and lines up campaigns,
-          every dated item shows up here in one timeline.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-2xl mx-auto">
-          {CATEGORY_ORDER.map(cat => {
-            const c = CATEGORY_COLOR[cat]
-            return (
-              <div key={cat} className="flex items-center gap-2.5 p-2.5 rounded-lg bg-bg-2/60 text-left">
-                <span className={`w-3 h-3 rounded-sm ${c.dot}`} />
-                <div className="min-w-0">
-                  <p className="text-[12px] font-medium text-ink leading-tight">{CATEGORY_LABEL[cat]}</p>
-                  <p className="text-[10px] text-ink-3 leading-tight mt-0.5">{CATEGORY_BLURB[cat]}</p>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    )
-  }
+function EmptyState() {
   return (
-    <div className="rounded-xl border bg-white p-8 text-center" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
-      <p className="text-sm text-ink-3">Nothing matches the current filter. Toggle categories on the left.</p>
+    <div className="rounded-2xl border bg-white p-10 text-center" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+      <h2 className="text-base font-semibold text-ink mb-1.5">Nothing on the calendar yet</h2>
+      <p className="text-sm text-ink-3 max-w-md mx-auto leading-relaxed mb-6">
+        As your strategist schedules posts, books filming days, and lines up campaigns,
+        every dated item shows up here in one timeline.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-2xl mx-auto">
+        {CATEGORY_ORDER.map(cat => {
+          const c = CATEGORY_COLOR[cat]
+          return (
+            <div key={cat} className="flex items-center gap-2.5 p-2.5 rounded-lg bg-bg-2/60 text-left">
+              <span className={`w-3 h-3 rounded-sm ${c.dot}`} />
+              <div className="min-w-0">
+                <p className="text-[12px] font-medium text-ink leading-tight">{CATEGORY_LABEL[cat]}</p>
+                <p className="text-[10px] text-ink-3 leading-tight mt-0.5">{CATEGORY_BLURB[cat]}</p>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
