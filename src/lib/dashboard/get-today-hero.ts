@@ -46,6 +46,17 @@ export interface ThisWeekItem {
   href?: string
 }
 
+export interface RecentActivityItem {
+  /** Human line, e.g. "Mark drafted a Mother's Day post" */
+  label: string
+  /** When it happened (ISO) -- rendered relative ("2 hours ago") */
+  whenIso: string
+  /** Activity kind drives the icon */
+  kind: 'strategist' | 'content' | 'review' | 'system'
+  /** Optional click-through */
+  href?: string
+}
+
 export interface GoalProgressLine {
   slug: GoalSlug
   priority: 1 | 2 | 3
@@ -75,6 +86,7 @@ export interface TodayHeroData {
   }
   needsYou: NeedsYouItem[]
   thisWeek: ThisWeekItem[]
+  recentActivity: RecentActivityItem[]
   goalLines: GoalProgressLine[]
   /** ISO date this snapshot was computed (drives cache + freshness). */
   computedAt: string
@@ -105,10 +117,11 @@ const PRIMARY_CONNECTION_FOR_GOAL: Record<GoalSlug, { channel: string; label: st
 export async function getTodayHero(clientId: string): Promise<TodayHeroData> {
   const admin = createAdminClient()
   const now = new Date()
+  const d2 = new Date(now.getTime() - 2 * 86400000)
   const d7 = new Date(now.getTime() - 7 * 86400000)
   const w7 = new Date(now.getTime() + 7 * 86400000)
 
-  const [clientRow, shape, goals, connRows, unrepRev, pendApprovals, tasksRow, weekPostsRow, recentReviewsRow] = await Promise.all([
+  const [clientRow, shape, goals, connRows, unrepRev, pendApprovals, tasksRow, weekPostsRow, recentReviewsRow, recentEventsRow] = await Promise.all([
     admin.from('clients').select('name').eq('id', clientId).maybeSingle(),
     getClientShape(clientId),
     getActiveClientGoals(clientId),
@@ -118,6 +131,7 @@ export async function getTodayHero(clientId: string): Promise<TodayHeroData> {
     admin.from('client_tasks').select('id, title, due_at').eq('client_id', clientId).eq('visible_to_client', true).in('status', ['todo', 'doing']).order('due_at', { ascending: true, nullsFirst: false }).limit(5),
     admin.from('scheduled_posts').select('id, status, scheduled_for, text', { count: 'exact' }).eq('client_id', clientId).gte('scheduled_for', now.toISOString()).lte('scheduled_for', w7.toISOString()).in('status', ['scheduled', 'approved', 'in_review']).order('scheduled_for', { ascending: true }).limit(5),
     admin.from('reviews').select('id', { count: 'exact', head: true }).eq('client_id', clientId).gte('posted_at', d7.toISOString()),
+    admin.from('events').select('event_type, summary, occurred_at, actor_role, subject_type, subject_id').eq('client_id', clientId).gte('occurred_at', d2.toISOString()).order('occurred_at', { ascending: false }).limit(8),
   ])
 
   const clientName = (clientRow.data?.name as string) ?? 'there'
@@ -252,6 +266,33 @@ export async function getTodayHero(clientId: string): Promise<TodayHeroData> {
     }
   })
 
+  // ── recentActivity (events feed, last 48h) ───────────────
+  const recentActivity: RecentActivityItem[] = []
+  for (const e of (recentEventsRow.data ?? [])) {
+    const summary = (e.summary as string) ?? ''
+    if (!summary) continue
+    const eventType = (e.event_type as string) ?? ''
+    const actorRole = (e.actor_role as string) ?? ''
+    let kind: RecentActivityItem['kind'] = 'system'
+    let href: string | undefined
+    if (actorRole === 'strategist' || actorRole === 'admin') {
+      kind = 'strategist'
+    } else if (eventType.startsWith('scheduled_post')) {
+      kind = 'content'
+      href = '/dashboard/social/calendar'
+    } else if (eventType.startsWith('review')) {
+      kind = 'review'
+      href = '/dashboard/local-seo/reviews'
+    }
+    recentActivity.push({
+      label: summary,
+      whenIso: e.occurred_at as string,
+      kind,
+      href,
+    })
+    if (recentActivity.length >= 5) break
+  }
+
   // ── headline ────────────────────────────────────────────
   let headline = ''
   if (stage === 'new') {
@@ -283,6 +324,7 @@ export async function getTodayHero(clientId: string): Promise<TodayHeroData> {
     },
     needsYou,
     thisWeek,
+    recentActivity,
     goalLines,
     computedAt: new Date().toISOString(),
   }

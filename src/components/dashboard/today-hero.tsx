@@ -22,9 +22,9 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Sparkles, RefreshCw, AlertCircle, MessageSquare, CheckSquare, Plug,
-  ListTodo, Calendar, ChevronRight,
+  ListTodo, Calendar, ChevronRight, Image as ImageIcon, User, Activity,
 } from 'lucide-react'
-import type { TodayHeroData, NeedsYouItem } from '@/lib/dashboard/get-today-hero'
+import type { TodayHeroData, NeedsYouItem, RecentActivityItem } from '@/lib/dashboard/get-today-hero'
 
 interface InitialBrief {
   text: string
@@ -151,11 +151,11 @@ export default function TodayHero({
         </div>
       )}
 
-      {/* This week (proof of motion) */}
+      {/* This week (upcoming, proof of motion) */}
       {hero.thisWeek.length > 0 && (
         <div className="mt-4 pt-4 border-t border-ink-7">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-2">
-            From your team this week
+            Shipping this week
           </p>
           <ul className="space-y-1.5">
             {hero.thisWeek.map((it, idx) => (
@@ -182,6 +182,22 @@ export default function TodayHero({
         </div>
       )}
 
+      {/* Recent activity (last 48h proof) */}
+      {hero.recentActivity.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-ink-7">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-2">
+            Recently
+          </p>
+          <ul className="space-y-1.5">
+            {hero.recentActivity.map((it, idx) => (
+              <li key={idx}>
+                <RecentActivityRow item={it} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Footer: brief metadata */}
       {brief && (
         <p className="text-[10px] text-ink-4 mt-4">
@@ -190,6 +206,34 @@ export default function TodayHero({
       )}
     </section>
   )
+}
+
+function RecentActivityRow({ item }: { item: RecentActivityItem }) {
+  const Icon =
+    item.kind === 'strategist' ? User :
+    item.kind === 'content' ? ImageIcon :
+    item.kind === 'review' ? MessageSquare :
+    Activity
+  const inner = (
+    <div className="flex items-start gap-2.5 -mx-2 px-2 py-1.5 rounded-md hover:bg-bg-2 transition-colors">
+      <Icon className="w-3.5 h-3.5 text-ink-4 flex-shrink-0 mt-1" />
+      <div className="flex-1 min-w-0">
+        <p className="text-[13px] text-ink leading-snug">{item.label}</p>
+        <p className="text-[11px] text-ink-4 mt-0.5">{relativeTime(item.whenIso)}</p>
+      </div>
+    </div>
+  )
+  return item.href ? <Link href={item.href}>{inner}</Link> : inner
+}
+
+function relativeTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime()
+  const m = Math.round(ms / 60000)
+  if (m < 60) return `${m}m ago`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.round(h / 24)
+  return `${d}d ago`
 }
 
 function NeedsYouIcon({ kind, urgency }: { kind?: NeedsYouItem['kind']; urgency: NeedsYouItem['urgency'] }) {

@@ -26,11 +26,10 @@ import { useRouter } from 'next/navigation'
 import { useClient } from '@/lib/client-context'
 import TodayHero from '@/components/dashboard/today-hero'
 import type { TodayHeroData } from '@/lib/dashboard/get-today-hero'
-import Agenda, { type AgendaItem } from '@/components/dashboard/agenda'
-import YourMarketingWeek from '@/components/dashboard/your-marketing-week'
+import type { AgendaItem } from '@/components/dashboard/agenda'
 import ComingUp, { type ComingUpItem } from '@/components/dashboard/coming-up'
-import PulseCards, { type PulseCard } from '@/components/dashboard/pulse-cards'
-import GoalProgressCards, { type GoalCardData } from '@/components/dashboard/goal-progress-cards'
+import type { PulseCard } from '@/components/dashboard/pulse-cards'
+import type { GoalCardData } from '@/components/dashboard/goal-progress-cards'
 import YourStrategist, { type StrategistCardData } from '@/components/dashboard/your-strategist'
 import RequestWork from '@/components/dashboard/request-work'
 import type { PlaybookExplanation } from '@/lib/dashboard/get-playbook-explanations'
@@ -162,29 +161,18 @@ export default function DashboardPage() {
     )
   }
 
-  // Pulse cards from bundle, with skeletons while loading.
-  const pulseCardsToRender: PulseCard[] = bundle
-    ? [bundle.pulse.customers, bundle.pulse.reputation, bundle.pulse.reach]
-    : [
-        { label: 'Your customers', state: 'loading', subtitle: '', href: '/dashboard/local-seo' },
-        { label: 'Your reputation', state: 'loading', subtitle: '', href: '/dashboard/local-seo/reviews' },
-        { label: 'Your reach', state: 'loading', subtitle: '', href: '/dashboard/social' },
-      ]
-
-  // BriefPills no longer needed -- TodayHero composes its own
-  // needs-you / this-week / goal-progress sections.
-
   return (
     <div
       className="max-w-[1280px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-x-6">
-        {/* ═════════════ LEFT — operational column ═════════════ */}
+        {/* ═════════════ LEFT — the morning paper ═════════════ */}
         <div>
-          {/* 1. Today hero (slim now) -- headline + narrative + needs-you
-              + from-the-team-this-week. Goals chip section removed
-              (goals live in their own sidebar tab; not daily readout). */}
+          {/* The Today hero owns the action surface end-to-end:
+              headline -> AI narrative -> needs you -> shipping this week
+              -> recently. No more standalone agenda or numbers blocks --
+              the hero is the dashboard. */}
           <div className="db-fade db-d1">
             <TodayHero
               clientId={client.id}
@@ -193,58 +181,24 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* 2. Your numbers -- the metrics owners want to see daily.
-              Same data source as before, but framed as performance, not
-              goal progress. */}
-          {bundle && (
-            <section className="mb-6 db-fade db-d2">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-3">
-                Your numbers
-              </p>
-              {bundle.goalCards.length > 0
-                ? <GoalProgressCards cards={bundle.goalCards} />
-                : <PulseCards cards={pulseCardsToRender} />
-              }
-            </section>
-          )}
-
-          {/* 3. Service delivery this month -- proof of work, shown when
-              we have active services to track against. */}
+          {/* Service delivery this month -- only when we have active
+              services to track against (else it's noise). */}
           {bundle && bundle.services.length > 0 && (
             <ServicesThisMonth rows={bundle.services} />
           )}
-
-          {/* 4. Full agenda -- the long tail of action items (hero
-              surfaces top 3, this lists the rest). */}
-          <div className="db-fade db-d3">
-            <Agenda items={bundle ? bundle.agenda : null} />
-          </div>
         </div>
 
         {/* ═════════════ RIGHT — context + actions column ═════════════ */}
         <div>
-          {/* Strategist relationship card -- top of right column. */}
+          {/* Strategist relationship card. */}
           <YourStrategist strategist={bundle ? bundle.strategist : null} />
 
-          {/* Request work -- one-click quick actions: new post, design,
-              video, campaign, message strategist. This is the "every
-              action is one click" promise made surface-level. */}
+          {/* Request work -- the "every action is one click" promise
+              made surface-level. */}
           <RequestWork />
 
-          {/* This week's activity -- proof of momentum from the team. */}
+          {/* Coming up -- marketing calendar (holidays + food moments). */}
           <div className="db-fade db-d4">
-            <YourMarketingWeek
-              clientId={client.id}
-              initialItems={
-                bundle
-                  ? (bundle.weekly.items as { label: string; detail?: string; icon: 'check' | 'message' | 'image' | 'star' | 'megaphone' | 'sparkle' }[])
-                  : undefined
-              }
-            />
-          </div>
-
-          {/* Coming up -- marketing calendar (holidays, food moments). */}
-          <div className="db-fade db-d5">
             <ComingUp items={bundle ? bundle.comingUp : null} />
           </div>
         </div>
