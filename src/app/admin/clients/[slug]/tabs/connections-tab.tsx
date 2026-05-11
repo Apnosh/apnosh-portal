@@ -438,7 +438,7 @@ export default function ConnectionsTab({ clientId }: { clientId: string }) {
                 ))}
               </div>
               <p className="text-xs text-ink-4 mt-3">
-                These are connected by the client from the dashboard. To re-connect or change a property, the client must do it from <code className="text-[11px] bg-bg-2 px-1 rounded">/dashboard/connect-accounts</code>.
+                These are connected by the client from the dashboard. To re-connect or change a property, the client must do it from <code className="text-[11px] bg-bg-2 px-1 rounded">/dashboard/connected-accounts</code>.
               </p>
             </div>
           )}

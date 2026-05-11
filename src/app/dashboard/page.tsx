@@ -22,8 +22,6 @@
  */
 
 import { useEffect, useState } from 'react'
-import { getDashboardData } from '@/lib/dashboard/get-dashboard-data'
-import type { DashboardData } from '@/types/dashboard'
 import { useClient } from '@/lib/client-context'
 import SetupChecklist from '@/components/dashboard/setup-checklist'
 import TodaysBrief, { type BriefPills } from '@/components/dashboard/todays-brief'
@@ -49,37 +47,36 @@ interface DashboardLoadResult {
 export default function DashboardPage() {
   const { client, loading: clientLoading } = useClient()
   const [bundle, setBundle] = useState<DashboardLoadResult | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retryToken, setRetryToken] = useState(0)
 
   // One consolidated fetch for everything the dashboard renders.
   useEffect(() => {
     if (!client?.id) return
     let cancelled = false
+    setLoadError(null)
     fetch(`/api/dashboard/load?clientId=${encodeURIComponent(client.id)}`)
-      .then(r => r.ok ? r.json() : null)
+      .then(async r => {
+        if (!r.ok) {
+          throw new Error(`Server returned ${r.status}`)
+        }
+        return r.json()
+      })
       .then(data => {
         if (cancelled || !data) return
         setBundle(data as DashboardLoadResult)
       })
-      .catch(() => { /* silent */ })
-    return () => { cancelled = true }
-  }, [client?.id])
-
-  // Insights side-channel kept simple — used only to inform the brief
-  // pills' trend signal as a fallback when bundle lacks it.
-  const [trendFallback, setTrendFallback] = useState<{ value: string; up: boolean } | null>(null)
-  useEffect(() => {
-    if (!client?.id) return
-    let cancelled = false
-    getDashboardData(client.id)
-      .then((data: DashboardData | null) => {
-        if (cancelled || !data) return
-        const pct = data.visibility.pct
-        const up = data.visibility.up
-        if (pct && pct !== '---') setTrendFallback({ value: pct, up })
+      .catch((err: Error) => {
+        if (cancelled) return
+        // Show retry UI instead of an endless skeleton.
+        setLoadError(err.message || 'Could not load your dashboard')
       })
-      .catch(() => { /* silent */ })
     return () => { cancelled = true }
-  }, [client?.id])
+  }, [client?.id, retryToken])
+
+  // Trend fallback removed -- the bundle's pulse data carries reach/customer
+  // deltas, which is what the brief pills were falling back to anyway. Saves
+  // a duplicate getDashboardData() round-trip on every dashboard mount.
 
   if (clientLoading) {
     return (
@@ -88,6 +85,28 @@ export default function DashboardPage() {
           <div className="h-6 bg-ink-6 rounded w-48 mx-auto" />
           <div className="h-12 bg-ink-6 rounded w-32 mx-auto" />
           <div className="h-64 bg-ink-6 rounded" />
+        </div>
+      </div>
+    )
+  }
+
+  if (loadError && !bundle) {
+    return (
+      <div className="max-w-[640px] mx-auto px-8 max-sm:px-4 pt-12 text-center">
+        <div className="rounded-xl border p-8 bg-white" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+          <h2 className="text-lg font-bold mb-2" style={{ color: 'var(--db-black)' }}>
+            Couldn&apos;t load your dashboard
+          </h2>
+          <p className="text-sm mb-5" style={{ color: 'var(--db-ink-3)' }}>
+            Something went wrong on our end. {loadError ? `(${loadError})` : ''}
+          </p>
+          <button
+            onClick={() => setRetryToken(t => t + 1)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+            style={{ background: '#4abd98' }}
+          >
+            Try again
+          </button>
         </div>
       </div>
     )
@@ -141,9 +160,7 @@ export default function DashboardPage() {
           ? { label: 'Reach this week', value: bundle.pulse.reach.delta, up: bundle.pulse.reach.up ?? null }
           : bundle.pulse.customers.state === 'live' && bundle.pulse.customers.delta
             ? { label: 'Customer actions this week', value: bundle.pulse.customers.delta, up: bundle.pulse.customers.up ?? null }
-            : trendFallback
-              ? { label: 'Reach this month', value: trendFallback.value, up: trendFallback.up }
-              : null,
+            : null,
       }
     : null
 

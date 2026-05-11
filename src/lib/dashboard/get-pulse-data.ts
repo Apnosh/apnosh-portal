@@ -42,20 +42,13 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
   const d30 = new Date(now.getTime() - 30 * 86400000)
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
 
-  // For sparklines we also pull the full 14-day daily series per metric.
+  // One query per metric source covers all three needs (this-7-day,
+  // prev-7-day, 14-day sparkline). We slice the same dataset in memory
+  // instead of issuing 3 separate queries per table. Down from 7 db
+  // roundtrips to 3.
+  const d7Date = fmt(d7)
   const d14Date = fmt(d14)
-  const [gbpThis, gbpPrev, gbpDaily, reviewsRecent, socialThis, socialPrev, socialDaily] = await Promise.all([
-    admin
-      .from('gbp_metrics')
-      .select('directions, calls, website_clicks, bookings, conversations')
-      .eq('client_id', clientId)
-      .gte('date', fmt(d7)),
-    admin
-      .from('gbp_metrics')
-      .select('directions, calls, website_clicks, bookings, conversations')
-      .eq('client_id', clientId)
-      .gte('date', fmt(d14))
-      .lt('date', fmt(d7)),
+  const [gbpDaily, reviewsRecent, socialDaily] = await Promise.all([
     admin
       .from('gbp_metrics')
       .select('date, directions, calls, website_clicks, bookings, conversations')
@@ -69,22 +62,21 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
       .gte('posted_at', d30.toISOString()),
     admin
       .from('social_metrics')
-      .select('reach')
-      .eq('client_id', clientId)
-      .gte('date', fmt(d7)),
-    admin
-      .from('social_metrics')
-      .select('reach')
-      .eq('client_id', clientId)
-      .gte('date', fmt(d14))
-      .lt('date', fmt(d7)),
-    admin
-      .from('social_metrics')
       .select('date, reach')
       .eq('client_id', clientId)
       .gte('date', d14Date)
       .order('date', { ascending: true }),
   ])
+
+  // Slice the 14-day datasets in memory.
+  type GbpRow = { date: string; directions?: number | null; calls?: number | null; website_clicks?: number | null; bookings?: number | null; conversations?: number | null }
+  type SocialRow = { date: string; reach?: number | null }
+  const gbpRows = (gbpDaily.data ?? []) as GbpRow[]
+  const socialRows = (socialDaily.data ?? []) as SocialRow[]
+  const gbpThis = { data: gbpRows.filter(r => r.date >= d7Date) }
+  const gbpPrev = { data: gbpRows.filter(r => r.date < d7Date) }
+  const socialThis = { data: socialRows.filter(r => r.date >= d7Date) }
+  const socialPrev = { data: socialRows.filter(r => r.date < d7Date) }
 
   // Build a 14-element daily series for sparklines. Some days may have no
   // row, so we zero-fill missing dates so the sparkline x-axis is even.

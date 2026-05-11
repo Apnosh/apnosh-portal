@@ -46,9 +46,14 @@ export default function TodaysBrief({
   const [loading, setLoading] = useState(initialBrief === undefined)
   const [refreshing, setRefreshing] = useState(false)
 
-  async function load(refresh = false) {
-    if (refresh) setRefreshing(true)
-    else setLoading(true)
+  async function load(refresh = false, options: { silent?: boolean } = {}) {
+    // silent mode (background gen after a cache miss) skips the
+    // loading-skeleton toggle -- we keep showing the "Composing" placeholder
+    // until the brief is ready, then transition directly to the brief.
+    if (!options.silent) {
+      if (refresh) setRefreshing(true)
+      else setLoading(true)
+    }
     try {
       const res = await fetch('/api/dashboard/brief', {
         method: 'POST',
@@ -60,8 +65,10 @@ export default function TodaysBrief({
     } catch {
       // silent — UI shows nothing rather than an error
     }
-    setLoading(false)
-    setRefreshing(false)
+    if (!options.silent) {
+      setLoading(false)
+      setRefreshing(false)
+    }
   }
 
   useEffect(() => {
@@ -71,9 +78,10 @@ export default function TodaysBrief({
       setBrief(initialBrief)
       setLoading(false)
       // If null = no cached brief, kick off background generation so
-      // tomorrow's load has a cache hit. Don't show a loading skeleton.
+      // tomorrow's load has a cache hit. Silent mode -- the "Composing"
+      // placeholder stays visible until the brief arrives, no skeleton flash.
       if (initialBrief === null) {
-        load(false).catch(() => { /* silent */ })
+        load(false, { silent: true }).catch(() => { /* silent */ })
       }
       return
     }
