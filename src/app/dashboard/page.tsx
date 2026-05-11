@@ -22,8 +22,8 @@
  */
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useClient } from '@/lib/client-context'
-import SetupChecklist from '@/components/dashboard/setup-checklist'
 import TodaysBrief, { type BriefPills } from '@/components/dashboard/todays-brief'
 import Agenda, { type AgendaItem } from '@/components/dashboard/agenda'
 import YourMarketingWeek from '@/components/dashboard/your-marketing-week'
@@ -31,7 +31,6 @@ import ComingUp, { type ComingUpItem } from '@/components/dashboard/coming-up'
 import PulseCards, { type PulseCard } from '@/components/dashboard/pulse-cards'
 import GoalProgressCards, { type GoalCardData } from '@/components/dashboard/goal-progress-cards'
 import YourStrategist, { type StrategistCardData } from '@/components/dashboard/your-strategist'
-import FirstWeekGuide, { type FirstWeekStep } from '@/components/dashboard/first-week-guide'
 import PlaybookExplanations from '@/components/dashboard/playbook-explanations'
 import type { PlaybookExplanation } from '@/lib/dashboard/get-playbook-explanations'
 import ServicesThisMonth from '@/components/dashboard/services-this-month'
@@ -58,10 +57,21 @@ interface DashboardLoadResult {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const { client, loading: clientLoading } = useClient()
   const [bundle, setBundle] = useState<DashboardLoadResult | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
+
+  // Setup gate: if the bundle reports shape or goals missing, send the
+  // owner to the /setup wizard. Onboarding lives there, not on the
+  // daily dashboard.
+  useEffect(() => {
+    if (!bundle) return
+    if (!bundle.setup.shapeSet || !bundle.setup.goalsSet) {
+      router.replace('/setup')
+    }
+  }, [bundle, router])
 
   // One consolidated fetch for everything the dashboard renders.
   useEffect(() => {
@@ -182,8 +192,6 @@ export default function DashboardPage() {
       className="max-w-[1280px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
-      <SetupChecklist />
-
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-x-6">
         {/* ═════════════ LEFT — operational column ═════════════ */}
         <div>
@@ -200,36 +208,6 @@ export default function DashboardPage() {
           {bundle && bundle.services.length > 0 && (
             <ServicesThisMonth rows={bundle.services} />
           )}
-
-          {/* 1c. First-week guide -- single ordered checklist for new clients.
-              Replaces the scattered "connect accounts" / "pick goals" CTAs that
-              previously lived in 3 different empty states. */}
-          {bundle && (() => {
-            const steps: FirstWeekStep[] = [
-              {
-                id: 'shape',
-                label: 'Tell us about your restaurant',
-                description: 'A few quick details so we can recommend the right mix.',
-                href: '/dashboard/restaurant',
-                done: bundle.setup.shapeSet,
-              },
-              {
-                id: 'goals',
-                label: 'Pick your goals',
-                description: 'Up to 3 things you want to move in the next 90 days.',
-                href: '/dashboard/goals',
-                done: bundle.setup.goalsSet,
-              },
-              {
-                id: 'connect',
-                label: 'Connect your accounts',
-                description: 'Google Business, social, website -- so we can track progress.',
-                href: '/dashboard/connected-accounts',
-                done: bundle.setup.anyChannelConnected,
-              },
-            ]
-            return <FirstWeekGuide steps={steps} />
-          })()}
 
           {/* 2. Agenda (the operating surface — unified action list) */}
           <div className="db-fade db-d2">

@@ -56,9 +56,11 @@ const DIGITAL_OPTIONS: Array<{ value: DigitalMaturity; label: string; help: stri
 interface Props {
   clientId: string
   initialShape: RestaurantShape | null
+  /** Where to send the user after save. Defaults to /dashboard. */
+  nextHref?: string
 }
 
-export default function ShapeEditor({ clientId, initialShape }: Props) {
+export default function ShapeEditor({ clientId, initialShape, nextHref = '/dashboard' }: Props) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
@@ -80,7 +82,7 @@ export default function ShapeEditor({ clientId, initialShape }: Props) {
       digitalMaturity: digitalMaturity as DigitalMaturity,
     })
     setSaving(false)
-    startTransition(() => router.push('/dashboard'))
+    startTransition(() => router.push(nextHref))
   }
 
   return (

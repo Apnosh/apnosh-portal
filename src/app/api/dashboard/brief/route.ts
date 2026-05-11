@@ -48,8 +48,8 @@ interface BriefData {
   cached: boolean
 }
 
-const FALLBACK = (clientName: string) =>
-  `Welcome to your dashboard. Once your accounts are connected, your daily brief will appear here every morning — what's moving, what needs your attention, and what to watch this week.`
+const FALLBACK = (_clientName: string) =>
+  `No new signal to surface yet. Once your accounts are connected and your goals are set, your daily brief will tell you specifically what to focus on — which 2-3 actions will move your numbers the most, and what your strategist is working on this week.`
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null) as BriefRequest | null

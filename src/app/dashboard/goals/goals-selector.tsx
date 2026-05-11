@@ -20,9 +20,11 @@ interface Props {
   clientId: string
   catalog: CatalogGoal[]
   activeGoals: ClientGoal[]
+  /** Where to send the user after save. Defaults to /dashboard. */
+  nextHref?: string
 }
 
-export default function GoalsSelector({ clientId, catalog, activeGoals }: Props) {
+export default function GoalsSelector({ clientId, catalog, activeGoals, nextHref = '/dashboard' }: Props) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
@@ -87,7 +89,7 @@ export default function GoalsSelector({ clientId, catalog, activeGoals }: Props)
     }
 
     setSaving(false)
-    startTransition(() => router.push('/dashboard'))
+    startTransition(() => router.push(nextHref))
   }
 
   return (
