@@ -8,6 +8,8 @@ import type { Client, ServiceArea } from '@/types/database'
 interface ClientContextValue {
   client: Client | null
   loading: boolean
+  /** True when the signed-in user has profiles.role === 'admin'. */
+  isAdmin: boolean
   enrolledServices: Set<ServiceArea>
   hasService: (area: ServiceArea) => boolean
   refresh: () => Promise<void>
@@ -16,18 +18,21 @@ interface ClientContextValue {
 const ClientContext = createContext<ClientContextValue>({
   client: null,
   loading: true,
+  isAdmin: false,
   enrolledServices: new Set(),
   hasService: () => false,
   refresh: async () => {},
 })
 
 // Cache key + TTL — keeps client data across navigations within the same
-// browser session so every page click doesn't re-fetch.
-const CACHE_KEY = 'apnosh:client-context:v1'
+// browser session so every page click doesn't re-fetch. Bumped to v2 when
+// we added isAdmin to the cached shape.
+const CACHE_KEY = 'apnosh:client-context:v2'
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes — refresh in background after this
 
 interface CachedShape {
   client: Client | null
+  isAdmin: boolean
   cachedAt: number
 }
 
@@ -40,44 +45,75 @@ function readCache(): CachedShape | null {
   } catch { return null }
 }
 
-function writeCache(client: Client | null): void {
+function writeCache(client: Client | null, isAdmin: boolean): void {
   if (typeof window === 'undefined') return
   try {
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ client, cachedAt: Date.now() }))
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+      client, isAdmin, cachedAt: Date.now(),
+    }))
   } catch { /* quota exceeded etc — ignore */ }
 }
 
 export function ClientProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
-  // Start with cached value if we have it — page renders instantly with
-  // last-known client, then refreshes in background if stale.
-  const [client, setClient] = useState<Client | null>(() => readCache()?.client ?? null)
-  const [loading, setLoading] = useState(() => readCache() === null)
+  const cached = typeof window !== 'undefined' ? readCache() : null
+  const [client, setClient] = useState<Client | null>(cached?.client ?? null)
+  const [isAdmin, setIsAdmin] = useState<boolean>(cached?.isAdmin ?? false)
+  const [loading, setLoading] = useState(cached === null)
 
   const refresh = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); writeCache(null); return }
-
-    // Resolve via dashboard (businesses.client_id) first
-    const { data: business } = await supabase
-      .from('businesses')
-      .select('client_id')
-      .eq('owner_id', user.id)
-      .maybeSingle()
-
-    let clientId: string | null = business?.client_id ?? null
-
-    // Fall back to client_users (magic link portal)
-    if (!clientId) {
-      const { data: clientUser } = await supabase
-        .from('client_users')
-        .select('client_id')
-        .eq('auth_user_id', user.id)
-        .maybeSingle()
-      if (clientUser?.client_id) clientId = clientUser.client_id
+    if (!user) {
+      setClient(null); setIsAdmin(false); setLoading(false)
+      writeCache(null, false)
+      return
     }
 
-    if (!clientId) { setLoading(false); writeCache(null); return }
+    // Role check first — admins use a different resolution rule.
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+    const admin = (profile?.role as string | null) === 'admin'
+    setIsAdmin(admin)
+
+    let clientId: string | null = null
+
+    if (admin) {
+      // Admins never auto-resolve. They explicitly pick a client via
+      // ?clientId=<id> in the URL (set by the in-app picker). This avoids
+      // the bug where an admin who has a row in businesses or client_users
+      // for testing gets silently locked to that client's dashboard.
+      if (typeof window !== 'undefined') {
+        clientId = new URLSearchParams(window.location.search).get('clientId')
+      }
+    } else {
+      // Regular clients: resolve via businesses.owner_id, fall back to
+      // client_users.auth_user_id (magic-link portal users).
+      const { data: business } = await supabase
+        .from('businesses')
+        .select('client_id')
+        .eq('owner_id', user.id)
+        .maybeSingle()
+      clientId = (business?.client_id as string | null) ?? null
+
+      if (!clientId) {
+        const { data: clientUser } = await supabase
+          .from('client_users')
+          .select('client_id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle()
+        clientId = (clientUser?.client_id as string | null) ?? null
+      }
+    }
+
+    if (!clientId) {
+      setClient(null)
+      setLoading(false)
+      writeCache(null, admin)
+      return
+    }
 
     const { data: clientRow } = await supabase
       .from('clients')
@@ -87,28 +123,29 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
 
     if (clientRow) {
       setClient(clientRow as Client)
-      writeCache(clientRow as Client)
+      writeCache(clientRow as Client, admin)
+    } else {
+      setClient(null)
+      writeCache(null, admin)
     }
     setLoading(false)
   }, [supabase])
 
   useEffect(() => {
-    const cached = readCache()
-    const fresh = cached && Date.now() - cached.cachedAt < CACHE_TTL_MS
+    const c = readCache()
+    const fresh = c && Date.now() - c.cachedAt < CACHE_TTL_MS
     if (fresh) {
-      // We already painted with cached value; nothing to do until cache expires.
+      // Painted with cached value; nothing to do until cache expires.
       return
     }
-    // No cache or stale — fetch (in background if we have a stale value to show)
     refresh()
   }, [refresh])
 
   const enrolledServices = resolveEnrolledServices(client?.services_active)
-
   const hasService = (area: ServiceArea) => hasServiceUtil(client?.services_active, area)
 
   return (
-    <ClientContext.Provider value={{ client, loading, enrolledServices, hasService, refresh }}>
+    <ClientContext.Provider value={{ client, loading, isAdmin, enrolledServices, hasService, refresh }}>
       {children}
     </ClientContext.Provider>
   )

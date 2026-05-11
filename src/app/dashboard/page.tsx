@@ -24,6 +24,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useClient } from '@/lib/client-context'
+import AdminClientPicker from '@/components/admin/admin-client-picker'
 import TodayHero from '@/components/dashboard/today-hero'
 import DashboardStats from '@/components/dashboard/dashboard-stats'
 import type { TodayHeroData } from '@/lib/dashboard/get-today-hero'
@@ -60,7 +61,7 @@ interface DashboardLoadResult {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { client, loading: clientLoading } = useClient()
+  const { client, loading: clientLoading, isAdmin } = useClient()
   const [bundle, setBundle] = useState<DashboardLoadResult | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
@@ -68,12 +69,17 @@ export default function DashboardPage() {
   // Setup gate: if the bundle reports shape or goals missing, send the
   // owner to the /setup wizard. Onboarding lives there, not on the
   // daily dashboard.
+  //
+  // Admins are exempt — they're viewing a client's dashboard for support
+  // or oversight, not setting up their own restaurant. Forcing them
+  // through /setup would corrupt that client's onboarding data.
   useEffect(() => {
     if (!bundle) return
+    if (isAdmin) return
     if (!bundle.setup.shapeSet || !bundle.setup.goalsSet) {
       router.replace('/setup')
     }
-  }, [bundle, router])
+  }, [bundle, router, isAdmin])
 
   // One consolidated fetch for everything the dashboard renders.
   useEffect(() => {
@@ -134,6 +140,19 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+    )
+  }
+
+  // Admin path: no client selected -> show picker. Admins never auto-resolve
+  // a client (avoids the bug where a test account in businesses/client_users
+  // silently routes them to that client's dashboard and onboarding).
+  if (isAdmin && !client?.id) {
+    return (
+      <AdminClientPicker
+        eyebrow="Dashboard · Admin view"
+        title="Pick a client"
+        description="You’re signed in as admin. Choose a client below to view their dashboard. The selection lives in the URL so you can bookmark or share the link."
+      />
     )
   }
 

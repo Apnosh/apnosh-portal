@@ -24,6 +24,20 @@ export default async function SetupRouter() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  // Admins are never the subject of onboarding. If an admin lands here
+  // (most commonly from the dashboard's setup gate firing on an
+  // unactivated client they were viewing), bounce them back to the
+  // dashboard picker rather than letting them overwrite that client's
+  // shape and goals.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle()
+  if ((profile?.role as string | null) === 'admin') {
+    redirect('/dashboard')
+  }
+
   // Resolve client_id via profile or client_users.
   let clientId: string | null = null
   const { data: business } = await supabase
