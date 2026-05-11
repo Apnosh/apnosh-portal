@@ -90,6 +90,15 @@ export default function TodayPage() {
   const [editTask, setEditTask] = useState<TaskWithClient | null>(null)
   const [clients, setClients] = useState<Array<{ id: string; name: string; slug: string }>>([])
   const [clientPickerOpen, setClientPickerOpen] = useState(false)
+  const [clientPickerQuery, setClientPickerQuery] = useState('')
+
+  const filteredClientsForPicker = useMemo(() => {
+    const q = clientPickerQuery.trim().toLowerCase()
+    if (!q) return clients
+    return clients.filter(c =>
+      c.name.toLowerCase().includes(q) || c.slug.toLowerCase().includes(q)
+    )
+  }, [clients, clientPickerQuery])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -292,25 +301,37 @@ export default function TodayPage() {
       {clientPickerOpen && (
         <div
           className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center p-4 overflow-y-auto"
-          onClick={e => { if (e.target === e.currentTarget) setClientPickerOpen(false) }}
+          onClick={e => { if (e.target === e.currentTarget) { setClientPickerOpen(false); setClientPickerQuery('') } }}
         >
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full my-12 overflow-hidden">
             <div className="p-4 border-b border-ink-6">
               <h2 className="text-base font-semibold text-ink">Which client?</h2>
               <p className="text-[11px] text-ink-4 mt-0.5">New tasks are scoped to one client.</p>
+              <input
+                type="text"
+                autoFocus
+                value={clientPickerQuery}
+                onChange={e => setClientPickerQuery(e.target.value)}
+                placeholder="Search by name or slug"
+                className="mt-3 w-full px-3 py-2 text-sm rounded-lg border border-ink-6 focus:outline-none focus:ring-2 focus:ring-ink-3 focus:border-transparent"
+              />
             </div>
             <div className="max-h-80 overflow-y-auto">
-              {clients.map(c => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => { setClientPickerOpen(false); setCreateFor(c.id) }}
-                  className="w-full text-left px-4 py-3 hover:bg-bg-2 border-b border-ink-6 last:border-0 text-sm text-ink flex items-center justify-between"
-                >
-                  {c.name}
-                  <ArrowRight className="w-3.5 h-3.5 text-ink-4" />
-                </button>
-              ))}
+              {filteredClientsForPicker.length === 0 ? (
+                <p className="px-4 py-6 text-center text-[12px] text-ink-4">No clients match &ldquo;{clientPickerQuery}&rdquo;</p>
+              ) : (
+                filteredClientsForPicker.map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => { setClientPickerOpen(false); setClientPickerQuery(''); setCreateFor(c.id) }}
+                    className="w-full text-left px-4 py-3 hover:bg-bg-2 border-b border-ink-6 last:border-0 text-sm text-ink flex items-center justify-between"
+                  >
+                    {c.name}
+                    <ArrowRight className="w-3.5 h-3.5 text-ink-4" />
+                  </button>
+                ))
+              )}
             </div>
           </div>
         </div>

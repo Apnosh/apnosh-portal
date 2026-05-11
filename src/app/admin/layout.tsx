@@ -18,13 +18,23 @@ import Breadcrumbs from '@/components/ui/breadcrumbs'
 import Notifications from '@/components/ui/notifications'
 import { AdminTabBar } from '@/components/ui/mobile-tab-bar'
 
+// Sidebar trimmed to the 10 daily essentials for a strategist.
+// Hidden but still reachable via deep links / breadcrumbs:
+//   /admin (the Overview front door) — accessible from the Apnosh logo
+//   /admin/orders         — reach via client detail tabs
+//   /admin/pipeline + subroutes — folded into Content Engine
+//   /admin/publish        — sub-action of Calendar
+//   /admin/analytics      — weekly task, reach via Reports
+//   /admin/inbox          — only valuable when Meta webhook is live
+//   /admin/agreements     — reach via client detail or Settings
+//   /admin/integrations   — agency-wide config, reach via Settings
+//   /admin/team           — owner-of-agency action, reach via Settings
 const navSections = [
   {
-    label: 'Clients',
+    label: 'Work',
     items: [
-      { label: 'Overview', href: '/admin', icon: LayoutDashboard },
-      { label: 'Console', href: '/admin/console', icon: Gauge },
       { label: 'Today', href: '/admin/today', icon: CheckSquare },
+      { label: 'Console', href: '/admin/console', icon: Gauge },
       { label: 'Clients', href: '/admin/clients', icon: Users },
     ],
   },
@@ -32,39 +42,21 @@ const navSections = [
     label: 'Production',
     items: [
       { label: 'Content Engine', href: '/admin/content-engine', icon: Sparkles },
-      { label: 'Orders', href: '/admin/orders', icon: ShoppingBag },
-      { label: 'Pipeline', href: '/admin/pipeline', icon: Kanban },
       { label: 'Queue', href: '/admin/queue', icon: ListTodo },
-      { label: 'Publish', href: '/admin/publish', icon: Send },
-    ],
-  },
-  {
-    label: 'Live',
-    items: [
       { label: 'Calendar', href: '/admin/calendar', icon: Calendar },
-      { label: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
-      { label: 'Social Inbox', href: '/admin/inbox', icon: MessageCircle },
     ],
   },
   {
-    label: 'Revenue',
+    label: 'Business',
     items: [
-      { label: 'Agreements', href: '/admin/agreements', icon: FileText },
+      { label: 'Messages', href: '/admin/messages', icon: MessageSquare },
       { label: 'Billing', href: '/admin/billing', icon: CreditCard },
       { label: 'Reports', href: '/admin/reports', icon: FileBarChart },
     ],
   },
   {
-    label: 'Communications',
+    label: 'Setup',
     items: [
-      { label: 'Messages', href: '/admin/messages', icon: MessageSquare },
-    ],
-  },
-  {
-    label: 'Settings',
-    items: [
-      { label: 'Integrations', href: '/admin/integrations', icon: Plug },
-      { label: 'Team', href: '/admin/team', icon: UserCog },
       { label: 'Settings', href: '/admin/settings', icon: Settings },
     ],
   },

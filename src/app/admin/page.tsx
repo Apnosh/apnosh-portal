@@ -179,7 +179,7 @@ export default function AdminDashboard() {
           label: 'Stale deliverables (no update in 7+ days)',
           count: staleCount,
           color: 'text-red-600',
-          href: '/admin/deliverables',
+          href: '/admin/queue',
         })
       }
       if (draftCount > 0) {
@@ -188,7 +188,7 @@ export default function AdminDashboard() {
           label: 'Draft invoices to send',
           count: draftCount,
           color: 'text-amber-600',
-          href: '/admin/invoices',
+          href: '/admin/billing',
         })
       }
       if (expiringCount > 0) {
