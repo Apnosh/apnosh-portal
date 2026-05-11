@@ -7,7 +7,7 @@ import {
   LayoutDashboard, CheckCircle, Calendar, ShoppingBag, BarChart3,
   MessageSquare, Wrench, Building2, CreditCard, FileText, HelpCircle, Settings,
   Menu, X, ChevronDown, BookOpen, FileBarChart, ListTodo,
-  Share2, Globe, MapPin, Mail, Image as ImageIcon, Target, Link2, Newspaper,
+  Share2, Globe, MapPin, Mail, Image as ImageIcon, Link2, Newspaper,
   Inbox, Star, Sparkles, Palette,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -86,7 +86,6 @@ const navSections: NavSection[] = [
     label: null,
     items: [
       { label: 'Today', href: '/dashboard', icon: LayoutDashboard, exact: true },
-      { label: 'Goals', href: '/dashboard/goals', icon: Target, exact: false },
       { label: 'Inbox', href: '/dashboard/approvals', icon: Inbox, exact: false },
       { label: 'Calendar', href: '/dashboard/social/calendar', icon: Calendar, exact: false },
     ],
@@ -99,7 +98,7 @@ const navSections: NavSection[] = [
       // Default click answers "how is this channel doing?" first; the
       // owner can then drill into the operational sub-pages.
       {
-        label: 'Posts',
+        label: 'Social media',
         href: '/dashboard/social',  // performance overview, not calendar
         icon: Sparkles,
         exact: true,
@@ -165,13 +164,17 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    label: 'Brand',
+    label: 'Your business',
     items: [
       {
         label: 'Your restaurant',
         href: '/dashboard/restaurant',
         icon: Building2,
         exact: false,
+        children: [
+          { label: 'Restaurant details', href: '/dashboard/restaurant' },
+          { label: 'Goals', href: '/dashboard/goals' },
+        ],
       },
       {
         label: 'Brand & Assets',
