@@ -43,7 +43,8 @@ interface InteractionRow { client_id: string; occurred_at: string; summary: stri
 interface ClientRow {
   id: string
   name: string
-  plan: string | null
+  /** Column is `tier` on the clients table — Basic / Standard / Pro / Internal. */
+  tier: string | null
   status: string | null
   assigned_team_member_id: string | null
 }
@@ -60,7 +61,7 @@ export async function getConsoleRows(opts?: {
   // 1) Clients in scope.
   let clientsQuery = admin
     .from('clients')
-    .select('id, name, plan, status, assigned_team_member_id')
+    .select('id, name, tier, status, assigned_team_member_id')
     .neq('status', 'archived')
 
   if (opts?.strategistId) {
@@ -159,7 +160,7 @@ export async function getConsoleRows(opts?: {
     return {
       clientId: c.id,
       name: c.name,
-      plan: c.plan,
+      plan: c.tier,
       status: c.status,
       assignedTeamMemberId: c.assigned_team_member_id,
       lastContactAt: lc?.at ?? null,
