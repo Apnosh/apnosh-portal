@@ -14,7 +14,8 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Calendar as CalendarIcon, ChevronRight } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { resolveCurrentClient } from '@/lib/auth/resolve-client'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getCalendar } from '@/lib/dashboard/get-calendar'
 import { signClientId } from '@/lib/calendar/feed-token'
 import CalendarView from './calendar-view'
@@ -26,55 +27,28 @@ interface PageProps {
 }
 
 export default async function CalendarPage({ searchParams }: PageProps) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const params = await searchParams
+  const { user, isAdmin, clientId } = await resolveCurrentClient(params.clientId ?? null)
   if (!user) redirect('/login')
 
-  // Detect admin role.
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
-  const isAdmin = (profile?.role as string | null) === 'admin'
-
-  const params = await searchParams
-  let clientId: string | null = null
+  const admin = createAdminClient()
   let viewingAs: { id: string; name: string } | null = null
 
   if (isAdmin) {
-    clientId = params.clientId ?? null
     if (!clientId) {
-      const { data: clients } = await supabase
+      const { data: clients } = await admin
         .from('clients')
         .select('id, name, slug')
         .order('name')
       return <ClientPicker clients={(clients ?? []) as Array<{ id: string; name: string; slug?: string | null }>} />
     }
-    const { data: c } = await supabase
+    const { data: c } = await admin
       .from('clients')
       .select('name')
       .eq('id', clientId)
       .maybeSingle()
     viewingAs = { id: clientId, name: (c?.name as string | null) ?? 'Client' }
-  } else {
-    const { data: business } = await supabase
-      .from('businesses')
-      .select('client_id')
-      .eq('owner_id', user.id)
-      .maybeSingle()
-    clientId = (business?.client_id as string | null) ?? null
-    if (!clientId) {
-      const { data: cu } = await supabase
-        .from('client_users')
-        .select('client_id')
-        .eq('auth_user_id', user.id)
-        .maybeSingle()
-      clientId = (cu?.client_id as string | null) ?? null
-    }
-  }
-
-  if (!clientId) {
+  } else if (!clientId) {
     return (
       <div className="max-w-2xl mx-auto py-12 text-center text-ink-3">
         Sign in as a client to see your calendar.
@@ -83,13 +57,13 @@ export default async function CalendarPage({ searchParams }: PageProps) {
   }
 
   const [events, clientRow] = await Promise.all([
-    getCalendar(clientId),
-    supabase.from('clients').select('created_at').eq('id', clientId).maybeSingle(),
+    getCalendar(clientId as string),
+    admin.from('clients').select('created_at').eq('id', clientId).maybeSingle(),
   ])
 
   const clientCreatedAt = (clientRow.data?.created_at as string | null) ?? null
-  const token = signClientId(clientId)
-  const subscribeUrl = `/api/calendar/feed?c=${encodeURIComponent(clientId)}&t=${token}`
+  const token = signClientId(clientId as string)
+  const subscribeUrl = `/api/calendar/feed?c=${encodeURIComponent(clientId as string)}&t=${token}`
 
   return (
     <CalendarView
