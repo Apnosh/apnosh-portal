@@ -81,12 +81,15 @@ interface CalendarViewProps {
   events: CalendarEvent[]
   clientCreatedAt?: string | null
   subscribePath?: string
+  /** Set when an admin is viewing a specific client's calendar */
+  viewingAs?: { id: string; name: string } | null
 }
 
 export default function CalendarView({
   events,
   clientCreatedAt = null,
   subscribePath,
+  viewingAs = null,
 }: CalendarViewProps) {
   const [view, setView] = useState<ViewMode>('month')
   const [cursor, setCursor] = useState(() => {
@@ -175,15 +178,30 @@ export default function CalendarView({
                 </p>
               </div>
             </div>
-            {subscribePath && (
-              <button
-                onClick={() => setShowSubscribe(true)}
-                className="group inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-2 hover:text-ink bg-white border border-ink-6 hover:border-ink-4 hover:shadow-sm rounded-full px-3 py-1.5 transition-all"
-              >
-                <Rss className="w-3 h-3 text-emerald-600 group-hover:text-emerald-700" />
-                Subscribe
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {viewingAs && (
+                <Link
+                  href="/dashboard/calendar"
+                  className="group inline-flex items-center gap-1.5 text-[12px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-full pl-2.5 pr-1 py-1 transition-colors"
+                  title="Switch client"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Viewing as <span className="font-semibold">{viewingAs.name}</span></span>
+                  <span className="text-[10px] text-emerald-600 group-hover:text-emerald-800 bg-white/60 rounded-full px-1.5 py-0.5 ml-1">
+                    Switch
+                  </span>
+                </Link>
+              )}
+              {subscribePath && (
+                <button
+                  onClick={() => setShowSubscribe(true)}
+                  className="group inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-2 hover:text-ink bg-white border border-ink-6 hover:border-ink-4 hover:shadow-sm rounded-full px-3 py-1.5 transition-all"
+                >
+                  <Rss className="w-3 h-3 text-emerald-600 group-hover:text-emerald-700" />
+                  Subscribe
+                </button>
+              )}
+            </div>
           </div>
           <h1 className="text-[32px] sm:text-[34px] leading-[1.05] font-bold text-ink tracking-tight">
             What&rsquo;s coming up
