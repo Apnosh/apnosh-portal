@@ -7,10 +7,10 @@
  */
 
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { ArrowLeft, FileText, Plus, Inbox, CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { assertClientDetailAccess } from '@/lib/auth/client-detail-gate'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,17 +29,7 @@ const STATUS_TONE: Record<string, { label: string; bg: string; text: string; Ico
 
 export default async function ClientQuotesPage({ params }: PageProps) {
   const { slug } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
-  if ((profile?.role as string | null) !== 'admin') redirect('/dashboard')
-
+  await assertClientDetailAccess(slug)
   const admin = createAdminClient()
   const { data: client } = await admin
     .from('clients')

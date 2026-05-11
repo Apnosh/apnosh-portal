@@ -9,10 +9,10 @@
  */
 
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { ArrowLeft, BookOpen } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { assertClientDetailAccess } from '@/lib/auth/client-detail-gate'
 import ThemesEditor, { type ThemeRow } from './themes-editor'
 
 export const dynamic = 'force-dynamic'
@@ -23,17 +23,7 @@ interface PageProps {
 
 export default async function ThemesPage({ params }: PageProps) {
   const { slug } = await params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
-  if ((profile?.role as string | null) !== 'admin') redirect('/dashboard')
-
+  await assertClientDetailAccess(slug)
   const admin = createAdminClient()
   const { data: client } = await admin
     .from('clients')
