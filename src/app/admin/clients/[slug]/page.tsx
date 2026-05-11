@@ -310,6 +310,20 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
         {/* Quick actions to operations pages */}
         <div className="flex items-center gap-1.5">
           <Link
+            href={`/admin/clients/${client.slug}/plan`}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 rounded-md transition-colors"
+          >
+            <Check className="w-3.5 h-3.5" />
+            Plan
+          </Link>
+          <Link
+            href={`/admin/clients/${client.slug}/quotes`}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-amber-700 hover:text-amber-800 hover:bg-amber-50 rounded-md transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Quotes
+          </Link>
+          <Link
             href={`/admin/clients/${client.slug}/operator`}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-3 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
           >

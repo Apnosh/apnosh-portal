@@ -1,0 +1,401 @@
+'use client'
+
+/**
+ * Strategist-facing quote builder.
+ *
+ * - Title (free text)
+ * - Source summary (auto-filled from the request task)
+ * - Line items: add/remove rows; each row label + qty + unit_price.
+ *   Row total + subtotal + total compute automatically.
+ * - Optional discount + estimated turnaround days
+ * - Strategist message (the pitch to the client)
+ * - "Save draft" or "Send to client" CTA
+ */
+
+import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Plus, Trash2, Loader2, Send, FileText, Check, Sparkles } from 'lucide-react'
+
+interface LineItem {
+  id: string
+  label: string
+  qty: number
+  unitPrice: number
+  notes: string
+}
+
+interface Props {
+  clientId: string
+  clientSlug: string
+  sourceRequestId: string | null
+  prefilledTitle: string
+  prefilledSourceSummary: string
+}
+
+const PRESETS: { label: string; qty: number; unitPrice: number }[] = [
+  { label: 'Feed post (graphic + caption)', qty: 1, unitPrice: 75 },
+  { label: 'Carousel post (3-5 slides)',    qty: 1, unitPrice: 150 },
+  { label: 'Short-form reel (30s)',         qty: 1, unitPrice: 150 },
+  { label: 'On-site filming day',           qty: 1, unitPrice: 250 },
+  { label: 'Custom graphic',                qty: 1, unitPrice: 100 },
+  { label: 'Story set (3-5 stories)',       qty: 1, unitPrice: 80 },
+  { label: 'Email campaign',                qty: 1, unitPrice: 200 },
+]
+
+export default function QuoteBuilder({
+  clientId, clientSlug, sourceRequestId, prefilledTitle, prefilledSourceSummary,
+}: Props) {
+  const router = useRouter()
+  const [title, setTitle] = useState(prefilledTitle || '')
+  const [sourceSummary, setSourceSummary] = useState(prefilledSourceSummary || '')
+  const [items, setItems] = useState<LineItem[]>([
+    { id: rnd(), label: '', qty: 1, unitPrice: 0, notes: '' },
+  ])
+  const [discount, setDiscount] = useState<string>('')
+  const [turnaround, setTurnaround] = useState<string>('5')
+  const [strategistMessage, setStrategistMessage] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const { subtotal, total, validItemCount } = useMemo(() => {
+    let sub = 0
+    let n = 0
+    for (const it of items) {
+      const lineTotal = (it.qty || 0) * (it.unitPrice || 0)
+      if (it.label.trim() && lineTotal > 0) {
+        n++
+        sub += lineTotal
+      }
+    }
+    const d = discount ? Number(discount) : 0
+    return { subtotal: sub, total: Math.max(0, sub - d), validItemCount: n }
+  }, [items, discount])
+
+  const canSend = title.trim().length >= 2 && validItemCount >= 1 && total > 0 && !submitting
+
+  function addItem(preset?: { label: string; qty: number; unitPrice: number }) {
+    setItems(p => [...p, {
+      id: rnd(),
+      label: preset?.label ?? '',
+      qty: preset?.qty ?? 1,
+      unitPrice: preset?.unitPrice ?? 0,
+      notes: '',
+    }])
+  }
+
+  function updateItem(id: string, patch: Partial<LineItem>) {
+    setItems(p => p.map(it => it.id === id ? { ...it, ...patch } : it))
+  }
+
+  function removeItem(id: string) {
+    setItems(p => p.length > 1 ? p.filter(it => it.id !== id) : p)
+  }
+
+  async function send(asDraft: boolean) {
+    if (!asDraft && !canSend) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const lineItems = items
+        .filter(it => it.label.trim() && (it.qty * it.unitPrice) > 0)
+        .map(it => ({
+          label: it.label.trim(),
+          qty: it.qty,
+          unit_price: it.unitPrice,
+          total: it.qty * it.unitPrice,
+          ...(it.notes.trim() ? { notes: it.notes.trim() } : {}),
+        }))
+
+      const res = await fetch('/api/admin/quotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId,
+          sourceRequestId,
+          sourceRequestSummary: sourceSummary.trim() || null,
+          title: title.trim(),
+          lineItems,
+          subtotal,
+          discount: discount ? Number(discount) : 0,
+          total,
+          estimatedTurnaroundDays: turnaround ? Number(turnaround) : null,
+          strategistMessage: strategistMessage.trim() || null,
+          status: asDraft ? 'draft' : 'sent',
+        }),
+      })
+      if (!res.ok) {
+        const t = await res.text()
+        throw new Error(t || `Server returned ${res.status}`)
+      }
+      const data: { id: string } = await res.json()
+      setSubmitted(true)
+      // Brief success state then bounce to the admin client page.
+      setTimeout(() => {
+        router.push(`/admin/clients/${clientSlug}/quotes`)
+      }, 1500)
+      void data
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not send. Try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (submitted) {
+    return (
+      <div className="rounded-3xl border bg-gradient-to-br from-emerald-50/60 via-white to-white p-10 text-center" style={{ borderColor: 'var(--db-border, #e8efe9)' }}>
+        <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200 flex items-center justify-center mb-4">
+          <Check className="w-6 h-6" strokeWidth={2.5} />
+        </div>
+        <h2 className="text-[20px] font-bold text-ink">Quote sent</h2>
+        <p className="text-[13px] text-ink-2 mt-2">Redirecting…</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+      {/* Form */}
+      <section className="space-y-6">
+        <Field label="Title" hint="Short headline the client sees on the hub.">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Kimchi burger reel"
+            className="w-full rounded-xl border bg-white px-4 py-2.5 text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400"
+            style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+          />
+        </Field>
+
+        <Field label="What's being scoped" hint="What did the client ask for? They'll see this on the quote.">
+          <textarea
+            value={sourceSummary}
+            onChange={(e) => setSourceSummary(e.target.value)}
+            rows={3}
+            placeholder="Owner wants a 30s reel of the new kimchi burger — kitchen prep + final shot."
+            className="w-full rounded-xl border bg-white px-4 py-2.5 text-[13px] text-ink leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 resize-none"
+            style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+          />
+        </Field>
+
+        {/* Line items */}
+        <div>
+          <div className="flex items-baseline justify-between mb-2">
+            <label className="text-[13px] font-semibold text-ink">Line items</label>
+            <p className="text-[11px] text-ink-4">Qty × unit price · click presets below to add quickly</p>
+          </div>
+          <div className="space-y-2 mb-3">
+            {items.map(it => {
+              const lineTotal = it.qty * it.unitPrice
+              return (
+                <div
+                  key={it.id}
+                  className="rounded-xl border bg-white p-3"
+                  style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+                >
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="text"
+                      value={it.label}
+                      onChange={(e) => updateItem(it.id, { label: e.target.value })}
+                      placeholder="Line item label"
+                      className="flex-1 min-w-0 text-[14px] text-ink bg-transparent focus:outline-none placeholder:text-ink-4"
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      value={it.qty || ''}
+                      onChange={(e) => updateItem(it.id, { qty: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                      className="w-14 text-right text-[13px] text-ink tabular-nums bg-bg-2/40 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ink-5"
+                    />
+                    <span className="text-[12px] text-ink-4 self-center">×</span>
+                    <div className="relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4 text-[12px]">$</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={it.unitPrice || ''}
+                        onChange={(e) => updateItem(it.id, { unitPrice: Math.max(0, Number(e.target.value)) })}
+                        className="w-24 pl-5 text-right text-[13px] text-ink tabular-nums bg-bg-2/40 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ink-5"
+                      />
+                    </div>
+                    <span className="text-[14px] font-bold text-ink tabular-nums w-20 text-right tabular-nums">
+                      ${lineTotal.toFixed(0)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(it.id)}
+                      disabled={items.length === 1}
+                      className="p-1 text-ink-4 hover:text-rose-700 disabled:opacity-30"
+                      aria-label="Remove line item"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={it.notes}
+                    onChange={(e) => updateItem(it.id, { notes: e.target.value })}
+                    placeholder="Optional note (e.g. 'includes color grading')"
+                    className="w-full mt-2 text-[11px] text-ink-3 bg-transparent focus:outline-none placeholder:text-ink-4"
+                  />
+                </div>
+              )
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => addItem()}
+            className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-2 hover:text-ink border border-dashed border-ink-5 hover:border-ink-3 rounded-full px-3 py-1.5 transition-colors"
+          >
+            <Plus className="w-3 h-3" />
+            Add line item
+          </button>
+
+          {/* Quick-add presets */}
+          <div className="mt-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 mb-1.5 inline-flex items-center gap-1">
+              <Sparkles className="w-2.5 h-2.5" />
+              Quick presets
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {PRESETS.map(p => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => addItem(p)}
+                  className="text-[11px] bg-bg-2/60 hover:bg-bg-2 text-ink-2 hover:text-ink rounded-full px-2.5 py-1 transition-colors"
+                >
+                  {p.label} · ${p.unitPrice}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <Field label="Strategist message (optional)" hint="Pitch the work. The client sees this above the line items.">
+          <textarea
+            value={strategistMessage}
+            onChange={(e) => setStrategistMessage(e.target.value)}
+            rows={3}
+            placeholder="This will need a half-day shoot to get the kitchen prep B-roll plus the final hero shot. I'm pricing the edit at 5 days because the color match between locations takes time."
+            className="w-full rounded-xl border bg-white px-4 py-2.5 text-[13px] text-ink leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 resize-none"
+            style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+          />
+        </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Discount" hint="Subtracted from subtotal.">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 text-[14px]">$</span>
+              <input
+                type="number"
+                min={0}
+                value={discount}
+                onChange={(e) => setDiscount(e.target.value)}
+                placeholder="0"
+                className="w-full rounded-xl border bg-white pl-7 pr-3 py-2 text-[14px] text-ink tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400"
+                style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+              />
+            </div>
+          </Field>
+          <Field label="Turnaround" hint="Days after approval.">
+            <div className="relative">
+              <input
+                type="number"
+                min={1}
+                value={turnaround}
+                onChange={(e) => setTurnaround(e.target.value)}
+                placeholder="5"
+                className="w-full rounded-xl border bg-white pl-3 pr-12 py-2 text-[14px] text-ink tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400"
+                style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-4 text-[11px]">days</span>
+            </div>
+          </Field>
+        </div>
+
+        {error && (
+          <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-[13px] text-rose-700">
+            {error}
+          </div>
+        )}
+      </section>
+
+      {/* Sticky summary */}
+      <aside>
+        <div
+          className="sticky top-6 rounded-2xl border bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.08)]"
+          style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="w-4 h-4 text-amber-700" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3">
+              Quote summary
+            </p>
+          </div>
+
+          <div className="space-y-1.5 text-[12px] text-ink-3 mb-3">
+            <Row label="Items" value={`${validItemCount}`} />
+            <Row label="Subtotal" value={`$${subtotal.toFixed(0)}`} />
+            {Number(discount) > 0 && <Row label="Discount" value={`−$${Number(discount).toFixed(0)}`} tone="emerald" />}
+          </div>
+
+          <div className="pt-3 border-t mb-4" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 mb-1">Total</p>
+            <p className="text-[28px] font-bold text-ink tabular-nums leading-none">
+              ${total.toFixed(0)}
+            </p>
+          </div>
+
+          <button
+            onClick={() => send(false)}
+            disabled={!canSend}
+            className="w-full inline-flex items-center justify-center gap-2 text-[13px] font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:bg-ink-6 disabled:cursor-not-allowed text-white rounded-full px-4 py-2.5 transition-colors"
+          >
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            Send to client
+          </button>
+          <button
+            onClick={() => send(true)}
+            disabled={!title.trim() || submitting}
+            className="w-full mt-2 inline-flex items-center justify-center text-[12px] font-medium text-ink-3 hover:text-ink py-2 transition-colors disabled:opacity-50"
+          >
+            Save as draft
+          </button>
+          <p className="text-[10px] text-ink-4 mt-2 text-center leading-snug">
+            Client sees this on their social hub and can approve, ask for changes, or decline.
+          </p>
+        </div>
+      </aside>
+    </div>
+  )
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-2 gap-2">
+        <label className="text-[13px] font-semibold text-ink">{label}</label>
+        {hint && <p className="text-[11px] text-ink-4 text-right max-w-md">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function Row({ label, value, tone }: { label: string; value: string; tone?: 'emerald' }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span>{label}</span>
+      <span className={`tabular-nums ${tone === 'emerald' ? 'text-emerald-700' : 'text-ink-2'}`}>{value}</span>
+    </div>
+  )
+}
+
+function rnd(): string {
+  return Math.random().toString(36).slice(2, 9)
+}
