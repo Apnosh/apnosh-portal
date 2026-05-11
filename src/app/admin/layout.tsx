@@ -57,6 +57,7 @@ const navSections = [
   {
     label: 'Setup',
     items: [
+      { label: 'Strategists', href: '/admin/strategists', icon: UserCog },
       { label: 'Settings', href: '/admin/settings', icon: Settings },
     ],
   },
