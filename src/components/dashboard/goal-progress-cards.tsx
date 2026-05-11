@@ -30,6 +30,7 @@ export interface GoalCardData {
   up?: boolean | null
   signal?: string                    // what we're measuring, e.g. "GBP discovery searches"
   whatWereDoing?: string             // one-line "what your strategist + Apnosh are doing"
+  benchmarkLine?: string             // contextual "typical for restaurants like yours is X-Y"
   href?: string                      // drill-down route
   connectLabel?: string              // empty-state CTA label
 }
@@ -80,12 +81,21 @@ function Card({ card }: { card: GoalCardData }) {
 
   if (card.state === 'no-data') {
     return (
-      <div className="rounded-xl p-4 border bg-white" style={{ borderColor: 'var(--db-border)' }}>
+      <div className="rounded-xl p-4 border-2 border-dashed bg-white" style={{ borderColor: 'var(--db-border, #d4e0db)' }}>
         <Header card={card} Icon={Icon} />
-        <div className="text-2xl font-bold text-ink-4">—</div>
-        <p className="text-[11px] text-ink-3 mt-1 leading-snug">{card.signal}</p>
+        <p className="text-[13px] text-ink-2 leading-relaxed mt-1.5">
+          We&apos;ll track {card.signal?.toLowerCase()} once you&apos;re set up.
+        </p>
+        {card.benchmarkLine && (
+          <p className="text-[11px] text-ink-3 mt-1.5 leading-snug">{card.benchmarkLine}</p>
+        )}
+        {card.whatWereDoing && (
+          <p className="text-[11px] text-ink-2 mt-2 italic leading-snug border-t border-ink-7 pt-2">
+            {card.whatWereDoing}
+          </p>
+        )}
         {card.href && card.connectLabel && (
-          <Link href={card.href} className="inline-block text-[11px] font-semibold mt-3 text-emerald-700 hover:text-emerald-800">
+          <Link href={card.href} className="inline-flex items-center text-[11px] font-semibold mt-3 text-emerald-700 hover:text-emerald-800">
             {card.connectLabel} →
           </Link>
         )}
@@ -111,6 +121,9 @@ function Card({ card }: { card: GoalCardData }) {
         )}
       </div>
       <p className="text-[11px] text-ink-3 mt-1 leading-snug">{card.signal}</p>
+      {card.benchmarkLine && (
+        <p className="text-[11px] text-ink-3 mt-1.5 leading-snug">{card.benchmarkLine}</p>
+      )}
       {card.whatWereDoing && (
         <p className="text-[11px] text-ink-2 mt-2 italic leading-snug border-t border-ink-7 pt-2">
           {card.whatWereDoing}

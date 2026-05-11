@@ -14,8 +14,9 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getActiveClientGoals } from '@/lib/goals/queries'
+import { getActiveClientGoals, getClientShape } from '@/lib/goals/queries'
 import { getPulseData } from './get-pulse-data'
+import { benchmarkLine, type BenchmarkSignal } from './benchmarks'
 import type { GoalCardData } from '@/components/dashboard/goal-progress-cards'
 import type { GoalSlug } from '@/lib/goals/types'
 
@@ -62,9 +63,10 @@ const GOAL_HREF: Record<GoalSlug, string> = {
 }
 
 export async function getGoalCards(clientId: string): Promise<GoalCardData[]> {
-  const [goals, pulse] = await Promise.all([
+  const [goals, pulse, shape] = await Promise.all([
     getActiveClientGoals(clientId),
     getPulseData(clientId),
+    getClientShape(clientId),
   ])
 
   if (goals.length === 0) return []
@@ -103,6 +105,8 @@ export async function getGoalCards(clientId: string): Promise<GoalCardData[]> {
       ? `Working: ${primaryServices.map(humanize).join(', ')}`
       : undefined
 
+    const benchSignal = goalToBenchmarkSignal(goal.goalSlug)
+
     if (signal.kind === 'unmapped') {
       return {
         slug: goal.goalSlug,
@@ -111,6 +115,7 @@ export async function getGoalCards(clientId: string): Promise<GoalCardData[]> {
         state: 'no-data',
         signal: GOAL_SIGNAL_LABEL[goal.goalSlug],
         whatWereDoing,
+        benchmarkLine: benchSignal && shape ? benchmarkLine(benchSignal, shape, null) : undefined,
         href: GOAL_HREF[goal.goalSlug],
         connectLabel: 'Talk to your strategist',
       } as GoalCardData
@@ -122,6 +127,14 @@ export async function getGoalCards(clientId: string): Promise<GoalCardData[]> {
       signal.kind === 'pulse_reach' ? pulse.reach :
       pulse.reputation
 
+    // Best-effort numeric for benchmark comparison. Pulse cards expose
+    // value as a formatted string ("1.2k"); we parse it for a rough
+    // observed number. Good enough for the typical/below/above band.
+    let observed: number | null = null
+    if ('value' in card && typeof card.value === 'string') {
+      observed = parseCompact(card.value)
+    }
+
     return {
       slug: goal.goalSlug,
       priority: goal.priority,
@@ -132,10 +145,30 @@ export async function getGoalCards(clientId: string): Promise<GoalCardData[]> {
       up: 'up' in card ? card.up : null,
       signal: GOAL_SIGNAL_LABEL[goal.goalSlug],
       whatWereDoing,
+      benchmarkLine: benchSignal && shape ? benchmarkLine(benchSignal, shape, observed) : undefined,
       href: card.href ?? GOAL_HREF[goal.goalSlug],
       connectLabel: card.state === 'no-data' && 'connectLabel' in card ? card.connectLabel : undefined,
     } as GoalCardData
   })
+}
+
+function goalToBenchmarkSignal(slug: GoalSlug): BenchmarkSignal | null {
+  switch (slug) {
+    case 'more_foot_traffic': return 'gbp_actions'
+    case 'better_reputation': return 'avg_rating'
+    case 'be_known_for': return 'social_reach'
+    default: return null
+  }
+}
+
+function parseCompact(s: string): number | null {
+  const m = s.match(/^([\d.]+)([kKmM]?)/)
+  if (!m) return null
+  const n = parseFloat(m[1])
+  if (isNaN(n)) return null
+  if (m[2] === 'k' || m[2] === 'K') return n * 1000
+  if (m[2] === 'm' || m[2] === 'M') return n * 1_000_000
+  return n
 }
 
 function displayName(slug: GoalSlug): string {

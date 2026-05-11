@@ -59,23 +59,26 @@ export default function PulseCards({ cards }: { cards: PulseCard[] }) {
           )
         }
         if (c.state === 'no-data') {
+          // Phase B7: contextual empty state. Lead with what we'll show
+          // when connected, not a sad em-dash.
           return (
             <Link
               href={c.href}
               key={c.label}
-              className="block rounded-xl p-4 border bg-white hover:bg-bg-2 transition-colors"
-              style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+              className="block rounded-xl p-4 border-2 border-dashed bg-white hover:bg-bg-2 transition-colors"
+              style={{ borderColor: 'var(--db-border, #d4e0db)' }}
             >
               <p className="text-[10px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: 'var(--db-ink-3, #888)' }}>
                 {c.label}
               </p>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold" style={{ color: 'var(--db-ink-4, #aaa)' }}>—</span>
-              </div>
-              <p className="text-[11px] mt-1" style={{ color: 'var(--db-ink-3, #888)' }}>{c.subtitle}</p>
-              <p className="inline-flex items-center gap-1 text-[11px] font-semibold mt-2 text-emerald-600">
+              <p className="text-[13px] leading-relaxed mb-3" style={{ color: 'var(--db-ink-2, #555)' }}>
+                {c.subtitle}.
+                <br />
+                <span className="text-ink-3 text-[12px]">Connect to start tracking.</span>
+              </p>
+              <p className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
                 <Plug className="w-3 h-3" />
-                {c.connectLabel ?? 'Connect'}
+                {c.connectLabel ?? 'Connect'} →
               </p>
             </Link>
           )

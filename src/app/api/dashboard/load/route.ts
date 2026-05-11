@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
   // Parallel: fire every query at once.
-  const [pulse, weekly, agenda, services, goalCards, strategist, playbooks, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
+  const [pulse, weekly, agenda, services, goalCards, strategist, playbooks, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
     getPulseData(clientId),
     getWeeklyActivity(clientId),
     getAgenda(clientId),
@@ -53,6 +53,11 @@ export async function GET(req: NextRequest) {
     getGoalCards(clientId),
     getStrategistForClient(clientId),
     getPlaybookExplanations(clientId),
+    admin
+      .from('clients')
+      .select('shape_footprint')
+      .eq('id', clientId)
+      .maybeSingle(),
     admin
       .from('reviews')
       .select('id, source, rating, author_name, review_text, posted_at, responded_at')
@@ -133,6 +138,14 @@ export async function GET(req: NextRequest) {
     goalCards,
     strategist,
     playbooks,
+    setup: {
+      shapeSet: !!shapeRow.data?.shape_footprint,
+      goalsSet: goalCards.length > 0,
+      anyChannelConnected:
+        pulse.customers.state === 'live' ||
+        pulse.reach.state === 'live' ||
+        pulse.reputation.state === 'live',
+    },
     comingUp,
     reviews: reviewsRow.data ?? [],
     brief: briefRow.data ? {

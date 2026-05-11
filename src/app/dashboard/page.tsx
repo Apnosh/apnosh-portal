@@ -31,6 +31,7 @@ import ComingUp, { type ComingUpItem } from '@/components/dashboard/coming-up'
 import PulseCards, { type PulseCard } from '@/components/dashboard/pulse-cards'
 import GoalProgressCards, { type GoalCardData } from '@/components/dashboard/goal-progress-cards'
 import YourStrategist, { type StrategistCardData } from '@/components/dashboard/your-strategist'
+import FirstWeekGuide, { type FirstWeekStep } from '@/components/dashboard/first-week-guide'
 import PlaybookExplanations from '@/components/dashboard/playbook-explanations'
 import type { PlaybookExplanation } from '@/lib/dashboard/get-playbook-explanations'
 import ServicesThisMonth from '@/components/dashboard/services-this-month'
@@ -44,6 +45,11 @@ interface DashboardLoadResult {
   goalCards: GoalCardData[]
   strategist: StrategistCardData | null
   playbooks: PlaybookExplanation[]
+  setup: {
+    shapeSet: boolean
+    goalsSet: boolean
+    anyChannelConnected: boolean
+  }
   comingUp: ComingUpItem[]
   reviews: unknown[]
   brief: { text: string; generatedAt: string; model: string; cached: boolean } | null
@@ -195,31 +201,35 @@ export default function DashboardPage() {
             <ServicesThisMonth rows={bundle.services} />
           )}
 
-          {/* 1c. Goals onboarding nudge -- shown when no active goals are set. */}
-          {bundle && bundle.goalCards.length === 0 && (
-            <section className="mb-6 db-fade db-d2">
-              <div
-                className="rounded-xl p-5 border bg-white"
-                style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
-              >
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-widest text-ink-3">
-                    Set your goals
-                  </span>
-                </div>
-                <p className="text-sm text-ink-2 mb-3 leading-relaxed">
-                  Pick up to 3 things you want to move in the next 90 days. Your strategist tailors the work to what matters most.
-                </p>
-                <a
-                  href="/dashboard/goals"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                  style={{ background: '#4abd98' }}
-                >
-                  Pick your goals →
-                </a>
-              </div>
-            </section>
-          )}
+          {/* 1c. First-week guide -- single ordered checklist for new clients.
+              Replaces the scattered "connect accounts" / "pick goals" CTAs that
+              previously lived in 3 different empty states. */}
+          {bundle && (() => {
+            const steps: FirstWeekStep[] = [
+              {
+                id: 'shape',
+                label: 'Tell us about your restaurant',
+                description: 'A few quick details so we can recommend the right mix.',
+                href: '/dashboard/restaurant',
+                done: bundle.setup.shapeSet,
+              },
+              {
+                id: 'goals',
+                label: 'Pick your goals',
+                description: 'Up to 3 things you want to move in the next 90 days.',
+                href: '/dashboard/goals',
+                done: bundle.setup.goalsSet,
+              },
+              {
+                id: 'connect',
+                label: 'Connect your accounts',
+                description: 'Google Business, social, website -- so we can track progress.',
+                href: '/dashboard/connected-accounts',
+                done: bundle.setup.anyChannelConnected,
+              },
+            ]
+            return <FirstWeekGuide steps={steps} />
+          })()}
 
           {/* 2. Agenda (the operating surface — unified action list) */}
           <div className="db-fade db-d2">
