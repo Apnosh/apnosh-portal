@@ -1,20 +1,20 @@
 /**
- * /dashboard/social — the publisher's hub.
+ * /dashboard/social/request — streamlined "tell us what to post".
  *
- * Reading order, top to bottom:
- *   1. Pulse hero        — narrative + 3 count tiles (Live / Queued / Needs you)
- *   2. Recent feed       — IG-style 5-col grid of the last 12 published posts
- *   3. Coming up         — next 5 scheduled
- *   4. What's working    — best recent performer + Boost CTA
- *   5. Push bar          — Request post / Calendar / Boost
+ * One page. The old flow was: pick type -> dedicated graphic form (20
+ * fields) or video form (25 fields). For a restaurant owner standing
+ * on the line that's a brick wall. This collapses to: pick a type,
+ * tell us about it, drop in any photos, hit send.
  *
- * Analytics deep-dive lives at /dashboard/social/performance.
+ * Submission writes to client_tasks (visible_to_client=true,
+ * assignee_type='admin') so it lands in the strategist's queue
+ * immediately. Strategists convert into a full graphic / video brief
+ * when they pick it up.
  */
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { getSocialHub } from '@/lib/dashboard/get-social-hub'
-import SocialHubView from './hub-view'
+import RequestForm from './request-form'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,14 +22,12 @@ interface PageProps {
   searchParams: Promise<{ clientId?: string }>
 }
 
-export default async function SocialHubPage({ searchParams }: PageProps) {
+export default async function RequestPage({ searchParams }: PageProps) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
   const params = await searchParams
-
-  // Resolve clientId. Admins must pass ?clientId=; non-admins auto-resolve.
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
@@ -60,13 +58,10 @@ export default async function SocialHubPage({ searchParams }: PageProps) {
   if (!clientId) {
     return (
       <div className="max-w-2xl mx-auto py-12 text-center text-ink-3">
-        {isAdmin
-          ? 'Pick a client from /dashboard to see their social hub.'
-          : 'Sign in as a client to see your social media.'}
+        Sign in as a client to request content.
       </div>
     )
   }
 
-  const data = await getSocialHub(clientId)
-  return <SocialHubView data={data} />
+  return <RequestForm clientId={clientId} />
 }

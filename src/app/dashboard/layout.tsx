@@ -99,16 +99,17 @@ const navSections: NavSection[] = [
       // owner can then drill into the operational sub-pages.
       {
         label: 'Social media',
-        href: '/dashboard/social',  // performance overview, not calendar
+        href: '/dashboard/social',  // the publisher's hub
         icon: Sparkles,
         exact: true,
         serviceArea: 'social',
         children: [
-          { label: 'Performance', href: '/dashboard/social', exact: true },
-          { label: 'Calendar', href: '/dashboard/social/calendar' },
+          { label: 'Hub', href: '/dashboard/social', exact: true },
+          { label: 'Request content', href: '/dashboard/social/request' },
+          { label: 'Boost a post', href: '/dashboard/social/boost' },
+          { label: 'Calendar', href: '/dashboard/calendar' },
+          { label: 'Performance', href: '/dashboard/social/performance' },
           { label: 'Action needed', href: '/dashboard/social/action-needed' },
-          { label: 'Request content', href: '/dashboard/social/requests/new' },
-          { label: 'Requests', href: '/dashboard/social/requests' },
         ],
       },
       {
