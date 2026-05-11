@@ -245,7 +245,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               ) : (
                 <>
                   <div className="text-sm font-medium text-white/80 truncate">{displayName}</div>
-                  <div className="text-[10px] text-white/30">Admin</div>
+                  <div className="text-[10px] text-white/30">{isAdmin === true ? 'Admin' : 'Strategist'}</div>
                 </>
               )}
             </div>
