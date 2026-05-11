@@ -158,30 +158,37 @@ export default function CalendarView({
 
   return (
     <>
-      <div className="max-w-7xl mx-auto py-6 px-4 lg:px-6">
-        {/* Compact header */}
-        <header className="mb-5">
-          <div className="flex items-center justify-between gap-3 mb-1">
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="w-4 h-4 text-ink-3" />
-              <span className="text-[11px] font-semibold uppercase tracking-widest text-ink-3">
-                Calendar
-              </span>
+      <div className="max-w-7xl mx-auto py-8 px-4 lg:px-6">
+        {/* Hero */}
+        <header className="mb-7">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+                <CalendarIcon className="w-4.5 h-4.5" strokeWidth={2.25} />
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
+                  Calendar
+                </p>
+                <p className="text-[11px] text-ink-4 mt-1 leading-none">
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
             </div>
             {subscribePath && (
               <button
                 onClick={() => setShowSubscribe(true)}
-                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-3 hover:text-ink border border-ink-6 hover:border-ink-5 rounded-full px-3 py-1 transition-colors"
+                className="group inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-2 hover:text-ink bg-white border border-ink-6 hover:border-ink-4 hover:shadow-sm rounded-full px-3 py-1.5 transition-all"
               >
-                <Rss className="w-3 h-3" />
+                <Rss className="w-3 h-3 text-emerald-600 group-hover:text-emerald-700" />
                 Subscribe
               </button>
             )}
           </div>
-          <h1 className="text-[24px] leading-tight font-bold text-ink tracking-tight">
+          <h1 className="text-[32px] sm:text-[34px] leading-[1.05] font-bold text-ink tracking-tight">
             What&rsquo;s coming up
           </h1>
-          <p className="text-[13px] text-ink-2 mt-1.5 leading-relaxed max-w-2xl">
+          <p className="text-[14px] text-ink-2 mt-2 leading-relaxed max-w-2xl">
             {composeNarrative(events)}
           </p>
 
@@ -222,17 +229,19 @@ export default function CalendarView({
 
             {events.length === 0 && (
               <div
-                className="rounded-lg border border-dashed bg-bg-2/40 px-4 py-3 mb-3 flex items-start gap-3"
-                style={{ borderColor: 'var(--db-border, #d4d4d4)' }}
+                className="rounded-2xl bg-gradient-to-br from-amber-50/80 via-white to-white border px-4 py-3.5 mb-4 flex items-start gap-3"
+                style={{ borderColor: 'var(--db-border, #f0e6d6)' }}
               >
-                <div className="text-[18px] leading-none">✨</div>
-                <div className="flex-1">
-                  <p className="text-[13px] font-medium text-ink leading-tight">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-100 text-amber-700 flex-shrink-0 ring-1 ring-amber-200/60">
+                  <Sparkles className="w-4 h-4" strokeWidth={2.25} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold text-ink leading-tight">
                     Nothing scheduled yet
                   </p>
-                  <p className="text-[12px] text-ink-3 mt-0.5 leading-snug">
+                  <p className="text-[12px] text-ink-2 mt-1 leading-relaxed">
                     Your strategist starts queuing posts, shoots, and tasks within a day or two
-                    of kickoff. Dashed items below show what to expect on the way.
+                    of kickoff. The dashed items below show what to expect on the way.
                   </p>
                 </div>
               </div>
@@ -297,7 +306,10 @@ function PulseStrip({
   }, [events])
 
   return (
-    <div className="flex flex-wrap items-center gap-2 mt-3">
+    <div
+      className="mt-5 grid grid-cols-3 max-w-xl rounded-2xl bg-white border overflow-hidden divide-x"
+      style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+    >
       <PulseTile label="This week" value={stats.thisWeek} onClick={() => onClick('thisWeek')} />
       <PulseTile label="Week after" value={stats.next7to14} onClick={() => onClick('nextWeek')} />
       <PulseTile
@@ -318,16 +330,17 @@ function PulseTile({
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-baseline gap-1.5 rounded-full bg-white border border-ink-6 hover:border-ink-5 px-3 py-1 transition-colors group"
+      className="group text-left px-4 py-3 hover:bg-bg-2/40 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-300"
+      style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
     >
-      <span className={`text-[14px] font-bold tabular-nums leading-none ${
+      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-ink-4 leading-none mb-1.5 group-hover:text-ink-3 transition-colors">
+        {label}
+      </p>
+      <p className={`text-[22px] font-bold tabular-nums leading-none tracking-tight ${
         tone === 'rose' && value > 0 ? 'text-rose-700' : 'text-ink'
       }`}>
         {value}
-      </span>
-      <span className="text-[11px] text-ink-3 group-hover:text-ink-2 transition-colors leading-none">
-        {label}
-      </span>
+      </p>
     </button>
   )
 }
@@ -343,10 +356,10 @@ function FilterRail({
 }) {
   return (
     <div className="sticky top-6">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-4 mb-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-4 mb-3">
         Filter
       </p>
-      <ul className="space-y-1">
+      <ul className="space-y-0.5">
         {CATEGORY_ORDER.map(cat => {
           const c = CATEGORY_COLOR[cat]
           const on = enabled[cat]
@@ -354,24 +367,30 @@ function FilterRail({
             <li key={cat}>
               <button
                 onClick={() => onToggle(cat)}
-                className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-left transition-colors ${
-                  on ? 'hover:bg-bg-2' : 'opacity-50 hover:opacity-75'
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-left transition-all ${
+                  on ? 'hover:bg-bg-2' : 'opacity-45 hover:opacity-80'
                 }`}
               >
-                <span className={`w-3 h-3 rounded-sm flex items-center justify-center ${
-                  on ? c.dot : 'bg-ink-6'
+                <span className={`w-3.5 h-3.5 rounded-[5px] flex items-center justify-center transition-all ${
+                  on ? `${c.dot} shadow-sm` : 'bg-white border border-ink-5'
                 }`}>
-                  {on && <span className="text-white text-[8px] leading-none">✓</span>}
+                  {on && (
+                    <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none" strokeWidth="3" stroke="currentColor">
+                      <path d="M2 6.5l2.5 2.5L10 3.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
                 </span>
                 <span className="flex-1 min-w-0">
-                  <span className="text-[13px] font-medium text-ink block leading-tight">
+                  <span className="text-[13px] font-semibold text-ink block leading-tight">
                     {CATEGORY_LABEL[cat]}
                   </span>
-                  <span className="text-[10px] text-ink-4 block leading-tight mt-0.5">
+                  <span className="text-[11px] text-ink-3 block leading-tight mt-0.5">
                     {CATEGORY_BLURB[cat]}
                   </span>
                 </span>
-                <span className="text-[11px] text-ink-4 tabular-nums">
+                <span className={`text-[11px] tabular-nums font-medium ${
+                  counts[cat] > 0 ? 'text-ink-2' : 'text-ink-4'
+                }`}>
                   {counts[cat]}
                 </span>
               </button>
@@ -438,28 +457,32 @@ function MonthView({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-[18px] font-bold text-ink tracking-tight">
-          {cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-[22px] sm:text-[24px] font-bold text-ink tracking-tight leading-none">
+          {cursor.toLocaleDateString('en-US', { month: 'long' })}
+          <span className="text-ink-3 font-medium ml-2">
+            {cursor.getFullYear()}
+          </span>
         </h2>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 bg-white border rounded-full p-0.5"
+          style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
           <button
             onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
             aria-label="Previous month"
-            className="p-1.5 rounded-md hover:bg-bg-2 text-ink-3"
+            className="p-1.5 rounded-full hover:bg-bg-2 text-ink-3 hover:text-ink transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
             onClick={() => setCursor(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}
-            className="text-[11px] font-medium text-ink-3 hover:text-ink px-2"
+            className="text-[11px] font-semibold uppercase tracking-wider text-ink-2 hover:text-ink px-2.5 transition-colors"
           >
             Today
           </button>
           <button
             onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
             aria-label="Next month"
-            className="p-1.5 rounded-md hover:bg-bg-2 text-ink-3"
+            className="p-1.5 rounded-full hover:bg-bg-2 text-ink-3 hover:text-ink transition-colors"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -467,18 +490,20 @@ function MonthView({
       </div>
 
       <div
-        className="rounded-2xl border bg-white overflow-hidden"
-        style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+        className="rounded-3xl border bg-white overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.08)]"
+        style={{ borderColor: 'var(--db-border, #ececec)' }}
       >
         {/* Weekday headers */}
         <div
-          className="grid grid-cols-7 border-b bg-bg-2/40"
-          style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+          className="grid grid-cols-7 border-b bg-bg-2/30"
+          style={{ borderColor: 'var(--db-border, #ececec)' }}
         >
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
             <div
               key={d}
-              className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 text-center py-2.5"
+              className={`text-[10px] font-semibold uppercase tracking-[0.15em] text-center py-3 ${
+                i === 0 || i === 6 ? 'text-ink-4' : 'text-ink-3'
+              }`}
             >
               {d}
             </div>
@@ -491,6 +516,8 @@ function MonthView({
             const dayEvents = byDay.get(k) ?? []
             const isToday = k === todayKey
             const isPast = k < todayKey
+            const isWeekend = c.date.getDay() === 0 || c.date.getDay() === 6
+            const isFirst = c.date.getDate() === 1
             const playbook = (playbookByDay.get(k) ?? []).filter(p => enabled[p.category])
             const playbookGhosts = dayEvents.length === 0 ? playbook : []
             const visible = dayEvents.slice(0, 4)
@@ -501,23 +528,36 @@ function MonthView({
               <div
                 key={idx}
                 onClick={() => onSelectDay(c.date)}
-                className={`relative min-h-[120px] sm:min-h-[140px] p-2 cursor-pointer hover:bg-bg-2/30 transition-colors ${
+                className={`group relative min-h-[124px] sm:min-h-[144px] p-2 cursor-pointer transition-colors ${
                   !isLastCol ? 'border-r' : ''
                 } ${!isLastRow ? 'border-b' : ''} ${
-                  !c.inMonth ? 'bg-bg-2/30' : isPast ? 'opacity-60' : ''
-                }`}
-                style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+                  !c.inMonth
+                    ? 'bg-bg-2/40 hover:bg-bg-2/60'
+                    : isToday
+                      ? 'bg-emerald-50/40 hover:bg-emerald-50/70'
+                      : isWeekend
+                        ? 'bg-bg-2/20 hover:bg-bg-2/50'
+                        : 'hover:bg-bg-2/40'
+                } ${isPast && !isToday ? 'opacity-65' : ''}`}
+                style={{ borderColor: 'var(--db-border, #ececec)' }}
               >
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className={`text-[12px] font-semibold ${
-                    isToday
-                      ? 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-ink text-white'
-                      : c.inMonth ? 'text-ink' : 'text-ink-5'
-                  }`}>
-                    {c.date.getDate()}
-                  </span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={`text-[13px] font-semibold tabular-nums ${
+                      isToday
+                        ? 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-600 text-white shadow-sm'
+                        : c.inMonth ? 'text-ink' : 'text-ink-5'
+                    }`}>
+                      {c.date.getDate()}
+                    </span>
+                    {isFirst && c.inMonth && !isToday && (
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-ink-4">
+                        {c.date.toLocaleDateString('en-US', { month: 'short' })}
+                      </span>
+                    )}
+                  </div>
                   {hidden > 0 && (
-                    <span className="text-[10px] text-ink-4 tabular-nums">
+                    <span className="text-[10px] font-semibold text-ink-3 tabular-nums bg-bg-2 px-1.5 py-0.5 rounded-full">
                       +{hidden}
                     </span>
                   )}
@@ -555,15 +595,15 @@ function MonthChip({
     <button
       onClick={onClick}
       title={event.title}
-      className={`w-full flex items-center gap-1 text-left rounded px-1.5 py-1 ${c.bg} ${c.text} hover:ring-1 hover:${c.ring} transition-all`}
+      className={`w-full flex items-center gap-1.5 text-left rounded-md px-1.5 py-1 ${c.bg} ${c.text} ring-1 ring-inset ring-transparent hover:ring-current/30 hover:shadow-sm transition-all`}
     >
       <Icon className="w-2.5 h-2.5 flex-shrink-0" />
       {!event.allDay && (
-        <span className="text-[10px] font-medium tabular-nums flex-shrink-0">
+        <span className="text-[10px] font-semibold tabular-nums flex-shrink-0">
           {formatTimeShort(event.startIso)}
         </span>
       )}
-      <span className="text-[11px] truncate leading-tight">
+      <span className="text-[11px] font-medium truncate leading-tight">
         {event.title}
       </span>
     </button>
