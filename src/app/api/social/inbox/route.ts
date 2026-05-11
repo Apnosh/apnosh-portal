@@ -34,13 +34,29 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
   const { data: profile } = await serverSb.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') return NextResponse.json({ error: 'Admin required' }, { status: 403 })
+  const isAdmin = profile?.role === 'admin'
 
   const body = await request.json()
   const { action, clientId } = body
 
   if (!action || !clientId) {
     return NextResponse.json({ error: 'action and clientId required' }, { status: 400 })
+  }
+
+  // Non-admins must own this client and can only run safe actions.
+  // Destructive ops (delete / edit on the live platform) stay admin-only.
+  if (!isAdmin) {
+    const DESTRUCTIVE = new Set(['delete_comment', 'delete_post', 'edit_post'])
+    if (DESTRUCTIVE.has(action)) {
+      return NextResponse.json({ error: 'Admin required for this action' }, { status: 403 })
+    }
+    const [{ data: biz }, { data: cu }] = await Promise.all([
+      serverSb.from('businesses').select('client_id').eq('owner_id', user.id).eq('client_id', clientId).maybeSingle(),
+      serverSb.from('client_users').select('client_id').eq('auth_user_id', user.id).eq('client_id', clientId).maybeSingle(),
+    ])
+    if (!biz && !cu) {
+      return NextResponse.json({ error: 'Not authorized for this client' }, { status: 403 })
+    }
   }
 
   const supabase = createClient(
