@@ -16,24 +16,35 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { logGeneration } from '@/lib/ai/log-generation'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
+import { getActiveClientGoals, getClientShape } from '@/lib/goals/queries'
+
+const GOAL_LABEL: Record<string, string> = {
+  more_foot_traffic: 'more foot traffic',
+  regulars_more_often: 'regulars coming back',
+  more_online_orders: 'more online orders',
+  more_reservations: 'more reservations',
+  better_reputation: 'better reputation',
+  be_known_for: 'be known as the spot',
+  fill_slow_times: 'filling slow times',
+  grow_catering: 'growing catering',
+}
 
 export const maxDuration = 30
 
-const SYSTEM = `You are a senior AI marketing assistant for a restaurant owner. Write the dashboard's morning brief.
+const SYSTEM = `You are a senior marketing partner for a restaurant owner. Write their morning brief — the narrative paragraph below the headline.
 
-Voice: calm, confident, practical. Like an experienced operations partner who already knows the business inside out. Never salesy. Never chipper. Never use exclamation marks. Plain language a busy person reads in five seconds.
+Voice: calm, confident, practical. Like an experienced co-pilot who already knows the business and is briefing them in 30 seconds. Plain English. No marketing jargon. No exclamation marks. No "we're excited" or "leveraging".
 
-Output: 60-80 words. Plain text. Three or four short sentences. No headings, no bullet points, no markdown.
+Length: 50-90 words. 2-4 short sentences. Plain text. No headings, no bullets, no markdown.
 
-Always end with the most urgent thing — either a decision they need to make today, or what to keep an eye on this week. If everything is genuinely fine, end with one observation about what's working.
+The brief sits below a one-line headline (which is generated separately) and above a "Needs you today" action list (which is also generated separately). Don't duplicate either. The narrative connects them: contextualize what's happening, note one specific thing that's working or worrying, and point at what they should focus on this week.
 
-Open with a status sentence (one of):
-- "Quiet weekend on search..." (when something is down/unusual)
-- "Busy week — bookings up..." (when something is up)
-- "Holding steady this week." (when nothing has changed materially)
-- "All quiet on the marketing front." (when everything is fine and nothing notable)
+Anchor every claim in the data block. Never invent numbers. If a metric is missing, ignore it. If the data is genuinely sparse (new client), say so directly and point at the highest-leverage setup move based on their goals.
 
-Anchor every claim in the data you receive. Do NOT invent numbers. If a metric is missing, just don't mention it.`.trim()
+Tone examples:
+- "Reach is up 12% — last Tuesday's reel hit 4,300 views. Sarah K.'s 3-star review is the main thing on the docket today. Mother's Day content drops Monday; we'll send it for your approval tonight."
+- "Quiet week on search — calls down 8% vs prior 7d. Worth checking your hours are accurate. Reputation's holding at 4.6 stars."
+- "Just getting started. Your top goal is foot traffic, so the highest-leverage move is connecting Google Business Profile — it unlocks 70% of the data behind it. Your strategist will reach out within 24 hours."`.trim()
 
 interface BriefRequest {
   clientId: string
@@ -103,12 +114,15 @@ export async function POST(req: NextRequest) {
   const d14 = new Date(now.getTime() - 14 * 86400000)
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
 
-  const [socialThis, socialPrev, reviewsThis, generationsThis, pendingApprovals] = await Promise.all([
+  const [socialThis, socialPrev, reviewsThis, generationsThis, pendingApprovals, goals, shape, connRows] = await Promise.all([
     admin.from('social_metrics').select('reach, impressions, profile_visits').eq('client_id', body.clientId).gte('date', fmt(d7)),
     admin.from('social_metrics').select('reach, impressions, profile_visits').eq('client_id', body.clientId).gte('date', fmt(d14)).lt('date', fmt(d7)),
     admin.from('reviews').select('rating, posted_at').eq('client_id', body.clientId).gte('posted_at', d7.toISOString()),
     admin.from('ai_generations').select('task_type, applied').eq('client_id', body.clientId).gte('created_at', d7.toISOString()).eq('applied', true),
-    admin.from('deliverables').select('id', { count: 'exact', head: true }).eq('business_id', body.clientId).eq('status', 'client_review'),
+    admin.from('deliverables').select('id', { count: 'exact', head: true }).eq('client_id', body.clientId).eq('status', 'client_review'),
+    getActiveClientGoals(body.clientId),
+    getClientShape(body.clientId),
+    admin.from('channel_connections').select('channel').eq('client_id', body.clientId).eq('status', 'active'),
   ])
 
   const sum = <T extends Record<string, unknown>>(rows: T[] | null, field: keyof T): number =>
@@ -128,8 +142,21 @@ export async function POST(req: NextRequest) {
 
   const approvalsCount = pendingApprovals.count ?? 0
 
-  // If there's literally no data, return a graceful fallback
-  if (!thisReach && !prevReach && !newReviewCount && !postsApplied && !approvalsCount) {
+  // Goal + shape context shapes the brief tone (new client setup vs.
+  // mid-journey signal vs. mature optimization).
+  const goalNames = goals.map(g => GOAL_LABEL[g.goalSlug] ?? g.goalSlug)
+  const connectedChannels = (connRows.data ?? []).map(r => r.channel as string)
+  const shapeStr = shape?.footprint && shape?.concept
+    ? `${shape.footprint.replace(/_/g, ' ')} ${shape.concept.replace(/_/g, ' ')}`
+    : null
+  const isNewClient = connectedChannels.length === 0
+
+  // New-client path: if there are no metrics yet AND no goals, fall back.
+  // Otherwise we still want Claude to write a directive setup-focused brief.
+  if (
+    !thisReach && !prevReach && !newReviewCount && !postsApplied && !approvalsCount &&
+    goalNames.length === 0
+  ) {
     return NextResponse.json({
       text: FALLBACK(client.name),
       generatedAt: new Date().toISOString(),
@@ -140,10 +167,14 @@ export async function POST(req: NextRequest) {
 
   const dataBlock = [
     `Business: ${client.name}`,
-    thisReach ? `Social reach this week: ${thisReach.toLocaleString()} (vs ${prevReach.toLocaleString()} prior week, ${reachChangePct !== null ? `${reachChangePct >= 0 ? '+' : ''}${reachChangePct}%` : 'no comparable data'})` : 'Social reach: no data yet',
-    newReviewCount > 0 ? `New reviews this week: ${newReviewCount} (${avgStar ? avgStar.toFixed(1) + ' avg' : ''})` : 'No new reviews this week',
+    shapeStr ? `Shape: ${shapeStr}` : null,
+    goalNames.length > 0 ? `Active goals (in priority): ${goalNames.join(', ')}` : 'No goals set yet',
+    `Connected channels: ${connectedChannels.length > 0 ? connectedChannels.join(', ') : 'none yet'}`,
+    isNewClient ? '*** This is a new client. Lead with the highest-leverage setup move for their top goal. ***' : null,
+    thisReach ? `Social reach this week: ${thisReach.toLocaleString()} (vs ${prevReach.toLocaleString()} prior week, ${reachChangePct !== null ? `${reachChangePct >= 0 ? '+' : ''}${reachChangePct}%` : 'no comparable data'})` : null,
+    newReviewCount > 0 ? `New reviews this week: ${newReviewCount} (${avgStar ? avgStar.toFixed(1) + ' avg' : ''})` : null,
     postsApplied > 0 ? `Content applied this week: ${postsApplied} pieces` : null,
-    approvalsCount > 0 ? `Pending owner approvals: ${approvalsCount}` : 'No pending approvals',
+    approvalsCount > 0 ? `Pending owner approvals: ${approvalsCount}` : null,
     `Today: ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`,
   ].filter(Boolean).join('\n')
 

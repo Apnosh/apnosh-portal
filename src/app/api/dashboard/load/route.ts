@@ -27,6 +27,7 @@ import { getCurrentCycleSummary } from '@/lib/services/delivery-matrix'
 import { getGoalCards } from '@/lib/dashboard/get-goal-cards'
 import { getStrategistForClient } from '@/lib/dashboard/get-strategist'
 import { getPlaybookExplanations } from '@/lib/dashboard/get-playbook-explanations'
+import { getTodayHero } from '@/lib/dashboard/get-today-hero'
 
 export const maxDuration = 15
 
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
   // Parallel: fire every query at once.
-  const [pulse, weekly, agenda, services, goalCards, strategist, playbooks, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
+  const [pulse, weekly, agenda, services, goalCards, strategist, playbooks, todayHero, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
     getPulseData(clientId),
     getWeeklyActivity(clientId),
     getAgenda(clientId),
@@ -53,6 +54,7 @@ export async function GET(req: NextRequest) {
     getGoalCards(clientId),
     getStrategistForClient(clientId),
     getPlaybookExplanations(clientId),
+    getTodayHero(clientId),
     admin
       .from('clients')
       .select('shape_footprint')
@@ -138,6 +140,7 @@ export async function GET(req: NextRequest) {
     goalCards,
     strategist,
     playbooks,
+    todayHero,
     setup: {
       shapeSet: !!shapeRow.data?.shape_footprint,
       goalsSet: goalCards.length > 0,

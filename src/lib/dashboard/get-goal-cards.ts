@@ -135,6 +135,26 @@ export async function getGoalCards(clientId: string): Promise<GoalCardData[]> {
       observed = parseCompact(card.value)
     }
 
+    // Treat live-with-zero as no-data visually -- a big "0" reads as
+    // broken to owners, not informative. Map back to a no-data card.
+    const effectivelyNoData =
+      card.state === 'live' &&
+      (observed === null || observed === 0)
+
+    if (effectivelyNoData) {
+      return {
+        slug: goal.goalSlug,
+        priority: goal.priority,
+        displayName: displayName(goal.goalSlug),
+        state: 'no-data',
+        signal: GOAL_SIGNAL_LABEL[goal.goalSlug],
+        whatWereDoing,
+        benchmarkLine: benchSignal && shape ? benchmarkLine(benchSignal, shape, null) : undefined,
+        href: card.href ?? GOAL_HREF[goal.goalSlug],
+        connectLabel: 'connectLabel' in card ? card.connectLabel : 'See details',
+      } as GoalCardData
+    }
+
     return {
       slug: goal.goalSlug,
       priority: goal.priority,

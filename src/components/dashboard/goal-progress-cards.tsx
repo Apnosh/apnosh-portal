@@ -136,13 +136,14 @@ function Card({ card }: { card: GoalCardData }) {
 }
 
 function Header({ card, Icon }: { card: GoalCardData; Icon: LucideIcon }) {
+  // Use a tighter tracking on long labels so they fit in narrow cards.
   return (
-    <div className="flex items-center gap-2 mb-1.5">
-      <span className="text-[10px] font-bold w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+    <div className="flex items-start gap-2 mb-1.5">
+      <span className="text-[10px] font-bold w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0 mt-0.5">
         {card.priority}
       </span>
-      <Icon className="w-3.5 h-3.5 text-ink-4" />
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-3 truncate">
+      <Icon className="w-3.5 h-3.5 text-ink-4 flex-shrink-0 mt-0.5" />
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-3 leading-tight flex-1 min-w-0">
         {card.displayName}
       </p>
     </div>

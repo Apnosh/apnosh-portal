@@ -24,7 +24,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useClient } from '@/lib/client-context'
-import TodaysBrief, { type BriefPills } from '@/components/dashboard/todays-brief'
+import TodayHero from '@/components/dashboard/today-hero'
+import type { TodayHeroData } from '@/lib/dashboard/get-today-hero'
 import Agenda, { type AgendaItem } from '@/components/dashboard/agenda'
 import YourMarketingWeek from '@/components/dashboard/your-marketing-week'
 import ComingUp, { type ComingUpItem } from '@/components/dashboard/coming-up'
@@ -44,6 +45,7 @@ interface DashboardLoadResult {
   goalCards: GoalCardData[]
   strategist: StrategistCardData | null
   playbooks: PlaybookExplanation[]
+  todayHero: TodayHeroData | null
   setup: {
     shapeSet: boolean
     goalsSet: boolean
@@ -169,23 +171,8 @@ export default function DashboardPage() {
         { label: 'Your reach', state: 'loading', subtitle: '', href: '/dashboard/social' },
       ]
 
-  // Brief pills — derived from the same bundle so we stay consistent.
-  const pills: BriefPills | null = bundle
-    ? {
-        scheduledToday: bundle.comingUp.filter(c => c.daysUntil === 0).reduce((acc, c) => acc + c.queuedCount, 0)
-          + bundle.agenda.filter(a => a.type === 'draft').length,
-        needsAttention: (() => {
-          const top = bundle.agenda.find(a => a.urgency === 'high') ?? bundle.agenda.find(a => a.urgency === 'medium')
-          if (!top) return null
-          return { label: top.label, href: top.href, urgency: top.urgency }
-        })(),
-        trend: bundle.pulse.reach.state === 'live' && bundle.pulse.reach.delta
-          ? { label: 'Reach this week', value: bundle.pulse.reach.delta, up: bundle.pulse.reach.up ?? null }
-          : bundle.pulse.customers.state === 'live' && bundle.pulse.customers.delta
-            ? { label: 'Customer actions this week', value: bundle.pulse.customers.delta, up: bundle.pulse.customers.up ?? null }
-            : null,
-      }
-    : null
+  // BriefPills no longer needed -- TodayHero composes its own
+  // needs-you / this-week / goal-progress sections.
 
   return (
     <div
@@ -195,47 +182,52 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-x-6">
         {/* ═════════════ LEFT — operational column ═════════════ */}
         <div>
-          {/* 1. Brief + status pills (the lead) */}
+          {/* 1. The Today hero (the morning paper). Headline, narrative,
+              needs-you, this-week, goal-progress chips. The lead. */}
           <div className="db-fade db-d1">
-            <TodaysBrief
+            <TodayHero
               clientId={client.id}
+              hero={bundle ? bundle.todayHero : null}
               initialBrief={bundle ? bundle.brief : undefined}
-              pills={pills}
             />
           </div>
 
-          {/* 1b. Your services this month — delivered vs expected per service */}
+          {/* 2. Service delivery this month -- proof of work for paying clients. */}
           {bundle && bundle.services.length > 0 && (
             <ServicesThisMonth rows={bundle.services} />
           )}
 
-          {/* 2. Agenda (the operating surface — unified action list) */}
+          {/* 3. Full agenda (everything the owner could act on). The hero
+              surfaces the top 3; this is the long tail. */}
           <div className="db-fade db-d2">
             <Agenda items={bundle ? bundle.agenda : null} />
           </div>
 
-          {/* 3. Goal progress OR generic pulse (goal-driven when active goals exist). */}
-          <div className="db-fade db-d3">
-            {bundle && bundle.goalCards.length > 0
-              ? <GoalProgressCards cards={bundle.goalCards} />
-              : <PulseCards cards={pulseCardsToRender} />
-            }
-          </div>
-
-          {/* 3b. Playbook explanations -- "what we're doing for each goal" */}
+          {/* 4. Playbook explanations -- "what we're doing for each goal".
+              Collapsible; supporting evidence behind the hero. */}
           {bundle && bundle.playbooks.length > 0 && (
-            <div className="db-fade db-d4">
+            <div className="db-fade db-d3">
               <PlaybookExplanations explanations={bundle.playbooks} />
+            </div>
+          )}
+
+          {/* 5. Pulse / goal-progress cards (deeper detail, drills into channels). */}
+          {bundle && (
+            <div className="db-fade db-d4">
+              {bundle.goalCards.length > 0
+                ? <GoalProgressCards cards={bundle.goalCards} />
+                : <PulseCards cards={pulseCardsToRender} />
+              }
             </div>
           )}
         </div>
 
         {/* ═════════════ RIGHT — context column ═════════════ */}
         <div>
-          {/* Strategist relationship card (B4) -- visible top of right column. */}
+          {/* Strategist relationship card -- top of right column. */}
           <YourStrategist strategist={bundle ? bundle.strategist : null} />
 
-          {/* 4. This week — proof of momentum */}
+          {/* This week's activity -- proof of momentum from the team. */}
           <div className="db-fade db-d4">
             <YourMarketingWeek
               clientId={client.id}
@@ -247,7 +239,7 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* 5. Coming up — marketing calendar (content opportunities) */}
+          {/* Coming up -- marketing calendar (content opportunities). */}
           <div className="db-fade db-d5">
             <ComingUp items={bundle ? bundle.comingUp : null} />
           </div>
@@ -256,3 +248,7 @@ export default function DashboardPage() {
     </div>
   )
 }
+
+// pills + BriefPills no longer used now that TodayHero composes its own
+// pills internally. Suppress lint by re-exporting only what's used.
+export {} // ensure file remains a module
