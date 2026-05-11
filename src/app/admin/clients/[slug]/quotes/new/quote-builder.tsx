@@ -14,7 +14,10 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, Loader2, Send, FileText, Check, Sparkles } from 'lucide-react'
+import {
+  Plus, Trash2, Loader2, Send, FileText, Check, Sparkles, Wand2,
+  AlertTriangle, CheckCircle2,
+} from 'lucide-react'
 
 interface LineItem {
   id: string
@@ -31,6 +34,18 @@ export interface PricingPreset {
   category?: string
 }
 
+interface AiAnalysisShape {
+  recommendedAction?: 'in_plan' | 'quote' | 'escalate'
+  confidence?: number
+  reasoning?: string
+  suggestedQuote?: {
+    title?: string
+    lineItems?: Array<{ label: string; qty: number; unitPrice: number; total: number; notes?: string }>
+    strategistMessage?: string
+    estimatedTurnaroundDays?: number
+  }
+}
+
 interface Props {
   clientId: string
   clientSlug: string
@@ -39,11 +54,15 @@ interface Props {
   prefilledSourceSummary: string
   /** Pulled from the active pricing_rubric on the server. */
   presets: PricingPreset[]
+  /** Optional AI-generated suggestion from the request submission. */
+  aiAnalysis: Record<string, unknown> | null
 }
 
 export default function QuoteBuilder({
-  clientId, clientSlug, sourceRequestId, prefilledTitle, prefilledSourceSummary, presets,
+  clientId, clientSlug, sourceRequestId, prefilledTitle, prefilledSourceSummary, presets, aiAnalysis,
 }: Props) {
+  const ai = aiAnalysis as AiAnalysisShape | null
+  const hasAiQuote = ai?.recommendedAction === 'quote' && (ai.suggestedQuote?.lineItems?.length ?? 0) > 0
   const router = useRouter()
   const [title, setTitle] = useState(prefilledTitle || '')
   const [sourceSummary, setSourceSummary] = useState(prefilledSourceSummary || '')
@@ -153,10 +172,35 @@ export default function QuoteBuilder({
     )
   }
 
+  function applyAiSuggestion() {
+    if (!ai?.suggestedQuote) return
+    const sq = ai.suggestedQuote
+    if (sq.title) setTitle(sq.title)
+    if (sq.strategistMessage) setStrategistMessage(sq.strategistMessage)
+    if (sq.estimatedTurnaroundDays) setTurnaround(String(sq.estimatedTurnaroundDays))
+    if (sq.lineItems && sq.lineItems.length > 0) {
+      setItems(sq.lineItems.map(it => ({
+        id: rnd(),
+        label: it.label ?? '',
+        qty: it.qty ?? 1,
+        unitPrice: it.unitPrice ?? 0,
+        notes: it.notes ?? '',
+      })))
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
       {/* Form */}
       <section className="space-y-6">
+        {/* AI suggestion banner */}
+        {ai && (
+          <AiBanner
+            analysis={ai}
+            hasQuote={!!hasAiQuote}
+            onApply={applyAiSuggestion}
+          />
+        )}
         <Field label="Title" hint="Short headline the client sees on the hub.">
           <input
             type="text"
@@ -397,4 +441,119 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: 'eme
 
 function rnd(): string {
   return Math.random().toString(36).slice(2, 9)
+}
+
+function AiBanner({
+  analysis, hasQuote, onApply,
+}: {
+  analysis: AiAnalysisShape
+  hasQuote: boolean
+  onApply: () => void
+}) {
+  const conf = Math.round((analysis.confidence ?? 0) * 100)
+  const action = analysis.recommendedAction ?? 'quote'
+
+  if (action === 'in_plan') {
+    return (
+      <div className="rounded-2xl border bg-gradient-to-br from-emerald-50/60 via-white to-white p-4" style={{ borderColor: 'var(--db-border, #d3e6db)' }}>
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200/60 flex-shrink-0">
+            <CheckCircle2 className="w-4.5 h-4.5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-700 leading-none">
+                AI says: in-plan
+              </p>
+              <span className="text-[10px] text-emerald-700/70 tabular-nums">{conf}% confidence</span>
+            </div>
+            <p className="text-[13px] text-ink mt-1.5 leading-snug">
+              {analysis.reasoning || 'Standard request that fits the monthly plan.'}
+            </p>
+            <p className="text-[11px] text-ink-3 mt-2 leading-snug">
+              If you agree, you can skip this quote, mark the task as doing on /admin/today,
+              and start producing. Or build a quote anyway if you want to scope it.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (action === 'escalate') {
+    return (
+      <div className="rounded-2xl border bg-gradient-to-br from-rose-50/60 via-white to-white p-4" style={{ borderColor: 'var(--db-border, #f0d3d3)' }}>
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-rose-100 text-rose-700 ring-1 ring-rose-200/60 flex-shrink-0">
+            <AlertTriangle className="w-4.5 h-4.5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-rose-700 leading-none">
+                AI says: needs your eyes
+              </p>
+              <span className="text-[10px] text-rose-700/70 tabular-nums">{conf}% confidence</span>
+            </div>
+            <p className="text-[13px] text-ink mt-1.5 leading-snug">
+              {analysis.reasoning || 'This one doesn\'t fit a standard pattern.'}
+            </p>
+            <p className="text-[11px] text-ink-3 mt-2 leading-snug">
+              No suggested quote — read the request, scope it manually, and price it.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // 'quote'
+  const sq = analysis.suggestedQuote
+  const total = sq?.lineItems?.reduce((s, i) => s + (i.total || 0), 0) ?? 0
+  return (
+    <div className="rounded-2xl border bg-gradient-to-br from-amber-50/60 via-white to-white p-4" style={{ borderColor: 'var(--db-border, #f0e6d6)' }}>
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-100 text-amber-700 ring-1 ring-amber-200/60 flex-shrink-0">
+          <Sparkles className="w-4.5 h-4.5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700 leading-none">
+              AI-drafted quote
+            </p>
+            <span className="text-[10px] text-amber-700/70 tabular-nums">{conf}% confidence</span>
+            {hasQuote && (
+              <span className="text-[13px] font-bold text-ink tabular-nums">
+                ${total.toFixed(0)}
+              </span>
+            )}
+          </div>
+          <p className="text-[13px] text-ink mt-1.5 leading-snug">
+            {analysis.reasoning || 'Quote suggestion drafted from the request.'}
+          </p>
+          {sq?.lineItems && sq.lineItems.length > 0 && (
+            <ul className="mt-2 space-y-0.5">
+              {sq.lineItems.map((it, i) => (
+                <li key={i} className="text-[11px] text-ink-3 flex items-center justify-between gap-3">
+                  <span className="truncate">{it.label}</span>
+                  <span className="tabular-nums flex-shrink-0">
+                    {it.qty} × ${it.unitPrice} = ${it.total}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {hasQuote && (
+            <button
+              type="button"
+              onClick={onApply}
+              className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1.5 transition-colors"
+            >
+              <Wand2 className="w-3 h-3" />
+              Apply AI suggestion
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }

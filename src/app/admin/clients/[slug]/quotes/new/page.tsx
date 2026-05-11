@@ -46,10 +46,11 @@ export default async function NewQuotePage({ params, searchParams }: PageProps) 
   // Pre-populate from a source request if provided.
   let prefilledTitle = ''
   let prefilledSourceSummary = ''
+  let aiAnalysis: Record<string, unknown> | null = null
   if (requestId) {
     const { data: task } = await admin
       .from('client_tasks')
-      .select('title, body')
+      .select('title, body, ai_analysis')
       .eq('id', requestId)
       .eq('client_id', client.id)
       .maybeSingle()
@@ -57,6 +58,7 @@ export default async function NewQuotePage({ params, searchParams }: PageProps) 
       const taskTitle = (task.title as string) ?? ''
       prefilledTitle = taskTitle.replace(/^Request:\s*/, '')
       prefilledSourceSummary = (task.body as string)?.split('\n').slice(0, 5).join('\n') ?? ''
+      aiAnalysis = (task.ai_analysis as Record<string, unknown> | null) ?? null
     }
   }
 
@@ -110,6 +112,7 @@ export default async function NewQuotePage({ params, searchParams }: PageProps) 
         prefilledTitle={prefilledTitle}
         prefilledSourceSummary={prefilledSourceSummary}
         presets={presets}
+        aiAnalysis={aiAnalysis}
       />
     </div>
   )

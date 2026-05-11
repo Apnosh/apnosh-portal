@@ -20,12 +20,25 @@ import {
 import type { ClientTask } from '@/types/database'
 import TaskFormModal from '@/components/admin/tasks/task-form-modal'
 
+interface AiAnalysis {
+  recommendedAction: 'in_plan' | 'quote' | 'escalate'
+  confidence: number
+  reasoning: string
+  suggestedQuote?: {
+    title: string
+    lineItems: Array<{ label: string; qty: number; unitPrice: number; total: number; notes?: string }>
+    strategistMessage: string
+    estimatedTurnaroundDays: number
+  }
+}
+
 interface TaskWithClient extends ClientTask {
   client: {
     id: string
     name: string
     slug: string
   } | null
+  ai_analysis?: AiAnalysis | null
 }
 
 type Bucket = 'overdue' | 'today' | 'week' | 'later' | 'nodate'
@@ -233,17 +246,13 @@ export default function TodayPage() {
                           </div>
                         </button>
 
-                        {/* Quote shortcut for content / boost requests */}
+                        {/* AI-suggested routing badge for content requests */}
                         {t.client && t.title?.startsWith('Request:') && (
-                          <Link
-                            href={`/admin/clients/${t.client.slug}/quotes/new?requestId=${t.id}`}
-                            onClick={e => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors flex-shrink-0 self-center"
-                            title="Build a quote for this request"
-                          >
-                            <FileText className="w-2.5 h-2.5" />
-                            Quote
-                          </Link>
+                          <AiRoutingBadge
+                            slug={t.client.slug}
+                            taskId={t.id}
+                            analysis={t.ai_analysis ?? null}
+                          />
                         )}
                         {t.client && t.title?.startsWith('Boost request:') && (
                           <Link
@@ -320,5 +329,83 @@ export default function TodayPage() {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * Confidence-aware routing badge for a content request. Renders one
+ * of four states:
+ *   - In plan (emerald)        - high confidence the request fits the plan
+ *   - Quote $X (amber)         - has an AI-suggested quote ready
+ *   - Needs review (rose)      - AI says escalate
+ *   - Quote (gray)             - no AI analysis yet (fallback to manual)
+ * All states link to the quote builder so the strategist can take
+ * the recommended action in one click.
+ */
+function AiRoutingBadge({
+  slug, taskId, analysis,
+}: {
+  slug: string
+  taskId: string
+  analysis: AiAnalysis | null
+}) {
+  const href = `/admin/clients/${slug}/quotes/new?requestId=${taskId}`
+
+  if (!analysis) {
+    return (
+      <Link
+        href={href}
+        onClick={e => e.stopPropagation()}
+        className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors flex-shrink-0 self-center"
+        title="Build a quote for this request"
+      >
+        <FileText className="w-2.5 h-2.5" />
+        Quote
+      </Link>
+    )
+  }
+
+  const confidencePct = Math.round(analysis.confidence * 100)
+
+  if (analysis.recommendedAction === 'in_plan') {
+    return (
+      <Link
+        href={href}
+        onClick={e => e.stopPropagation()}
+        className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors flex-shrink-0 self-center"
+        title={`AI: ${analysis.reasoning}`}
+      >
+        <CheckCircle2 className="w-2.5 h-2.5" />
+        In plan · {confidencePct}%
+      </Link>
+    )
+  }
+
+  if (analysis.recommendedAction === 'quote' && analysis.suggestedQuote) {
+    const total = analysis.suggestedQuote.lineItems.reduce((s, i) => s + (i.total || 0), 0)
+    return (
+      <Link
+        href={href}
+        onClick={e => e.stopPropagation()}
+        className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors flex-shrink-0 self-center"
+        title={`AI suggests $${total}: ${analysis.reasoning}`}
+      >
+        <FileText className="w-2.5 h-2.5" />
+        Quote ${total} · {confidencePct}%
+      </Link>
+    )
+  }
+
+  // escalate
+  return (
+    <Link
+      href={href}
+      onClick={e => e.stopPropagation()}
+      className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors flex-shrink-0 self-center"
+      title={`AI escalated: ${analysis.reasoning}`}
+    >
+      <AlertTriangle className="w-2.5 h-2.5" />
+      Review · {confidencePct}%
+    </Link>
   )
 }

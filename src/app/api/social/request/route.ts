@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { suggestQuoteForRequest } from '@/lib/admin/suggest-quote'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -136,8 +137,25 @@ export async function POST(req: NextRequest) {
     return new NextResponse(`Could not save: ${insertErr.message}`, { status: 500 })
   }
 
+  // Fire AI quote suggestion in parallel with the event log. Best-effort.
+  // The strategist queue and quote builder both render whatever's there.
+  const aiPromise = suggestQuoteForRequest({
+    clientId: body.clientId,
+    requestText: body.description,
+    requestType: body.type ?? null,
+    assetLinks: body.assetLinks ?? null,
+    desiredDate: body.customDate ?? null,
+    platforms: body.platforms,
+  }).then(async (suggestion) => {
+    if (!suggestion || !inserted?.id) return
+    await admin
+      .from('client_tasks')
+      .update({ ai_analysis: suggestion })
+      .eq('id', inserted.id)
+  }).catch(() => { /* silent — strategist still sees task without analysis */ })
+
   // Best-effort event log entry — non-fatal if it fails.
-  await admin
+  const eventPromise = admin
     .from('events')
     .insert({
       client_id: body.clientId,
@@ -153,6 +171,8 @@ export async function POST(req: NextRequest) {
         has_assets: !!body.assetLinks,
       },
     })
+
+  await Promise.all([aiPromise, eventPromise])
 
   return NextResponse.json({ ok: true, taskId: inserted?.id ?? null })
 }
