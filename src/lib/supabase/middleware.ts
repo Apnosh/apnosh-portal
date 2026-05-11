@@ -102,11 +102,25 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url)
       }
 
-      // Block /admin for client portal users (admin-only area).
+      // Block /admin for client portal users (admin-only area), UNLESS
+      // they also hold the strategist capability — strategists drill
+      // into client detail pages via /admin/clients/[slug]. RLS scopes
+      // the data they see to their assigned book.
       if (isAdminRoute) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/dashboard'
-        return NextResponse.redirect(url)
+        const { data: cap } = await supabase
+          .from('person_capabilities')
+          .select('capability')
+          .eq('person_id', user.id)
+          .eq('capability', 'strategist')
+          .eq('status', 'active')
+          .maybeSingle()
+
+        if (!cap) {
+          const url = request.nextUrl.clone()
+          url.pathname = '/dashboard'
+          return NextResponse.redirect(url)
+        }
+        // Strategist with client_user row → fall through, allow /admin access.
       }
 
       // Check if this client_user has completed onboarding via client_profiles
@@ -154,11 +168,23 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url)
       }
 
-      // Non-admin trying to access /admin -> redirect to /dashboard
+      // Non-admin trying to access /admin -> allowed only if they're
+      // a strategist (drills into /admin/clients/[slug] from their
+      // /work/* surfaces). RLS scopes their data.
       if (isAdminRoute && role !== 'admin') {
-        const url = request.nextUrl.clone()
-        url.pathname = '/dashboard'
-        return NextResponse.redirect(url)
+        const { data: cap } = await supabase
+          .from('person_capabilities')
+          .select('capability')
+          .eq('person_id', user.id)
+          .eq('capability', 'strategist')
+          .eq('status', 'active')
+          .maybeSingle()
+
+        if (!cap) {
+          const url = request.nextUrl.clone()
+          url.pathname = '/dashboard'
+          return NextResponse.redirect(url)
+        }
       }
 
       // ── Onboarding enforcement for client/team_member on /dashboard ──
