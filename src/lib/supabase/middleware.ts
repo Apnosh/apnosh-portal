@@ -36,9 +36,10 @@ export async function updateSession(request: NextRequest) {
   const isAdminRoute = path.startsWith('/admin')
   const isOnboarding = path.startsWith('/onboarding')
   const isClientRoute = path.startsWith('/client')
+  const isWorkRoute = path.startsWith('/work') || path.startsWith('/marketplace')
 
   // ── Unauthenticated: redirect to login ──
-  if (!user && (isDashboard || isAdminRoute || isOnboarding || isClientRoute)) {
+  if (!user && (isDashboard || isAdminRoute || isOnboarding || isClientRoute || isWorkRoute)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.searchParams.set('redirect', path)
