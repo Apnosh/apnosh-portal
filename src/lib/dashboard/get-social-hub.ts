@@ -13,6 +13,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getLatestCompletedCampaign, type CampaignRow } from './get-campaigns'
+import { getContentPlan, type ContentPlan } from './get-content-plan'
+import { getPendingQuotes, type ContentQuote } from './get-quotes'
 
 export interface SocialHubData {
   /** Counts shown as clickable tiles in the hero. */
@@ -36,6 +38,10 @@ export interface SocialHubData {
   reach30d: number | null
   /** Most recently completed boost — drives the "Last boost result" card. */
   lastCompletedBoost: CampaignRow | null
+  /** The client's current plan + monthly usage. */
+  plan: ContentPlan
+  /** Quotes the client needs to act on (sent or revising). */
+  pendingQuotes: ContentQuote[]
 }
 
 export interface SocialPostCard {
@@ -68,7 +74,7 @@ export async function getSocialHub(clientId: string): Promise<SocialHubData> {
   const thirtyAgo = new Date(now - 30 * DAY_MS).toISOString()
   const future = new Date(now + 60 * DAY_MS).toISOString()
 
-  const [recentRow, upcomingRow, needsYouRow, queuedRow, perfRow, reachRow, lastCompletedBoost] = await Promise.all([
+  const [recentRow, upcomingRow, needsYouRow, queuedRow, perfRow, reachRow, lastCompletedBoost, plan, pendingQuotes] = await Promise.all([
     // Recent published posts
     admin
       .from('scheduled_posts')
@@ -119,6 +125,10 @@ export async function getSocialHub(clientId: string): Promise<SocialHubData> {
       .limit(2000),
     // Most recently completed boost (for the "Last boost result" card)
     getLatestCompletedCampaign(clientId),
+    // Plan (tier + monthly allotment + usage so far)
+    getContentPlan(clientId),
+    // Pending quotes (sent / revising)
+    getPendingQuotes(clientId),
   ])
 
   const recent: SocialPostCard[] = (recentRow.data ?? []).map(toCard)
@@ -165,7 +175,7 @@ export async function getSocialHub(clientId: string): Promise<SocialHubData> {
     reach30d,
   })
 
-  return { counts, narrative, recent, upcoming, topPerformer, reach30d, lastCompletedBoost }
+  return { counts, narrative, recent, upcoming, topPerformer, reach30d, lastCompletedBoost, plan, pendingQuotes }
 }
 
 function toCard(r: Record<string, unknown>): SocialPostCard {

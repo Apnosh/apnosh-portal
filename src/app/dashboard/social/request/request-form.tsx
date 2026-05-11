@@ -181,13 +181,32 @@ export default function RequestForm({ clientId }: { clientId: string }) {
             <Check className="w-6 h-6" strokeWidth={2.5} />
           </div>
           <h1 className="text-[24px] font-bold text-ink tracking-tight">
-            Got it. We&rsquo;re on it.
+            Got it. Your strategist will respond within 24 hours.
           </h1>
-          <p className="text-[14px] text-ink-2 mt-2 max-w-md mx-auto leading-relaxed">
-            Your strategist will draft 1-3 versions based on what you sent.
-            You&rsquo;ll see them in your Inbox to approve within 24 hours.
+          <p className="text-[14px] text-ink-2 mt-3 max-w-lg mx-auto leading-relaxed">
+            One of two things happens next.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-2 mt-6">
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl mx-auto text-left">
+            <div className="rounded-xl border bg-white px-4 py-3.5" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 mb-1">
+                If it&rsquo;s in your plan
+              </p>
+              <p className="text-[12px] text-ink-2 leading-snug">
+                Your strategist drafts 1-3 versions within 48 hours. You approve in your Inbox.
+                No extra charge.
+              </p>
+            </div>
+            <div className="rounded-xl border bg-white px-4 py-3.5" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 mb-1">
+                If it&rsquo;s a bigger lift
+              </p>
+              <p className="text-[12px] text-ink-2 leading-snug">
+                You&rsquo;ll get a quote here (with line items + total). Approve, ask for changes, or decline.
+                Nothing starts until you say yes.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-7">
             <Link
               href="/dashboard/social"
               className="inline-flex items-center gap-1.5 text-[13px] font-semibold bg-ink text-white rounded-full px-4 py-2 hover:bg-ink/90 transition-colors"

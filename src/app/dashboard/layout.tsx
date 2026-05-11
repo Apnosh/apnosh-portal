@@ -110,6 +110,7 @@ const navSections: NavSection[] = [
           { label: 'Calendar', href: '/dashboard/calendar' },
           { label: 'Performance', href: '/dashboard/social/performance' },
           { label: 'Action needed', href: '/dashboard/social/action-needed' },
+          { label: 'Quotes', href: '/dashboard/social/quotes' },
         ],
       },
       {

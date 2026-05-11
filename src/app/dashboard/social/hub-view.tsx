@@ -16,10 +16,12 @@ import Link from 'next/link'
 import {
   Sparkles, Plus, Calendar as CalendarIcon, TrendingUp, ArrowRight,
   Camera, Globe, Image as ImageIcon, Video, Layers, Send, Zap, Music,
-  Eye, MousePointer2, Footprints,
+  Eye, MousePointer2, Footprints, FileText, CircleCheck,
 } from 'lucide-react'
 import type { SocialHubData, SocialPostCard, TopPerformer } from '@/lib/dashboard/get-social-hub'
 import type { CampaignRow } from '@/lib/dashboard/get-campaigns'
+import type { ContentPlan } from '@/lib/dashboard/get-content-plan'
+import type { ContentQuote } from '@/lib/dashboard/get-quotes'
 
 const PLATFORM_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   instagram: Camera,
@@ -40,6 +42,21 @@ export default function SocialHubView({ data }: { data: SocialHubData }) {
     <div className="max-w-7xl mx-auto py-8 px-4 lg:px-6">
       {/* Hero */}
       <Hero data={data} />
+
+      {/* Plan + Pending quotes */}
+      {(shouldShowPlan(data.plan) || data.pendingQuotes.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-7">
+          {shouldShowPlan(data.plan) && <PlanCard plan={data.plan} />}
+          {data.pendingQuotes.length > 0 && <QuotesCard quotes={data.pendingQuotes} />}
+          {/* When only one is showing, balance the row. */}
+          {shouldShowPlan(data.plan) && data.pendingQuotes.length === 0 && (
+            <QuotesEmptyCard />
+          )}
+          {!shouldShowPlan(data.plan) && data.pendingQuotes.length > 0 && (
+            <PlanEmptyCard />
+          )}
+        </div>
+      )}
 
       {/* Recent + Coming up */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 lg:gap-7 mt-7">
@@ -346,6 +363,183 @@ function WhatsWorking({ perf }: { perf: TopPerformer }) {
         </Link>
       </div>
     </section>
+  )
+}
+
+/* ─────────────────────────────── Plan + Quotes cards ─────────────────────────────── */
+
+function shouldShowPlan(plan: ContentPlan): boolean {
+  return !!plan.tier || plan.socialMonthlyAllotment != null
+}
+
+function PlanCard({ plan }: { plan: ContentPlan }) {
+  const tier = plan.tier ?? 'Plan'
+  const allot = plan.socialMonthlyAllotment
+  const used = plan.usedThisMonth
+  const remaining = plan.remainingThisMonth
+  const percent = plan.percentUsed
+  const isFull = remaining !== null && remaining === 0
+  return (
+    <div
+      className="rounded-2xl border bg-white p-5"
+      style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+    >
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 flex-shrink-0">
+            <CircleCheck className="w-4.5 h-4.5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
+              Your plan
+            </p>
+            <p className="text-[15px] font-semibold text-ink mt-1 leading-none">
+              {tier}
+              {plan.monthlyRate !== null && (
+                <span className="text-ink-3 font-medium text-[12px]"> · ${plan.monthlyRate}/mo</span>
+              )}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {allot ? (
+        <>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-[28px] font-bold text-ink leading-none tabular-nums tracking-tight">
+              {used}
+              <span className="text-[18px] text-ink-3 font-medium"> / {allot}</span>
+            </span>
+            <span className="text-[12px] text-ink-3">posts used this month</span>
+          </div>
+          <div className="h-2 rounded-full bg-bg-2 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${
+                isFull ? 'bg-rose-500' : percent && percent >= 80 ? 'bg-amber-500' : 'bg-emerald-500'
+              }`}
+              style={{ width: `${Math.max(2, percent ?? 0)}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-ink-3 mt-2 leading-snug">
+            {isFull
+              ? 'Plan maxed for this month. Extras need a quote.'
+              : remaining !== null
+              ? `${remaining} ${remaining === 1 ? 'post' : 'posts'} left this month. Resets on the 1st.`
+              : 'Resets on the 1st of the month.'}
+          </p>
+        </>
+      ) : (
+        <p className="text-[13px] text-ink-2 leading-relaxed">
+          Your strategist will set monthly allotments once your plan is finalized. Until then,
+          requests are quoted individually.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function PlanEmptyCard() {
+  return (
+    <div
+      className="rounded-2xl border-2 border-dashed bg-white p-5 flex items-start gap-3"
+      style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+    >
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-bg-2 text-ink-3 flex-shrink-0">
+        <CircleCheck className="w-4.5 h-4.5" />
+      </div>
+      <div className="flex-1">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
+          Your plan
+        </p>
+        <p className="text-[12px] text-ink-2 mt-1.5 leading-snug">
+          Your strategist sets monthly allotments once your plan is finalized. Until then,
+          each request is quoted on its own.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function QuotesCard({ quotes }: { quotes: ContentQuote[] }) {
+  const total = quotes.reduce((s, q) => s + q.total, 0)
+  return (
+    <div
+      className="rounded-2xl border bg-gradient-to-br from-amber-50/60 via-white to-white p-5"
+      style={{ borderColor: 'var(--db-border, #f0e6d6)' }}
+    >
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-100 text-amber-700 ring-1 ring-amber-200/60 flex-shrink-0">
+            <FileText className="w-4.5 h-4.5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700 leading-none">
+              Waiting on you
+            </p>
+            <p className="text-[15px] font-semibold text-ink mt-1 leading-none">
+              {quotes.length} quote{quotes.length === 1 ? '' : 's'} to review
+            </p>
+          </div>
+        </div>
+        <p className="text-[18px] font-bold text-ink tabular-nums leading-none">
+          ${formatCompact(total)}
+        </p>
+      </div>
+
+      <ul className="space-y-1.5">
+        {quotes.slice(0, 3).map(q => (
+          <li key={q.id}>
+            <Link
+              href={`/dashboard/social/quotes/${q.id}`}
+              className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2.5 hover:shadow-sm transition-shadow"
+              style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-semibold text-ink leading-tight truncate">
+                  {q.title}
+                </p>
+                {q.sourceRequestSummary && (
+                  <p className="text-[10px] text-ink-3 mt-0.5 leading-tight truncate">
+                    {q.sourceRequestSummary}
+                  </p>
+                )}
+              </div>
+              <span className="text-[13px] font-bold text-ink tabular-nums flex-shrink-0">
+                ${q.total.toFixed(0)}
+              </span>
+              <ArrowRight className="w-3.5 h-3.5 text-ink-4 flex-shrink-0" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {quotes.length > 3 && (
+        <p className="text-[11px] text-ink-3 mt-2">
+          And {quotes.length - 3} more.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function QuotesEmptyCard() {
+  return (
+    <div
+      className="rounded-2xl border-2 border-dashed bg-white p-5 flex items-start gap-3"
+      style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+    >
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-bg-2 text-ink-3 flex-shrink-0">
+        <FileText className="w-4.5 h-4.5" />
+      </div>
+      <div className="flex-1">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
+          No quotes pending
+        </p>
+        <p className="text-[12px] text-ink-2 mt-1.5 leading-snug">
+          If a request goes beyond your plan, your strategist sends a quote here within 24 hours.
+          Approve, decline, or ask for changes.
+        </p>
+      </div>
+    </div>
   )
 }
 
