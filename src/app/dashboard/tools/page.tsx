@@ -35,8 +35,8 @@ const tools: ToolDef[] = [
   { id: 'ideas', name: 'Content Idea Generator', description: 'Get fresh content ideas for your industry', icon: Lightbulb },
   { id: 'review', name: 'Review Response Generator', description: 'Draft professional responses to customer reviews', icon: MessageSquare },
   { id: 'hashtag', name: 'Hashtag Research', description: 'Find the best hashtags for your posts', icon: Hash },
-  { id: 'audit', name: 'Social Media Audit', description: 'Automated profile health check across all platforms', icon: ClipboardCheck, comingSoon: true },
-  { id: 'competitor', name: 'Competitor Analysis', description: 'Track competitor posting frequency, engagement, and content strategy', icon: Eye, comingSoon: true },
+  // Audit + Competitor Analysis hidden for v1 -- placeholders without
+  // a real implementation. Re-add when the analyzers are built.
 ]
 
 /* ------------------------------------------------------------------ */

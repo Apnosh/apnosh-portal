@@ -101,13 +101,8 @@ export default function YourStrategist({ strategist }: { strategist: StrategistC
             <MessageSquare className="w-3.5 h-3.5" />
             Send a message
           </Link>
-          <Link
-            href="/dashboard/quarterly-review"
-            className="inline-flex items-center gap-1 text-[11px] text-ink-3 hover:text-ink-2"
-          >
-            Next review
-            <ArrowRight className="w-3 h-3" />
-          </Link>
+          {/* "Next review" CTA hidden for v1 -- /dashboard/quarterly-review
+              is a placeholder. Re-add when the review flow ships. */}
         </div>
       </div>
     </section>

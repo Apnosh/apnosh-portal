@@ -354,13 +354,8 @@ function WhatsWorking({ perf }: { perf: TopPerformer }) {
           </p>
         </div>
 
-        <Link
-          href={`/dashboard/social/boost?postId=${encodeURIComponent(perf.postId)}`}
-          className="inline-flex items-center gap-1.5 text-[13px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-4 py-2 transition-colors flex-shrink-0"
-        >
-          <Zap className="w-3.5 h-3.5" />
-          Boost this post
-        </Link>
+        {/* Boost CTA hidden for v1 -- the boost flow is not wired yet.
+            Re-add when /dashboard/social/boost connects to the strategist queue. */}
       </div>
     </section>
   )
@@ -565,13 +560,7 @@ function LastBoostResult({ campaign }: { campaign: CampaignRow }) {
               ${campaign.budgetTotal.toFixed(0)} over {campaign.days} days · ended {relativeShort(campaign.endedAt ?? campaign.createdAt)}
             </p>
           </div>
-          <Link
-            href="/dashboard/social/boost"
-            className="hidden sm:inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-2 hover:text-ink bg-white border border-ink-6 hover:border-ink-4 rounded-full px-3 py-1.5 transition-all"
-          >
-            <Zap className="w-3 h-3 text-emerald-600" />
-            Boost another
-          </Link>
+          {/* "Boost another" CTA hidden for v1 (boost flow not wired). */}
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -618,17 +607,11 @@ function PushBar() {
       Icon: CalendarIcon,
       tone: 'bg-white hover:bg-bg-2 text-ink border border-ink-6',
     },
-    {
-      label: 'Boost a post',
-      sub: 'Push paid reach',
-      href: '/dashboard/social/boost',
-      Icon: Zap,
-      tone: 'bg-white hover:bg-bg-2 text-ink border border-ink-6',
-    },
+    // "Boost a post" hidden for v1 -- flow not wired. Re-add when ready.
   ]
   return (
     <section className="mt-8">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {actions.map(a => {
           const { Icon } = a
           return (
