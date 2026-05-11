@@ -111,22 +111,35 @@ export default function CalendarView({
     return c
   }, [events])
 
-  // Onboarding playbook keyed by dayKey
+  // Onboarding playbook keyed by dayKey. We show ghosts in two cases:
+  //   1. The client is in the first 14 days of tenure (the natural
+  //      onboarding window), counting forward from creation.
+  //   2. There are zero real events on the calendar at all. In that
+  //      case we pin the playbook to "now" so the grid still shows
+  //      something useful even for older accounts that haven't been
+  //      activated yet.
   const playbookByDay = useMemo(() => {
     const m = new Map<string, PlaybookMilestone[]>()
-    if (!clientCreatedAt) return m
-    const start = startOfDay(new Date(clientCreatedAt))
-    const ageDays = Math.floor((Date.now() - start.getTime()) / 86_400_000)
-    if (ageDays > 14) return m
+    const hasNoEvents = events.length === 0
+    let anchor: Date | null = null
+    if (clientCreatedAt) {
+      const start = startOfDay(new Date(clientCreatedAt))
+      const ageDays = Math.floor((Date.now() - start.getTime()) / 86_400_000)
+      if (ageDays <= 14) anchor = start
+      else if (hasNoEvents) anchor = startOfDay(new Date())
+    } else if (hasNoEvents) {
+      anchor = startOfDay(new Date())
+    }
+    if (!anchor) return m
     for (const ms of ONBOARDING_PLAYBOOK) {
-      const date = addDays(start, ms.daysFromStart)
+      const date = addDays(anchor, ms.daysFromStart)
       const k = dayKey(date)
       const arr = m.get(k) ?? []
       arr.push(ms)
       m.set(k, arr)
     }
     return m
-  }, [clientCreatedAt])
+  }, [clientCreatedAt, events.length])
 
   function handleKpiClick(target: 'thisWeek' | 'nextWeek' | 'actionNeeded') {
     if (target === 'thisWeek') {
@@ -207,9 +220,24 @@ export default function CalendarView({
               <ViewToggle view={view} onChange={setView} />
             </div>
 
-            {filtered.length === 0 && events.length === 0 ? (
-              <EmptyState />
-            ) : view === 'month' ? (
+            {events.length === 0 && (
+              <div
+                className="rounded-lg border border-dashed bg-bg-2/40 px-4 py-3 mb-3 flex items-start gap-3"
+                style={{ borderColor: 'var(--db-border, #d4d4d4)' }}
+              >
+                <div className="text-[18px] leading-none">✨</div>
+                <div className="flex-1">
+                  <p className="text-[13px] font-medium text-ink leading-tight">
+                    Nothing scheduled yet
+                  </p>
+                  <p className="text-[12px] text-ink-3 mt-0.5 leading-snug">
+                    Your strategist starts queuing posts, shoots, and tasks within a day or two
+                    of kickoff. Dashed items below show what to expect on the way.
+                  </p>
+                </div>
+              </div>
+            )}
+            {view === 'month' ? (
               <MonthView
                 events={filtered}
                 cursor={cursor}
@@ -219,6 +247,8 @@ export default function CalendarView({
                 playbookByDay={playbookByDay}
                 enabled={enabled}
               />
+            ) : filtered.length === 0 ? (
+              <AgendaEmpty />
             ) : (
               <AgendaView events={filtered} onSelect={setSelected} />
             )}
@@ -952,28 +982,13 @@ function SubscribeDialog({ path, onClose }: { path: string; onClose: () => void 
 
 /* ───────────────────────────── Empty state ───────────────────────────── */
 
-function EmptyState() {
+function AgendaEmpty() {
   return (
-    <div className="rounded-2xl border bg-white p-10 text-center" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
-      <h2 className="text-base font-semibold text-ink mb-1.5">Nothing on the calendar yet</h2>
-      <p className="text-sm text-ink-3 max-w-md mx-auto leading-relaxed mb-6">
-        As your strategist schedules posts, books filming days, and lines up campaigns,
-        every dated item shows up here in one timeline.
+    <div className="rounded-2xl border bg-white p-8 text-center" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+      <p className="text-sm text-ink-3 max-w-md mx-auto leading-relaxed">
+        Nothing matches the current filter. Toggle a category on the left to see more,
+        or switch to Month to see the full grid.
       </p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-2xl mx-auto">
-        {CATEGORY_ORDER.map(cat => {
-          const c = CATEGORY_COLOR[cat]
-          return (
-            <div key={cat} className="flex items-center gap-2.5 p-2.5 rounded-lg bg-bg-2/60 text-left">
-              <span className={`w-3 h-3 rounded-sm ${c.dot}`} />
-              <div className="min-w-0">
-                <p className="text-[12px] font-medium text-ink leading-tight">{CATEGORY_LABEL[cat]}</p>
-                <p className="text-[10px] text-ink-3 leading-tight mt-0.5">{CATEGORY_BLURB[cat]}</p>
-              </div>
-            </div>
-          )
-        })}
-      </div>
     </div>
   )
 }
