@@ -24,6 +24,7 @@ import { getAgenda } from '@/lib/dashboard/get-agenda'
 import { getMarketingCalendar, daysUntil } from '@/lib/dashboard/marketing-calendar'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCurrentCycleSummary } from '@/lib/services/delivery-matrix'
+import { getGoalCards } from '@/lib/dashboard/get-goal-cards'
 
 export const maxDuration = 15
 
@@ -42,11 +43,12 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
   // Parallel: fire every query at once.
-  const [pulse, weekly, agenda, services, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
+  const [pulse, weekly, agenda, services, goalCards, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
     getPulseData(clientId),
     getWeeklyActivity(clientId),
     getAgenda(clientId),
     getCurrentCycleSummary(clientId),
+    getGoalCards(clientId),
     admin
       .from('reviews')
       .select('id, source, rating, author_name, review_text, posted_at, responded_at')
@@ -124,6 +126,7 @@ export async function GET(req: NextRequest) {
     weekly,
     agenda,
     services,
+    goalCards,
     comingUp,
     reviews: reviewsRow.data ?? [],
     brief: briefRow.data ? {
