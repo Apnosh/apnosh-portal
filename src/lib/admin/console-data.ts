@@ -33,7 +33,6 @@ export interface ConsoleRow {
   needsAttentionScore: number
 }
 
-const WEEK_MS = 7 * 86400 * 1000
 const DAY_MS = 86400 * 1000
 
 interface DueRow { client_id: string }
@@ -55,7 +54,6 @@ export async function getConsoleRows(opts?: {
 }): Promise<ConsoleRow[]> {
   const admin = createAdminClient()
   const now = new Date()
-  const weekFromNow = new Date(now.getTime() + WEEK_MS)
   const dayAgo = new Date(now.getTime() - DAY_MS)
   const sevenDaysOut = new Date(now.getTime() + 7 * DAY_MS)
 
@@ -84,15 +82,16 @@ export async function getConsoleRows(opts?: {
     eventsRes,
     interactionsRes,
   ] = await Promise.all([
+    // Active deliverables per client. We do NOT have a deadline column on
+    // deliverables, so the original "due this week" query was 500ing. As a
+    // proxy we count anything currently in flight (draft / internal_review /
+    // client_review / revision_requested). Same intent: "what does the
+    // strategist need to move today."
     admin
       .from('deliverables')
-      .select('client_id, deadline')
+      .select('client_id')
       .in('client_id', clientIds)
-      .not('deadline', 'is', null)
-      .lte('deadline', weekFromNow.toISOString())
-      .gte('deadline', now.toISOString())
-      .neq('status', 'published')
-      .neq('status', 'approved'),
+      .in('status', ['draft', 'internal_review', 'client_review', 'revision_requested']),
     admin
       .from('reviews')
       .select('client_id, rating, response_text')
