@@ -1,9 +1,13 @@
 /**
  * POST /api/social/boost
  *
- * v1 stub: lands a boost request in client_tasks for the strategist
- * to confirm and launch in Meta Ads Manager. Direct integration with
- * Meta Ads goes here when we wire it.
+ * Owner approves a boost spec in /dashboard/social/boost. We write a
+ * row to ad_campaigns with status='pending' so the strategist sees it
+ * in their queue and launches it in Meta Ads Manager. The same table
+ * stores the live campaign id and cached metrics once the strategist
+ * launches, so this single table is the spine of the boost lifecycle.
+ *
+ * Direct Meta Ads launch goes here when we wire the Marketing API.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -21,12 +25,6 @@ interface Body {
   audience: string
 }
 
-const AUDIENCE_LABEL: Record<string, string> = {
-  locals:  'Locals (within 5 miles)',
-  foodies: 'Food enthusiasts (locals who follow food / dining)',
-  recent:  'Recent visitors (90-day engaged)',
-}
-
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -39,11 +37,14 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Invalid JSON', { status: 400 })
   }
 
-  if (!body.clientId || !body.postId || !body.budget || !body.days) {
+  if (!body.clientId || !body.postId || !body.budget || !body.days || !body.audience) {
     return new NextResponse('Missing required fields', { status: 400 })
   }
+  if (!['locals', 'foodies', 'recent'].includes(body.audience)) {
+    return new NextResponse('Invalid audience', { status: 400 })
+  }
 
-  // Confirm scope.
+  // Auth scope check
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
@@ -60,32 +61,37 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const audienceLabel = AUDIENCE_LABEL[body.audience] ?? body.audience
-  const dailySpend = (body.budget / body.days).toFixed(2)
-  const title = `Boost request: $${body.budget} × ${body.days} days`
-  const bodyText = [
-    `**Boost request**`,
-    '',
-    `**Post:** ${body.postId}`,
-    `**Total budget:** $${body.budget}`,
-    `**Duration:** ${body.days} days`,
-    `**Daily spend:** ~$${dailySpend}/day`,
-    `**Audience:** ${audienceLabel}`,
-    '',
-    'Owner approved budget. Strategist to confirm targeting and launch in Meta Ads Manager.',
-  ].join('\n')
-
   const admin = createAdminClient()
+
+  // Snapshot the post so the campaign still renders if the source is deleted later.
+  const { data: post } = await admin
+    .from('scheduled_posts')
+    .select('text, media_urls, platforms')
+    .eq('id', body.postId)
+    .eq('client_id', body.clientId)
+    .maybeSingle()
+  if (!post) {
+    return new NextResponse('Post not found for this client', { status: 404 })
+  }
+  const snapshot = {
+    text: ((post.text as string) ?? '').slice(0, 500),
+    media_url: ((post.media_urls as string[] | null) ?? [])[0] ?? null,
+    platforms: (post.platforms as string[] | null) ?? [],
+  }
+
   const { data: inserted, error: insertErr } = await admin
-    .from('client_tasks')
+    .from('ad_campaigns')
     .insert({
       client_id: body.clientId,
-      title,
-      body: bodyText,
-      status: 'todo',
-      due_at: new Date(Date.now() + 1 * 86_400_000).toISOString(),
-      assignee_type: 'admin',
-      visible_to_client: true,
+      source_post_id: body.postId,
+      source_post_snapshot: snapshot,
+      budget_total: body.budget,
+      days: body.days,
+      audience_preset: body.audience,
+      platform: 'meta',
+      status: 'pending',
+      approved_by: user.id,
+      created_by: user.id,
     })
     .select('id')
     .single()
@@ -97,7 +103,7 @@ export async function POST(req: NextRequest) {
   await admin.from('events').insert({
     client_id: body.clientId,
     event_type: 'boost_request.created',
-    subject_type: 'client_task',
+    subject_type: 'ad_campaign',
     subject_id: inserted?.id ?? null,
     actor_id: user.id,
     actor_role: isAdmin ? 'admin' : 'client',
@@ -110,5 +116,5 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  return NextResponse.json({ ok: true, taskId: inserted?.id ?? null })
+  return NextResponse.json({ ok: true, campaignId: inserted?.id ?? null })
 }

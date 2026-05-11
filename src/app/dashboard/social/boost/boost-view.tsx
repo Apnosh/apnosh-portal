@@ -14,15 +14,19 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Zap, Calendar as CalendarIcon, Users, BarChart3, Info,
-  Image as ImageIcon, Check, Loader2, TrendingUp,
+  Image as ImageIcon, Check, Loader2, TrendingUp, Clock, Play, Pause,
+  MousePointer2, Eye,
 } from 'lucide-react'
 import type { SocialPostCard, TopPerformer } from '@/lib/dashboard/get-social-hub'
+import type { CampaignRow, CampaignStatus } from '@/lib/dashboard/get-campaigns'
 
 interface Props {
   clientId: string
   preselectedPostId: string | null
   candidates: SocialPostCard[]
   topPerformer: TopPerformer | null
+  activeCampaigns: CampaignRow[]
+  pastCampaigns: CampaignRow[]
 }
 
 const BUDGET_PRESETS = [
@@ -46,6 +50,7 @@ const AUDIENCE_PRESETS = [
 
 export default function BoostView({
   clientId, preselectedPostId, candidates, topPerformer,
+  activeCampaigns, pastCampaigns,
 }: Props) {
   const router = useRouter()
   const initialPostId =
@@ -323,14 +328,123 @@ export default function BoostView({
             </p>
           </div>
 
-          <div className="mt-4 rounded-xl border bg-bg-2/60 p-3 flex items-start gap-2" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
-            <Info className="w-3.5 h-3.5 text-ink-4 mt-0.5 flex-shrink-0" />
-            <p className="text-[11px] text-ink-3 leading-snug">
-              Active campaigns and historical results show up here once your first boost has been running for 24 hours.
-            </p>
-          </div>
+          {activeCampaigns.length === 0 && pastCampaigns.length === 0 && (
+            <div className="mt-4 rounded-xl border bg-bg-2/60 p-3 flex items-start gap-2" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+              <Info className="w-3.5 h-3.5 text-ink-4 mt-0.5 flex-shrink-0" />
+              <p className="text-[11px] text-ink-3 leading-snug">
+                Active campaigns and historical results show up here once your first boost has launched.
+              </p>
+            </div>
+          )}
         </aside>
       </div>
+
+      {/* Active campaigns rail */}
+      {activeCampaigns.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-[16px] font-bold text-ink tracking-tight mb-3">
+            Active campaigns
+          </h2>
+          <ul className="space-y-2">
+            {activeCampaigns.map(c => <CampaignRowCard key={c.id} campaign={c} variant="active" />)}
+          </ul>
+        </section>
+      )}
+
+      {/* Past campaigns rail */}
+      {pastCampaigns.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-[16px] font-bold text-ink tracking-tight mb-3">
+            Past campaigns
+          </h2>
+          <ul className="space-y-2">
+            {pastCampaigns.map(c => <CampaignRowCard key={c.id} campaign={c} variant="past" />)}
+          </ul>
+        </section>
+      )}
+    </div>
+  )
+}
+
+/* ───────────────────────────── Campaign row ───────────────────────────── */
+
+const STATUS_TONE: Record<CampaignStatus, { label: string; bg: string; text: string; Icon: React.ComponentType<{ className?: string }> }> = {
+  pending:    { label: 'Awaiting launch',     bg: 'bg-amber-50',  text: 'text-amber-700',  Icon: Clock },
+  launching:  { label: 'Launching',           bg: 'bg-sky-50',    text: 'text-sky-700',    Icon: Loader2 },
+  active:     { label: 'Active',              bg: 'bg-emerald-50', text: 'text-emerald-700', Icon: Play },
+  paused:     { label: 'Paused',              bg: 'bg-ink-7',     text: 'text-ink-3',      Icon: Pause },
+  completed:  { label: 'Completed',           bg: 'bg-ink-7',     text: 'text-ink-3',      Icon: Check },
+  cancelled:  { label: 'Cancelled',           bg: 'bg-rose-50',   text: 'text-rose-700',   Icon: Info },
+}
+
+const AUDIENCE_SHORT: Record<string, string> = {
+  locals: 'Locals',
+  foodies: 'Food enthusiasts',
+  recent: 'Recent visitors',
+}
+
+function CampaignRowCard({ campaign, variant }: { campaign: CampaignRow; variant: 'active' | 'past' }) {
+  const tone = STATUS_TONE[campaign.status]
+  const ToneIcon = tone.Icon
+  const days = campaign.days
+  const startedDays = campaign.launchedAt
+    ? Math.floor((Date.now() - new Date(campaign.launchedAt).getTime()) / 86_400_000)
+    : null
+  const cpm = campaign.reach > 0 ? (campaign.spend / campaign.reach) * 1000 : null
+  return (
+    <li>
+      <div
+        className="rounded-xl border bg-white p-4 flex items-start gap-4"
+        style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+      >
+        {campaign.sourceMediaUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={campaign.sourceMediaUrl} alt="" className="w-14 h-14 sm:w-16 sm:h-16 rounded-md object-cover flex-shrink-0" />
+        ) : (
+          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-md bg-bg-2 flex items-center justify-center flex-shrink-0">
+            <ImageIcon className="w-5 h-5 text-ink-4" />
+          </div>
+        )}
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${tone.bg} ${tone.text}`}>
+              <ToneIcon className={`w-2.5 h-2.5 ${campaign.status === 'launching' ? 'animate-spin' : ''}`} />
+              {tone.label}
+            </span>
+            <span className="text-[11px] text-ink-4">
+              {AUDIENCE_SHORT[campaign.audiencePreset] ?? campaign.audiencePreset} ·{' '}
+              ${Number(campaign.budgetTotal).toFixed(0)} × {days}d
+            </span>
+          </div>
+          <p className="text-[13px] font-medium text-ink leading-snug line-clamp-2">
+            {campaign.sourceText || 'Boosted post'}
+          </p>
+          {variant === 'active' && campaign.status === 'active' && startedDays !== null && (
+            <p className="text-[11px] text-ink-3 mt-1.5">
+              Day {Math.min(startedDays + 1, days)} of {days} · ~${(campaign.spend).toFixed(0)} spent
+            </p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 sm:gap-6 flex-shrink-0 text-right">
+          <Metric icon={<Eye className="w-3 h-3" />} label="Reach" value={formatCompact(campaign.reach)} />
+          <Metric icon={<MousePointer2 className="w-3 h-3" />} label="Clicks" value={formatCompact(campaign.clicks)} />
+          <Metric icon={<TrendingUp className="w-3 h-3" />} label={cpm ? 'CPM' : 'Spend'} value={cpm ? `$${cpm.toFixed(2)}` : `$${campaign.spend.toFixed(0)}`} />
+        </div>
+      </div>
+    </li>
+  )
+}
+
+function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 mb-1 flex items-center justify-end gap-1">
+        {icon}
+        {label}
+      </p>
+      <p className="text-[14px] font-bold text-ink tabular-nums leading-none">{value}</p>
     </div>
   )
 }

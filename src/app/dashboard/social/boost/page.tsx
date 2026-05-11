@@ -18,6 +18,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getSocialHub } from '@/lib/dashboard/get-social-hub'
+import { getActiveCampaigns, getPastCampaigns } from '@/lib/dashboard/get-campaigns'
 import BoostView from './boost-view'
 
 export const dynamic = 'force-dynamic'
@@ -67,16 +68,22 @@ export default async function BoostPage({ searchParams }: PageProps) {
     )
   }
 
-  // Use the existing social hub data for the recent post pool. Top
-  // performer comes from there; we use the next 2 recent posts as
-  // secondary suggestions.
-  const hub = await getSocialHub(clientId)
+  // Pull everything in parallel: candidate posts from the hub, plus
+  // active and past campaigns for the rails below the form.
+  const [hub, activeCampaigns, pastCampaigns] = await Promise.all([
+    getSocialHub(clientId),
+    getActiveCampaigns(clientId),
+    getPastCampaigns(clientId),
+  ])
+
   return (
     <BoostView
       clientId={clientId}
       preselectedPostId={params.postId ?? null}
       candidates={hub.recent.slice(0, 6)}
       topPerformer={hub.topPerformer}
+      activeCampaigns={activeCampaigns}
+      pastCampaigns={pastCampaigns}
     />
   )
 }

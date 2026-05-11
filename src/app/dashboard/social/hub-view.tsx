@@ -16,8 +16,10 @@ import Link from 'next/link'
 import {
   Sparkles, Plus, Calendar as CalendarIcon, TrendingUp, ArrowRight,
   Camera, Globe, Image as ImageIcon, Video, Layers, Send, Zap, Music,
+  Eye, MousePointer2, Footprints,
 } from 'lucide-react'
 import type { SocialHubData, SocialPostCard, TopPerformer } from '@/lib/dashboard/get-social-hub'
+import type { CampaignRow } from '@/lib/dashboard/get-campaigns'
 
 const PLATFORM_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   instagram: Camera,
@@ -48,6 +50,11 @@ export default function SocialHubView({ data }: { data: SocialHubData }) {
       {/* What's working */}
       {data.topPerformer && (
         <WhatsWorking perf={data.topPerformer} />
+      )}
+
+      {/* Last boost result */}
+      {data.lastCompletedBoost && (
+        <LastBoostResult campaign={data.lastCompletedBoost} />
       )}
 
       {/* Push bar */}
@@ -339,6 +346,63 @@ function WhatsWorking({ perf }: { perf: TopPerformer }) {
         </Link>
       </div>
     </section>
+  )
+}
+
+/* ─────────────────────────────── Last boost result ─────────────────────────────── */
+
+function LastBoostResult({ campaign }: { campaign: CampaignRow }) {
+  const cpClick = campaign.clicks > 0 ? campaign.spend / campaign.clicks : null
+  return (
+    <section className="mt-8">
+      <div
+        className="rounded-2xl border bg-gradient-to-br from-amber-50/60 via-white to-white p-5 sm:p-6"
+        style={{ borderColor: 'var(--db-border, #f0e6d6)' }}
+      >
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-100 text-amber-700 ring-1 ring-amber-200/60 flex-shrink-0">
+            <Zap className="w-4.5 h-4.5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700 leading-none">
+              Last boost result
+            </p>
+            <p className="text-[12px] text-ink-3 mt-1 leading-tight">
+              ${campaign.budgetTotal.toFixed(0)} over {campaign.days} days · ended {relativeShort(campaign.endedAt ?? campaign.createdAt)}
+            </p>
+          </div>
+          <Link
+            href="/dashboard/social/boost"
+            className="hidden sm:inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-2 hover:text-ink bg-white border border-ink-6 hover:border-ink-4 rounded-full px-3 py-1.5 transition-all"
+          >
+            <Zap className="w-3 h-3 text-emerald-600" />
+            Boost another
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <BoostStat icon={<Eye className="w-3.5 h-3.5" />} label="Reach" value={formatCompact(campaign.reach)} />
+          <BoostStat icon={<MousePointer2 className="w-3.5 h-3.5" />} label="Clicks" value={formatCompact(campaign.clicks)} />
+          <BoostStat icon={<TrendingUp className="w-3.5 h-3.5" />} label="Cost / click" value={cpClick ? `$${cpClick.toFixed(2)}` : '—'} />
+          <BoostStat icon={<Footprints className="w-3.5 h-3.5" />} label="Visits (est.)" value={campaign.footTrafficEst ? formatCompact(campaign.footTrafficEst) : '—'} />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function BoostStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div
+      className="rounded-xl bg-white border px-3 py-2.5"
+      style={{ borderColor: 'var(--db-border, #ececec)' }}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-ink-4 mb-1.5 inline-flex items-center gap-1">
+        <span className="text-ink-3">{icon}</span>
+        {label}
+      </p>
+      <p className="text-[20px] font-bold text-ink tabular-nums leading-none">{value}</p>
+    </div>
   )
 }
 

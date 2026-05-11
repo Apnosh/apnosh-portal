@@ -17,12 +17,12 @@
  * so the strategist can paste-copy into a richer brief.
  */
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Sparkles, ArrowLeft, Send, Check, Loader2, ChefHat, Calendar as CalendarIcon,
-  Camera, Users, MessageCircle, Tag, MoreHorizontal, Globe, Music,
+  Camera, Users, MessageCircle, Tag, MoreHorizontal, Globe, Music, Mic, MicOff,
 } from 'lucide-react'
 
 type RequestType = 'new_dish' | 'event' | 'bts' | 'feature' | 'review' | 'promo' | 'other'
@@ -57,6 +57,30 @@ const PLATFORMS: { id: string; label: string; Icon: React.ComponentType<{ classN
   { id: 'tiktok',    label: 'TikTok',    Icon: Music },
 ]
 
+// Web Speech API types — not in lib.dom.d.ts by default.
+interface SpeechRecognitionAlternative { transcript: string }
+interface SpeechRecognitionResult { isFinal: boolean; 0: SpeechRecognitionAlternative; length: number }
+interface SpeechRecognitionResultList { length: number; item(i: number): SpeechRecognitionResult; [index: number]: SpeechRecognitionResult }
+interface SpeechRecognitionEvent { resultIndex: number; results: SpeechRecognitionResultList }
+interface SpeechRecognitionLike {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  start(): void
+  stop(): void
+  onresult: ((e: SpeechRecognitionEvent) => void) | null
+  onerror: ((e: Event) => void) | null
+  onend: (() => void) | null
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionCtor
+    webkitSpeechRecognition?: SpeechRecognitionCtor
+  }
+}
+
 export default function RequestForm({ clientId }: { clientId: string }) {
   const router = useRouter()
   const [type, setType] = useState<RequestType | null>(null)
@@ -68,6 +92,50 @@ export default function RequestForm({ clientId }: { clientId: string }) {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Voice input — Web Speech API, browser-native (no server cost).
+  // Not supported in every browser; we hide the mic button when not available.
+  const [voiceSupported, setVoiceSupported] = useState(false)
+  const [listening, setListening] = useState(false)
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const descriptionBaseRef = useRef<string>('')
+
+  useEffect(() => {
+    const Ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition
+    if (Ctor) setVoiceSupported(true)
+  }, [])
+
+  function toggleVoice() {
+    if (listening) {
+      recognitionRef.current?.stop()
+      return
+    }
+    const Ctor = window.SpeechRecognition ?? window.webkitSpeechRecognition
+    if (!Ctor) return
+    const r = new Ctor()
+    r.continuous = true
+    r.interimResults = true
+    r.lang = 'en-US'
+    descriptionBaseRef.current = description ? description + (description.endsWith(' ') ? '' : ' ') : ''
+    r.onresult = (e) => {
+      let finalText = ''
+      let interim = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const result = e.results[i]
+        if (result.isFinal) finalText += result[0].transcript
+        else interim += result[0].transcript
+      }
+      setDescription(descriptionBaseRef.current + finalText + interim)
+      if (finalText) descriptionBaseRef.current += finalText
+    }
+    r.onerror = () => { setListening(false) }
+    r.onend = () => { setListening(false); recognitionRef.current = null }
+    recognitionRef.current = r
+    setListening(true)
+    r.start()
+  }
+
+  useEffect(() => () => { recognitionRef.current?.stop() }, [])
 
   const canSubmit = description.trim().length >= 5 && !submitting
 
@@ -205,20 +273,39 @@ export default function RequestForm({ clientId }: { clientId: string }) {
         {/* 2. Description */}
         <Field
           label="Tell us about it"
-          hint="One paragraph is plenty. Voice notes, raw thoughts, or full caption ideas all work."
+          hint={voiceSupported ? 'Type or hit the mic to dictate.' : 'One paragraph is plenty. Voice notes, raw thoughts, or full caption ideas all work.'}
           required
         >
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={5}
-            placeholder="We just rolled out a kimchi burger. Spicy, melty, perfect for late night. Already a regular favorite — want to show it off."
-            className="w-full rounded-xl border bg-white p-4 text-[14px] text-ink leading-relaxed placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 transition-all resize-none"
-            style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
-          />
+          <div className="relative">
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={5}
+              placeholder="We just rolled out a kimchi burger. Spicy, melty, perfect for late night. Already a regular favorite — want to show it off."
+              className={`w-full rounded-xl border bg-white p-4 ${voiceSupported ? 'pr-14' : ''} text-[14px] text-ink leading-relaxed placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 transition-all resize-none`}
+              style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+            />
+            {voiceSupported && (
+              <button
+                type="button"
+                onClick={toggleVoice}
+                aria-label={listening ? 'Stop recording' : 'Dictate with your voice'}
+                className={`absolute top-3 right-3 inline-flex items-center justify-center w-10 h-10 rounded-full transition-all ${
+                  listening
+                    ? 'bg-rose-600 text-white shadow-lg scale-110 animate-pulse'
+                    : 'bg-bg-2 text-ink-3 hover:bg-emerald-50 hover:text-emerald-700'
+                }`}
+                title={listening ? 'Tap to stop' : 'Tap to dictate'}
+              >
+                {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
+            )}
+          </div>
           <div className="flex items-center justify-between mt-1.5">
-            <p className="text-[11px] text-ink-4">
-              {description.length < 5
+            <p className={`text-[11px] ${listening ? 'text-rose-700 font-medium' : 'text-ink-4'}`}>
+              {listening
+                ? 'Listening… speak when ready. Tap the mic to stop.'
+                : description.length < 5
                 ? 'A sentence or two is enough.'
                 : description.length > 800
                 ? 'Plenty for us to work with — keep going if you want.'

@@ -12,6 +12,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getLatestCompletedCampaign, type CampaignRow } from './get-campaigns'
 
 export interface SocialHubData {
   /** Counts shown as clickable tiles in the hero. */
@@ -33,6 +34,8 @@ export interface SocialHubData {
   topPerformer: TopPerformer | null
   /** Total reach across the last 30 days, when available. */
   reach30d: number | null
+  /** Most recently completed boost — drives the "Last boost result" card. */
+  lastCompletedBoost: CampaignRow | null
 }
 
 export interface SocialPostCard {
@@ -65,7 +68,7 @@ export async function getSocialHub(clientId: string): Promise<SocialHubData> {
   const thirtyAgo = new Date(now - 30 * DAY_MS).toISOString()
   const future = new Date(now + 60 * DAY_MS).toISOString()
 
-  const [recentRow, upcomingRow, needsYouRow, queuedRow, perfRow, reachRow] = await Promise.all([
+  const [recentRow, upcomingRow, needsYouRow, queuedRow, perfRow, reachRow, lastCompletedBoost] = await Promise.all([
     // Recent published posts
     admin
       .from('scheduled_posts')
@@ -114,6 +117,8 @@ export async function getSocialHub(clientId: string): Promise<SocialHubData> {
       .eq('client_id', clientId)
       .gte('metric_date', thirtyAgo.slice(0, 10))
       .limit(2000),
+    // Most recently completed boost (for the "Last boost result" card)
+    getLatestCompletedCampaign(clientId),
   ])
 
   const recent: SocialPostCard[] = (recentRow.data ?? []).map(toCard)
@@ -160,7 +165,7 @@ export async function getSocialHub(clientId: string): Promise<SocialHubData> {
     reach30d,
   })
 
-  return { counts, narrative, recent, upcoming, topPerformer, reach30d }
+  return { counts, narrative, recent, upcoming, topPerformer, reach30d, lastCompletedBoost }
 }
 
 function toCard(r: Record<string, unknown>): SocialPostCard {
