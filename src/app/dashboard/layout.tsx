@@ -105,6 +105,7 @@ const navSections: NavSection[] = [
         serviceArea: 'social',
         children: [
           { label: 'Hub', href: '/dashboard/social', exact: true },
+          { label: 'Editorial plan', href: '/dashboard/social/plan' },
           { label: 'Request content', href: '/dashboard/social/request' },
           { label: 'Boost a post', href: '/dashboard/social/boost' },
           { label: 'Calendar', href: '/dashboard/calendar' },

@@ -317,6 +317,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
             Plan
           </Link>
           <Link
+            href={`/admin/clients/${client.slug}/themes`}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-amber-700 hover:text-amber-800 hover:bg-amber-50 rounded-md transition-colors"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            Themes
+          </Link>
+          <Link
             href={`/admin/clients/${client.slug}/quotes`}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-amber-700 hover:text-amber-800 hover:bg-amber-50 rounded-md transition-colors"
           >

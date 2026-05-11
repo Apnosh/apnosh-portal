@@ -15,7 +15,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import {
   CheckSquare, Circle, Loader2, Plus, AlertTriangle, Clock,
-  User, Briefcase, ArrowRight, CheckCircle2,
+  User, Briefcase, ArrowRight, CheckCircle2, FileText, Zap,
 } from 'lucide-react'
 import type { ClientTask } from '@/types/database'
 import TaskFormModal from '@/components/admin/tasks/task-form-modal'
@@ -233,6 +233,29 @@ export default function TodayPage() {
                           </div>
                         </button>
 
+                        {/* Quote shortcut for content / boost requests */}
+                        {t.client && t.title?.startsWith('Request:') && (
+                          <Link
+                            href={`/admin/clients/${t.client.slug}/quotes/new?requestId=${t.id}`}
+                            onClick={e => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors flex-shrink-0 self-center"
+                            title="Build a quote for this request"
+                          >
+                            <FileText className="w-2.5 h-2.5" />
+                            Quote
+                          </Link>
+                        )}
+                        {t.client && t.title?.startsWith('Boost request:') && (
+                          <Link
+                            href={`/admin/clients/${t.client.slug}`}
+                            onClick={e => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors flex-shrink-0 self-center"
+                            title="Boost request — launch in Meta Ads Manager"
+                          >
+                            <Zap className="w-2.5 h-2.5" />
+                            Boost
+                          </Link>
+                        )}
                         {t.client && (
                           <Link
                             href={`/admin/clients/${t.client.slug}`}

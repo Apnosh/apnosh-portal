@@ -12,7 +12,7 @@ import { notFound, redirect } from 'next/navigation'
 import { ArrowLeft, FileText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import QuoteBuilder from './quote-builder'
+import QuoteBuilder, { type PricingPreset } from './quote-builder'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,6 +60,21 @@ export default async function NewQuotePage({ params, searchParams }: PageProps) 
     }
   }
 
+  // Pull the active pricing rubric so the quote builder presets are
+  // editable from /admin/settings/pricing rather than hardcoded.
+  const { data: rubricRows } = await admin
+    .from('pricing_rubric')
+    .select('content_type, label, unit_price, category, blurb, display_order')
+    .eq('active', true)
+    .order('display_order', { ascending: true })
+
+  const presets: PricingPreset[] = (rubricRows ?? []).map(r => ({
+    label: r.label as string,
+    qty: 1,
+    unitPrice: Number(r.unit_price ?? 0),
+    category: (r.category as string) ?? 'content',
+  }))
+
   return (
     <div className="px-6 py-8 max-w-4xl mx-auto">
       <Link
@@ -94,6 +109,7 @@ export default async function NewQuotePage({ params, searchParams }: PageProps) 
         sourceRequestId={requestId ?? null}
         prefilledTitle={prefilledTitle}
         prefilledSourceSummary={prefilledSourceSummary}
+        presets={presets}
       />
     </div>
   )

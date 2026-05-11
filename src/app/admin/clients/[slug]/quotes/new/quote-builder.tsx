@@ -24,26 +24,25 @@ interface LineItem {
   notes: string
 }
 
+export interface PricingPreset {
+  label: string
+  qty: number
+  unitPrice: number
+  category?: string
+}
+
 interface Props {
   clientId: string
   clientSlug: string
   sourceRequestId: string | null
   prefilledTitle: string
   prefilledSourceSummary: string
+  /** Pulled from the active pricing_rubric on the server. */
+  presets: PricingPreset[]
 }
 
-const PRESETS: { label: string; qty: number; unitPrice: number }[] = [
-  { label: 'Feed post (graphic + caption)', qty: 1, unitPrice: 75 },
-  { label: 'Carousel post (3-5 slides)',    qty: 1, unitPrice: 150 },
-  { label: 'Short-form reel (30s)',         qty: 1, unitPrice: 150 },
-  { label: 'On-site filming day',           qty: 1, unitPrice: 250 },
-  { label: 'Custom graphic',                qty: 1, unitPrice: 100 },
-  { label: 'Story set (3-5 stories)',       qty: 1, unitPrice: 80 },
-  { label: 'Email campaign',                qty: 1, unitPrice: 200 },
-]
-
 export default function QuoteBuilder({
-  clientId, clientSlug, sourceRequestId, prefilledTitle, prefilledSourceSummary,
+  clientId, clientSlug, sourceRequestId, prefilledTitle, prefilledSourceSummary, presets,
 }: Props) {
   const router = useRouter()
   const [title, setTitle] = useState(prefilledTitle || '')
@@ -262,7 +261,7 @@ export default function QuoteBuilder({
               Quick presets
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {PRESETS.map(p => (
+              {presets.map(p => (
                 <button
                   key={p.label}
                   type="button"
