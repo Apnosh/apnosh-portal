@@ -22,7 +22,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Sparkles, RefreshCw, AlertCircle, MessageSquare, CheckSquare, Plug,
-  ListTodo, Calendar, ChevronRight, ArrowRight,
+  ListTodo, Calendar, ChevronRight,
 } from 'lucide-react'
 import type { TodayHeroData, NeedsYouItem } from '@/lib/dashboard/get-today-hero'
 
@@ -179,41 +179,6 @@ export default function TodayHero({
               </li>
             ))}
           </ul>
-        </div>
-      )}
-
-      {/* Slim goal-progress row */}
-      {hero.goalLines.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-ink-7">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-3">
-              Your goals
-            </p>
-            <Link href="/dashboard/goals" className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 inline-flex items-center gap-0.5">
-              Edit <ArrowRight className="w-3 h-3" />
-            </Link>
-          </div>
-          <div className="space-y-1.5">
-            {hero.goalLines.map(g => (
-              <Link
-                key={g.slug}
-                href={g.href ?? '/dashboard/goals'}
-                className="flex items-start gap-2.5 -mx-2 px-2 py-1.5 rounded-md hover:bg-bg-2 transition-colors"
-              >
-                <span className="text-[10px] font-bold w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  {g.priority}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] text-ink leading-snug capitalize">
-                    {g.label}
-                  </p>
-                  {g.signalLine && (
-                    <p className="text-[11px] text-ink-3 mt-0.5 leading-snug">{g.signalLine}</p>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
         </div>
       )}
 

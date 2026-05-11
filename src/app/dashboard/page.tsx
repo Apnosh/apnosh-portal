@@ -32,7 +32,7 @@ import ComingUp, { type ComingUpItem } from '@/components/dashboard/coming-up'
 import PulseCards, { type PulseCard } from '@/components/dashboard/pulse-cards'
 import GoalProgressCards, { type GoalCardData } from '@/components/dashboard/goal-progress-cards'
 import YourStrategist, { type StrategistCardData } from '@/components/dashboard/your-strategist'
-import PlaybookExplanations from '@/components/dashboard/playbook-explanations'
+import RequestWork from '@/components/dashboard/request-work'
 import type { PlaybookExplanation } from '@/lib/dashboard/get-playbook-explanations'
 import ServicesThisMonth from '@/components/dashboard/services-this-month'
 import type { ServiceMonthRow } from '@/lib/services/delivery-matrix'
@@ -182,8 +182,9 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-x-6">
         {/* ═════════════ LEFT — operational column ═════════════ */}
         <div>
-          {/* 1. The Today hero (the morning paper). Headline, narrative,
-              needs-you, this-week, goal-progress chips. The lead. */}
+          {/* 1. Today hero (slim now) -- headline + narrative + needs-you
+              + from-the-team-this-week. Goals chip section removed
+              (goals live in their own sidebar tab; not daily readout). */}
           <div className="db-fade db-d1">
             <TodayHero
               clientId={client.id}
@@ -192,40 +193,43 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* 2. Service delivery this month -- proof of work for paying clients. */}
-          {bundle && bundle.services.length > 0 && (
-            <ServicesThisMonth rows={bundle.services} />
-          )}
-
-          {/* 3. Full agenda (everything the owner could act on). The hero
-              surfaces the top 3; this is the long tail. */}
-          <div className="db-fade db-d2">
-            <Agenda items={bundle ? bundle.agenda : null} />
-          </div>
-
-          {/* 4. Playbook explanations -- "what we're doing for each goal".
-              Collapsible; supporting evidence behind the hero. */}
-          {bundle && bundle.playbooks.length > 0 && (
-            <div className="db-fade db-d3">
-              <PlaybookExplanations explanations={bundle.playbooks} />
-            </div>
-          )}
-
-          {/* 5. Pulse / goal-progress cards (deeper detail, drills into channels). */}
+          {/* 2. Your numbers -- the metrics owners want to see daily.
+              Same data source as before, but framed as performance, not
+              goal progress. */}
           {bundle && (
-            <div className="db-fade db-d4">
+            <section className="mb-6 db-fade db-d2">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-3 mb-3">
+                Your numbers
+              </p>
               {bundle.goalCards.length > 0
                 ? <GoalProgressCards cards={bundle.goalCards} />
                 : <PulseCards cards={pulseCardsToRender} />
               }
-            </div>
+            </section>
           )}
+
+          {/* 3. Service delivery this month -- proof of work, shown when
+              we have active services to track against. */}
+          {bundle && bundle.services.length > 0 && (
+            <ServicesThisMonth rows={bundle.services} />
+          )}
+
+          {/* 4. Full agenda -- the long tail of action items (hero
+              surfaces top 3, this lists the rest). */}
+          <div className="db-fade db-d3">
+            <Agenda items={bundle ? bundle.agenda : null} />
+          </div>
         </div>
 
-        {/* ═════════════ RIGHT — context column ═════════════ */}
+        {/* ═════════════ RIGHT — context + actions column ═════════════ */}
         <div>
           {/* Strategist relationship card -- top of right column. */}
           <YourStrategist strategist={bundle ? bundle.strategist : null} />
+
+          {/* Request work -- one-click quick actions: new post, design,
+              video, campaign, message strategist. This is the "every
+              action is one click" promise made surface-level. */}
+          <RequestWork />
 
           {/* This week's activity -- proof of momentum from the team. */}
           <div className="db-fade db-d4">
@@ -239,7 +243,7 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* Coming up -- marketing calendar (content opportunities). */}
+          {/* Coming up -- marketing calendar (holidays, food moments). */}
           <div className="db-fade db-d5">
             <ComingUp items={bundle ? bundle.comingUp : null} />
           </div>
