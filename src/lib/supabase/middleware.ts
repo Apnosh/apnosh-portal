@@ -63,9 +63,28 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse
   }
 
-  // ── Authenticated: check if user is a client_user first ──
+  // ── Authenticated: resolve role first ──
+  //
+  // We look at profiles.role BEFORE the client_users linkage. An Apnosh
+  // staff member who is also linked to a client_user row (for testing
+  // or to receive notifications on a specific account) is still an
+  // admin — they must keep access to /admin and not be auto-routed as
+  // a client.
   if (user && (isDashboard || isAdminRoute || isClientRoute)) {
-    // Check client_user linkage by auth_user_id
+    const { data: adminProfile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+    const isAdminUser = (adminProfile?.role as string | null) === 'admin'
+
+    // Admin: full access to /admin, /dashboard, and /client. No client_user
+    // checks, no onboarding gate.
+    if (isAdminUser) {
+      return supabaseResponse
+    }
+
+    // Non-admin: check client_user linkage by auth_user_id
     const { data: clientUser } = await supabase
       .from('client_users')
       .select('id, client_id')
