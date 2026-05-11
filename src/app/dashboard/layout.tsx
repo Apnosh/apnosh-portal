@@ -107,6 +107,7 @@ const navSections: NavSection[] = [
           { label: 'Hub', href: '/dashboard/social', exact: true },
           { label: 'Editorial plan', href: '/dashboard/social/plan' },
           { label: 'Engage', href: '/dashboard/social/engage' },
+          { label: 'Library', href: '/dashboard/social/library' },
           { label: 'Request content', href: '/dashboard/social/request' },
           { label: 'Boost a post', href: '/dashboard/social/boost' },
           { label: 'Calendar', href: '/dashboard/calendar' },
