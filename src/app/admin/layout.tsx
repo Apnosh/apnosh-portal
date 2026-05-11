@@ -77,27 +77,63 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return pathname.startsWith(href)
   }
 
-  // Overdue / due-today task counts for the sidebar badge on "Today".
-  // Polled every 60s + re-fetched on pathname change so completing a
-  // task updates the count within a click or a minute.
-  const [overdueCount, setOverdueCount] = useState(0)
+  // Sidebar badges. One poll per surface that has work waiting:
+  //   Today    -> tasks due today or overdue
+  //   Queue    -> deliverables awaiting client approval
+  //   Messages -> unread messages
+  //   Billing  -> draft or overdue invoices
+  // Polled every 60s + on pathname change so completing work clears
+  // the count within a click or a minute.
+  const [counts, setCounts] = useState<Record<string, number>>({})
   useEffect(() => {
     let cancelled = false
     async function load() {
       const supabase = createClient()
       const endOfToday = new Date()
       endOfToday.setHours(23, 59, 59, 999)
-      const { count } = await supabase
-        .from('client_tasks')
-        .select('id', { count: 'exact', head: true })
-        .in('status', ['todo', 'doing'])
-        .lte('due_at', endOfToday.toISOString())
-      if (!cancelled) setOverdueCount(count ?? 0)
+
+      const [today, queue, messages, billing] = await Promise.all([
+        supabase
+          .from('client_tasks')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['todo', 'doing'])
+          .lte('due_at', endOfToday.toISOString()),
+        supabase
+          .from('deliverables')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'awaiting_approval'),
+        supabase
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .is('read_at', null)
+          .neq('sender_role', 'admin'),
+        supabase
+          .from('invoices')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['draft', 'overdue']),
+      ])
+
+      if (cancelled) return
+      setCounts({
+        '/admin/today': today.count ?? 0,
+        '/admin/queue': queue.count ?? 0,
+        '/admin/messages': messages.count ?? 0,
+        '/admin/billing': billing.count ?? 0,
+      })
     }
     void load()
     const t = setInterval(() => void load(), 60_000)
     return () => { cancelled = true; clearInterval(t) }
   }, [pathname])
+
+  // Color per badge — red for time-sensitive, amber for things that
+  // need attention but aren't blocking, ink (dark) for everything else.
+  const badgeTone: Record<string, string> = {
+    '/admin/today':    'bg-red-500',
+    '/admin/queue':    'bg-amber-500',
+    '/admin/messages': 'bg-emerald-500',
+    '/admin/billing':  'bg-amber-500',
+  }
 
   return (
     <ToastProvider>
@@ -142,12 +178,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   >
                     <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
                     <span className="flex-1">{item.label}</span>
-                    {item.href === '/admin/today' && overdueCount > 0 && (
+                    {counts[item.href] > 0 && (
                       <span
-                        className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center"
-                        title={`${overdueCount} task${overdueCount === 1 ? '' : 's'} due today or overdue`}
+                        className={`min-w-[18px] h-[18px] px-1 rounded-full text-white text-[10px] font-semibold flex items-center justify-center ${badgeTone[item.href] ?? 'bg-ink-4'}`}
+                        title={`${counts[item.href]} item${counts[item.href] === 1 ? '' : 's'} need${counts[item.href] === 1 ? 's' : ''} attention`}
                       >
-                        {overdueCount > 99 ? '99+' : overdueCount}
+                        {counts[item.href] > 99 ? '99+' : counts[item.href]}
                       </span>
                     )}
                   </Link>
@@ -214,17 +250,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setQuickAddOpen(false)} />
                   <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl border border-ink-6 shadow-lg shadow-black/8 z-50 py-1.5">
-                    <Link href="/admin/clients" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors">
+                    {/* Each link includes ?new=1 so the destination page opens
+                        its creation modal automatically instead of landing on
+                        the list view. Pages read this via useSearchParams. */}
+                    <Link href="/admin/clients?new=1" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors">
                       <Users className="w-4 h-4 text-ink-4" /> New Client
                     </Link>
-                    <Link href="/admin/billing" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors">
+                    <Link href="/admin/billing?new=1" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors">
                       <CreditCard className="w-4 h-4 text-ink-4" /> New Invoice
                     </Link>
                     <Link href="/admin/agreements/send" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors">
                       <FileText className="w-4 h-4 text-ink-4" /> New Agreement
                     </Link>
-                    <Link href="/admin/messages" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors">
+                    <Link href="/admin/messages?new=1" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors">
                       <MessageSquare className="w-4 h-4 text-ink-4" /> New Message
+                    </Link>
+                    <Link href="/admin/strategists" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors border-t border-ink-7 mt-1 pt-2">
+                      <UserCog className="w-4 h-4 text-ink-4" /> Invite Strategist
                     </Link>
                   </div>
                 </>

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, Suspense } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import {
   Search, Plus, MapPin, Globe, X, ChevronRight, Loader2,
   Building2, Palette, Users, Check, Upload,
@@ -451,6 +452,17 @@ function CardSkeleton() {
 /*  Main Component                                                     */
 /* ------------------------------------------------------------------ */
 
+// Small reader component that pulls ?new=1 out of the URL. Wrapped in
+// Suspense by the page export below so Next can prerender the shell
+// while the param resolves at request time.
+function NewParamWatcher({ onOpen }: { onOpen: () => void }) {
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('new') === '1') onOpen()
+  }, [searchParams, onOpen])
+  return null
+}
+
 export default function AdminClientsPage() {
   const [clients, setClients] = useState<ClientCard[]>([])
   const [loading, setLoading] = useState(true)
@@ -706,6 +718,13 @@ export default function AdminClientsPage() {
         onClose={() => setShowAddModal(false)}
         onCreated={fetchClients}
       />
+
+      {/* Watch ?new=1 in the URL to auto-open the create modal. Wrapped
+          in Suspense per Next 15+ requirement for client-side
+          useSearchParams during static prerender. */}
+      <Suspense fallback={null}>
+        <NewParamWatcher onOpen={() => setShowAddModal(true)} />
+      </Suspense>
     </div>
   )
 }
