@@ -3,6 +3,22 @@
 ## What This Is
 A dual-portal SaaS application for Apnosh, an AI-powered digital marketing agency. Two audiences: **clients** (local business owners managing their marketing) and **admins** (the Apnosh team delivering and managing services).
 
+## CRITICAL: AI-First Architecture
+**Before adding any new content table, AI integration, or workflow, read [docs/AI-FIRST-PRINCIPLES.md](docs/AI-FIRST-PRINCIPLES.md).**
+
+Those eight principles are non-negotiable. They define how the data layer compounds over time so every piece of work makes the next one better. Summary:
+
+1. **Provenance everywhere** — every artifact records who created it, how, from what input
+2. **Outcomes everywhere** — every artifact gets metrics attached after it ships
+3. **Human judgment is gold** — every approve / revise / reject records a reason
+4. **Versioned context** — brand voice, themes, briefs are versioned; AI tags which version it ran against
+5. **Quality gate at every step** — AI is never the last step; human approves before client-facing publish
+6. **Retrieval-aware generation** — `getClientContext(clientId)` before every AI call, never blind prompt
+7. **Cross-client learning** — anonymized patterns surface in suggestions
+8. **All role interactions logged** — capture the delta between AI output and human final
+
+If a PR can't meet a principle, document the exemption in the PR description.
+
 ## Tech Stack
 - **Framework:** Next.js 16 (App Router, React 19, TypeScript)
 - **Database:** Supabase (Postgres + Auth + RLS + Storage)
