@@ -132,5 +132,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  // If a client originally requested this content (via /work/inbox accept),
+  // close the linked task once the draft ships. Best-effort — failures
+  // here don't block the draft state change.
+  if (action === 'publish' && updated?.status === 'published') {
+    await admin
+      .from('client_tasks')
+      .update({
+        status: 'done',
+        completed_by: user.id,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('draft_id', draftId)
+      .in('status', ['todo', 'doing'])
+  }
+
   return NextResponse.json({ ok: true, draft: updated })
 }
