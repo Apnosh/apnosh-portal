@@ -25,7 +25,7 @@ export default async function VisualQueuePage() {
   // these to the user's book.
   const { data } = await supabase
     .from('content_drafts')
-    .select('id, client_id, source_theme_id, service_line, status, idea, caption, proposed_by, proposed_via, target_platforms, target_publish_date, revision_count, approved_by, approved_at, rejection_reason, ai_generation_ids, published_post_id, created_at, updated_at, media_brief, hashtags')
+    .select('id, client_id, source_theme_id, service_line, status, idea, caption, proposed_by, proposed_via, target_platforms, target_publish_date, revision_count, approved_by, approved_at, rejection_reason, ai_generation_ids, published_post_id, created_at, updated_at, media_brief, media_urls, hashtags')
     .in('status', ['idea', 'draft', 'revising', 'approved'])
     .order('updated_at', { ascending: false })
     .limit(100)
@@ -75,6 +75,7 @@ export default async function VisualQueuePage() {
       publishedPostId: (d.published_post_id as string) ?? null,
       outcomeSummary: null,
       publishedUrl: null,
+      mediaUrls: Array.isArray(d.media_urls) ? (d.media_urls as string[]) : [],
       createdAt: (d.created_at as string) ?? new Date().toISOString(),
       updatedAt: (d.updated_at as string) ?? new Date().toISOString(),
       mediaBrief: (d.media_brief as Record<string, unknown>) ?? {},

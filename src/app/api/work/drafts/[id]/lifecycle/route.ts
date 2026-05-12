@@ -23,6 +23,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyClientOwners } from '@/lib/notifications'
 import { attemptPublish } from '@/lib/publish/attempt-publish'
+import { getApprovalSettings } from '@/lib/work/approval-settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   // RLS protects which drafts the caller can see; if hidden, 404.
   const { data: draft } = await supabase
     .from('content_drafts')
-    .select('id, client_id, status, caption, media_brief, hashtags, scheduled_for')
+    .select('id, client_id, status, caption, media_brief, hashtags, scheduled_for, client_signed_off_at')
     .eq('id', draftId)
     .maybeSingle()
   if (!draft) return NextResponse.json({ error: 'draft not found' }, { status: 404 })
@@ -114,6 +115,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     case 'publish': {
       if (draft.status !== 'approved' && draft.status !== 'scheduled') {
         return NextResponse.json({ error: 'draft must be approved or scheduled to publish' }, { status: 400 })
+      }
+
+      // Per-client gate: some owners require their own sign-off before
+      // anything goes live. allow_strategist_direct_publish lets a
+      // trusted strategist bypass — useful for fast-moving accounts.
+      const settings = await getApprovalSettings(draft.client_id as string)
+      if (
+        settings.client_signoff_required &&
+        !draft.client_signed_off_at &&
+        !settings.allow_strategist_direct_publish
+      ) {
+        return NextResponse.json({
+          error: 'This client requires owner sign-off before publishing.',
+          code: 'client_signoff_required',
+        }, { status: 422 })
       }
 
       // Two paths:

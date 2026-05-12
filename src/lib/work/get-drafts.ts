@@ -39,6 +39,7 @@ export interface DraftRow {
     engagement_rate: number | null
   } | null
   publishedUrl: string | null
+  mediaUrls: string[]
   createdAt: string
   updatedAt: string
 }
@@ -48,7 +49,7 @@ export async function getMyDrafts(opts: { status?: DraftStatus[] } = {}): Promis
 
   let q = supabase
     .from('content_drafts')
-    .select('id, client_id, source_theme_id, service_line, status, idea, caption, proposed_by, proposed_via, target_platforms, target_publish_date, revision_count, approved_by, approved_at, rejection_reason, ai_generation_ids, published_post_id, outcome_summary, published_url, created_at, updated_at')
+    .select('id, client_id, source_theme_id, service_line, status, idea, caption, proposed_by, proposed_via, target_platforms, target_publish_date, revision_count, approved_by, approved_at, rejection_reason, ai_generation_ids, published_post_id, outcome_summary, published_url, media_urls, created_at, updated_at')
     .order('updated_at', { ascending: false })
     .limit(200)
 
@@ -98,6 +99,7 @@ export async function getMyDrafts(opts: { status?: DraftStatus[] } = {}): Promis
       publishedPostId: (d.published_post_id as string) ?? null,
       outcomeSummary: (d.outcome_summary as DraftRow['outcomeSummary']) ?? null,
       publishedUrl: (d.published_url as string) ?? null,
+      mediaUrls: Array.isArray(d.media_urls) ? (d.media_urls as string[]) : [],
       createdAt: (d.created_at as string) ?? new Date().toISOString(),
       updatedAt: (d.updated_at as string) ?? new Date().toISOString(),
     }

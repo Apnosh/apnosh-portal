@@ -14,7 +14,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
-import { notifyStaffForClient } from '@/lib/notifications'
+import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
+import { getApprovalSettings } from '@/lib/work/approval-settings'
+import { attemptPublish } from '@/lib/publish/attempt-publish'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,5 +79,31 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     },
   ).catch(() => ({ notified: 0 }))
 
-  return NextResponse.json({ ok: true, signedOffAt })
+  // If this client opted into auto-publish, fire the publish flow
+  // immediately. Failures here don't roll back the sign-off — the
+  // staff bell already notified the team, so a human can finish it.
+  const settings = await getApprovalSettings(draft.client_id as string)
+  let autoPublish: { fired: boolean; ok?: boolean; error?: string } = { fired: false }
+  if (settings.auto_publish_on_signoff) {
+    try {
+      const result = await attemptPublish(id)
+      autoPublish = { fired: true, ok: result.ok, error: result.error }
+      if (result.ok) {
+        await admin
+          .from('content_drafts')
+          .update({ status: 'published' })
+          .eq('id', id)
+        await notifyClientOwners(draft.client_id as string, {
+          kind: 'draft_published',
+          title: 'Your post is live',
+          body: 'Auto-published right after your sign-off.',
+          link: result.publishedUrl ?? '/dashboard',
+        }).catch(() => ({ notified: 0 }))
+      }
+    } catch (e) {
+      autoPublish = { fired: true, ok: false, error: e instanceof Error ? e.message : 'unknown error' }
+    }
+  }
+
+  return NextResponse.json({ ok: true, signedOffAt, autoPublish })
 }

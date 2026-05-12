@@ -13,8 +13,10 @@ import {
   FileText, Sparkles, CheckCircle2, XCircle, Loader2, Clock,
   Send, Eye, ArrowRight, ListTodo, MessageSquare, Pencil,
   CalendarClock, ExternalLink, RotateCcw, Plus, AlertCircle,
+  Image as ImageIcon,
 } from 'lucide-react'
 import type { DraftRow, DraftStatus } from '@/lib/work/get-drafts'
+import DraftMediaAttach from '@/components/work/draft-media-attach'
 
 interface Props {
   initialDrafts: DraftRow[]
@@ -49,6 +51,7 @@ export default function DraftsView({ initialDrafts }: Props) {
   const [judgePanel, setJudgePanel] = useState<{ id: string; mode: 'revise' | 'rejected' } | null>(null)
   const [lifePanel, setLifePanel] = useState<{ id: string; mode: LifecycleMode } | null>(null)
   const [outcomePanel, setOutcomePanel] = useState<{ id: string } | null>(null)
+  const [mediaPanelId, setMediaPanelId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
   const onSubmitOutcome = useCallback(async (id: string, body: Record<string, unknown>) => {
@@ -193,6 +196,9 @@ export default function DraftsView({ initialDrafts }: Props) {
                 setOutcomePanel={setOutcomePanel}
                 onSubmitOutcome={onSubmitOutcome}
                 focusId={focusId}
+                mediaPanelId={mediaPanelId}
+                setMediaPanelId={setMediaPanelId}
+                onMediaChange={(id, urls) => setDrafts(prev => prev.map(d => d.id === id ? { ...d, mediaUrls: urls } : d))}
               />
             )
           })}
@@ -207,6 +213,7 @@ function Bucket({
   lifePanel, setLifePanel, onLifecycle,
   outcomePanel, setOutcomePanel, onSubmitOutcome,
   focusId,
+  mediaPanelId, setMediaPanelId, onMediaChange,
 }: {
   def: BucketDef
   rows: DraftRow[]
@@ -221,6 +228,9 @@ function Bucket({
   setOutcomePanel: (p: { id: string } | null) => void
   onSubmitOutcome: (id: string, body: Record<string, unknown>) => Promise<void>
   focusId: string | null
+  mediaPanelId: string | null
+  setMediaPanelId: (id: string | null) => void
+  onMediaChange: (id: string, urls: string[]) => void
 }) {
   const toneText =
     def.tone === 'amber' ? 'text-amber-700'
@@ -239,6 +249,10 @@ function Bucket({
         {rows.map(r => (
           <DraftCard key={r.id} r={r}
             focused={r.id === focusId}
+            mediaOpen={mediaPanelId === r.id}
+            onToggleMedia={() => setMediaPanelId(mediaPanelId === r.id ? null : r.id)}
+            onMediaChange={(urls) => onMediaChange(r.id, urls)}
+            onCloseMedia={() => setMediaPanelId(null)}
             busy={busyId === r.id}
             judgePanel={openPanel?.id === r.id ? openPanel : null}
             lifePanel={lifePanel?.id === r.id ? lifePanel : null}
@@ -267,6 +281,7 @@ function Bucket({
 
 function DraftCard({
   r, busy, focused,
+  mediaOpen, onToggleMedia, onMediaChange, onCloseMedia,
   judgePanel, onApprove, onOpenRevise, onOpenReject, onSubmitJudgment, onCancelJudge,
   lifePanel, onOpenEdit, onOpenSchedule, onOpenPublish, onSubmitLifecycle, onCancelLifecycle, onUnschedule,
   outcomePanel, setOutcomePanel, onSubmitOutcome,
@@ -274,6 +289,10 @@ function DraftCard({
   r: DraftRow
   busy: boolean
   focused: boolean
+  mediaOpen: boolean
+  onToggleMedia: () => void
+  onMediaChange: (urls: string[]) => void
+  onCloseMedia: () => void
   judgePanel: { id: string; mode: 'revise'|'rejected' } | null
   onApprove: () => void
   onOpenRevise: () => void
@@ -397,6 +416,21 @@ function DraftCard({
                   Edit
                 </button>
               )}
+              {r.status !== 'published' && r.status !== 'rejected' && (
+                <button
+                  onClick={onToggleMedia}
+                  disabled={busy}
+                  className={`inline-flex items-center gap-1 text-[11px] font-semibold rounded-lg px-2.5 py-1.5 border disabled:opacity-50 ${
+                    r.mediaUrls.length > 0
+                      ? 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-200'
+                      : 'bg-bg-1 hover:bg-bg-2 text-ink-3 hover:text-ink border-ink-6'
+                  }`}
+                  title={r.mediaUrls.length > 0 ? `${r.mediaUrls.length} attached` : 'No media yet'}
+                >
+                  <ImageIcon className="w-3 h-3" />
+                  Media{r.mediaUrls.length > 0 ? ` (${r.mediaUrls.length})` : ''}
+                </button>
+              )}
               {judgeable && (
                 <>
                   <button
@@ -449,6 +483,15 @@ function DraftCard({
             </span>
           )}
         </div>
+
+        {mediaOpen && (
+          <DraftMediaAttach
+            draftId={r.id}
+            mediaUrls={r.mediaUrls}
+            onChange={onMediaChange}
+            onClose={onCloseMedia}
+          />
+        )}
 
         {judgePanel && (
           <JudgePanel

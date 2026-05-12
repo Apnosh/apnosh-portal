@@ -22,6 +22,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyClientOwners } from '@/lib/notifications'
+import { getApprovalSettings } from '@/lib/work/approval-settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,10 +53,27 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   // get a not-found rather than an error.
   const { data: draft } = await supabase
     .from('content_drafts')
-    .select('id, client_id, status, revision_count')
+    .select('id, client_id, status, revision_count, media_urls')
     .eq('id', draftId)
     .maybeSingle()
   if (!draft) return NextResponse.json({ error: 'draft not found' }, { status: 404 })
+
+  // Per-client preference: some owners want media attached before
+  // anyone marks a draft 'approved'. We enforce that gate here so the
+  // strategist gets a clear error rather than silently reaching the
+  // publish step without visuals.
+  if (judgment === 'approved') {
+    const settings = await getApprovalSettings(draft.client_id as string)
+    if (settings.media_required_before_approval) {
+      const media = Array.isArray(draft.media_urls) ? (draft.media_urls as string[]).filter(Boolean) : []
+      if (media.length === 0) {
+        return NextResponse.json({
+          error: 'This client requires media attached before approval.',
+          code: 'media_required_before_approval',
+        }, { status: 422 })
+      }
+    }
+  }
 
   const admin = createAdminClient()
 
