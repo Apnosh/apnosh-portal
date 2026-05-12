@@ -125,6 +125,27 @@ function ThemeCard({ t }: { t: ThemeRow }) {
     ? new Date(t.month).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })
     : '(no month)'
   const pillarCount = Array.isArray(t.pillars) ? (t.pillars as unknown[]).length : 0
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function generate() {
+    setGenerating(true)
+    setError(null)
+    const res = await fetch(`/api/work/themes/${t.id}/generate-ideas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ count: 10 }),
+    })
+    setGenerating(false)
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({ error: 'failed' }))
+      setError(j.error ?? 'failed')
+      return
+    }
+    // Navigate to the drafts ledger so strategist can judge each.
+    window.location.href = '/work/drafts'
+  }
+
   return (
     <li
       className="rounded-2xl border bg-white p-4"
@@ -157,12 +178,12 @@ function ThemeCard({ t }: { t: ThemeRow }) {
       </div>
       <div className="flex items-center gap-2 mt-3 pt-3 border-t border-ink-7">
         <button
-          disabled
-          title="Wiring up in next step"
-          className="inline-flex items-center gap-1.5 bg-ink/80 text-white text-[12px] font-semibold rounded-lg px-3 py-1.5 opacity-60 cursor-not-allowed"
+          onClick={generate}
+          disabled={generating}
+          className="inline-flex items-center gap-1.5 bg-ink hover:bg-ink-2 text-white text-[12px] font-semibold rounded-lg px-3 py-1.5 disabled:opacity-60"
         >
-          <Sparkles className="w-3.5 h-3.5" />
-          Generate ideas
+          {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+          {generating ? 'Generating…' : 'Generate ideas'}
         </button>
         <a
           href={`/work/drafts`}
@@ -170,6 +191,9 @@ function ThemeCard({ t }: { t: ThemeRow }) {
         >
           See drafts <ArrowRight className="w-3 h-3" />
         </a>
+        {error && (
+          <span className="text-[11px] text-red-600 ml-auto">{error}</span>
+        )}
       </div>
     </li>
   )
