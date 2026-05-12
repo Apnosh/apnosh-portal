@@ -53,6 +53,15 @@ export type ClientContextBrand = {
   version: number
 } | null
 
+export interface ClientContextCrossSignal {
+  draftId: string
+  anonDescriptor: string
+  idea: string
+  caption: string | null
+  outcomeEngagement: number
+  proposedVia: string
+}
+
 export interface ClientContext {
   clientId: string
   clientName: string | null
@@ -60,6 +69,7 @@ export interface ClientContext {
   topPosts: ClientContextPost[]
   recentThemes: ClientContextTheme[]
   brand: ClientContextBrand
+  crossClientSignal: ClientContextCrossSignal[]
   /** Stable string suitable for inlining into a prompt. */
   promptSummary: string
   /** Capture this and pass to ai_generation_inputs.retrieved_* arrays. */
@@ -68,6 +78,7 @@ export interface ClientContext {
     postIds: string[]
     themeIds: string[]
     brandVersion: number | null
+    crossClientDraftIds: string[]
   }
 }
 
@@ -75,6 +86,7 @@ const POST_LOOKBACK_DAYS = 90
 const TOP_POSTS_LIMIT = 10
 const THEMES_LIMIT = 3
 const FACTS_LIMIT = 50
+const CROSS_CLIENT_LIMIT = 5
 
 export const getClientContext = cache(
   async (clientId: string): Promise<ClientContext> => {
@@ -82,7 +94,7 @@ export const getClientContext = cache(
 
     const lookbackIso = new Date(Date.now() - POST_LOOKBACK_DAYS * 86400 * 1000).toISOString()
 
-    const [clientRes, factsRes, postsRes, themesRes, brandRes] = await Promise.all([
+    const [clientRes, factsRes, postsRes, themesRes, brandRes, crossRes] = await Promise.all([
       supabase
         .from('clients')
         .select('id, name')
@@ -113,6 +125,11 @@ export const getClientContext = cache(
         .select('brand_voice, visual_style, colors, version')
         .eq('client_id', clientId)
         .maybeSingle(),
+      // Principle #7: anonymized signal from similar clients
+      supabase.rpc('get_cross_client_signal', {
+        target_client_id: clientId,
+        signal_limit: CROSS_CLIENT_LIMIT,
+      }),
     ])
 
     const facts: ClientContextFact[] = (factsRes.data ?? []).map(f => ({
@@ -146,6 +163,22 @@ export const getClientContext = cache(
         }
       : null
 
+    const crossClientSignal: ClientContextCrossSignal[] = (crossRes.data ?? []).map((r: {
+      draft_id: string
+      anon_descriptor: string
+      idea: string
+      caption: string | null
+      outcome_engagement: number | null
+      proposed_via: string
+    }) => ({
+      draftId: r.draft_id,
+      anonDescriptor: r.anon_descriptor,
+      idea: r.idea,
+      caption: r.caption,
+      outcomeEngagement: Number(r.outcome_engagement ?? 0),
+      proposedVia: r.proposed_via,
+    }))
+
     return {
       clientId,
       clientName: (clientRes.data?.name as string) ?? null,
@@ -153,15 +186,17 @@ export const getClientContext = cache(
       topPosts,
       recentThemes,
       brand,
+      crossClientSignal,
       promptSummary: buildPromptSummary({
         clientName: (clientRes.data?.name as string) ?? null,
-        facts, topPosts, recentThemes, brand,
+        facts, topPosts, recentThemes, brand, crossClientSignal,
       }),
       retrieval: {
         factIds: facts.map(f => f.id),
         postIds: topPosts.map(p => p.id),
         themeIds: recentThemes.map(t => t.id),
         brandVersion: brand?.version ?? null,
+        crossClientDraftIds: crossClientSignal.map(s => s.draftId),
       },
     }
   },
@@ -179,6 +214,7 @@ function buildPromptSummary(args: {
   topPosts: ClientContextPost[]
   recentThemes: ClientContextTheme[]
   brand: ClientContextBrand
+  crossClientSignal: ClientContextCrossSignal[]
 }): string {
   const parts: string[] = []
 
@@ -213,6 +249,16 @@ function buildPromptSummary(args: {
     for (const p of args.topPosts.slice(0, 5)) {
       const c = (p.caption ?? '').slice(0, 140).replace(/\s+/g, ' ').trim()
       parts.push(`- [${p.totalInteractions} engagements] ${c}${p.caption && p.caption.length > 140 ? '…' : ''}`)
+    }
+  }
+
+  if (args.crossClientSignal.length > 0) {
+    parts.push(`\n## What's working at similar restaurants (anonymized)`)
+    parts.push(`*Use these as inspiration only — never copy. Adapt to this client's voice and facts.*`)
+    for (const s of args.crossClientSignal.slice(0, 5)) {
+      const c = (s.caption ?? '').slice(0, 120).replace(/\s+/g, ' ').trim()
+      const eng = s.outcomeEngagement > 0 ? `[${s.outcomeEngagement} eng]` : '[approved]'
+      parts.push(`- ${eng} ${s.anonDescriptor}: ${s.idea}${c ? ` — "${c}${s.caption && s.caption.length > 120 ? '…' : ''}"` : ''}`)
     }
   }
 

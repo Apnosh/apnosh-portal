@@ -10,6 +10,13 @@
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 
+export interface ServiceModules {
+  social: 'lite' | 'standard' | 'pro' | null
+  website: 'lite' | 'standard' | 'pro' | null
+  email: 'lite' | 'standard' | 'pro' | null
+  local: 'lite' | 'standard' | 'pro' | null
+}
+
 export interface StrategistClientRow {
   id: string
   name: string
@@ -17,6 +24,7 @@ export interface StrategistClientRow {
   tier: string | null
   logoUrl: string | null
   billingStatus: string | null
+  serviceModules: ServiceModules
   pendingTasks: number
   draftQuotes: number
   lastActivityAt: string | null
@@ -32,7 +40,7 @@ export async function getStrategistBook(): Promise<StrategistClientRow[]> {
   // brand_assets and we don't surface them on this list page.)
   const { data: clients, error } = await supabase
     .from('clients')
-    .select('id, name, slug, tier, billing_status')
+    .select('id, name, slug, tier, billing_status, service_modules')
     .order('name')
 
   if (error || !clients || clients.length === 0) return []
@@ -74,15 +82,24 @@ export async function getStrategistBook(): Promise<StrategistClientRow[]> {
   // We expose it on the row so the UI can hide admin-only CTAs.
   void isAdmin
 
-  return clients.map(c => ({
-    id: c.id as string,
-    name: c.name as string,
-    slug: c.slug as string,
-    tier: (c.tier as string) ?? null,
-    logoUrl: null,
-    billingStatus: (c.billing_status as string) ?? null,
-    pendingTasks: taskCounts.get(c.id as string) ?? 0,
-    draftQuotes: quoteCounts.get(c.id as string) ?? 0,
-    lastActivityAt: lastQuoteActivity.get(c.id as string) ?? null,
-  }))
+  return clients.map(c => {
+    const sm = (c.service_modules as Record<string, unknown>) ?? {}
+    return {
+      id: c.id as string,
+      name: c.name as string,
+      slug: c.slug as string,
+      tier: (c.tier as string) ?? null,
+      logoUrl: null,
+      billingStatus: (c.billing_status as string) ?? null,
+      serviceModules: {
+        social:  (sm.social  as ServiceModules['social'])  ?? null,
+        website: (sm.website as ServiceModules['website']) ?? null,
+        email:   (sm.email   as ServiceModules['email'])   ?? null,
+        local:   (sm.local   as ServiceModules['local'])   ?? null,
+      },
+      pendingTasks: taskCounts.get(c.id as string) ?? 0,
+      draftQuotes: quoteCounts.get(c.id as string) ?? 0,
+      lastActivityAt: lastQuoteActivity.get(c.id as string) ?? null,
+    }
+  })
 }

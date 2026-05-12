@@ -183,7 +183,7 @@ Return the JSON array of ${count} ideas now.`
   const generationId = aiGenInsert.data?.id as string | undefined
   void costUsd  // cost computed but not persisted (no column yet)
 
-  // 2) Write ai_generation_inputs row (retrieval audit — principle #6).
+  // 2) Write ai_generation_inputs row (retrieval audit — principle #6 + #7).
   if (generationId) {
     await admin.from('ai_generation_inputs').insert({
       generation_id: generationId,
@@ -191,10 +191,12 @@ Return the JSON array of ${count} ideas now.`
       prompt: userPrompt.slice(0, 8000),
       retrieved_facts: context.retrieval.factIds,
       retrieved_posts: context.retrieval.postIds,
-      retrieved_drafts: [],
+      retrieved_drafts: context.retrieval.crossClientDraftIds,
       brand_voice_version: context.retrieval.brandVersion,
       theme_version: Number(theme.version ?? 1),
-      cross_client_signal: null,
+      cross_client_signal: context.crossClientSignal.length > 0
+        ? { count: context.crossClientSignal.length, descriptors: context.crossClientSignal.map(s => s.anonDescriptor) }
+        : null,
       model: MODEL,
     })
   }

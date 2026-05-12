@@ -99,12 +99,53 @@ function ClientCard({ c }: { c: Awaited<ReturnType<typeof getStrategistBook>>[nu
           <ChevronRight className="w-4 h-4 text-ink-4 group-hover:text-ink-2 flex-shrink-0 mt-1" />
         </div>
 
+        <ModulesRow modules={c.serviceModules} />
+
         <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-ink-7">
           <Stat icon={<ListTodo className="w-3 h-3" />} label="Tasks" value={c.pendingTasks} tone={c.pendingTasks > 0 ? 'amber' : 'muted'} />
           <Stat icon={<FileText className="w-3 h-3" />} label="Open quotes" value={c.draftQuotes} tone={c.draftQuotes > 0 ? 'amber' : 'muted'} />
         </div>
       </Link>
     </li>
+  )
+}
+
+const MODULE_TONE: Record<string, string> = {
+  lite:     'bg-ink-7 text-ink-3',
+  standard: 'bg-sky-50 text-sky-700',
+  pro:      'bg-violet-50 text-violet-700',
+}
+
+function ModulesRow({ modules }: { modules: { social: string | null; website: string | null; email: string | null; local: string | null } }) {
+  const entries: Array<[string, string | null]> = [
+    ['Social',   modules.social],
+    ['Web',      modules.website],
+    ['Email',    modules.email],
+    ['Local',    modules.local],
+  ]
+  const active = entries.filter(([, tier]) => tier !== null)
+  if (active.length === 0) {
+    return (
+      <p className="text-[10px] text-ink-4 mt-2 uppercase tracking-wider">
+        No service modules
+      </p>
+    )
+  }
+  return (
+    <div className="flex flex-wrap gap-1 mt-2">
+      {entries.map(([label, tier]) => (
+        <span
+          key={label}
+          className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+            tier ? MODULE_TONE[tier] : 'bg-ink-7 text-ink-4 opacity-50'
+          }`}
+          title={tier ? `${label} ${tier}` : `${label} — not subscribed`}
+        >
+          {label}
+          {tier && <span className="ml-0.5 opacity-70 lowercase">{tier === 'standard' ? 'std' : tier}</span>}
+        </span>
+      ))}
+    </div>
   )
 }
 
