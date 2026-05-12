@@ -9,6 +9,7 @@ import { publishToFacebook } from './facebook'
 import { publishToInstagram } from './instagram'
 import { publishToTikTok } from './tiktok'
 import { publishToLinkedIn } from './linkedin'
+import { publishToGbp } from './gbp'
 import type { PlatformPublishResult } from '@/types/database'
 
 interface PlatformConnection {
@@ -16,6 +17,8 @@ interface PlatformConnection {
   access_token: string | null
   page_id: string | null
   ig_account_id: string | null
+  /** GBP only. accounts/{accountId}/locations/{locationId}. */
+  gbp_resource_name?: string | null
 }
 
 interface PublishInput {
@@ -102,6 +105,19 @@ export async function publishToAllPlatforms(
           post_id: ttResult.postId,
           published_at: ttResult.success ? new Date().toISOString() : undefined,
           error: ttResult.error,
+        }
+      } else if (platform === 'gbp' || platform === 'google_business_profile') {
+        const gbpResult = await publishToGbp({
+          resourceName: conn.gbp_resource_name ?? '',
+          accessToken: conn.access_token,
+          text: input.text,
+          mediaUrls: input.mediaUrls,
+        })
+        results[platform] = {
+          status: gbpResult.success ? 'published' : 'failed',
+          post_id: gbpResult.postName,
+          published_at: gbpResult.success ? new Date().toISOString() : undefined,
+          error: gbpResult.error,
         }
       } else if (platform === 'linkedin') {
         const liResult = await publishToLinkedIn(

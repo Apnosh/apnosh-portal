@@ -129,6 +129,7 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
       access_token: c.access_token,
       page_id: c.page_id,
       ig_account_id: c.ig_account_id,
+      gbp_resource_name: c.gbp_resource_name ?? null,
     })),
   )
 
@@ -168,6 +169,20 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
     const fb = map.facebook
     if (fb?.status === 'published' && fb.post_id) {
       return `https://facebook.com/${fb.post_id}`
+    }
+    // GBP returns post_id as `accounts/.../locations/.../localPosts/.../`
+    // The post itself doesn't have a stable public URL on Google Search
+    // (it's surfaced contextually), so we link to the location's Google
+    // Maps profile via the platform_url stored on the connection.
+    const gbp = map.gbp ?? map.google_business_profile
+    if (gbp?.status === 'published') {
+      const gbpConn = connections.find(c => c.platform === 'gbp')
+      // gbp_resource_name = accounts/{accountId}/locations/{locationId}
+      // We can construct a place-search URL using the location name.
+      if (gbpConn?.accountName) {
+        return `https://www.google.com/search?q=${encodeURIComponent(gbpConn.accountName)}`
+      }
+      return 'https://business.google.com/posts'
     }
     return undefined
   }

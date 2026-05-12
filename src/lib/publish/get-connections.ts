@@ -23,6 +23,8 @@ export interface PublishConnection {
   access_token: string | null
   page_id: string | null
   ig_account_id: string | null
+  /** GBP only. accounts/{accountId}/locations/{locationId}. */
+  gbp_resource_name?: string | null
   /** Display info for UI / preflight messaging. */
   accountName: string | null
   /** ISO timestamp. Null if non-expiring. */
@@ -40,35 +42,63 @@ export async function getPublishConnectionsForClient(
 ): Promise<PublishConnection[]> {
   const admin = createAdminClient()
 
-  const { data } = await admin
-    .from('social_connections')
-    .select('platform, access_token, platform_account_id, platform_account_name, token_expires_at, sync_status')
-    .eq('client_id', clientId)
-    .in('platform', ['instagram', 'facebook', 'linkedin'])
-    .eq('sync_status', 'active')
+  const [socialRes, channelRes] = await Promise.all([
+    admin
+      .from('social_connections')
+      .select('platform, access_token, platform_account_id, platform_account_name, token_expires_at, sync_status')
+      .eq('client_id', clientId)
+      .in('platform', ['instagram', 'facebook', 'linkedin'])
+      .eq('sync_status', 'active'),
+    admin
+      .from('channel_connections')
+      .select('channel, access_token, platform_account_id, platform_account_name, token_expires_at, status')
+      .eq('client_id', clientId)
+      .eq('channel', 'google_business_profile')
+      .eq('status', 'active'),
+  ])
 
   const now = Date.now()
-  const rows = (data ?? []).filter(r => {
-    if (!r.access_token) return false
-    if (!r.token_expires_at) return true
-    return new Date(r.token_expires_at as string).getTime() > now
-  })
+  const out: PublishConnection[] = []
 
-  return rows.map(r => {
+  for (const r of socialRes.data ?? []) {
+    if (!r.access_token) continue
+    if (r.token_expires_at && new Date(r.token_expires_at as string).getTime() <= now) continue
+
     const platform = r.platform as string
     const pid = r.platform_account_id as string | null
-
     // platform_account_id semantics:
     //   instagram → the IG business account ID
     //   facebook  → the FB page ID
     //   linkedin  → the LinkedIn org URN (or person ID for personal pages)
-    return {
+    out.push({
       platform,
       access_token: r.access_token as string,
       page_id: platform === 'facebook' ? pid : null,
       ig_account_id: platform === 'instagram' ? pid : null,
       accountName: (r.platform_account_name as string) ?? null,
       expiresAt: (r.token_expires_at as string) ?? null,
-    }
-  })
+    })
+  }
+
+  for (const r of channelRes.data ?? []) {
+    if (!r.access_token) continue
+    if (r.token_expires_at && new Date(r.token_expires_at as string).getTime() <= now) continue
+
+    const resourceName = (r.platform_account_id as string) ?? ''
+    // 'pending' means the client connected OAuth but never picked a
+    // location during onboarding — skip rather than fail publish later.
+    if (!resourceName || resourceName === 'pending') continue
+
+    out.push({
+      platform: 'gbp',
+      access_token: r.access_token as string,
+      page_id: null,
+      ig_account_id: null,
+      gbp_resource_name: resourceName,
+      accountName: (r.platform_account_name as string) ?? null,
+      expiresAt: (r.token_expires_at as string) ?? null,
+    })
+  }
+
+  return out
 }
