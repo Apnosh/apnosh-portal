@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { signOut, useUser } from '@/lib/supabase/hooks'
 import { ToastProvider } from '@/components/ui/toast'
+import NotificationBell from '@/components/work/notification-bell'
 import { WORK_SURFACES_BY_CAPABILITY } from '@/lib/roles/catalog'
 import type { RoleCapability } from '@/lib/auth/capabilities'
 
@@ -241,6 +242,7 @@ export default function WorkLayout({ children }: { children: React.ReactNode }) 
               )}
             </nav>
             <div className="flex-1" />
+            <NotificationBell />
           </header>
           <main className="flex-1">{children}</main>
         </div>

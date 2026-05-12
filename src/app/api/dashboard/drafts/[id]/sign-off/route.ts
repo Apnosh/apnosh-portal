@@ -14,6 +14,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
+import { notifyStaffForClient } from '@/lib/notifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +65,17 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     actor_role: 'client',
     summary: 'Client signed off on the draft',
   })
+
+  await notifyStaffForClient(
+    draft.client_id as string,
+    ['strategist', 'community_mgr'],
+    {
+      kind: 'client_signoff',
+      title: 'Client signed off — ready to schedule',
+      body: 'The owner approved the draft. You can publish or schedule it.',
+      link: `/work/drafts?draft=${id}`,
+    },
+  ).catch(() => ({ notified: 0 }))
 
   return NextResponse.json({ ok: true, signedOffAt })
 }

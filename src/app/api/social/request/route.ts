@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { suggestQuoteForRequest } from '@/lib/admin/suggest-quote'
+import { notifyStaffForClient } from '@/lib/notifications'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -174,7 +175,20 @@ export async function POST(req: NextRequest) {
       },
     })
 
-  await Promise.all([aiPromise, eventPromise])
+  // Fan out an in-portal notification to staff assigned to this
+  // client. Best-effort — never blocks the request.
+  const notifyPromise = notifyStaffForClient(
+    body.clientId,
+    ['strategist', 'copywriter', 'community_mgr', 'onboarder'],
+    {
+      kind: 'client_request',
+      title: `New ${typeLabel.toLowerCase()} request`,
+      body: body.description.slice(0, 140),
+      link: `/work/inbox?task=${inserted?.id ?? ''}`,
+    },
+  ).catch(() => ({ notified: 0 }))
+
+  await Promise.all([aiPromise, eventPromise, notifyPromise])
 
   return NextResponse.json({ ok: true, taskId: inserted?.id ?? null })
 }

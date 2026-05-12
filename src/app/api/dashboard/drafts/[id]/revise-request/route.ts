@@ -14,6 +14,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
+import { notifyStaffForClient } from '@/lib/notifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,6 +75,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     summary: 'Client requested revisions',
     payload: { note_chars: body.note.length },
   })
+
+  await notifyStaffForClient(
+    draft.client_id as string,
+    ['strategist', 'copywriter', 'community_mgr'],
+    {
+      kind: 'client_revise',
+      title: 'Client asked for revisions',
+      body: body.note.trim().slice(0, 140),
+      link: `/work/drafts?draft=${id}`,
+    },
+  ).catch(() => ({ notified: 0 }))
 
   return NextResponse.json({ ok: true, status: 'revising' })
 }
