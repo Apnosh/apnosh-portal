@@ -63,7 +63,7 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
       .limit(30),
     admin
       .from('client_tasks')
-      .select('id, title, status, due_at, created_at')
+      .select('id, title, status, source, draft_id, due_at, created_at')
       .eq('client_id', clientId)
       .eq('visible_to_client', true)
       .in('status', ['todo', 'doing'])
@@ -139,15 +139,36 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
         dueLabel = `Due ${dueAt.toLocaleString('en-US', { month: 'short', day: 'numeric' })}`
       }
     }
+
+    // For client-submitted requests, show the workflow stage label
+    // ("Received" / "In progress") rather than only the due date.
+    // This is the client-side echo of the staff inbox actions.
+    const taskStatus = t.status as string
+    const taskSource = t.source as string | null
+    const isClientRequest = taskSource === 'client_request'
+    let workflowLabel: string | undefined
+    let workflowUrgency: InboxItem['urgency'] | undefined
+    if (isClientRequest) {
+      if (taskStatus === 'todo') {
+        workflowLabel = 'Received'
+        workflowUrgency = 'medium'
+      } else if (taskStatus === 'doing') {
+        workflowLabel = (t.draft_id as string | null)
+          ? 'Drafting'
+          : 'In progress'
+        workflowUrgency = 'low'
+      }
+    }
+
     items.push({
       id: `task-${t.id}`,
       kind: 'task',
       title: t.title as string,
       detail: undefined,
-      urgency: dueUrgency,
+      urgency: workflowUrgency ?? dueUrgency,
       href: '/dashboard/inbox',
       whenIso: (t.created_at as string) ?? new Date().toISOString(),
-      status: dueLabel,
+      status: workflowLabel ?? dueLabel,
     })
   }
 

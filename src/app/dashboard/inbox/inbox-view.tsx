@@ -55,6 +55,9 @@ const STATUS_TONE: Record<string, string> = {
   'In review': 'bg-amber-50 text-amber-700',
   'Overdue': 'bg-rose-50 text-rose-700',
   'Due today': 'bg-rose-50 text-rose-700',
+  'Received': 'bg-sky-50 text-sky-700',
+  'In progress': 'bg-purple-50 text-purple-700',
+  'Drafting': 'bg-purple-50 text-purple-700',
 }
 
 function statusClass(s: string | undefined): string {
