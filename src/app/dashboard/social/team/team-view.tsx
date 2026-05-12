@@ -12,24 +12,72 @@ import { useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import {
   MessageSquare, MoreHorizontal, ExternalLink, EyeOff, ArrowLeftRight,
-  Circle, Users, X, Loader2, AlertCircle, Check,
+  Circle, Users, X, Loader2, AlertCircle, Check, Plus, Search, UserPlus,
 } from 'lucide-react'
 import type { TeamMember } from '@/lib/dashboard/get-team'
+import type { AvailableSpecialist } from '@/lib/dashboard/get-available-specialists'
 import { ROLE_LABEL } from '@/lib/dashboard/team-labels'
 
 interface Props {
   clientId: string
   team: TeamMember[]
+  available: AvailableSpecialist[]
+  missingRoles: string[]
 }
 
-export default function TeamView({ clientId, team }: Props) {
+export default function TeamView({ clientId, team, available, missingRoles }: Props) {
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null)
   const [swapTarget, setSwapTarget] = useState<{ personId: string; role: string; personName: string } | null>(null)
+  const [addTarget, setAddTarget] = useState<AvailableSpecialist | null>(null)
+  // Section 2 filters (multi-select role, multi-select availability, search)
+  const [filterRoles, setFilterRoles] = useState<Set<string>>(new Set())
+  const [filterAvail, setFilterAvail] = useState<Set<'available' | 'limited' | 'full'>>(new Set(['available', 'limited']))
+  const [search, setSearch] = useState('')
+  /* Local "requested" set — once the client taps Request to add, we
+     hide that card so they don't tap again. Server is idempotent
+     anyway, but the UI feedback matters. */
+  const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set())
 
   const visible = useMemo(() => team.filter(m => !hiddenIds.has(m.personId)), [team, hiddenIds])
   const primary = visible.find(m => m.isPrimaryContact)
   const others = visible.filter(m => !m.isPrimaryContact)
+
+  // Section 2 filtered list. All filters apply client-side; the server
+  // pre-filters to active marketplace-relevant capabilities only.
+  const filteredAvailable = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return available
+      .filter(s => !requestedIds.has(s.personId))
+      .filter(s => filterAvail.has(s.availability))
+      .filter(s => {
+        if (filterRoles.size === 0) return true
+        return s.capabilities.some(c => filterRoles.has(c))
+      })
+      .filter(s => {
+        if (!q) return true
+        const haystack = [s.displayName, ...s.specialties, ...s.capabilityLabels].join(' ').toLowerCase()
+        return haystack.includes(q)
+      })
+  }, [available, requestedIds, filterAvail, filterRoles, search])
+
+  const handleAddSent = useCallback((personId: string) => {
+    setRequestedIds(prev => new Set(prev).add(personId))
+    setAddTarget(null)
+  }, [])
+
+  // Suggestion strip: pick up to 3 candidates per missing role.
+  const suggestionStrips = useMemo(() => {
+    if (missingRoles.length === 0) return []
+    return missingRoles
+      .map(role => ({
+        role,
+        candidates: available
+          .filter(s => s.capabilities.includes(role) && !requestedIds.has(s.personId))
+          .slice(0, 3),
+      }))
+      .filter(s => s.candidates.length > 0)
+  }, [missingRoles, available, requestedIds])
 
   const messageThreadHref = primary
     ? `/dashboard/messages?to=${primary.personId}`
@@ -104,11 +152,117 @@ export default function TeamView({ clientId, team }: Props) {
         </div>
       )}
 
+      {/* ─── Section 2: Available specialists ────────────────────── */}
+      <section className="mt-10">
+        <header className="mb-3">
+          <h2
+            className="text-[22px] sm:text-[26px] leading-tight font-bold text-ink tracking-tight"
+            style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}
+          >
+            Add to your team
+          </h2>
+          <p className="text-[13px] text-ink-2 mt-1.5 max-w-2xl leading-relaxed">
+            Specialists {primary?.displayName.split(' ')[0] ?? 'your strategist'} trusts who could fit your account.
+          </p>
+        </header>
+
+        {/* Suggestion strips for missing roles */}
+        {suggestionStrips.length > 0 && (
+          <div className="space-y-2 mb-4">
+            {suggestionStrips.map(({ role, candidates }) => (
+              <div key={role} className="rounded-xl bg-brand/5 ring-1 ring-brand/20 p-3">
+                <p className="text-[13px] text-ink-2 leading-snug">
+                  You don&rsquo;t have a dedicated <strong>{ROLE_LABEL[role] ?? role}</strong>. Here {candidates.length === 1 ? 'is one' : `are ${candidates.length}`} we&rsquo;d recommend.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {candidates.map(c => (
+                    <button
+                      key={c.personId}
+                      onClick={() => setAddTarget(c)}
+                      className="inline-flex items-center gap-2 bg-white hover:bg-ink-7 ring-1 ring-ink-6 rounded-full pl-1 pr-3 py-1 text-[12px] font-medium text-ink-2"
+                    >
+                      <Avatar url={c.avatarUrl} name={c.displayName} size={24} />
+                      {c.displayName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Filter bar */}
+        <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="flex-1 relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none" />
+            <input
+              type="search"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name, specialty, or role"
+              className="w-full text-[13px] pl-8 pr-3 py-2 rounded-lg ring-1 ring-ink-6 focus:ring-ink-3 focus:outline-none"
+            />
+          </div>
+          <FilterChips
+            label="Role"
+            options={[
+              ['strategist', 'Strategist'],
+              ['social_media_manager', 'SMM'],
+              ['copywriter', 'Copywriter'],
+              ['photographer', 'Photographer'],
+              ['videographer', 'Videographer'],
+              ['editor', 'Video editor'],
+              ['ad_buyer', 'Paid media'],
+              ['seo_specialist', 'SEO'],
+            ]}
+            selected={filterRoles}
+            onToggle={(k) => setFilterRoles(prev => { const next = new Set(prev); if (next.has(k)) next.delete(k); else next.add(k); return next })}
+          />
+          <FilterChips
+            label="Available"
+            options={[
+              ['available', 'Available'],
+              ['limited', 'Limited'],
+            ]}
+            selected={filterAvail as Set<string>}
+            onToggle={(k) => setFilterAvail(prev => {
+              const next = new Set(prev) as Set<'available' | 'limited' | 'full'>
+              if (next.has(k as 'available' | 'limited' | 'full')) next.delete(k as 'available' | 'limited' | 'full')
+              else next.add(k as 'available' | 'limited' | 'full')
+              return next
+            })}
+          />
+        </div>
+
+        {filteredAvailable.length === 0 ? (
+          <p className="text-[13px] text-ink-3 py-8 text-center bg-white ring-1 ring-ink-6 rounded-2xl">
+            {search || filterRoles.size > 0
+              ? `No one matches those filters right now. Try broadening, or message ${primary?.displayName.split(' ')[0] ?? 'your strategist'} to source someone specific.`
+              : 'No additional specialists available right now.'}
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filteredAvailable.map(s => (
+              <AvailableCard key={s.personId} specialist={s} onRequest={() => setAddTarget(s)} />
+            ))}
+          </div>
+        )}
+      </section>
+
       {swapTarget && (
         <SwapModal
           clientId={clientId}
           target={swapTarget}
           onClose={() => setSwapTarget(null)}
+        />
+      )}
+
+      {addTarget && (
+        <AddSpecialistModal
+          clientId={clientId}
+          specialist={addTarget}
+          onClose={() => setAddTarget(null)}
+          onSent={() => handleAddSent(addTarget.personId)}
         />
       )}
     </div>
@@ -507,6 +661,270 @@ function EmptyState() {
       <p className="text-[13px] text-ink-3 leading-relaxed max-w-md mx-auto">
         Your strategist will introduce everyone within 48 hours of kickoff. You&rsquo;ll see them here as soon as they&rsquo;re on board.
       </p>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Section 2 sub-components
+// ─────────────────────────────────────────────────────────────────────
+
+function FilterChips({
+  label, options, selected, onToggle,
+}: {
+  label: string
+  options: [string, string][]
+  selected: Set<string>
+  onToggle: (key: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4 mr-1 hidden sm:inline">
+        {label}
+      </span>
+      {options.map(([k, lbl]) => {
+        const on = selected.has(k)
+        return (
+          <button
+            key={k}
+            onClick={() => onToggle(k)}
+            className={`text-[11px] font-medium rounded-full px-2 py-1 ring-1 transition-colors ${
+              on
+                ? 'bg-ink text-white ring-ink'
+                : 'bg-white text-ink-2 ring-ink-6 hover:ring-ink-4'
+            }`}
+          >
+            {lbl}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function AvailableCard({
+  specialist, onRequest,
+}: {
+  specialist: AvailableSpecialist
+  onRequest: () => void
+}) {
+  return (
+    <article className="rounded-2xl bg-white ring-1 ring-ink-6 p-4 flex flex-col">
+      <div className="flex items-start gap-3">
+        <Avatar url={specialist.avatarUrl} name={specialist.displayName} size={44} />
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-semibold text-ink leading-tight truncate">
+            {specialist.displayName}
+          </p>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {specialist.capabilityLabels.slice(0, 2).map(label => (
+              <span key={label} className="text-[10px] font-medium text-ink-3 bg-ink-7 px-1.5 py-0.5 rounded-full">
+                {label}
+              </span>
+            ))}
+            {specialist.availability === 'limited' && (
+              <span className="text-[10px] font-medium text-amber-700 bg-amber-50 ring-1 ring-amber-200 px-1.5 py-0.5 rounded-full">
+                Limited
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {specialist.bio && (
+        <p className="text-[12px] text-ink-2 mt-3 leading-relaxed line-clamp-3">
+          {specialist.bio}
+        </p>
+      )}
+
+      {specialist.specialties.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-3">
+          {specialist.specialties.slice(0, 3).map(s => (
+            <span key={s} className="text-[10px] font-medium text-brand-dark bg-brand/10 px-1.5 py-0.5 rounded-full">
+              {s}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <p className="text-[11px] text-ink-3 mt-3 leading-snug">
+        {specialist.trustSignal}
+      </p>
+
+      <div className="mt-auto pt-3 flex items-center gap-2">
+        <button
+          onClick={onRequest}
+          className="flex-1 text-[12px] font-semibold bg-ink text-white rounded-lg px-3 py-1.5 hover:bg-ink-2 inline-flex items-center justify-center gap-1"
+        >
+          <UserPlus className="w-3.5 h-3.5" />
+          Request to add
+        </button>
+        {specialist.portfolioUrl && (
+          <a
+            href={specialist.portfolioUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center w-8 h-8 rounded-lg ring-1 ring-ink-6 text-ink-3 hover:text-ink hover:bg-ink-7"
+            aria-label="View portfolio"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function AddSpecialistModal({
+  clientId, specialist, onClose, onSent,
+}: {
+  clientId: string
+  specialist: AvailableSpecialist
+  onClose: () => void
+  onSent: () => void
+}) {
+  /* Roles the client wants this person to play on THEIR account.
+     Pre-checks the specialist's primary capability so the common case
+     ("yep, that's what I want them for") is one tap. */
+  const [selectedRoles, setSelectedRoles] = useState<Set<string>>(() => {
+    return new Set(specialist.capabilities.slice(0, 1))
+  })
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+
+  const toggleRole = useCallback((role: string) => {
+    setSelectedRoles(prev => {
+      const next = new Set(prev)
+      if (next.has(role)) next.delete(role)
+      else next.add(role)
+      return next
+    })
+  }, [])
+
+  const submit = useCallback(async () => {
+    setBusy(true); setError(null)
+    try {
+      const res = await fetch('/api/dashboard/team/add-specialist', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          clientId,
+          proposedSpecialistId: specialist.personId,
+          proposedRoles: [...selectedRoles],
+          note: note.trim() || null,
+        }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`)
+      setDone(true)
+      setTimeout(onSent, 800)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Send failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [clientId, specialist.personId, selectedRoles, note, onSent])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink/40 p-0 sm:p-4">
+      <div className="bg-white w-full sm:w-[460px] sm:rounded-2xl rounded-t-2xl shadow-xl overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-ink-6">
+          <p className="text-[15px] font-semibold text-ink">
+            Add {specialist.displayName.split(' ')[0]} to your team
+          </p>
+          <button onClick={onClose} className="text-ink-4 hover:text-ink" aria-label="Close">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {done ? (
+          <div className="p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 inline-flex items-center justify-center mb-3">
+              <Check className="w-5 h-5" />
+            </div>
+            <p className="text-[14px] font-semibold text-ink mb-1">Sent</p>
+            <p className="text-[12px] text-ink-3 leading-relaxed">
+              Your strategist will send a quote shortly.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <Avatar url={specialist.avatarUrl} name={specialist.displayName} size={44} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-ink leading-tight">{specialist.displayName}</p>
+                  <p className="text-[11px] text-ink-3 mt-0.5">{specialist.trustSignal}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3 mb-1.5">
+                  What would they do on your account?
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {specialist.capabilities.map(role => {
+                    const on = selectedRoles.has(role)
+                    return (
+                      <button
+                        key={role}
+                        onClick={() => toggleRole(role)}
+                        className={`text-[12px] font-medium rounded-full px-3 py-1 ring-1 transition-colors ${
+                          on
+                            ? 'bg-ink text-white ring-ink'
+                            : 'bg-white text-ink-2 ring-ink-6 hover:ring-ink-4'
+                        }`}
+                      >
+                        {ROLE_LABEL[role] ?? role}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3 mb-1.5">
+                  Anything your strategist should know? <span className="text-ink-4 normal-case">(optional)</span>
+                </label>
+                <textarea
+                  value={note}
+                  onChange={e => setNote(e.target.value)}
+                  rows={3}
+                  placeholder="What you're hoping they can help with."
+                  className="w-full text-[13px] p-2.5 rounded-lg ring-1 ring-ink-6 focus:ring-ink-3 focus:outline-none resize-y leading-relaxed"
+                />
+              </div>
+
+              {error && (
+                <p className="text-[11px] text-rose-700 inline-flex items-start gap-1">
+                  <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                  {error}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 p-3 bg-ink-7/30">
+              <button
+                onClick={onClose}
+                className="text-[13px] font-medium text-ink-3 hover:text-ink px-3 py-2"
+                disabled={busy}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submit}
+                disabled={busy || selectedRoles.size === 0}
+                className="text-[13px] font-semibold bg-brand text-white rounded-lg px-4 py-2 hover:bg-brand-dark disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                Send request
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }

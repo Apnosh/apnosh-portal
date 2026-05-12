@@ -11,7 +11,7 @@
 
 import { useState, useCallback } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Check, AlertCircle, Star, ArrowLeftRight, Users } from 'lucide-react'
+import { ArrowLeft, Loader2, Check, AlertCircle, Star, ArrowLeftRight, Users, UserPlus, X } from 'lucide-react'
 import type { TeamMember } from '@/lib/dashboard/get-team'
 import { ROLE_LABEL } from '@/lib/dashboard/team-labels'
 
@@ -25,17 +25,57 @@ interface OpenSwap {
   status: 'open' | 'in_discussion'
 }
 
+interface OpenAdd {
+  id: string
+  proposedSpecialistId: string
+  proposedSpecialistName: string
+  proposedSpecialistAvatar: string | null
+  proposedRoles: string[]
+  note: string | null
+  requestedAt: string
+  status: 'open' | 'in_discussion' | 'quoted'
+}
+
 interface Props {
   clientId: string
   clientName: string
   team: TeamMember[]
   openSwaps: OpenSwap[]
+  openAdds: OpenAdd[]
 }
 
-export default function TeamMgmtView({ clientId, clientName, team: initialTeam, openSwaps: initialSwaps }: Props) {
+export default function TeamMgmtView({
+  clientId, clientName, team: initialTeam,
+  openSwaps: initialSwaps, openAdds: initialAdds,
+}: Props) {
   const [team, setTeam] = useState(initialTeam)
   const [swaps, setSwaps] = useState(initialSwaps)
+  const [adds, setAdds] = useState(initialAdds)
   const [error, setError] = useState<string | null>(null)
+
+  const resolveAdd = useCallback(async (
+    addId: string,
+    status: 'accepted' | 'declined' | 'withdrawn',
+    note: string | null,
+  ) => {
+    setError(null)
+    const prev = adds
+    setAdds(a => a.filter(x => x.id !== addId))  // optimistic
+    try {
+      const res = await fetch(`/api/work/clients/${clientId}/add-requests/${addId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status, resolutionNote: note }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error ?? `HTTP ${res.status}`)
+      }
+    } catch (e) {
+      setAdds(prev)
+      setError(e instanceof Error ? e.message : 'Resolve failed')
+    }
+  }, [clientId, adds])
 
   const personName = useCallback((id: string) => {
     return team.find(m => m.personId === id)?.displayName ?? 'Specialist'
@@ -126,6 +166,19 @@ export default function TeamMgmtView({ clientId, clientName, team: initialTeam, 
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
+      )}
+
+      {/* Open add-specialist requests */}
+      {adds.length > 0 && (
+        <section className="mb-6">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-dark mb-2 inline-flex items-center gap-1.5">
+            <UserPlus className="w-3.5 h-3.5" />
+            Add requests · {adds.length}
+          </h2>
+          <ul className="space-y-2">
+            {adds.map(a => <AddRow key={a.id} addReq={a} onResolve={(status, note) => resolveAdd(a.id, status, note)} />)}
+          </ul>
+        </section>
       )}
 
       {/* Open swaps */}
@@ -318,6 +371,103 @@ function MgmtRow({
               ? <em>&ldquo;{member.currentFocus}&rdquo;</em>
               : <span className="text-ink-4">Click to set the one-liner that shows on the team page.</span>}
           </button>
+        )}
+      </div>
+    </li>
+  )
+}
+
+function AddRow({
+  addReq, onResolve,
+}: {
+  addReq: OpenAdd
+  onResolve: (status: 'accepted' | 'declined' | 'withdrawn', note: string | null) => void
+}) {
+  const [busyAction, setBusyAction] = useState<'accept' | 'decline' | null>(null)
+  const [showDecline, setShowDecline] = useState(false)
+  const [note, setNote] = useState('')
+
+  return (
+    <li className="rounded-2xl bg-brand/5 ring-1 ring-brand/20 p-4">
+      <div className="flex items-start gap-3">
+        {addReq.proposedSpecialistAvatar ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={addReq.proposedSpecialistAvatar} alt={addReq.proposedSpecialistName}
+               className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-ink-7 text-ink-2 inline-flex items-center justify-center text-[12px] font-semibold flex-shrink-0">
+            {addReq.proposedSpecialistName.split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-semibold text-ink leading-tight">
+            Add {addReq.proposedSpecialistName}
+          </p>
+          <p className="text-[11px] text-ink-3 mt-0.5">
+            Proposed roles: {addReq.proposedRoles.length > 0
+              ? addReq.proposedRoles.map(r => ROLE_LABEL[r] ?? r).join(', ')
+              : 'unspecified — your call'}
+          </p>
+          <p className="text-[10px] text-ink-4 mt-0.5">
+            Requested {new Date(addReq.requestedAt).toLocaleString()}
+          </p>
+        </div>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-dark bg-brand/10 px-1.5 py-0.5 rounded-full inline-flex items-center">
+          {addReq.status === 'quoted' ? 'Quote sent' : addReq.status === 'in_discussion' ? 'Discussing' : 'New'}
+        </span>
+      </div>
+
+      {addReq.note && (
+        <p className="text-[12px] text-ink-2 mt-3 leading-relaxed italic">
+          &ldquo;{addReq.note}&rdquo;
+        </p>
+      )}
+
+      <div className="mt-3">
+        {showDecline ? (
+          <div>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              rows={2}
+              placeholder="Optional note (e.g. 'Capacity full this quarter — re-offered Marcus instead')"
+              className="w-full text-[12px] p-2 rounded-lg ring-1 ring-ink-6 focus:ring-ink-3 focus:outline-none resize-y"
+            />
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                onClick={() => { setBusyAction('decline'); onResolve('declined', note.trim() || null) }}
+                disabled={busyAction !== null}
+                className="text-[12px] font-semibold bg-ink text-white rounded-md px-3 py-1.5 hover:bg-ink-2 disabled:opacity-50 inline-flex items-center gap-1"
+              >
+                {busyAction === 'decline' ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                Confirm decline
+              </button>
+              <button onClick={() => setShowDecline(false)} className="text-[12px] text-ink-3 hover:text-ink px-2 py-1.5">
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => { setBusyAction('accept'); onResolve('accepted', null) }}
+              disabled={busyAction !== null}
+              className="text-[12px] font-semibold bg-brand text-white rounded-md px-3 py-1.5 hover:bg-brand-dark disabled:opacity-50 inline-flex items-center gap-1"
+            >
+              {busyAction === 'accept' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              Accept (assign now)
+            </button>
+            <button
+              onClick={() => setShowDecline(true)}
+              className="text-[12px] font-medium text-ink-3 hover:text-ink ring-1 ring-ink-6 rounded-md px-3 py-1.5 inline-flex items-center gap-1"
+            >
+              <X className="w-3 h-3" />
+              Decline
+            </button>
+            <span className="text-[10px] text-ink-4 ml-1">
+              (Accept just clears the request — actual assignment goes through onboarding tools.)
+            </span>
+          </div>
         )}
       </div>
     </li>

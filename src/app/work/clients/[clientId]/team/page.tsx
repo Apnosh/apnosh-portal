@@ -42,7 +42,7 @@ export default async function Page({ params }: PageProps) {
   if (!client) notFound()
 
   const admin = createAdminClient()
-  const [team, openSwapsRes] = await Promise.all([
+  const [team, openSwapsRes, openAddsRes] = await Promise.all([
     getTeamForClient(clientId),
     admin
       .from('swap_requests')
@@ -50,7 +50,22 @@ export default async function Page({ params }: PageProps) {
       .eq('client_id', clientId)
       .in('status', ['open', 'in_discussion'])
       .order('requested_at', { ascending: false }),
+    admin
+      .from('add_specialist_requests')
+      .select('id, proposed_specialist_id, proposed_roles, note, requested_at, status')
+      .eq('client_id', clientId)
+      .in('status', ['open', 'in_discussion', 'quoted'])
+      .order('requested_at', { ascending: false }),
   ])
+
+  // Resolve proposed-specialist display names for the add-requests
+  // rail. Tiny separate query since the team list may not include
+  // these people yet (they're not assigned).
+  const proposedIds = [...new Set((openAddsRes.data ?? []).map(r => r.proposed_specialist_id as string))]
+  const { data: proposedProfiles } = proposedIds.length > 0
+    ? await admin.from('profiles').select('id, full_name, avatar_url').in('id', proposedIds)
+    : { data: [] as Array<{ id: string; full_name: string | null; avatar_url: string | null }> }
+  const proposedMap = new Map((proposedProfiles ?? []).map(p => [p.id as string, p]))
 
   return (
     <TeamMgmtView
@@ -66,6 +81,19 @@ export default async function Page({ params }: PageProps) {
         requestedAt: r.requested_at as string,
         status: r.status as 'open' | 'in_discussion',
       }))}
+      openAdds={(openAddsRes.data ?? []).map(r => {
+        const p = proposedMap.get(r.proposed_specialist_id as string)
+        return {
+          id: r.id as string,
+          proposedSpecialistId: r.proposed_specialist_id as string,
+          proposedSpecialistName: (p?.full_name as string) ?? 'Specialist',
+          proposedSpecialistAvatar: (p?.avatar_url as string) ?? null,
+          proposedRoles: Array.isArray(r.proposed_roles) ? (r.proposed_roles as string[]) : [],
+          note: (r.note as string) ?? null,
+          requestedAt: r.requested_at as string,
+          status: r.status as 'open' | 'in_discussion' | 'quoted',
+        }
+      })}
     />
   )
 }
