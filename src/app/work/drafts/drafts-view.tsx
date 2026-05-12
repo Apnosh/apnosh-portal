@@ -10,7 +10,8 @@ import { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import {
   FileText, Sparkles, CheckCircle2, XCircle, Loader2, Clock,
-  Send, Eye, ArrowRight, ListTodo, MessageSquare,
+  Send, Eye, ArrowRight, ListTodo, MessageSquare, Pencil,
+  CalendarClock, ExternalLink, RotateCcw,
 } from 'lucide-react'
 import type { DraftRow, DraftStatus } from '@/lib/work/get-drafts'
 
@@ -37,10 +38,33 @@ const BUCKETS: BucketDef[] = [
 const REVISE_TAGS = ['tone', 'angle', 'off_brand', 'too_long', 'too_short', 'wrong_audience', 'other']
 const REJECT_TAGS = ['off_brand', 'low_value', 'duplicate', 'wrong_timing', 'other']
 
+type LifecycleMode = 'edit' | 'schedule' | 'publish'
+
 export default function DraftsView({ initialDrafts }: Props) {
   const [drafts, setDrafts] = useState<DraftRow[]>(initialDrafts)
   const [busy, setBusy] = useState<string | null>(null)
   const [judgePanel, setJudgePanel] = useState<{ id: string; mode: 'revise' | 'rejected' } | null>(null)
+  const [lifePanel, setLifePanel] = useState<{ id: string; mode: LifecycleMode } | null>(null)
+
+  const lifecycleCall = useCallback(async (
+    id: string,
+    body: Record<string, unknown>,
+  ) => {
+    setBusy(id)
+    const res = await fetch(`/api/work/drafts/${id}/lifecycle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    setBusy(null)
+    if (!res.ok) {
+      alert((await res.json()).error ?? 'Could not save change.')
+      return
+    }
+    const { draft } = await res.json()
+    setDrafts(prev => prev.map(d => d.id === id ? { ...d, status: draft.status, caption: draft.caption, targetPublishDate: draft.scheduled_for } : d))
+    setLifePanel(null)
+  }, [])
 
   const grouped = useMemo(() => {
     const map = new Map<string, DraftRow[]>()
@@ -113,6 +137,9 @@ export default function DraftsView({ initialDrafts }: Props) {
                 busyId={busy} onJudge={post}
                 openPanel={judgePanel}
                 setOpenPanel={setJudgePanel}
+                lifePanel={lifePanel}
+                setLifePanel={setLifePanel}
+                onLifecycle={lifecycleCall}
               />
             )
           })}
@@ -124,6 +151,7 @@ export default function DraftsView({ initialDrafts }: Props) {
 
 function Bucket({
   def, rows, busyId, onJudge, openPanel, setOpenPanel,
+  lifePanel, setLifePanel, onLifecycle,
 }: {
   def: BucketDef
   rows: DraftRow[]
@@ -131,6 +159,9 @@ function Bucket({
   onJudge: (id: string, j: 'approved'|'revise'|'rejected', tags?: string[], note?: string) => void
   openPanel: { id: string; mode: 'revise'|'rejected' } | null
   setOpenPanel: (p: { id: string; mode: 'revise'|'rejected' } | null) => void
+  lifePanel: { id: string; mode: LifecycleMode } | null
+  setLifePanel: (p: { id: string; mode: LifecycleMode } | null) => void
+  onLifecycle: (id: string, body: Record<string, unknown>) => Promise<void> | void
 }) {
   const toneText =
     def.tone === 'amber' ? 'text-amber-700'
@@ -150,13 +181,20 @@ function Bucket({
           <DraftCard key={r.id} r={r}
             busy={busyId === r.id}
             judgePanel={openPanel?.id === r.id ? openPanel : null}
+            lifePanel={lifePanel?.id === r.id ? lifePanel : null}
             onApprove={() => onJudge(r.id, 'approved', ['perfect'])}
             onOpenRevise={() => setOpenPanel({ id: r.id, mode: 'revise' })}
             onOpenReject={() => setOpenPanel({ id: r.id, mode: 'rejected' })}
             onSubmitJudgment={(tags, note) =>
               onJudge(r.id, openPanel!.mode === 'revise' ? 'revise' : 'rejected', tags, note)
             }
-            onCancel={() => setOpenPanel(null)}
+            onCancelJudge={() => setOpenPanel(null)}
+            onOpenEdit={() => setLifePanel({ id: r.id, mode: 'edit' })}
+            onOpenSchedule={() => setLifePanel({ id: r.id, mode: 'schedule' })}
+            onOpenPublish={() => setLifePanel({ id: r.id, mode: 'publish' })}
+            onSubmitLifecycle={(body) => onLifecycle(r.id, body)}
+            onCancelLifecycle={() => setLifePanel(null)}
+            onUnschedule={() => onLifecycle(r.id, { action: 'unschedule' })}
           />
         ))}
       </ul>
@@ -165,7 +203,9 @@ function Bucket({
 }
 
 function DraftCard({
-  r, busy, judgePanel, onApprove, onOpenRevise, onOpenReject, onSubmitJudgment, onCancel,
+  r, busy,
+  judgePanel, onApprove, onOpenRevise, onOpenReject, onSubmitJudgment, onCancelJudge,
+  lifePanel, onOpenEdit, onOpenSchedule, onOpenPublish, onSubmitLifecycle, onCancelLifecycle, onUnschedule,
 }: {
   r: DraftRow
   busy: boolean
@@ -174,9 +214,20 @@ function DraftCard({
   onOpenRevise: () => void
   onOpenReject: () => void
   onSubmitJudgment: (tags: string[], note?: string) => void
-  onCancel: () => void
+  onCancelJudge: () => void
+  lifePanel: { id: string; mode: LifecycleMode } | null
+  onOpenEdit: () => void
+  onOpenSchedule: () => void
+  onOpenPublish: () => void
+  onSubmitLifecycle: (body: Record<string, unknown>) => void
+  onCancelLifecycle: () => void
+  onUnschedule: () => void
 }) {
-  const stillJudgeable = ['idea','draft','revising'].includes(r.status)
+  const judgeable = ['idea','draft','revising'].includes(r.status)
+  const editable = ['idea','draft','revising','approved'].includes(r.status)
+  const schedulable = r.status === 'approved'
+  const publishable = r.status === 'approved' || r.status === 'scheduled'
+  const showUnschedule = r.status === 'scheduled'
   return (
     <li>
       <article
@@ -216,43 +267,92 @@ function DraftCard({
             )}
           </div>
 
-          {stillJudgeable && !judgePanel && (
-            <div className="flex flex-col gap-1 flex-shrink-0">
-              <button
-                onClick={onApprove}
-                disabled={busy}
-                className="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-semibold rounded-lg px-2.5 py-1.5 disabled:opacity-50"
-                title="One-click approve"
-              >
-                {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                Approve
-              </button>
-              <button
-                onClick={onOpenRevise}
-                disabled={busy}
-                className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[11px] font-semibold rounded-lg px-2.5 py-1.5 disabled:opacity-50"
-              >
-                <ListTodo className="w-3 h-3" />
-                Revise
-              </button>
-              <button
-                onClick={onOpenReject}
-                disabled={busy}
-                className="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-semibold rounded-lg px-2.5 py-1.5 disabled:opacity-50"
-              >
-                <XCircle className="w-3 h-3" />
-                Reject
-              </button>
+          {!judgePanel && !lifePanel && (
+            <div className="flex flex-col gap-1 flex-shrink-0 min-w-[110px]">
+              {judgeable && (
+                <button
+                  onClick={onApprove}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-semibold rounded-lg px-2.5 py-1.5 disabled:opacity-50"
+                  title="One-click approve"
+                >
+                  {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                  Approve
+                </button>
+              )}
+              {schedulable && (
+                <button
+                  onClick={onOpenSchedule}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 bg-violet-50 hover:bg-violet-100 text-violet-700 text-[11px] font-semibold rounded-lg px-2.5 py-1.5 disabled:opacity-50"
+                >
+                  <CalendarClock className="w-3 h-3" />
+                  Schedule
+                </button>
+              )}
+              {publishable && (
+                <button
+                  onClick={onOpenPublish}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-semibold rounded-lg px-2.5 py-1.5 disabled:opacity-50"
+                >
+                  <Send className="w-3 h-3" />
+                  Publish
+                </button>
+              )}
+              {showUnschedule && (
+                <button
+                  onClick={onUnschedule}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 bg-bg-1 hover:bg-bg-2 text-ink-3 hover:text-ink text-[11px] font-semibold rounded-lg px-2.5 py-1.5 border border-ink-6 disabled:opacity-50"
+                  title="Move back to approved (not scheduled)"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Unschedule
+                </button>
+              )}
+              {editable && (
+                <button
+                  onClick={onOpenEdit}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 bg-bg-1 hover:bg-bg-2 text-ink-3 hover:text-ink text-[11px] font-semibold rounded-lg px-2.5 py-1.5 border border-ink-6 disabled:opacity-50"
+                >
+                  <Pencil className="w-3 h-3" />
+                  Edit
+                </button>
+              )}
+              {judgeable && (
+                <>
+                  <button
+                    onClick={onOpenRevise}
+                    disabled={busy}
+                    className="inline-flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[11px] font-semibold rounded-lg px-2.5 py-1.5 disabled:opacity-50"
+                  >
+                    <ListTodo className="w-3 h-3" />
+                    Revise
+                  </button>
+                  <button
+                    onClick={onOpenReject}
+                    disabled={busy}
+                    className="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-semibold rounded-lg px-2.5 py-1.5 disabled:opacity-50"
+                  >
+                    <XCircle className="w-3 h-3" />
+                    Reject
+                  </button>
+                </>
+              )}
             </div>
           )}
 
-          {!stillJudgeable && r.publishedPostId && (
-            <Link
-              href={`/dashboard/social/quotes/${r.publishedPostId}`}
+          {r.status === 'published' && (r.publishedPostId || (r as DraftRow & { publishedUrl?: string }).publishedUrl) && (
+            <a
+              href={(r as DraftRow & { publishedUrl?: string }).publishedUrl ?? '#'}
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-[11px] text-ink-3 hover:text-ink inline-flex items-center gap-1 flex-shrink-0"
             >
-              <Eye className="w-3 h-3" /> Post
-            </Link>
+              <ExternalLink className="w-3 h-3" /> Live
+            </a>
           )}
         </div>
 
@@ -261,7 +361,17 @@ function DraftCard({
             mode={judgePanel.mode}
             busy={busy}
             onSubmit={onSubmitJudgment}
-            onCancel={onCancel}
+            onCancel={onCancelJudge}
+          />
+        )}
+
+        {lifePanel && (
+          <LifecyclePanel
+            mode={lifePanel.mode}
+            draft={r}
+            busy={busy}
+            onSubmit={onSubmitLifecycle}
+            onCancel={onCancelLifecycle}
           />
         )}
       </article>
@@ -350,6 +460,100 @@ function JudgePanel({
         >
           {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : mode === 'revise' ? <ListTodo className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
           Submit
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function LifecyclePanel({
+  mode, draft, busy, onSubmit, onCancel,
+}: {
+  mode: LifecycleMode
+  draft: DraftRow
+  busy: boolean
+  onSubmit: (body: Record<string, unknown>) => void
+  onCancel: () => void
+}) {
+  const [caption, setCaption] = useState(draft.caption ?? '')
+  const [note, setNote] = useState('')
+  // Scheduled defaults to tomorrow 10am local
+  const [scheduledFor, setScheduledFor] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    d.setHours(10, 0, 0, 0)
+    // datetime-local needs yyyy-MM-ddTHH:mm
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  })
+  const [publishedUrl, setPublishedUrl] = useState('')
+
+  function submit() {
+    if (mode === 'edit') {
+      onSubmit({ action: 'edit', caption, note: note || undefined })
+    } else if (mode === 'schedule') {
+      onSubmit({ action: 'schedule', scheduledFor: new Date(scheduledFor).toISOString() })
+    } else {
+      onSubmit({ action: 'publish', publishedUrl: publishedUrl || undefined })
+    }
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-ink-7">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3 mb-2 inline-flex items-center gap-1.5">
+        {mode === 'edit' && <><Pencil className="w-3 h-3" /> Edit caption</>}
+        {mode === 'schedule' && <><CalendarClock className="w-3 h-3" /> Schedule</>}
+        {mode === 'publish' && <><Send className="w-3 h-3" /> Mark as published</>}
+      </p>
+
+      {mode === 'edit' && (
+        <>
+          <textarea
+            value={caption}
+            onChange={e => setCaption(e.target.value)}
+            rows={5}
+            placeholder="Caption…"
+            className="w-full text-[13px] p-2 rounded-lg border border-ink-6 focus:outline-none focus:ring-2 focus:ring-ink-3 resize-y"
+          />
+          <input
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="Optional note about the revision (one line)…"
+            className="w-full text-[12px] p-2 rounded-lg border border-ink-6 focus:outline-none focus:ring-2 focus:ring-ink-3 mt-2"
+          />
+        </>
+      )}
+
+      {mode === 'schedule' && (
+        <input
+          type="datetime-local"
+          value={scheduledFor}
+          onChange={e => setScheduledFor(e.target.value)}
+          className="w-full text-[13px] p-2 rounded-lg border border-ink-6 focus:outline-none focus:ring-2 focus:ring-ink-3"
+        />
+      )}
+
+      {mode === 'publish' && (
+        <input
+          type="url"
+          value={publishedUrl}
+          onChange={e => setPublishedUrl(e.target.value)}
+          placeholder="https://instagram.com/p/… (optional permalink)"
+          className="w-full text-[13px] p-2 rounded-lg border border-ink-6 focus:outline-none focus:ring-2 focus:ring-ink-3"
+        />
+      )}
+
+      <div className="flex items-center justify-end gap-2 mt-2">
+        <button onClick={onCancel} className="text-[12px] text-ink-3 hover:text-ink px-2 py-1">
+          Cancel
+        </button>
+        <button
+          onClick={submit}
+          disabled={busy || (mode === 'edit' && !caption.trim())}
+          className="inline-flex items-center gap-1 text-[12px] font-semibold rounded-lg px-3 py-1.5 bg-ink hover:bg-ink-2 text-white disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+          {mode === 'edit' ? 'Save' : mode === 'schedule' ? 'Schedule' : 'Publish'}
         </button>
       </div>
     </div>
