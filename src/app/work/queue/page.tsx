@@ -73,6 +73,8 @@ export default async function VisualQueuePage() {
       rejectionReason: (d.rejection_reason as string) ?? null,
       aiGenerationCount: Array.isArray(d.ai_generation_ids) ? (d.ai_generation_ids as unknown[]).length : 0,
       publishedPostId: (d.published_post_id as string) ?? null,
+      outcomeSummary: null,
+      publishedUrl: null,
       createdAt: (d.created_at as string) ?? new Date().toISOString(),
       updatedAt: (d.updated_at as string) ?? new Date().toISOString(),
       mediaBrief: (d.media_brief as Record<string, unknown>) ?? {},

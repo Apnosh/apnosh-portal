@@ -11,7 +11,7 @@ import Link from 'next/link'
 import {
   FileText, Sparkles, CheckCircle2, XCircle, Loader2, Clock,
   Send, Eye, ArrowRight, ListTodo, MessageSquare, Pencil,
-  CalendarClock, ExternalLink, RotateCcw,
+  CalendarClock, ExternalLink, RotateCcw, Plus, AlertCircle,
 } from 'lucide-react'
 import type { DraftRow, DraftStatus } from '@/lib/work/get-drafts'
 
@@ -45,6 +45,38 @@ export default function DraftsView({ initialDrafts }: Props) {
   const [busy, setBusy] = useState<string | null>(null)
   const [judgePanel, setJudgePanel] = useState<{ id: string; mode: 'revise' | 'rejected' } | null>(null)
   const [lifePanel, setLifePanel] = useState<{ id: string; mode: LifecycleMode } | null>(null)
+  const [outcomePanel, setOutcomePanel] = useState<{ id: string } | null>(null)
+
+  const onSubmitOutcome = useCallback(async (id: string, body: Record<string, unknown>) => {
+    setBusy(id)
+    try {
+      const res = await fetch(`/api/work/drafts/${id}/attach-outcome`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error ?? `HTTP ${res.status}`)
+      }
+      const j = await res.json()
+      setDrafts(prev => prev.map(d => d.id === id ? {
+        ...d,
+        outcomeSummary: {
+          platform: (body.platform as string) ?? 'instagram',
+          external_id: body.externalId as string,
+          reach: Number(body.reach ?? 0),
+          interactions: Number(j.interactions ?? 0),
+          engagement_rate: typeof j.engagementRate === 'number' ? j.engagementRate : null,
+        },
+      } : d))
+      setOutcomePanel(null)
+    } catch (e) {
+      throw e
+    } finally {
+      setBusy(null)
+    }
+  }, [])
 
   const lifecycleCall = useCallback(async (
     id: string,
@@ -140,6 +172,9 @@ export default function DraftsView({ initialDrafts }: Props) {
                 lifePanel={lifePanel}
                 setLifePanel={setLifePanel}
                 onLifecycle={lifecycleCall}
+                outcomePanel={outcomePanel}
+                setOutcomePanel={setOutcomePanel}
+                onSubmitOutcome={onSubmitOutcome}
               />
             )
           })}
@@ -152,6 +187,7 @@ export default function DraftsView({ initialDrafts }: Props) {
 function Bucket({
   def, rows, busyId, onJudge, openPanel, setOpenPanel,
   lifePanel, setLifePanel, onLifecycle,
+  outcomePanel, setOutcomePanel, onSubmitOutcome,
 }: {
   def: BucketDef
   rows: DraftRow[]
@@ -162,6 +198,9 @@ function Bucket({
   lifePanel: { id: string; mode: LifecycleMode } | null
   setLifePanel: (p: { id: string; mode: LifecycleMode } | null) => void
   onLifecycle: (id: string, body: Record<string, unknown>) => Promise<void> | void
+  outcomePanel: { id: string } | null
+  setOutcomePanel: (p: { id: string } | null) => void
+  onSubmitOutcome: (id: string, body: Record<string, unknown>) => Promise<void>
 }) {
   const toneText =
     def.tone === 'amber' ? 'text-amber-700'
@@ -182,6 +221,8 @@ function Bucket({
             busy={busyId === r.id}
             judgePanel={openPanel?.id === r.id ? openPanel : null}
             lifePanel={lifePanel?.id === r.id ? lifePanel : null}
+            outcomePanel={outcomePanel?.id === r.id ? outcomePanel : null}
+            setOutcomePanel={setOutcomePanel}
             onApprove={() => onJudge(r.id, 'approved', ['perfect'])}
             onOpenRevise={() => setOpenPanel({ id: r.id, mode: 'revise' })}
             onOpenReject={() => setOpenPanel({ id: r.id, mode: 'rejected' })}
@@ -195,6 +236,7 @@ function Bucket({
             onSubmitLifecycle={(body) => onLifecycle(r.id, body)}
             onCancelLifecycle={() => setLifePanel(null)}
             onUnschedule={() => onLifecycle(r.id, { action: 'unschedule' })}
+            onSubmitOutcome={(body) => onSubmitOutcome(r.id, body)}
           />
         ))}
       </ul>
@@ -206,6 +248,7 @@ function DraftCard({
   r, busy,
   judgePanel, onApprove, onOpenRevise, onOpenReject, onSubmitJudgment, onCancelJudge,
   lifePanel, onOpenEdit, onOpenSchedule, onOpenPublish, onSubmitLifecycle, onCancelLifecycle, onUnschedule,
+  outcomePanel, setOutcomePanel, onSubmitOutcome,
 }: {
   r: DraftRow
   busy: boolean
@@ -222,6 +265,9 @@ function DraftCard({
   onSubmitLifecycle: (body: Record<string, unknown>) => void
   onCancelLifecycle: () => void
   onUnschedule: () => void
+  outcomePanel: { id: string } | null
+  setOutcomePanel: (p: { id: string } | null) => void
+  onSubmitOutcome: (body: Record<string, unknown>) => Promise<void>
 }) {
   const judgeable = ['idea','draft','revising'].includes(r.status)
   const editable = ['idea','draft','revising','approved'].includes(r.status)
@@ -344,15 +390,33 @@ function DraftCard({
             </div>
           )}
 
-          {r.status === 'published' && (r.publishedPostId || (r as DraftRow & { publishedUrl?: string }).publishedUrl) && (
+          {r.status === 'published' && r.publishedUrl && (
             <a
-              href={(r as DraftRow & { publishedUrl?: string }).publishedUrl ?? '#'}
+              href={r.publishedUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[11px] text-ink-3 hover:text-ink inline-flex items-center gap-1 flex-shrink-0"
             >
               <ExternalLink className="w-3 h-3" /> Live
             </a>
+          )}
+          {r.status === 'published' && !r.outcomeSummary && (
+            <button
+              onClick={() => setOutcomePanel({ id: r.id })}
+              className="text-[11px] font-medium text-violet-700 hover:text-violet-900 px-1.5 py-0.5 rounded ring-1 ring-violet-200 hover:bg-violet-50 inline-flex items-center gap-1 flex-shrink-0"
+            >
+              <Plus className="w-3 h-3" /> Attach outcome
+            </button>
+          )}
+          {r.status === 'published' && r.outcomeSummary && (
+            <span
+              className="text-[10px] font-semibold text-emerald-700 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 ring-1 ring-emerald-100 flex-shrink-0"
+              title={`${r.outcomeSummary.reach} reach · ${r.outcomeSummary.interactions} interactions`}
+            >
+              {r.outcomeSummary.engagement_rate !== null
+                ? `${(r.outcomeSummary.engagement_rate * 100).toFixed(1)}% eng`
+                : `${r.outcomeSummary.interactions} int`}
+            </span>
           )}
         </div>
 
@@ -372,6 +436,14 @@ function DraftCard({
             busy={busy}
             onSubmit={onSubmitLifecycle}
             onCancel={onCancelLifecycle}
+          />
+        )}
+
+        {outcomePanel && (
+          <AttachOutcomePanel
+            busy={busy}
+            onSubmit={onSubmitOutcome}
+            onCancel={() => setOutcomePanel(null)}
           />
         )}
       </article>
@@ -577,6 +649,92 @@ function EmptyState() {
         <Sparkles className="w-4 h-4" />
         Start with a theme
       </Link>
+    </div>
+  )
+}
+
+function AttachOutcomePanel({
+  busy, onSubmit, onCancel,
+}: {
+  busy: boolean
+  onSubmit: (body: Record<string, unknown>) => Promise<void>
+  onCancel: () => void
+}) {
+  const [externalId, setExternalId] = useState('')
+  const [permalink, setPermalink] = useState('')
+  const [reach, setReach] = useState('')
+  const [likes, setLikes] = useState('')
+  const [comments, setComments] = useState('')
+  const [saves, setSaves] = useState('')
+  const [shares, setShares] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    if (!externalId.trim() || !reach) {
+      setError('Post ID + reach required')
+      return
+    }
+    setError(null)
+    try {
+      await onSubmit({
+        platform: 'instagram',
+        externalId: externalId.trim(),
+        permalink: permalink.trim() || undefined,
+        reach: Number(reach) || 0,
+        likes: Number(likes) || 0,
+        comments: Number(comments) || 0,
+        saves: Number(saves) || 0,
+        shares: Number(shares) || 0,
+      })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed')
+    }
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-ink-6/40">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-violet-700 mb-2 inline-flex items-center gap-1">
+        <Plus className="w-3 h-3" /> Attach outcome
+      </p>
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <input value={externalId} onChange={e => setExternalId(e.target.value)}
+          placeholder="IG post ID *"
+          className="text-[12px] px-2 py-1.5 rounded-md ring-1 ring-ink-6 focus:ring-violet-500 focus:outline-none" />
+        <input value={permalink} onChange={e => setPermalink(e.target.value)}
+          placeholder="https://instagram.com/p/..."
+          className="text-[12px] px-2 py-1.5 rounded-md ring-1 ring-ink-6 focus:ring-violet-500 focus:outline-none" />
+      </div>
+      <div className="grid grid-cols-5 gap-2 mb-2">
+        <NumField label="Reach *" value={reach} onChange={setReach} />
+        <NumField label="Likes" value={likes} onChange={setLikes} />
+        <NumField label="Comments" value={comments} onChange={setComments} />
+        <NumField label="Saves" value={saves} onChange={setSaves} />
+        <NumField label="Shares" value={shares} onChange={setShares} />
+      </div>
+      {error && (
+        <div className="mb-2 flex items-start gap-1 text-[11px] text-red-700">
+          <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <button onClick={submit} disabled={busy}
+          className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 inline-flex items-center gap-1.5">
+          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+          Attach
+        </button>
+        <button onClick={onCancel} className="text-[11px] text-ink-3 hover:text-ink px-2 py-1.5">Cancel</button>
+      </div>
+    </div>
+  )
+}
+
+function NumField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="block text-[9px] font-semibold text-ink-3 uppercase tracking-wider mb-0.5">{label}</label>
+      <input type="number" value={value} onChange={e => onChange(e.target.value)}
+        className="w-full text-[12px] px-2 py-1.5 rounded-md ring-1 ring-ink-6 focus:ring-violet-500 focus:outline-none" />
     </div>
   )
 }

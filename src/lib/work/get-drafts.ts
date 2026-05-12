@@ -31,6 +31,14 @@ export interface DraftRow {
   rejectionReason: string | null
   aiGenerationCount: number
   publishedPostId: string | null
+  outcomeSummary: {
+    platform: string
+    external_id: string
+    reach: number
+    interactions: number
+    engagement_rate: number | null
+  } | null
+  publishedUrl: string | null
   createdAt: string
   updatedAt: string
 }
@@ -40,7 +48,7 @@ export async function getMyDrafts(opts: { status?: DraftStatus[] } = {}): Promis
 
   let q = supabase
     .from('content_drafts')
-    .select('id, client_id, source_theme_id, service_line, status, idea, caption, proposed_by, proposed_via, target_platforms, target_publish_date, revision_count, approved_by, approved_at, rejection_reason, ai_generation_ids, published_post_id, created_at, updated_at')
+    .select('id, client_id, source_theme_id, service_line, status, idea, caption, proposed_by, proposed_via, target_platforms, target_publish_date, revision_count, approved_by, approved_at, rejection_reason, ai_generation_ids, published_post_id, outcome_summary, published_url, created_at, updated_at')
     .order('updated_at', { ascending: false })
     .limit(200)
 
@@ -88,6 +96,8 @@ export async function getMyDrafts(opts: { status?: DraftStatus[] } = {}): Promis
       rejectionReason: (d.rejection_reason as string) ?? null,
       aiGenerationCount: Array.isArray(d.ai_generation_ids) ? (d.ai_generation_ids as unknown[]).length : 0,
       publishedPostId: (d.published_post_id as string) ?? null,
+      outcomeSummary: (d.outcome_summary as DraftRow['outcomeSummary']) ?? null,
+      publishedUrl: (d.published_url as string) ?? null,
       createdAt: (d.created_at as string) ?? new Date().toISOString(),
       updatedAt: (d.updated_at as string) ?? new Date().toISOString(),
     }
