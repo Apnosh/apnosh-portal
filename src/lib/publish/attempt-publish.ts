@@ -136,18 +136,37 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
   const firstWin = Object.values(perPlatform).find(r => r.status === 'published')
 
   // Build a clickable permalink to surface back on the draft card.
-  // Different platforms hand back IDs in different shapes; we cover
-  // the common ones and let everything else fall through to undefined.
-  function buildPermalink(map: Record<string, PlatformPublishResult>): string | undefined {
+  // IG returns a numeric media id and needs a follow-up fetch to get
+  // the real /p/{shortcode}/ URL. FB returns `{pageId}_{postId}` which
+  // resolves directly.
+  async function buildPermalink(
+    map: Record<string, PlatformPublishResult>,
+  ): Promise<string | undefined> {
     const ig = map.instagram
     if (ig?.status === 'published' && ig.post_id) {
-      // IG returns numeric media id; the shortcode permalink needs a separate fetch.
-      // For v1 we link to the account; richer permalink lookup is Phase 2.
-      return 'https://instagram.com'
+      const igConn = connections.find(c => c.platform === 'instagram')
+      if (igConn?.access_token) {
+        try {
+          const r = await fetch(
+            `https://graph.instagram.com/v21.0/${ig.post_id}?fields=permalink&access_token=${encodeURIComponent(igConn.access_token)}`,
+          )
+          if (r.ok) {
+            const j = (await r.json()) as { permalink?: string }
+            if (j.permalink) return j.permalink
+          }
+        } catch {
+          // Fall through to the account-level link rather than failing
+          // the whole publish — the post is live, we just couldn't
+          // resolve its URL.
+        }
+      }
+      // Best-effort fallback: link to the account so the UI button
+      // still works even if the lookup fails.
+      const handle = igConn?.accountName
+      return handle ? `https://instagram.com/${handle}` : 'https://instagram.com'
     }
     const fb = map.facebook
     if (fb?.status === 'published' && fb.post_id) {
-      // FB post_id is `pageId_postId` — that resolves directly.
       return `https://facebook.com/${fb.post_id}`
     }
     return undefined
@@ -168,7 +187,7 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
   // PlatformPublishResult carries post_id but no URL; build a permalink
   // for the platforms where we know the shape, fall back to undefined.
   const publishedPostId = firstWin.post_id ?? undefined
-  const publishedUrl = buildPermalink(perPlatform)
+  const publishedUrl = await buildPermalink(perPlatform)
 
   if (publishedUrl || publishedPostId) {
     await admin
