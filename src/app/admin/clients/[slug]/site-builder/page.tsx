@@ -12,10 +12,12 @@ import { getDraft } from '@/lib/site-config/actions'
 import { RESTAURANT_DEFAULTS } from '@/lib/site-schemas'
 import type { RestaurantSite } from '@/lib/site-schemas/restaurant'
 import SiteBuilderForm from '@/components/admin/site-builder/site-builder-form'
+import { requireAdminUser } from '@/lib/auth/require-admin'
 
 interface PageProps { params: Promise<{ slug: string }> }
 
 export default async function SiteBuilderPage({ params }: PageProps) {
+  await requireAdminUser()
   const { slug } = await params
   const supabase = await createClient()
 

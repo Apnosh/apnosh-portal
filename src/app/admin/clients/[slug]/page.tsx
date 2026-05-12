@@ -234,6 +234,31 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
   // because they're auto-synced from the subscription via webhook.
   const [hasActiveStripeSub, setHasActiveStripeSub] = useState(false)
 
+  // Role of the viewer — admin vs. non-admin (strategist). Drives which
+  // action buttons and tabs render. Default null (= "still loading");
+  // we render the strategist-safe view until we know for sure.
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void fetch('/api/me/capabilities', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : { all: [] })
+      .then((j: { all?: Array<{ role: string }> }) => {
+        if (cancelled) return
+        const caps = j.all ?? []
+        setIsAdmin(caps.some(c => c.role === 'admin'))
+      })
+      .catch(() => { if (!cancelled) setIsAdmin(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Filter the tab list: strategist does not need Docs or Settings.
+  // Settings is mostly billing/connection config; Docs is admin-only.
+  const visibleTabs = useMemo(() => (
+    isAdmin === true
+      ? TABS
+      : TABS.filter(t => t.key !== 'docs' && t.key !== 'settings')
+  ), [isAdmin])
+
   const fetchAll = useCallback(async () => {
     setLoading(true)
 
@@ -330,13 +355,17 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
             <FileText className="w-3.5 h-3.5" />
             Quotes
           </Link>
-          <Link
-            href={`/admin/clients/${client.slug}/operator`}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-3 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Operator
-          </Link>
+          {/* Admin-only actions: Operator (ops handoff), Site Builder
+              and Site legacy (dev work). Strategist doesn't touch these. */}
+          {isAdmin === true && (
+            <Link
+              href={`/admin/clients/${client.slug}/operator`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-3 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Operator
+            </Link>
+          )}
           <Link
             href={`/admin/clients/${client.slug}/updates`}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-3 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
@@ -344,21 +373,25 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
             <RefreshCw className="w-3.5 h-3.5" />
             Updates
           </Link>
-          <Link
-            href={`/admin/clients/${client.slug}/site-builder`}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-white bg-brand hover:bg-brand-dark rounded-md transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Site Builder
-          </Link>
-          <Link
-            href={`/admin/clients/${client.slug}/site`}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-4 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
-            title="Legacy site settings (use Site Builder instead)"
-          >
-            <Globe className="w-3.5 h-3.5" />
-            Site (legacy)
-          </Link>
+          {isAdmin === true && (
+            <>
+              <Link
+                href={`/admin/clients/${client.slug}/site-builder`}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-white bg-brand hover:bg-brand-dark rounded-md transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Site Builder
+              </Link>
+              <Link
+                href={`/admin/clients/${client.slug}/site`}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-ink-4 hover:text-ink hover:bg-bg-2 rounded-md transition-colors"
+                title="Legacy site settings (use Site Builder instead)"
+              >
+                <Globe className="w-3.5 h-3.5" />
+                Site (legacy)
+              </Link>
+            </>
+          )}
           <Link
             href={`/sites/${client.slug}`}
             target="_blank"
@@ -373,7 +406,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
 
       {/* ── Tabs ───────────────────────────────────────────────────── */}
       <div className="flex gap-1 border-b border-ink-6 overflow-x-auto">
-        {TABS.map(tab => (
+        {visibleTabs.map(tab => (
           <button
             key={tab.key}
             onClick={() => setTab(tab.key)}
@@ -401,6 +434,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
           users={users}
           setUsers={setUsers}
           hasActiveStripeSub={hasActiveStripeSub}
+          isAdmin={isAdmin}
         />
       )}
 
@@ -547,6 +581,7 @@ function OverviewTab({
   users,
   setUsers,
   hasActiveStripeSub,
+  isAdmin,
 }: {
   client: Client
   setClient: (c: Client) => void
@@ -554,6 +589,7 @@ function OverviewTab({
   users: ClientUser[]
   setUsers: (u: ClientUser[]) => void
   hasActiveStripeSub: boolean
+  isAdmin: boolean | null
 }) {
   const supabase = createClient()
 
@@ -1075,7 +1111,7 @@ function OverviewTab({
     </div>
   )
 
-  return <ClientOverview client={client} brand={brand} editContent={editPanelContent} onClientUpdate={handleClientUpdate} />
+  return <ClientOverview client={client} brand={brand} editContent={editPanelContent} onClientUpdate={handleClientUpdate} isAdmin={isAdmin === true} />
 }
 
 /* ------------------------------------------------------------------ */

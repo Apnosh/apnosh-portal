@@ -35,6 +35,10 @@ interface HeroHeaderProps {
   onCreateInvoice: () => void
   onLogMeeting: () => void
   onClientUpdate: (changes: Partial<Client>) => Promise<void>
+  /** Viewer role. Strategist does not see admin-only actions
+      (e.g. "New invoice"). Defaults to true for backwards-compat
+      with any callers that haven't been updated. */
+  isAdmin?: boolean
 }
 
 const BILLING_STATUS_LABEL: Record<string, string> = {
@@ -73,6 +77,7 @@ function formatInitials(name: string): string {
 }
 
 export default function HeroHeader({
+  isAdmin = true,
   client,
   brand,
   daysSinceLastContact,
@@ -109,11 +114,11 @@ export default function HeroHeader({
       if (!(e.metaKey || e.ctrlKey)) return
       if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return
       if (e.key.toLowerCase() === 'l') { e.preventDefault(); onLogMeeting() }
-      if (e.key.toLowerCase() === 'i') { e.preventDefault(); onCreateInvoice() }
+      if (isAdmin && e.key.toLowerCase() === 'i') { e.preventDefault(); onCreateInvoice() }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onLogMeeting, onCreateInvoice])
+  }, [onLogMeeting, onCreateInvoice, isAdmin])
 
   const overall = health ? rollupHealth(health) : 'unknown'
   const healthRing = HEALTH_RING[overall] ?? HEALTH_RING.unknown
@@ -267,16 +272,21 @@ export default function HeroHeader({
                       ⌘L
                     </kbd>
                   </button>
-                  <button
-                    onClick={onCreateInvoice}
-                    className="group inline-flex items-center gap-2 pl-3 pr-2 py-2 border border-ink-6 hover:border-ink-4 bg-white hover:bg-bg-2 rounded-lg text-[13px] text-ink-2 font-medium transition-colors shadow-sm"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">New invoice</span>
-                    <kbd className="hidden md:inline-flex items-center text-[10px] font-medium bg-bg-2 rounded px-1.5 py-0.5 ml-0.5 text-ink-4">
-                      ⌘I
-                    </kbd>
-                  </button>
+                  {/* "New invoice" is admin-only — billing is not the
+                      strategist's lane. Strategist gets just "Log meeting"
+                      as their secondary action here. */}
+                  {isAdmin && (
+                    <button
+                      onClick={onCreateInvoice}
+                      className="group inline-flex items-center gap-2 pl-3 pr-2 py-2 border border-ink-6 hover:border-ink-4 bg-white hover:bg-bg-2 rounded-lg text-[13px] text-ink-2 font-medium transition-colors shadow-sm"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">New invoice</span>
+                      <kbd className="hidden md:inline-flex items-center text-[10px] font-medium bg-bg-2 rounded px-1.5 py-0.5 ml-0.5 text-ink-4">
+                        ⌘I
+                      </kbd>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

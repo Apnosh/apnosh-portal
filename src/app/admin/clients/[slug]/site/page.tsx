@@ -12,10 +12,12 @@ import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getSiteSettings } from '@/lib/site-settings/actions'
 import SiteSettingsForm from '@/components/admin/site/site-settings-form'
+import { requireAdminUser } from '@/lib/auth/require-admin'
 
 interface PageProps { params: Promise<{ slug: string }> }
 
 export default async function ClientSitePage({ params }: PageProps) {
+  await requireAdminUser()
   const { slug } = await params
   const supabase = await createClient()
 

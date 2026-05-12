@@ -40,6 +40,9 @@ interface Props {
   brand?: ClientBrand | null
   editContent: React.ReactNode
   onClientUpdate: (changes: Partial<Client>) => Promise<void>
+  /** Whether the viewer is an admin. Drives admin-only UI like
+      "New invoice" inside HeroHeader. Defaults to true. */
+  isAdmin?: boolean
 }
 
 interface OverviewStats {
@@ -85,7 +88,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default function ClientOverview({ client, brand, editContent, onClientUpdate }: Props) {
+export default function ClientOverview({ client, brand, editContent, onClientUpdate, isAdmin = true }: Props) {
   const [stats, setStats] = useState<OverviewStats>(EMPTY_STATS)
   const [editOpen, setEditOpen] = useState(false)
   const [interactionModalOpen, setInteractionModalOpen] = useState(false)
@@ -181,6 +184,7 @@ export default function ClientOverview({ client, brand, editContent, onClientUpd
           }}
           onLogMeeting={() => setInteractionModalOpen(true)}
           onClientUpdate={onClientUpdate}
+          isAdmin={isAdmin}
         />
       </div>
 

@@ -13,10 +13,12 @@ import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { listProposals, listAgentRuns } from '@/lib/operator/actions'
 import OperatorView from '@/components/admin/operator/operator-view'
+import { requireAdminUser } from '@/lib/auth/require-admin'
 
 interface PageProps { params: Promise<{ slug: string }> }
 
 export default async function ClientOperatorPage({ params }: PageProps) {
+  await requireAdminUser()
   const { slug } = await params
   const supabase = await createClient()
 
