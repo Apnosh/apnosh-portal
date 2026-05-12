@@ -110,9 +110,7 @@ const navSections: NavSection[] = [
           { label: 'Engage', href: '/dashboard/social/engage' },
           { label: 'Library', href: '/dashboard/social/library' },
           { label: 'Request content', href: '/dashboard/social/request' },
-          // Boost a post hidden for v1: page is a UI stub with no ad data wired.
-          // Re-add when /dashboard/social/boost connects to the strategist queue.
-          // { label: 'Boost a post', href: '/dashboard/social/boost' },
+          { label: 'Boost a post', href: '/dashboard/social/boost' },
           { label: 'Calendar', href: '/dashboard/calendar' },
           { label: 'Performance', href: '/dashboard/social/performance' },
           { label: 'Action needed', href: '/dashboard/social/action-needed' },

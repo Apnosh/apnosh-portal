@@ -3,10 +3,10 @@
 /**
  * Boost view: pick a post, pick a budget, send for strategist approval.
  *
- * v1 deliberately ships UI-only — the "Send for approval" CTA writes
- * a client_task so the strategist sees it and runs the real campaign
- * in Meta Ads Manager. When we wire direct Meta Ads integration the
- * submit handler swaps to launch automatically.
+ * "Send for approval" POSTs /api/social/boost which writes a row to
+ * ad_campaigns (status='pending'). The strategist sees it in
+ * /work/boosts and launches it in Meta Ads Manager; direct Meta Ads
+ * API launch can replace that step later.
  */
 
 import { useMemo, useState } from 'react'

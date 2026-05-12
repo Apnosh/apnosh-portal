@@ -11,8 +11,9 @@
  *   3. Budget & results — monthly ad budget, used vs. remaining,
  *      estimated foot-traffic attributable to ads.
  *
- * v1 is intentionally UI-only — no live ad data wired. The structure
- * stays in shape for when we wire Meta Ads Manager / TikTok Ads.
+ * Submit handler writes to ad_campaigns (status='pending') so the
+ * strategist sees it in /work/boosts and launches it. Direct Meta
+ * Ads Manager API launch can replace the manual step later.
  */
 
 import { redirect } from 'next/navigation'
