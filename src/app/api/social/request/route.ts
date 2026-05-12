@@ -129,6 +129,8 @@ export async function POST(req: NextRequest) {
       due_at: dueAt,
       assignee_type: 'admin',
       visible_to_client: true,
+      source: 'client_request',
+      created_by: user.id,
     })
     .select('id')
     .single()
