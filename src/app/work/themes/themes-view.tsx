@@ -242,7 +242,7 @@ function CreateModal({
     onCreated({
       id, clientId, clientName: c?.name ?? null, clientSlug: c?.slug ?? null,
       month, themeName, themeBlurb, pillars, keyDates: [], strategistNotes: null,
-      status: 'draft', version: 1,
+      status: 'planning', version: 1,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       draftCount: 0,
     })

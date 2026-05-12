@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       pillars: body.pillars ?? [],
       key_dates: body.keyDates ?? [],
       strategist_notes: body.strategistNotes ?? null,
-      status: 'draft',
+      status: 'planning',  // valid statuses: planning | shared | archived
       created_by: user.id,
     })
     .select('id')
