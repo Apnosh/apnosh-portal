@@ -14,6 +14,7 @@ import { ArrowLeft, MapPin, Clock, Phone, User, FileText, Upload, CheckSquare, S
 import { getMyCapabilities } from '@/lib/auth/capabilities'
 import { requireCapability } from '@/lib/auth/require-capability'
 import { getShootDetail } from '@/lib/work/get-shoots'
+import ShootActions from './shoot-actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -139,18 +140,9 @@ export default async function ShootDetailPage({ params }: PageProps) {
         </Card>
       )}
 
-      {/* Upload */}
+      {/* AI prep + status actions */}
       <div className="mt-6">
-        <a
-          href={`/api/shoots/${shoot.id}/upload`}
-          className="flex items-center justify-center gap-2 w-full rounded-xl bg-ink text-white text-[14px] font-semibold py-3.5 hover:bg-ink-2 active:scale-[0.99] transition-all"
-        >
-          <Upload className="w-4 h-4" />
-          Upload footage
-        </a>
-        <p className="text-[11px] text-ink-4 text-center mt-2">
-          Upload when you wrap. Strategist gets notified automatically.
-        </p>
+        <ShootActions shootId={shoot.id} initialStatus={shoot.status} />
       </div>
 
       {shoot.uploads.length > 0 && (
