@@ -140,8 +140,8 @@ ${body.proposal.pet_peeves.map(p => `- ${p}`).join('\n')}`
           client_id: client.id,
           category: cat,
           fact: f.value,
-          source: f.rationale ? `Onboarding: ${f.rationale}` : 'Onboarding intake',
-          confidence: 0.8,
+          source: 'onboarding',
+          confidence: 'medium',
           recorded_by: user.id,
           active: true,
         }
