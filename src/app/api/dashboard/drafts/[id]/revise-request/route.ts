@@ -61,7 +61,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     reason_tags: ['client_request'],
     reason_note: body.note.trim(),
     context_snapshot: { client_id: draft.client_id, source: 'client_signoff_page' },
-    judged_by: user.id,
+    judge_id: user.id,
   })
 
   await admin.from('events').insert({
