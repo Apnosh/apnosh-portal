@@ -16,6 +16,7 @@ import AssetsTab from './tabs/assets-tab'
 import StyleLibraryTab from './tabs/style-library-tab'
 import QueueTab from './tabs/queue-tab'
 import MetricsTab from './tabs/metrics-tab'
+import KnowledgeTab from '@/components/admin/knowledge-tab'
 import LocalSeoTab from './tabs/local-seo-tab'
 import ReviewsTab from './tabs/reviews-tab'
 import NotesTab from './tabs/notes-tab'
@@ -45,10 +46,11 @@ import type {
 type Tab =
   | 'overview'
   | 'profile'
-  | 'timeline'       // NEW — every call, email, meeting, note
+  | 'timeline'       // every call, email, meeting, note
   | 'docs'
   | 'brand'          // Brand System + Assets + Style Library
   | 'content'        // Content Queue (future: calendar, pipeline)
+  | 'knowledge'      // Structured client knowledge facts → fed to every AI run
   | 'performance'    // Social Metrics + Reviews + Website
   | 'notes'          // AM Notes + Dashboard Notes
   | 'settings'       // Connections + Data Sync
@@ -60,6 +62,7 @@ const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
   { key: 'docs',        label: 'Docs',        icon: FileText },
   { key: 'brand',       label: 'Brand',       icon: Palette },
   { key: 'content',     label: 'Content',     icon: ListTodo },
+  { key: 'knowledge',   label: 'Knowledge',   icon: Sparkles },
   { key: 'performance', label: 'Performance', icon: BarChart3 },
   { key: 'notes',       label: 'Notes',       icon: MessageSquare },
   { key: 'settings',    label: 'Settings',    icon: RefreshCw },
@@ -473,6 +476,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
 
       {activeTab === 'content' && (
         <QueueTab clientId={client.id} clientSlug={client.slug} />
+      )}
+
+      {activeTab === 'knowledge' && (
+        <KnowledgeTab clientId={client.id} />
       )}
 
       {activeTab === 'performance' && (
