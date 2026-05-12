@@ -6,8 +6,9 @@
 
 'use client'
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import {
   FileText, Sparkles, CheckCircle2, XCircle, Loader2, Clock,
   Send, Eye, ArrowRight, ListTodo, MessageSquare, Pencil,
@@ -41,6 +42,8 @@ const REJECT_TAGS = ['off_brand', 'low_value', 'duplicate', 'wrong_timing', 'oth
 type LifecycleMode = 'edit' | 'schedule' | 'publish'
 
 export default function DraftsView({ initialDrafts }: Props) {
+  const params = useSearchParams()
+  const focusId = params.get('focus') ?? params.get('draft')
   const [drafts, setDrafts] = useState<DraftRow[]>(initialDrafts)
   const [busy, setBusy] = useState<string | null>(null)
   const [judgePanel, setJudgePanel] = useState<{ id: string; mode: 'revise' | 'rejected' } | null>(null)
@@ -189,6 +192,7 @@ export default function DraftsView({ initialDrafts }: Props) {
                 outcomePanel={outcomePanel}
                 setOutcomePanel={setOutcomePanel}
                 onSubmitOutcome={onSubmitOutcome}
+                focusId={focusId}
               />
             )
           })}
@@ -202,6 +206,7 @@ function Bucket({
   def, rows, busyId, onJudge, openPanel, setOpenPanel,
   lifePanel, setLifePanel, onLifecycle,
   outcomePanel, setOutcomePanel, onSubmitOutcome,
+  focusId,
 }: {
   def: BucketDef
   rows: DraftRow[]
@@ -215,6 +220,7 @@ function Bucket({
   outcomePanel: { id: string } | null
   setOutcomePanel: (p: { id: string } | null) => void
   onSubmitOutcome: (id: string, body: Record<string, unknown>) => Promise<void>
+  focusId: string | null
 }) {
   const toneText =
     def.tone === 'amber' ? 'text-amber-700'
@@ -232,6 +238,7 @@ function Bucket({
       <ul className="space-y-2">
         {rows.map(r => (
           <DraftCard key={r.id} r={r}
+            focused={r.id === focusId}
             busy={busyId === r.id}
             judgePanel={openPanel?.id === r.id ? openPanel : null}
             lifePanel={lifePanel?.id === r.id ? lifePanel : null}
@@ -259,13 +266,14 @@ function Bucket({
 }
 
 function DraftCard({
-  r, busy,
+  r, busy, focused,
   judgePanel, onApprove, onOpenRevise, onOpenReject, onSubmitJudgment, onCancelJudge,
   lifePanel, onOpenEdit, onOpenSchedule, onOpenPublish, onSubmitLifecycle, onCancelLifecycle, onUnschedule,
   outcomePanel, setOutcomePanel, onSubmitOutcome,
 }: {
   r: DraftRow
   busy: boolean
+  focused: boolean
   judgePanel: { id: string; mode: 'revise'|'rejected' } | null
   onApprove: () => void
   onOpenRevise: () => void
@@ -288,10 +296,18 @@ function DraftCard({
   const schedulable = r.status === 'approved'
   const publishable = r.status === 'approved' || r.status === 'scheduled'
   const showUnschedule = r.status === 'scheduled'
+  const ref = useRef<HTMLLIElement>(null)
+  useEffect(() => {
+    if (!focused) return
+    const t = setTimeout(() => {
+      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 50)
+    return () => clearTimeout(t)
+  }, [focused])
   return (
-    <li>
+    <li ref={ref}>
       <article
-        className="rounded-2xl border bg-white p-4"
+        className={`rounded-2xl border bg-white p-4 ${focused ? 'ring-2 ring-brand' : ''}`}
         style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
       >
         <div className="flex items-start gap-3">

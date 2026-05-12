@@ -83,7 +83,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       kind: 'client_revise',
       title: 'Client asked for revisions',
       body: body.note.trim().slice(0, 140),
-      link: `/work/drafts?draft=${id}`,
+      link: `/work/drafts?focus=${id}`,
     },
   ).catch(() => ({ notified: 0 }))
 

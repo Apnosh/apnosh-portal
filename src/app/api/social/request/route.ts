@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
       kind: 'client_request',
       title: `New ${typeLabel.toLowerCase()} request`,
       body: body.description.slice(0, 140),
-      link: `/work/inbox?task=${inserted?.id ?? ''}`,
+      link: `/work/inbox?focus=${inserted?.id ?? ''}`,
     },
   ).catch(() => ({ notified: 0 }))
 

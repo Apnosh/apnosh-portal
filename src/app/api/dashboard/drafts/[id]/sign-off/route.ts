@@ -73,7 +73,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
       kind: 'client_signoff',
       title: 'Client signed off — ready to schedule',
       body: 'The owner approved the draft. You can publish or schedule it.',
-      link: `/work/drafts?draft=${id}`,
+      link: `/work/drafts?focus=${id}`,
     },
   ).catch(() => ({ notified: 0 }))
 

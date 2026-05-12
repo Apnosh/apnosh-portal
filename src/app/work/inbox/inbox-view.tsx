@@ -6,8 +6,8 @@
 
 'use client'
 
-import { useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Inbox, Sparkles, Loader2, CheckCircle2, X, Clock, AlertCircle,
   ArrowRight, Wrench, MessageSquareWarning, FileText,
@@ -20,12 +20,32 @@ type Tab = 'requests' | 'internal' | 'recent'
 
 export default function InboxView({ initialInbox }: Props) {
   const router = useRouter()
+  const params = useSearchParams()
+  const focusId = params.get('focus') ?? params.get('task')
   const [inbox, setInbox] = useState<InboxBuckets>(initialInbox)
-  const initial: Tab = initialInbox.clientRequests.length > 0 ? 'requests'
-    : initialInbox.internal.length > 0 ? 'internal' : 'recent'
+  // If we arrived with ?focus=<id>, open the tab that contains it.
+  const initial: Tab = (() => {
+    if (focusId) {
+      if (initialInbox.clientRequests.some(r => r.id === focusId)) return 'requests'
+      if (initialInbox.internal.some(r => r.id === focusId)) return 'internal'
+      if (initialInbox.recent.some(r => r.id === focusId)) return 'recent'
+    }
+    return initialInbox.clientRequests.length > 0 ? 'requests'
+      : initialInbox.internal.length > 0 ? 'internal' : 'recent'
+  })()
   const [tab, setTab] = useState<Tab>(initial)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const focusRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!focusId) return
+    // Wait one frame so the row is mounted, then bring it on-screen.
+    const t = setTimeout(() => {
+      focusRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 50)
+    return () => clearTimeout(t)
+  }, [focusId, tab])
 
   const removeRow = (id: string) => {
     setInbox(prev => ({
@@ -121,14 +141,19 @@ export default function InboxView({ initialInbox }: Props) {
       ) : (
         <div className="space-y-3">
           {activeList.map(row => (
-            <InboxCard
+            <div
               key={row.id}
-              row={row}
-              busy={busy === row.id}
-              readOnly={tab === 'recent'}
-              onAccept={() => accept(row)}
-              onDismiss={() => dismiss(row)}
-            />
+              ref={row.id === focusId ? focusRef : null}
+              className={row.id === focusId ? 'ring-2 ring-brand rounded-2xl transition-shadow' : ''}
+            >
+              <InboxCard
+                row={row}
+                busy={busy === row.id}
+                readOnly={tab === 'recent'}
+                onAccept={() => accept(row)}
+                onDismiss={() => dismiss(row)}
+              />
+            </div>
           ))}
         </div>
       )}
