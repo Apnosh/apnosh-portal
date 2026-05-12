@@ -381,4 +381,5 @@ export const WORK_SURFACES_BY_CAPABILITY: Partial<Record<RoleCapability, string[
   email_specialist: ['/work/today', '/work/campaigns'],
   onboarder: ['/work/today', '/work/onboarding'],
   data_analyst: ['/work/performance'],
+  finance: ['/work/today', '/work/billing'],
 }
