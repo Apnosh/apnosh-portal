@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
       email: body.basics.email ?? null,
       phone: body.basics.phone ?? null,
       socials: body.basics.socialHandle ? { instagram: body.basics.socialHandle } : {},
-      tier: body.basics.serviceTier ?? 'starter',
+      tier: ({ starter: 'Basic', growth: 'Standard', scale: 'Pro' } as const)[body.basics.serviceTier ?? 'starter'] ?? 'Basic',
       onboarding_date: new Date().toISOString(),
       status: 'active',
       notes: `Cuisine: ${body.basics.cuisine}`,
