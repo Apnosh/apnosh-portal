@@ -56,7 +56,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
       idea,
       caption: captionSeed,
       proposed_by: task.created_by ?? user.id,
-      proposed_via: 'client',  // came from a client_request
+      proposed_via: 'client_request',
       target_platforms: ['instagram'],
     })
     .select('id')
