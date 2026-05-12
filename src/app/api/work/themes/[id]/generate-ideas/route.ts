@@ -151,17 +151,20 @@ Return the JSON array of ${count} ideas now.`
   const admin = createAdminClient()
 
   // 1) Write ai_generations row (audit trail — principle #1 + #2).
-  // Schema reality: ai_generations uses task_type / raw_text /
-  // latency_ms; there is no status or cost_usd column.
+  // Schema reality: ai_generations.task_type has a check constraint
+  // that only permits: generate, recreate, refine, extract, design,
+  // critique, judge. Use 'generate' since this IS a generation task,
+  // and stuff the more specific label into output_summary so we can
+  // still group / filter later.
   const latencyMs = completedAt.getTime() - startedAt.getTime()
-  const { data: agentRun } = await admin
+  const aiGenInsert = await admin
     .from('ai_generations')
     .insert({
       client_id: theme.client_id,
-      task_type: 'post_ideas_from_theme',
+      task_type: 'generate',
       model: MODEL,
-      input_summary: userPrompt.slice(0, 4000),
-      output_summary: parseError ? `failed: ${parseError}` : `${ideas.length} ideas`,
+      input_summary: { kind: 'post_ideas_from_theme', prompt: userPrompt.slice(0, 4000) },
+      output_summary: { kind: 'post_ideas_from_theme', count: ideas.length, error: parseError },
       raw_text: rawOutput.slice(0, 16000),
       latency_ms: latencyMs,
       input_tokens: inputTokens,
@@ -172,7 +175,12 @@ Return the JSON array of ${count} ideas now.`
     .select('id')
     .maybeSingle()
 
-  const generationId = agentRun?.id as string | undefined
+  if (aiGenInsert.error) {
+    // Don't swallow — surface so the caller knows audit failed even
+    // if drafts succeed. This prevents the "no provenance" bug.
+    console.error('ai_generations insert failed:', aiGenInsert.error)
+  }
+  const generationId = aiGenInsert.data?.id as string | undefined
   void costUsd  // cost computed but not persisted (no column yet)
 
   // 2) Write ai_generation_inputs row (retrieval audit — principle #6).
