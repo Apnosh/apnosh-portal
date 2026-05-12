@@ -59,19 +59,16 @@ export default function QueueView({ initialDrafts }: Props) {
   return (
     <div className="max-w-4xl mx-auto py-7 px-4 lg:px-6">
       <header className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-pink-50 text-pink-700 ring-1 ring-pink-100">
-            <ImageIcon className="w-4.5 h-4.5" />
+        <div className="flex items-center gap-3 mb-1.5">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-pink-50 text-pink-700 ring-1 ring-pink-100 flex-shrink-0">
+            <ImageIcon className="w-4 h-4" />
           </div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
-            Visual queue
-          </p>
+          <h1 className="text-[22px] sm:text-[24px] leading-tight font-bold text-ink tracking-tight">
+            Drafts that need a visual brief
+          </h1>
         </div>
-        <h1 className="text-[26px] sm:text-[28px] leading-tight font-bold text-ink tracking-tight">
-          Drafts that need a visual brief
-        </h1>
-        <p className="text-[13px] text-ink-2 mt-1.5 leading-relaxed max-w-2xl">
-          Write composition, lighting, props, and shot list for each draft. AI can draft a brief grounded in the client&rsquo;s voice + your past winning patterns.
+        <p className="text-[13px] text-ink-2 leading-relaxed max-w-2xl ml-10">
+          Write composition, lighting, props, and shot list. AI can draft from the client&rsquo;s voice + your past winners.
         </p>
       </header>
 

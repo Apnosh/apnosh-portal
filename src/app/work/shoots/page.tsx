@@ -27,18 +27,15 @@ export default async function ShootsListPage() {
   return (
     <div className="max-w-2xl mx-auto py-6 px-4">
       <header className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-50 text-amber-700 ring-1 ring-amber-100">
-            <Camera className="w-4.5 h-4.5" />
+        <div className="flex items-center gap-3 mb-1.5">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-amber-50 text-amber-700 ring-1 ring-amber-100 flex-shrink-0">
+            <Camera className="w-4 h-4" />
           </div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
-            Your shoots
-          </p>
+          <h1 className="text-[22px] leading-tight font-bold text-ink tracking-tight">
+            Shoot day
+          </h1>
         </div>
-        <h1 className="text-[26px] leading-tight font-bold text-ink tracking-tight">
-          Shoot day
-        </h1>
-        <p className="text-[13px] text-ink-3 mt-1.5 leading-relaxed">
+        <p className="text-[13px] text-ink-3 leading-relaxed ml-10">
           Tap a shoot to see the brief, location, and shot list. Upload footage when you wrap.
         </p>
       </header>

@@ -46,18 +46,15 @@ export default function WebView({ initialData }: Props) {
     <div className="max-w-5xl mx-auto py-7 px-4 lg:px-6 space-y-6">
       <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-sky-50 text-sky-700 ring-1 ring-sky-100">
-              <Globe className="w-4.5 h-4.5" />
+          <div className="flex items-center gap-3 mb-1.5">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-sky-50 text-sky-700 ring-1 ring-sky-100 flex-shrink-0">
+              <Globe className="w-4 h-4" />
             </div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
-              Web
-            </p>
+            <h1 className="text-[22px] sm:text-[24px] leading-tight font-bold text-ink tracking-tight">
+              Site health &amp; page drafts
+            </h1>
           </div>
-          <h1 className="text-[26px] sm:text-[28px] leading-tight font-bold text-ink tracking-tight">
-            Site health &amp; page drafts
-          </h1>
-          <p className="text-[13px] text-ink-2 mt-1.5 leading-relaxed max-w-2xl">
+          <p className="text-[13px] text-ink-2 leading-relaxed max-w-2xl ml-10">
             Per-client uptime + page speed at a glance. AI drafts new page copy in each client&rsquo;s voice.
           </p>
         </div>
