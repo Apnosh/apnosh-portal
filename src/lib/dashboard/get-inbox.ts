@@ -39,7 +39,7 @@ const URGENCY_RANK: Record<InboxItem['urgency'], number> = { high: 0, medium: 1,
 export async function getInbox(clientId: string): Promise<InboxItem[]> {
   const admin = createAdminClient()
 
-  const [delivsRow, postsRow, reviewsRow, tasksRow] = await Promise.all([
+  const [delivsRow, postsRow, reviewsRow, tasksRow, draftApprovalsRow] = await Promise.all([
     admin
       .from('deliverables')
       .select('id, title, type, status, created_at')
@@ -68,6 +68,17 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
       .eq('visible_to_client', true)
       .in('status', ['todo', 'doing'])
       .order('due_at', { ascending: true, nullsFirst: false })
+      .limit(20),
+    // Approved drafts that originated from a client_request — these
+    // are waiting for the client's final sign-off / review.
+    admin
+      .from('content_drafts')
+      .select('id, idea, caption, status, proposed_via, updated_at, approved_at, client_signed_off_at')
+      .eq('client_id', clientId)
+      .eq('proposed_via', 'client_request')
+      .eq('status', 'approved')
+      .is('client_signed_off_at', null)
+      .order('approved_at', { ascending: false })
       .limit(20),
   ])
 
@@ -169,6 +180,25 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
       href: '/dashboard/inbox',
       whenIso: (t.created_at as string) ?? new Date().toISOString(),
       status: workflowLabel ?? dueLabel,
+    })
+  }
+
+  // Approved drafts awaiting client sign-off — the natural next step
+  // after staff hits "approve" on a draft originated from a client
+  // request. Click-through goes to the preview page where the owner
+  // can read the caption and approve in one tap.
+  for (const d of draftApprovalsRow.data ?? []) {
+    const idea = (d.idea as string) ?? 'Approval ready'
+    const caption = (d.caption as string) ?? ''
+    items.push({
+      id: `client-approval-${d.id}`,
+      kind: 'approval',
+      title: idea,
+      detail: caption ? caption.slice(0, 120) + (caption.length > 120 ? '…' : '') : 'Tap to read the caption and approve',
+      urgency: 'high',
+      href: `/dashboard/preview/${d.id}`,
+      whenIso: (d.approved_at as string) ?? (d.updated_at as string) ?? new Date().toISOString(),
+      status: 'Ready for your review',
     })
   }
 
