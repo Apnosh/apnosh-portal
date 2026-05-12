@@ -14,6 +14,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 
 export type RoleCapability =
+  // Core 11 (migration 101)
   | 'admin'
   | 'strategist'
   | 'ad_buyer'
@@ -25,6 +26,18 @@ export type RoleCapability =
   | 'influencer'
   | 'client_owner'
   | 'client_manager'
+  // Added in migration 106
+  | 'designer'
+  | 'email_specialist'
+  | 'local_seo'
+  | 'web_ops'
+  | 'web_designer'
+  | 'web_developer'
+  | 'data_analyst'
+  | 'onboarder'
+  | 'finance'
+  | 'paid_media'
+  | 'visual_creator'
 
 export interface RoleSummary {
   role: RoleCapability
@@ -37,6 +50,7 @@ export interface RoleSummary {
 }
 
 const META: Record<RoleCapability, Omit<RoleSummary, 'role'>> = {
+  // Core 11
   admin:          { label: 'Admin',         accent: 'ink',     landingPath: '/admin' },
   strategist:     { label: 'Strategist',    accent: 'emerald', landingPath: '/work/today' },
   ad_buyer:       { label: 'Ad buyer',      accent: 'violet',  landingPath: '/work/boosts' },
@@ -48,6 +62,18 @@ const META: Record<RoleCapability, Omit<RoleSummary, 'role'>> = {
   influencer:     { label: 'Creator',       accent: 'pink',    landingPath: '/marketplace' },
   client_owner:   { label: 'Owner',         accent: 'brand',   landingPath: '/dashboard' },
   client_manager: { label: 'Manager',       accent: 'brand',   landingPath: '/dashboard' },
+  // Added in migration 106 (catalog is also in src/lib/roles/catalog.ts)
+  designer:         { label: 'Designer',         accent: 'pink',    landingPath: '/work/queue' },
+  email_specialist: { label: 'Email Specialist', accent: 'teal',    landingPath: '/work/email' },
+  local_seo:        { label: 'Local SEO',        accent: 'emerald', landingPath: '/work/local' },
+  web_ops:          { label: 'Web Ops',          accent: 'sky',     landingPath: '/work/web' },
+  web_designer:     { label: 'Web Designer',     accent: 'rose',    landingPath: '/work/web-projects' },
+  web_developer:    { label: 'Web Developer',    accent: 'indigo',  landingPath: '/work/web-projects' },
+  data_analyst:     { label: 'Data Analyst',     accent: 'sky',     landingPath: '/work/reports' },
+  onboarder:        { label: 'Onboarder',        accent: 'amber',   landingPath: '/work/onboarding' },
+  finance:          { label: 'Finance',          accent: 'ink',     landingPath: '/admin/billing' },
+  paid_media:       { label: 'Paid Media',       accent: 'violet',  landingPath: '/work/boosts' },
+  visual_creator:   { label: 'Visual Creator',   accent: 'amber',   landingPath: '/work/shoots' },
 }
 
 export function describeRole(role: RoleCapability): RoleSummary {

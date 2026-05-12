@@ -57,7 +57,7 @@ const navSections = [
   {
     label: 'Setup',
     items: [
-      { label: 'Strategists', href: '/admin/strategists', icon: UserCog },
+      { label: 'Team', href: '/admin/team', icon: UserCog },
       { label: 'Settings', href: '/admin/settings', icon: Settings },
     ],
   },
@@ -320,8 +320,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     <Link href="/admin/messages?new=1" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors">
                       <MessageSquare className="w-4 h-4 text-ink-4" /> New Message
                     </Link>
-                    <Link href="/admin/strategists" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors border-t border-ink-7 mt-1 pt-2">
-                      <UserCog className="w-4 h-4 text-ink-4" /> Invite Strategist
+                    <Link href="/admin/team" onClick={() => setQuickAddOpen(false)} className="flex items-center gap-2.5 px-4 py-2 text-sm text-ink hover:bg-bg-2 transition-colors border-t border-ink-7 mt-1 pt-2">
+                      <UserCog className="w-4 h-4 text-ink-4" /> Invite team member
                     </Link>
                   </div>
                 </>
