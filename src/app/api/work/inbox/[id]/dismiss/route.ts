@@ -29,7 +29,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     .eq('id', id)
     .maybeSingle()
   if (!task) return NextResponse.json({ error: 'task not found' }, { status: 404 })
-  if (task.status === 'done' || task.status === 'dismissed') {
+  if (task.status === 'done' || task.status === 'canceled') {
     return NextResponse.json({ error: `already ${task.status}` }, { status: 409 })
   }
 
@@ -37,7 +37,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   const { error } = await admin
     .from('client_tasks')
     .update({
-      status: 'dismissed',
+      status: 'canceled',
       completed_by: user.id,
       completed_at: new Date().toISOString(),
     })

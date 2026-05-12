@@ -228,10 +228,9 @@ function AIAnalysisRow({ analysis }: { analysis: Record<string, unknown> }) {
 function StatusBadge({ status }: { status: InboxRow['status'] }) {
   if (status === 'todo') return null
   const map: Record<string, string> = {
-    in_progress: 'text-amber-700 bg-amber-50 ring-amber-100',
-    snoozed: 'text-ink-3 bg-ink-7 ring-ink-6',
+    doing: 'text-amber-700 bg-amber-50 ring-amber-100',
     done: 'text-emerald-700 bg-emerald-50 ring-emerald-100',
-    dismissed: 'text-ink-4 bg-ink-7 ring-ink-6',
+    canceled: 'text-ink-4 bg-ink-7 ring-ink-6',
   }
   return (
     <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ring-1 ${map[status] ?? ''}`}>

@@ -12,7 +12,7 @@
 
 import { createClient as createServerClient } from '@/lib/supabase/server'
 
-export type TaskStatus = 'todo' | 'in_progress' | 'snoozed' | 'done' | 'dismissed'
+export type TaskStatus = 'todo' | 'doing' | 'done' | 'canceled'
 export type TaskSource = 'client_request' | 'system' | 'admin' | 'engage_followup' | 'invoice_chase'
 
 export interface InboxRow {
@@ -63,13 +63,13 @@ export async function getInbox(): Promise<InboxBuckets> {
     supabase
       .from('client_tasks')
       .select(SELECT)
-      .in('status', ['todo', 'in_progress', 'snoozed'])
+      .in('status', ['todo', 'doing'])
       .order('created_at', { ascending: false })
       .limit(100),
     supabase
       .from('client_tasks')
       .select(SELECT)
-      .in('status', ['done', 'dismissed'])
+      .in('status', ['done', 'canceled'])
       .gte('updated_at', sevenDaysAgo)
       .order('updated_at', { ascending: false })
       .limit(20),

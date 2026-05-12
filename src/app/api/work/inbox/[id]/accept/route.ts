@@ -34,7 +34,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     .eq('id', id)
     .maybeSingle()
   if (!task) return NextResponse.json({ error: 'task not found' }, { status: 404 })
-  if (task.status === 'done' || task.status === 'dismissed') {
+  if (task.status === 'done' || task.status === 'canceled') {
     return NextResponse.json({ error: `cannot accept from status ${task.status}` }, { status: 409 })
   }
   if (task.content_id) {
@@ -70,7 +70,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   const { error: updateErr } = await admin
     .from('client_tasks')
     .update({
-      status: 'in_progress',
+      status: 'doing',
       content_id: draft.id,
       assignee_type: 'admin',
       assignee_id: user.id,
