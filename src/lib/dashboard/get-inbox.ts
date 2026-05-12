@@ -16,7 +16,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export type InboxItemKind = 'approval' | 'post_review' | 'review' | 'task'
+export type InboxItemKind = 'approval' | 'post_review' | 'review' | 'task' | 'connection'
 
 export interface InboxItem {
   id: string
@@ -39,7 +39,7 @@ const URGENCY_RANK: Record<InboxItem['urgency'], number> = { high: 0, medium: 1,
 export async function getInbox(clientId: string): Promise<InboxItem[]> {
   const admin = createAdminClient()
 
-  const [delivsRow, postsRow, reviewsRow, tasksRow, draftApprovalsRow] = await Promise.all([
+  const [delivsRow, postsRow, reviewsRow, tasksRow, draftApprovalsRow, connectionsRow] = await Promise.all([
     admin
       .from('deliverables')
       .select('id, title, type, status, created_at')
@@ -80,6 +80,16 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
       .is('client_signed_off_at', null)
       .order('approved_at', { ascending: false })
       .limit(20),
+    // Broken integrations — surfaced here too so the sidebar badge
+    // (which counts the agenda) and the inbox page agree. Previously
+    // the badge counted these but the inbox page didn't render them,
+    // producing "1 notification but nothing's there" confusion.
+    admin
+      .from('channel_connections')
+      .select('id, channel, status, updated_at')
+      .eq('client_id', clientId)
+      .in('status', ['error', 'expired', 'disconnected'])
+      .limit(10),
   ])
 
   const items: InboxItem[] = []
@@ -199,6 +209,38 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
       href: `/dashboard/preview/${d.id}`,
       whenIso: (d.approved_at as string) ?? (d.updated_at as string) ?? new Date().toISOString(),
       status: 'Ready for your review',
+    })
+  }
+
+  // Broken integrations. Match the agenda's urgency='high' so the
+  // sidebar badge and the inbox page stay in sync.
+  const CHANNEL_LABEL: Record<string, string> = {
+    instagram: 'Instagram',
+    facebook: 'Facebook',
+    tiktok: 'TikTok',
+    linkedin: 'LinkedIn',
+    google_analytics: 'Google Analytics',
+    google_business_profile: 'Google Business Profile',
+    google_search_console: 'Search Console',
+    yelp: 'Yelp',
+  }
+  for (const c of connectionsRow.data ?? []) {
+    const channel = (c.channel as string) ?? 'integration'
+    const label = CHANNEL_LABEL[channel] ?? channel
+    const status = (c.status as string) ?? 'broken'
+    items.push({
+      id: `connection-${c.id}`,
+      kind: 'connection',
+      title: `Reconnect ${label}`,
+      detail: status === 'expired'
+        ? 'The connection token expired. One tap to refresh.'
+        : status === 'disconnected'
+        ? 'Disconnected. Reconnect to keep the data flowing.'
+        : 'Something\'s off with this connection.',
+      urgency: 'high',
+      href: '/dashboard/connected-accounts',
+      whenIso: (c.updated_at as string) ?? new Date().toISOString(),
+      status: status === 'expired' ? 'Expired' : status === 'disconnected' ? 'Disconnected' : 'Needs attention',
     })
   }
 

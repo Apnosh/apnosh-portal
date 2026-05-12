@@ -18,7 +18,7 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import {
   CheckSquare, MessageSquare, ListTodo, FileText, Send, Inbox as InboxIcon,
-  ChevronRight,
+  ChevronRight, PlugZap,
 } from 'lucide-react'
 import type { InboxItem, InboxItemKind } from '@/lib/dashboard/get-inbox'
 
@@ -34,6 +34,9 @@ const FILTER_LABEL: Record<Filter, string> = {
 function kindToFilter(k: InboxItemKind): Filter {
   if (k === 'approval' || k === 'post_review') return 'approval'
   if (k === 'review') return 'review'
+  // Connection-fix items live alongside tasks in the Tasks filter —
+  // both are "things you need to do," and adding a 5th tab for one
+  // rarely-shown kind isn't worth the UI weight.
   return 'task'
 }
 
@@ -42,6 +45,7 @@ const KIND_ICON: Record<InboxItemKind, React.ComponentType<{ className?: string 
   post_review: Send,
   review: MessageSquare,
   task: ListTodo,
+  connection: PlugZap,
 }
 
 const URGENCY_TONE: Record<InboxItem['urgency'], string> = {
@@ -58,6 +62,9 @@ const STATUS_TONE: Record<string, string> = {
   'Received': 'bg-sky-50 text-sky-700',
   'In progress': 'bg-purple-50 text-purple-700',
   'Drafting': 'bg-purple-50 text-purple-700',
+  'Expired': 'bg-rose-50 text-rose-700',
+  'Disconnected': 'bg-rose-50 text-rose-700',
+  'Needs attention': 'bg-amber-50 text-amber-700',
 }
 
 function statusClass(s: string | undefined): string {
