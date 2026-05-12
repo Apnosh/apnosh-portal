@@ -266,7 +266,7 @@ function ReviewStep({
     setProposal({ ...proposal, facts: proposal.facts.filter((_, j) => j !== i) })
   }
   const addFact = () => {
-    setProposal({ ...proposal, facts: [...proposal.facts, { category: 'differentiator', value: '', rationale: '' }] })
+    setProposal({ ...proposal, facts: [...proposal.facts, { category: 'observation', value: '', rationale: '' }] })
   }
 
   return (
@@ -425,9 +425,9 @@ function DoneStep({ committed, onStartOver }: { committed: CommitResult; onStart
 const INPUT_CLS = 'w-full text-[13px] px-2 py-1.5 rounded-md ring-1 ring-ink-6 focus:ring-cyan-500 focus:outline-none'
 
 const FACT_CATEGORIES = [
-  'menu_signature', 'menu_dietary', 'hours_window', 'location_detail',
-  'team_owner', 'team_member', 'origin_story', 'community_tie',
-  'differentiator', 'pet_peeve', 'voice_note',
+  'history', 'specialty', 'customer', 'voice', 'pet_peeve',
+  'seasonality', 'competitor', 'event', 'signature_item',
+  'value_prop', 'positioning', 'owner_quote', 'observation',
 ]
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

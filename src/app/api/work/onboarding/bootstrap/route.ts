@@ -51,10 +51,11 @@ interface BootstrapProposal {
   why: string
 }
 
+// Mirror the DB check constraint on client_knowledge_facts.category.
 const VALID_FACT_CATEGORIES = [
-  'menu_signature', 'menu_dietary', 'hours_window', 'location_detail',
-  'team_owner', 'team_member', 'origin_story', 'community_tie',
-  'differentiator', 'pet_peeve', 'voice_note',
+  'history', 'specialty', 'customer', 'voice', 'pet_peeve',
+  'seasonality', 'competitor', 'event', 'signature_item',
+  'value_prop', 'positioning', 'owner_quote', 'observation',
 ]
 
 export async function POST(req: NextRequest) {
@@ -78,7 +79,7 @@ Output JSON only:
     "voice_traits": ["3-5 punchy descriptors — direct/dry, hyper-local, food-obsessed, etc"],
     "pet_peeves": ["2-3 specific things to NEVER do — e.g. 'never call ourselves authentic', 'no superlatives like best/finest'"],
     "facts": [
-      { "category": "menu_signature" | "menu_dietary" | "hours_window" | "location_detail" | "team_owner" | "team_member" | "origin_story" | "community_tie" | "differentiator" | "pet_peeve" | "voice_note",
+      { "category": "history" | "specialty" | "customer" | "voice" | "pet_peeve" | "seasonality" | "competitor" | "event" | "signature_item" | "value_prop" | "positioning" | "owner_quote" | "observation",
         "value": "the actual fact, ~1 sentence",
         "rationale": "one short line on why this matters for content" }
       // produce 5-7 facts; only what's grounded in the discovery notes

@@ -117,9 +117,11 @@ ${body.proposal.pet_peeves.map(p => `- ${p}`).join('\n')}`
     const factRows = body.proposal.facts.map(f => ({
       client_id: client.id,
       category: f.category,
-      value: f.value,
-      rationale: f.rationale,
-      created_by: user.id,
+      fact: f.value,
+      source: f.rationale ? `Onboarding: ${f.rationale}` : 'Onboarding intake',
+      confidence: 0.8,
+      recorded_by: user.id,
+      active: true,
     }))
     const { count, error: factsErr } = await admin
       .from('client_knowledge_facts')
