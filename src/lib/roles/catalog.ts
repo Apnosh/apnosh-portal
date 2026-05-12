@@ -378,7 +378,7 @@ export const WORK_SURFACES_BY_CAPABILITY: Partial<Record<RoleCapability, string[
   influencer: ['/marketplace'],
   local_seo: ['/work/today', '/work/reviews'],
   web_ops: ['/work/today'],
-  email_specialist: ['/work/today'],
+  email_specialist: ['/work/today', '/work/campaigns'],
   onboarder: ['/work/today'],
   data_analyst: ['/work/performance'],
 }
