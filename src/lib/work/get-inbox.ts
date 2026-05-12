@@ -25,7 +25,7 @@ export interface InboxRow {
   status: TaskStatus
   source: TaskSource | null
   visibleToClient: boolean
-  contentId: string | null  // set once converted to a content_draft
+  draftId: string | null  // set once converted to a content_draft
   aiAnalysis: Record<string, unknown> | null
   createdAt: string
   dueAt: string | null
@@ -46,14 +46,14 @@ interface RawTask {
   status: TaskStatus
   source: string | null
   visible_to_client: boolean
-  content_id: string | null
+  draft_id: string | null
   ai_analysis: Record<string, unknown> | null
   created_at: string
   due_at: string | null
   snoozed_until: string | null
 }
 
-const SELECT = 'id, client_id, title, body, status, source, visible_to_client, content_id, ai_analysis, created_at, due_at, snoozed_until'
+const SELECT = 'id, client_id, title, body, status, source, visible_to_client, draft_id, ai_analysis, created_at, due_at, snoozed_until'
 
 export async function getInbox(): Promise<InboxBuckets> {
   const supabase = await createServerClient()
@@ -100,7 +100,7 @@ export async function getInbox(): Promise<InboxBuckets> {
       status: r.status,
       source: (r.source as TaskSource | null) ?? null,
       visibleToClient: r.visible_to_client,
-      contentId: r.content_id,
+      draftId: r.draft_id,
       aiAnalysis: r.ai_analysis,
       createdAt: r.created_at,
       dueAt: r.due_at,

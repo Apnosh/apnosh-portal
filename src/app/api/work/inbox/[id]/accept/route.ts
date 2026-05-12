@@ -30,15 +30,15 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   const { id } = await ctx.params
   const { data: task } = await supabase
     .from('client_tasks')
-    .select('id, client_id, title, body, status, content_id, source, created_by')
+    .select('id, client_id, title, body, status, draft_id, source, created_by')
     .eq('id', id)
     .maybeSingle()
   if (!task) return NextResponse.json({ error: 'task not found' }, { status: 404 })
   if (task.status === 'done' || task.status === 'canceled') {
     return NextResponse.json({ error: `cannot accept from status ${task.status}` }, { status: 409 })
   }
-  if (task.content_id) {
-    return NextResponse.json({ error: 'task already has a draft', draftId: task.content_id }, { status: 409 })
+  if (task.draft_id) {
+    return NextResponse.json({ error: 'task already has a draft', draftId: task.draft_id }, { status: 409 })
   }
 
   const admin = createAdminClient()
@@ -71,7 +71,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     .from('client_tasks')
     .update({
       status: 'doing',
-      content_id: draft.id,
+      draft_id: draft.id,
       assignee_type: 'admin',
       assignee_id: user.id,
     })
