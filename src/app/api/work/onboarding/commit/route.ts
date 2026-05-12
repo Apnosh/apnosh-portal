@@ -111,22 +111,48 @@ ${body.proposal.pet_peeves.map(p => `- ${p}`).join('\n')}`
     })
   // Brand error is non-fatal; surface a warning later.
 
-  // 3. Insert facts
+  // 3. Insert facts. Map common AI-returned category synonyms onto
+  // the DB check constraint values, drop anything we can't map.
+  const VALID = new Set([
+    'history', 'specialty', 'customer', 'voice', 'pet_peeve',
+    'seasonality', 'competitor', 'event', 'signature_item',
+    'value_prop', 'positioning', 'owner_quote', 'observation',
+  ])
+  const CATEGORY_MAP: Record<string, string> = {
+    menu_signature: 'signature_item',
+    menu_dietary: 'specialty',
+    hours_window: 'observation',
+    location_detail: 'observation',
+    team_owner: 'history',
+    team_member: 'observation',
+    origin_story: 'history',
+    community_tie: 'customer',
+    differentiator: 'value_prop',
+    voice_note: 'voice',
+  }
   let factsInserted = 0
   if (body.proposal.facts.length > 0) {
-    const factRows = body.proposal.facts.map(f => ({
-      client_id: client.id,
-      category: f.category,
-      fact: f.value,
-      source: f.rationale ? `Onboarding: ${f.rationale}` : 'Onboarding intake',
-      confidence: 0.8,
-      recorded_by: user.id,
-      active: true,
-    }))
-    const { count, error: factsErr } = await admin
-      .from('client_knowledge_facts')
-      .insert(factRows, { count: 'exact' })
-    if (!factsErr) factsInserted = count ?? factRows.length
+    const factRows = body.proposal.facts
+      .map(f => {
+        const cat = VALID.has(f.category) ? f.category : (CATEGORY_MAP[f.category] ?? null)
+        if (!cat) return null
+        return {
+          client_id: client.id,
+          category: cat,
+          fact: f.value,
+          source: f.rationale ? `Onboarding: ${f.rationale}` : 'Onboarding intake',
+          confidence: 0.8,
+          recorded_by: user.id,
+          active: true,
+        }
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+    if (factRows.length > 0) {
+      const { count, error: factsErr } = await admin
+        .from('client_knowledge_facts')
+        .insert(factRows, { count: 'exact' })
+      if (!factsErr) factsInserted = count ?? factRows.length
+    }
   }
 
   // 4. Opening theme — use current month
