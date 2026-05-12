@@ -81,7 +81,7 @@ Output JSON only:
       { "category": "menu_signature" | "menu_dietary" | "hours_window" | "location_detail" | "team_owner" | "team_member" | "origin_story" | "community_tie" | "differentiator" | "pet_peeve" | "voice_note",
         "value": "the actual fact, ~1 sentence",
         "rationale": "one short line on why this matters for content" }
-      // produce 6-10 facts grounded in the discovery notes; don't invent specifics not implied by the notes
+      // produce 5-7 facts; only what's grounded in the discovery notes
     ],
     "opening_theme": {
       "theme_name": "5-8 words — month 1 angle",
@@ -121,7 +121,7 @@ Return the JSON now.`
   try {
     const msg = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 2500,
+      max_tokens: 1500,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     })
