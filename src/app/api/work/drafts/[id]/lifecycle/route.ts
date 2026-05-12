@@ -22,6 +22,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyClientOwners } from '@/lib/notifications'
+import { attemptPublish } from '@/lib/publish/attempt-publish'
 
 export const dynamic = 'force-dynamic'
 
@@ -114,10 +115,33 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       if (draft.status !== 'approved' && draft.status !== 'scheduled') {
         return NextResponse.json({ error: 'draft must be approved or scheduled to publish' }, { status: 400 })
       }
-      updates.status = 'published'
-      updates.published_at = body?.publishedAt ?? new Date().toISOString()
-      if (body?.publishedUrl) updates.published_url = body.publishedUrl
-      if (body?.publishedPostId) updates.published_post_id = body.publishedPostId
+
+      // Two paths:
+      //   - body.publishedUrl present  → manual backfill (admin recording
+      //     a post that went out via some other tool). Keep behavior.
+      //   - otherwise                  → actually publish to the platforms
+      //     via attemptPublish. If publishing fails we don't move status.
+      if (body?.publishedUrl) {
+        updates.status = 'published'
+        updates.published_at = body?.publishedAt ?? new Date().toISOString()
+        updates.published_url = body.publishedUrl
+        if (body?.publishedPostId) updates.published_post_id = body.publishedPostId
+      } else {
+        const result = await attemptPublish(draftId)
+        if (!result.ok) {
+          return NextResponse.json({
+            error: result.error ?? 'publish failed',
+            code: result.errorCode,
+            perPlatform: result.perPlatform,
+          }, { status: 422 })
+        }
+        // attemptPublish already wrote published_at + published_url
+        // directly to the draft. We just flip status here.
+        updates.status = 'published'
+        // Don't overwrite the receipt — attemptPublish set it.
+        delete updates.updated_at  // re-set below by the standard path
+        updates.updated_at = new Date().toISOString()
+      }
       break
     }
 
