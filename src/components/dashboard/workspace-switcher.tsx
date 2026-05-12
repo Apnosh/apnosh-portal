@@ -1,20 +1,24 @@
 /**
- * Workspace switcher chip — top of the dashboard top bar.
+ * Capability chip group — top of every authenticated page.
  *
- * Reads the signed-in user's roles from /api/me/capabilities and
- * shows the current "viewing as" lens. If the user has only one
- * role, it's a static badge. With two or more it opens a dropdown
- * to swap lenses — selecting one navigates to that role's landing.
+ * Roles in Apnosh are additive permissions on one account, NOT
+ * separate workspaces you switch between. So this component shows
+ * the SET of capabilities you hold side-by-side, no dropdown, no
+ * "viewing as" mode.
  *
- * Phase 0: pure context cue + navigation. Phase 1+ will hang
- * per-role contextual menus and an active-client picker off this.
+ * One capability: a single chip ("Strategist").
+ * Multiple: a row of chips ("Strategist · Copywriter").
+ * Zero: render nothing.
+ *
+ * Click a chip → navigate to that role's landing path (still useful
+ * as a quick "go to my home for this hat" shortcut), but it's not a
+ * lens switch.
  */
 
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronDown, Check } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { RoleSummary } from '@/lib/auth/capabilities'
 
 const ACCENT_CLASSES: Record<RoleSummary['accent'], { bg: string; text: string; ring: string; dot: string }> = {
@@ -30,108 +34,38 @@ const ACCENT_CLASSES: Record<RoleSummary['accent'], { bg: string; text: string; 
   brand:   { bg: 'bg-brand-tint', text: 'text-brand-dark',  ring: 'ring-brand/20',    dot: 'bg-brand' },
 }
 
-interface ApiPayload {
-  all: RoleSummary[]
-  active: RoleSummary | null
-}
-
 export default function WorkspaceSwitcher() {
   const router = useRouter()
-  const params = useSearchParams()
-  const roleParam = params.get('role')
+  const [caps, setCaps] = useState<RoleSummary[] | null>(null)
 
-  const [data, setData] = useState<ApiPayload | null>(null)
-  const [open, setOpen] = useState(false)
-  const wrapRef = useRef<HTMLDivElement>(null)
-
-  // Fetch capabilities. Re-fetch when ?role= changes so the active
-  // pill matches the URL.
   useEffect(() => {
     let alive = true
-    const qs = roleParam ? `?role=${encodeURIComponent(roleParam)}` : ''
-    fetch('/api/me/capabilities' + qs, { cache: 'no-store' })
-      .then(r => (r.ok ? r.json() : { all: [], active: null }))
-      .then((j: ApiPayload) => { if (alive) setData(j) })
-      .catch(() => { if (alive) setData({ all: [], active: null }) })
+    fetch('/api/me/capabilities', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : { all: [] })
+      .then((j: { all?: RoleSummary[] }) => { if (alive) setCaps(j.all ?? []) })
+      .catch(() => { if (alive) setCaps([]) })
     return () => { alive = false }
-  }, [roleParam])
+  }, [])
 
-  // Click-outside close.
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  if (!data || !data.active) return null
-
-  const active = data.active
-  const all = data.all
-  const hasMultiple = all.length > 1
-  const a = ACCENT_CLASSES[active.accent]
-
-  const chip = (
-    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 ring-1 ${a.bg} ${a.text} ${a.ring} text-[12px] font-semibold transition-colors`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${a.dot}`} aria-hidden />
-      {active.label}
-      {hasMultiple && <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />}
-    </span>
-  )
-
-  if (!hasMultiple) return <div className="select-none">{chip}</div>
+  if (!caps || caps.length === 0) return null
 
   return (
-    <div ref={wrapRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 rounded-full"
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        {chip}
-      </button>
-
-      {open && (
-        <div
-          role="menu"
-          className="absolute left-0 mt-1.5 w-64 bg-white rounded-2xl border border-ink-6 shadow-lg overflow-hidden z-50"
-        >
-          <div className="px-4 pt-3 pb-2 text-[10px] uppercase tracking-[0.18em] text-ink-4 font-semibold">
-            Viewing as
-          </div>
-          <ul>
-            {all.map(r => {
-              const isActive = r.role === active.role
-              const ac = ACCENT_CLASSES[r.accent]
-              return (
-                <li key={r.role}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpen(false)
-                      if (!isActive) router.push(r.landingPath + '?role=' + r.role)
-                    }}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-bg-2 transition-colors ${isActive ? 'bg-bg-2' : ''}`}
-                  >
-                    <span className={`w-7 h-7 rounded-lg flex items-center justify-center ring-1 ${ac.bg} ${ac.ring}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${ac.dot}`} aria-hidden />
-                    </span>
-                    <span className="flex-1 min-w-0">
-                      <span className={`block text-[13px] font-semibold ${ac.text} leading-tight`}>{r.label}</span>
-                      <span className="block text-[11px] text-ink-4 leading-tight">{r.landingPath}</span>
-                    </span>
-                    {isActive && <Check className="w-4 h-4 text-ink-3" />}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      )}
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {caps.map(role => {
+        const a = ACCENT_CLASSES[role.accent]
+        return (
+          <button
+            key={role.role}
+            type="button"
+            onClick={() => router.push(role.landingPath)}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ${a.bg} ${a.text} ${a.ring} text-[12px] font-semibold transition-colors hover:brightness-95`}
+            title={`Go to ${role.label} home`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${a.dot}`} aria-hidden />
+            {role.label}
+          </button>
+        )
+      })}
     </div>
   )
 }

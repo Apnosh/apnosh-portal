@@ -329,3 +329,56 @@ export const TYPE_LABELS: Record<RoleType, string> = {
 export const INVITABLE_ROLES: RoleDef[] = ROLES.filter(r =>
   !['videographer','photographer','ad_buyer','client_owner','client_manager','admin'].includes(r.capability),
 )
+
+/**
+ * Which /work surfaces are relevant to each capability. Admin sees
+ * everything implicitly. The /work layout reads this to compute the
+ * union of nav items for whatever capabilities the user holds.
+ *
+ * Key = capability, Value = array of /work paths the holder should
+ * see in their nav.
+ */
+export const WORK_SURFACES_BY_CAPABILITY: Partial<Record<RoleCapability, string[]>> = {
+  strategist: [
+    '/work/today', '/work/inbox', '/work/approvals', '/work/calendar',
+    '/work/themes', '/work/drafts',
+    '/work/clients', '/work/quotes',
+    '/work/performance',
+  ],
+  copywriter: [
+    '/work/today',     // shared workday hub
+    '/work/briefs',    // copywriter's queue (drafts that need caption work)
+    '/work/themes',    // read-only — see the angle for context
+    '/work/drafts',    // see all drafts; can edit captions on revising drafts
+    '/work/performance',
+  ],
+  designer: [
+    '/work/today',
+    '/work/queue',     // design queue (deferred)
+    '/work/themes',
+    '/work/drafts',
+  ],
+  community_mgr: [
+    '/work/today',
+    '/work/engage',    // already shipped (was role-gated)
+  ],
+  paid_media: [
+    '/work/today',
+    '/work/boosts',    // already shipped
+  ],
+  editor: [
+    '/work/today',
+    '/work/edits',     // already shipped
+  ],
+  visual_creator: [
+    '/work/shoots',    // already shipped
+  ],
+  videographer: ['/work/shoots'],   // legacy
+  photographer: ['/work/shoots'],   // legacy
+  influencer: ['/marketplace'],
+  local_seo: ['/work/today'],
+  web_ops: ['/work/today'],
+  email_specialist: ['/work/today'],
+  onboarder: ['/work/today'],
+  data_analyst: ['/work/performance'],
+}

@@ -6,12 +6,12 @@
  * this page sees all messages.
  */
 
-import { requireCapability } from '@/lib/auth/require-capability'
+import { requireAnyCapability } from '@/lib/auth/require-any-capability'
 import AdminMessagesClient from '@/app/admin/messages/page'
 
 export const dynamic = 'force-dynamic'
 
 export default async function WorkInboxPage() {
-  await requireCapability('strategist')
+  await requireAnyCapability(["strategist","community_mgr"])
   return <AdminMessagesClient />
 }

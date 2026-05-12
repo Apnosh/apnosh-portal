@@ -14,13 +14,13 @@
  * strategist sees only their book, while admin sees all.
  */
 
-import { requireCapability } from '@/lib/auth/require-capability'
+import { requireAnyCapability } from '@/lib/auth/require-any-capability'
 import AdminTodayClient from '@/app/admin/today/page'
 
 export const dynamic = 'force-dynamic'
 
 export default async function WorkTodayPage() {
-  await requireCapability('strategist')
+  await requireAnyCapability(["strategist","copywriter","designer","paid_media","community_mgr","local_seo","email_specialist","web_ops","onboarder","editor","data_analyst"])
   // Reuse the existing admin client component verbatim. It already
   // pulls cross-client data the strategist needs.
   return <AdminTodayClient />

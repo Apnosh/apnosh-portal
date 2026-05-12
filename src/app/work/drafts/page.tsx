@@ -12,14 +12,14 @@
  * irreplaceable training signal for future AI fine-tuning.
  */
 
-import { requireCapability } from '@/lib/auth/require-capability'
+import { requireAnyCapability } from '@/lib/auth/require-any-capability'
 import { getMyDrafts } from '@/lib/work/get-drafts'
 import DraftsView from './drafts-view'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DraftsPage() {
-  await requireCapability('strategist')
+  await requireAnyCapability(["strategist","copywriter","designer"])
   const drafts = await getMyDrafts()
   return <DraftsView initialDrafts={drafts} />
 }

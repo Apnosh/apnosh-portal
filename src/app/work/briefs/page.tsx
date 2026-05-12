@@ -1,31 +1,29 @@
 /**
- * /work/briefs — copywriter queue.
+ * /work/briefs — copywriter's caption queue.
  *
- * Caption + copy jobs. Each card: image/clip preview, owner voice notes,
- * brand voice doc link, due date. Inline caption editor and submit-for-
- * review action. Phase 0 ships the gated shell.
+ * Filtered view of content_drafts focused on what NEEDS captions:
+ *   - status = 'idea'        (no caption yet)
+ *   - status = 'revising'    (strategist asked for changes)
+ *   - status = 'draft'       (caption written, ready for review/polish)
+ *
+ * The strategist gates these via judgments at /work/drafts; the
+ * copywriter polishes the caption text and submits back. Both
+ * surfaces share the same data, the same RLS, and the same lifecycle
+ * API — they're just two different lenses on the same work.
+ *
+ * Accessible to strategist + copywriter + designer (the creative
+ * pod), per the additive role model.
  */
 
-import { PenLine } from 'lucide-react'
-import { requireCapability } from '@/lib/auth/require-capability'
-import QueueShell, { ComingSoonState } from '@/components/work/queue-shell'
+import { requireAnyCapability } from '@/lib/auth/require-any-capability'
+import { getMyDrafts } from '@/lib/work/get-drafts'
+import BriefsView from './briefs-view'
 
 export const dynamic = 'force-dynamic'
 
-export default async function CopywriterQueue() {
-  await requireCapability('copywriter')
-  return (
-    <QueueShell
-      icon={<PenLine className="w-4.5 h-4.5" />}
-      accent="sky"
-      eyebrow="Copywriter"
-      title="Caption queue"
-      description="Caption and copy jobs across your assigned clients. Each card includes brand voice and any owner voice notes."
-      empty={
-        <ComingSoonState>
-          Caption jobs land here once a post is in production. We&rsquo;re wiring the live queue next.
-        </ComingSoonState>
-      }
-    />
-  )
+export default async function BriefsPage() {
+  await requireAnyCapability(['strategist','copywriter','designer'])
+  // Filter to drafts that need caption work.
+  const drafts = await getMyDrafts({ status: ['idea','draft','revising'] })
+  return <BriefsView initialDrafts={drafts} />
 }

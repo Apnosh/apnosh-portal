@@ -12,7 +12,7 @@
 
 import Link from 'next/link'
 import { Users, ChevronRight, ListTodo, FileText, Building2 } from 'lucide-react'
-import { requireCapability } from '@/lib/auth/require-capability'
+import { requireAnyCapability } from '@/lib/auth/require-any-capability'
 import { getStrategistBook } from '@/lib/work/get-strategist-book'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 
@@ -26,7 +26,7 @@ const TIER_TONE: Record<string, string> = {
 }
 
 export default async function StrategistBookPage() {
-  await requireCapability('strategist')
+  await requireAnyCapability(["strategist"])
   const { isAdmin } = await resolveCurrentClient()
   const clients = await getStrategistBook()
 

@@ -6,12 +6,12 @@
  * assigned clients in the totals.
  */
 
-import { requireCapability } from '@/lib/auth/require-capability'
+import { requireAnyCapability } from '@/lib/auth/require-any-capability'
 import AdminReportsClient from '@/app/admin/reports/page'
 
 export const dynamic = 'force-dynamic'
 
 export default async function WorkPerformancePage() {
-  await requireCapability('strategist')
+  await requireAnyCapability(["strategist","data_analyst"])
   return <AdminReportsClient />
 }

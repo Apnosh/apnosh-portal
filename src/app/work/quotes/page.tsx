@@ -7,7 +7,7 @@
 
 import Link from 'next/link'
 import { FileText, ArrowRight, CheckCircle2, XCircle, Inbox, Clock, Loader2 } from 'lucide-react'
-import { requireCapability } from '@/lib/auth/require-capability'
+import { requireAnyCapability } from '@/lib/auth/require-any-capability'
 import { getStrategistQuotes, type StrategistQuoteRow } from '@/lib/work/get-strategist-quotes'
 
 export const dynamic = 'force-dynamic'
@@ -30,7 +30,7 @@ const BUCKETS: Array<{ key: string; label: string; statuses: string[]; tone: 'am
 ]
 
 export default async function StrategistQuotesPage() {
-  await requireCapability('strategist')
+  await requireAnyCapability(["strategist"])
   const quotes = await getStrategistQuotes()
 
   return (

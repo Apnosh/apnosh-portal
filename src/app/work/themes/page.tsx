@@ -7,7 +7,7 @@
  * once E3 lands).
  */
 
-import { requireCapability } from '@/lib/auth/require-capability'
+import { requireAnyCapability } from '@/lib/auth/require-any-capability'
 import { getMyThemes } from '@/lib/work/get-themes'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import ThemesView from './themes-view'
@@ -15,7 +15,7 @@ import ThemesView from './themes-view'
 export const dynamic = 'force-dynamic'
 
 export default async function ThemesPage() {
-  await requireCapability('strategist')
+  await requireAnyCapability(["strategist","copywriter","designer"])
 
   const supabase = await createServerClient()
   const [themes, clientsRes] = await Promise.all([

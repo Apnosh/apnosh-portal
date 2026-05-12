@@ -6,12 +6,12 @@
  * only what they need to approve.
  */
 
-import { requireCapability } from '@/lib/auth/require-capability'
+import { requireAnyCapability } from '@/lib/auth/require-any-capability'
 import AdminQueueClient from '@/app/admin/queue/page'
 
 export const dynamic = 'force-dynamic'
 
 export default async function WorkApprovalsPage() {
-  await requireCapability('strategist')
+  await requireAnyCapability(["strategist"])
   return <AdminQueueClient />
 }
