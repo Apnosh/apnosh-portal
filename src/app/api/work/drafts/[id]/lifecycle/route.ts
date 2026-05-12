@@ -21,6 +21,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { notifyClientOwners } from '@/lib/notifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -146,6 +147,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       })
       .eq('draft_id', draftId)
       .in('status', ['todo', 'doing'])
+
+    await notifyClientOwners(draft.client_id as string, {
+      kind: 'draft_published',
+      title: 'Your post is live',
+      body: body?.publishedUrl ? 'Open to see it in the wild.' : 'It just went out on your feed.',
+      link: body?.publishedUrl ?? '/dashboard',
+    }).catch(() => ({ notified: 0 }))
   }
 
   return NextResponse.json({ ok: true, draft: updated })

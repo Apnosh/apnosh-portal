@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  Bell, CheckCircle, Package, BarChart3, CreditCard, MessageSquare, X
+  Bell, CheckCircle, Package, BarChart3, CreditCard, MessageSquare, X, Sparkles, Send,
 } from 'lucide-react'
 import { useNotifications } from '@/lib/supabase/hooks'
 import { markNotificationRead } from '@/lib/actions'
@@ -16,6 +16,8 @@ const iconMap: Record<string, { icon: typeof CheckCircle; color: string }> = {
   payment: { icon: CreditCard, color: 'bg-amber-50 text-amber-600' },
   message: { icon: MessageSquare, color: 'bg-brand-tint text-brand-dark' },
   order_confirmed: { icon: Package, color: 'bg-blue-50 text-blue-600' },
+  draft_approved: { icon: Sparkles, color: 'bg-brand-tint text-brand-dark' },
+  draft_published: { icon: Send, color: 'bg-emerald-50 text-emerald-600' },
   system: { icon: Bell, color: 'bg-gray-50 text-gray-600' },
 }
 

@@ -115,6 +115,48 @@ export async function notifyStaffForClient(
 }
 
 /**
+ * Notify every owner of a client (the people on the business side).
+ * Resolved by joining `client_users` (the client-portal access table)
+ * + `businesses.owner_id` (the legacy single-owner pointer). Returns
+ * the count of recipients reached.
+ */
+export async function notifyClientOwners(
+  clientId: string,
+  payload: { kind: NotificationKind; title: string; body?: string; link?: string },
+): Promise<{ notified: number }> {
+  const admin = createAdminClient()
+
+  const [cuRes, bizRes] = await Promise.all([
+    admin.from('client_users').select('auth_user_id').eq('client_id', clientId),
+    admin.from('businesses').select('owner_id').eq('client_id', clientId),
+  ])
+
+  const ids = new Set<string>()
+  for (const r of cuRes.data ?? []) {
+    if (r.auth_user_id) ids.add(r.auth_user_id as string)
+  }
+  for (const r of bizRes.data ?? []) {
+    if (r.owner_id) ids.add(r.owner_id as string)
+  }
+  if (ids.size === 0) return { notified: 0 }
+
+  const rows = [...ids].map(uid => ({
+    user_id: uid,
+    type: payload.kind,
+    title: payload.title,
+    body: payload.body ?? null,
+    link: payload.link ?? null,
+  }))
+
+  const { error } = await admin.from('notifications').insert(rows)
+  if (error) {
+    console.warn('[notifications] client-owner fan-out failed:', error.message)
+    return { notified: 0 }
+  }
+  return { notified: ids.size }
+}
+
+/**
  * Load the most recent N notifications for the current user. Returns
  * empty array if signed out — caller doesn't need to handle auth.
  */

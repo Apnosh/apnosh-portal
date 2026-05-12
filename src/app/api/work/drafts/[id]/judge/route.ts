@@ -21,6 +21,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { notifyClientOwners } from '@/lib/notifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -98,6 +99,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       .from('content_drafts')
       .update(updates)
       .eq('id', draftId)
+  }
+
+  // Tell the client when an internal approval lands so they know to
+  // sign off. Other judgments stay internal.
+  if (judgment === 'approved') {
+    await notifyClientOwners(draft.client_id as string, {
+      kind: 'draft_approved',
+      title: 'A post is ready for your review',
+      body: 'Your team approved the draft. Tap to read it and give the green light.',
+      link: `/dashboard/preview/${draftId}`,
+    }).catch(() => ({ notified: 0 }))
   }
 
   return NextResponse.json({ ok: true, judgment, newStatus: updates.status ?? draft.status })
