@@ -15,7 +15,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   CheckSquare, Users, Calendar, Menu, X, LogOut,
-  Inbox, ListChecks, FileText, BarChart3, Sparkles,
+  Inbox, ListChecks, FileText, BarChart3, Sparkles, BookOpen,
 } from 'lucide-react'
 import { signOut, useUser } from '@/lib/supabase/hooks'
 import WorkspaceSwitcher from '@/components/dashboard/workspace-switcher'
@@ -36,6 +36,7 @@ const NAV_SECTIONS = [
   {
     label: 'Editorial',
     items: [
+      { label: 'Themes', href: '/work/themes', icon: BookOpen },
       { label: 'Drafts', href: '/work/drafts', icon: Sparkles },
     ],
   },

@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, ShoppingBag, Kanban, UserCog, FileBarChart,
   FileText, CreditCard, MessageSquare, Settings, Menu, X, ChevronDown, Shield, Plus,
   BarChart3, Calendar, ListTodo, Send, MessageCircle, Sparkles, CheckSquare,
-  Plug, Gauge,
+  Plug, Gauge, BookOpen,
 } from 'lucide-react'
 import { useUser, signOut } from '@/lib/supabase/hooks'
 import { ToastProvider } from '@/components/ui/toast'
@@ -169,6 +169,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     {
       label: 'Editorial',
       items: [
+        { label: 'Themes', href: '/work/themes', icon: BookOpen },
         { label: 'Drafts', href: '/work/drafts', icon: Sparkles },
       ],
     },
