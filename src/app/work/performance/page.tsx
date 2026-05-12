@@ -1,17 +1,20 @@
 /**
- * /work/performance — cross-client rollup of how their book is doing.
+ * /work/performance — data analyst's book-level rollup.
  *
- * Reuses the admin reports page (which is already a cross-client
- * rollup of metrics). RLS scopes data; strategist sees only their
- * assigned clients in the totals.
+ * Shows the compounding loop in numbers: drafts created, judged,
+ * approved, published, replied to, reviewed. Plus top performing
+ * posts and a per-client activity rail. AI synthesis surfaces
+ * patterns the analyst should brief upstream.
  */
 
 import { requireAnyCapability } from '@/lib/auth/require-any-capability'
-import AdminReportsClient from '@/app/admin/reports/page'
+import { getPerformanceData } from '@/lib/work/get-performance-data'
+import PerformanceView from './performance-view'
 
 export const dynamic = 'force-dynamic'
 
-export default async function WorkPerformancePage() {
-  await requireAnyCapability(["strategist","data_analyst"])
-  return <AdminReportsClient />
+export default async function PerformancePage() {
+  await requireAnyCapability(['strategist', 'data_analyst'])
+  const data = await getPerformanceData()
+  return <PerformanceView initialData={data} />
 }
