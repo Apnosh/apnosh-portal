@@ -86,7 +86,7 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
     // producing "1 notification but nothing's there" confusion.
     admin
       .from('channel_connections')
-      .select('id, channel, status, updated_at')
+      .select('id, channel, status, last_sync_at, connected_at')
       .eq('client_id', clientId)
       .in('status', ['error', 'expired', 'disconnected'])
       .limit(10),
@@ -239,7 +239,7 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
         : 'Something\'s off with this connection.',
       urgency: 'high',
       href: '/dashboard/connected-accounts',
-      whenIso: (c.updated_at as string) ?? new Date().toISOString(),
+      whenIso: ((c.last_sync_at as string) ?? (c.connected_at as string)) ?? new Date().toISOString(),
       status: status === 'expired' ? 'Expired' : status === 'disconnected' ? 'Disconnected' : 'Needs attention',
     })
   }
