@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic'
 export default async function ShootsListPage() {
   // Either capability is fine; check both manually.
   const caps = await getMyCapabilities()
-  const ok = caps.some(c => c.role === 'videographer' || c.role === 'photographer' || c.role === 'admin')
+  const ok = caps.some(c => c.role === 'videographer' || c.role === 'photographer' || c.role === 'visual_creator' || c.role === 'admin')
   if (!ok) await requireCapability('videographer') // triggers the redirect
 
   const shoots = await getMyShoots()

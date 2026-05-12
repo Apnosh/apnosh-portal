@@ -24,7 +24,7 @@ interface PageProps {
 
 export default async function ShootDetailPage({ params }: PageProps) {
   const caps = await getMyCapabilities()
-  const ok = caps.some(c => c.role === 'videographer' || c.role === 'photographer' || c.role === 'admin')
+  const ok = caps.some(c => c.role === 'videographer' || c.role === 'photographer' || c.role === 'visual_creator' || c.role === 'admin')
   if (!ok) await requireCapability('videographer')
 
   const { id } = await params
