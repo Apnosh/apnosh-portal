@@ -167,6 +167,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       ],
     },
     {
+      label: 'Editorial',
+      items: [
+        { label: 'Drafts', href: '/work/drafts', icon: Sparkles },
+      ],
+    },
+    {
       label: 'Book',
       items: [
         { label: 'Clients', href: '/work/clients', icon: Users },

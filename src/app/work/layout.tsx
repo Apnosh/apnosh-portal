@@ -15,7 +15,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   CheckSquare, Users, Calendar, Menu, X, LogOut,
-  Inbox, ListChecks, FileText, BarChart3,
+  Inbox, ListChecks, FileText, BarChart3, Sparkles,
 } from 'lucide-react'
 import { signOut, useUser } from '@/lib/supabase/hooks'
 import WorkspaceSwitcher from '@/components/dashboard/workspace-switcher'
@@ -31,6 +31,12 @@ const NAV_SECTIONS = [
       { label: 'Inbox',      href: '/work/inbox',     icon: Inbox },
       { label: 'Approvals',  href: '/work/approvals', icon: ListChecks },
       { label: 'Calendar',   href: '/work/calendar',  icon: Calendar },
+    ],
+  },
+  {
+    label: 'Editorial',
+    items: [
+      { label: 'Drafts', href: '/work/drafts', icon: Sparkles },
     ],
   },
   {
