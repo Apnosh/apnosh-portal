@@ -136,20 +136,26 @@ export default function WorkLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <ToastProvider>
-      <div className="min-h-screen bg-bg-2 flex">
+      <div className="min-h-screen flex" style={{ background: 'radial-gradient(1200px 600px at 80% -10%, rgba(74,189,152,0.06), transparent 50%), linear-gradient(180deg, #fafafb 0%, #f4f5f7 100%)' }}>
         {/* Mobile scrim */}
         {sidebarOpen && (
           <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
         )}
 
         {/* Sidebar */}
-        <aside className={`fixed top-0 left-0 h-full w-[240px] bg-ink z-50 flex flex-col transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <aside
+          className={`fixed top-0 left-0 h-full w-[240px] z-50 flex flex-col transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+          style={{ background: 'linear-gradient(180deg, #1d1d1f 0%, #141416 100%)', boxShadow: '1px 0 0 rgba(255,255,255,0.04) inset, 0 0 40px rgba(0,0,0,0.15)' }}
+        >
           <div className="h-14 flex items-center justify-between px-5 border-b border-white/8">
             <Link href="/work" className="font-[family-name:var(--font-display)] text-lg text-white/80">
               Apn<em className="text-brand italic">osh</em>
             </Link>
             <div className="flex items-center gap-2">
-              <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-bold px-2 py-0.5 rounded-full">
+              <span
+                className="text-emerald-200 text-[9px] font-bold px-2 py-0.5 rounded-full"
+                style={{ background: 'linear-gradient(135deg, rgba(74,189,152,0.22), rgba(74,189,152,0.08))', boxShadow: 'inset 0 0 0 1px rgba(74,189,152,0.25)' }}
+              >
                 {roleBadge}
               </span>
               <button
@@ -164,7 +170,7 @@ export default function WorkLayout({ children }: { children: React.ReactNode }) 
           <nav className="flex-1 px-3 py-3 overflow-y-auto">
             {sections.map(section => (
               <div key={section.label} className="mb-3">
-                <div className="px-3 mb-1 text-[10px] font-semibold text-white/25 uppercase tracking-wider">
+                <div className="px-3 mb-1.5 text-[9px] font-semibold text-white/30 uppercase tracking-[0.18em]">
                   {section.label}
                 </div>
                 <div className="space-y-0.5">
@@ -173,12 +179,18 @@ export default function WorkLayout({ children }: { children: React.ReactNode }) 
                       key={item.href}
                       href={item.href}
                       onClick={() => setSidebarOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[36px] ${
+                      className={`relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all min-h-[36px] ${
                         isActive(item.href)
-                          ? 'bg-white/10 text-white'
+                          ? 'text-white'
                           : 'text-white/40 hover:bg-white/5 hover:text-white/70'
                       }`}
+                      style={isActive(item.href)
+                        ? { background: 'linear-gradient(90deg, rgba(74,189,152,0.16), rgba(255,255,255,0.04))', boxShadow: 'inset 0 0 0 1px rgba(74,189,152,0.18)' }
+                        : undefined}
                     >
+                      {isActive(item.href) && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-brand" />
+                      )}
                       <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
                       <span>{item.label}</span>
                     </Link>
@@ -210,7 +222,7 @@ export default function WorkLayout({ children }: { children: React.ReactNode }) 
 
         {/* Main */}
         <div className="flex-1 lg:ml-[240px] flex flex-col">
-          <header className="h-14 bg-white border-b border-ink-6 flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
+          <header className="h-14 flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30 backdrop-blur-md bg-white/75 border-b border-ink-6/70">
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-ink-3 hover:text-ink min-h-[44px] min-w-[44px] flex items-center justify-center">
               <Menu className="w-5 h-5" />
             </button>

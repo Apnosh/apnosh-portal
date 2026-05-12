@@ -58,7 +58,7 @@ export default function WorkspaceSwitcher() {
             key={role.role}
             type="button"
             onClick={() => router.push(role.landingPath)}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ${a.bg} ${a.text} ${a.ring} text-[12px] font-semibold transition-colors hover:brightness-95 flex-shrink-0`}
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 ring-1 ${a.bg} ${a.text} ${a.ring} text-[11px] font-semibold transition-all hover:brightness-95 hover:scale-[1.03] flex-shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.04)]`}
             title={`Go to ${role.label} home`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${a.dot}`} aria-hidden />
