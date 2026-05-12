@@ -28,6 +28,8 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   }
 
   const { id } = await ctx.params
+
+  // Read once for early 404 + audit metadata. We re-claim atomically below.
   const { data: task } = await supabase
     .from('client_tasks')
     .select('id, client_id, title, body, status, draft_id, source, created_by')
@@ -43,19 +45,50 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
 
   const admin = createAdminClient()
 
-  // Seed the idea from the title + body
-  const idea = task.title ?? 'Untitled request'
-  const captionSeed = task.body ?? null
+  // Race-safe claim: only one concurrent caller will get a row back.
+  // The WHERE clause matches only tasks still in todo AND with no draft
+  // yet — concurrent callers will see a second-write of 0 rows.
+  const { data: claimed, error: claimErr } = await admin
+    .from('client_tasks')
+    .update({
+      status: 'doing',
+      assignee_type: 'admin',
+      assignee_id: user.id,
+    })
+    .eq('id', id)
+    .eq('status', 'todo')
+    .is('draft_id', null)
+    .select('id, client_id, title, body, created_by')
+    .maybeSingle()
+  if (claimErr) {
+    return NextResponse.json({ error: claimErr.message }, { status: 500 })
+  }
+  if (!claimed) {
+    // Someone else won the race; re-read to return the winning draft id.
+    const { data: winner } = await admin
+      .from('client_tasks')
+      .select('draft_id')
+      .eq('id', id)
+      .maybeSingle()
+    return NextResponse.json({
+      error: 'task already accepted',
+      draftId: winner?.draft_id ?? null,
+    }, { status: 409 })
+  }
+
+  // We own the task. Seed the draft.
+  const idea = (claimed.title as string) ?? 'Untitled request'
+  const captionSeed = (claimed.body as string) ?? null
 
   const { data: draft, error: insertErr } = await admin
     .from('content_drafts')
     .insert({
-      client_id: task.client_id,
-      service_line: 'social',  // Default; can be edited
+      client_id: claimed.client_id,
+      service_line: 'social',
       status: 'idea',
       idea,
       caption: captionSeed,
-      proposed_by: task.created_by ?? user.id,
+      proposed_by: (claimed.created_by as string) ?? user.id,
       proposed_via: 'client_request',
       target_platforms: ['instagram'],
     })
@@ -63,21 +96,21 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     .maybeSingle()
 
   if (insertErr || !draft) {
+    // Insert failed — release the claim so the user can retry.
+    await admin
+      .from('client_tasks')
+      .update({ status: 'todo', assignee_type: 'admin', assignee_id: null })
+      .eq('id', id)
     return NextResponse.json({ error: insertErr?.message ?? 'draft insert failed' }, { status: 500 })
   }
 
-  // Mark the task in_progress and link the draft
-  const { error: updateErr } = await admin
+  // Link the new draft id back onto the task we already claimed.
+  const { error: linkErr } = await admin
     .from('client_tasks')
-    .update({
-      status: 'doing',
-      draft_id: draft.id,
-      assignee_type: 'admin',
-      assignee_id: user.id,
-    })
+    .update({ draft_id: draft.id })
     .eq('id', id)
-  if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 })
+  if (linkErr) {
+    return NextResponse.json({ error: linkErr.message }, { status: 500 })
   }
 
   // Audit
