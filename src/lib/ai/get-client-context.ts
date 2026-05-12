@@ -62,6 +62,13 @@ export interface ClientContextCrossSignal {
   proposedVia: string
 }
 
+export interface ClientContextJudgment {
+  judgment: 'revise' | 'rejected'
+  tags: string[]
+  note: string | null
+  createdAt: string
+}
+
 export interface ClientContext {
   clientId: string
   clientName: string | null
@@ -70,6 +77,8 @@ export interface ClientContext {
   recentThemes: ClientContextTheme[]
   brand: ClientContextBrand
   crossClientSignal: ClientContextCrossSignal[]
+  /** Recent revise/reject judgments — what to AVOID next time. */
+  rejectionPatterns: ClientContextJudgment[]
   /** Stable string suitable for inlining into a prompt. */
   promptSummary: string
   /** Capture this and pass to ai_generation_inputs.retrieved_* arrays. */
@@ -79,6 +88,7 @@ export interface ClientContext {
     themeIds: string[]
     brandVersion: number | null
     crossClientDraftIds: string[]
+    judgmentIds: string[]
   }
 }
 
@@ -87,6 +97,8 @@ const TOP_POSTS_LIMIT = 10
 const THEMES_LIMIT = 3
 const FACTS_LIMIT = 50
 const CROSS_CLIENT_LIMIT = 5
+const JUDGMENT_LIMIT = 10
+const JUDGMENT_LOOKBACK_DAYS = 90
 
 export const getClientContext = cache(
   async (clientId: string): Promise<ClientContext> => {
@@ -94,7 +106,9 @@ export const getClientContext = cache(
 
     const lookbackIso = new Date(Date.now() - POST_LOOKBACK_DAYS * 86400 * 1000).toISOString()
 
-    const [clientRes, factsRes, postsRes, themesRes, brandRes, crossRes] = await Promise.all([
+    const judgmentLookbackIso = new Date(Date.now() - JUDGMENT_LOOKBACK_DAYS * 86400 * 1000).toISOString()
+
+    const [clientRes, factsRes, postsRes, themesRes, brandRes, crossRes, judgRes] = await Promise.all([
       supabase
         .from('clients')
         .select('id, name')
@@ -130,6 +144,16 @@ export const getClientContext = cache(
         target_client_id: clientId,
         signal_limit: CROSS_CLIENT_LIMIT,
       }),
+      // Principle #8 → #6: recent revise/reject judgments become avoidance instructions for the next AI run.
+      // We pull human_judgments where subject is a content_draft for this client.
+      supabase
+        .from('human_judgments')
+        .select('id, judgment, reason_tags, reason_note, created_at, context_snapshot')
+        .in('judgment', ['revise', 'rejected'])
+        .eq('subject_type', 'content_draft')
+        .gte('created_at', judgmentLookbackIso)
+        .order('created_at', { ascending: false })
+        .limit(JUDGMENT_LIMIT * 3),  // over-fetch; filter to this client below
     ])
 
     const facts: ClientContextFact[] = (factsRes.data ?? []).map(f => ({
@@ -179,6 +203,25 @@ export const getClientContext = cache(
       proposedVia: r.proposed_via,
     }))
 
+    // Filter judgments to ones whose context_snapshot.client_id matches.
+    // (We can't filter at the DB level via JSON without a function index;
+    // for current volumes this is fine.)
+    const rejectionPatternsRaw = (judgRes.data ?? []).filter((j: { context_snapshot?: Record<string, unknown> | null }) => {
+      const cid = (j.context_snapshot as Record<string, unknown> | null)?.client_id
+      return cid === clientId
+    }).slice(0, JUDGMENT_LIMIT)
+
+    const rejectionPatterns: ClientContextJudgment[] = rejectionPatternsRaw.map((j: {
+      judgment: string; reason_tags: string[] | null; reason_note: string | null; created_at: string
+    }) => ({
+      judgment: j.judgment as 'revise' | 'rejected',
+      tags: Array.isArray(j.reason_tags) ? j.reason_tags : [],
+      note: j.reason_note,
+      createdAt: j.created_at,
+    }))
+
+    const judgmentIds = (rejectionPatternsRaw as Array<{ id: string }>).map(j => j.id)
+
     return {
       clientId,
       clientName: (clientRes.data?.name as string) ?? null,
@@ -187,9 +230,10 @@ export const getClientContext = cache(
       recentThemes,
       brand,
       crossClientSignal,
+      rejectionPatterns,
       promptSummary: buildPromptSummary({
         clientName: (clientRes.data?.name as string) ?? null,
-        facts, topPosts, recentThemes, brand, crossClientSignal,
+        facts, topPosts, recentThemes, brand, crossClientSignal, rejectionPatterns,
       }),
       retrieval: {
         factIds: facts.map(f => f.id),
@@ -197,6 +241,7 @@ export const getClientContext = cache(
         themeIds: recentThemes.map(t => t.id),
         brandVersion: brand?.version ?? null,
         crossClientDraftIds: crossClientSignal.map(s => s.draftId),
+        judgmentIds,
       },
     }
   },
@@ -215,6 +260,7 @@ function buildPromptSummary(args: {
   recentThemes: ClientContextTheme[]
   brand: ClientContextBrand
   crossClientSignal: ClientContextCrossSignal[]
+  rejectionPatterns: ClientContextJudgment[]
 }): string {
   const parts: string[] = []
 
@@ -259,6 +305,34 @@ function buildPromptSummary(args: {
       const c = (s.caption ?? '').slice(0, 120).replace(/\s+/g, ' ').trim()
       const eng = s.outcomeEngagement > 0 ? `[${s.outcomeEngagement} eng]` : '[approved]'
       parts.push(`- ${eng} ${s.anonDescriptor}: ${s.idea}${c ? ` — "${c}${s.caption && s.caption.length > 120 ? '…' : ''}"` : ''}`)
+    }
+  }
+
+  // The compounding loop: every revise/reject judgment we've captured
+  // becomes an avoidance instruction for the next generation.
+  // Principle #8 (capture) → principle #6 (retrieve) → better output.
+  if (args.rejectionPatterns.length > 0) {
+    // Bucket by tag for frequency.
+    const tagCounts = new Map<string, number>()
+    const tagNotes = new Map<string, string[]>()
+    for (const j of args.rejectionPatterns) {
+      for (const tag of j.tags) {
+        tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1)
+        if (j.note) {
+          if (!tagNotes.has(tag)) tagNotes.set(tag, [])
+          if (tagNotes.get(tag)!.length < 3) tagNotes.get(tag)!.push(j.note)
+        }
+      }
+    }
+    const ordered = Array.from(tagCounts.entries()).sort((a, b) => b[1] - a[1])
+    if (ordered.length > 0) {
+      parts.push(`\n## What this client rejects (avoid these patterns)`)
+      parts.push(`*Based on ${args.rejectionPatterns.length} recent revise/reject judgments. Treat as hard constraints.*`)
+      for (const [tag, count] of ordered) {
+        const notes = tagNotes.get(tag) ?? []
+        const noteText = notes.length > 0 ? ` — notes: "${notes.join('"; "')}"` : ''
+        parts.push(`- **${tag.replace(/_/g, ' ')}** (${count}×)${noteText}`)
+      }
     }
   }
 
