@@ -10,11 +10,19 @@
 const LINKEDIN_CLIENT_ID = process.env.LINKEDIN_CLIENT_ID!
 const LINKEDIN_CLIENT_SECRET = process.env.LINKEDIN_CLIENT_SECRET!
 
-// Start with basic scopes. Once Community Management API is approved,
-// add: r_organization_social, rw_organization_admin, w_organization_social
+// openid + profile cover Sign In; w_member_social lets us post to
+// the connected user's own LinkedIn feed (generally available, no
+// Partner approval needed).
+//
+// Once LinkedIn Community Management API is approved for this app:
+//   add r_organization_social, rw_organization_admin, w_organization_social
+// and switch to LINKEDIN_CM_CLIENT_ID. Existing tokens will need
+// re-authorization to gain the broader scopes.
 const SCOPES = [
   'openid',
   'profile',
+  'email',
+  'w_member_social',
 ].join(' ')
 
 export function getLinkedInOAuthUrl(state: string): string {

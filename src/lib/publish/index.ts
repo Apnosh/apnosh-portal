@@ -19,6 +19,8 @@ interface PlatformConnection {
   ig_account_id: string | null
   /** GBP only. accounts/{accountId}/locations/{locationId}. */
   gbp_resource_name?: string | null
+  /** LinkedIn only. URN or raw id for the author (person or organization). */
+  linkedin_urn?: string | null
 }
 
 interface PublishInput {
@@ -120,9 +122,12 @@ export async function publishToAllPlatforms(
           error: gbpResult.error,
         }
       } else if (platform === 'linkedin') {
+        // Prefer the dedicated linkedin_urn field; fall back to
+        // ig_account_id for legacy callers that haven't migrated yet.
+        const linkedinAuthor = conn.linkedin_urn ?? conn.ig_account_id
         const liResult = await publishToLinkedIn(
           conn.access_token,
-          conn.ig_account_id, // reused for org ID
+          linkedinAuthor,
           input.text,
           input.mediaUrls[0] || null,
         )

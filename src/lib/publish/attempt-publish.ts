@@ -130,6 +130,7 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
       page_id: c.page_id,
       ig_account_id: c.ig_account_id,
       gbp_resource_name: c.gbp_resource_name ?? null,
+      linkedin_urn: c.linkedin_urn ?? null,
     })),
   )
 
@@ -169,6 +170,12 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
     const fb = map.facebook
     if (fb?.status === 'published' && fb.post_id) {
       return `https://facebook.com/${fb.post_id}`
+    }
+    // LinkedIn returns the post URN; the public URL is /feed/update/{urn}.
+    const li = map.linkedin
+    if (li?.status === 'published' && li.post_id) {
+      const encoded = encodeURIComponent(li.post_id)
+      return `https://www.linkedin.com/feed/update/${encoded}/`
     }
     // GBP returns post_id as `accounts/.../locations/.../localPosts/.../`
     // The post itself doesn't have a stable public URL on Google Search

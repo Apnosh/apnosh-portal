@@ -25,6 +25,9 @@ export interface PublishConnection {
   ig_account_id: string | null
   /** GBP only. accounts/{accountId}/locations/{locationId}. */
   gbp_resource_name?: string | null
+  /** LinkedIn only. Either urn:li:person:<sub> or urn:li:organization:<id>,
+   *  or the raw ID — publish helper normalizes. */
+  linkedin_urn?: string | null
   /** Display info for UI / preflight messaging. */
   accountName: string | null
   /** ISO timestamp. Null if non-expiring. */
@@ -75,6 +78,7 @@ export async function getPublishConnectionsForClient(
       access_token: r.access_token as string,
       page_id: platform === 'facebook' ? pid : null,
       ig_account_id: platform === 'instagram' ? pid : null,
+      linkedin_urn: platform === 'linkedin' ? pid : null,
       accountName: (r.platform_account_name as string) ?? null,
       expiresAt: (r.token_expires_at as string) ?? null,
     })
