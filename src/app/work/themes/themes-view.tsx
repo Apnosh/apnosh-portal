@@ -8,7 +8,7 @@
 
 import { useState, useMemo } from 'react'
 import {
-  BookOpen, Plus, Loader2, X, Sparkles, ArrowRight, ListTodo,
+  BookOpen, Plus, Loader2, X, Sparkles, ArrowRight, ListTodo, Pencil,
 } from 'lucide-react'
 import type { ThemeRow } from '@/lib/work/get-themes'
 
@@ -121,17 +121,49 @@ function ClientGroup({
 }
 
 function ThemeCard({ t }: { t: ThemeRow }) {
-  const monthLabel = t.month
-    ? new Date(t.month).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })
+  const [current, setCurrent] = useState(t)
+  const monthLabel = current.month
+    ? new Date(current.month).toLocaleDateString(undefined, { year: 'numeric', month: 'long' })
     : '(no month)'
-  const pillarCount = Array.isArray(t.pillars) ? (t.pillars as unknown[]).length : 0
+  const pillarCount = Array.isArray(current.pillars) ? (current.pillars as unknown[]).length : 0
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState(current.themeName ?? '')
+  const [editBlurb, setEditBlurb] = useState(current.themeBlurb ?? '')
+  const [editPillars, setEditPillars] = useState(
+    Array.isArray(current.pillars) ? (current.pillars as string[]).join('\n') : '',
+  )
+  const [saving, setSaving] = useState(false)
+
+  async function saveEdit() {
+    setSaving(true); setError(null)
+    const pillars = editPillars.split(/[\n,]/).map(s => s.trim()).filter(Boolean)
+    const res = await fetch(`/api/work/themes/${current.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ themeName: editName, themeBlurb: editBlurb, pillars }),
+    })
+    setSaving(false)
+    if (!res.ok) {
+      setError((await res.json()).error ?? 'failed')
+      return
+    }
+    const { theme } = await res.json()
+    setCurrent({
+      ...current,
+      themeName: theme.theme_name,
+      themeBlurb: theme.theme_blurb,
+      pillars: theme.pillars,
+      version: theme.version,
+    })
+    setEditing(false)
+  }
 
   async function generate() {
     setGenerating(true)
     setError(null)
-    const res = await fetch(`/api/work/themes/${t.id}/generate-ideas`, {
+    const res = await fetch(`/api/work/themes/${current.id}/generate-ideas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ count: 10 }),
@@ -151,50 +183,101 @@ function ThemeCard({ t }: { t: ThemeRow }) {
       className="rounded-2xl border bg-white p-4"
       style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
     >
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700">
-          {monthLabel}
-        </span>
-        {t.status && t.status !== 'active' && (
-          <span className="text-[10px] uppercase tracking-wider text-ink-4">· {t.status}</span>
-        )}
-        <span className="text-[10px] text-ink-5 ml-auto">v{t.version}</span>
-      </div>
-      <p className="text-[15px] font-semibold text-ink leading-snug">
-        {t.themeName || '(untitled)'}
-      </p>
-      {t.themeBlurb && (
-        <p className="text-[12px] text-ink-3 mt-1 leading-snug line-clamp-3">
-          {t.themeBlurb}
-        </p>
+      {!editing ? (
+        <>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700">
+              {monthLabel}
+            </span>
+            {current.status && current.status !== 'active' && (
+              <span className="text-[10px] uppercase tracking-wider text-ink-4">· {current.status}</span>
+            )}
+            <span className="text-[10px] text-ink-5 ml-auto">v{current.version}</span>
+          </div>
+          <p className="text-[15px] font-semibold text-ink leading-snug">
+            {current.themeName || '(untitled)'}
+          </p>
+          {current.themeBlurb && (
+            <p className="text-[12px] text-ink-3 mt-1 leading-snug line-clamp-3">
+              {current.themeBlurb}
+            </p>
+          )}
+          <div className="flex items-center gap-3 mt-3 text-[11px] text-ink-4">
+            {pillarCount > 0 && <span>{pillarCount} pillar{pillarCount === 1 ? '' : 's'}</span>}
+            {current.draftCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <ListTodo className="w-3 h-3" /> {current.draftCount} draft{current.draftCount === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-ink-7">
+            <button
+              onClick={generate}
+              disabled={generating}
+              className="inline-flex items-center gap-1.5 bg-ink hover:bg-ink-2 text-white text-[12px] font-semibold rounded-lg px-3 py-1.5 disabled:opacity-60"
+            >
+              {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              {generating ? 'Generating…' : 'Generate ideas'}
+            </button>
+            <button
+              onClick={() => setEditing(true)}
+              className="inline-flex items-center gap-1 text-[11px] text-ink-3 hover:text-ink px-2 py-1"
+            >
+              <Pencil className="w-3 h-3" /> Edit
+            </button>
+            <a
+              href={`/work/drafts`}
+              className="text-[11px] text-ink-3 hover:text-ink inline-flex items-center gap-1 ml-auto"
+            >
+              See drafts <ArrowRight className="w-3 h-3" />
+            </a>
+            {error && (
+              <span className="text-[11px] text-red-600">{error}</span>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-700 mb-2">
+            Editing theme · {monthLabel}
+          </p>
+          <input
+            type="text"
+            value={editName}
+            onChange={e => setEditName(e.target.value)}
+            placeholder="Theme name"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-ink-6 focus:outline-none focus:ring-2 focus:ring-ink-3 mb-2"
+          />
+          <textarea
+            value={editBlurb}
+            onChange={e => setEditBlurb(e.target.value)}
+            rows={2}
+            placeholder="Blurb"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-ink-6 focus:outline-none focus:ring-2 focus:ring-ink-3 mb-2 resize-none"
+          />
+          <textarea
+            value={editPillars}
+            onChange={e => setEditPillars(e.target.value)}
+            rows={3}
+            placeholder="Pillars (one per line)"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-ink-6 focus:outline-none focus:ring-2 focus:ring-ink-3 mb-2 resize-none"
+          />
+          {error && <p className="text-[11px] text-red-600 mb-2">{error}</p>}
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={() => { setEditing(false); setError(null) }} className="text-[12px] text-ink-3 hover:text-ink px-2 py-1">
+              Cancel
+            </button>
+            <button
+              onClick={saveEdit}
+              disabled={saving || !editName.trim()}
+              className="inline-flex items-center gap-1 text-[12px] font-semibold bg-ink hover:bg-ink-2 text-white rounded-lg px-3 py-1.5 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pencil className="w-3 h-3" />}
+              Save (v{current.version + 1})
+            </button>
+          </div>
+        </>
       )}
-      <div className="flex items-center gap-3 mt-3 text-[11px] text-ink-4">
-        {pillarCount > 0 && <span>{pillarCount} pillar{pillarCount === 1 ? '' : 's'}</span>}
-        {t.draftCount > 0 && (
-          <span className="inline-flex items-center gap-1">
-            <ListTodo className="w-3 h-3" /> {t.draftCount} draft{t.draftCount === 1 ? '' : 's'}
-          </span>
-        )}
-      </div>
-      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-ink-7">
-        <button
-          onClick={generate}
-          disabled={generating}
-          className="inline-flex items-center gap-1.5 bg-ink hover:bg-ink-2 text-white text-[12px] font-semibold rounded-lg px-3 py-1.5 disabled:opacity-60"
-        >
-          {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-          {generating ? 'Generating…' : 'Generate ideas'}
-        </button>
-        <a
-          href={`/work/drafts`}
-          className="text-[11px] text-ink-3 hover:text-ink inline-flex items-center gap-1"
-        >
-          See drafts <ArrowRight className="w-3 h-3" />
-        </a>
-        {error && (
-          <span className="text-[11px] text-red-600 ml-auto">{error}</span>
-        )}
-      </div>
     </li>
   )
 }
