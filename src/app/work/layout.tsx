@@ -13,14 +13,39 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CheckSquare, Users, Calendar, Menu, X, LogOut } from 'lucide-react'
+import {
+  CheckSquare, Users, Calendar, Menu, X, LogOut,
+  Inbox, ListChecks, FileText, BarChart3,
+} from 'lucide-react'
 import { signOut, useUser } from '@/lib/supabase/hooks'
 import WorkspaceSwitcher from '@/components/dashboard/workspace-switcher'
 import { ToastProvider } from '@/components/ui/toast'
 
-const NAV = [
-  { label: 'Today', href: '/work/today', icon: CheckSquare },
-  { label: 'Clients', href: '/work/clients', icon: Users },
+// Real-workspace nav for the strategist. Three groups so a daily user
+// can find every surface within reach without scrolling.
+const NAV_SECTIONS = [
+  {
+    label: 'Daily',
+    items: [
+      { label: 'Today',      href: '/work/today',     icon: CheckSquare },
+      { label: 'Inbox',      href: '/work/inbox',     icon: Inbox },
+      { label: 'Approvals',  href: '/work/approvals', icon: ListChecks },
+      { label: 'Calendar',   href: '/work/calendar',  icon: Calendar },
+    ],
+  },
+  {
+    label: 'Book',
+    items: [
+      { label: 'Clients',  href: '/work/clients',  icon: Users },
+      { label: 'Quotes',   href: '/work/quotes',   icon: FileText },
+    ],
+  },
+  {
+    label: 'Insights',
+    items: [
+      { label: 'Performance', href: '/work/performance', icon: BarChart3 },
+    ],
+  },
 ]
 
 export default function WorkLayout({ children }: { children: React.ReactNode }) {
@@ -64,20 +89,29 @@ export default function WorkLayout({ children }: { children: React.ReactNode }) 
           </div>
 
           <nav className="flex-1 px-3 py-3 overflow-y-auto">
-            {NAV.map(item => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setSidebarOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2 mb-0.5 rounded-lg text-sm font-medium transition-colors min-h-[36px] ${
-                  isActive(item.href)
-                    ? 'bg-white/10 text-white'
-                    : 'text-white/40 hover:bg-white/5 hover:text-white/70'
-                }`}
-              >
-                <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
-                <span>{item.label}</span>
-              </Link>
+            {NAV_SECTIONS.map(section => (
+              <div key={section.label} className="mb-3">
+                <div className="px-3 mb-1 text-[10px] font-semibold text-white/25 uppercase tracking-wider">
+                  {section.label}
+                </div>
+                <div className="space-y-0.5">
+                  {section.items.map(item => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[36px] ${
+                        isActive(item.href)
+                          ? 'bg-white/10 text-white'
+                          : 'text-white/40 hover:bg-white/5 hover:text-white/70'
+                      }`}
+                    >
+                      <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
+                      <span>{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
 

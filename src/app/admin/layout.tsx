@@ -154,14 +154,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => { cancelled = true }
   }, [user?.id])
 
-  // Strategist-only nav: just a way back to /work. The drill-in page
-  // itself has its own internal nav (tabs across the client detail).
+  // Strategist nav: the same shape they see in /work/* so the drill-in
+  // experience feels like a continuation, not a context-switch.
   const strategistNav = [
     {
-      label: 'Strategist',
+      label: 'Daily',
       items: [
-        { label: 'Your work', href: '/work/today', icon: CheckSquare },
-        { label: 'Your clients', href: '/work/clients', icon: Users },
+        { label: 'Today',     href: '/work/today',     icon: CheckSquare },
+        { label: 'Inbox',     href: '/work/inbox',     icon: MessageSquare },
+        { label: 'Approvals', href: '/work/approvals', icon: ListTodo },
+        { label: 'Calendar',  href: '/work/calendar',  icon: Calendar },
+      ],
+    },
+    {
+      label: 'Book',
+      items: [
+        { label: 'Clients', href: '/work/clients', icon: Users },
+        { label: 'Quotes',  href: '/work/quotes',  icon: FileText },
+      ],
+    },
+    {
+      label: 'Insights',
+      items: [
+        { label: 'Performance', href: '/work/performance', icon: FileBarChart },
       ],
     },
   ]
