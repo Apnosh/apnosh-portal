@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import {
   FileText, Sparkles, CheckCircle2, XCircle, Loader2, Clock,
@@ -46,6 +46,7 @@ export default function DraftsView({ initialDrafts }: Props) {
   const [judgePanel, setJudgePanel] = useState<{ id: string; mode: 'revise' | 'rejected' } | null>(null)
   const [lifePanel, setLifePanel] = useState<{ id: string; mode: LifecycleMode } | null>(null)
   const [outcomePanel, setOutcomePanel] = useState<{ id: string } | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   const onSubmitOutcome = useCallback(async (id: string, body: Record<string, unknown>) => {
     setBusy(id)
@@ -90,7 +91,8 @@ export default function DraftsView({ initialDrafts }: Props) {
     })
     setBusy(null)
     if (!res.ok) {
-      alert((await res.json()).error ?? 'Could not save change.')
+      const j = await res.json().catch(() => ({}))
+      setToast(j.error ?? 'Could not save change.')
       return
     }
     const { draft } = await res.json()
@@ -122,7 +124,7 @@ export default function DraftsView({ initialDrafts }: Props) {
     })
     setBusy(null)
     if (!res.ok) {
-      alert('Could not save judgment. Try again.')
+      setToast('Could not save judgment. Try again.')
       return
     }
     const { newStatus } = await res.json()
@@ -131,8 +133,23 @@ export default function DraftsView({ initialDrafts }: Props) {
     setJudgePanel(null)
   }, [])
 
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 4000)
+    return () => clearTimeout(t)
+  }, [toast])
+
   return (
     <div className="max-w-5xl mx-auto py-7 px-4 lg:px-6">
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-ink text-white text-[13px] font-medium px-4 py-2.5 shadow-xl inline-flex items-center gap-2 max-w-md">
+          <AlertCircle className="w-4 h-4 text-red-300 flex-shrink-0" />
+          <span>{toast}</span>
+          <button onClick={() => setToast(null)} className="text-white/60 hover:text-white ml-2">
+            <span className="text-[16px] leading-none">×</span>
+          </button>
+        </div>
+      )}
       <header className="mb-7 flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div className="flex items-center gap-3 mb-2">

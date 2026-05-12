@@ -127,13 +127,11 @@ export default function WorkLayout({ children }: { children: React.ReactNode }) 
   const roleBadge = useMemo(() => {
     if (!heldCaps || heldCaps.size === 0) return 'WORK'
     if (heldCaps.has('admin')) return 'ADMIN'
-    if (heldCaps.size > 2) return 'MULTI'
     if (heldCaps.size === 1) {
       const cap = Array.from(heldCaps)[0]
-      return cap.toUpperCase().replace('_', ' ')
+      return cap.toUpperCase().replace(/_/g, ' ')
     }
-    // 2 caps → first one's label compact
-    return 'MULTI'
+    return `${heldCaps.size} ROLES`
   }, [heldCaps])
 
   return (

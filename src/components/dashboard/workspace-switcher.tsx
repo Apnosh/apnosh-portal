@@ -50,7 +50,7 @@ export default function WorkspaceSwitcher() {
   if (!caps || caps.length === 0) return null
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
+    <div className="flex items-center gap-1.5 overflow-x-auto lg:flex-wrap lg:overflow-visible -mx-1 px-1 scrollbar-thin">
       {caps.map(role => {
         const a = ACCENT_CLASSES[role.accent]
         return (
@@ -58,7 +58,7 @@ export default function WorkspaceSwitcher() {
             key={role.role}
             type="button"
             onClick={() => router.push(role.landingPath)}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ${a.bg} ${a.text} ${a.ring} text-[12px] font-semibold transition-colors hover:brightness-95`}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 ring-1 ${a.bg} ${a.text} ${a.ring} text-[12px] font-semibold transition-colors hover:brightness-95 flex-shrink-0`}
             title={`Go to ${role.label} home`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${a.dot}`} aria-hidden />
