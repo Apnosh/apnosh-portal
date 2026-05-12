@@ -19,7 +19,6 @@ import {
   PenLine, Megaphone, MessagesSquare, Film, Camera, Image as ImageIcon, Star, Mail, UserPlus, Receipt, Globe,
 } from 'lucide-react'
 import { signOut, useUser } from '@/lib/supabase/hooks'
-import WorkspaceSwitcher from '@/components/dashboard/workspace-switcher'
 import { ToastProvider } from '@/components/ui/toast'
 import { WORK_SURFACES_BY_CAPABILITY } from '@/lib/roles/catalog'
 import type { RoleCapability } from '@/lib/auth/capabilities'
@@ -134,6 +133,12 @@ export default function WorkLayout({ children }: { children: React.ReactNode }) 
     return `${heldCaps.size} ROLES`
   }, [heldCaps])
 
+  // Resolve current page label + its section for the header breadcrumb.
+  const currentCrumb = useMemo(() => {
+    const item = ALL_NAV_ITEMS.find(i => pathname === i.href || pathname.startsWith(i.href + '/'))
+    return item ? { section: item.section, label: item.label } : null
+  }, [pathname])
+
   return (
     <ToastProvider>
       <div className="min-h-screen flex" style={{ background: 'radial-gradient(1200px 600px at 80% -10%, rgba(74,189,152,0.06), transparent 50%), linear-gradient(180deg, #fafafb 0%, #f4f5f7 100%)' }}>
@@ -147,24 +152,18 @@ export default function WorkLayout({ children }: { children: React.ReactNode }) 
           className={`fixed top-0 left-0 h-full w-[240px] z-50 flex flex-col transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
           style={{ background: 'linear-gradient(180deg, #1d1d1f 0%, #141416 100%)', boxShadow: '1px 0 0 rgba(255,255,255,0.04) inset, 0 0 40px rgba(0,0,0,0.15)' }}
         >
-          <div className="h-14 flex items-center justify-between px-5 border-b border-white/8">
-            <Link href="/work" className="font-[family-name:var(--font-display)] text-lg text-white/80">
-              Apn<em className="text-brand italic">osh</em>
-            </Link>
-            <div className="flex items-center gap-2">
-              <span
-                className="text-emerald-200 text-[9px] font-bold px-2 py-0.5 rounded-full"
-                style={{ background: 'linear-gradient(135deg, rgba(74,189,152,0.22), rgba(74,189,152,0.08))', boxShadow: 'inset 0 0 0 1px rgba(74,189,152,0.25)' }}
-              >
-                {roleBadge}
+          <div className="h-12 flex items-center justify-between px-4 border-b border-white/[0.06]">
+            <Link href="/work" className="inline-flex items-center gap-2 group">
+              <span className="font-[family-name:var(--font-display)] text-[18px] text-white tracking-tight">
+                Apn<em className="text-brand italic">osh</em>
               </span>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="lg:hidden text-white/40 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+            </Link>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden text-white/40 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
           <nav className="flex-1 px-3 py-3 overflow-y-auto">
@@ -201,17 +200,21 @@ export default function WorkLayout({ children }: { children: React.ReactNode }) 
           </nav>
 
           {/* User chip */}
-          <div className="p-3 border-t border-white/8">
-            <div className="flex items-center gap-3 px-2 py-1.5">
-              <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-300 flex items-center justify-center text-xs font-bold">
+          <div className="p-3 border-t border-white/[0.06]">
+            <div className="flex items-center gap-3 px-1.5 py-1">
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-emerald-200 flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, rgba(74,189,152,0.28), rgba(74,189,152,0.10))', boxShadow: 'inset 0 0 0 1px rgba(74,189,152,0.22)' }}
+              >
                 {initials}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-medium text-white/80 truncate">{displayName}</p>
+                <p className="text-[12px] font-medium text-white/85 truncate leading-tight">{displayName}</p>
+                <p className="text-[10px] text-white/40 truncate leading-tight">{roleBadge}</p>
               </div>
               <button
                 onClick={signOut}
-                className="text-white/40 hover:text-red-400"
+                className="text-white/30 hover:text-red-400 transition-colors"
                 title="Sign out"
               >
                 <LogOut className="w-4 h-4" />
@@ -222,13 +225,22 @@ export default function WorkLayout({ children }: { children: React.ReactNode }) 
 
         {/* Main */}
         <div className="flex-1 lg:ml-[240px] flex flex-col">
-          <header className="h-14 flex items-center gap-3 px-4 lg:px-6 sticky top-0 z-30 backdrop-blur-md bg-white/75 border-b border-ink-6/70">
-            <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-ink-3 hover:text-ink min-h-[40px] min-w-[40px] flex items-center justify-center flex-shrink-0">
+          <header className="h-12 flex items-center gap-3 px-4 lg:px-6 sticky top-0 z-30 backdrop-blur-md bg-white/80 border-b border-ink-6/60">
+            <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-ink-3 hover:text-ink min-h-[40px] min-w-[40px] flex items-center justify-center flex-shrink-0 -ml-2">
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex-1 min-w-0 flex items-center">
-              <WorkspaceSwitcher />
-            </div>
+            <nav className="flex items-center gap-2 text-[12px] min-w-0">
+              {currentCrumb ? (
+                <>
+                  <span className="text-ink-3 font-medium uppercase tracking-[0.12em] text-[10px] truncate">{currentCrumb.section}</span>
+                  <span className="text-ink-5">/</span>
+                  <span className="text-ink font-semibold truncate">{currentCrumb.label}</span>
+                </>
+              ) : (
+                <span className="text-ink-3">Work</span>
+              )}
+            </nav>
+            <div className="flex-1" />
           </header>
           <main className="flex-1">{children}</main>
         </div>
