@@ -192,6 +192,7 @@ Return the JSON array of ${count} ideas now.`
       retrieved_facts: context.retrieval.factIds,
       retrieved_posts: context.retrieval.postIds,
       retrieved_drafts: context.retrieval.crossClientDraftIds,
+      retrieved_judgments: context.retrieval.judgmentIds,
       brand_voice_version: context.retrieval.brandVersion,
       theme_version: Number(theme.version ?? 1),
       cross_client_signal: context.crossClientSignal.length > 0

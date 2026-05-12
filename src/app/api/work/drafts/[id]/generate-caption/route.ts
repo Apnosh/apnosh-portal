@@ -148,6 +148,7 @@ Return the JSON now.`
       retrieved_facts: context.retrieval.factIds,
       retrieved_posts: context.retrieval.postIds,
       retrieved_drafts: context.retrieval.crossClientDraftIds,
+      retrieved_judgments: context.retrieval.judgmentIds,
       brand_voice_version: context.retrieval.brandVersion,
       theme_version: themeVersion,
       cross_client_signal: context.crossClientSignal.length > 0
