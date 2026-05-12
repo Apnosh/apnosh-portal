@@ -50,7 +50,7 @@ export default function WorkspaceSwitcher() {
   if (!caps || caps.length === 0) return null
 
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto lg:flex-wrap lg:overflow-visible -mx-1 px-1 scrollbar-thin">
+    <div className="flex items-center gap-1.5 overflow-x-auto min-w-0 -mx-1 px-1 py-0.5 scrollbar-thin" style={{ scrollbarWidth: 'thin', WebkitMaskImage: 'linear-gradient(to right, black 92%, transparent 100%)' }}>
       {caps.map(role => {
         const a = ACCENT_CLASSES[role.accent]
         return (

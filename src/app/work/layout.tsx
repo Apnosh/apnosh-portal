@@ -222,14 +222,13 @@ export default function WorkLayout({ children }: { children: React.ReactNode }) 
 
         {/* Main */}
         <div className="flex-1 lg:ml-[240px] flex flex-col">
-          <header className="h-14 flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30 backdrop-blur-md bg-white/75 border-b border-ink-6/70">
-            <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-ink-3 hover:text-ink min-h-[44px] min-w-[44px] flex items-center justify-center">
+          <header className="h-14 flex items-center gap-3 px-4 lg:px-6 sticky top-0 z-30 backdrop-blur-md bg-white/75 border-b border-ink-6/70">
+            <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-ink-3 hover:text-ink min-h-[40px] min-w-[40px] flex items-center justify-center flex-shrink-0">
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0 flex items-center">
               <WorkspaceSwitcher />
             </div>
-            <div className="flex-1" />
           </header>
           <main className="flex-1">{children}</main>
         </div>
