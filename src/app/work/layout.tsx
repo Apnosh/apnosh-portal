@@ -16,7 +16,7 @@ import { usePathname } from 'next/navigation'
 import {
   CheckSquare, Users, Calendar, Menu, X, LogOut,
   Inbox, ListChecks, FileText, BarChart3, Sparkles, BookOpen,
-  PenLine, Megaphone, MessagesSquare, Film, Camera, Image as ImageIcon, Star, Mail, UserPlus, Receipt,
+  PenLine, Megaphone, MessagesSquare, Film, Camera, Image as ImageIcon, Star, Mail, UserPlus, Receipt, Globe,
 } from 'lucide-react'
 import { signOut, useUser } from '@/lib/supabase/hooks'
 import WorkspaceSwitcher from '@/components/dashboard/workspace-switcher'
@@ -56,6 +56,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { label: 'Onboarding', href: '/work/onboarding', icon: UserPlus,      section: 'Book' },
   { label: 'Clients',    href: '/work/clients',   icon: Users,          section: 'Book' },
   { label: 'Billing',    href: '/work/billing',   icon: Receipt,        section: 'Book' },
+  { label: 'Web',        href: '/work/web',       icon: Globe,          section: 'Production' },
   { label: 'Quotes',     href: '/work/quotes',    icon: FileText,       section: 'Book' },
   // Insights
   { label: 'Performance', href: '/work/performance', icon: BarChart3,   section: 'Insights' },

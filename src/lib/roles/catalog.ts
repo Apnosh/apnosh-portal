@@ -377,7 +377,9 @@ export const WORK_SURFACES_BY_CAPABILITY: Partial<Record<RoleCapability, string[
   photographer: ['/work/shoots'],   // legacy
   influencer: ['/marketplace'],
   local_seo: ['/work/today', '/work/reviews'],
-  web_ops: ['/work/today'],
+  web_ops: ['/work/today', '/work/web'],
+  web_designer: ['/work/today', '/work/web'],
+  web_developer: ['/work/today', '/work/web'],
   email_specialist: ['/work/today', '/work/campaigns'],
   onboarder: ['/work/today', '/work/onboarding'],
   data_analyst: ['/work/performance'],
