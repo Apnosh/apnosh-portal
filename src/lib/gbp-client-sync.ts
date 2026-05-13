@@ -265,6 +265,9 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
       for (const r of reviews) {
         const rating = r.starRating ? (STAR_MAP[r.starRating] ?? null) : null
         if (rating === null) continue
+        /* Store the full v4 path in review_url so the reply endpoint
+           can derive (account, location, review) without re-enumerating
+           the GBP API. Format: accounts/{a}/locations/{l}/reviews/{r}. */
         const payload = {
           client_id: clientId,
           source: 'google' as const,
@@ -273,7 +276,7 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
           author_name: r.reviewer?.displayName ?? 'Anonymous',
           author_avatar_url: r.reviewer?.profilePhotoUrl ?? null,
           review_text: r.comment ?? null,
-          review_url: null,
+          review_url: r.name,
           response_text: r.reviewReply?.comment ?? null,
           responded_at: r.reviewReply?.updateTime ?? null,
           posted_at: r.createTime,

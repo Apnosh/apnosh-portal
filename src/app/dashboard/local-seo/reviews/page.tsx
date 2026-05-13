@@ -49,6 +49,83 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+/* Inline reply composer. Posts to /api/dashboard/reviews/[id]/reply
+   which calls the GBP v4 API and mirrors the response into our DB. */
+function ReplyBox({ reviewId, source, onSent }: { reviewId: string; source: ReviewSource; onSent: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (source !== 'google') {
+    return <div className="mt-3 text-[11px] text-ink-4 italic">No response yet · reply available on Google soon</div>
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium text-brand-dark hover:text-brand"
+      >
+        <MessageSquare className="w-3 h-3" />
+        Reply
+      </button>
+    )
+  }
+
+  async function submit() {
+    if (!text.trim()) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/dashboard/reviews/${reviewId}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ replyText: text.trim() }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(body.error || `Failed (${res.status})`)
+      } else {
+        onSent()
+      }
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      <textarea
+        value={text}
+        onChange={e => setText(e.target.value)}
+        placeholder="Write a public reply…"
+        rows={3}
+        className="w-full text-sm p-2.5 rounded-lg border border-ink-6 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+      />
+      {error && <p className="text-xs text-rose-700">{error}</p>}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={submit}
+          disabled={busy || !text.trim()}
+          className="text-xs font-semibold text-white bg-brand hover:bg-brand-dark rounded-full px-3.5 py-1.5 disabled:opacity-50"
+        >
+          {busy ? 'Posting to Google…' : 'Post reply'}
+        </button>
+        <button
+          onClick={() => { setOpen(false); setText(''); setError(null) }}
+          disabled={busy}
+          className="text-xs text-ink-3 hover:text-ink"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function ReviewsPage() {
   const supabase = createClient()
   const { client, loading: clientLoading } = useClient()
@@ -368,7 +445,7 @@ export default function ReviewsPage() {
                       <p className="text-xs text-ink-2 leading-relaxed whitespace-pre-wrap">{review.response_text}</p>
                     </div>
                   ) : (
-                    <div className="mt-3 text-[11px] text-ink-4 italic">No response yet</div>
+                    <ReplyBox reviewId={review.id} source={review.source as ReviewSource} onSent={() => window.location.reload()} />
                   )}
                 </div>
               ))}
