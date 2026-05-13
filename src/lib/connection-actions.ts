@@ -279,19 +279,23 @@ export async function syncConnection(
   const clientId = await resolveClientId(user.id)
   if (!clientId) return { success: false, error: 'No client context' }
 
+  /* Each table has a different identifier column (channel_connections.channel
+     vs platform_connections.platform), so we can't select both in one query
+     without erroring. Select * and pick the right field per table. */
   const { data: existing } = await admin
     .from(source)
-    .select('client_id, channel, platform')
+    .select('*')
     .eq('id', connectionId)
     .maybeSingle()
 
-  if (!existing || existing.client_id !== clientId) {
+  if (!existing || (existing as { client_id?: string }).client_id !== clientId) {
     return { success: false, error: 'Connection not found' }
   }
 
   /* Right now only Google Business Profile has a per-client sync
      path. Other channels still rely on background crons. */
-  const channelOrPlatform = (existing.channel ?? existing.platform) as string
+  const row = existing as { channel?: string; platform?: string }
+  const channelOrPlatform = (row.channel ?? row.platform ?? '') as string
   if (source === 'channel_connections' && channelOrPlatform === 'google_business_profile') {
     const { syncClientGbp } = await import('@/lib/gbp-client-sync')
     const r = await syncClientGbp(clientId)
