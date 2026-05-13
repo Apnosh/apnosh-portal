@@ -83,7 +83,14 @@ export async function finalizeGBPConnection(
     .delete()
     .eq('client_id', clientId)
     .eq('channel', 'google_business_profile')
-    .eq('platform_account_id', location.name)
+    .eq('platform_account_id', `${accountName}/${location.name}`)
+
+  /* Store the full resource name "accounts/{a}/locations/{l}". The
+     publish pipeline (publishToGbp), reviews reply endpoint, and
+     listing editor all expect that shape — older code stored just
+     "locations/{l}" which 404s on every v4 endpoint and on the
+     listing-edit PATCH. */
+  const fullResourceName = `${accountName}/${location.name}`
 
   const { error: insertErr } = await supabase
     .from('channel_connections')
@@ -91,7 +98,7 @@ export async function finalizeGBPConnection(
       client_id: clientId,
       channel: 'google_business_profile',
       connection_type: 'oauth',
-      platform_account_id: location.name, // "locations/123456"
+      platform_account_id: fullResourceName,
       platform_account_name: location.title,
       access_token: pending.access_token,
       refresh_token: pending.refresh_token,
