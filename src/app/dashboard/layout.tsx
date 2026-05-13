@@ -133,6 +133,7 @@ const navSections: NavSection[] = [
         serviceArea: 'local_seo',
         children: [
           { label: 'Overview', href: '/dashboard/local-seo', exact: true },
+          { label: 'Full analytics', href: '/dashboard/local-seo/analytics' },
           { label: 'Reviews', href: '/dashboard/local-seo/reviews' },
           { label: 'Your listing', href: '/dashboard/local-seo/listing' },
           { label: 'Menu', href: '/dashboard/local-seo/menu' },

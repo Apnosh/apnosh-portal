@@ -127,7 +127,7 @@ function LocalSeoContent() {
             <ChevronRight className="w-4 h-4 text-ink-4" />
           </Link>
           <Link
-            href="/dashboard/analytics"
+            href="/dashboard/local-seo/analytics"
             className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
           >
             <div className="flex items-center gap-3">
@@ -135,8 +135,8 @@ function LocalSeoContent() {
                 <BarChart3 className="w-5 h-5 text-ink-3" />
               </div>
               <div>
-                <div className="text-sm font-medium text-ink">Full details</div>
-                <div className="text-xs text-ink-4">All GBP metrics + charts</div>
+                <div className="text-sm font-medium text-ink">Full analytics</div>
+                <div className="text-xs text-ink-4">Daily metrics, sparklines, CSV export</div>
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-ink-4" />
@@ -227,7 +227,7 @@ function LocalSeoContent() {
       <div className="db-fade db-d7">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Link
-            href="/dashboard/analytics"
+            href="/dashboard/local-seo/analytics"
             className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
           >
             <div className="flex items-center gap-3">
@@ -235,8 +235,8 @@ function LocalSeoContent() {
                 <TrendingUp className="w-5 h-5 text-ink-3" />
               </div>
               <div>
-                <div className="text-sm font-medium text-ink">Full details</div>
-                <div className="text-xs text-ink-4">All GBP metrics + charts</div>
+                <div className="text-sm font-medium text-ink">Full analytics</div>
+                <div className="text-xs text-ink-4">Daily metrics, sparklines, CSV export</div>
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-ink-4" />
