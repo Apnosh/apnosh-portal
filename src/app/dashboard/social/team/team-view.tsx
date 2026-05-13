@@ -25,12 +25,15 @@ interface Props {
   missingRoles: string[]
 }
 
+type Tab = 'your-team' | 'marketplace'
+
 export default function TeamView({ clientId, team, available, missingRoles }: Props) {
+  const [tab, setTab] = useState<Tab>(team.length > 0 ? 'your-team' : 'marketplace')
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null)
   const [swapTarget, setSwapTarget] = useState<{ personId: string; role: string; personName: string } | null>(null)
   const [addTarget, setAddTarget] = useState<AvailableSpecialist | null>(null)
-  // Section 2 filters (multi-select role, multi-select availability, search)
+  // Marketplace filters (multi-select role, multi-select availability, search)
   const [filterRoles, setFilterRoles] = useState<Set<string>>(new Set())
   const [filterAvail, setFilterAvail] = useState<Set<'available' | 'limited' | 'full'>>(new Set(['available', 'limited']))
   const [search, setSearch] = useState('')
@@ -83,88 +86,101 @@ export default function TeamView({ clientId, team, available, missingRoles }: Pr
     ? `/dashboard/messages?to=${primary.personId}`
     : '/dashboard/messages'
 
-  // Empty state — no team yet at all.
-  if (team.length === 0) {
-    return <EmptyState />
-  }
-
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 lg:px-6">
-      <header className="mb-6">
+      <header className="mb-5">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 mb-2">
           Home / Social / Team
         </p>
         <h1 className="text-[28px] sm:text-[34px] leading-[1.1] font-bold text-ink tracking-tight" style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}>
-          Your team
+          {tab === 'your-team' ? 'Your team' : 'Marketplace'}
         </h1>
         <p className="text-[14px] text-ink-2 mt-2 max-w-2xl leading-relaxed">
-          The people producing your content. Message anyone directly, or let {primary?.displayName.split(' ')[0] ?? 'your strategist'} route it.
+          {tab === 'your-team'
+            ? team.length > 0
+              ? `The people producing your content. Message anyone directly, or let ${primary?.displayName.split(' ')[0] ?? 'your strategist'} route it.`
+              : 'Your team is being assembled. Browse the Marketplace to suggest specialists for your account.'
+            : `Specialists ${primary?.displayName.split(' ')[0] ?? 'your strategist'} trusts who could fit your account.`}
         </p>
       </header>
 
-      {/* Message your team — recommended channel */}
-      <Link
-        href={messageThreadHref}
-        className="block mb-4 rounded-2xl bg-brand text-white hover:bg-brand-dark transition-colors p-4"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-white/15 inline-flex items-center justify-center flex-shrink-0">
-            <Users className="w-5 h-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-semibold leading-tight">Message your team</p>
-            <p className="text-[12px] opacity-80 mt-0.5 leading-snug">
-              {primary
-                ? `Default thread goes to ${primary.displayName.split(' ')[0]}. She'll loop in whoever's needed.`
-                : 'Reach the whole team in one thread.'}
-            </p>
-          </div>
-          <MessageSquare className="w-4 h-4 opacity-70 flex-shrink-0" />
-        </div>
-      </Link>
-
-      {/* Primary contact card */}
-      {primary && (
-        <PrimaryCard
-          member={primary}
-          menuOpen={openMenuFor === primary.personId}
-          onOpenMenu={() => setOpenMenuFor(openMenuFor === primary.personId ? null : primary.personId)}
-          onCloseMenu={() => setOpenMenuFor(null)}
-          onRequestSwap={(role) => setSwapTarget({ personId: primary.personId, role, personName: primary.displayName })}
-          onHide={() => setHiddenIds(s => new Set(s).add(primary.personId))}
+      {/* Tab nav */}
+      <div className="border-b border-ink-6 mb-5 flex items-center gap-1">
+        <TabButton
+          active={tab === 'your-team'}
+          onClick={() => setTab('your-team')}
+          label="Your team"
+          count={team.length}
         />
-      )}
+        <TabButton
+          active={tab === 'marketplace'}
+          onClick={() => setTab('marketplace')}
+          label="Marketplace"
+          count={available.length}
+        />
+      </div>
 
-      {/* Standard cards */}
-      {others.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
-          {others.map(m => (
-            <StandardCard
-              key={m.personId}
-              member={m}
-              menuOpen={openMenuFor === m.personId}
-              onOpenMenu={() => setOpenMenuFor(openMenuFor === m.personId ? null : m.personId)}
-              onCloseMenu={() => setOpenMenuFor(null)}
-              onRequestSwap={(role) => setSwapTarget({ personId: m.personId, role, personName: m.displayName })}
-              onHide={() => setHiddenIds(s => new Set(s).add(m.personId))}
-            />
-          ))}
-        </div>
-      )}
+      {tab === 'your-team' ? (
+        <>
+          {team.length === 0 ? (
+            <EmptyTeamInline onBrowse={() => setTab('marketplace')} />
+          ) : (
+            <>
+              {/* Message your team — recommended channel */}
+              <Link
+                href={messageThreadHref}
+                className="block mb-4 rounded-2xl bg-brand text-white hover:bg-brand-dark transition-colors p-4"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-white/15 inline-flex items-center justify-center flex-shrink-0">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[15px] font-semibold leading-tight">Message your team</p>
+                    <p className="text-[12px] opacity-80 mt-0.5 leading-snug">
+                      {primary
+                        ? `Default thread goes to ${primary.displayName.split(' ')[0]}. They'll loop in whoever's needed.`
+                        : 'Reach the whole team in one thread.'}
+                    </p>
+                  </div>
+                  <MessageSquare className="w-4 h-4 opacity-70 flex-shrink-0" />
+                </div>
+              </Link>
 
-      {/* ─── Section 2: Available specialists ────────────────────── */}
-      <section className="mt-10">
-        <header className="mb-3">
-          <h2
-            className="text-[22px] sm:text-[26px] leading-tight font-bold text-ink tracking-tight"
-            style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}
-          >
-            Add to your team
-          </h2>
-          <p className="text-[13px] text-ink-2 mt-1.5 max-w-2xl leading-relaxed">
-            Specialists {primary?.displayName.split(' ')[0] ?? 'your strategist'} trusts who could fit your account.
-          </p>
-        </header>
+              {/* Primary contact card */}
+              {primary && (
+                <PrimaryCard
+                  member={primary}
+                  menuOpen={openMenuFor === primary.personId}
+                  onOpenMenu={() => setOpenMenuFor(openMenuFor === primary.personId ? null : primary.personId)}
+                  onCloseMenu={() => setOpenMenuFor(null)}
+                  onRequestSwap={(role) => setSwapTarget({ personId: primary.personId, role, personName: primary.displayName })}
+                  onHide={() => setHiddenIds(s => new Set(s).add(primary.personId))}
+                />
+              )}
+
+              {/* Standard cards */}
+              {others.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+                  {others.map(m => (
+                    <StandardCard
+                      key={m.personId}
+                      member={m}
+                      menuOpen={openMenuFor === m.personId}
+                      onOpenMenu={() => setOpenMenuFor(openMenuFor === m.personId ? null : m.personId)}
+                      onCloseMenu={() => setOpenMenuFor(null)}
+                      onRequestSwap={(role) => setSwapTarget({ personId: m.personId, role, personName: m.displayName })}
+                      onHide={() => setHiddenIds(s => new Set(s).add(m.personId))}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </>
+      ) : (
+        /* ─── Marketplace tab ────────────────────── */
+        <section>
 
         {/* Suggestion strips for missing roles */}
         {suggestionStrips.length > 0 && (
@@ -247,7 +263,8 @@ export default function TeamView({ clientId, team, available, missingRoles }: Pr
             ))}
           </div>
         )}
-      </section>
+        </section>
+      )}
 
       {swapTarget && (
         <SwapModal
@@ -643,24 +660,57 @@ function SwapModal({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Empty state
+// Tab nav + empty states
 // ─────────────────────────────────────────────────────────────────────
 
-function EmptyState() {
+function TabButton({
+  active, onClick, label, count,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  count: number
+}) {
   return (
-    <div className="max-w-2xl mx-auto py-16 px-4 text-center">
+    <button
+      onClick={onClick}
+      className={`relative px-3 py-2.5 text-[13px] font-semibold transition-colors ${
+        active ? 'text-ink' : 'text-ink-3 hover:text-ink-2'
+      }`}
+    >
+      {label}
+      <span className={`ml-1.5 text-[11px] font-normal ${active ? 'text-ink-3' : 'text-ink-4'}`}>
+        {count}
+      </span>
+      {active && (
+        <span className="absolute left-0 right-0 -bottom-px h-[2px] bg-ink rounded-full" />
+      )}
+    </button>
+  )
+}
+
+function EmptyTeamInline({ onBrowse }: { onBrowse: () => void }) {
+  return (
+    <div className="rounded-2xl bg-white ring-1 ring-ink-6 py-12 px-6 text-center">
       <div className="w-14 h-14 rounded-full bg-ink-7 text-ink-2 mx-auto inline-flex items-center justify-center mb-4">
         <Users className="w-6 h-6" />
       </div>
       <h2
-        className="text-[22px] font-semibold text-ink mb-2"
+        className="text-[18px] font-semibold text-ink mb-1.5"
         style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}
       >
-        Your team is being assembled
+        No one assigned yet
       </h2>
       <p className="text-[13px] text-ink-3 leading-relaxed max-w-md mx-auto">
-        Your strategist will introduce everyone within 48 hours of kickoff. You&rsquo;ll see them here as soon as they&rsquo;re on board.
+        Your strategist will introduce everyone within 48 hours of kickoff. In the meantime, you can browse who&rsquo;s available.
       </p>
+      <button
+        onClick={onBrowse}
+        className="mt-4 text-[13px] font-semibold bg-ink text-white rounded-lg px-4 py-2 hover:bg-ink-2 inline-flex items-center gap-1.5"
+      >
+        <Search className="w-3.5 h-3.5" />
+        Browse marketplace
+      </button>
     </div>
   )
 }

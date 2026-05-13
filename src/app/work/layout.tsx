@@ -55,6 +55,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   // Book
   { label: 'Onboarding', href: '/work/onboarding', icon: UserPlus,      section: 'Book' },
   { label: 'Clients',    href: '/work/clients',   icon: Users,          section: 'Book' },
+  { label: 'Specialists', href: '/work/specialists', icon: UserPlus,    section: 'Book' },
   { label: 'Billing',    href: '/work/billing',   icon: Receipt,        section: 'Book' },
   { label: 'Web',        href: '/work/web',       icon: Globe,          section: 'Production' },
   { label: 'Quotes',     href: '/work/quotes',    icon: FileText,       section: 'Book' },

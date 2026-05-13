@@ -342,7 +342,7 @@ export const WORK_SURFACES_BY_CAPABILITY: Partial<Record<RoleCapability, string[
   strategist: [
     '/work/today', '/work/inbox', '/work/approvals', '/work/calendar',
     '/work/themes', '/work/drafts',
-    '/work/clients', '/work/quotes',
+    '/work/clients', '/work/specialists', '/work/quotes',
     '/work/performance',
   ],
   copywriter: [
@@ -381,7 +381,7 @@ export const WORK_SURFACES_BY_CAPABILITY: Partial<Record<RoleCapability, string[
   web_designer: ['/work/today', '/work/web'],
   web_developer: ['/work/today', '/work/web'],
   email_specialist: ['/work/today', '/work/campaigns'],
-  onboarder: ['/work/today', '/work/onboarding'],
+  onboarder: ['/work/today', '/work/onboarding', '/work/specialists'],
   data_analyst: ['/work/performance'],
   finance: ['/work/today', '/work/billing'],
 }

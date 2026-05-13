@@ -117,7 +117,7 @@ export default function InboxView({ items }: { items: InboxItem[] }) {
         <h1 className="text-2xl font-bold text-ink">
           {items.length === 0
             ? 'You’re caught up'
-            : `${items.length} item${items.length === 1 ? '' : 's'} need your attention`}
+            : `${items.length} item${items.length === 1 ? '' : 's'} need${items.length === 1 ? 's' : ''} your attention`}
         </h1>
         <p className="text-sm text-ink-3 mt-1">
           Approvals, reviews, and tasks in one place. Most urgent at the top.
