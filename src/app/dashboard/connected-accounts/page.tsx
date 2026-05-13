@@ -7,7 +7,7 @@ import {
   RefreshCw, Trash2, ExternalLink, Plus, HelpCircle, Star,
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
-import { getConnectionsForClient, disconnectPlatform, type UnifiedConnection } from '@/lib/connection-actions'
+import { getConnectionsForClient, disconnectPlatform, syncConnection, type UnifiedConnection } from '@/lib/connection-actions'
 
 /* ------------------------------------------------------------------ */
 /*  Platform catalog                                                   */
@@ -73,10 +73,11 @@ function statusStyles(status: UnifiedConnection['status']) {
 /*  Components                                                         */
 /* ------------------------------------------------------------------ */
 
-function ConnectionCard({ conn, clientId, onDisconnect }: {
+function ConnectionCard({ conn, clientId, onDisconnect, onSynced }: {
   conn: UnifiedConnection
   clientId: string
   onDisconnect: () => void
+  onSynced: () => void
 }) {
   const catalog = CATALOG.find((c) => c.id === conn.platform)
   const Icon = catalog?.icon || LinkIcon
@@ -84,6 +85,8 @@ function ConnectionCard({ conn, clientId, onDisconnect }: {
 
   const [disconnecting, setDisconnecting] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
 
   async function handleDisconnect() {
     setDisconnecting(true)
@@ -91,6 +94,29 @@ function ConnectionCard({ conn, clientId, onDisconnect }: {
     setDisconnecting(false)
     if (res.success) onDisconnect()
   }
+
+  async function handleSync() {
+    setSyncing(true)
+    setSyncMessage(null)
+    const res = await syncConnection(conn.source, conn.id)
+    setSyncing(false)
+    if (res.success) {
+      const bits: string[] = []
+      if (res.locationsDiscovered) bits.push(`${res.locationsDiscovered} ${res.locationsDiscovered === 1 ? 'location' : 'locations'}`)
+      if (res.metricsImported) bits.push(`${res.metricsImported} day's metrics`)
+      if (res.reviewsImported) bits.push(`${res.reviewsImported} review${res.reviewsImported === 1 ? '' : 's'}`)
+      setSyncMessage(bits.length > 0 ? `Pulled ${bits.join(', ')}` : 'Nothing new yet — try again later')
+      onSynced()
+    } else {
+      setSyncMessage(res.error)
+    }
+    /* Clear the toast after a few seconds so it doesn't linger. */
+    setTimeout(() => setSyncMessage(null), 6000)
+  }
+
+  /* Only platforms that have a per-client sync path get the button.
+     Right now that's Google Business Profile via channel_connections. */
+  const canSync = conn.source === 'channel_connections' && conn.platform === 'google_business_profile'
 
   const needsAttention = conn.status === 'expired' || conn.status === 'error'
 
@@ -138,8 +164,26 @@ function ConnectionCard({ conn, clientId, onDisconnect }: {
             </div>
           )}
 
+          {syncMessage && (
+            <div className="mt-3 px-3 py-2 bg-emerald-50 rounded-lg text-xs text-emerald-800 leading-relaxed">
+              {syncMessage}
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex items-center gap-2 mt-3">
+            {canSync && !needsAttention && (
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-ink-2 hover:text-ink border border-ink-6 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {syncing
+                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                  : <RefreshCw className="w-3 h-3" />}
+                {syncing ? 'Syncing…' : 'Sync now'}
+              </button>
+            )}
             {needsAttention && conn.actions.canReconnect && conn.actions.reconnectUrl && (
               <a
                 href={`${conn.actions.reconnectUrl}?clientId=${clientId}`}
@@ -312,7 +356,7 @@ export default function ConnectedAccountsPage() {
                 <h2 className="text-xs font-bold uppercase tracking-wider text-ink-4 mb-3">{CATEGORY_LABELS[cat]}</h2>
                 <div className="space-y-3">
                   {list.map((conn) => (
-                    <ConnectionCard key={`${conn.source}-${conn.id}`} conn={conn} clientId={clientId} onDisconnect={load} />
+                    <ConnectionCard key={`${conn.source}-${conn.id}`} conn={conn} clientId={clientId} onDisconnect={load} onSynced={load} />
                   ))}
                 </div>
               </section>

@@ -264,6 +264,50 @@ export async function disconnectPlatform(
 // Get the list of possible platforms (for "Add more" section)
 // ---------------------------------------------------------------------------
 
+/* Trigger a manual sync for a single connection. Owned + scoped to
+   the caller's client so a restaurant owner can refresh their own
+   data without needing admin access to the agency cron. */
+export async function syncConnection(
+  source: 'platform_connections' | 'channel_connections',
+  connectionId: string
+): Promise<{ success: true; locationsDiscovered: number; metricsImported: number; reviewsImported: number; errors: string[] } | { success: false; error: string }> {
+  const userSupabase = await createServerClient()
+  const { data: { user } } = await userSupabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const admin = createAdminClient()
+  const clientId = await resolveClientId(user.id)
+  if (!clientId) return { success: false, error: 'No client context' }
+
+  const { data: existing } = await admin
+    .from(source)
+    .select('client_id, channel, platform')
+    .eq('id', connectionId)
+    .maybeSingle()
+
+  if (!existing || existing.client_id !== clientId) {
+    return { success: false, error: 'Connection not found' }
+  }
+
+  /* Right now only Google Business Profile has a per-client sync
+     path. Other channels still rely on background crons. */
+  const channelOrPlatform = (existing.channel ?? existing.platform) as string
+  if (source === 'channel_connections' && channelOrPlatform === 'google_business_profile') {
+    const { syncClientGbp } = await import('@/lib/gbp-client-sync')
+    const r = await syncClientGbp(clientId)
+    if (!r.ok) return { success: false, error: r.message ?? 'Sync failed' }
+    return {
+      success: true,
+      locationsDiscovered: r.locationsDiscovered,
+      metricsImported: r.metricsImported,
+      reviewsImported: r.reviewsImported,
+      errors: r.errors,
+    }
+  }
+
+  return { success: false, error: 'Sync not supported for this connection yet' }
+}
+
 export async function getAvailablePlatforms() {
   return Object.entries(PLATFORM_META).map(([id, meta]) => ({
     id,
