@@ -11,8 +11,9 @@
 import { useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import {
-  MessageSquare, MoreHorizontal, ExternalLink, EyeOff, ArrowLeftRight,
+  MessageSquare, MoreHorizontal, ExternalLink, ArrowLeftRight,
   Circle, Users, X, Loader2, AlertCircle, Check, Plus, Search, UserPlus,
+  ChevronDown, ChevronUp, Send,
 } from 'lucide-react'
 import type { TeamMember } from '@/lib/dashboard/get-team'
 import type { AvailableSpecialist } from '@/lib/dashboard/get-available-specialists'
@@ -22,14 +23,15 @@ interface Props {
   clientId: string
   team: TeamMember[]
   available: AvailableSpecialist[]
-  missingRoles: string[]
 }
 
-type Tab = 'your-team' | 'marketplace'
+type Tab = 'your-team' | 'add'
 
-export default function TeamView({ clientId, team, available, missingRoles }: Props) {
-  const [tab, setTab] = useState<Tab>(team.length > 0 ? 'your-team' : 'marketplace')
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
+export default function TeamView({ clientId, team, available }: Props) {
+  const [tab, setTab] = useState<Tab>(team.length > 0 ? 'your-team' : 'add')
+  // Power-user toggle for the directory grid — collapsed by default
+  // so the conversational prompt is the front door.
+  const [rosterOpen, setRosterOpen] = useState(false)
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null)
   const [swapTarget, setSwapTarget] = useState<{ personId: string; role: string; personName: string } | null>(null)
   const [addTarget, setAddTarget] = useState<AvailableSpecialist | null>(null)
@@ -42,7 +44,24 @@ export default function TeamView({ clientId, team, available, missingRoles }: Pr
      anyway, but the UI feedback matters. */
   const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set())
 
-  const visible = useMemo(() => team.filter(m => !hiddenIds.has(m.personId)), [team, hiddenIds])
+  /* Backend-role hiding: editor, ad_buyer, seo_specialist, designer
+     only surface when they have recent activity on the account.
+     A restaurant owner doesn't think about their video editor unless
+     a reel was just delivered — surfacing them otherwise adds noise. */
+  const BACKEND_ROLES = new Set(['editor', 'ad_buyer', 'seo_specialist', 'designer', 'paid_media'])
+  const ACTIVITY_RECENCY_MS = 30 * 24 * 60 * 60 * 1000  // 30 days
+  const visible = useMemo(() => {
+    const now = Date.now()
+    return team.filter(m => {
+      // Always show client-facing roles + the primary contact.
+      if (m.isPrimaryContact) return true
+      const isBackendOnly = m.roles.every(r => BACKEND_ROLES.has(r))
+      if (!isBackendOnly) return true
+      // Backend-only: require recent activity to be visible.
+      if (!m.lastActivityAt) return false
+      return now - new Date(m.lastActivityAt).getTime() < ACTIVITY_RECENCY_MS
+    })
+  }, [team])
   const primary = visible.find(m => m.isPrimaryContact)
   const others = visible.filter(m => !m.isPrimaryContact)
 
@@ -69,19 +88,6 @@ export default function TeamView({ clientId, team, available, missingRoles }: Pr
     setAddTarget(null)
   }, [])
 
-  // Suggestion strip: pick up to 3 candidates per missing role.
-  const suggestionStrips = useMemo(() => {
-    if (missingRoles.length === 0) return []
-    return missingRoles
-      .map(role => ({
-        role,
-        candidates: available
-          .filter(s => s.capabilities.includes(role) && !requestedIds.has(s.personId))
-          .slice(0, 3),
-      }))
-      .filter(s => s.candidates.length > 0)
-  }, [missingRoles, available, requestedIds])
-
   const messageThreadHref = primary
     ? `/dashboard/messages?to=${primary.personId}`
     : '/dashboard/messages'
@@ -93,14 +99,14 @@ export default function TeamView({ clientId, team, available, missingRoles }: Pr
           Home / Social / Team
         </p>
         <h1 className="text-[28px] sm:text-[34px] leading-[1.1] font-bold text-ink tracking-tight" style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}>
-          {tab === 'your-team' ? 'Your team' : 'Marketplace'}
+          {tab === 'your-team' ? 'Your team' : 'Add to your team'}
         </h1>
         <p className="text-[14px] text-ink-2 mt-2 max-w-2xl leading-relaxed">
           {tab === 'your-team'
             ? team.length > 0
               ? `The people producing your content. Message anyone directly, or let ${primary?.displayName.split(' ')[0] ?? 'your strategist'} route it.`
-              : 'Your team is being assembled. Browse the Marketplace to suggest specialists for your account.'
-            : `Specialists ${primary?.displayName.split(' ')[0] ?? 'your strategist'} trusts who could fit your account.`}
+              : `Your team is being assembled. ${primary?.displayName.split(' ')[0] ?? 'Your strategist'} will introduce everyone soon.`
+            : `Tell ${primary?.displayName.split(' ')[0] ?? 'your strategist'} what you need. They'll suggest the right person and let you know if anything changes about your plan.`}
         </p>
       </header>
 
@@ -113,17 +119,17 @@ export default function TeamView({ clientId, team, available, missingRoles }: Pr
           count={team.length}
         />
         <TabButton
-          active={tab === 'marketplace'}
-          onClick={() => setTab('marketplace')}
-          label="Marketplace"
-          count={available.length}
+          active={tab === 'add'}
+          onClick={() => setTab('add')}
+          label="Add to your team"
+          count={null}
         />
       </div>
 
       {tab === 'your-team' ? (
         <>
           {team.length === 0 ? (
-            <EmptyTeamInline onBrowse={() => setTab('marketplace')} />
+            <EmptyTeamInline onAsk={() => setTab('add')} />
           ) : (
             <>
               {/* Message your team — recommended channel */}
@@ -151,11 +157,11 @@ export default function TeamView({ clientId, team, available, missingRoles }: Pr
               {primary && (
                 <PrimaryCard
                   member={primary}
+                  primaryName={primary.displayName}
                   menuOpen={openMenuFor === primary.personId}
                   onOpenMenu={() => setOpenMenuFor(openMenuFor === primary.personId ? null : primary.personId)}
                   onCloseMenu={() => setOpenMenuFor(null)}
                   onRequestSwap={(role) => setSwapTarget({ personId: primary.personId, role, personName: primary.displayName })}
-                  onHide={() => setHiddenIds(s => new Set(s).add(primary.personId))}
                 />
               )}
 
@@ -166,11 +172,11 @@ export default function TeamView({ clientId, team, available, missingRoles }: Pr
                     <StandardCard
                       key={m.personId}
                       member={m}
+                      primaryName={primary?.displayName ?? null}
                       menuOpen={openMenuFor === m.personId}
                       onOpenMenu={() => setOpenMenuFor(openMenuFor === m.personId ? null : m.personId)}
                       onCloseMenu={() => setOpenMenuFor(null)}
                       onRequestSwap={(role) => setSwapTarget({ personId: m.personId, role, personName: m.displayName })}
-                      onHide={() => setHiddenIds(s => new Set(s).add(m.personId))}
                     />
                   ))}
                 </div>
@@ -179,90 +185,85 @@ export default function TeamView({ clientId, team, available, missingRoles }: Pr
           )}
         </>
       ) : (
-        /* ─── Marketplace tab ────────────────────── */
+        /* ─── Add to your team tab ──────────────────
+           Conversational front door. The marketplace directory still
+           exists, but lives behind a "Browse our roster" toggle for
+           the rare case the owner wants to pick someone specifically. */
         <section>
+          <AskPrompt
+            clientId={clientId}
+            primaryName={primary?.displayName.split(' ')[0] ?? null}
+          />
 
-        {/* Suggestion strips for missing roles */}
-        {suggestionStrips.length > 0 && (
-          <div className="space-y-2 mb-4">
-            {suggestionStrips.map(({ role, candidates }) => (
-              <div key={role} className="rounded-xl bg-brand/5 ring-1 ring-brand/20 p-3">
-                <p className="text-[13px] text-ink-2 leading-snug">
-                  You don&rsquo;t have a dedicated <strong>{ROLE_LABEL[role] ?? role}</strong>. Here {candidates.length === 1 ? 'is one' : `are ${candidates.length}`} we&rsquo;d recommend.
+          <button
+            onClick={() => setRosterOpen(o => !o)}
+            className="mt-6 mb-3 text-[12px] font-medium text-ink-3 hover:text-ink inline-flex items-center gap-1"
+          >
+            {rosterOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {rosterOpen ? 'Hide our roster' : 'Browse our roster'}
+            <span className="text-ink-4 ml-1">{rosterOpen ? '' : `(${available.length})`}</span>
+          </button>
+
+          {rosterOpen && (
+            <>
+              {/* Filter bar */}
+              <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="flex-1 relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none" />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search by name, specialty, or role"
+                    className="w-full text-[13px] pl-8 pr-3 py-2 rounded-lg ring-1 ring-ink-6 focus:ring-ink-3 focus:outline-none"
+                  />
+                </div>
+                <FilterChips
+                  label="Role"
+                  options={[
+                    ['strategist', 'Strategist'],
+                    ['social_media_manager', 'SMM'],
+                    ['copywriter', 'Copywriter'],
+                    ['photographer', 'Photographer'],
+                    ['videographer', 'Videographer'],
+                    ['editor', 'Video editor'],
+                    ['ad_buyer', 'Paid media'],
+                    ['seo_specialist', 'SEO'],
+                  ]}
+                  selected={filterRoles}
+                  onToggle={(k) => setFilterRoles(prev => { const next = new Set(prev); if (next.has(k)) next.delete(k); else next.add(k); return next })}
+                />
+                <FilterChips
+                  label="Available"
+                  options={[
+                    ['available', 'Available'],
+                    ['limited', 'Limited'],
+                  ]}
+                  selected={filterAvail as Set<string>}
+                  onToggle={(k) => setFilterAvail(prev => {
+                    const next = new Set(prev) as Set<'available' | 'limited' | 'full'>
+                    if (next.has(k as 'available' | 'limited' | 'full')) next.delete(k as 'available' | 'limited' | 'full')
+                    else next.add(k as 'available' | 'limited' | 'full')
+                    return next
+                  })}
+                />
+              </div>
+
+              {filteredAvailable.length === 0 ? (
+                <p className="text-[13px] text-ink-3 py-8 text-center bg-white ring-1 ring-ink-6 rounded-2xl">
+                  {search || filterRoles.size > 0
+                    ? `No one matches those filters right now. Try broadening, or just ask ${primary?.displayName.split(' ')[0] ?? 'your strategist'} above.`
+                    : 'No additional specialists available right now.'}
                 </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {candidates.map(c => (
-                    <button
-                      key={c.personId}
-                      onClick={() => setAddTarget(c)}
-                      className="inline-flex items-center gap-2 bg-white hover:bg-ink-7 ring-1 ring-ink-6 rounded-full pl-1 pr-3 py-1 text-[12px] font-medium text-ink-2"
-                    >
-                      <Avatar url={c.avatarUrl} name={c.displayName} size={24} />
-                      {c.displayName}
-                    </button>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {filteredAvailable.map(s => (
+                    <AvailableCard key={s.personId} specialist={s} onRequest={() => setAddTarget(s)} />
                   ))}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Filter bar */}
-        <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2">
-          <div className="flex-1 relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none" />
-            <input
-              type="search"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search by name, specialty, or role"
-              className="w-full text-[13px] pl-8 pr-3 py-2 rounded-lg ring-1 ring-ink-6 focus:ring-ink-3 focus:outline-none"
-            />
-          </div>
-          <FilterChips
-            label="Role"
-            options={[
-              ['strategist', 'Strategist'],
-              ['social_media_manager', 'SMM'],
-              ['copywriter', 'Copywriter'],
-              ['photographer', 'Photographer'],
-              ['videographer', 'Videographer'],
-              ['editor', 'Video editor'],
-              ['ad_buyer', 'Paid media'],
-              ['seo_specialist', 'SEO'],
-            ]}
-            selected={filterRoles}
-            onToggle={(k) => setFilterRoles(prev => { const next = new Set(prev); if (next.has(k)) next.delete(k); else next.add(k); return next })}
-          />
-          <FilterChips
-            label="Available"
-            options={[
-              ['available', 'Available'],
-              ['limited', 'Limited'],
-            ]}
-            selected={filterAvail as Set<string>}
-            onToggle={(k) => setFilterAvail(prev => {
-              const next = new Set(prev) as Set<'available' | 'limited' | 'full'>
-              if (next.has(k as 'available' | 'limited' | 'full')) next.delete(k as 'available' | 'limited' | 'full')
-              else next.add(k as 'available' | 'limited' | 'full')
-              return next
-            })}
-          />
-        </div>
-
-        {filteredAvailable.length === 0 ? (
-          <p className="text-[13px] text-ink-3 py-8 text-center bg-white ring-1 ring-ink-6 rounded-2xl">
-            {search || filterRoles.size > 0
-              ? `No one matches those filters right now. Try broadening, or message ${primary?.displayName.split(' ')[0] ?? 'your strategist'} to source someone specific.`
-              : 'No additional specialists available right now.'}
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filteredAvailable.map(s => (
-              <AvailableCard key={s.personId} specialist={s} onRequest={() => setAddTarget(s)} />
-            ))}
-          </div>
-        )}
+              )}
+            </>
+          )}
         </section>
       )}
 
@@ -311,14 +312,14 @@ function Avatar({ url, name, size }: { url: string | null; name: string; size: n
 }
 
 function PrimaryCard({
-  member, menuOpen, onOpenMenu, onCloseMenu, onRequestSwap, onHide,
+  member, primaryName, menuOpen, onOpenMenu, onCloseMenu, onRequestSwap,
 }: {
   member: TeamMember
+  primaryName: string | null
   menuOpen: boolean
   onOpenMenu: () => void
   onCloseMenu: () => void
   onRequestSwap: (role: string) => void
-  onHide: () => void
 }) {
   return (
     <article className="rounded-2xl bg-white ring-1 ring-ink-6 p-5 sm:p-6">
@@ -369,8 +370,8 @@ function PrimaryCard({
               {menuOpen && (
                 <OverflowMenu
                   member={member}
+                  primaryName={primaryName}
                   onRequestSwap={(role) => { onCloseMenu(); onRequestSwap(role) }}
-                  onHide={() => { onCloseMenu(); onHide() }}
                   onClose={onCloseMenu}
                 />
               )}
@@ -383,14 +384,14 @@ function PrimaryCard({
 }
 
 function StandardCard({
-  member, menuOpen, onOpenMenu, onCloseMenu, onRequestSwap, onHide,
+  member, primaryName, menuOpen, onOpenMenu, onCloseMenu, onRequestSwap,
 }: {
   member: TeamMember
+  primaryName: string | null
   menuOpen: boolean
   onOpenMenu: () => void
   onCloseMenu: () => void
   onRequestSwap: (role: string) => void
-  onHide: () => void
 }) {
   return (
     <article className="rounded-2xl bg-white ring-1 ring-ink-6 p-4">
@@ -419,8 +420,8 @@ function StandardCard({
           {menuOpen && (
             <OverflowMenu
               member={member}
+              primaryName={primaryName}
               onRequestSwap={(role) => { onCloseMenu(); onRequestSwap(role) }}
-              onHide={() => { onCloseMenu(); onHide() }}
               onClose={onCloseMenu}
             />
           )}
@@ -453,18 +454,19 @@ function StandardCard({
 }
 
 function OverflowMenu({
-  member, onRequestSwap, onHide, onClose,
+  member, primaryName, onRequestSwap, onClose,
 }: {
   member: TeamMember
+  primaryName: string | null
   onRequestSwap: (role: string) => void
-  onHide: () => void
   onClose: () => void
 }) {
+  const strategistFirst = primaryName?.split(' ')[0] ?? 'your strategist'
   return (
     <>
       {/* Click-outside scrim */}
       <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute right-0 top-full mt-1 w-56 rounded-xl bg-white shadow-lg ring-1 ring-ink-6 z-50 py-1">
+      <div className="absolute right-0 top-full mt-1 w-64 rounded-xl bg-white shadow-lg ring-1 ring-ink-6 z-50 py-1">
         {member.portfolioUrl && (
           <a
             href={member.portfolioUrl}
@@ -477,6 +479,7 @@ function OverflowMenu({
             View portfolio
           </a>
         )}
+        {/* Softened: framed as raising a need, not firing a person. */}
         {member.roles.map(role => (
           <button
             key={role}
@@ -484,16 +487,9 @@ function OverflowMenu({
             className="w-full flex items-center gap-2 px-3 py-2 text-[12px] text-ink-2 hover:text-ink hover:bg-ink-7 text-left"
           >
             <ArrowLeftRight className="w-3.5 h-3.5" />
-            Request a different {ROLE_LABEL[role] ?? role}
+            Talk to {strategistFirst} about your {(ROLE_LABEL[role] ?? role).toLowerCase()}
           </button>
         ))}
-        <button
-          onClick={onHide}
-          className="w-full flex items-center gap-2 px-3 py-2 text-[12px] text-ink-3 hover:text-ink hover:bg-ink-7 text-left"
-        >
-          <EyeOff className="w-3.5 h-3.5" />
-          Hide from team page
-        </button>
       </div>
     </>
   )
@@ -669,7 +665,7 @@ function TabButton({
   active: boolean
   onClick: () => void
   label: string
-  count: number
+  count: number | null
 }) {
   return (
     <button
@@ -679,9 +675,11 @@ function TabButton({
       }`}
     >
       {label}
-      <span className={`ml-1.5 text-[11px] font-normal ${active ? 'text-ink-3' : 'text-ink-4'}`}>
-        {count}
-      </span>
+      {count !== null && (
+        <span className={`ml-1.5 text-[11px] font-normal ${active ? 'text-ink-3' : 'text-ink-4'}`}>
+          {count}
+        </span>
+      )}
       {active && (
         <span className="absolute left-0 right-0 -bottom-px h-[2px] bg-ink rounded-full" />
       )}
@@ -689,7 +687,7 @@ function TabButton({
   )
 }
 
-function EmptyTeamInline({ onBrowse }: { onBrowse: () => void }) {
+function EmptyTeamInline({ onAsk }: { onAsk: () => void }) {
   return (
     <div className="rounded-2xl bg-white ring-1 ring-ink-6 py-12 px-6 text-center">
       <div className="w-14 h-14 rounded-full bg-ink-7 text-ink-2 mx-auto inline-flex items-center justify-center mb-4">
@@ -699,17 +697,17 @@ function EmptyTeamInline({ onBrowse }: { onBrowse: () => void }) {
         className="text-[18px] font-semibold text-ink mb-1.5"
         style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}
       >
-        No one assigned yet
+        Your team is being assembled
       </h2>
       <p className="text-[13px] text-ink-3 leading-relaxed max-w-md mx-auto">
-        Your strategist will introduce everyone within 48 hours of kickoff. In the meantime, you can browse who&rsquo;s available.
+        Your strategist will introduce everyone within 48 hours of kickoff. In the meantime, you can already tell them what you need.
       </p>
       <button
-        onClick={onBrowse}
+        onClick={onAsk}
         className="mt-4 text-[13px] font-semibold bg-ink text-white rounded-lg px-4 py-2 hover:bg-ink-2 inline-flex items-center gap-1.5"
       >
-        <Search className="w-3.5 h-3.5" />
-        Browse marketplace
+        <MessageSquare className="w-3.5 h-3.5" />
+        Tell us what you need
       </button>
     </div>
   )
@@ -974,6 +972,95 @@ function AddSpecialistModal({
             </div>
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Add-to-your-team: conversational prompt
+// ─────────────────────────────────────────────────────────────────────
+
+function AskPrompt({
+  clientId, primaryName,
+}: {
+  clientId: string
+  primaryName: string | null
+}) {
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [sent, setSent] = useState(false)
+  const strategistFirst = primaryName?.split(' ')[0] ?? 'your strategist'
+
+  const submit = useCallback(async () => {
+    const m = message.trim()
+    if (!m) return
+    setBusy(true); setError(null)
+    try {
+      const res = await fetch('/api/dashboard/team/ask', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ clientId, message: m }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`)
+      setSent(true)
+      setMessage('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Send failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [clientId, message])
+
+  if (sent) {
+    return (
+      <div className="rounded-2xl bg-white ring-1 ring-emerald-200 p-5 text-center">
+        <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-700 inline-flex items-center justify-center mb-2">
+          <Check className="w-5 h-5" />
+        </div>
+        <p className="text-[14px] font-semibold text-ink mb-1">Sent</p>
+        <p className="text-[12px] text-ink-3 leading-relaxed max-w-md mx-auto">
+          {strategistFirst} will reply in your thread with the right person and any plan changes — usually within a day.
+        </p>
+        <button
+          onClick={() => setSent(false)}
+          className="mt-3 text-[12px] font-medium text-ink-3 hover:text-ink"
+        >
+          Send another
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-2xl bg-white ring-1 ring-ink-6 p-5">
+      <textarea
+        value={message}
+        onChange={e => setMessage(e.target.value)}
+        rows={4}
+        placeholder={`Examples: "We need more photo content for the patio" · "I want someone to handle TikTok" · "Launching a new menu — who can help?"`}
+        className="w-full text-[14px] p-3 rounded-xl ring-1 ring-ink-6 focus:ring-ink-3 focus:outline-none resize-y leading-relaxed placeholder:text-ink-4"
+      />
+      <p className="text-[11px] text-ink-3 mt-2 leading-relaxed">
+        {strategistFirst} replies with a name and tells you upfront if it changes your plan or pricing. No surprises.
+      </p>
+      {error && (
+        <p className="mt-2 text-[11px] text-rose-700 inline-flex items-start gap-1">
+          <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+          {error}
+        </p>
+      )}
+      <div className="mt-3 flex items-center justify-end">
+        <button
+          onClick={submit}
+          disabled={busy || !message.trim()}
+          className="text-[13px] font-semibold bg-brand text-white rounded-lg px-4 py-2 hover:bg-brand-dark disabled:opacity-40 inline-flex items-center gap-1.5"
+        >
+          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+          Send to {strategistFirst}
+        </button>
       </div>
     </div>
   )

@@ -15,10 +15,7 @@
 import { redirect } from 'next/navigation'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { getTeamForClient } from '@/lib/dashboard/get-team'
-import {
-  getAvailableSpecialists,
-  getMissingTeamRoles,
-} from '@/lib/dashboard/get-available-specialists'
+import { getAvailableSpecialists } from '@/lib/dashboard/get-available-specialists'
 import TeamView from './team-view'
 
 export const dynamic = 'force-dynamic'
@@ -39,17 +36,15 @@ export default async function TeamPage({ searchParams }: PageProps) {
     )
   }
 
-  const [team, available, missingRoles] = await Promise.all([
+  const [team, available] = await Promise.all([
     getTeamForClient(clientId),
     getAvailableSpecialists(clientId),
-    getMissingTeamRoles(clientId),
   ])
   return (
     <TeamView
       clientId={clientId}
       team={team}
       available={available}
-      missingRoles={missingRoles}
     />
   )
 }
