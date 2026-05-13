@@ -51,7 +51,12 @@ function formatDate(iso: string): string {
 
 /* Inline reply composer. Posts to /api/dashboard/reviews/[id]/reply
    which calls the GBP v4 API and mirrors the response into our DB. */
-function ReplyBox({ reviewId, source, onSent }: { reviewId: string; source: ReviewSource; onSent: () => void }) {
+function ReplyBox({ reviewId, source, v4Enabled, onSent }: {
+  reviewId: string
+  source: ReviewSource
+  v4Enabled: boolean
+  onSent: () => void
+}) {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -59,6 +64,16 @@ function ReplyBox({ reviewId, source, onSent }: { reviewId: string; source: Revi
 
   if (source !== 'google') {
     return <div className="mt-3 text-[11px] text-ink-4 italic">No response yet · reply available on Google soon</div>
+  }
+
+  /* Until v4 access lands, replying would just round-trip an "API not
+     enabled" error. Better to surface the actual state up-front. */
+  if (!v4Enabled) {
+    return (
+      <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-ink-4 italic">
+        Reply available once Google approves the v4 API request
+      </div>
+    )
   }
 
   if (!open) {
@@ -133,6 +148,7 @@ export default function ReviewsPage() {
   const [reviews, setReviews] = useState<Review[]>([])
   const [perf, setPerf] = useState<ReviewsPerformance | null>(null)
   const [loading, setLoading] = useState(true)
+  const [v4Enabled, setV4Enabled] = useState(false)
 
   const [sourceFilter, setSourceFilter] = useState<ReviewSource | 'all'>('all')
   const [ratingFilter, setRatingFilter] = useState<'all' | '5' | '4' | '3' | '2' | '1'>('all')
@@ -157,6 +173,20 @@ export default function ReviewsPage() {
 
   useEffect(() => { load() }, [load])
   useRealtimeRefresh(['reviews'], load)
+
+  /* Check whether the legacy v4 Business Profile API is enabled for
+     this connection — drives whether the Reply UI is interactive. */
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/dashboard/gbp/status')
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (cancelled || !json) return
+        setV4Enabled(!!json.v4Enabled)
+      })
+      .catch(() => { /* leave false */ })
+    return () => { cancelled = true }
+  }, [])
 
   const filtered = useMemo(() => {
     return reviews.filter(r => {
@@ -466,7 +496,7 @@ export default function ReviewsPage() {
                       <p className="text-xs text-ink-2 leading-relaxed whitespace-pre-wrap">{review.response_text}</p>
                     </div>
                   ) : (
-                    <ReplyBox reviewId={review.id} source={review.source as ReviewSource} onSent={() => window.location.reload()} />
+                    <ReplyBox reviewId={review.id} source={review.source as ReviewSource} v4Enabled={v4Enabled} onSent={() => window.location.reload()} />
                   )}
                 </div>
               ))}

@@ -34,6 +34,8 @@ export default function ListingEditor() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [title, setTitle] = useState<string | null>(null)
+  const [verified, setVerified] = useState(true)
+  const [verifiedChecked, setVerifiedChecked] = useState(false)
 
   /* Form state — kept separate from the original so we know what
      changed. On save we only PATCH the diff. */
@@ -54,10 +56,16 @@ export default function ListingEditor() {
   useEffect(() => {
     async function load() {
       try {
-        const [listingRes, attrRes] = await Promise.all([
+        const [listingRes, attrRes, statusRes] = await Promise.all([
           fetch('/api/dashboard/listing'),
           fetch('/api/dashboard/listing/attributes'),
+          fetch('/api/dashboard/gbp/status'),
         ])
+        if (statusRes.ok) {
+          const status = await statusRes.json() as { verified?: boolean }
+          setVerified(status.verified !== false)
+          setVerifiedChecked(true)
+        }
         const listingBody = await listingRes.json()
         if (!listingRes.ok) {
           setLoadError(listingBody.error || `HTTP ${listingRes.status}`)
@@ -111,6 +119,18 @@ export default function ListingEditor() {
   async function save() {
     const patch = diffFields()
     if (Object.keys(patch).length === 0 && !attributesChanged) return
+
+    /* Destructive guard: if the owner is about to clear an existing
+       description, double-check. Cleared descriptions are easy to do
+       by accident (select-all + delete) and they wipe what customers
+       see on Google. */
+    if (patch.description !== undefined
+        && (patch.description ?? '').trim() === ''
+        && (original?.description ?? '').trim() !== ''
+        && !confirm('Clear your business description? Customers won\'t see any description on your Google listing until you add a new one.')) {
+      return
+    }
+
     setSaving(true)
     setSaveError(null)
     try {
@@ -206,6 +226,34 @@ export default function ListingEditor() {
           </div>
         </div>
       </div>
+
+      {/* Verification banner: most write operations require a verified
+         listing and Performance API metrics only flow for verified
+         listings. We detect "not found" errors on the metrics sync as
+         the proxy for unverified status. */}
+      {verifiedChecked && !verified && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 flex items-start gap-3">
+          <AlertTriangle className="w-4.5 h-4.5 text-amber-700 flex-shrink-0 mt-0.5" />
+          <div className="text-sm leading-relaxed">
+            <p className="font-semibold text-amber-900">Listing not verified yet</p>
+            <p className="text-amber-900/85 mt-1">
+              Google reports this listing isn&rsquo;t verified or doesn&rsquo;t have a
+              physical address. Edits below will save, but the Performance
+              API won&rsquo;t return impression/call data and some changes may
+              not show on public search until verification is complete.
+              Verify your listing at{' '}
+              <a
+                href="https://business.google.com/locations"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold underline hover:text-amber-950"
+              >
+                business.google.com
+              </a>.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Description */}
       <Section
