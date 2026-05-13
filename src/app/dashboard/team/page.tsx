@@ -10,7 +10,6 @@
 import { redirect } from 'next/navigation'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { getTeamForClient } from '@/lib/dashboard/get-team'
-import { getAvailableSpecialists } from '@/lib/dashboard/get-available-specialists'
 import { getOpenTeamRequests } from '@/lib/dashboard/get-team-requests'
 import TeamView from './team-view'
 
@@ -32,16 +31,14 @@ export default async function TeamPage({ searchParams }: PageProps) {
     )
   }
 
-  const [team, available, openRequests] = await Promise.all([
+  const [team, openRequests] = await Promise.all([
     getTeamForClient(clientId),
-    getAvailableSpecialists(clientId),
     getOpenTeamRequests(clientId),
   ])
   return (
     <TeamView
       clientId={clientId}
       team={team}
-      available={available}
       openRequests={openRequests}
     />
   )
