@@ -28,6 +28,9 @@ import { getGoalCards } from '@/lib/dashboard/get-goal-cards'
 import { getStrategistForClient } from '@/lib/dashboard/get-strategist'
 import { getPlaybookExplanations } from '@/lib/dashboard/get-playbook-explanations'
 import { getTodayHero } from '@/lib/dashboard/get-today-hero'
+import { getRecentReviews } from '@/lib/dashboard/get-recent-reviews'
+import { getSinceLastChecked } from '@/lib/dashboard/get-since-last-checked'
+import { getPrimaryStrategist } from '@/lib/dashboard/get-primary-strategist'
 
 export const maxDuration = 15
 
@@ -46,7 +49,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
   // Parallel: fire every query at once.
-  const [pulse, weekly, agenda, services, goalCards, strategist, playbooks, todayHero, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
+  const [pulse, weekly, agenda, services, goalCards, strategist, playbooks, todayHero, recentReviews, sinceLastChecked, primaryStrategist, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
     getPulseData(clientId),
     getWeeklyActivity(clientId),
     getAgenda(clientId),
@@ -55,6 +58,9 @@ export async function GET(req: NextRequest) {
     getStrategistForClient(clientId),
     getPlaybookExplanations(clientId),
     getTodayHero(clientId),
+    getRecentReviews(clientId, 3),
+    getSinceLastChecked(clientId, 5),
+    getPrimaryStrategist(clientId),
     admin
       .from('clients')
       .select('shape_footprint')
@@ -139,6 +145,9 @@ export async function GET(req: NextRequest) {
     services,
     goalCards,
     strategist,
+    primaryStrategist,
+    recentReviews,
+    sinceLastChecked,
     playbooks,
     todayHero,
     setup: {
