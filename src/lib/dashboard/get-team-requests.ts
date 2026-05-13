@@ -3,7 +3,7 @@
 /**
  * The owner's view of their open team-related requests.
  *
- * Closes the loop on /dashboard/social/team. Without this, an owner
+ * Closes the loop on /dashboard/team. Without this, an owner
  * who taps "Talk to your strategist about your photographer" or sends
  * a conversational ask gets a "Sent" toast and then has nowhere to
  * see that the request landed. This server lib pulls every open

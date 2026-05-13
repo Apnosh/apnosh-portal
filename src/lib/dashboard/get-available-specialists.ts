@@ -1,7 +1,7 @@
 'use server'
 
 /**
- * Marketplace data for Section 2 of /dashboard/social/team.
+ * Marketplace data for the Add-to-your-team tab of /dashboard/team.
  *
  * Returns a list of specialists this client COULD add to their team —
  * meaning: people with at least one active relevant capability who

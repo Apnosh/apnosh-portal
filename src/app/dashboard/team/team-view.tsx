@@ -98,7 +98,7 @@ export default function TeamView({ clientId, team, available, openRequests }: Pr
     <div className="max-w-5xl mx-auto py-6 px-4 lg:px-6">
       <header className="mb-5">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 mb-2">
-          Home / Social / Team
+          Home / Team
         </p>
         <h1 className="text-[28px] sm:text-[34px] leading-[1.1] font-bold text-ink tracking-tight" style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}>
           {tab === 'your-team' ? 'Your team' : 'Add to your team'}

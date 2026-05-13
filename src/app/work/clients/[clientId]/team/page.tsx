@@ -1,7 +1,7 @@
 /**
  * /work/clients/[clientId]/team — strategist-facing team management.
  *
- * Edits the same data the client sees on /dashboard/social/team:
+ * Edits the same data the client sees on /dashboard/team:
  *   - mark a person as primary contact
  *   - update "current focus" — the one-liner under the primary card
  *   - resolve open swap_requests (mark resolved + optional note)

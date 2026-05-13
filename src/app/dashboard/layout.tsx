@@ -8,7 +8,7 @@ import {
   MessageSquare, Wrench, Building2, CreditCard, FileText, HelpCircle, Settings,
   Menu, X, ChevronDown, BookOpen, FileBarChart, ListTodo,
   Share2, Globe, MapPin, Mail, Image as ImageIcon, Link2, Newspaper,
-  Inbox, Star, Sparkles, Palette,
+  Inbox, Star, Sparkles, Palette, Users,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { CartProvider } from '@/lib/cart-context'
@@ -88,6 +88,7 @@ const navSections: NavSection[] = [
     items: [
       { label: 'Today', href: '/dashboard', icon: LayoutDashboard, exact: true },
       { label: 'Inbox', href: '/dashboard/inbox', icon: Inbox, exact: false },
+      { label: 'Team', href: '/dashboard/team', icon: Users, exact: false },
       { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar, exact: false },
     ],
   },
@@ -111,7 +112,6 @@ const navSections: NavSection[] = [
           { label: 'Library', href: '/dashboard/social/library' },
           { label: 'Request content', href: '/dashboard/social/request' },
           { label: 'Boost a post', href: '/dashboard/social/boost' },
-          { label: 'Team', href: '/dashboard/social/team' },
           { label: 'Calendar', href: '/dashboard/calendar' },
           { label: 'Performance', href: '/dashboard/social/performance' },
           { label: 'Action needed', href: '/dashboard/social/action-needed' },
