@@ -135,6 +135,7 @@ const navSections: NavSection[] = [
           { label: 'Overview', href: '/dashboard/local-seo', exact: true },
           { label: 'Reviews', href: '/dashboard/local-seo/reviews' },
           { label: 'Your listing', href: '/dashboard/local-seo/listing' },
+          { label: 'Menu', href: '/dashboard/local-seo/menu' },
           { label: 'Locations', href: '/dashboard/local-seo/locations' },
         ],
       },

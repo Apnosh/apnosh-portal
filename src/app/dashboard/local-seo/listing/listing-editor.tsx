@@ -347,6 +347,28 @@ export default function ListingEditor() {
         </Section>
       )}
 
+      {/* Photos + posts await v4 API approval. Surface clearly so owners
+         know they're coming, not missing. */}
+      <Section
+        label="Photos & posts"
+        hint="Photo management and local posts publish to Google through a separate API surface that&apos;s still in review."
+      >
+        <div className="rounded-2xl border border-ink-6 bg-bg-2/50 px-4 py-5 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 grid place-items-center flex-shrink-0">
+            <AlertTriangle className="w-4 h-4" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-ink">Waiting on Google&rsquo;s API approval</p>
+            <p className="text-xs text-ink-3 mt-1 leading-relaxed">
+              Uploading photos and publishing posts (specials, events, offers) use Google&rsquo;s
+              legacy v4 Business Profile API. We&rsquo;ve requested access (case 5-7311000040463) —
+              typical turnaround is 7–10 business days. Once approved, both will appear here
+              without you needing to do anything.
+            </p>
+          </div>
+        </div>
+      </Section>
+
       {/* Sticky save */}
       <div className="sticky bottom-4 flex items-center justify-end gap-3">
         {saveError && (
