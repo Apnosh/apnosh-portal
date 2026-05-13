@@ -258,6 +258,21 @@ function LocalSeoContent() {
             <ChevronRight className="w-4 h-4 text-ink-4" />
           </Link>
           <Link
+            href="/dashboard/local-seo/listing"
+            className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-bg-2 flex items-center justify-center">
+                <MapPin className="w-5 h-5 text-ink-3" />
+              </div>
+              <div>
+                <div className="text-sm font-medium text-ink">Your listing</div>
+                <div className="text-xs text-ink-4">Hours, phone, website, description</div>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-ink-4" />
+          </Link>
+          <Link
             href="/dashboard/analytics"
             className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
           >
