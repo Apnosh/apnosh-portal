@@ -31,6 +31,7 @@ import { getTodayHero } from '@/lib/dashboard/get-today-hero'
 import { getRecentReviews } from '@/lib/dashboard/get-recent-reviews'
 import { getSinceLastChecked } from '@/lib/dashboard/get-since-last-checked'
 import { getPrimaryStrategist } from '@/lib/dashboard/get-primary-strategist'
+import { getInboxThreads } from '@/lib/dashboard/get-inbox-threads'
 
 export const maxDuration = 15
 
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
   // Parallel: fire every query at once.
-  const [pulse, weekly, agenda, services, goalCards, strategist, playbooks, todayHero, recentReviews, sinceLastChecked, primaryStrategist, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
+  const [pulse, weekly, agenda, services, goalCards, strategist, playbooks, todayHero, recentReviews, sinceLastChecked, primaryStrategist, inboxThreads, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
     getPulseData(clientId),
     getWeeklyActivity(clientId),
     getAgenda(clientId),
@@ -61,6 +62,9 @@ export async function GET(req: NextRequest) {
     getRecentReviews(clientId, 3),
     getSinceLastChecked(clientId, 5),
     getPrimaryStrategist(clientId),
+    /* Inbox is customer-conversations only since the Direction D rebuild;
+       the sidebar badge counts urgent + soon threads here. */
+    getInboxThreads(clientId, 50),
     admin
       .from('clients')
       .select('shape_footprint')
@@ -169,6 +173,10 @@ export async function GET(req: NextRequest) {
     counts: {
       unansweredReviews: unansweredCountRow.count ?? 0,
       pendingApprovals: approvalsCountRow.count ?? 0,
+      /* Drives the sidebar 'Inbox' badge — urgent + soon customer
+         conversations only (the new inbox concept). Action items
+         live on the dashboard rail, not in the badge. */
+      inboxNeeds: inboxThreads.filter(t => t.severity === 'urgent' || t.severity === 'soon').length,
     },
     tasks,
   })

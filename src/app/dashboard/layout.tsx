@@ -310,13 +310,13 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         const r = await fetch(`/api/dashboard/load?clientId=${encodeURIComponent(client!.id)}`)
         if (!r.ok) return
         const json = await r.json() as {
-          counts?: { unansweredReviews?: number; pendingApprovals?: number }
-          agenda?: Array<{ urgency: 'high' | 'medium' | 'low' }>
+          counts?: { unansweredReviews?: number; pendingApprovals?: number; inboxNeeds?: number }
         }
         if (cancelled) return
-        const inbox = (json.agenda ?? []).filter(a => a.urgency === 'high' || a.urgency === 'medium').length
         setNavCounts({
-          inbox,
+          /* Inbox is customer-conversations only since the Direction D
+             rebuild — count urgent + soon threads, not agenda items. */
+          inbox: json.counts?.inboxNeeds ?? 0,
           reviews: json.counts?.unansweredReviews ?? 0,
           approvals: json.counts?.pendingApprovals ?? 0,
         })

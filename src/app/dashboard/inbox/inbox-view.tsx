@@ -143,7 +143,7 @@ export default function InboxView({
         <div className="inline-flex bg-ink-7 rounded-full p-0.5">
           {[
             ['needs', 'Needs you', needsCount],
-            ['handling', `${strategistFirst} handling`, handlingCount],
+            ['handling', `${StrategistFirst} handling`, handlingCount],
             ['all', 'All', threads.length],
           ].map(([v, l, n]) => {
             const active = lens === v
