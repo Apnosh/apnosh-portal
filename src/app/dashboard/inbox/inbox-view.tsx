@@ -17,10 +17,48 @@ import { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import {
   Search, Inbox as InboxIcon, Sparkles, Check, FileText, Star, MessageSquare, AtSign, MessageCircle,
-  Calendar as CalIcon,
 } from 'lucide-react'
-import type { InboxThread, ThreadKind, ThreadSeverity } from '@/lib/dashboard/get-inbox-threads'
-import { channelLabel, kindLabel } from '@/lib/dashboard/inbox-labels'
+import type { InboxThread, ThreadKind } from '@/lib/dashboard/get-inbox-threads'
+import { channelLabel } from '@/lib/dashboard/inbox-labels'
+
+/* Kind-aware status line — replaces the generic "URGENT / NEEDS REPLY"
+   labels with something an owner actually understands at a glance.
+   Approval: when it publishes. Review: rating + reply state. Message:
+   how long the customer has been waiting. */
+function statusFor(t: InboxThread): { text: string; tone: 'rose' | 'amber' | 'ink' | 'brand' } {
+  if (t.replied || t.severity === 'handled') return { text: 'Handled', tone: 'brand' }
+  if (t.kind === 'approval') {
+    const sched = t.approvalScheduledFor ? new Date(t.approvalScheduledFor) : null
+    if (!sched) return { text: 'Ready to sign off', tone: 'ink' }
+    const h = (sched.getTime() - Date.now()) / 3_600_000
+    if (h < 0) return { text: 'Overdue · sign off now', tone: 'rose' }
+    if (h < 24) return { text: `Publishes in ${Math.max(1, Math.round(h))}h`, tone: 'rose' }
+    if (h < 72) return { text: `Publishes ${sched.toLocaleDateString('en-US', { weekday: 'short' })}`, tone: 'amber' }
+    return { text: `Publishes ${sched.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`, tone: 'ink' }
+  }
+  if (t.kind === 'review') {
+    const r = t.rating ?? 0
+    if (r > 0 && r <= 2) return { text: `${r}★ · reply needed`, tone: 'rose' }
+    if (r === 3) return { text: '3★ · reply soon', tone: 'amber' }
+    if (r >= 4) return { text: `${r}★ · quick thanks`, tone: 'ink' }
+    return { text: 'Reply needed', tone: 'amber' }
+  }
+  /* dm / comment / mention — how long the customer has been waiting */
+  const mins = Math.floor((Date.now() - new Date(t.postedAt).getTime()) / 60_000)
+  if (t.severity === 'urgent') return { text: 'Customer waiting · reply now', tone: 'rose' }
+  if (mins < 60) return { text: `Customer waiting ${mins}m`, tone: 'amber' }
+  const h = Math.floor(mins / 60)
+  if (h < 24) return { text: `Customer waiting ${h}h`, tone: 'amber' }
+  const d = Math.floor(h / 24)
+  return { text: `Customer waiting ${d}d`, tone: 'ink' }
+}
+
+const TONE: Record<'rose' | 'amber' | 'ink' | 'brand', { bg: string; fg: string; dot: string }> = {
+  rose: { bg: 'bg-rose-50', fg: 'text-rose-700', dot: 'bg-rose-500' },
+  amber: { bg: 'bg-amber-50', fg: 'text-amber-800', dot: 'bg-amber-500' },
+  ink: { bg: 'bg-ink-7', fg: 'text-ink-3', dot: 'bg-ink-5' },
+  brand: { bg: 'bg-brand/10', fg: 'text-brand-dark', dot: 'bg-brand' },
+}
 
 interface PrimaryStrategist {
   id: string
@@ -29,39 +67,6 @@ interface PrimaryStrategist {
   email: string | null
   avatarUrl: string | null
   initials: string
-}
-
-type Lens = 'needs' | 'handling' | 'all'
-
-const SEVERITY: Record<ThreadSeverity, { label: string; rowBg: string; pillBg: string; pillFg: string; leftBar: string }> = {
-  urgent: {
-    label: 'URGENT',
-    rowBg: 'bg-rose-50/60',
-    pillBg: 'bg-rose-100',
-    pillFg: 'text-rose-900',
-    leftBar: 'border-l-[3px] border-rose-600',
-  },
-  soon: {
-    label: 'NEEDS REPLY SOON',
-    rowBg: 'bg-white',
-    pillBg: 'bg-amber-100',
-    pillFg: 'text-amber-900',
-    leftBar: 'border-l-[3px] border-amber-500',
-  },
-  none: {
-    label: 'NO RUSH',
-    rowBg: 'bg-white',
-    pillBg: 'bg-ink-7',
-    pillFg: 'text-ink-3',
-    leftBar: 'border-l-[3px] border-transparent',
-  },
-  handled: {
-    label: 'HANDLED',
-    rowBg: 'bg-white',
-    pillBg: 'bg-brand/15',
-    pillFg: 'text-brand-dark',
-    leftBar: 'border-l-[3px] border-transparent',
-  },
 }
 
 type KindTab = 'all' | 'approval' | 'review' | 'message'
@@ -139,18 +144,13 @@ export default function InboxView({
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-bg-2">
 
-      {/* Header */}
-      <div className="px-4 lg:px-8 pt-6 pb-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between bg-white border-b border-ink-6">
-        <div>
-          <h1 className="text-[26px] sm:text-[30px] font-semibold text-ink leading-none" style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}>
-            Inbox
-          </h1>
-          <p className="text-[12.5px] text-ink-3 mt-1.5">
-            Everything that needs you. {StrategistFirst} drafts replies; you approve or rewrite.
-          </p>
-        </div>
-        <div className="text-[12px] text-ink-3">
-          <strong className="text-ink-2 font-medium">{filtered.length}</strong> shown
+      {/* Header — short, scannable */}
+      <div className="px-4 lg:px-8 pt-5 pb-2 flex items-end justify-between gap-3 bg-white border-b border-ink-6">
+        <h1 className="text-[24px] sm:text-[28px] font-semibold text-ink leading-none" style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}>
+          Inbox
+        </h1>
+        <div className="text-[11.5px] text-ink-3 pb-0.5">
+          {filtered.length === 0 ? 'You\'re all caught up' : `${filtered.length} need${filtered.length === 1 ? 's' : ''} you`}
         </div>
       </div>
 
@@ -160,14 +160,17 @@ export default function InboxView({
         <nav className="flex items-center gap-1 -mb-px">
           {TABS.map(t => {
             const active = tab === t.key
+            const empty = t.count === 0
             return (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`relative px-3.5 py-3 text-[13px] font-semibold transition-colors ${active ? 'text-ink' : 'text-ink-3 hover:text-ink-2'}`}
+                className={`relative px-3.5 py-3 text-[13px] font-semibold transition-colors ${active ? 'text-ink' : empty ? 'text-ink-4 hover:text-ink-3' : 'text-ink-3 hover:text-ink-2'}`}
               >
                 {t.label}
-                <span className={`ml-1.5 text-[10.5px] font-normal ${active ? 'text-ink-3' : 'text-ink-4'}`}>{t.count}</span>
+                {t.count > 0 && (
+                  <span className={`ml-1.5 text-[10.5px] font-medium px-1.5 py-0.5 rounded-full ${active ? 'bg-brand/15 text-brand-dark' : 'bg-ink-7 text-ink-3'}`}>{t.count}</span>
+                )}
                 {active && <span className="absolute left-0 right-0 -bottom-px h-[2px] bg-brand rounded-full" />}
               </button>
             )
@@ -213,10 +216,12 @@ export default function InboxView({
         {/* Thread list */}
         <div className="border-r border-ink-6 overflow-y-auto bg-white">
           {filtered.length === 0 ? (
-            <div className="p-8 text-center text-ink-3">
-              <InboxIcon className="w-7 h-7 text-ink-4 mx-auto mb-2" />
-              <p className="text-[13px] font-medium text-ink-2">No threads here</p>
-              <p className="text-[11.5px] mt-1">Try a different filter, or check back as customers reach out.</p>
+            <div className="p-10 text-center">
+              <div className="w-10 h-10 mx-auto mb-3 rounded-full bg-brand/15 text-brand-dark grid place-items-center">
+                <Check className="w-5 h-5" />
+              </div>
+              <p className="text-[14px] font-medium text-ink">You&rsquo;re all caught up</p>
+              <p className="text-[11.5px] text-ink-3 mt-1">Nothing needs you right now. {StrategistFirst} is on it.</p>
             </div>
           ) : (
             filtered.map(t => (
@@ -258,10 +263,9 @@ function KindIcon({ kind, className = 'w-4 h-4' }: { kind: ThreadKind; className
 }
 
 function ThreadRow({ thread, active, onClick }: { thread: InboxThread; active: boolean; onClick: () => void }) {
-  const sev = SEVERITY[thread.severity]
+  const status = statusFor(thread)
+  const tone = TONE[status.tone]
   const ageLabel = relTime(thread.postedAt)
-  const showStars = thread.rating !== null
-  /* Kind icon tint: approvals neutral, reviews amber, social brand-green. */
   const iconTint =
     thread.kind === 'approval' ? 'bg-ink-7 text-ink-2'
     : thread.kind === 'review' ? 'bg-amber-50 text-amber-700'
@@ -269,44 +273,30 @@ function ThreadRow({ thread, active, onClick }: { thread: InboxThread; active: b
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left block px-3 py-3 border-b border-ink-6 ${sev.leftBar} ${active ? 'bg-brand/8' : thread.severity === 'urgent' ? sev.rowBg : 'bg-white hover:bg-ink-7/40'}`}
+      className={`w-full text-left block px-3.5 py-2.5 border-b border-ink-6 transition-colors ${active ? 'bg-brand/8' : 'bg-white hover:bg-ink-7/40'}`}
     >
-      <div className="flex items-start gap-2.5">
-        {/* Kind icon — owners can scan and know what this is at a glance */}
-        <div className={`w-7 h-7 rounded-lg ${iconTint} grid place-items-center flex-shrink-0 mt-0.5`}>
+      <div className="flex items-center gap-2.5">
+        {/* Severity dot — at-a-glance urgency */}
+        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${tone.dot}`} />
+
+        {/* Kind icon */}
+        <div className={`w-7 h-7 rounded-lg ${iconTint} grid place-items-center flex-shrink-0`}>
           <KindIcon kind={thread.kind} className="w-3.5 h-3.5" />
         </div>
+
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            {thread.unread && <span className="w-1.5 h-1.5 rounded-full bg-brand flex-shrink-0" />}
-            <span className="text-[12.5px] font-medium text-ink truncate">{thread.authorName}</span>
-            {showStars && thread.rating !== null && (
-              <span className={`text-[11px] tracking-tight ${thread.rating <= 2 ? 'text-rose-600' : 'text-amber-600'}`}>
-                {'★'.repeat(thread.rating)}{'☆'.repeat(Math.max(0, 5 - thread.rating))}
-              </span>
-            )}
-            <span className="flex-1" />
-            <span className="text-[10px] text-ink-4 whitespace-nowrap">{ageLabel}</span>
-          </div>
-          <div className="text-[9.5px] font-bold uppercase tracking-wider text-ink-4 mb-1">
-            {kindLabel(thread.kind)} · <ChannelBadge platform={thread.platform} kind={thread.kind} />
-          </div>
-          <p className="text-[12px] text-ink-2 leading-snug line-clamp-2 mb-1.5">
-            {thread.text || (thread.kind === 'comment' ? '(no text)' : '—')}
-          </p>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${sev.pillBg} ${sev.pillFg}`}>
-              {sev.label}
+          {/* Line 1: title + age */}
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[13px] truncate ${thread.unread ? 'font-semibold text-ink' : 'font-medium text-ink-2'}`}>
+              {thread.authorName}
             </span>
-            {thread.tags.slice(0, 2).map(t => (
-              <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-ink-7 text-ink-3">{t}</span>
-            ))}
-            {thread.kind === 'approval' && thread.approvalScheduledFor && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-ink-7 text-ink-3 inline-flex items-center gap-1">
-                <CalIcon className="w-2.5 h-2.5" />
-                {new Date(thread.approvalScheduledFor).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </span>
-            )}
+            <span className="flex-1" />
+            <span className="text-[10.5px] text-ink-4 whitespace-nowrap flex-shrink-0">{ageLabel}</span>
+          </div>
+          {/* Line 2: kind-aware status (replaces redundant snippet + generic pill) */}
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className={`text-[11px] font-medium ${tone.fg}`}>{status.text}</span>
+            <span className="text-[10.5px] text-ink-4">· <ChannelBadge platform={thread.platform} kind={thread.kind} /></span>
           </div>
         </div>
       </div>
@@ -330,7 +320,8 @@ function ApprovalDetail({
   strategistFirst: string
   detailHref: string
 }) {
-  const sev = SEVERITY[thread.severity]
+  const status = statusFor(thread)
+  const tone = TONE[status.tone]
   const caption = thread.approvalCaption ?? thread.text
   const media = thread.approvalMediaUrls ?? []
   const scheduled = thread.approvalScheduledFor ?? null
@@ -339,22 +330,38 @@ function ApprovalDetail({
     : null
   return (
     <div className="max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="flex items-start gap-3.5 mb-5">
-        <div className="w-11 h-11 rounded-2xl bg-ink-7 text-ink-2 grid place-items-center flex-shrink-0">
-          <FileText className="w-5 h-5" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[16px] font-semibold text-ink" style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}>
-              {thread.authorName}
-            </span>
-            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${sev.pillBg} ${sev.pillFg}`}>{sev.label}</span>
+      {/* Action-first header: title + status + primary CTA all visible immediately */}
+      <div className="bg-white ring-1 ring-ink-6 rounded-2xl p-4 mb-4">
+        <div className="flex items-start gap-3 mb-3">
+          <div className="w-10 h-10 rounded-xl bg-ink-7 text-ink-2 grid place-items-center flex-shrink-0">
+            <FileText className="w-4.5 h-4.5" />
           </div>
-          <p className="text-[11.5px] text-ink-3 mt-1">
-            Approval ready{scheduledLabel ? ` · planned for ${scheduledLabel}` : ''}
-            {thread.tags.length > 0 && <> · {thread.tags.join(' · ')}</>}
-          </p>
+          <div className="flex-1 min-w-0">
+            <div className="text-[15.5px] font-semibold text-ink leading-tight" style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}>
+              {thread.authorName}
+            </div>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${tone.bg} ${tone.fg}`}>{status.text}</span>
+              {thread.tags.length > 0 && (
+                <span className="text-[11px] text-ink-3">· {thread.tags.join(' · ')}</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href={detailHref}
+            className="bg-brand hover:bg-brand-dark text-white rounded-full px-4 py-2 text-[13px] font-semibold inline-flex items-center gap-1.5"
+          >
+            <Check className="w-3.5 h-3.5" />
+            Approve &amp; sign off
+          </Link>
+          <Link href={detailHref} className="text-[12.5px] font-medium text-ink-2 hover:text-ink ring-1 ring-ink-5 rounded-full px-3.5 py-2">
+            Edit
+          </Link>
+          <Link href={detailHref} className="text-[12px] text-ink-3 hover:text-ink ml-1">
+            Request changes
+          </Link>
         </div>
       </div>
 
@@ -388,23 +395,6 @@ function ApprovalDetail({
         )}
       </div>
 
-      {/* Actions */}
-      <div className="bg-white ring-1 ring-ink-6 rounded-2xl p-3 mb-4 flex items-center gap-2 flex-wrap">
-        <Link
-          href={detailHref}
-          className="bg-brand hover:bg-brand-dark text-white rounded-full px-4 py-1.5 text-[12.5px] font-semibold inline-flex items-center gap-1.5"
-        >
-          <Check className="w-3.5 h-3.5" />
-          Approve &amp; sign off
-        </Link>
-        <Link href={detailHref} className="text-[12px] font-medium text-ink-2 hover:text-ink ring-1 ring-ink-5 rounded-full px-3 py-1.5">
-          Edit
-        </Link>
-        <Link href={detailHref} className="text-[12px] text-ink-3 hover:text-ink ml-2">
-          Request changes
-        </Link>
-      </div>
-
       {/* What strategist did */}
       <div className="bg-brand-tint/40 rounded-2xl p-4">
         <div className="text-[10px] font-bold uppercase tracking-wider text-brand-dark mb-2">
@@ -421,7 +411,8 @@ function ApprovalDetail({
 }
 
 function ThreadDetail({ thread, strategistFirst }: { thread: InboxThread; strategistFirst: string }) {
-  const sev = SEVERITY[thread.severity]
+  const status = statusFor(thread)
+  const tone = TONE[status.tone]
   const stars = thread.rating !== null ? '★'.repeat(thread.rating) + '☆'.repeat(Math.max(0, 5 - thread.rating)) : null
   const detailHref = thread.kind === 'review'
     ? `/dashboard/local-seo/reviews?focus=${thread.refId}`
@@ -452,15 +443,13 @@ function ThreadDetail({ thread, strategistFirst }: { thread: InboxThread; strate
               <span className={`text-[13px] tracking-tight ${(thread.rating ?? 0) <= 2 ? 'text-rose-600' : 'text-amber-600'}`}>{stars}</span>
             )}
             <span className="text-[11.5px] text-ink-3">· <ChannelBadge platform={thread.platform} kind={thread.kind} /> · {relTime(thread.postedAt)} ago</span>
-            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${sev.pillBg} ${sev.pillFg}`}>{sev.label}</span>
           </div>
-          {thread.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              {thread.tags.map(t => (
-                <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-ink-7 text-ink-3">{t}</span>
-              ))}
-            </div>
-          )}
+          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${tone.bg} ${tone.fg}`}>{status.text}</span>
+            {thread.tags.map(t => (
+              <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-ink-7 text-ink-3">{t}</span>
+            ))}
+          </div>
         </div>
       </div>
 
