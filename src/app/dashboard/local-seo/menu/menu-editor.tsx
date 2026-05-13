@@ -7,10 +7,12 @@ import {
   Utensils, GripVertical,
 } from 'lucide-react'
 import type { FoodMenu, MenuSection, MenuItem } from '@/lib/gbp-menu'
+import ConnectEmptyState from '../connect-empty-state'
 
 export default function MenuEditor() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [connected, setConnected] = useState<boolean | null>(null)
   const [menus, setMenus] = useState<FoodMenu[]>([])
   const [original, setOriginal] = useState<FoodMenu[]>([])
   const [saving, setSaving] = useState(false)
@@ -21,10 +23,17 @@ export default function MenuEditor() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/dashboard/listing/menu')
-        const body = await res.json()
-        if (!res.ok) {
-          setLoadError(body.error || `HTTP ${res.status}`)
+        const [menuRes, statusRes] = await Promise.all([
+          fetch('/api/dashboard/listing/menu'),
+          fetch('/api/dashboard/gbp/status'),
+        ])
+        if (statusRes.ok) {
+          const s = await statusRes.json() as { connected?: boolean }
+          setConnected(s.connected !== false)
+        }
+        const body = await menuRes.json()
+        if (!menuRes.ok) {
+          setLoadError(body.error || `HTTP ${menuRes.status}`)
           return
         }
         const data = body as { menus: FoodMenu[] }
@@ -130,6 +139,10 @@ export default function MenuEditor() {
         </div>
       </div>
     )
+  }
+
+  if (loadError && connected === false) {
+    return <ConnectEmptyState context="your menu" />
   }
 
   if (loadError) {

@@ -12,6 +12,7 @@ import { useClient } from '@/lib/client-context'
 import { getReviewsPerformance, type ReviewsPerformance } from '@/lib/dashboard/get-channel-performance'
 import ChannelHero from '@/components/dashboard/channel-hero'
 import type { Review, ReviewSource } from '@/types/database'
+import ConnectEmptyState from '../connect-empty-state'
 
 const SOURCE_LABEL: Record<ReviewSource, string> = {
   google: 'Google',
@@ -149,6 +150,7 @@ export default function ReviewsPage() {
   const [perf, setPerf] = useState<ReviewsPerformance | null>(null)
   const [loading, setLoading] = useState(true)
   const [v4Enabled, setV4Enabled] = useState(false)
+  const [connected, setConnected] = useState<boolean | null>(null)
 
   const [sourceFilter, setSourceFilter] = useState<ReviewSource | 'all'>('all')
   const [ratingFilter, setRatingFilter] = useState<'all' | '5' | '4' | '3' | '2' | '1'>('all')
@@ -175,7 +177,9 @@ export default function ReviewsPage() {
   useRealtimeRefresh(['reviews'], load)
 
   /* Check whether the legacy v4 Business Profile API is enabled for
-     this connection — drives whether the Reply UI is interactive. */
+     this connection — drives whether the Reply UI is interactive.
+     Also tracks whether the client is connected at all so we can
+     show a friendly empty state instead of a silent zero-reviews list. */
   useEffect(() => {
     let cancelled = false
     fetch('/api/dashboard/gbp/status')
@@ -183,6 +187,7 @@ export default function ReviewsPage() {
       .then(json => {
         if (cancelled || !json) return
         setV4Enabled(!!json.v4Enabled)
+        setConnected(json.connected !== false)
       })
       .catch(() => { /* leave false */ })
     return () => { cancelled = true }
@@ -227,6 +232,12 @@ export default function ReviewsPage() {
   }, [reviews])
 
   if (clientLoading || loading) return <ReviewsSkeleton />
+
+  /* Show the connect CTA when the owner clearly has no GBP linked
+     yet — much friendlier than a silent zero-review list. */
+  if (connected === false && reviews.length === 0) {
+    return <ConnectEmptyState context="your reviews" />
+  }
 
   const hasData = reviews.length > 0
 

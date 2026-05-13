@@ -7,6 +7,7 @@ import type {
   ListingFields, WeeklyHours, DayKey, SpecialHours, AttributeValues,
   ListingCategories, ListingCategory,
 } from '@/lib/gbp-listing'
+import ConnectEmptyState from '../connect-empty-state'
 
 interface AttributeCatalogItem {
   id: string
@@ -33,12 +34,21 @@ function emptyHours(): WeeklyHours {
   return { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] }
 }
 
+interface GbpStatus {
+  connected: boolean
+  v4Enabled?: boolean
+  verified?: boolean
+  tokenRevoked?: boolean
+  locationName?: string | null
+  clientId?: string
+}
+
 export default function ListingEditor() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [title, setTitle] = useState<string | null>(null)
-  const [verified, setVerified] = useState(true)
-  const [verifiedChecked, setVerifiedChecked] = useState(false)
+  const [status, setStatus] = useState<GbpStatus>({ connected: true })
+  const [statusChecked, setStatusChecked] = useState(false)
 
   /* Form state — kept separate from the original so we know what
      changed. On save we only PATCH the diff. */
@@ -66,9 +76,9 @@ export default function ListingEditor() {
           fetch('/api/dashboard/gbp/status'),
         ])
         if (statusRes.ok) {
-          const status = await statusRes.json() as { verified?: boolean }
-          setVerified(status.verified !== false)
-          setVerifiedChecked(true)
+          const s = await statusRes.json() as GbpStatus
+          setStatus(s)
+          setStatusChecked(true)
         }
         const listingBody = await listingRes.json()
         if (!listingRes.ok) {
@@ -195,6 +205,11 @@ export default function ListingEditor() {
   }
 
   if (loadError) {
+    /* If the status endpoint says we're not connected, prefer the
+       friendly CTA over a raw API error. */
+    if (statusChecked && !status.connected) {
+      return <ConnectEmptyState context="your listing" />
+    }
     return (
       <div className="max-w-3xl mx-auto px-4 py-10">
         <Link href="/dashboard/local-seo" className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink mb-6">
@@ -226,20 +241,53 @@ export default function ListingEditor() {
           <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center ring-1 ring-emerald-100">
             <MapPin className="w-5 h-5" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-semibold text-ink">Your Google listing</h1>
             <p className="text-sm text-ink-3 mt-1">
               Changes here update what people see on <strong className="text-ink-2">{title ?? 'your listing'}</strong> in Google Search and Maps.
             </p>
           </div>
+          <button
+            onClick={() => {
+              if (confirm('Pick a different Google listing? You\'ll re-authorize with Google and choose which listing to link.')) {
+                window.location.href = `/api/auth/google-business?clientId=${encodeURIComponent(status.clientId ?? '')}`
+              }
+            }}
+            className="text-[11px] font-medium text-ink-3 hover:text-ink ring-1 ring-ink-6 hover:ring-ink-4 rounded-full px-3 py-1.5"
+            title="Re-authorize and link a different listing"
+          >
+            Switch listing
+          </button>
         </div>
       </div>
+
+      {/* Token revoked banner — takes precedence over other states
+         because nothing else works until the owner re-authenticates. */}
+      {statusChecked && status.tokenRevoked && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 flex items-start gap-3">
+          <AlertTriangle className="w-4.5 h-4.5 text-rose-700 flex-shrink-0 mt-0.5" />
+          <div className="text-sm leading-relaxed flex-1">
+            <p className="font-semibold text-rose-900">Google revoked access</p>
+            <p className="text-rose-900/85 mt-1">
+              The Google account that connected this listing no longer has manager
+              access, or the OAuth grant was revoked. Reconnect to keep syncing
+              and editing.
+            </p>
+          </div>
+          <Link
+            href={`/api/auth/google-business?clientId=${encodeURIComponent(status.clientId ?? '')}`}
+            className="self-center inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700"
+          >
+            Reconnect
+          </Link>
+        </div>
+      )}
 
       {/* Verification banner: most write operations require a verified
          listing and Performance API metrics only flow for verified
          listings. We detect "not found" errors on the metrics sync as
          the proxy for unverified status. */}
-      {verifiedChecked && !verified && (
+      {statusChecked && !status.tokenRevoked && status.verified === false && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 flex items-start gap-3">
           <AlertTriangle className="w-4.5 h-4.5 text-amber-700 flex-shrink-0 mt-0.5" />
           <div className="text-sm leading-relaxed">
@@ -474,6 +522,16 @@ function CategoriesEditor({ value, onChange }: {
 
   function makePrimary(cat: ListingCategory) {
     if (value.primary?.name === cat.name) return
+    /* Switching the primary category is the single most ranking-impactful
+       edit on a Google listing — it changes which searches surface the
+       business and which features Google offers (reservation widgets,
+       order links). Worth a one-line confirm so an owner can't fat-finger
+       it from "Restaurant" to "Office space." */
+    if (value.primary && !confirm(
+      `Switch your primary category from "${value.primary.displayName}" to "${cat.displayName}"? This changes which Google searches show your listing and may take a few days to reflect publicly.`
+    )) {
+      return
+    }
     const newAdditional = [
       ...(value.primary ? [value.primary] : []),
       ...value.additional.filter(c => c.name !== cat.name),

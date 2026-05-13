@@ -47,6 +47,7 @@ export async function GET() {
       v4Enabled: false,
       verified: false,
       caseId: '5-7311000040463',
+      clientId,
     })
   }
 
@@ -64,12 +65,20 @@ export async function GET() {
      service-area-only. */
   const unverified = /metrics .*?: requested entity was not found/i.test(syncErr)
 
+  /* Token revoked signal: Google returns 401 / invalid_grant when
+     the manager access has been pulled or the user revoked the
+     OAuth grant. Distinct from quota/permission errors because the
+     fix is a Reconnect, not waiting for Google. */
+  const tokenRevoked = /invalid_grant|unauthorized|401|token (?:has been )?(?:expired|revoked)/i.test(syncErr)
+
   return NextResponse.json({
     connected: true,
     v4Enabled,
     verified: !unverified,
+    tokenRevoked,
     locationName: row.platform_account_name,
     syncError: row.sync_error,
     caseId: '5-7311000040463',
+    clientId,
   })
 }
