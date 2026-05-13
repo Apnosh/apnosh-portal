@@ -665,18 +665,31 @@ export async function runGBPDailyMetrics(
     websiteClicks: 0,
   }
 
-  const series = (data.multiDailyMetricTimeSeries || []) as Array<{
-    dailyMetricTimeSeries?: {
-      dailyMetric?: string
-      timeSeries?: {
-        datedValues?: Array<{ date: { year: number; month: number; day: number }; value?: string }>
-      }
+  /* Google's actual response shape: multiDailyMetricTimeSeries is an
+     array; each entry has dailyMetricTimeSeries that is ALSO an array
+     of {dailyMetric, timeSeries} per requested metric. The previous
+     parser treated the inner field as a single object, so every metric
+     came back as 0 even when the API returned real data. */
+  type MetricSeries = {
+    dailyMetric?: string
+    timeSeries?: {
+      datedValues?: Array<{ date: { year: number; month: number; day: number }; value?: string }>
     }
-  }>
+  }
+  type Outer = { dailyMetricTimeSeries?: MetricSeries[] | MetricSeries }
 
-  for (const s of series) {
-    const metric = s.dailyMetricTimeSeries?.dailyMetric
-    const values = s.dailyMetricTimeSeries?.timeSeries?.datedValues || []
+  const series = (data.multiDailyMetricTimeSeries || []) as Outer[]
+  const flat: MetricSeries[] = []
+  for (const o of series) {
+    const inner = o.dailyMetricTimeSeries
+    if (!inner) continue
+    if (Array.isArray(inner)) flat.push(...inner)
+    else flat.push(inner)
+  }
+
+  for (const s of flat) {
+    const metric = s.dailyMetric
+    const values = s.timeSeries?.datedValues || []
     const value = values.length > 0 ? Number(values[0].value || 0) : 0
 
     switch (metric) {
