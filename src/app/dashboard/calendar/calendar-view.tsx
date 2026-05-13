@@ -219,13 +219,12 @@ export default function CalendarView({
           <PulseStrip events={events} onClick={handleKpiClick} />
         </header>
 
-        {/* Approval banner — most-urgent thing the owner can act on right now */}
+        {/* Approval banner — most-urgent thing the owner can act on right now.
+           This is the only attention-grabbing strip on the page; cadence
+           accountability deferred until strategists can set per-client targets. */}
         {pendingApprovals > 0 && (
           <ApprovalBanner count={pendingApprovals} oldestIso={oldestApprovalIso} />
         )}
-
-        {/* Cadence banner — "are we on pace this month?" */}
-        <CadenceBanner events={events} />
 
         {/* Two-col layout */}
         <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-6 lg:gap-8">
@@ -295,9 +294,6 @@ export default function CalendarView({
             )}
           </main>
         </div>
-
-        {/* Legend — teaches owners what each color + status means */}
-        <Legend />
       </div>
 
       {selected && <DetailSheet event={selected} onClose={() => setSelected(null)} />}
@@ -626,14 +622,19 @@ function MonthChip({
 }) {
   const c = CATEGORY_COLOR[event.category]
   const Icon = KIND_ICON[event.kind]
-  /* Only show the status badge when status is meaningful — "scheduled"
-     is implied for everything on the calendar, so skip it to reduce noise. */
-  const showStatus = event.status && !/^scheduled$/i.test(event.status)
+  /* Three states a busy owner cares about, communicated visually:
+       - needs attention (draft / awaiting approval / missed) → red dot
+       - done (live / posted) → 60% opacity so it visually recedes
+       - scheduled (the default) → no extra cue
+     No text codes, no decoder ring required. */
+  const s = (event.status || '').toLowerCase()
+  const needsAttention = /draft|approv|miss|fail|revis/.test(s)
+  const isDone = /post|publish|sent|live/.test(s)
   return (
     <button
       onClick={onClick}
       title={`${event.title}${event.status ? ' · ' + event.status : ''}`}
-      className={`w-full flex items-center gap-1.5 text-left rounded-md px-1.5 py-1 ${c.bg} ${c.text} ring-1 ring-inset ring-transparent hover:ring-current/30 hover:shadow-sm transition-all`}
+      className={`relative w-full flex items-center gap-1.5 text-left rounded-md px-1.5 py-1 ${c.bg} ${c.text} ring-1 ring-inset ring-transparent hover:ring-current/30 hover:shadow-sm transition-all ${isDone ? 'opacity-60' : ''}`}
     >
       <Icon className="w-2.5 h-2.5 flex-shrink-0" />
       {!event.allDay && (
@@ -644,24 +645,14 @@ function MonthChip({
       <span className="text-[11px] font-medium truncate leading-tight flex-1 min-w-0">
         {event.title}
       </span>
-      {showStatus && (
-        <span className={`text-[8.5px] font-bold uppercase tracking-wider px-1 py-px rounded ${TONE_CHIP[event.statusTone]} flex-shrink-0`}>
-          {shortStatus(event.status)}
-        </span>
+      {needsAttention && (
+        <span
+          aria-label="needs your attention"
+          className="w-1.5 h-1.5 rounded-full bg-rose-500 flex-shrink-0 ring-2 ring-white"
+        />
       )}
     </button>
   )
-}
-
-/* Trim long status strings so they fit on a month chip. */
-function shortStatus(s: string): string {
-  const m = s.toLowerCase()
-  if (m.includes('approv')) return 'APRV'
-  if (m.includes('draft')) return 'DRFT'
-  if (m.includes('post') || m.includes('publish')) return 'LIVE'
-  if (m.includes('miss') || m.includes('fail')) return 'MISS'
-  if (m.includes('cancel')) return 'CXLD'
-  return s.slice(0, 4).toUpperCase()
 }
 
 /* ────────────────────────────── Agenda ────────────────────────────── */
@@ -1233,80 +1224,3 @@ function relAge(iso: string): string {
   return `${d}d`
 }
 
-/* ─────────────────────────────── Cadence banner ─────────────────────────────── */
-
-/* Recommended cadence is a sensible default until we let strategists
-   set it per-client. v1 = 4 posts/wk + 1 reel/wk + 1 email/wk. */
-const CADENCE_TARGET = { postsPerWeek: 4, reelsPerWeek: 1, emailsPerWeek: 1 }
-
-function CadenceBanner({ events }: { events: CalendarEvent[] }) {
-  /* Count events in the current month that are either already published
-     or scheduled to publish. "On pace" = ratio of shipped+queued to the
-     target for the elapsed-weeks portion of the month. */
-  const stats = useMemo(() => {
-    const now = new Date()
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    const weeksInMonth = Math.ceil((monthEnd.getDate() - monthStart.getDate() + 1) / 7)
-    const target = (CADENCE_TARGET.postsPerWeek + CADENCE_TARGET.reelsPerWeek + CADENCE_TARGET.emailsPerWeek) * weeksInMonth
-    let shipped = 0
-    for (const e of events) {
-      const t = new Date(e.startIso)
-      if (t < monthStart || t > monthEnd) continue
-      if (e.kind === 'post' || e.kind === 'email') shipped++
-    }
-    return { shipped, target, weeksInMonth }
-  }, [events])
-
-  const onPace = stats.shipped >= Math.floor(stats.target * 0.85)
-  const monthLabel = new Date().toLocaleDateString('en-US', { month: 'long' })
-
-  return (
-    <div
-      className="mb-4 flex items-center gap-3 rounded-2xl bg-emerald-50/60 border border-emerald-100 px-4 py-3"
-    >
-      <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-      <p className="text-[13px] text-ink-2 leading-snug">
-        <strong className="text-ink font-semibold">Recommended cadence:</strong>{' '}
-        {CADENCE_TARGET.postsPerWeek} posts/wk, {CADENCE_TARGET.reelsPerWeek} reel/wk, {CADENCE_TARGET.emailsPerWeek} email/wk.
-        <span className="ml-1.5">
-          {monthLabel}:{' '}
-          <strong className={onPace ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
-            {onPace ? 'on pace' : 'behind'}
-          </strong>
-          {' '}({stats.shipped} of {stats.target} planned).
-        </span>
-      </p>
-    </div>
-  )
-}
-
-/* ─────────────────────────────── Legend ─────────────────────────────── */
-
-function Legend() {
-  return (
-    <div
-      className="mt-6 flex items-center gap-x-5 gap-y-2 flex-wrap rounded-2xl border bg-white px-4 py-3 text-[11.5px] text-ink-3"
-      style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
-    >
-      <span className="text-[10px] font-bold uppercase tracking-wider text-ink-4">Legend</span>
-      {CATEGORY_ORDER.map(cat => (
-        <span key={cat} className="inline-flex items-center gap-1.5">
-          <span className={`w-2.5 h-2.5 rounded-sm ${CATEGORY_COLOR[cat].dot}`} />
-          {CATEGORY_LABEL[cat]}
-        </span>
-      ))}
-      <span className="w-px h-3.5 bg-ink-6" />
-      {[
-        { label: 'DRAFT', cls: 'bg-amber-50 text-amber-700' },
-        { label: 'APRV', cls: 'bg-rose-50 text-rose-700' },
-        { label: 'LIVE', cls: 'bg-emerald-50 text-emerald-700' },
-        { label: 'MISS', cls: 'bg-rose-50 text-rose-700' },
-      ].map(s => (
-        <span key={s.label} className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${s.cls}`}>
-          {s.label}
-        </span>
-      ))}
-    </div>
-  )
-}
