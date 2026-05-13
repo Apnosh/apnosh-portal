@@ -27,6 +27,18 @@ export interface ListingFields {
   websiteUri?: string | null
   regularHours?: WeeklyHours | null
   specialHours?: SpecialHours | null
+  categories?: ListingCategories | null
+}
+
+export interface ListingCategory {
+  /** Full resource name e.g. "categories/gcid:restaurant" */
+  name: string
+  displayName: string
+}
+
+export interface ListingCategories {
+  primary: ListingCategory | null
+  additional: ListingCategory[]
 }
 
 export type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
@@ -303,7 +315,7 @@ export async function getClientListing(clientId: string): Promise<{
   if ('error' in tok) return { ok: false, error: tok.error }
   const { accessToken, resourceName } = tok
 
-  const readMask = 'title,profile,websiteUri,phoneNumbers,regularHours,specialHours'
+  const readMask = 'title,profile,websiteUri,phoneNumbers,regularHours,specialHours,categories'
   const url = `${V1_BASE}/${resourceName}?readMask=${encodeURIComponent(readMask)}`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
   const body = await res.json().catch(() => ({}))
@@ -317,6 +329,10 @@ export async function getClientListing(clientId: string): Promise<{
     websiteUri?: string
     regularHours?: { periods?: GbpPeriod[] }
     specialHours?: { specialHourPeriods?: GbpSpecialPeriod[] }
+    categories?: {
+      primaryCategory?: ListingCategory
+      additionalCategories?: ListingCategory[]
+    }
   }
   return {
     ok: true,
@@ -328,8 +344,35 @@ export async function getClientListing(clientId: string): Promise<{
       websiteUri: data.websiteUri ?? null,
       regularHours: periodsToWeekly(data.regularHours?.periods),
       specialHours: specialPeriodsToList(data.specialHours?.specialHourPeriods),
+      categories: {
+        primary: data.categories?.primaryCategory
+          ? { name: data.categories.primaryCategory.name, displayName: data.categories.primaryCategory.displayName }
+          : null,
+        additional: (data.categories?.additionalCategories ?? []).map(c => ({
+          name: c.name,
+          displayName: c.displayName,
+        })),
+      },
     },
   }
+}
+
+/* Search Google's category catalog. Returns up to 20 matching
+   categories for a search term. Used by the typeahead in the
+   listing editor's category picker. */
+export async function searchListingCategories(clientId: string, query: string): Promise<
+  { ok: true; categories: ListingCategory[] } | { ok: false; error: string }
+> {
+  if (!query || query.trim().length < 2) return { ok: true, categories: [] }
+  const tok = await getActiveTokenForClient(clientId)
+  if ('error' in tok) return { ok: false, error: tok.error }
+  const url = `${V1_BASE}/categories:search?searchTerm=${encodeURIComponent(query.trim())}&regionCode=US&languageCode=en&view=BASIC&pageSize=20`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${tok.accessToken}` } })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) return { ok: false, error: body?.error?.message || `HTTP ${res.status}` }
+  const categories = ((body as { categories?: Array<{ name: string; displayName: string }> }).categories ?? [])
+    .map(c => ({ name: c.name, displayName: c.displayName }))
+  return { ok: true, categories }
 }
 
 /* ── Write listing changes ─────────────────────────────────────── */
@@ -371,6 +414,15 @@ export async function updateClientListing(
       ? { specialHourPeriods: specialListToPeriods(patch.specialHours) }
       : { specialHourPeriods: [] }
     updateMaskParts.push('specialHours')
+  }
+  if (patch.categories !== undefined && patch.categories) {
+    body.categories = {
+      primaryCategory: patch.categories.primary
+        ? { name: patch.categories.primary.name }
+        : undefined,
+      additionalCategories: patch.categories.additional.map(c => ({ name: c.name })),
+    }
+    updateMaskParts.push('categories')
   }
 
   if (updateMaskParts.length === 0) {

@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Save, Loader2, MapPin, AlertTriangle, CheckCircle2, Plus, X } from 'lucide-react'
-import type { ListingFields, WeeklyHours, DayKey, SpecialHours, AttributeValues } from '@/lib/gbp-listing'
+import { ArrowLeft, Save, Loader2, MapPin, AlertTriangle, CheckCircle2, Plus, X, Search, Tag } from 'lucide-react'
+import type {
+  ListingFields, WeeklyHours, DayKey, SpecialHours, AttributeValues,
+  ListingCategories, ListingCategory,
+} from '@/lib/gbp-listing'
 
 interface AttributeCatalogItem {
   id: string
@@ -44,6 +47,7 @@ export default function ListingEditor() {
   const [websiteUri, setWebsiteUri] = useState('')
   const [hours, setHours] = useState<WeeklyHours>(emptyHours())
   const [specialHours, setSpecialHours] = useState<SpecialHours>([])
+  const [categories, setCategories] = useState<ListingCategories>({ primary: null, additional: [] })
   const [attributes, setAttributes] = useState<AttributeValues>({})
   const [attributeCatalog, setAttributeCatalog] = useState<AttributeCatalogItem[]>([])
   const [originalAttributes, setOriginalAttributes] = useState<AttributeValues>({})
@@ -78,6 +82,7 @@ export default function ListingEditor() {
         setWebsiteUri(data.fields.websiteUri ?? '')
         setHours(data.fields.regularHours ?? emptyHours())
         setSpecialHours(data.fields.specialHours ?? [])
+        setCategories(data.fields.categories ?? { primary: null, additional: [] })
         setOriginal(data.fields)
 
         /* Attributes are a separate API call — render them if they
@@ -110,6 +115,9 @@ export default function ListingEditor() {
     }
     if (JSON.stringify(original.specialHours ?? []) !== JSON.stringify(specialHours)) {
       out.specialHours = specialHours
+    }
+    if (JSON.stringify(original.categories ?? { primary: null, additional: [] }) !== JSON.stringify(categories)) {
+      out.categories = categories
     }
     return out
   }
@@ -159,7 +167,7 @@ export default function ListingEditor() {
       }
       setSavedAt(Date.now())
       setOriginal({
-        description, primaryPhone, websiteUri, regularHours: hours, specialHours,
+        description, primaryPhone, websiteUri, regularHours: hours, specialHours, categories,
       })
       setOriginalAttributes(attributes)
       /* Clear "Saved" toast after 4 seconds. */
@@ -270,6 +278,14 @@ export default function ListingEditor() {
         <div className="text-[11px] text-ink-4 mt-1.5 text-right">{description.length} / 750</div>
       </Section>
 
+      {/* Categories — primary + up to 9 additional */}
+      <Section
+        label="Categories"
+        hint="Your primary category is the main label customers see; additional categories help discovery."
+      >
+        <CategoriesEditor value={categories} onChange={setCategories} />
+      </Section>
+
       {/* Phone + Website */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <Section label="Primary phone" hint="Shown to customers who tap “Call.”">
@@ -366,6 +382,172 @@ function Section({ label, hint, children }: { label: string; hint?: string; chil
         {hint && <span className="block text-[11.5px] text-ink-3 mt-0.5">{hint}</span>}
       </label>
       <div className="mt-2">{children}</div>
+    </div>
+  )
+}
+
+/* Category editor: primary (one) + additional (up to 9). Typeahead
+   search hits the v1 categories:search endpoint. Categories share
+   shape across the API but their resource names live in a flat
+   namespace ("categories/gcid:restaurant") so we just shove them
+   into a list and let the user reorder which is primary. */
+function CategoriesEditor({ value, onChange }: {
+  value: ListingCategories
+  onChange: (next: ListingCategories) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<ListingCategory[]>([])
+  const [searching, setSearching] = useState(false)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!query.trim() || query.trim().length < 2) {
+      setResults([])
+      return
+    }
+    let cancelled = false
+    setSearching(true)
+    const t = setTimeout(() => {
+      fetch(`/api/dashboard/listing/categories?q=${encodeURIComponent(query.trim())}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(json => {
+          if (cancelled || !json) return
+          setResults(json.categories ?? [])
+        })
+        .finally(() => { if (!cancelled) setSearching(false) })
+    }, 250)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [query])
+
+  function add(cat: ListingCategory) {
+    /* Don't add duplicates. If we have no primary yet, fill that
+       slot; otherwise it becomes an additional category (up to 9). */
+    const all = [
+      value.primary,
+      ...value.additional,
+    ].filter(Boolean) as ListingCategory[]
+    if (all.some(c => c.name === cat.name)) return
+    if (!value.primary) {
+      onChange({ primary: cat, additional: value.additional })
+    } else if (value.additional.length < 9) {
+      onChange({ primary: value.primary, additional: [...value.additional, cat] })
+    }
+    setQuery('')
+    setResults([])
+    setOpen(false)
+  }
+
+  function remove(cat: ListingCategory) {
+    if (value.primary?.name === cat.name) {
+      /* Removing the primary promotes the first additional. */
+      const [next, ...rest] = value.additional
+      onChange({ primary: next ?? null, additional: rest })
+    } else {
+      onChange({
+        primary: value.primary,
+        additional: value.additional.filter(c => c.name !== cat.name),
+      })
+    }
+  }
+
+  function makePrimary(cat: ListingCategory) {
+    if (value.primary?.name === cat.name) return
+    const newAdditional = [
+      ...(value.primary ? [value.primary] : []),
+      ...value.additional.filter(c => c.name !== cat.name),
+    ]
+    onChange({ primary: cat, additional: newAdditional })
+  }
+
+  const additionalSlotsLeft = 9 - value.additional.length
+
+  return (
+    <div className="space-y-3">
+      {/* Current categories */}
+      <div className="space-y-2">
+        {value.primary && (
+          <CategoryPill
+            cat={value.primary}
+            isPrimary
+            onRemove={() => remove(value.primary!)}
+          />
+        )}
+        {value.additional.map(c => (
+          <CategoryPill
+            key={c.name}
+            cat={c}
+            isPrimary={false}
+            onRemove={() => remove(c)}
+            onMakePrimary={() => makePrimary(c)}
+          />
+        ))}
+        {!value.primary && value.additional.length === 0 && (
+          <p className="text-[12px] text-ink-4 italic">No categories yet — add your first below.</p>
+        )}
+      </div>
+
+      {/* Add search box */}
+      <div className="relative">
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-ink-4" />
+          <input
+            type="text"
+            value={query}
+            onChange={e => { setQuery(e.target.value); setOpen(true) }}
+            onFocus={() => setOpen(true)}
+            placeholder={!value.primary
+              ? 'Search for your primary category (e.g. Korean restaurant)'
+              : `Add another category (up to ${additionalSlotsLeft} more)`}
+            disabled={value.primary !== null && additionalSlotsLeft === 0}
+            className="w-full text-sm pl-9 pr-3 py-2.5 rounded-lg border border-ink-6 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-50"
+          />
+        </div>
+        {open && query.trim().length >= 2 && (
+          <div className="absolute left-0 right-0 top-full mt-1 max-h-60 overflow-y-auto rounded-lg border border-ink-6 bg-white shadow-md z-10">
+            {searching && <div className="px-3 py-2 text-[12px] text-ink-4">Searching…</div>}
+            {!searching && results.length === 0 && (
+              <div className="px-3 py-2 text-[12px] text-ink-4">No matches. Try a different term.</div>
+            )}
+            {results.map(r => (
+              <button
+                key={r.name}
+                onClick={() => add(r)}
+                className="w-full text-left px-3 py-2 text-sm text-ink-2 hover:bg-bg-2 inline-flex items-center gap-2"
+              >
+                <Tag className="w-3 h-3 text-ink-4" />
+                {r.displayName}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CategoryPill({ cat, isPrimary, onRemove, onMakePrimary }: {
+  cat: ListingCategory
+  isPrimary: boolean
+  onRemove: () => void
+  onMakePrimary?: () => void
+}) {
+  return (
+    <div className="inline-flex items-center gap-2 text-sm bg-white border border-ink-6 rounded-lg px-3 py-2 w-full">
+      <Tag className={`w-3.5 h-3.5 ${isPrimary ? 'text-brand-dark' : 'text-ink-4'}`} />
+      <span className={isPrimary ? 'font-semibold text-ink' : 'text-ink-2'}>{cat.displayName}</span>
+      {isPrimary ? (
+        <span className="text-[10px] uppercase tracking-wider font-bold text-brand-dark bg-brand/15 px-1.5 py-0.5 rounded">Primary</span>
+      ) : (
+        onMakePrimary && (
+          <button onClick={onMakePrimary} className="text-[11px] text-ink-3 hover:text-brand-dark underline">
+            Make primary
+          </button>
+        )
+      )}
+      <span className="flex-1" />
+      <button onClick={onRemove} className="text-ink-4 hover:text-rose-600" title="Remove">
+        <X className="w-3.5 h-3.5" />
+      </button>
     </div>
   )
 }
