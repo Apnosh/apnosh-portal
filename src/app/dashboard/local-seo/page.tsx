@@ -219,59 +219,13 @@ function LocalSeoContent() {
         </div>
       )}
 
-      {/* Local SEO tools */}
+      {/* The "tools" tile group is gone — the sticky LocalSeoNav at the top
+         of every page already exposes Overview / Reviews / Your listing /
+         Locations, so duplicating them at the bottom is just noise.
+         Keeping a lone Full details deep-link until the analytics page
+         is folded in. */}
       <div className="db-fade db-d7">
-        <h2 className="text-[15px] font-bold mb-3" style={{ color: 'var(--db-black)' }}>
-          Local SEO tools
-        </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {locations.length > 1 && (
-            <Link
-              href="/dashboard/local-seo/locations"
-              className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-bg-2 flex items-center justify-center">
-                  <MapPin className="w-5 h-5 text-ink-3" />
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-ink">Locations</div>
-                  <div className="text-xs text-ink-4">{locations.length} locations compared</div>
-                </div>
-              </div>
-              <ChevronRight className="w-4 h-4 text-ink-4" />
-            </Link>
-          )}
-          <Link
-            href="/dashboard/local-seo/reviews"
-            className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-bg-2 flex items-center justify-center">
-                <Star className="w-5 h-5 text-ink-3" />
-              </div>
-              <div>
-                <div className="text-sm font-medium text-ink">Reviews</div>
-                <div className="text-xs text-ink-4">Google, Yelp, and more</div>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-ink-4" />
-          </Link>
-          <Link
-            href="/dashboard/local-seo/listing"
-            className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-bg-2 flex items-center justify-center">
-                <MapPin className="w-5 h-5 text-ink-3" />
-              </div>
-              <div>
-                <div className="text-sm font-medium text-ink">Your listing</div>
-                <div className="text-xs text-ink-4">Hours, phone, website, description</div>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-ink-4" />
-          </Link>
           <Link
             href="/dashboard/analytics"
             className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"

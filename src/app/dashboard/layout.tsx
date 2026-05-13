@@ -129,8 +129,14 @@ const navSections: NavSection[] = [
         label: 'Local SEO',
         href: '/dashboard/local-seo',
         icon: MapPin,
-        exact: false,
+        exact: true,
         serviceArea: 'local_seo',
+        children: [
+          { label: 'Overview', href: '/dashboard/local-seo', exact: true },
+          { label: 'Reviews', href: '/dashboard/local-seo/reviews' },
+          { label: 'Your listing', href: '/dashboard/local-seo/listing' },
+          { label: 'Locations', href: '/dashboard/local-seo/locations' },
+        ],
       },
       {
         label: 'Email & SMS',
