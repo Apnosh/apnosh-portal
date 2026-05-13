@@ -108,5 +108,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     })
     .eq('id', id)
 
+  /* Audit log for transparency / debugging. */
+  try {
+    await admin.from('gbp_listing_audit').insert({
+      client_id: clientId,
+      actor_user_id: user.id,
+      actor_email: user.email ?? null,
+      action: 'reply_to_review',
+      fields: { reviewId: id, length: replyText.length },
+      error: null,
+    })
+  } catch { /* never block on audit failure */ }
+
   return NextResponse.json({ ok: true })
 }

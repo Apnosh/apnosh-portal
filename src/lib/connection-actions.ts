@@ -294,9 +294,18 @@ export async function syncConnection(
 
   /* Right now only Google Business Profile has a per-client sync
      path. Other channels still rely on background crons. */
-  const row = existing as { channel?: string; platform?: string }
+  const row = existing as { channel?: string; platform?: string; last_sync_at?: string | null }
   const channelOrPlatform = (row.channel ?? row.platform ?? '') as string
   if (source === 'channel_connections' && channelOrPlatform === 'google_business_profile') {
+    /* Rate limit: 60s cooldown between manual syncs per connection.
+       Sync is ~10-30 API calls; spam-clicking quickly exhausts quota. */
+    const lastSync = row.last_sync_at ? new Date(row.last_sync_at).getTime() : 0
+    const cooldownMs = 60_000
+    if (Date.now() - lastSync < cooldownMs) {
+      const secsLeft = Math.ceil((cooldownMs - (Date.now() - lastSync)) / 1000)
+      return { success: false, error: `Try again in ${secsLeft}s — last sync was just a moment ago.` }
+    }
+
     const { syncClientGbp } = await import('@/lib/gbp-client-sync')
     const r = await syncClientGbp(clientId)
     if (!r.ok) return { success: false, error: r.message ?? 'Sync failed' }

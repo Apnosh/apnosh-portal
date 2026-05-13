@@ -12,6 +12,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { getClientListing, updateClientListing, type ListingFields } from '@/lib/gbp-listing'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -38,6 +39,23 @@ export async function PATCH(req: NextRequest) {
   }
 
   const result = await updateClientListing(clientId, body)
+
+  /* Audit log — fire-and-forget. We capture which top-level fields
+     the owner touched + the actor identity, not the values themselves
+     (descriptions can be sensitive). On failure we still log so we
+     have a trail of attempted edits + error reason. */
+  try {
+    const admin = createAdminClient()
+    await admin.from('gbp_listing_audit').insert({
+      client_id: clientId,
+      actor_user_id: user.id,
+      actor_email: user.email ?? null,
+      action: 'update_listing',
+      fields: Object.keys(body),
+      error: result.ok ? null : result.error,
+    })
+  } catch { /* never block a save on audit failure */ }
+
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 })
   return NextResponse.json({ ok: true })
 }

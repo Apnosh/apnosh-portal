@@ -10,6 +10,10 @@
       "schedule": "30 14 * * *"
     },
     {
+      "path": "/api/cron/gbp-client-sync",
+      "schedule": "0 15 * * *"
+    },
+    {
       "path": "/api/cron/run-operator",
       "schedule": "0 15 * * 1"
     },

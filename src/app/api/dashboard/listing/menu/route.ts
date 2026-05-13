@@ -6,6 +6,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { getClientMenus, updateClientMenus, type FoodMenu } from '@/lib/gbp-menu'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -30,6 +31,24 @@ export async function PATCH(req: NextRequest) {
   if (!body?.menus) return NextResponse.json({ error: 'Missing menus' }, { status: 400 })
 
   const result = await updateClientMenus(clientId, body.menus)
+
+  try {
+    const admin = createAdminClient()
+    const totalSections = body.menus.reduce((acc, m) => acc + (m.sections?.length ?? 0), 0)
+    const totalItems = body.menus.reduce(
+      (acc, m) => acc + (m.sections?.reduce((s, sec) => s + (sec.items?.length ?? 0), 0) ?? 0),
+      0,
+    )
+    await admin.from('gbp_listing_audit').insert({
+      client_id: clientId,
+      actor_user_id: user.id,
+      actor_email: user.email ?? null,
+      action: 'update_menu',
+      fields: { menus: body.menus.length, sections: totalSections, items: totalItems },
+      error: result.ok ? null : result.error,
+    })
+  } catch { /* never block a save on audit failure */ }
+
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 })
   return NextResponse.json({ ok: true })
 }
