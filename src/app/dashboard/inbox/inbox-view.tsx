@@ -1,23 +1,19 @@
 'use client'
 
 /**
- * Inbox — Direction D customer-conversations layout.
+ * Inbox — Gmail-style list.
  *
- * Toolbar: 3-segment lens (Needs you / Strategist handling / All),
- * channel filter, sentiment filter, search, bulk-approve-5★.
- * Two-pane: thread list (left) + detail with strategist's draft reply,
- * customer history, and per-thread audit log (right).
- *
- * The reply-approval flow currently routes out to the channel-specific
- * surface (reviews queue, social engage page). Inline approval will
- * land when the reply API is unified.
+ * Single-line compact rows for at-a-glance scanning. Clicking a row
+ * opens the full detail (review draft, approval preview, customer
+ * message) in place of the list, with a back button. No always-on
+ * preview pane — the list stays scannable.
  */
 
 import { useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import {
   Search, Inbox as InboxIcon, Sparkles, Check, FileText, Star, MessageSquare, AtSign, MessageCircle,
-  Calendar as CalIcon,
+  Calendar as CalIcon, ArrowLeft,
 } from 'lucide-react'
 import type { InboxThread, ThreadKind, ThreadSeverity } from '@/lib/dashboard/get-inbox-threads'
 import { channelLabel, kindLabel } from '@/lib/dashboard/inbox-labels'
@@ -31,37 +27,11 @@ interface PrimaryStrategist {
   initials: string
 }
 
-type Lens = 'needs' | 'handling' | 'all'
-
-const SEVERITY: Record<ThreadSeverity, { label: string; rowBg: string; pillBg: string; pillFg: string; leftBar: string }> = {
-  urgent: {
-    label: 'URGENT',
-    rowBg: 'bg-rose-50/60',
-    pillBg: 'bg-rose-100',
-    pillFg: 'text-rose-900',
-    leftBar: 'border-l-[3px] border-rose-600',
-  },
-  soon: {
-    label: 'NEEDS REPLY SOON',
-    rowBg: 'bg-white',
-    pillBg: 'bg-amber-100',
-    pillFg: 'text-amber-900',
-    leftBar: 'border-l-[3px] border-amber-500',
-  },
-  none: {
-    label: 'NO RUSH',
-    rowBg: 'bg-white',
-    pillBg: 'bg-ink-7',
-    pillFg: 'text-ink-3',
-    leftBar: 'border-l-[3px] border-transparent',
-  },
-  handled: {
-    label: 'HANDLED',
-    rowBg: 'bg-white',
-    pillBg: 'bg-brand/15',
-    pillFg: 'text-brand-dark',
-    leftBar: 'border-l-[3px] border-transparent',
-  },
+const SEVERITY: Record<ThreadSeverity, { label: string; pillBg: string; pillFg: string; dot: string }> = {
+  urgent: { label: 'URGENT', pillBg: 'bg-rose-100', pillFg: 'text-rose-900', dot: 'bg-rose-500' },
+  soon: { label: 'SOON', pillBg: 'bg-amber-100', pillFg: 'text-amber-900', dot: 'bg-amber-500' },
+  none: { label: 'NO RUSH', pillBg: 'bg-ink-7', pillFg: 'text-ink-3', dot: 'bg-ink-5' },
+  handled: { label: 'HANDLED', pillBg: 'bg-brand/15', pillFg: 'text-brand-dark', dot: 'bg-brand' },
 }
 
 type KindTab = 'all' | 'approval' | 'review' | 'message'
@@ -72,8 +42,6 @@ export default function InboxView({
   threads: InboxThread[]
   strategist: PrimaryStrategist | null
 }) {
-  /* One tab row replaces the older lens + kind chips. Messages collapses
-     DMs, comments, and mentions because owners don't distinguish them. */
   const [tab, setTab] = useState<KindTab>('all')
   const [showHandled, setShowHandled] = useState(false)
   const [search, setSearch] = useState('')
@@ -102,7 +70,6 @@ export default function InboxView({
     })
   }, [threads, matchesTab, showHandled, search])
 
-  /* Per-tab open counts (excluding handled). */
   const counts = useMemo(() => {
     const c = { all: 0, approval: 0, review: 0, message: 0 }
     for (const t of threads) {
@@ -115,19 +82,10 @@ export default function InboxView({
     return c
   }, [threads])
 
-  /* Auto-select first thread when filter changes. */
-  const selected = useMemo(() => {
-    if (selectedId) {
-      const match = filtered.find(t => t.id === selectedId)
-      if (match) return match
-    }
-    return filtered[0] ?? null
-  }, [filtered, selectedId])
-
-  const bulkApprove5Star = useCallback(() => {
-    /* Future: POST to a bulk-approve endpoint that runs through review-reply
-       for every drafted 5★ in the current filter. v1 is a no-op stub. */
-  }, [])
+  const selected = useMemo(
+    () => (selectedId ? threads.find(t => t.id === selectedId) ?? null : null),
+    [threads, selectedId],
+  )
 
   const TABS: { key: KindTab; label: string; count: number }[] = [
     { key: 'all', label: 'All', count: counts.all },
@@ -136,9 +94,28 @@ export default function InboxView({
     { key: 'message', label: 'Messages', count: counts.message },
   ]
 
+  /* Detail view: replaces the list when a thread is selected. */
+  if (selected) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-bg-2">
+        <div className="px-4 lg:px-8 py-3 bg-white border-b border-ink-6 flex items-center gap-3">
+          <button
+            onClick={() => setSelectedId(null)}
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-2 hover:text-ink"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to inbox
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-7">
+          <ThreadDetail thread={selected} strategistFirst={strategistFirst} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-bg-2">
-
       {/* Header */}
       <div className="px-4 lg:px-8 pt-6 pb-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between bg-white border-b border-ink-6">
         <div>
@@ -154,9 +131,8 @@ export default function InboxView({
         </div>
       </div>
 
-      {/* Simplified toolbar: kind tabs · show-handled toggle · search · bulk-approve (only on Reviews) */}
+      {/* Toolbar */}
       <div className="px-4 lg:px-8 bg-white border-b border-ink-6 flex flex-wrap items-center gap-3">
-        {/* Underline tabs */}
         <nav className="flex items-center gap-1 -mb-px">
           {TABS.map(t => {
             const active = tab === t.key
@@ -195,58 +171,29 @@ export default function InboxView({
             className="text-[12px] pl-8 pr-3 py-1.5 rounded-md ring-1 ring-ink-6 bg-white focus:outline-none focus:ring-ink-3 w-[180px]"
           />
         </div>
-
-        {tab === 'review' && counts.review > 0 && (
-          <button
-            onClick={bulkApprove5Star}
-            className="text-[12px] font-medium ring-1 ring-ink-5 text-ink-2 hover:text-ink rounded-md px-3 py-1.5 inline-flex items-center gap-1.5"
-          >
-            <Check className="w-3.5 h-3.5" />
-            Bulk approve · 5★
-          </button>
-        )}
       </div>
 
-      {/* Two pane */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[380px_1fr] bg-white">
-
-        {/* Thread list */}
-        <div className="border-r border-ink-6 overflow-y-auto bg-white">
-          {filtered.length === 0 ? (
-            <div className="p-8 text-center text-ink-3">
-              <InboxIcon className="w-7 h-7 text-ink-4 mx-auto mb-2" />
-              <p className="text-[13px] font-medium text-ink-2">No threads here</p>
-              <p className="text-[11.5px] mt-1">Try a different filter, or check back as customers reach out.</p>
-            </div>
-          ) : (
-            filtered.map(t => (
-              <ThreadRow
-                key={t.id}
-                thread={t}
-                active={selected?.id === t.id}
-                onClick={() => setSelectedId(t.id)}
-              />
-            ))
-          )}
-        </div>
-
-        {/* Detail pane */}
-        <div className="overflow-y-auto bg-bg-2 p-7">
-          {selected ? (
-            <ThreadDetail thread={selected} strategistFirst={strategistFirst} />
-          ) : (
-            <div className="text-center py-16">
-              <InboxIcon className="w-8 h-8 text-ink-4 mx-auto mb-3" />
-              <p className="text-[13px] text-ink-3">Select a thread to see the conversation.</p>
-            </div>
-          )}
-        </div>
+      {/* Gmail-style list */}
+      <div className="flex-1 min-h-0 overflow-y-auto bg-white">
+        {filtered.length === 0 ? (
+          <div className="p-8 text-center text-ink-3">
+            <InboxIcon className="w-7 h-7 text-ink-4 mx-auto mb-2" />
+            <p className="text-[13px] font-medium text-ink-2">No threads here</p>
+            <p className="text-[11.5px] mt-1">Try a different filter, or check back as customers reach out.</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-ink-6">
+            {filtered.map(t => (
+              <ThreadRow key={t.id} thread={t} onClick={() => setSelectedId(t.id)} />
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )
 }
 
-// ─── Thread row (left pane) ──────────────────────────────────────────
+// ─── Thread row — single-line Gmail-style ────────────────────────────
 
 function KindIcon({ kind, className = 'w-4 h-4' }: { kind: ThreadKind; className?: string }) {
   if (kind === 'approval') return <FileText className={className} />
@@ -257,60 +204,64 @@ function KindIcon({ kind, className = 'w-4 h-4' }: { kind: ThreadKind; className
   return null
 }
 
-function ThreadRow({ thread, active, onClick }: { thread: InboxThread; active: boolean; onClick: () => void }) {
+function ThreadRow({ thread, onClick }: { thread: InboxThread; onClick: () => void }) {
   const sev = SEVERITY[thread.severity]
   const ageLabel = relTime(thread.postedAt)
-  const showStars = thread.rating !== null
-  /* Kind icon tint: approvals neutral, reviews amber, social brand-green. */
   const iconTint =
-    thread.kind === 'approval' ? 'bg-ink-7 text-ink-2'
-    : thread.kind === 'review' ? 'bg-amber-50 text-amber-700'
-    : 'bg-brand/15 text-brand-dark'
+    thread.kind === 'approval' ? 'text-ink-3'
+    : thread.kind === 'review' ? 'text-amber-600'
+    : 'text-brand-dark'
+  const snippet = thread.text?.trim().replace(/\s+/g, ' ') || (thread.kind === 'approval' ? thread.approvalCaption?.trim().replace(/\s+/g, ' ') ?? '' : '')
+
   return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left block px-3 py-3 border-b border-ink-6 ${sev.leftBar} ${active ? 'bg-brand/8' : thread.severity === 'urgent' ? sev.rowBg : 'bg-white hover:bg-ink-7/40'}`}
-    >
-      <div className="flex items-start gap-2.5">
-        {/* Kind icon — owners can scan and know what this is at a glance */}
-        <div className={`w-7 h-7 rounded-lg ${iconTint} grid place-items-center flex-shrink-0 mt-0.5`}>
-          <KindIcon kind={thread.kind} className="w-3.5 h-3.5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            {thread.unread && <span className="w-1.5 h-1.5 rounded-full bg-brand flex-shrink-0" />}
-            <span className="text-[12.5px] font-medium text-ink truncate">{thread.authorName}</span>
-            {showStars && thread.rating !== null && (
-              <span className={`text-[11px] tracking-tight ${thread.rating <= 2 ? 'text-rose-600' : 'text-amber-600'}`}>
-                {'★'.repeat(thread.rating)}{'☆'.repeat(Math.max(0, 5 - thread.rating))}
-              </span>
-            )}
-            <span className="flex-1" />
-            <span className="text-[10px] text-ink-4 whitespace-nowrap">{ageLabel}</span>
-          </div>
-          <div className="text-[9.5px] font-bold uppercase tracking-wider text-ink-4 mb-1">
-            {kindLabel(thread.kind)} · <ChannelBadge platform={thread.platform} kind={thread.kind} />
-          </div>
-          <p className="text-[12px] text-ink-2 leading-snug line-clamp-2 mb-1.5">
-            {thread.text || (thread.kind === 'comment' ? '(no text)' : '—')}
-          </p>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full ${sev.pillBg} ${sev.pillFg}`}>
-              {sev.label}
-            </span>
-            {thread.tags.slice(0, 2).map(t => (
-              <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-ink-7 text-ink-3">{t}</span>
-            ))}
-            {thread.kind === 'approval' && thread.approvalScheduledFor && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-ink-7 text-ink-3 inline-flex items-center gap-1">
-                <CalIcon className="w-2.5 h-2.5" />
-                {new Date(thread.approvalScheduledFor).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    </button>
+    <li>
+      <button
+        onClick={onClick}
+        className={`w-full text-left flex items-center gap-3 px-4 lg:px-6 py-2.5 hover:bg-ink-7/40 transition-colors ${thread.unread ? 'bg-white' : 'bg-bg-2/30'}`}
+      >
+        {/* Severity dot */}
+        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${sev.dot}`} title={sev.label} />
+
+        {/* Kind icon */}
+        <KindIcon kind={thread.kind} className={`w-4 h-4 flex-shrink-0 ${iconTint}`} />
+
+        {/* Sender — fixed width on desktop for column alignment */}
+        <span className={`text-[13px] truncate flex-shrink-0 w-[160px] ${thread.unread ? 'font-semibold text-ink' : 'font-medium text-ink-2'}`}>
+          {thread.authorName}
+        </span>
+
+        {/* Stars (reviews only) */}
+        {thread.rating !== null && (
+          <span className={`text-[11px] tracking-tight flex-shrink-0 ${thread.rating <= 2 ? 'text-rose-600' : 'text-amber-600'}`}>
+            {'★'.repeat(thread.rating)}
+          </span>
+        )}
+
+        {/* Subject/snippet — eats remaining space, single line */}
+        <span className="text-[12.5px] text-ink-2 truncate flex-1 min-w-0">
+          <span className="text-ink-4 mr-1.5">[{kindLabel(thread.kind)}]</span>
+          {snippet || <span className="text-ink-4 italic">(no preview)</span>}
+        </span>
+
+        {/* Channel chip */}
+        <span className="text-[10.5px] text-ink-3 flex-shrink-0 hidden md:inline">
+          <ChannelBadge platform={thread.platform} kind={thread.kind} />
+        </span>
+
+        {/* Scheduled date for approvals */}
+        {thread.kind === 'approval' && thread.approvalScheduledFor && (
+          <span className="text-[10.5px] text-ink-3 flex-shrink-0 hidden md:inline-flex items-center gap-1">
+            <CalIcon className="w-2.5 h-2.5" />
+            {new Date(thread.approvalScheduledFor).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </span>
+        )}
+
+        {/* Time */}
+        <span className="text-[11px] text-ink-4 whitespace-nowrap flex-shrink-0 tabular-nums w-[44px] text-right">
+          {ageLabel}
+        </span>
+      </button>
+    </li>
   )
 }
 
@@ -321,7 +272,7 @@ function ChannelBadge({ platform, kind }: { platform: string; kind: string }) {
   return <>{channelLabel(platform)}</>
 }
 
-// ─── Thread detail (right pane) ──────────────────────────────────────
+// ─── Thread detail ───────────────────────────────────────────────────
 
 function ApprovalDetail({
   thread, strategistFirst, detailHref,
@@ -339,7 +290,6 @@ function ApprovalDetail({
     : null
   return (
     <div className="max-w-3xl mx-auto">
-      {/* Header */}
       <div className="flex items-start gap-3.5 mb-5">
         <div className="w-11 h-11 rounded-2xl bg-ink-7 text-ink-2 grid place-items-center flex-shrink-0">
           <FileText className="w-5 h-5" />
@@ -358,7 +308,6 @@ function ApprovalDetail({
         </div>
       </div>
 
-      {/* Media thumbnails */}
       {media.length > 0 && (
         <div className="grid grid-cols-3 gap-2 mb-4">
           {media.slice(0, 3).map((u, i) => (
@@ -375,7 +324,6 @@ function ApprovalDetail({
         </div>
       )}
 
-      {/* Caption preview */}
       <div className="bg-white ring-1 ring-ink-6 rounded-2xl p-4 mb-4">
         <div className="text-[10px] font-bold uppercase tracking-wider text-ink-4 mb-1.5 inline-flex items-center gap-1.5">
           <Sparkles className="w-3 h-3 text-amber-600" />
@@ -388,7 +336,6 @@ function ApprovalDetail({
         )}
       </div>
 
-      {/* Actions */}
       <div className="bg-white ring-1 ring-ink-6 rounded-2xl p-3 mb-4 flex items-center gap-2 flex-wrap">
         <Link
           href={detailHref}
@@ -405,7 +352,6 @@ function ApprovalDetail({
         </Link>
       </div>
 
-      {/* What strategist did */}
       <div className="bg-brand-tint/40 rounded-2xl p-4">
         <div className="text-[10px] font-bold uppercase tracking-wider text-brand-dark mb-2">
           What {strategistFirst} did
@@ -428,14 +374,11 @@ function ThreadDetail({ thread, strategistFirst }: { thread: InboxThread; strate
     : thread.kind === 'approval' ? (thread.approvalHref ?? `/dashboard/preview/${thread.refId}`)
     : `/dashboard/social/engage?focus=${thread.refId}`
 
-  /* Approval kinds get a content-preview detail pane instead of the
-     customer-message + draft-reply layout. */
   if (thread.kind === 'approval') {
     return <ApprovalDetail thread={thread} strategistFirst={strategistFirst} detailHref={detailHref} />
   }
   return (
     <div className="max-w-3xl mx-auto">
-      {/* Header */}
       <div className="flex items-start gap-3.5 mb-5">
         <div
           className="w-11 h-11 rounded-full bg-brand/15 text-brand-dark grid place-items-center text-[14px] font-medium flex-shrink-0"
@@ -464,7 +407,6 @@ function ThreadDetail({ thread, strategistFirst }: { thread: InboxThread; strate
         </div>
       </div>
 
-      {/* Customer message */}
       <div className="bg-white ring-1 ring-ink-6 rounded-2xl p-4 mb-4">
         <div className="text-[10px] font-bold uppercase tracking-wider text-ink-4 mb-1.5">
           {thread.authorName} said · {relTime(thread.postedAt)} ago
@@ -477,7 +419,6 @@ function ThreadDetail({ thread, strategistFirst }: { thread: InboxThread; strate
         )}
       </div>
 
-      {/* Strategist's draft reply OR replied/awaiting */}
       {thread.replied ? (
         <div className="bg-brand-tint/40 ring-1 ring-brand/30 rounded-2xl p-4 mb-4">
           <div className="text-[10px] font-bold uppercase tracking-wider text-brand-dark mb-1.5 inline-flex items-center gap-1.5">
@@ -501,7 +442,6 @@ function ThreadDetail({ thread, strategistFirst }: { thread: InboxThread; strate
             </span>
           </div>
           <p className="px-4 py-3.5 text-[13px] text-ink leading-relaxed">
-            {/* social_interactions doesn't carry drafts yet — show a pointer to where the draft lives */}
             Draft is being prepared by {strategistFirst}. Open the channel page to review.
           </p>
           <div className="px-4 py-2.5 border-t border-ink-6 flex items-center gap-2">
@@ -519,32 +459,6 @@ function ThreadDetail({ thread, strategistFirst }: { thread: InboxThread; strate
         </div>
       )}
 
-      {/* Customer history */}
-      <div className="bg-white ring-1 ring-ink-6 rounded-2xl p-4 mb-4">
-        <div className="text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-3">Customer history</div>
-        <div className="flex flex-wrap gap-x-7 gap-y-3">
-          <div>
-            <div className="text-[10px] text-ink-4 uppercase tracking-wider mb-0.5">Previous reviews</div>
-            <div className="text-[14px] text-ink font-medium" style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}>
-              {thread.kind === 'review' ? '—' : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] text-ink-4 uppercase tracking-wider mb-0.5">Last interaction</div>
-            <div className="text-[14px] text-ink font-medium" style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}>
-              {new Date(thread.postedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] text-ink-4 uppercase tracking-wider mb-0.5">Sentiment</div>
-            <div className={`text-[14px] font-medium ${thread.severity === 'urgent' ? 'text-rose-600' : 'text-brand-dark'}`} style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}>
-              {thread.severity === 'urgent' ? '↓ needs attention' : thread.severity === 'handled' ? '✓ handled' : '↑ neutral'}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* What strategist did */}
       <div className="bg-brand-tint/40 rounded-2xl p-4">
         <div className="text-[10px] font-bold uppercase tracking-wider text-brand-dark mb-2">
           What {strategistFirst} did on this thread
@@ -556,8 +470,6 @@ function ThreadDetail({ thread, strategistFirst }: { thread: InboxThread; strate
 }
 
 function AuditList({ thread, strategistFirst }: { thread: InboxThread; strategistFirst: string }) {
-  // Synthetic for now — when social_interactions stores per-thread audit
-  // we'll join it. Useful starting story for the owner.
   const items: { t: string; e: string }[] = []
   items.push({ t: relTime(thread.postedAt) + ' ago', e: `Surfaced from ${channelLabel(thread.platform)} · flagged ${thread.severity}` })
   if (thread.tags.length > 0) {
