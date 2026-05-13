@@ -8,7 +8,7 @@ import {
   MessageSquare, Wrench, Building2, CreditCard, FileText, HelpCircle, Settings,
   Menu, X, ChevronDown, BookOpen, FileBarChart, ListTodo,
   Share2, Globe, MapPin, Mail, Image as ImageIcon, Link2, Newspaper,
-  Inbox, Star, Sparkles, Palette, Users,
+  CheckSquare, Star, Sparkles, Palette, Users,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { CartProvider } from '@/lib/cart-context'
@@ -77,7 +77,7 @@ interface NavSection {
 //   /dashboard/notifications (use the bell icon in header)
 // ─────────────────────────────────────────────────────────────────────
 // Sidebar reorganized around marketing JOBS, not internal service-areas:
-//   Today / Inbox / Calendar    — daily destinations
+//   Today / Calendar             — daily destinations (Inbox folded into Approvals)
 //   Publish (group)              — content channels
 //   Engage (group)               — customer-facing surfaces
 //   Brand (group)                — assets + guidelines combined
@@ -87,7 +87,6 @@ const navSections: NavSection[] = [
     label: null,
     items: [
       { label: 'Today', href: '/dashboard', icon: LayoutDashboard, exact: true },
-      { label: 'Inbox', href: '/dashboard/inbox', icon: Inbox, exact: false },
       { label: 'Team', href: '/dashboard/team', icon: Users, exact: false },
       { label: 'Marketplace', href: '/dashboard/marketplace', icon: Sparkles, exact: false },
       { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar, exact: false },
@@ -96,6 +95,9 @@ const navSections: NavSection[] = [
   {
     label: 'Publish',
     items: [
+      // Approvals sits at the top of Publish because it's the gate
+      // before anything goes out. Replaces the old top-level Inbox.
+      { label: 'Approvals', href: '/dashboard/approvals', icon: CheckSquare, exact: false },
       // Each channel routes to its analytics-overview page by default;
       // operational sub-pages (calendar, drafts, etc.) are children.
       // Default click answers "how is this channel doing?" first; the
@@ -296,8 +298,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   // endpoint so we get inbox, reviews (and later messages) in one shot
   // and use the same auth path that handles all client linkage types
   // (admin / profile / business owner / client_users magic-link portal).
-  const [navCounts, setNavCounts] = useState<{ inbox: number; reviews: number; approvals: number }>({
-    inbox: 0,
+  const [navCounts, setNavCounts] = useState<{ reviews: number; approvals: number }>({
     reviews: 0,
     approvals: 0,
   })
@@ -314,9 +315,6 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         }
         if (cancelled) return
         setNavCounts({
-          /* Inbox is customer-conversations only since the Direction D
-             rebuild — count urgent + soon threads, not agenda items. */
-          inbox: json.counts?.inboxNeeds ?? 0,
           reviews: json.counts?.unansweredReviews ?? 0,
           approvals: json.counts?.pendingApprovals ?? 0,
         })
@@ -329,7 +327,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
   // Map nav-item label/href to the right count.
   function badgeFor(item: { label: string; href: string }): number {
-    if (item.label === 'Inbox' || item.href === '/dashboard/approvals') return navCounts.inbox
+    if (item.href === '/dashboard/approvals') return navCounts.approvals
     if (item.label === 'Reviews') return navCounts.reviews
     return 0
   }
