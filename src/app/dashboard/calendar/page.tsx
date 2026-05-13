@@ -56,14 +56,39 @@ export default async function CalendarPage({ searchParams }: PageProps) {
     )
   }
 
-  const [events, clientRow] = await Promise.all([
+  /* Pull approval counts in parallel so the calendar header can show
+     "N awaiting your approval" without a second roundtrip. Sum the
+     legacy deliverables queue + the new content_drafts pipeline so
+     the badge stays accurate no matter which flow the strategist used. */
+  const [events, clientRow, deliverablesPending, draftsPending] = await Promise.all([
     getCalendar(clientId as string),
     admin.from('clients').select('created_at').eq('id', clientId).maybeSingle(),
+    admin
+      .from('deliverables')
+      .select('id, created_at', { count: 'exact' })
+      .eq('business_id', clientId)
+      .eq('status', 'client_review')
+      .order('created_at', { ascending: true })
+      .limit(1),
+    admin
+      .from('content_drafts')
+      .select('id, approved_at', { count: 'exact' })
+      .eq('client_id', clientId)
+      .eq('proposed_via', 'client_request')
+      .eq('status', 'approved')
+      .is('client_signed_off_at', null)
+      .order('approved_at', { ascending: true })
+      .limit(1),
   ])
 
   const clientCreatedAt = (clientRow.data?.created_at as string | null) ?? null
   const token = signClientId(clientId as string)
   const subscribeUrl = `/api/calendar/feed?c=${encodeURIComponent(clientId as string)}&t=${token}`
+
+  /* Oldest pending approval drives the "oldest 6h" hint on the banner. */
+  const oldestDeliverable = (deliverablesPending.data?.[0]?.created_at as string | null) ?? null
+  const oldestDraft = (draftsPending.data?.[0]?.approved_at as string | null) ?? null
+  const oldestPending = pickOldest(oldestDeliverable, oldestDraft)
 
   return (
     <CalendarView
@@ -71,8 +96,16 @@ export default async function CalendarPage({ searchParams }: PageProps) {
       clientCreatedAt={clientCreatedAt}
       subscribePath={subscribeUrl}
       viewingAs={viewingAs}
+      pendingApprovals={(deliverablesPending.count ?? 0) + (draftsPending.count ?? 0)}
+      oldestApprovalIso={oldestPending}
     />
   )
+}
+
+function pickOldest(a: string | null, b: string | null): string | null {
+  if (!a) return b
+  if (!b) return a
+  return new Date(a).getTime() < new Date(b).getTime() ? a : b
 }
 
 /* ────────────────────────────── Client picker ─────────────────────────── */

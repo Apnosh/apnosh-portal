@@ -83,6 +83,10 @@ interface CalendarViewProps {
   subscribePath?: string
   /** Set when an admin is viewing a specific client's calendar */
   viewingAs?: { id: string; name: string } | null
+  /** Items the owner still has to sign off on (deliverables + content_drafts). */
+  pendingApprovals?: number
+  /** ISO timestamp of the oldest pending approval — used to show "oldest Xh". */
+  oldestApprovalIso?: string | null
 }
 
 export default function CalendarView({
@@ -90,6 +94,8 @@ export default function CalendarView({
   clientCreatedAt = null,
   subscribePath,
   viewingAs = null,
+  pendingApprovals = 0,
+  oldestApprovalIso = null,
 }: CalendarViewProps) {
   const [view, setView] = useState<ViewMode>('month')
   const [cursor, setCursor] = useState(() => {
@@ -213,6 +219,14 @@ export default function CalendarView({
           <PulseStrip events={events} onClick={handleKpiClick} />
         </header>
 
+        {/* Approval banner — most-urgent thing the owner can act on right now */}
+        {pendingApprovals > 0 && (
+          <ApprovalBanner count={pendingApprovals} oldestIso={oldestApprovalIso} />
+        )}
+
+        {/* Cadence banner — "are we on pace this month?" */}
+        <CadenceBanner events={events} />
+
         {/* Two-col layout */}
         <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-6 lg:gap-8">
           <aside className="hidden lg:block">
@@ -281,6 +295,9 @@ export default function CalendarView({
             )}
           </main>
         </div>
+
+        {/* Legend — teaches owners what each color + status means */}
+        <Legend />
       </div>
 
       {selected && <DetailSheet event={selected} onClose={() => setSelected(null)} />}
@@ -609,10 +626,13 @@ function MonthChip({
 }) {
   const c = CATEGORY_COLOR[event.category]
   const Icon = KIND_ICON[event.kind]
+  /* Only show the status badge when status is meaningful — "scheduled"
+     is implied for everything on the calendar, so skip it to reduce noise. */
+  const showStatus = event.status && !/^scheduled$/i.test(event.status)
   return (
     <button
       onClick={onClick}
-      title={event.title}
+      title={`${event.title}${event.status ? ' · ' + event.status : ''}`}
       className={`w-full flex items-center gap-1.5 text-left rounded-md px-1.5 py-1 ${c.bg} ${c.text} ring-1 ring-inset ring-transparent hover:ring-current/30 hover:shadow-sm transition-all`}
     >
       <Icon className="w-2.5 h-2.5 flex-shrink-0" />
@@ -621,11 +641,27 @@ function MonthChip({
           {formatTimeShort(event.startIso)}
         </span>
       )}
-      <span className="text-[11px] font-medium truncate leading-tight">
+      <span className="text-[11px] font-medium truncate leading-tight flex-1 min-w-0">
         {event.title}
       </span>
+      {showStatus && (
+        <span className={`text-[8.5px] font-bold uppercase tracking-wider px-1 py-px rounded ${TONE_CHIP[event.statusTone]} flex-shrink-0`}>
+          {shortStatus(event.status)}
+        </span>
+      )}
     </button>
   )
+}
+
+/* Trim long status strings so they fit on a month chip. */
+function shortStatus(s: string): string {
+  const m = s.toLowerCase()
+  if (m.includes('approv')) return 'APRV'
+  if (m.includes('draft')) return 'DRFT'
+  if (m.includes('post') || m.includes('publish')) return 'LIVE'
+  if (m.includes('miss') || m.includes('fail')) return 'MISS'
+  if (m.includes('cancel')) return 'CXLD'
+  return s.slice(0, 4).toUpperCase()
 }
 
 /* ────────────────────────────── Agenda ────────────────────────────── */
@@ -1162,4 +1198,115 @@ function humanList(items: string[]): string {
   if (items.length === 1) return items[0]
   if (items.length === 2) return `${items[0]} and ${items[1]}`
   return items.slice(0, -1).join(', ') + ', and ' + items[items.length - 1]
+}
+
+/* ─────────────────────────────── Approval banner ─────────────────────────────── */
+
+function ApprovalBanner({ count, oldestIso }: { count: number; oldestIso: string | null }) {
+  const oldestLabel = oldestIso ? relAge(oldestIso) : null
+  return (
+    <Link
+      href="/dashboard/approvals"
+      className="mb-4 flex items-center gap-3 rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 hover:bg-rose-100 transition-colors group"
+    >
+      <span className="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0" />
+      <span className="text-[13px] text-rose-900 font-medium">
+        {count} awaiting your approval
+        {oldestLabel && <span className="text-rose-700 font-normal"> · oldest {oldestLabel}</span>}
+      </span>
+      <span className="flex-1" />
+      <span className="text-[12px] font-semibold text-rose-900 group-hover:text-rose-950 inline-flex items-center gap-1">
+        Review
+        <ChevronRight className="w-3.5 h-3.5" />
+      </span>
+    </Link>
+  )
+}
+
+function relAge(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime()
+  const h = Math.floor(ms / 3_600_000)
+  if (h < 1) return 'just now'
+  if (h < 24) return `${h}h`
+  const d = Math.floor(h / 24)
+  if (d === 1) return '1d'
+  return `${d}d`
+}
+
+/* ─────────────────────────────── Cadence banner ─────────────────────────────── */
+
+/* Recommended cadence is a sensible default until we let strategists
+   set it per-client. v1 = 4 posts/wk + 1 reel/wk + 1 email/wk. */
+const CADENCE_TARGET = { postsPerWeek: 4, reelsPerWeek: 1, emailsPerWeek: 1 }
+
+function CadenceBanner({ events }: { events: CalendarEvent[] }) {
+  /* Count events in the current month that are either already published
+     or scheduled to publish. "On pace" = ratio of shipped+queued to the
+     target for the elapsed-weeks portion of the month. */
+  const stats = useMemo(() => {
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    const weeksInMonth = Math.ceil((monthEnd.getDate() - monthStart.getDate() + 1) / 7)
+    const target = (CADENCE_TARGET.postsPerWeek + CADENCE_TARGET.reelsPerWeek + CADENCE_TARGET.emailsPerWeek) * weeksInMonth
+    let shipped = 0
+    for (const e of events) {
+      const t = new Date(e.startIso)
+      if (t < monthStart || t > monthEnd) continue
+      if (e.kind === 'post' || e.kind === 'email') shipped++
+    }
+    return { shipped, target, weeksInMonth }
+  }, [events])
+
+  const onPace = stats.shipped >= Math.floor(stats.target * 0.85)
+  const monthLabel = new Date().toLocaleDateString('en-US', { month: 'long' })
+
+  return (
+    <div
+      className="mb-4 flex items-center gap-3 rounded-2xl bg-emerald-50/60 border border-emerald-100 px-4 py-3"
+    >
+      <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+      <p className="text-[13px] text-ink-2 leading-snug">
+        <strong className="text-ink font-semibold">Recommended cadence:</strong>{' '}
+        {CADENCE_TARGET.postsPerWeek} posts/wk, {CADENCE_TARGET.reelsPerWeek} reel/wk, {CADENCE_TARGET.emailsPerWeek} email/wk.
+        <span className="ml-1.5">
+          {monthLabel}:{' '}
+          <strong className={onPace ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
+            {onPace ? 'on pace' : 'behind'}
+          </strong>
+          {' '}({stats.shipped} of {stats.target} planned).
+        </span>
+      </p>
+    </div>
+  )
+}
+
+/* ─────────────────────────────── Legend ─────────────────────────────── */
+
+function Legend() {
+  return (
+    <div
+      className="mt-6 flex items-center gap-x-5 gap-y-2 flex-wrap rounded-2xl border bg-white px-4 py-3 text-[11.5px] text-ink-3"
+      style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+    >
+      <span className="text-[10px] font-bold uppercase tracking-wider text-ink-4">Legend</span>
+      {CATEGORY_ORDER.map(cat => (
+        <span key={cat} className="inline-flex items-center gap-1.5">
+          <span className={`w-2.5 h-2.5 rounded-sm ${CATEGORY_COLOR[cat].dot}`} />
+          {CATEGORY_LABEL[cat]}
+        </span>
+      ))}
+      <span className="w-px h-3.5 bg-ink-6" />
+      {[
+        { label: 'DRAFT', cls: 'bg-amber-50 text-amber-700' },
+        { label: 'APRV', cls: 'bg-rose-50 text-rose-700' },
+        { label: 'LIVE', cls: 'bg-emerald-50 text-emerald-700' },
+        { label: 'MISS', cls: 'bg-rose-50 text-rose-700' },
+      ].map(s => (
+        <span key={s.label} className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${s.cls}`}>
+          {s.label}
+        </span>
+      ))}
+    </div>
+  )
 }
