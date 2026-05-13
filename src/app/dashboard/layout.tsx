@@ -76,28 +76,32 @@ interface NavSection {
 //   /dashboard/goals (first-run only; surface as setup card)
 //   /dashboard/notifications (use the bell icon in header)
 // ─────────────────────────────────────────────────────────────────────
-// Sidebar reorganized around marketing JOBS, not internal service-areas:
-//   Today / Calendar             — daily destinations (Inbox folded into Approvals)
-//   Publish (group)              — content channels
-//   Engage (group)               — customer-facing surfaces
-//   Brand (group)                — assets + guidelines combined
+// Sidebar reorganized around owner FREQUENCY, not service-area:
+//   Daily               — Today / Approvals / Reviews / Messages / Calendar
+//   Publish (group)     — channel performance: Social / Local SEO / Email / Web
+//   Team (group)        — workspace: Team / Marketplace
+//   Your business       — Restaurant / Brand / Weekly briefs
 // Settings + low-frequency items moved to bottomItems.
 const navSections: NavSection[] = [
   {
+    /* Daily destinations — what an owner checks every time they open the
+       portal. Ordered by attention priority, not by service category:
+       Today (overview), Approvals (sign-offs gating publish), Reviews +
+       Messages (customer voice), Calendar (what's coming). */
     label: null,
     items: [
       { label: 'Today', href: '/dashboard', icon: LayoutDashboard, exact: true },
-      { label: 'Team', href: '/dashboard/team', icon: Users, exact: false },
-      { label: 'Marketplace', href: '/dashboard/marketplace', icon: Sparkles, exact: false },
+      { label: 'Approvals', href: '/dashboard/approvals', icon: CheckSquare, exact: false },
+      { label: 'Reviews', href: '/dashboard/local-seo/reviews', icon: Star, exact: false },
+      { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, exact: false },
       { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar, exact: false },
     ],
   },
   {
+    /* Channel performance — "how is each channel doing?" Approvals
+       was pulled out to the daily group; this group is purely channels. */
     label: 'Publish',
     items: [
-      // Approvals sits at the top of Publish because it's the gate
-      // before anything goes out. Replaces the old top-level Inbox.
-      { label: 'Approvals', href: '/dashboard/approvals', icon: CheckSquare, exact: false },
       // Each channel routes to its analytics-overview page by default;
       // operational sub-pages (calendar, drafts, etc.) are children.
       // Default click answers "how is this channel doing?" first; the
@@ -157,20 +161,11 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    label: 'Engage',
+    /* Workspace — who's working on this. Admin-flavored, not daily. */
+    label: 'Team',
     items: [
-      {
-        label: 'Reviews',
-        href: '/dashboard/local-seo/reviews',
-        icon: Star,
-        exact: false,
-      },
-      {
-        label: 'Messages',
-        href: '/dashboard/messages',
-        icon: MessageSquare,
-        exact: false,
-      },
+      { label: 'Team', href: '/dashboard/team', icon: Users, exact: false },
+      { label: 'Marketplace', href: '/dashboard/marketplace', icon: Sparkles, exact: false },
     ],
   },
   {
