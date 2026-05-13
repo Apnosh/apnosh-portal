@@ -160,6 +160,27 @@ export default function EmailSmsHubPage() {
         </Link>
       </div>
 
+      {/* Get-started CTA when there's truly no activity yet. */}
+      {upcomingCampaigns.length === 0 && sentThisMonth === 0 && !latestList && (
+        <div className="rounded-2xl border border-ink-6 bg-white p-8 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 grid place-items-center mx-auto mb-4">
+            <Send className="w-5 h-5" />
+          </div>
+          <h2 className="text-lg font-semibold text-ink">Send your first campaign</h2>
+          <p className="text-sm text-ink-3 mt-2 max-w-md mx-auto leading-relaxed">
+            Apnosh designs and sends emails or SMS for you. Request a campaign and your
+            strategist drafts it within a few days. You approve before anything goes out.
+          </p>
+          <Link
+            href="/dashboard/email-sms/campaigns"
+            className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Request a campaign
+          </Link>
+        </div>
+      )}
+
       {/* Upcoming campaigns preview */}
       {upcomingCampaigns.length > 0 && (
         <div>

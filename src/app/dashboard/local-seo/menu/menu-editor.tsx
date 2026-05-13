@@ -279,18 +279,20 @@ export default function MenuEditor() {
 
               <div className="space-y-2">
                 {section.items.map((item, itemI) => (
+                  /* Layout: stacks vertically on phone, two rows on tablet+
+                     so a 4-char "9.99" doesn't get crushed. */
                   <div key={itemI} className="grid grid-cols-12 gap-2 items-start">
                     <input
                       value={item.name}
                       onChange={e => updateItem(activeMenu, secI, itemI, { name: e.target.value })}
                       placeholder="Item name"
-                      className="col-span-4 text-[13px] p-2 rounded-md border border-ink-6 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+                      className="col-span-12 sm:col-span-4 text-[13px] p-2 rounded-md border border-ink-6 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
                     />
                     <input
                       value={item.description ?? ''}
                       onChange={e => updateItem(activeMenu, secI, itemI, { description: e.target.value })}
                       placeholder="Description (optional)"
-                      className="col-span-6 text-[13px] p-2 rounded-md border border-ink-6 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+                      className="col-span-10 sm:col-span-6 text-[13px] p-2 rounded-md border border-ink-6 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
                     />
                     <input
                       value={item.price ?? ''}
