@@ -29,7 +29,6 @@ import {
   listGBPLocations,
   runGBPDailyMetrics,
 } from '@/lib/google'
-import { gbpConnector } from '@/lib/integrations/gbp-connector'
 import type { ConnectionRow } from '@/lib/integrations/types'
 
 export interface ClientSyncResult {
@@ -231,15 +230,72 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
     }
   }
 
-  /* 7. Reuse the existing review connector — same token, same locations. */
+  /* 7. Reviews — fetch directly per (account, location). The shared
+        gbpConnector reads accountId from connection.metadata.account_id,
+        which only holds one account; this client has locations across
+        multiple accounts. We already enumerated (account, location)
+        pairs in step 3, so use them directly. v4 endpoint, since
+        Google never moved reviews to v1. */
+  const STAR_MAP: Record<string, number> = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 }
   let reviewsImported = 0
-  if (gbpConnector.sync) {
+  for (const loc of allLocations) {
+    const accountId = loc.accountName.replace('accounts/', '')
+    const locationId = loc.name.replace('locations/', '')
     try {
-      const r = await gbpConnector.sync({ ...conn, access_token: accessToken })
-      if (r.ok) reviewsImported = r.count ?? 0
-      else errors.push(`reviews: ${r.error ?? 'unknown'}`)
+      const url = `https://mybusiness.googleapis.com/v4/accounts/${accountId}/locations/${locationId}/reviews?pageSize=50`
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        const msg = body.error?.message || `HTTP ${res.status}`
+        const tag = `reviews ${loc.title}: ${msg}`
+        if (!errors.includes(tag)) errors.push(tag)
+        continue
+      }
+      const json = await res.json() as { reviews?: Array<{
+        reviewId: string
+        reviewer?: { displayName?: string; profilePhotoUrl?: string; isAnonymous?: boolean }
+        starRating?: string
+        comment?: string
+        createTime: string
+        updateTime?: string
+        reviewReply?: { comment: string; updateTime: string }
+        name: string
+      }> }
+      const reviews = json.reviews ?? []
+      for (const r of reviews) {
+        const rating = r.starRating ? (STAR_MAP[r.starRating] ?? null) : null
+        if (rating === null) continue
+        const payload = {
+          client_id: clientId,
+          source: 'google' as const,
+          external_id: r.reviewId,
+          rating,
+          author_name: r.reviewer?.displayName ?? 'Anonymous',
+          author_avatar_url: r.reviewer?.profilePhotoUrl ?? null,
+          review_text: r.comment ?? null,
+          review_url: null,
+          response_text: r.reviewReply?.comment ?? null,
+          responded_at: r.reviewReply?.updateTime ?? null,
+          posted_at: r.createTime,
+          flagged: rating <= 3,
+        }
+        const { data: existing } = await admin
+          .from('reviews')
+          .select('id')
+          .eq('client_id', clientId)
+          .eq('source', 'google')
+          .eq('external_id', r.reviewId)
+          .maybeSingle()
+        if (existing) {
+          await admin.from('reviews').update(payload).eq('id', existing.id)
+        } else {
+          await admin.from('reviews').insert(payload)
+          reviewsImported++
+        }
+      }
     } catch (err) {
-      errors.push(`reviews: ${(err as Error).message}`)
+      const tag = `reviews ${loc.title}: ${(err as Error).message}`
+      if (!errors.includes(tag)) errors.push(tag)
     }
   }
 
