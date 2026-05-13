@@ -153,18 +153,22 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
   }
 
   /* 5. If the connection is still pending and we have exactly one
-        location, finalize it. */
+        location, finalize it. platform_account_id is stored as the
+        full resource name "accounts/{a}/locations/{l}" — the publish
+        path needs that shape, and per-endpoint parsing is trivial. */
   if (conn.status === 'pending' && allLocations.length === 1) {
     const loc = allLocations[0]
+    const resourceName = `${loc.accountName}/${loc.name}`
     await admin
       .from('channel_connections')
       .update({
         status: 'active',
-        platform_account_id: loc.name.replace('locations/', ''),
+        platform_account_id: resourceName,
         platform_account_name: loc.title,
         metadata: {
           ...(conn.metadata ?? {}),
           account_id: loc.accountName.replace('accounts/', ''),
+          location_id: loc.name,
         },
       })
       .eq('id', conn.id)
