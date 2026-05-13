@@ -1,51 +1,64 @@
 'use server'
 
 /**
- * Inbox threads — unified customer conversations from every channel.
+ * Inbox threads — unified attention surface.
  *
- * Merges:
- *   - reviews          (Google, Yelp, etc.)
- *   - social_interactions  (IG DMs, IG comments, mentions)
+ * Restaurant owners don't think of "approvals" and "customer reviews"
+ * as separate concepts — they're all just "stuff I need to look at."
+ * This lib merges every kind of thread that might need an owner's
+ * attention into one feed, with a stable Thread shape so the UI
+ * renders one list.
  *
- * Each row maps to the same Thread shape so the UI renders one list.
- * Severity is derived from rating / requires_attention / responded state.
+ * Sources:
+ *   - reviews                    → kind='review'   (Google, Yelp, ...)
+ *   - social_interactions        → kind='dm'|'comment'|'mention'
+ *                                  (IG DMs, IG comments, mentions)
+ *   - content_drafts             → kind='approval' (client_request drafts
+ *                                  approved internally, awaiting your sign-off)
+ *   - deliverables               → kind='approval' (legacy approvals path)
+ *
+ * Severity is derived per-kind; sorting is by recency across all kinds.
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export type ThreadKind = 'review' | 'dm' | 'comment' | 'mention'
+export type ThreadKind = 'review' | 'dm' | 'comment' | 'mention' | 'approval'
 export type ThreadSeverity = 'urgent' | 'soon' | 'none' | 'handled'
 
 export interface InboxThread {
   id: string
   kind: ThreadKind
-  platform: string                 // 'google' | 'yelp' | 'instagram' | etc.
+  /** Display source — 'google' / 'yelp' / 'instagram' / etc., or 'content' for approvals. */
+  platform: string
   authorName: string
   authorHandle: string | null
-  /** For reviews. */
   rating: number | null
   text: string
   postedAt: string
-  /** For comments — caption snippet of the post they're on. */
+  /** Comment context: caption of the post they're on. */
   postCaption: string | null
   severity: ThreadSeverity
   tags: string[]
-  /** AI-drafted reply if one exists and isn't sent. */
   draftReply: string | null
-  /** True when the row has been responded to. */
   replied: boolean
   repliedAt: string | null
-  /** Best-effort "unread" — fresh + unanswered. */
   unread: boolean
-  /** Stable URL params to deep-link to this thread. */
   refKind: ThreadKind
   refId: string
+  /** Approval-only: caption preview the owner is approving. */
+  approvalCaption?: string | null
+  /** Approval-only: media thumbnails. */
+  approvalMediaUrls?: string[]
+  /** Approval-only: planned publish date. */
+  approvalScheduledFor?: string | null
+  /** Approval-only: deep link to the preview / detail page. */
+  approvalHref?: string
 }
 
 export async function getInboxThreads(clientId: string, limit = 50): Promise<InboxThread[]> {
   const admin = createAdminClient()
 
-  const [reviewsRes, interactionsRes] = await Promise.all([
+  const [reviewsRes, interactionsRes, draftApprovalsRes, deliverableApprovalsRes] = await Promise.all([
     admin
       .from('reviews')
       .select('id, source, rating, author_name, review_text, posted_at, response_text, responded_at, sentiment')
@@ -58,6 +71,26 @@ export async function getInboxThreads(clientId: string, limit = 50): Promise<Inb
       .eq('client_id', clientId)
       .order('created_at_platform', { ascending: false })
       .limit(limit),
+    /* Content drafts that originated from a client request, were
+       approved internally by staff, and are now waiting on the
+       owner's final sign-off. The "Ready for your review" loop. */
+    admin
+      .from('content_drafts')
+      .select('id, idea, caption, media_urls, status, proposed_via, approved_at, target_publish_date, target_platforms, client_signed_off_at')
+      .eq('client_id', clientId)
+      .eq('proposed_via', 'client_request')
+      .eq('status', 'approved')
+      .is('client_signed_off_at', null)
+      .order('approved_at', { ascending: false })
+      .limit(20),
+    /* Legacy deliverables awaiting client review (pre-content-engine). */
+    admin
+      .from('deliverables')
+      .select('id, title, type, status, created_at, scheduled_for')
+      .eq('business_id', clientId)
+      .eq('status', 'client_review')
+      .order('created_at', { ascending: false })
+      .limit(20),
   ])
 
   const threads: InboxThread[] = []
@@ -113,7 +146,7 @@ export async function getInboxThreads(clientId: string, limit = 50): Promise<Inb
       postCaption: (s.post_caption_snippet as string) ?? null,
       severity,
       tags: sentiment ? [sentiment] : [],
-      draftReply: null,  // social_interactions doesn't store drafts yet — AI reply is a future hook
+      draftReply: null,
       replied,
       repliedAt: (s.reply_at as string) ?? null,
       unread: !replied,
@@ -122,6 +155,85 @@ export async function getInboxThreads(clientId: string, limit = 50): Promise<Inb
     })
   }
 
-  threads.sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime())
+  /* Approvals — content drafts awaiting sign-off. Urgency rises as
+     the planned publish date approaches; 'urgent' if within 24h. */
+  const nowMs = Date.now()
+  for (const d of draftApprovalsRes.data ?? []) {
+    const scheduled = (d.target_publish_date as string) ?? null
+    const hoursLeft = scheduled ? (new Date(scheduled).getTime() - nowMs) / 3_600_000 : null
+    const severity: ThreadSeverity =
+      hoursLeft !== null && hoursLeft < 0 ? 'urgent'
+      : hoursLeft !== null && hoursLeft < 24 ? 'urgent'
+      : hoursLeft !== null && hoursLeft < 72 ? 'soon'
+      : 'none'
+    const media = Array.isArray(d.media_urls) ? (d.media_urls as string[]) : []
+    threads.push({
+      id: `draft-${d.id}`,
+      kind: 'approval',
+      platform: 'content',
+      authorName: (d.idea as string) || 'Content ready for review',
+      authorHandle: null,
+      rating: null,
+      text: ((d.caption as string) ?? '').slice(0, 240),
+      postedAt: (d.approved_at as string) ?? new Date().toISOString(),
+      postCaption: null,
+      severity,
+      tags: Array.isArray(d.target_platforms) ? (d.target_platforms as string[]) : [],
+      draftReply: null,
+      replied: false,
+      repliedAt: null,
+      unread: true,
+      refKind: 'approval',
+      refId: d.id as string,
+      approvalCaption: (d.caption as string) ?? null,
+      approvalMediaUrls: media,
+      approvalScheduledFor: scheduled,
+      approvalHref: `/dashboard/preview/${d.id}`,
+    })
+  }
+
+  for (const dl of deliverableApprovalsRes.data ?? []) {
+    const scheduled = (dl.scheduled_for as string) ?? null
+    const hoursLeft = scheduled ? (new Date(scheduled).getTime() - nowMs) / 3_600_000 : null
+    const severity: ThreadSeverity =
+      hoursLeft !== null && hoursLeft < 24 ? 'urgent'
+      : hoursLeft !== null && hoursLeft < 72 ? 'soon'
+      : 'none'
+    threads.push({
+      id: `deliverable-${dl.id}`,
+      kind: 'approval',
+      platform: 'content',
+      authorName: (dl.title as string) || 'Content awaiting your review',
+      authorHandle: null,
+      rating: null,
+      text: humanizeType(dl.type as string),
+      postedAt: (dl.created_at as string) ?? new Date().toISOString(),
+      postCaption: null,
+      severity,
+      tags: [(dl.type as string) ?? ''].filter(Boolean),
+      draftReply: null,
+      replied: false,
+      repliedAt: null,
+      unread: true,
+      refKind: 'approval',
+      refId: dl.id as string,
+      approvalScheduledFor: scheduled,
+      approvalHref: `/dashboard/approvals/${dl.id}`,
+    })
+  }
+
+  threads.sort((a, b) => {
+    /* Urgent first, then soon, then by recency. Handled threads sink
+       below open ones at the same urgency. */
+    const sevRank: Record<ThreadSeverity, number> = { urgent: 0, soon: 1, none: 2, handled: 3 }
+    const sr = sevRank[a.severity] - sevRank[b.severity]
+    if (sr !== 0) return sr
+    return new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime()
+  })
   return threads.slice(0, limit)
+}
+
+function humanizeType(s: string | null | undefined): string {
+  if (!s) return ''
+  return s.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
