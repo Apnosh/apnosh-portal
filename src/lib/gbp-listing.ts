@@ -26,6 +26,7 @@ export interface ListingFields {
   primaryPhone?: string | null
   websiteUri?: string | null
   regularHours?: WeeklyHours | null
+  specialHours?: SpecialHours | null
 }
 
 export type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
@@ -33,6 +34,17 @@ export type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
 /* Per day: array of {open, close} ranges in HH:MM (24h). Empty array
    means closed for that day. */
 export type WeeklyHours = Record<DayKey, Array<{ open: string; close: string }>>
+
+/* Date-specific overrides. Each entry is one calendar day where the
+   restaurant deviates from regular hours: closed (e.g. holidays) or
+   on alternate hours (e.g. limited Thanksgiving service). */
+export type SpecialHours = Array<{
+  date: string  /* YYYY-MM-DD */
+  closed: boolean
+  /* Used only when closed === false. */
+  open?: string
+  close?: string
+}>
 
 const DAY_TO_GBP: Record<DayKey, string> = {
   mon: 'MONDAY', tue: 'TUESDAY', wed: 'WEDNESDAY', thu: 'THURSDAY',
@@ -126,6 +138,55 @@ function periodsToWeekly(periods: GbpPeriod[] | undefined): WeeklyHours {
   return out
 }
 
+interface GbpDate { year: number; month: number; day: number }
+interface GbpSpecialPeriod {
+  startDate: GbpDate
+  endDate?: GbpDate
+  closed?: boolean
+  openTime?: { hours?: number; minutes?: number }
+  closeTime?: { hours?: number; minutes?: number }
+}
+
+function dateToYmd(d: GbpDate): string {
+  const y = String(d.year).padStart(4, '0')
+  const m = String(d.month).padStart(2, '0')
+  const day = String(d.day).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function ymdToDate(ymd: string): GbpDate {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return { year: y, month: m, day: d }
+}
+
+function specialPeriodsToList(periods: GbpSpecialPeriod[] | undefined): SpecialHours {
+  return (periods ?? []).map(p => ({
+    date: dateToYmd(p.startDate),
+    closed: !!p.closed,
+    open: !p.closed && p.openTime ? hh(p.openTime) : undefined,
+    close: !p.closed && p.closeTime ? hh(p.closeTime) : undefined,
+  }))
+}
+
+function specialListToPeriods(list: SpecialHours): GbpSpecialPeriod[] {
+  return list
+    .filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s.date))
+    .map(s => {
+      const d = ymdToDate(s.date)
+      if (s.closed) {
+        return { startDate: d, endDate: d, closed: true }
+      }
+      const [oh, om] = (s.open ?? '11:00').split(':').map(Number)
+      const [ch, cm] = (s.close ?? '21:00').split(':').map(Number)
+      return {
+        startDate: d, endDate: d,
+        closed: false,
+        openTime: { hours: oh, minutes: om || 0 },
+        closeTime: { hours: ch, minutes: cm || 0 },
+      }
+    })
+}
+
 function weeklyToGbpPeriods(weekly: WeeklyHours): GbpPeriod[] {
   const order: DayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
   const periods: GbpPeriod[] = []
@@ -146,6 +207,90 @@ function weeklyToGbpPeriods(weekly: WeeklyHours): GbpPeriod[] {
   return periods
 }
 
+/* ── Attributes ────────────────────────────────────────────────── */
+
+/* Curated list of restaurant-relevant boolean attributes. Google's
+   v1 API supports many more per-category, but listing all of them
+   would overwhelm a restaurant owner. Add to this set as owners ask
+   for them. The order here is the order the UI renders. */
+export const RESTAURANT_ATTRIBUTES: Array<{ id: string; label: string; group: string }> = [
+  /* Service options */
+  { id: 'has_dine_in', label: 'Dine-in', group: 'Service options' },
+  { id: 'has_takeout', label: 'Takeout', group: 'Service options' },
+  { id: 'has_delivery', label: 'Delivery', group: 'Service options' },
+  { id: 'has_curbside_pickup', label: 'Curbside pickup', group: 'Service options' },
+  /* Amenities */
+  { id: 'has_outdoor_seating', label: 'Outdoor seating', group: 'Amenities' },
+  { id: 'wheelchair_accessible_entrance', label: 'Wheelchair-accessible entrance', group: 'Amenities' },
+  { id: 'wheelchair_accessible_parking', label: 'Wheelchair-accessible parking', group: 'Amenities' },
+  { id: 'wheelchair_accessible_restroom', label: 'Wheelchair-accessible restroom', group: 'Amenities' },
+  /* Offerings */
+  { id: 'serves_breakfast', label: 'Serves breakfast', group: 'Offerings' },
+  { id: 'serves_lunch', label: 'Serves lunch', group: 'Offerings' },
+  { id: 'serves_dinner', label: 'Serves dinner', group: 'Offerings' },
+  { id: 'serves_brunch', label: 'Serves brunch', group: 'Offerings' },
+  { id: 'serves_dessert', label: 'Serves dessert', group: 'Offerings' },
+  { id: 'serves_coffee', label: 'Serves coffee', group: 'Offerings' },
+  { id: 'serves_vegetarian_food', label: 'Vegetarian options', group: 'Offerings' },
+  /* Planning */
+  { id: 'accepts_reservations', label: 'Accepts reservations', group: 'Planning' },
+  /* Payments */
+  { id: 'accepts_credit_cards', label: 'Accepts credit cards', group: 'Payments' },
+  { id: 'accepts_debit_cards', label: 'Accepts debit cards', group: 'Payments' },
+  { id: 'accepts_cash_only', label: 'Cash only', group: 'Payments' },
+  { id: 'accepts_nfc_mobile_payments', label: 'Accepts mobile / contactless payments', group: 'Payments' },
+]
+
+export type AttributeValues = Record<string, boolean>
+
+interface RawAttribute {
+  name: string
+  valueType?: string
+  values?: unknown[]
+}
+
+export async function getClientAttributes(clientId: string): Promise<
+  { ok: true; values: AttributeValues } | { ok: false; error: string }
+> {
+  const tok = await getActiveTokenForClient(clientId)
+  if ('error' in tok) return { ok: false, error: tok.error }
+  const url = `${V1_BASE}/${tok.resourceName}/attributes`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${tok.accessToken}` } })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) return { ok: false, error: body?.error?.message || `HTTP ${res.status}` }
+  const out: AttributeValues = {}
+  const attrs = ((body as { attributes?: RawAttribute[] }).attributes ?? [])
+  for (const a of attrs) {
+    const id = a.name.replace(/^attributes\//, '')
+    if (a.valueType === 'BOOL' && Array.isArray(a.values) && a.values.length > 0) {
+      out[id] = !!a.values[0]
+    }
+  }
+  return { ok: true, values: out }
+}
+
+export async function updateClientAttributes(
+  clientId: string,
+  values: AttributeValues,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const tok = await getActiveTokenForClient(clientId)
+  if ('error' in tok) return { ok: false, error: tok.error }
+  const attributes = Object.entries(values).map(([id, v]) => ({
+    name: `attributes/${id}`,
+    valueType: 'BOOL',
+    values: [v],
+  }))
+  const url = `${V1_BASE}/${tok.resourceName}/attributes?updateMask=attributes`
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${tok.accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: `${tok.resourceName}/attributes`, attributes }),
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) return { ok: false, error: body?.error?.message || `HTTP ${res.status}` }
+  return { ok: true }
+}
+
 /* ── Read current listing ──────────────────────────────────────── */
 
 export async function getClientListing(clientId: string): Promise<{
@@ -158,7 +303,7 @@ export async function getClientListing(clientId: string): Promise<{
   if ('error' in tok) return { ok: false, error: tok.error }
   const { accessToken, resourceName } = tok
 
-  const readMask = 'title,profile,websiteUri,phoneNumbers,regularHours'
+  const readMask = 'title,profile,websiteUri,phoneNumbers,regularHours,specialHours'
   const url = `${V1_BASE}/${resourceName}?readMask=${encodeURIComponent(readMask)}`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
   const body = await res.json().catch(() => ({}))
@@ -171,6 +316,7 @@ export async function getClientListing(clientId: string): Promise<{
     phoneNumbers?: { primaryPhone?: string }
     websiteUri?: string
     regularHours?: { periods?: GbpPeriod[] }
+    specialHours?: { specialHourPeriods?: GbpSpecialPeriod[] }
   }
   return {
     ok: true,
@@ -181,6 +327,7 @@ export async function getClientListing(clientId: string): Promise<{
       primaryPhone: data.phoneNumbers?.primaryPhone ?? null,
       websiteUri: data.websiteUri ?? null,
       regularHours: periodsToWeekly(data.regularHours?.periods),
+      specialHours: specialPeriodsToList(data.specialHours?.specialHourPeriods),
     },
   }
 }
@@ -218,6 +365,12 @@ export async function updateClientListing(
       ? { periods: weeklyToGbpPeriods(patch.regularHours) }
       : { periods: [] }
     updateMaskParts.push('regularHours')
+  }
+  if (patch.specialHours !== undefined) {
+    body.specialHours = patch.specialHours
+      ? { specialHourPeriods: specialListToPeriods(patch.specialHours) }
+      : { specialHourPeriods: [] }
+    updateMaskParts.push('specialHours')
   }
 
   if (updateMaskParts.length === 0) {

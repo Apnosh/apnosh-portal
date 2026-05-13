@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Save, Loader2, MapPin, AlertTriangle, CheckCircle2 } from 'lucide-react'
-import type { ListingFields, WeeklyHours, DayKey } from '@/lib/gbp-listing'
+import { ArrowLeft, Save, Loader2, MapPin, AlertTriangle, CheckCircle2, Plus, X } from 'lucide-react'
+import type { ListingFields, WeeklyHours, DayKey, SpecialHours, AttributeValues } from '@/lib/gbp-listing'
+
+interface AttributeCatalogItem {
+  id: string
+  label: string
+  group: string
+}
 
 interface LoadedListing {
   title: string | null
@@ -35,6 +41,10 @@ export default function ListingEditor() {
   const [primaryPhone, setPrimaryPhone] = useState('')
   const [websiteUri, setWebsiteUri] = useState('')
   const [hours, setHours] = useState<WeeklyHours>(emptyHours())
+  const [specialHours, setSpecialHours] = useState<SpecialHours>([])
+  const [attributes, setAttributes] = useState<AttributeValues>({})
+  const [attributeCatalog, setAttributeCatalog] = useState<AttributeCatalogItem[]>([])
+  const [originalAttributes, setOriginalAttributes] = useState<AttributeValues>({})
 
   const [original, setOriginal] = useState<Required<ListingFields> | null>(null)
   const [saving, setSaving] = useState(false)
@@ -44,19 +54,34 @@ export default function ListingEditor() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/dashboard/listing')
-        const body = await res.json()
-        if (!res.ok) {
-          setLoadError(body.error || `HTTP ${res.status}`)
+        const [listingRes, attrRes] = await Promise.all([
+          fetch('/api/dashboard/listing'),
+          fetch('/api/dashboard/listing/attributes'),
+        ])
+        const listingBody = await listingRes.json()
+        if (!listingRes.ok) {
+          setLoadError(listingBody.error || `HTTP ${listingRes.status}`)
           return
         }
-        const data = body as { ok: true; title: string | null; fields: Required<ListingFields> }
+        const data = listingBody as { ok: true; title: string | null; fields: Required<ListingFields> }
         setTitle(data.title)
         setDescription(data.fields.description ?? '')
         setPrimaryPhone(data.fields.primaryPhone ?? '')
         setWebsiteUri(data.fields.websiteUri ?? '')
         setHours(data.fields.regularHours ?? emptyHours())
+        setSpecialHours(data.fields.specialHours ?? [])
         setOriginal(data.fields)
+
+        /* Attributes are a separate API call — render them if they
+           loaded, but don't block the page if the call fails (some
+           accounts return 404 here). */
+        if (attrRes.ok) {
+          const attrBody = await attrRes.json() as { values?: AttributeValues; catalog?: AttributeCatalogItem[] }
+          const values = attrBody.values ?? {}
+          setAttributes(values)
+          setOriginalAttributes(values)
+          setAttributeCatalog(attrBody.catalog ?? [])
+        }
       } catch (err) {
         setLoadError((err as Error).message)
       } finally {
@@ -75,29 +100,48 @@ export default function ListingEditor() {
     if (JSON.stringify(original.regularHours ?? emptyHours()) !== JSON.stringify(hours)) {
       out.regularHours = hours
     }
+    if (JSON.stringify(original.specialHours ?? []) !== JSON.stringify(specialHours)) {
+      out.specialHours = specialHours
+    }
     return out
   }
 
+  const attributesChanged = JSON.stringify(originalAttributes) !== JSON.stringify(attributes)
+
   async function save() {
     const patch = diffFields()
-    if (Object.keys(patch).length === 0) return
+    if (Object.keys(patch).length === 0 && !attributesChanged) return
     setSaving(true)
     setSaveError(null)
     try {
-      const res = await fetch('/api/dashboard/listing', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
-      })
-      const body = await res.json()
-      if (!res.ok) {
-        setSaveError(body.error || `HTTP ${res.status}`)
-        return
+      const calls: Promise<Response>[] = []
+      if (Object.keys(patch).length > 0) {
+        calls.push(fetch('/api/dashboard/listing', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        }))
+      }
+      if (attributesChanged) {
+        calls.push(fetch('/api/dashboard/listing/attributes', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ values: attributes }),
+        }))
+      }
+      const results = await Promise.all(calls)
+      for (const res of results) {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          setSaveError(body.error || `HTTP ${res.status}`)
+          return
+        }
       }
       setSavedAt(Date.now())
       setOriginal({
-        description, primaryPhone, websiteUri, regularHours: hours,
+        description, primaryPhone, websiteUri, regularHours: hours, specialHours,
       })
+      setOriginalAttributes(attributes)
       /* Clear "Saved" toast after 4 seconds. */
       setTimeout(() => setSavedAt(s => (s && Date.now() - s >= 4000 ? null : s)), 4000)
     } catch (err) {
@@ -107,7 +151,7 @@ export default function ListingEditor() {
     }
   }
 
-  const hasChanges = Object.keys(diffFields()).length > 0
+  const hasChanges = Object.keys(diffFields()).length > 0 || attributesChanged
 
   if (loading) {
     return (
@@ -217,6 +261,28 @@ export default function ListingEditor() {
         </div>
       </Section>
 
+      {/* Special hours: holidays, one-off closures, limited holiday menus */}
+      <Section
+        label="Special hours"
+        hint="Override regular hours for one-off dates: holidays, vacations, private events."
+      >
+        <SpecialHoursEditor value={specialHours} onChange={setSpecialHours} />
+      </Section>
+
+      {/* Attributes — service options, amenities, payments. */}
+      {attributeCatalog.length > 0 && (
+        <Section
+          label="Service options & amenities"
+          hint="What you offer. Each toggle here is a label customers see on your Google listing."
+        >
+          <AttributesEditor
+            catalog={attributeCatalog}
+            values={attributes}
+            onChange={setAttributes}
+          />
+        </Section>
+      )}
+
       {/* Sticky save */}
       <div className="sticky bottom-4 flex items-center justify-end gap-3">
         {saveError && (
@@ -252,6 +318,137 @@ function Section({ label, hint, children }: { label: string; hint?: string; chil
         {hint && <span className="block text-[11.5px] text-ink-3 mt-0.5">{hint}</span>}
       </label>
       <div className="mt-2">{children}</div>
+    </div>
+  )
+}
+
+/* Group restaurant attributes by their `group` field and render
+   each group as a row of toggle pills. Restaurant owners scan these
+   fast — single-tap to flip, no save button per pill. */
+function AttributesEditor({ catalog, values, onChange }: {
+  catalog: AttributeCatalogItem[]
+  values: AttributeValues
+  onChange: (next: AttributeValues) => void
+}) {
+  const groups: Record<string, AttributeCatalogItem[]> = {}
+  for (const item of catalog) {
+    (groups[item.group] = groups[item.group] || []).push(item)
+  }
+  return (
+    <div className="space-y-4">
+      {Object.entries(groups).map(([group, items]) => (
+        <div key={group}>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-4 mb-2">{group}</div>
+          <div className="flex flex-wrap gap-2">
+            {items.map(item => {
+              const on = !!values[item.id]
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onChange({ ...values, [item.id]: !on })}
+                  className={`text-[12px] rounded-full px-3 py-1.5 border transition-colors ${
+                    on
+                      ? 'bg-brand text-white border-brand'
+                      : 'bg-white text-ink-2 border-ink-6 hover:border-ink-4'
+                  }`}
+                >
+                  {on && <span className="mr-1">✓</span>}
+                  {item.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* Holiday / one-off closure editor. Each row is a single date with
+   either a "Closed" toggle or open/close times. Restaurants typically
+   only have a handful of these per year, so we keep the UI simple
+   and additive (no date-range; pick one day, add another row if you
+   need a multi-day stretch). */
+function SpecialHoursEditor({ value, onChange }: {
+  value: SpecialHours
+  onChange: (next: SpecialHours) => void
+}) {
+  function addRow() {
+    const today = new Date().toISOString().slice(0, 10)
+    onChange([...value, { date: today, closed: true }])
+  }
+  function update(i: number, patch: Partial<SpecialHours[number]>) {
+    onChange(value.map((r, j) => j === i ? { ...r, ...patch } : r))
+  }
+  function remove(i: number) {
+    onChange(value.filter((_, j) => j !== i))
+  }
+
+  if (value.length === 0) {
+    return (
+      <button
+        onClick={addRow}
+        className="inline-flex items-center gap-1.5 text-[12px] font-medium text-brand-dark hover:text-brand"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        Add a holiday or closure
+      </button>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      {value.map((row, i) => (
+        <div key={i} className="flex items-center gap-2 flex-wrap p-2 rounded-lg bg-bg-2/50 border border-ink-7">
+          <input
+            type="date"
+            value={row.date}
+            onChange={e => update(i, { date: e.target.value })}
+            className="text-[12px] px-2 py-1 rounded-md border border-ink-6 bg-white"
+          />
+          <label className="inline-flex items-center gap-1.5 text-[12px] text-ink-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={row.closed}
+              onChange={e => update(i, { closed: e.target.checked })}
+              className="rounded border-ink-5 text-brand focus:ring-brand"
+            />
+            Closed
+          </label>
+          {!row.closed && (
+            <div className="inline-flex items-center gap-1">
+              <input
+                type="time"
+                value={row.open ?? '11:00'}
+                onChange={e => update(i, { open: e.target.value })}
+                className="text-[12px] px-2 py-1 rounded-md border border-ink-6 bg-white"
+              />
+              <span className="text-[11px] text-ink-4">→</span>
+              <input
+                type="time"
+                value={row.close ?? '21:00'}
+                onChange={e => update(i, { close: e.target.value })}
+                className="text-[12px] px-2 py-1 rounded-md border border-ink-6 bg-white"
+              />
+            </div>
+          )}
+          <span className="flex-1" />
+          <button
+            onClick={() => remove(i)}
+            className="text-ink-4 hover:text-rose-600"
+            title="Remove this entry"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ))}
+      <button
+        onClick={addRow}
+        className="inline-flex items-center gap-1.5 text-[12px] font-medium text-brand-dark hover:text-brand"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        Add another
+      </button>
     </div>
   )
 }
