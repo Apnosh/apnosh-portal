@@ -171,12 +171,18 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
       .eq('id', conn.id)
   }
 
-  /* 6. Pull yesterday's metrics for every location we just claimed. */
-  const yesterday = (() => {
+  /* 6. Pull the last 7 days of metrics for every location we just
+        claimed. The Business Profile Performance API typically has a
+        ~3-day aggregation lag, so syncing only yesterday means the
+        Local SEO 30-day window stays empty. A 7-day backfill catches
+        whatever's actually available and is cheap enough to run
+        on-demand from the Sync now button. */
+  const targetDates: string[] = []
+  for (let daysAgo = 7; daysAgo >= 1; daysAgo--) {
     const d = new Date()
-    d.setUTCDate(d.getUTCDate() - 1)
-    return d.toISOString().slice(0, 10)
-  })()
+    d.setUTCDate(d.getUTCDate() - daysAgo)
+    targetDates.push(d.toISOString().slice(0, 10))
+  }
 
   let metricsImported = 0
   /* Only sync metrics for locations actually tied to this client now
@@ -188,33 +194,40 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
   for (const row of clientLocations ?? []) {
     const storeCode = row.store_code as string
     const title = row.location_name as string
-    try {
-      const m = await runGBPDailyMetrics(`locations/${storeCode}`, accessToken, yesterday)
-      const total =
-        m.businessImpressionsMobileMaps +
-        m.businessImpressionsMobileSearch +
-        m.businessImpressionsDesktopMaps +
-        m.businessImpressionsDesktopSearch
-      const { error: upsertErr } = await admin.from('gbp_metrics').upsert({
-        client_id: clientId,
-        location_id: `gbp_loc_${storeCode}`,
-        location_name: title,
-        date: yesterday,
-        directions: m.businessDirectionRequests,
-        calls: m.callClicks,
-        website_clicks: m.websiteClicks,
-        search_views: total,
-        impressions_search_mobile: m.businessImpressionsMobileSearch,
-        impressions_search_desktop: m.businessImpressionsDesktopSearch,
-        impressions_maps_mobile: m.businessImpressionsMobileMaps,
-        impressions_maps_desktop: m.businessImpressionsDesktopMaps,
-        impressions_total: total,
-        source: 'gbp_api_client',
-      }, { onConflict: 'client_id,location_id,date' })
-      if (upsertErr) errors.push(`metrics ${title}: ${upsertErr.message}`)
-      else metricsImported++
-    } catch (err) {
-      errors.push(`metrics ${title}: ${(err as Error).message}`)
+    for (const targetDate of targetDates) {
+      try {
+        const m = await runGBPDailyMetrics(`locations/${storeCode}`, accessToken, targetDate)
+        const total =
+          m.businessImpressionsMobileMaps +
+          m.businessImpressionsMobileSearch +
+          m.businessImpressionsDesktopMaps +
+          m.businessImpressionsDesktopSearch
+        const { error: upsertErr } = await admin.from('gbp_metrics').upsert({
+          client_id: clientId,
+          location_id: `gbp_loc_${storeCode}`,
+          location_name: title,
+          date: targetDate,
+          directions: m.businessDirectionRequests,
+          calls: m.callClicks,
+          website_clicks: m.websiteClicks,
+          search_views: total,
+          impressions_search_mobile: m.businessImpressionsMobileSearch,
+          impressions_search_desktop: m.businessImpressionsDesktopSearch,
+          impressions_maps_mobile: m.businessImpressionsMobileMaps,
+          impressions_maps_desktop: m.businessImpressionsDesktopMaps,
+          impressions_total: total,
+          source: 'gbp_api_client',
+        }, { onConflict: 'client_id,location_id,date' })
+        if (upsertErr) errors.push(`metrics ${title} ${targetDate}: ${upsertErr.message}`)
+        else metricsImported++
+      } catch (err) {
+        /* Permission/not-found errors repeat for every date on the
+           same location — log once per location, not per date. */
+        const msg = (err as Error).message
+        const tag = `metrics ${title}: ${msg}`
+        if (!errors.includes(tag)) errors.push(tag)
+        break
+      }
     }
   }
 
