@@ -13,21 +13,23 @@ import Link from 'next/link'
 import {
   MessageSquare, MoreHorizontal, ExternalLink, ArrowLeftRight,
   Circle, Users, X, Loader2, AlertCircle, Check, Plus, Search, UserPlus,
-  ChevronDown, ChevronUp, Send,
+  ChevronDown, ChevronUp, Send, Clock,
 } from 'lucide-react'
 import type { TeamMember } from '@/lib/dashboard/get-team'
 import type { AvailableSpecialist } from '@/lib/dashboard/get-available-specialists'
+import type { TeamRequest } from '@/lib/dashboard/get-team-requests'
 import { ROLE_LABEL } from '@/lib/dashboard/team-labels'
 
 interface Props {
   clientId: string
   team: TeamMember[]
   available: AvailableSpecialist[]
+  openRequests: TeamRequest[]
 }
 
 type Tab = 'your-team' | 'add'
 
-export default function TeamView({ clientId, team, available }: Props) {
+export default function TeamView({ clientId, team, available, openRequests }: Props) {
   const [tab, setTab] = useState<Tab>(team.length > 0 ? 'your-team' : 'add')
   // Power-user toggle for the directory grid — collapsed by default
   // so the conversational prompt is the front door.
@@ -152,6 +154,11 @@ export default function TeamView({ clientId, team, available }: Props) {
                   <MessageSquare className="w-4 h-4 opacity-70 flex-shrink-0" />
                 </div>
               </Link>
+
+              {/* Open requests rail — so the owner knows the loop is moving */}
+              {openRequests.length > 0 && (
+                <OpenRequestsRail requests={openRequests} />
+              )}
 
               {/* Primary contact card */}
               {primary && (
@@ -557,7 +564,7 @@ function SwapModal({
       <div className="bg-white w-full sm:w-[460px] sm:rounded-2xl rounded-t-2xl shadow-xl overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-ink-6">
           <p className="text-[15px] font-semibold text-ink">
-            Let&rsquo;s find a better fit for {ROLE_LABEL[target.role] ?? target.role}
+            About your {(ROLE_LABEL[target.role] ?? target.role).toLowerCase()}
           </p>
           <button onClick={onClose} className="text-ink-4 hover:text-ink" aria-label="Close">
             <X className="w-4 h-4" />
@@ -991,7 +998,11 @@ function AskPrompt({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
+  /* Two forms so we render correctly at sentence start (capitalized
+     fallback) and mid-sentence (lowercase fallback). When a real
+     strategist name is set, both forms are just the first name. */
   const strategistFirst = primaryName?.split(' ')[0] ?? 'your strategist'
+  const StrategistFirst = primaryName?.split(' ')[0] ?? 'Your strategist'
 
   const submit = useCallback(async () => {
     const m = message.trim()
@@ -1022,7 +1033,7 @@ function AskPrompt({
         </div>
         <p className="text-[14px] font-semibold text-ink mb-1">Sent</p>
         <p className="text-[12px] text-ink-3 leading-relaxed max-w-md mx-auto">
-          {strategistFirst} will reply in your thread with the right person and any plan changes — usually within a day.
+          {StrategistFirst} will reply in your thread with the right person and any plan changes — usually within a day.
         </p>
         <button
           onClick={() => setSent(false)}
@@ -1044,7 +1055,7 @@ function AskPrompt({
         className="w-full text-[14px] p-3 rounded-xl ring-1 ring-ink-6 focus:ring-ink-3 focus:outline-none resize-y leading-relaxed placeholder:text-ink-4"
       />
       <p className="text-[11px] text-ink-3 mt-2 leading-relaxed">
-        {strategistFirst} replies with a name and tells you upfront if it changes your plan or pricing. No surprises.
+        {StrategistFirst} replies with a name and tells you upfront if it changes your plan or pricing. No surprises.
       </p>
       {error && (
         <p className="mt-2 text-[11px] text-rose-700 inline-flex items-start gap-1">
@@ -1062,6 +1073,47 @@ function AskPrompt({
           Send to {strategistFirst}
         </button>
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Open team-requests rail — closes the loop for the owner
+// ─────────────────────────────────────────────────────────────────────
+
+function OpenRequestsRail({ requests }: { requests: TeamRequest[] }) {
+  return (
+    <div className="mb-4 rounded-2xl bg-ink-7/60 ring-1 ring-ink-6 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 mb-2 inline-flex items-center gap-1.5">
+        <Clock className="w-3 h-3" />
+        Open with your team · {requests.length}
+      </p>
+      <ul className="space-y-1.5">
+        {requests.map(r => {
+          const toneClass =
+            r.statusTone === 'progress' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+            : r.statusTone === 'warn' ? 'bg-amber-50 text-amber-700 ring-amber-200'
+            : 'bg-white text-ink-3 ring-ink-6'
+          return (
+            <li key={r.id} className="rounded-xl bg-white ring-1 ring-ink-6 p-3 flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-semibold text-ink leading-tight">{r.title}</p>
+                {r.preview && (
+                  <p className="text-[12px] text-ink-3 mt-0.5 leading-snug line-clamp-2 italic">
+                    &ldquo;{r.preview}&rdquo;
+                  </p>
+                )}
+                <p className="text-[10px] text-ink-4 mt-1">
+                  Sent {new Date(r.requestedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </p>
+              </div>
+              <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full ring-1 flex-shrink-0 whitespace-nowrap ${toneClass}`}>
+                {r.statusLabel}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }

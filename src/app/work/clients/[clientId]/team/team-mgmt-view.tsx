@@ -9,9 +9,9 @@
  *      and a "Primary" toggle (only one per role enforced server-side)
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Check, AlertCircle, Star, ArrowLeftRight, Users, UserPlus, X } from 'lucide-react'
+import { ArrowLeft, Loader2, Check, AlertCircle, Star, ArrowLeftRight, Users, UserPlus, X, Plus, Search } from 'lucide-react'
 import type { TeamMember } from '@/lib/dashboard/get-team'
 import { ROLE_LABEL } from '@/lib/dashboard/team-labels'
 
@@ -52,6 +52,7 @@ export default function TeamMgmtView({
   const [swaps, setSwaps] = useState(initialSwaps)
   const [adds, setAdds] = useState(initialAdds)
   const [error, setError] = useState<string | null>(null)
+  const [assignOpen, setAssignOpen] = useState(false)
 
   const resolveAdd = useCallback(async (
     addId: string,
@@ -203,12 +204,21 @@ export default function TeamMgmtView({
 
       {/* Team list */}
       <section>
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-3 mb-2">
-          Team
-        </h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-3">
+            Team
+          </h2>
+          <button
+            onClick={() => setAssignOpen(true)}
+            className="text-[12px] font-semibold bg-ink text-white rounded-lg px-3 py-1.5 hover:bg-ink-2 inline-flex items-center gap-1"
+          >
+            <Plus className="w-3 h-3" />
+            Assign someone
+          </button>
+        </div>
         {team.length === 0 ? (
-          <p className="text-[13px] text-ink-3 py-6 text-center">
-            No one is assigned to this client yet. Use the onboarding tools to add the first specialist.
+          <p className="text-[13px] text-ink-3 py-6 text-center bg-white ring-1 ring-ink-6 rounded-2xl">
+            No one is assigned to this client yet. Tap <strong>Assign someone</strong> to add the first specialist.
           </p>
         ) : (
           <ul className="space-y-3">
@@ -223,6 +233,20 @@ export default function TeamMgmtView({
           </ul>
         )}
       </section>
+
+      {assignOpen && (
+        <AssignSpecialistModal
+          clientId={clientId}
+          onClose={() => setAssignOpen(false)}
+          onAssigned={() => {
+            setAssignOpen(false)
+            /* Easiest way to reflect the new assignment: refresh from
+               the server. Avoids re-implementing the full TeamMember
+               shape on the client. */
+            window.location.reload()
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -471,5 +495,247 @@ function AddRow({
         )}
       </div>
     </li>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Assign-specialist modal
+// ─────────────────────────────────────────────────────────────────────
+
+interface Candidate {
+  personId: string
+  displayName: string
+  email: string
+  avatarUrl: string | null
+  availability: 'available' | 'limited' | 'full'
+  capabilities: string[]
+  capabilityLabels: string[]
+}
+
+function AssignSpecialistModal({
+  clientId, onClose, onAssigned,
+}: {
+  clientId: string
+  onClose: () => void
+  onAssigned: () => void
+}) {
+  const [loading, setLoading] = useState(true)
+  const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [search, setSearch] = useState('')
+  const [picked, setPicked] = useState<Candidate | null>(null)
+  const [pickedRole, setPickedRole] = useState<string>('')
+  const [primary, setPrimaryFlag] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  /* Fetch on mount. Keeping it modal-local means the candidates list
+     refreshes every time the modal opens, picking up newly-invited
+     specialists without needing a parent re-render. */
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/work/clients/${clientId}/assignments`)
+        const j = await r.json().catch(() => ({}))
+        if (cancelled) return
+        if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`)
+        setCandidates((j.candidates as Candidate[]) ?? [])
+      } catch (e) {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : 'Failed to load specialists')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [clientId])
+
+  const filtered = candidates.filter(c => {
+    if (!search.trim()) return true
+    const q = search.trim().toLowerCase()
+    return [c.displayName, c.email, ...c.capabilityLabels].join(' ').toLowerCase().includes(q)
+  })
+
+  const submit = useCallback(async () => {
+    if (!picked || !pickedRole) return
+    setBusy(true); setError(null)
+    try {
+      const res = await fetch(`/api/work/clients/${clientId}/assignments`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          personId: picked.personId,
+          role: pickedRole,
+          isPrimaryContact: primary,
+        }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`)
+      onAssigned()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Assign failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [clientId, picked, pickedRole, primary, onAssigned])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ink/40 p-0 sm:p-4">
+      <div className="bg-white w-full sm:w-[520px] sm:rounded-2xl rounded-t-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b border-ink-6">
+          <p className="text-[15px] font-semibold text-ink">
+            {picked ? `Assign ${picked.displayName}` : 'Assign someone to this client'}
+          </p>
+          <button onClick={onClose} className="text-ink-4 hover:text-ink" aria-label="Close">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {picked ? (
+            <div className="p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                {picked.avatarUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={picked.avatarUrl} alt={picked.displayName} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-ink-7 text-ink-2 inline-flex items-center justify-center text-[12px] font-semibold flex-shrink-0">
+                    {picked.displayName.split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-ink leading-tight">{picked.displayName}</p>
+                  <p className="text-[11px] text-ink-3">{picked.email}</p>
+                </div>
+                <button onClick={() => { setPicked(null); setPickedRole('') }} className="text-[11px] text-ink-3 hover:text-ink">
+                  Pick someone else
+                </button>
+              </div>
+
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3 mb-1.5">
+                  As what role?
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {picked.capabilities.map(cap => (
+                    <button
+                      key={cap}
+                      onClick={() => setPickedRole(cap)}
+                      className={`text-[12px] font-medium rounded-full px-3 py-1 ring-1 transition-colors ${
+                        pickedRole === cap
+                          ? 'bg-ink text-white ring-ink'
+                          : 'bg-white text-ink-2 ring-ink-6 hover:ring-ink-4'
+                      }`}
+                    >
+                      {ROLE_LABEL[cap] ?? cap}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-ink-4 mt-1.5">
+                  Only the capabilities this person holds are pickable.
+                </p>
+              </div>
+
+              <label className="flex items-center gap-2 text-[12px] text-ink-2">
+                <input
+                  type="checkbox"
+                  checked={primary}
+                  onChange={e => setPrimaryFlag(e.target.checked)}
+                  className="rounded ring-1 ring-ink-6"
+                />
+                Make primary contact for this role
+              </label>
+
+              {error && (
+                <p className="text-[11px] text-rose-700 inline-flex items-start gap-1">
+                  <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                  {error}
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="p-3 border-b border-ink-6">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none" />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search by name, email, or role"
+                    autoFocus
+                    className="w-full text-[13px] pl-8 pr-3 py-2 rounded-lg ring-1 ring-ink-6 focus:ring-ink-3 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="p-8 text-center text-[12px] text-ink-3 inline-flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Loading specialists…
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="p-8 text-center text-[12px] text-ink-3">
+                  {candidates.length === 0
+                    ? 'No more specialists to assign. Invite new ones via /work/specialists.'
+                    : 'No specialists match those filters.'}
+                </div>
+              ) : (
+                <ul className="divide-y divide-ink-6/40">
+                  {filtered.map(c => (
+                    <li key={c.personId}>
+                      <button
+                        onClick={() => { setPicked(c); setPickedRole(c.capabilities[0] ?? '') }}
+                        className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-ink-7/40"
+                      >
+                        {c.avatarUrl ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={c.avatarUrl} alt={c.displayName} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-ink-7 text-ink-2 inline-flex items-center justify-center text-[11px] font-semibold flex-shrink-0">
+                            {c.displayName.split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-semibold text-ink leading-tight truncate">{c.displayName}</p>
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            {c.capabilityLabels.slice(0, 3).map(l => (
+                              <span key={l} className="text-[10px] font-medium text-ink-3 bg-ink-7 px-1.5 py-0.5 rounded-full">{l}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full ring-1 flex-shrink-0 ${
+                          c.availability === 'available' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                          : c.availability === 'limited' ? 'bg-amber-50 text-amber-700 ring-amber-200'
+                          : 'bg-ink-7 text-ink-3 ring-ink-6'
+                        }`}>
+                          {c.availability}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+
+        {picked && (
+          <div className="flex items-center justify-end gap-2 p-3 bg-ink-7/30 border-t border-ink-6">
+            <button onClick={onClose} disabled={busy} className="text-[13px] font-medium text-ink-3 hover:text-ink px-3 py-2">
+              Cancel
+            </button>
+            <button
+              onClick={submit}
+              disabled={busy || !pickedRole}
+              className="text-[13px] font-semibold bg-brand text-white rounded-lg px-4 py-2 hover:bg-brand-dark disabled:opacity-50 inline-flex items-center gap-1.5"
+            >
+              {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Assign
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

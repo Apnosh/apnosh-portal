@@ -88,13 +88,17 @@ interface AssignmentRow {
 export async function getTeamForClient(clientId: string): Promise<TeamMember[]> {
   const admin = createAdminClient()
 
-  // 1. Active assignments for this client.
+  // 1. Active AGENCY-SIDE assignments for this client. Explicitly
+  //    filter out client_owner / client_manager — those are the
+  //    restaurant's own staff, not the Apnosh team. A restaurant
+  //    owner viewing /dashboard/social/team shouldn't see themselves.
   const { data: assignments } = await admin
     .from('role_assignments')
     .select('person_id, role, is_primary_contact, current_focus, client_id')
     .eq('client_id', clientId)
     .is('ended_at', null)
     .neq('scope', 'global')  // pool-only rows don't belong here
+    .not('role', 'in', '(client_owner,client_manager)')
 
   if (!assignments?.length) return []
 
