@@ -11,7 +11,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { BarChart3, Star, MapPin, Layers } from 'lucide-react'
+import { useClient } from '@/lib/client-context'
 
 interface Tab {
   label: string
@@ -19,17 +21,41 @@ interface Tab {
   icon: React.ComponentType<{ className?: string }>
   /** Match exactly (overview) vs prefix-match (reviews, listing). */
   exact?: boolean
+  /** Hide the tab when the client has 0 or 1 connected locations — comparison
+     view only makes sense with multiple listings. */
+  multiLocationOnly?: boolean
 }
 
 const TABS: Tab[] = [
   { label: 'Overview', href: '/dashboard/local-seo', icon: BarChart3, exact: true },
   { label: 'Reviews', href: '/dashboard/local-seo/reviews', icon: Star },
   { label: 'Your listing', href: '/dashboard/local-seo/listing', icon: MapPin },
-  { label: 'Locations', href: '/dashboard/local-seo/locations', icon: Layers },
+  { label: 'Locations', href: '/dashboard/local-seo/locations', icon: Layers, multiLocationOnly: true },
 ]
 
 export default function LocalSeoNav() {
   const pathname = usePathname()
+  const { client } = useClient()
+  const [locationCount, setLocationCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!client?.id) return
+    let cancelled = false
+    fetch(`/api/dashboard/locations?clientId=${encodeURIComponent(client.id)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (cancelled || !json) return
+        const n = Array.isArray(json?.locations) ? json.locations.length : 0
+        setLocationCount(n)
+      })
+      .catch(() => { /* leave null, render conservatively */ })
+    return () => { cancelled = true }
+  }, [client?.id])
+
+  const visible = TABS.filter(t => {
+    if (!t.multiLocationOnly) return true
+    return locationCount !== null && locationCount > 1
+  })
 
   function isActive(t: Tab): boolean {
     if (t.exact) return pathname === t.href
@@ -43,7 +69,7 @@ export default function LocalSeoNav() {
     >
       <div className="max-w-5xl mx-auto px-4 lg:px-6">
         <div className="flex items-center gap-1 overflow-x-auto -mb-px">
-          {TABS.map(t => {
+          {visible.map(t => {
             const Icon = t.icon
             const active = isActive(t)
             return (

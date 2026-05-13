@@ -95,48 +95,99 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
     }
   }
 
-  /* 3. Enumerate every location the token can see. */
-  const allLocations: DiscoveredLocation[] = []
-  try {
-    const accounts = await listGBPAccounts(accessToken)
-    for (const a of accounts) {
-      try {
-        const locs = await listGBPLocations(accessToken, a.name)
-        for (const l of locs) {
-          allLocations.push({
-            name: l.name,
-            title: l.title,
-            storeCode: l.storeCode,
-            accountName: a.name,
-          })
-        }
-      } catch (err) {
-        errors.push(`list locations (${a.accountName}): ${(err as Error).message}`)
+  /* 3. Decide which location is the "linked" one for this client.
+        Earlier versions of this sync enumerated every accessible
+        location and claimed each one for the syncing client — that
+        was wrong: an agency owner connecting via OAuth has manager
+        access to dozens of unrelated restaurant listings, and we'd
+        pull them all in. Now we strictly use the one location that
+        was picked during connect (channel_connections.platform_account_id).
+
+        Only path that still needs enumeration is finalizing a
+        still-pending connection that has exactly one accessible
+        location — single-listing restaurants get auto-finalized so
+        they don't have to deal with a picker UI. */
+  let linkedResource: { accountName: string; locationName: string; title: string } | null = null
+
+  if (conn.platform_account_id && conn.platform_account_id !== 'pending') {
+    /* Already linked: parse "accounts/{a}/locations/{l}". */
+    const m = /^accounts\/([^/]+)\/locations\/([^/]+)$/.exec(conn.platform_account_id)
+    if (m) {
+      linkedResource = {
+        accountName: `accounts/${m[1]}`,
+        locationName: `locations/${m[2]}`,
+        title: conn.platform_account_name ?? '',
       }
     }
-  } catch (err) {
-    return { ...emptyResult, message: `Failed to list GBP accounts: ${(err as Error).message}` }
   }
 
-  /* 4. Upsert gbp_locations rows so reviews + future metrics can find them. */
-  for (const loc of allLocations) {
-    /* store_code uniqueness is across-the-board; if another client
-       has already claimed this store_code we leave their ownership
-       alone and only refresh display fields. */
+  if (!linkedResource && conn.status === 'pending') {
+    /* Auto-finalize single-listing restaurants. Anyone with multiple
+       must go through the picker page. */
+    const discovered: DiscoveredLocation[] = []
+    try {
+      const accounts = await listGBPAccounts(accessToken)
+      for (const a of accounts) {
+        const locs = await listGBPLocations(accessToken, a.name).catch(() => [])
+        for (const l of locs) {
+          discovered.push({ name: l.name, title: l.title, storeCode: l.storeCode, accountName: a.name })
+        }
+      }
+    } catch (err) {
+      return { ...emptyResult, message: `Failed to list GBP accounts: ${(err as Error).message}` }
+    }
+
+    if (discovered.length === 1) {
+      const loc = discovered[0]
+      const resourceName = `${loc.accountName}/${loc.name}`
+      await admin
+        .from('channel_connections')
+        .update({
+          status: 'active',
+          platform_account_id: resourceName,
+          platform_account_name: loc.title,
+          metadata: {
+            ...(conn.metadata ?? {}),
+            account_id: loc.accountName.replace('accounts/', ''),
+            location_id: loc.name,
+          },
+        })
+        .eq('id', conn.id)
+      linkedResource = {
+        accountName: loc.accountName,
+        locationName: loc.name,
+        title: loc.title,
+      }
+    } else {
+      return {
+        ok: false,
+        locationsDiscovered: discovered.length,
+        metricsImported: 0,
+        reviewsImported: 0,
+        errors,
+        message: `Pick which location to link — you have manager access to ${discovered.length} listings`,
+      }
+    }
+  }
+
+  if (!linkedResource) {
+    return { ...emptyResult, message: 'Connection has no linked location' }
+  }
+
+  /* 4. Upsert ONLY the linked location into gbp_locations. */
+  const storeCode = linkedResource.locationName.replace('locations/', '')
+  {
     const { data: existing } = await admin
       .from('gbp_locations')
       .select('id, client_id')
-      .eq('store_code', loc.name.replace('locations/', ''))
+      .eq('store_code', storeCode)
       .maybeSingle()
-
-    const storeCode = loc.name.replace('locations/', '')
     if (existing) {
       await admin
         .from('gbp_locations')
         .update({
-          location_name: loc.title,
+          location_name: linkedResource.title,
           last_seen_at: new Date().toISOString(),
-          /* Only claim it for this client if it was unclaimed before. */
           ...(existing.client_id ? {} : { client_id: clientId }),
         })
         .eq('id', existing.id)
@@ -145,34 +196,20 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
         .from('gbp_locations')
         .insert({
           store_code: storeCode,
-          location_name: loc.title,
+          location_name: linkedResource.title,
           client_id: clientId,
           last_seen_at: new Date().toISOString(),
         })
     }
   }
 
-  /* 5. If the connection is still pending and we have exactly one
-        location, finalize it. platform_account_id is stored as the
-        full resource name "accounts/{a}/locations/{l}" — the publish
-        path needs that shape, and per-endpoint parsing is trivial. */
-  if (conn.status === 'pending' && allLocations.length === 1) {
-    const loc = allLocations[0]
-    const resourceName = `${loc.accountName}/${loc.name}`
-    await admin
-      .from('channel_connections')
-      .update({
-        status: 'active',
-        platform_account_id: resourceName,
-        platform_account_name: loc.title,
-        metadata: {
-          ...(conn.metadata ?? {}),
-          account_id: loc.accountName.replace('accounts/', ''),
-          location_id: loc.name,
-        },
-      })
-      .eq('id', conn.id)
-  }
+  /* Surface a single-entry "discovered" array so the rest of the sync
+     (metrics + reviews loops) keeps the same shape. */
+  const allLocations: DiscoveredLocation[] = [{
+    name: linkedResource.locationName,
+    title: linkedResource.title,
+    accountName: linkedResource.accountName,
+  }]
 
   /* 6. Pull the last 7 days of metrics for every location we just
         claimed. The Business Profile Performance API typically has a
