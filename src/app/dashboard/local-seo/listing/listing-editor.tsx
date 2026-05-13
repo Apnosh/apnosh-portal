@@ -395,6 +395,16 @@ export default function ListingEditor() {
         </Section>
       )}
 
+      {/* Recent edits — surface the audit log so owners + strategists
+         can see who changed what when, without having to ask Apnosh
+         staff to dig through logs. */}
+      <Section
+        label="Recent edits"
+        hint="Every change made to this listing through the portal."
+      >
+        <AuditHistory />
+      </Section>
+
       {/* Photos + posts await v4 API approval. Surface clearly so owners
          know they're coming, not missing. */}
       <Section
@@ -628,6 +638,109 @@ function CategoryPill({ cat, isPrimary, onRemove, onMakePrimary }: {
       <button onClick={onRemove} className="text-ink-4 hover:text-rose-600" title="Remove">
         <X className="w-3.5 h-3.5" />
       </button>
+    </div>
+  )
+}
+
+interface AuditEntry {
+  id: string
+  actor_email: string | null
+  action: string
+  fields: unknown
+  error: string | null
+  created_at: string
+}
+
+function actionLabel(action: string): string {
+  switch (action) {
+    case 'update_listing': return 'Edited listing info'
+    case 'update_attributes': return 'Updated attributes'
+    case 'update_menu': return 'Edited menu'
+    case 'reply_to_review': return 'Replied to review'
+    default: return action.replace(/_/g, ' ')
+  }
+}
+
+function fieldsSummary(fields: unknown): string {
+  if (Array.isArray(fields)) return fields.length === 0 ? '' : fields.join(', ')
+  if (fields && typeof fields === 'object') {
+    const obj = fields as Record<string, unknown>
+    return Object.entries(obj)
+      .filter(([, v]) => v !== null && v !== undefined)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(', ')
+  }
+  return ''
+}
+
+function relTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function AuditHistory() {
+  const [entries, setEntries] = useState<AuditEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/dashboard/listing/audit')
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (json) setEntries(json.entries ?? [])
+      })
+      .catch(() => { /* leave empty */ })
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return <p className="text-[12px] text-ink-4 italic">Loading history…</p>
+  }
+  if (entries.length === 0) {
+    return <p className="text-[12px] text-ink-4 italic">No edits yet. Changes you save will show up here.</p>
+  }
+
+  const visible = expanded ? entries : entries.slice(0, 5)
+
+  return (
+    <div className="space-y-1.5">
+      {visible.map(e => {
+        const summary = fieldsSummary(e.fields)
+        return (
+          <div key={e.id} className="flex items-start gap-3 text-[12.5px] py-1.5">
+            <span className="text-[10.5px] text-ink-4 tabular-nums w-[60px] flex-shrink-0 mt-0.5">
+              {relTime(e.created_at)}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-ink-2">
+                <strong className="text-ink">{actionLabel(e.action)}</strong>
+                {summary && <span className="text-ink-3"> · {summary}</span>}
+                {e.error && (
+                  <span className="ml-1.5 text-[10.5px] uppercase tracking-wider font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded">
+                    failed
+                  </span>
+                )}
+              </p>
+              <p className="text-[10.5px] text-ink-4 mt-0.5">{e.actor_email ?? 'someone'}</p>
+            </div>
+          </div>
+        )
+      })}
+      {entries.length > 5 && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-[12px] font-medium text-brand-dark hover:text-brand mt-1"
+        >
+          {expanded ? `Show fewer` : `Show ${entries.length - 5} more`}
+        </button>
+      )}
     </div>
   )
 }

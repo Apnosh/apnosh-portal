@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from '@/lib/realtime'
 import { useClient } from '@/lib/client-context'
 import { getReviewsPerformance, type ReviewsPerformance } from '@/lib/dashboard/get-channel-performance'
+import { getPlatformReviewSnapshots, type PlatformSnapshot } from '@/lib/dashboard/get-platform-reviews'
 import ChannelHero from '@/components/dashboard/channel-hero'
 import type { Review, ReviewSource } from '@/types/database'
 import ConnectEmptyState from '../connect-empty-state'
@@ -48,6 +49,69 @@ function Stars({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'md' | '
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+/* Per-platform summary card. For platforms where we can't fetch
+   individual reviews (Yelp, future TripAdvisor), this is the only
+   surface where their data appears. Connect CTA shows up when the
+   platform isn't linked yet so owners have a clear path forward. */
+function PlatformCard({ snapshot }: { snapshot: PlatformSnapshot }) {
+  const platformInfo: Record<PlatformSnapshot['platform'], { label: string; color: string; bg: string; connectPath: string }> = {
+    google: { label: 'Google', color: 'text-blue-700', bg: 'bg-blue-50', connectPath: '/dashboard/connected-accounts' },
+    yelp: { label: 'Yelp', color: 'text-red-700', bg: 'bg-red-50', connectPath: '/dashboard/connected-accounts/yelp' },
+    facebook: { label: 'Facebook', color: 'text-sky-700', bg: 'bg-sky-50', connectPath: '/dashboard/connected-accounts' },
+    tripadvisor: { label: 'TripAdvisor', color: 'text-green-700', bg: 'bg-green-50', connectPath: '/dashboard/connected-accounts' },
+    other: { label: 'Other', color: 'text-ink-3', bg: 'bg-ink-7', connectPath: '/dashboard/connected-accounts' },
+  }
+  const info = platformInfo[snapshot.platform]
+
+  if (!snapshot.connected) {
+    return (
+      <Link
+        href={info.connectPath}
+        className="block rounded-2xl border border-dashed border-ink-5 bg-white p-4 hover:border-ink-4 hover:bg-bg-2/30 transition-colors"
+      >
+        <div className="flex items-center justify-between">
+          <span className={`text-[12px] font-bold uppercase tracking-wider ${info.color} ${info.bg} px-2 py-0.5 rounded`}>
+            {info.label}
+          </span>
+          <span className="text-[12px] text-ink-3 font-medium">Connect →</span>
+        </div>
+        <p className="text-[12px] text-ink-3 mt-3">
+          {snapshot.platform === 'yelp'
+            ? 'See your Yelp rating and review count. (Yelp doesn\'t share individual review text via their API, so reviews show here as a summary only.)'
+            : `Track ${info.label} performance.`}
+        </p>
+      </Link>
+    )
+  }
+
+  return (
+    <div className="rounded-2xl border border-ink-6 bg-white p-4">
+      <div className="flex items-center justify-between mb-3">
+        <span className={`text-[12px] font-bold uppercase tracking-wider ${info.color} ${info.bg} px-2 py-0.5 rounded`}>
+          {info.label}
+        </span>
+        {!snapshot.hasIndividualReviews && (
+          <span className="text-[10px] text-ink-4">Summary only</span>
+        )}
+      </div>
+      <div className="flex items-baseline gap-3 mb-1.5">
+        <div className="text-[28px] font-semibold text-ink tabular-nums leading-none">
+          {snapshot.ratingAvg !== null ? snapshot.ratingAvg.toFixed(1) : '—'}
+        </div>
+        {snapshot.ratingAvg !== null && (
+          <Stars rating={snapshot.ratingAvg} size="sm" />
+        )}
+      </div>
+      <div className="text-[11.5px] text-ink-3">
+        {snapshot.reviewCount.toLocaleString()} review{snapshot.reviewCount === 1 ? '' : 's'}
+        {snapshot.newReviewsThisMonth > 0 && (
+          <> · <strong className="text-emerald-700">+{snapshot.newReviewsThisMonth}</strong> this month</>
+        )}
+      </div>
+    </div>
+  )
 }
 
 /* Inline reply composer. Posts to /api/dashboard/reviews/[id]/reply
@@ -148,6 +212,7 @@ export default function ReviewsPage() {
 
   const [reviews, setReviews] = useState<Review[]>([])
   const [perf, setPerf] = useState<ReviewsPerformance | null>(null)
+  const [platforms, setPlatforms] = useState<PlatformSnapshot[]>([])
   const [loading, setLoading] = useState(true)
   const [v4Enabled, setV4Enabled] = useState(false)
   const [connected, setConnected] = useState<boolean | null>(null)
@@ -159,17 +224,19 @@ export default function ReviewsPage() {
   const load = useCallback(async () => {
     if (!client?.id) { setLoading(false); return }
 
-    const [reviewsRes, perfRes] = await Promise.all([
+    const [reviewsRes, perfRes, platformRes] = await Promise.all([
       supabase
         .from('reviews')
         .select('*')
         .eq('client_id', client.id)
         .order('posted_at', { ascending: false }),
       getReviewsPerformance(client.id).catch(() => null),
+      getPlatformReviewSnapshots(client.id).catch(() => [] as PlatformSnapshot[]),
     ])
 
     setReviews((reviewsRes.data ?? []) as Review[])
     setPerf(perfRes)
+    setPlatforms(platformRes)
     setLoading(false)
   }, [client?.id, supabase])
 
@@ -281,6 +348,17 @@ export default function ReviewsPage() {
       {/* Performance hero — average star, new-review count, response rate */}
       {perf && (
         <ChannelHero title="Reviews performance · last 30 days" summary={perf.summary} metrics={perf.metrics} />
+      )}
+
+      {/* Per-platform performance cards. Surfaces Yelp summary even
+         though Yelp Fusion free tier doesn't expose review text. */}
+      {platforms.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-ink mb-3">By platform</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {platforms.map(p => <PlatformCard key={p.platform} snapshot={p} />)}
+          </div>
+        </div>
       )}
 
       {!hasData ? (
