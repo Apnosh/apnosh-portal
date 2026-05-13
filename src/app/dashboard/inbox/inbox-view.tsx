@@ -64,37 +64,35 @@ const SEVERITY: Record<ThreadSeverity, { label: string; rowBg: string; pillBg: s
   },
 }
 
+type KindTab = 'all' | 'approval' | 'review' | 'message'
+
 export default function InboxView({
   threads, strategist,
 }: {
   threads: InboxThread[]
   strategist: PrimaryStrategist | null
 }) {
-  const [lens, setLens] = useState<Lens>(() => {
-    const needsCount = threads.filter(t => t.severity === 'urgent' || t.severity === 'soon').length
-    return needsCount > 0 ? 'needs' : 'all'
-  })
-  const [kindFilter, setKindFilter] = useState<ThreadKind | 'all'>('all')
-  const [channel, setChannel] = useState<string>('all')
-  const [sentiment, setSentiment] = useState<string>('all')
+  /* One tab row replaces the older lens + kind chips. Messages collapses
+     DMs, comments, and mentions because owners don't distinguish them. */
+  const [tab, setTab] = useState<KindTab>('all')
+  const [showHandled, setShowHandled] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const strategistFirst = strategist?.firstName ?? 'your strategist'
   const StrategistFirst = strategist?.firstName ?? 'Your strategist'
 
+  const matchesTab = useCallback((t: InboxThread) => {
+    if (tab === 'all') return true
+    if (tab === 'approval') return t.kind === 'approval'
+    if (tab === 'review') return t.kind === 'review'
+    return t.kind === 'dm' || t.kind === 'comment' || t.kind === 'mention'
+  }, [tab])
+
   const filtered = useMemo(() => {
     return threads.filter(t => {
-      if (lens === 'needs' && !(t.severity === 'urgent' || t.severity === 'soon')) return false
-      if (lens === 'handling' && t.severity !== 'handled') return false
-      if (kindFilter !== 'all' && t.kind !== kindFilter) return false
-      if (channel !== 'all' && t.platform !== channel) return false
-      if (sentiment !== 'all') {
-        const matchesPositive = sentiment === 'positive' && ((t.rating ?? 0) >= 4 || t.tags.includes('positive'))
-        const matchesNeutral = sentiment === 'neutral' && (t.rating === 3 || t.tags.includes('neutral'))
-        const matchesNegative = sentiment === 'negative' && ((t.rating ?? 0) <= 2 && t.rating !== null || t.tags.includes('negative'))
-        if (!matchesPositive && !matchesNeutral && !matchesNegative) return false
-      }
+      if (!matchesTab(t)) return false
+      if (!showHandled && t.severity === 'handled') return false
       if (search.trim()) {
         const q = search.trim().toLowerCase()
         const hay = `${t.authorName} ${t.text} ${t.tags.join(' ')}`.toLowerCase()
@@ -102,7 +100,20 @@ export default function InboxView({
       }
       return true
     })
-  }, [threads, lens, kindFilter, channel, sentiment, search])
+  }, [threads, matchesTab, showHandled, search])
+
+  /* Per-tab open counts (excluding handled). */
+  const counts = useMemo(() => {
+    const c = { all: 0, approval: 0, review: 0, message: 0 }
+    for (const t of threads) {
+      if (t.severity === 'handled') continue
+      c.all += 1
+      if (t.kind === 'approval') c.approval += 1
+      else if (t.kind === 'review') c.review += 1
+      else c.message += 1
+    }
+    return c
+  }, [threads])
 
   /* Auto-select first thread when filter changes. */
   const selected = useMemo(() => {
@@ -113,14 +124,17 @@ export default function InboxView({
     return filtered[0] ?? null
   }, [filtered, selectedId])
 
-  const needsCount = threads.filter(t => t.severity === 'urgent' || t.severity === 'soon').length
-  const handlingCount = threads.filter(t => t.severity === 'handled').length
-
   const bulkApprove5Star = useCallback(() => {
-    // Future: POST to a bulk-approve endpoint that runs through review-reply
-    // for every drafted 5★ in the current filter. v1 is a no-op stub —
-    // routed out to the reviews queue.
+    /* Future: POST to a bulk-approve endpoint that runs through review-reply
+       for every drafted 5★ in the current filter. v1 is a no-op stub. */
   }, [])
+
+  const TABS: { key: KindTab; label: string; count: number }[] = [
+    { key: 'all', label: 'All', count: counts.all },
+    { key: 'approval', label: 'Approvals', count: counts.approval },
+    { key: 'review', label: 'Reviews', count: counts.review },
+    { key: 'message', label: 'Messages', count: counts.message },
+  ]
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-bg-2">
@@ -132,96 +146,65 @@ export default function InboxView({
             Inbox
           </h1>
           <p className="text-[12.5px] text-ink-3 mt-1.5">
-            Every place customers reach you. {StrategistFirst} drafts replies; you approve or rewrite.
+            Everything that needs you. {StrategistFirst} drafts replies; you approve or rewrite.
           </p>
         </div>
         <div className="text-[12px] text-ink-3">
-          <strong className="text-ink-2 font-medium">{filtered.length}</strong> thread{filtered.length === 1 ? '' : 's'} shown
+          <strong className="text-ink-2 font-medium">{filtered.length}</strong> shown
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="px-4 lg:px-8 py-3 bg-white border-b border-ink-6 flex flex-wrap items-center gap-2">
-        {/* Lens segmented control */}
-        <div className="inline-flex bg-ink-7 rounded-full p-0.5">
-          {[
-            ['needs', 'Needs you', needsCount],
-            ['handling', `${StrategistFirst} handling`, handlingCount],
-            ['all', 'All', threads.length],
-          ].map(([v, l, n]) => {
-            const active = lens === v
+      {/* Simplified toolbar: kind tabs · show-handled toggle · search · bulk-approve (only on Reviews) */}
+      <div className="px-4 lg:px-8 bg-white border-b border-ink-6 flex flex-wrap items-center gap-3">
+        {/* Underline tabs */}
+        <nav className="flex items-center gap-1 -mb-px">
+          {TABS.map(t => {
+            const active = tab === t.key
             return (
               <button
-                key={String(v)}
-                onClick={() => setLens(v as Lens)}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[12px] font-medium transition-colors ${active ? 'bg-white shadow-sm text-ink' : 'text-ink-2 hover:text-ink'}`}
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`relative px-3.5 py-3 text-[13px] font-semibold transition-colors ${active ? 'text-ink' : 'text-ink-3 hover:text-ink-2'}`}
               >
-                {l}
-                <span className="text-[10px] text-ink-4 font-normal">{n}</span>
+                {t.label}
+                <span className={`ml-1.5 text-[10.5px] font-normal ${active ? 'text-ink-3' : 'text-ink-4'}`}>{t.count}</span>
+                {active && <span className="absolute left-0 right-0 -bottom-px h-[2px] bg-brand rounded-full" />}
               </button>
             )
           })}
-        </div>
-
-        <div className="w-px h-5 bg-ink-6" />
-
-        {/* Kind chips — let the owner narrow by what type of thing it is */}
-        <div className="inline-flex items-center gap-1 flex-wrap">
-          {([
-            { k: 'all', label: 'All types' },
-            { k: 'approval', label: 'Approvals' },
-            { k: 'review', label: 'Reviews' },
-            { k: 'dm', label: 'DMs' },
-            { k: 'comment', label: 'Comments' },
-          ] as { k: ThreadKind | 'all'; label: string }[]).map(({ k, label }) => {
-            const count = k === 'all' ? threads.length : threads.filter(t => t.kind === k).length
-            const active = kindFilter === k
-            if (k !== 'all' && count === 0) return null
-            return (
-              <button
-                key={k}
-                onClick={() => setKindFilter(k)}
-                className={`text-[11.5px] font-medium rounded-full px-2.5 py-1 ring-1 transition-colors ${
-                  active ? 'bg-ink text-white ring-ink' : 'bg-white text-ink-2 ring-ink-6 hover:ring-ink-4'
-                }`}
-              >
-                {label}
-                <span className={`ml-1 text-[10px] ${active ? 'text-white/70' : 'text-ink-4'}`}>{count}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        <select value={channel} onChange={e => setChannel(e.target.value)} className="text-[12px] px-2.5 py-1 rounded-md ring-1 ring-ink-6 bg-white text-ink-2 focus:outline-none focus:ring-ink-3">
-          <option value="all">All channels</option>
-          <option value="google">Google</option>
-          <option value="yelp">Yelp</option>
-          <option value="instagram">Instagram</option>
-          <option value="facebook">Facebook</option>
-        </select>
-        <select value={sentiment} onChange={e => setSentiment(e.target.value)} className="text-[12px] px-2.5 py-1 rounded-md ring-1 ring-ink-6 bg-white text-ink-2 focus:outline-none focus:ring-ink-3">
-          <option value="all">Any sentiment</option>
-          <option value="positive">Positive</option>
-          <option value="neutral">Neutral</option>
-          <option value="negative">Negative</option>
-        </select>
+        </nav>
 
         <div className="flex-1" />
+
+        <label className="inline-flex items-center gap-1.5 text-[12px] text-ink-3 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showHandled}
+            onChange={e => setShowHandled(e.target.checked)}
+            className="rounded border-ink-5 text-brand focus:ring-brand"
+          />
+          Show handled
+        </label>
 
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-4 pointer-events-none" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search inbox…"
-            className="text-[12px] pl-8 pr-3 py-1.5 rounded-md ring-1 ring-ink-6 bg-white focus:outline-none focus:ring-ink-3 w-[200px]"
+            placeholder="Search…"
+            className="text-[12px] pl-8 pr-3 py-1.5 rounded-md ring-1 ring-ink-6 bg-white focus:outline-none focus:ring-ink-3 w-[180px]"
           />
         </div>
 
-        <button onClick={bulkApprove5Star} className="text-[12px] font-medium ring-1 ring-ink-5 text-ink-2 hover:text-ink rounded-md px-3 py-1.5 inline-flex items-center gap-1.5">
-          <Check className="w-3.5 h-3.5" />
-          Bulk approve · 5★
-        </button>
+        {tab === 'review' && counts.review > 0 && (
+          <button
+            onClick={bulkApprove5Star}
+            className="text-[12px] font-medium ring-1 ring-ink-5 text-ink-2 hover:text-ink rounded-md px-3 py-1.5 inline-flex items-center gap-1.5"
+          >
+            <Check className="w-3.5 h-3.5" />
+            Bulk approve · 5★
+          </button>
+        )}
       </div>
 
       {/* Two pane */}
