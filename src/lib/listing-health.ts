@@ -16,6 +16,7 @@
 
 import { getClientListing, getClientAttributes } from '@/lib/gbp-listing'
 import { getClientMenuLink } from '@/lib/gbp-menu'
+import { upcomingHolidayDates } from '@/lib/us-holidays'
 
 export interface HealthCheck {
   id: string
@@ -207,44 +208,3 @@ export async function getListingHealth(
   return { score, status, checks, topFixes }
 }
 
-/* Curated US restaurant-relevant holidays. Add per-year because
-   some shift (Thanksgiving = 4th Thursday). Keep this list short
-   and high-impact — it powers both the health check and the
-   holiday-hours reminder cron. */
-export function upcomingHolidayDates(windowDays: number): Array<{ date: string; label: string }> {
-  const all = US_RESTAURANT_HOLIDAYS
-  const now = new Date()
-  const cutoff = new Date()
-  cutoff.setUTCDate(cutoff.getUTCDate() + windowDays)
-  return all.filter(h => {
-    const d = new Date(h.date + 'T00:00:00Z')
-    return d >= now && d <= cutoff
-  })
-}
-
-export const US_RESTAURANT_HOLIDAYS: Array<{ date: string; label: string }> = [
-  /* 2026 */
-  { date: '2026-01-01', label: "New Year's Day" },
-  { date: '2026-02-14', label: "Valentine's Day" },
-  { date: '2026-05-10', label: "Mother's Day" },
-  { date: '2026-05-25', label: 'Memorial Day' },
-  { date: '2026-06-21', label: "Father's Day" },
-  { date: '2026-07-04', label: 'Independence Day' },
-  { date: '2026-09-07', label: 'Labor Day' },
-  { date: '2026-11-26', label: 'Thanksgiving' },
-  { date: '2026-12-24', label: 'Christmas Eve' },
-  { date: '2026-12-25', label: 'Christmas Day' },
-  { date: '2026-12-31', label: "New Year's Eve" },
-  /* 2027 */
-  { date: '2027-01-01', label: "New Year's Day" },
-  { date: '2027-02-14', label: "Valentine's Day" },
-  { date: '2027-05-09', label: "Mother's Day" },
-  { date: '2027-05-31', label: 'Memorial Day' },
-  { date: '2027-06-20', label: "Father's Day" },
-  { date: '2027-07-04', label: 'Independence Day' },
-  { date: '2027-09-06', label: 'Labor Day' },
-  { date: '2027-11-25', label: 'Thanksgiving' },
-  { date: '2027-12-24', label: 'Christmas Eve' },
-  { date: '2027-12-25', label: 'Christmas Day' },
-  { date: '2027-12-31', label: "New Year's Eve" },
-]

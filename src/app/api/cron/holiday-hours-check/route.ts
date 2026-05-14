@@ -13,7 +13,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getClientListing } from '@/lib/gbp-listing'
-import { upcomingHolidayDates } from '@/lib/listing-health'
+import { upcomingHolidayDates } from '@/lib/us-holidays'
 import { createNotification } from '@/lib/notifications'
 
 export const dynamic = 'force-dynamic'
