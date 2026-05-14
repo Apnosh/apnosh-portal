@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import ClarityCard from '@/components/dashboard/clarity-card'
+import CommerceFunnelCard from '@/components/dashboard/commerce-funnel-card'
 import { useRealtimeRefresh } from '@/lib/realtime'
 import { useClient } from '@/lib/client-context'
 import {
@@ -457,6 +458,19 @@ export default function WebsiteTrafficPage() {
           {/* Google search position over time. Inverted (lower
               position = better, so chart "going up" = improving). */}
           {positionSeries.length >= 3 && <PositionChart series={positionSeries} />}
+
+          {/* Commerce funnels — orders + reservations side-by-side. */}
+          {(() => {
+            const { start, end } = RANGE_OPTIONS[rangeKey].compute()
+            const s = toDateStr(start)
+            const e = toDateStr(end)
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <CommerceFunnelCard kind="order" startDate={s} endDate={e} clientSlug={client?.slug} />
+                <CommerceFunnelCard kind="reservation" startDate={s} endDate={e} clientSlug={client?.slug} />
+              </div>
+            )
+          })()}
 
           {/* Heatmaps + session recordings via Microsoft Clarity. */}
           {client?.id && (
