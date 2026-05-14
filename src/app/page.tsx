@@ -1,19 +1,25 @@
 /**
- * Root route — bounce to the right home based on role.
+ * Root route — bounce to the right home based on the user's
+ * highest-priority capability.
  *
- *   - No session            -> /login
- *   - profiles.role=admin   -> /admin (Apnosh staff console)
- *   - everyone else         -> /dashboard (client portal)
+ *   - No session              -> /login
+ *   - Has any capability      -> that capability's landingPath
+ *                                  (admin -> /admin
+ *                                   strategist -> /work/clients
+ *                                   client_owner -> /dashboard
+ *                                   etc.)
+ *   - No capability + has client membership (legacy fallback)
+ *                              -> /dashboard
+ *   - Nothing                  -> /login
  *
- * The auth/callback route does this same check after OAuth, but
- * users who hit / directly (typed URL, bookmark, signed-in cookie
- * from another tab) bypass that path. Without this redirect, Apnosh
- * staff land on the client portal and have to manually navigate to
- * /admin.
+ * Previously this hardcoded admin -> /admin, everyone else -> /dashboard.
+ * Internal users with only strategist/designer/etc. capabilities were
+ * silently routed to the client portal, which feels broken.
  */
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getActiveRole } from '@/lib/auth/capabilities'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,14 +28,14 @@ export default async function Home() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
+  /* Honor the capability system: it already knows each role's
+     correct landing path (admin -> /admin, strategist -> /work/clients,
+     client_owner -> /dashboard, etc.) and picks the highest-priority
+     capability the user holds. */
+  const role = await getActiveRole()
+  if (role?.landingPath) redirect(role.landingPath)
 
-  if ((profile?.role as string | null) === 'admin') {
-    redirect('/admin')
-  }
+  /* No capabilities at all — last-resort fallback for very old
+     accounts that never got migrated. */
   redirect('/dashboard')
 }
