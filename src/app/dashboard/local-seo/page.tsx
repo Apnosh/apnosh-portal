@@ -183,36 +183,36 @@ function LocalSeoContent() {
         </div>
       )}
 
-      {/* How your local presence is doing */}
-      <div className="db-fade db-d1">
-        <StatusBanner
-          headline={view.headline}
-          businessName={businessName}
-          pct={view.pct}
-          up={view.up}
-        />
-      </div>
-
-      {/* Your main number */}
-      <div className="db-fade db-d3">
-        <HeroMetric ctx={view.ctx} num={view.num} pctFull={view.pctFull} up={view.up} />
-      </div>
-
-      {/* Your trend over time */}
-      <div className="db-fade db-d4">
-        <TrendChart
-          data={view.chartData}
-          timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
-          up={view.up}
-          unit={view.unit}
-        />
-      </div>
-
-      {/* The breakdown */}
-      <div className="db-fade db-d5">
-        <MetricGrid title={view.bdtitle} metrics={view.metrics} />
-      </div>
+      {(() => {
+        const r = view.byRange?.[timeRange]
+        const num = r?.num ?? view.num
+        const pct = r?.pct ?? view.pct
+        const pctFull = r?.pctFull ?? view.pctFull
+        const up = r?.up ?? view.up
+        const metrics = r?.metrics ?? view.metrics
+        return (
+          <>
+            <div className="db-fade db-d1">
+              <StatusBanner headline={view.headline} businessName={businessName} pct={pct} up={up} />
+            </div>
+            <div className="db-fade db-d3">
+              <HeroMetric ctx={view.ctx} num={num} pctFull={pctFull} up={up} />
+            </div>
+            <div className="db-fade db-d4">
+              <TrendChart
+                data={view.chartData}
+                timeRange={timeRange}
+                onTimeRangeChange={setTimeRange}
+                up={up}
+                unit={view.unit}
+              />
+            </div>
+            <div className="db-fade db-d5">
+              <MetricGrid title={view.bdtitle} metrics={metrics} />
+            </div>
+          </>
+        )
+      })()}
 
       {/* Per-location panel — only for multi-location clients viewing all.
          Sorted by total interactions; shows top performers and easy-to-spot

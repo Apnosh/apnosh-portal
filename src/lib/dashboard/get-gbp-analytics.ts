@@ -14,7 +14,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export type AnalyticsRange = '7d' | '30d' | '90d' | '12m'
+export type AnalyticsRange = '7d' | '30d' | '90d' | '12m' | 'custom'
 
 export interface DailyPoint {
   date: string
@@ -43,9 +43,8 @@ export interface AnalyticsSummary {
     bookings: number
     foodOrders: number
   }
-  /* Same totals for the immediately preceding window of the same
-     length, so the UI can show percentage deltas without a second
-     round-trip. */
+  /* Totals for the SAME calendar window one year ago (YoY). Restaurants
+     are seasonal, so YoY is more meaningful than prior-period. */
   prevTotals: AnalyticsSummary['totals']
 }
 
@@ -73,14 +72,26 @@ function ymd(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
+export interface AnalyticsOptions {
+  range?: AnalyticsRange
+  /** Used when range === 'custom'. YYYY-MM-DD inclusive. */
+  customStart?: string
+  customEnd?: string
+  locationId?: string | null
+}
+
 export async function getGbpAnalytics(
   clientId: string,
-  range: AnalyticsRange = '30d',
-  /* Optional filter to a single client_locations.id. When set, only
-     that location's gbp_metrics rows contribute to the totals.
-     `null` = aggregate across all locations. */
-  locationId: string | null = null,
+  rangeOrOptions: AnalyticsRange | AnalyticsOptions = '30d',
+  /* Legacy positional locationId arg — kept for backwards compat with
+     existing callers; new code should pass AnalyticsOptions. */
+  legacyLocationId: string | null = null,
 ): Promise<AnalyticsSummary> {
+  const opts: AnalyticsOptions = typeof rangeOrOptions === 'string'
+    ? { range: rangeOrOptions, locationId: legacyLocationId }
+    : rangeOrOptions
+  const range: AnalyticsRange = opts.range ?? '30d'
+  const locationId = opts.locationId ?? null
   const admin = createAdminClient()
   const days = rangeToDays(range)
 
@@ -96,19 +107,30 @@ export async function getGbpAnalytics(
     metricsLocationId = (loc?.gbp_location_id as string | null) ?? null
   }
 
-  /* The Performance API typically lags ~3 days, so anchor the window
-     end at 1 day ago to avoid leading zeros polluting the view. */
-  const endDate = new Date()
-  endDate.setUTCDate(endDate.getUTCDate() - 1)
-  const startDate = new Date(endDate)
-  startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
+  /* Build the current window. Custom ranges use the caller-supplied
+     dates verbatim; preset ranges anchor to "today − 3" (the Performance
+     API's documented reporting lag boundary) so we never include
+     dates Google hasn't aggregated yet. */
+  let startDate: Date
+  let endDate: Date
+  if (range === 'custom' && opts.customStart && opts.customEnd) {
+    startDate = new Date(opts.customStart + 'T00:00:00Z')
+    endDate = new Date(opts.customEnd + 'T00:00:00Z')
+  } else {
+    endDate = new Date()
+    endDate.setUTCDate(endDate.getUTCDate() - 3)
+    startDate = new Date(endDate)
+    startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
+  }
 
-  /* Prior-period window of the same length, ending the day before
-     the current window starts. */
-  const prevEndDate = new Date(startDate)
-  prevEndDate.setUTCDate(prevEndDate.getUTCDate() - 1)
-  const prevStartDate = new Date(prevEndDate)
-  prevStartDate.setUTCDate(prevStartDate.getUTCDate() - (days - 1))
+  /* Comparison window = SAME calendar window from one year ago.
+     Restaurants are seasonal — comparing March-2026 to Feb-2026 is
+     usually misleading (more rain, less foot traffic), but comparing
+     March-2026 to March-2025 controls for seasonality. */
+  const prevStartDate = new Date(startDate)
+  prevStartDate.setUTCFullYear(prevStartDate.getUTCFullYear() - 1)
+  const prevEndDate = new Date(endDate)
+  prevEndDate.setUTCFullYear(prevEndDate.getUTCFullYear() - 1)
 
   /* Supabase / PostgREST caps row results at 1000 server-side
      regardless of .limit(). Paginate with .range() so the full
@@ -211,6 +233,19 @@ export async function getGbpAnalytics(
       impressions: 0, directions: 0, calls: 0, websiteClicks: 0,
       postViews: 0, conversations: 0, bookings: 0, foodOrders: 0,
     })
+  }
+
+  /* Trim trailing all-zero dates: the Performance API's 3-day lag is
+     a guideline, not a guarantee — sometimes the last 4-5 days haven't
+     aggregated yet. Showing them as zeros makes the chart look like
+     traffic crashed. Drop trailing days until we hit one with data. */
+  while (daily.length > 1) {
+    const last = daily[daily.length - 1]
+    const hasData = last.impressions || last.directions || last.calls
+      || last.websiteClicks || last.postViews || last.conversations
+      || last.bookings || last.foodOrders
+    if (hasData) break
+    daily.pop()
   }
 
   const totals = daily.reduce((acc, d) => ({

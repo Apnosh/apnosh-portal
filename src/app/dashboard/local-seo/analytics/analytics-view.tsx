@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, ArrowUpRight, ArrowDownRight, Eye, MapPin, Phone, Globe,
-  Send, Download, BarChart3, AlertCircle, History, Loader2, CheckCircle2,
+  Download, BarChart3, AlertCircle,
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
-import { getGbpAnalytics, type AnalyticsRange, type AnalyticsSummary } from '@/lib/dashboard/get-gbp-analytics'
+import { getGbpAnalytics, type AnalyticsRange, type AnalyticsSummary, type AnalyticsOptions } from '@/lib/dashboard/get-gbp-analytics'
 import { getClientLocations } from '@/lib/dashboard/get-client-locations'
 import type { ClientLocation } from '@/lib/dashboard/location-helpers'
 import ConnectEmptyState from '../connect-empty-state'
@@ -17,7 +17,20 @@ const RANGE_OPTIONS: Array<{ value: AnalyticsRange; label: string }> = [
   { value: '30d', label: '30 days' },
   { value: '90d', label: '90 days' },
   { value: '12m', label: '12 months' },
+  { value: 'custom', label: 'Custom' },
 ]
+
+/* Default custom range = last 30 days ending 3 days ago (API lag). */
+function defaultCustomRange(): { start: string; end: string } {
+  const end = new Date()
+  end.setUTCDate(end.getUTCDate() - 3)
+  const start = new Date(end)
+  start.setUTCDate(start.getUTCDate() - 29)
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
+  }
+}
 
 /* "2026-05-11" parsed via new Date() resolves to UTC midnight, which
    in PT renders as the prior calendar day. Treat the YMD string as
@@ -43,6 +56,7 @@ function pctDelta(curr: number, prev: number): { value: number; up: boolean; new
 export default function AnalyticsView() {
   const { client, loading: clientLoading } = useClient()
   const [range, setRange] = useState<AnalyticsRange>('30d')
+  const [customRange, setCustomRange] = useState(() => defaultCustomRange())
   const [locationId, setLocationId] = useState<string | null>(null)
   const [locations, setLocations] = useState<ClientLocation[]>([])
   const [data, setData] = useState<AnalyticsSummary | null>(null)
@@ -50,31 +64,6 @@ export default function AnalyticsView() {
   const [connected, setConnected] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeMetric, setActiveMetric] = useState<keyof AnalyticsSummary['totals']>('impressions')
-  const [backfilling, setBackfilling] = useState(false)
-  const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
-
-  async function runBackfill() {
-    if (!confirm('Pull the last 18 months of Google data for every linked location? Takes a few minutes and counts against the daily API quota.')) return
-    setBackfilling(true)
-    setBackfillMsg(null)
-    try {
-      const res = await fetch('/api/dashboard/gbp/backfill', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monthsBack: 18 }),
-      })
-      const body = await res.json() as { ok: boolean; daysInserted?: number; locationsAttempted?: number; errors?: unknown[]; message?: string }
-      if (!res.ok || !body.ok) {
-        setBackfillMsg(`Failed: ${body.message || 'unknown error'}`)
-      } else {
-        setBackfillMsg(`Pulled ${body.daysInserted ?? 0} days across ${body.locationsAttempted ?? 0} locations${(body.errors?.length ?? 0) > 0 ? ` (with ${body.errors!.length} errors)` : ''}. Refresh to see.`)
-      }
-    } catch (err) {
-      setBackfillMsg(`Failed: ${(err as Error).message}`)
-    } finally {
-      setBackfilling(false)
-    }
-  }
 
   /* Load locations once — drives the location picker. */
   useEffect(() => {
@@ -97,13 +86,19 @@ export default function AnalyticsView() {
       })
       .catch(() => { /* ignore */ })
 
-    getGbpAnalytics(client.id, range, locationId)
+    const opts: AnalyticsOptions = {
+      range,
+      locationId,
+      customStart: range === 'custom' ? customRange.start : undefined,
+      customEnd: range === 'custom' ? customRange.end : undefined,
+    }
+    getGbpAnalytics(client.id, opts)
       .then(d => { if (!cancelled) setData(d) })
       .catch(err => { if (!cancelled) setError((err as Error).message) })
       .finally(() => { if (!cancelled) setLoading(false) })
 
     return () => { cancelled = true }
-  }, [client?.id, range, locationId])
+  }, [client?.id, range, locationId, customRange.start, customRange.end])
 
   /* CSV export of the current range — owners and strategists frequently
      drop these into spreadsheets. */
@@ -227,24 +222,31 @@ export default function AnalyticsView() {
             <Download className="w-3 h-3" />
             CSV
           </button>
-          <button
-            onClick={runBackfill}
-            disabled={backfilling}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium text-ink-2 hover:text-ink ring-1 ring-ink-6 hover:ring-ink-4 disabled:opacity-50"
-            title="Pull historical Google Business Profile data going back 18 months"
-          >
-            {backfilling ? <Loader2 className="w-3 h-3 animate-spin" /> : <History className="w-3 h-3" />}
-            {backfilling ? 'Pulling history…' : 'Backfill history'}
-          </button>
+          {/* Manual backfill button removed — backfill now runs
+             automatically when a client connects their listing.
+             Kept the API + lib in place for admin tooling. */}
         </div>
       </div>
 
-      {backfillMsg && (
-        <div className={`rounded-2xl border p-3 flex items-start gap-3 ${backfillMsg.startsWith('Failed') ? 'border-rose-200 bg-rose-50/70' : 'border-emerald-200 bg-emerald-50/70'}`}>
-          {backfillMsg.startsWith('Failed')
-            ? <AlertCircle className="w-4 h-4 text-rose-700 flex-shrink-0 mt-0.5" />
-            : <CheckCircle2 className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />}
-          <p className={`text-[12.5px] ${backfillMsg.startsWith('Failed') ? 'text-rose-900' : 'text-emerald-900'}`}>{backfillMsg}</p>
+      {/* Custom date range inputs — only visible when "Custom" is active. */}
+      {range === 'custom' && (
+        <div className="rounded-2xl border border-ink-6 bg-white p-3 flex items-center gap-3 flex-wrap">
+          <span className="text-[11px] uppercase tracking-wider font-semibold text-ink-3">Range</span>
+          <input
+            type="date"
+            value={customRange.start}
+            max={customRange.end}
+            onChange={e => setCustomRange(r => ({ ...r, start: e.target.value }))}
+            className="text-[12.5px] text-ink-2 bg-white ring-1 ring-ink-6 rounded-lg px-2 py-1 focus:outline-none focus:ring-ink-3"
+          />
+          <span className="text-ink-4 text-[12px]">to</span>
+          <input
+            type="date"
+            value={customRange.end}
+            min={customRange.start}
+            onChange={e => setCustomRange(r => ({ ...r, end: e.target.value }))}
+            className="text-[12.5px] text-ink-2 bg-white ring-1 ring-ink-6 rounded-lg px-2 py-1 focus:outline-none focus:ring-ink-3"
+          />
         </div>
       )}
 
@@ -413,7 +415,7 @@ function KpiTile({
             <span className={delta.up ? 'text-emerald-700' : 'text-rose-700'}>
               {delta.value}%
             </span>
-            <span className="text-ink-4">vs prior period</span>
+            <span className="text-ink-4">vs last year</span>
           </>
         )}
       </div>
@@ -428,7 +430,7 @@ function SecondaryTile({ label, value, prev }: { label: string; value: number; p
       <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-3">{label}</div>
       <div className="mt-1.5 text-[20px] font-semibold text-ink tabular-nums leading-none">{fmt(value)}</div>
       <div className="mt-1 text-[11px] text-ink-4">
-        {value === 0 && prev === 0 ? '—' : delta.new ? 'New' : `${delta.up ? '+' : '-'}${delta.value}% prior`}
+        {value === 0 && prev === 0 ? '—' : delta.new ? 'New' : `${delta.up ? '+' : '-'}${delta.value}% YoY`}
       </div>
     </div>
   )

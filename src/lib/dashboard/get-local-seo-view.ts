@@ -60,6 +60,9 @@ export async function getLocalSeoView(
   const lastMonthSameDay = addDays(now, -31)
 
   const yearAgo = addDays(now, -365)
+  /* Two years back so the 1Y range tab can show a YoY comparison
+     (current year vs the year before it). */
+  const twoYearsAgo = addDays(now, -730)
 
   /* Supabase / PostgREST enforces a server-side max_rows cap (default
      1000) that .limit() can't exceed. A multi-location client with
@@ -76,7 +79,7 @@ export async function getLocalSeoView(
         .from('gbp_metrics')
         .select('date, directions, calls, website_clicks, search_views, search_views_maps, search_views_search, photo_views')
         .eq('client_id', clientId)
-        .gte('date', formatDate(yearAgo))
+        .gte('date', formatDate(twoYearsAgo))
         .order('date', { ascending: true })
         .range(from, from + page - 1)
       if (gbpLocationId) q = q.eq('location_id', gbpLocationId)
@@ -232,6 +235,58 @@ export async function getLocalSeoView(
   // ---- AM note
   const am = await getAmNote(supabase, clientId, 'local_seo')
 
+  /* Per-range hero + metrics so clicking the time-range tab actually
+     changes the headline numbers (not just the chart). Restaurants are
+     seasonal, so the comparison is YoY (same window one year ago). */
+  const rangeDays: Record<TimeRange, number> = {
+    '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365,
+  }
+  const byRange = {} as NonNullable<DashboardView['byRange']>
+  for (const [rk, days] of Object.entries(rangeDays) as Array<[TimeRange, number]>) {
+    const winEnd = addDays(now, -3)  // skip API lag tail
+    const winStart = addDays(winEnd, -(days - 1))
+    const yoyEnd = addDays(winEnd, -365)
+    const yoyStart = addDays(winStart, -365)
+    const curr = filterByDateRange(gbpRows, winStart, winEnd)
+    const prev = filterByDateRange(gbpRows, yoyStart, yoyEnd)
+    const cInt = sumInteractions(curr)
+    const pInt = sumInteractions(prev)
+    const hasPrev = pInt >= 20
+    const pct = hasPrev ? Math.round(((cInt - pInt) / pInt) * 100) : 0
+    const cDir = sumField(curr, 'directions'), pDir = sumField(prev, 'directions')
+    const cCal = sumField(curr, 'calls'), pCal = sumField(prev, 'calls')
+    const cClk = sumField(curr, 'website_clicks'), pClk = sumField(prev, 'website_clicks')
+    byRange[rk] = {
+      num: fmtNum(cInt),
+      pct: hasPrev ? (pct >= 0 ? '+' : '') + pct + '%' : 'New',
+      pctFull: hasPrev
+        ? (pct >= 0 ? '+' : '') + pct + '% vs same period last year'
+        : 'Not enough history for a comparison yet',
+      up: pct >= 0,
+      metrics: [
+        {
+          label: 'Directions', value: fmtNum(cDir),
+          subtitle: 'People who got directions to you',
+          trend: fmtPct(cDir, pDir), up: cDir >= pDir,
+          sparkline: metricsCards[0].sparkline,
+        },
+        {
+          label: 'Phone calls', value: fmtNum(cCal),
+          subtitle: 'Calls from your Google listing',
+          trend: fmtPct(cCal, pCal), up: cCal >= pCal,
+          sparkline: metricsCards[1].sparkline,
+        },
+        {
+          label: 'Website clicks', value: fmtNum(cClk),
+          subtitle: 'Visits to your site from Google',
+          trend: fmtPct(cClk, pClk), up: cClk >= pClk,
+          sparkline: metricsCards[2].sparkline,
+        },
+        metricsCards[3],  // reviews — keep the rolling-30 version
+      ],
+    }
+  }
+
   return {
     headline: !hasPrevData
       ? "Your local presence is getting set up"
@@ -255,6 +310,7 @@ export async function getLocalSeoView(
     insights,
     am,
     chartData,
+    byRange,
   }
 }
 

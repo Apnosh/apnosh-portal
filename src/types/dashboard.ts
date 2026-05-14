@@ -44,6 +44,16 @@ export interface DashboardView {
     note: string
   }
   chartData: Record<TimeRange, ChartData>
+  /* Optional per-range hero + metrics so the time-range tabs can drive
+     the headline numbers, not just the chart. When present, the page
+     swaps in byRange[timeRange] for num/pct/pctFull/up/metrics. */
+  byRange?: Record<TimeRange, {
+    num: string
+    pct: string
+    pctFull: string
+    up: boolean
+    metrics: DashboardMetric[]
+  }>
 }
 
 export interface ActionItem {
