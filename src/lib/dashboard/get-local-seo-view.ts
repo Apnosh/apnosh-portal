@@ -61,18 +61,32 @@ export async function getLocalSeoView(
 
   const yearAgo = addDays(now, -365)
 
-  /* Supabase's default row limit is 1000. A multi-location client with
-     12 months of daily metrics easily exceeds that (5 locs × 365 days),
-     so we'd silently truncate to the oldest rows and miss the current
-     period. Explicit large limit forces the full dataset. */
-  let gbpQuery = supabase
-    .from('gbp_metrics')
-    .select('date, directions, calls, website_clicks, search_views, search_views_maps, search_views_search, photo_views')
-    .eq('client_id', clientId)
-    .gte('date', formatDate(yearAgo))
-    .order('date', { ascending: true })
-    .limit(10000)
-  if (gbpLocationId) gbpQuery = gbpQuery.eq('location_id', gbpLocationId)
+  /* Supabase / PostgREST enforces a server-side max_rows cap (default
+     1000) that .limit() can't exceed. A multi-location client with
+     12 months of daily metrics easily blows past that (5 locs × 365
+     days = 1,825). Without pagination the first .select() returns
+     the OLDEST 1000 rows and silently drops everything recent —
+     manifests as "0 actions in the last 30 days" on the Overview.
+     Paginate explicitly so we always get the full window. */
+  async function fetchAllGbp(): Promise<GbpRow[]> {
+    const page = 1000
+    const out: GbpRow[] = []
+    for (let from = 0; ; from += page) {
+      let q = supabase
+        .from('gbp_metrics')
+        .select('date, directions, calls, website_clicks, search_views, search_views_maps, search_views_search, photo_views')
+        .eq('client_id', clientId)
+        .gte('date', formatDate(yearAgo))
+        .order('date', { ascending: true })
+        .range(from, from + page - 1)
+      if (gbpLocationId) q = q.eq('location_id', gbpLocationId)
+      const res = await q
+      const rows = (res.data ?? []) as GbpRow[]
+      out.push(...rows)
+      if (rows.length < page) break
+    }
+    return out
+  }
 
   let reviewsQuery = supabase
     .from('reviews')
@@ -100,14 +114,12 @@ export async function getLocalSeoView(
     .order('date', { ascending: false })
     .limit(60)
 
-  const [gbpRes, reviewsRes, prevReviewsRes, reviewMetricsRes] = await Promise.all([
-    gbpQuery,
+  const [gbpRows, reviewsRes, prevReviewsRes, reviewMetricsRes] = await Promise.all([
+    fetchAllGbp(),
     reviewsQuery,
     prevReviewsQuery,
     reviewMetricsQuery,
   ])
-
-  const gbpRows = (gbpRes.data ?? []) as GbpRow[]
   const reviews = (reviewsRes.data ?? []) as ReviewRow[]
   const prevReviewCount = (prevReviewsRes.data ?? []).length
   const reviewMetrics = (reviewMetricsRes.data ?? []) as ReviewMetricRow[]

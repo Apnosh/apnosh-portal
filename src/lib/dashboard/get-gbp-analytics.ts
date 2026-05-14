@@ -110,31 +110,63 @@ export async function getGbpAnalytics(
   const prevStartDate = new Date(prevEndDate)
   prevStartDate.setUTCDate(prevStartDate.getUTCDate() - (days - 1))
 
-  /* Multi-location clients on the 12m range easily exceed Supabase's
-     default 1000-row limit (5 locs × 365 days = 1,825). Explicit cap
-     so we don't silently truncate. */
-  let currQuery = admin
-    .from('gbp_metrics')
-    .select('date, impressions_total, directions, calls, website_clicks, post_views, conversations, bookings, food_orders, search_views')
-    .eq('client_id', clientId)
-    .gte('date', ymd(startDate))
-    .lte('date', ymd(endDate))
-    .order('date', { ascending: true })
-    .limit(10000)
-  let prevQuery = admin
-    .from('gbp_metrics')
-    .select('impressions_total, directions, calls, website_clicks, post_views, conversations, bookings, food_orders, search_views')
-    .eq('client_id', clientId)
-    .gte('date', ymd(prevStartDate))
-    .lte('date', ymd(prevEndDate))
-    .limit(10000)
-
-  if (metricsLocationId) {
-    currQuery = currQuery.eq('location_id', metricsLocationId)
-    prevQuery = prevQuery.eq('location_id', metricsLocationId)
+  /* Supabase / PostgREST caps row results at 1000 server-side
+     regardless of .limit(). Paginate with .range() so the full
+     12-month × 5-location dataset (1,825 rows) comes through. */
+  async function fetchAllPaged<T>(makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null }>): Promise<T[]> {
+    const page = 1000
+    const out: T[] = []
+    for (let from = 0; ; from += page) {
+      const res = await makeQuery(from, from + page - 1)
+      const rows = (res.data ?? []) as T[]
+      out.push(...rows)
+      if (rows.length < page) break
+    }
+    return out
   }
 
-  const [currRes, prevRes] = await Promise.all([currQuery, prevQuery])
+  type CurrRow = {
+    date: string
+    impressions_total: number | null
+    directions: number | null
+    calls: number | null
+    website_clicks: number | null
+    post_views: number | null
+    conversations: number | null
+    bookings: number | null
+    food_orders: number | null
+    search_views: number | null
+  }
+  type PrevRow = Omit<CurrRow, 'date'>
+
+  const [currData, prevData] = await Promise.all([
+    fetchAllPaged<CurrRow>((from, to) => {
+      let q = admin
+        .from('gbp_metrics')
+        .select('date, impressions_total, directions, calls, website_clicks, post_views, conversations, bookings, food_orders, search_views')
+        .eq('client_id', clientId)
+        .gte('date', ymd(startDate))
+        .lte('date', ymd(endDate))
+        .order('date', { ascending: true })
+        .range(from, to)
+      if (metricsLocationId) q = q.eq('location_id', metricsLocationId)
+      return q.then(r => ({ data: r.data as CurrRow[] | null }))
+    }),
+    fetchAllPaged<PrevRow>((from, to) => {
+      let q = admin
+        .from('gbp_metrics')
+        .select('impressions_total, directions, calls, website_clicks, post_views, conversations, bookings, food_orders, search_views')
+        .eq('client_id', clientId)
+        .gte('date', ymd(prevStartDate))
+        .lte('date', ymd(prevEndDate))
+        .range(from, to)
+      if (metricsLocationId) q = q.eq('location_id', metricsLocationId)
+      return q.then(r => ({ data: r.data as PrevRow[] | null }))
+    }),
+  ])
+
+  const currRes = { data: currData }
+  const prevRes = { data: prevData }
 
   const dailyByDate = new Map<string, DailyPoint>()
   for (const r of (currRes.data ?? []) as Array<{
