@@ -306,7 +306,13 @@ export async function getClientMenuLink(
   const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
   const loc = v1LocationPath(tok.v4Path)
-  const url = `${V1_BASE}/${loc}/attributes`
+  /* Read via locations.get with readMask=attributes — same endpoint
+     family we already use for hours/categories, so it works on any
+     project where the v1 BI API is enabled. The standalone
+     /attributes sub-resource often surfaces a "Google My Business
+     API not enabled" error pointing at the legacy v4 service even
+     when the actual issue is something else. */
+  const url = `${V1_BASE}/${loc}?readMask=attributes`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${tok.accessToken}` } })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) return { ok: false, error: body?.error?.message || `HTTP ${res.status}` }
@@ -323,12 +329,13 @@ export async function updateClientMenuLink(
   const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
   const loc = v1LocationPath(tok.v4Path)
-  /* Patch the attributes singleton. Setting url_menu to an empty
-     array clears it; otherwise we send the single URI value. */
-  const url = `${V1_BASE}/${loc}/attributes?updateMask=attributes`
+  /* Patch via locations.patch with updateMask=attributes — body
+     carries the Location resource with the attributes array set
+     to just the url_menu entry. */
+  const url = `${V1_BASE}/${loc}?updateMask=attributes`
   const trimmed = menuUrl.trim()
   const body = {
-    name: `${loc}/attributes`,
+    name: loc,
     attributes: [
       {
         name: MENU_URL_ATTR,
