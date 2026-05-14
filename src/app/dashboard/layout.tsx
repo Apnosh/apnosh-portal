@@ -84,23 +84,22 @@ interface NavSection {
 // Settings + low-frequency items moved to bottomItems.
 const navSections: NavSection[] = [
   {
-    /* Daily destinations — what an owner checks every time they open the
-       portal. Reviews is no longer top-level since it lives natively
-       under Local SEO; promoting Marketplace here surfaces the
-       creator-booking flow that owners actually act on day-to-day. */
+    /* Daily destinations — what an owner checks every time they
+       open the portal. Marketplace is not a daily thing; it lives
+       under Workspace with the rest of the team booking flow. */
     label: null,
     items: [
       { label: 'Today', href: '/dashboard', icon: LayoutDashboard, exact: true },
       { label: 'Approvals', href: '/dashboard/approvals', icon: CheckSquare, exact: false },
-      { label: 'Marketplace', href: '/dashboard/marketplace', icon: Sparkles, exact: false },
       { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, exact: false },
       { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar, exact: false },
     ],
   },
   {
-    /* Channel performance — "how is each channel doing?" Approvals
-       was pulled out to the daily group; this group is purely channels. */
-    label: 'Publish',
+    /* Channels — how each marketing channel is doing. Owners
+       think in channel categories (social, local SEO, website,
+       email), so this group mirrors that mental model. */
+    label: 'Channels',
     items: [
       // Each channel routes to its analytics-overview page by default;
       // operational sub-pages (calendar, drafts, etc.) are children.
@@ -169,19 +168,20 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    /* Workspace — who's working on this. Marketplace was promoted
-       to the top "daily" group; this section is just the static
-       roster now. */
-    label: 'Team',
+    /* Workspace — everyone working on the business. Team =
+       the strategists assigned to this client; Marketplace =
+       one-off creator bookings. */
+    label: 'Workspace',
     items: [
       { label: 'Team', href: '/dashboard/team', icon: Users, exact: false },
+      { label: 'Marketplace', href: '/dashboard/marketplace', icon: Sparkles, exact: false },
     ],
   },
   {
     label: 'Your business',
     items: [
       {
-        label: 'Your restaurant',
+        label: 'Restaurant info',
         href: '/dashboard/restaurant',
         icon: Building2,
         exact: false,
@@ -206,14 +206,25 @@ const navSections: NavSection[] = [
         icon: Newspaper,
         exact: false,
       },
+      {
+        label: 'Business profile',
+        href: '/dashboard/profile',
+        icon: Building2,
+        exact: false,
+      },
+      {
+        label: 'Connections',
+        href: '/dashboard/connected-accounts',
+        icon: Link2,
+        exact: false,
+      },
     ],
   },
 ]
 
-// Footer items — low-frequency settings, kept compact in the bottom rail.
+// Footer items — true settings only. Frequently-used connections
+// and business profile are promoted up into the main nav.
 const bottomItems = [
-  { label: 'Connections', href: '/dashboard/connected-accounts', icon: Link2 },
-  { label: 'Business profile', href: '/dashboard/profile', icon: Building2 },
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { label: 'Agreements', href: '/dashboard/agreements', icon: FileText },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
