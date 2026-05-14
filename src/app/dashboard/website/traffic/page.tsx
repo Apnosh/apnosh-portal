@@ -20,6 +20,7 @@ import {
   RefreshCw, BarChart3, Sparkles, Mail,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import ClarityCard from '@/components/dashboard/clarity-card'
 import { useRealtimeRefresh } from '@/lib/realtime'
 import { useClient } from '@/lib/client-context'
 import {
@@ -116,6 +117,16 @@ export default function WebsiteTrafficPage() {
   const [loading, setLoading] = useState(true)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [latestSync, setLatestSync] = useState<string | null>(null)
+  const [clarityProjectId, setClarityProjectId] = useState<string | null>(null)
+
+  /* Load the saved Clarity project ID once on mount. */
+  useEffect(() => {
+    if (!client?.id) return
+    fetch('/api/dashboard/clarity')
+      .then(r => r.ok ? r.json() : null)
+      .then(j => setClarityProjectId(j?.projectId ?? null))
+      .catch(() => { /* leave null; card shows setup */ })
+  }, [client?.id])
 
   const load = useCallback(async () => {
     if (!client?.id) { setLoading(false); return }
@@ -446,6 +457,11 @@ export default function WebsiteTrafficPage() {
           {/* Google search position over time. Inverted (lower
               position = better, so chart "going up" = improving). */}
           {positionSeries.length >= 3 && <PositionChart series={positionSeries} />}
+
+          {/* Heatmaps + session recordings via Microsoft Clarity. */}
+          {client?.id && (
+            <ClarityCard clientId={client.id} initialProjectId={clarityProjectId} />
+          )}
 
           {/* 6. Google search performance. */}
           {insight.search.hasData && (
