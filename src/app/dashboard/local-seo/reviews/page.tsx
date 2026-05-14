@@ -14,6 +14,7 @@ import { getPlatformReviewSnapshots, type PlatformSnapshot } from '@/lib/dashboa
 import { getClientLocations } from '@/lib/dashboard/get-client-locations'
 import type { ClientLocation } from '@/lib/dashboard/location-helpers'
 import ChannelHero from '@/components/dashboard/channel-hero'
+import ReviewThemesPanel from '@/components/dashboard/review-themes-panel'
 import type { Review, ReviewSource } from '@/types/database'
 import ConnectEmptyState from '../connect-empty-state'
 
@@ -377,6 +378,10 @@ export default function ReviewsPage() {
           </div>
         </div>
       )}
+
+      {/* AI-extracted themes from recent reviews — only the most
+         recurring topics, with praise vs critical split. */}
+      <ReviewThemesPanel locationId={locationFilter === 'all' ? null : locationFilter} />
 
       {!hasData ? (
         <div className="bg-white rounded-xl border border-ink-6 p-12 text-center">

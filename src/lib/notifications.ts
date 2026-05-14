@@ -21,6 +21,7 @@ export type NotificationKind =
   | 'draft_approved'
   | 'draft_published'
   | 'payment'
+  | 'holiday_hours_reminder'
 
 export interface NotificationRow {
   id: string

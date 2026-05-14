@@ -14,6 +14,7 @@ import StatusBanner from '@/components/dashboard/status-banner'
 import HeroMetric from '@/components/dashboard/hero-metric'
 import TrendChart from '@/components/dashboard/trend-chart'
 import MetricGrid from '@/components/dashboard/metric-grid'
+import ListingHealthCard from '@/components/dashboard/listing-health-card'
 import InsightCard from '@/components/dashboard/insight-card'
 import AMNote from '@/components/dashboard/am-note'
 import LocationSelector from '@/components/dashboard/location-selector'
@@ -210,6 +211,11 @@ function LocalSeoContent() {
             <div className="db-fade db-d5">
               <MetricGrid title={view.bdtitle} metrics={metrics} />
             </div>
+            {client?.id && (
+              <div className="db-fade db-d5 mt-4">
+                <ListingHealthCard clientId={client.id} locationId={selectedLocationId} />
+              </div>
+            )}
           </>
         )
       })()}
