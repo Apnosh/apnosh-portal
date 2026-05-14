@@ -44,13 +44,17 @@ export async function respondToReview(
     return { ok: false, error: 'Review has no external_id; cannot post reply' }
   }
 
-  // Find the connection + the location this review came from.
+  /* Find the connection. Multi-location clients have multiple rows;
+     pick the most recent active — tokens are shared across siblings. */
   const { data: connection } = await admin
     .from('channel_connections')
     .select('access_token, metadata')
     .eq('client_id', review.client_id)
     .eq('channel', 'google_business_profile')
     .eq('status', 'active')
+    .neq('platform_account_id', 'pending')
+    .order('connected_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
   if (!connection?.access_token) {
     return { ok: false, error: 'No active Google Business connection for this client' }

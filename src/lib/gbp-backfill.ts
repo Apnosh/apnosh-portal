@@ -200,12 +200,16 @@ export async function backfillClientGbpMetrics(
   const admin = createAdminClient()
   const errors: BackfillResult['errors'] = []
 
+  /* Multi-location: pick most recent active; tokens are shared. */
   const { data: connRow } = await admin
     .from('channel_connections')
     .select('id, access_token, refresh_token, token_expires_at')
     .eq('client_id', clientId)
     .eq('channel', 'google_business_profile')
     .eq('status', 'active')
+    .neq('platform_account_id', 'pending')
+    .order('connected_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
   if (!connRow) {
     return { ok: false, message: 'No active connection', locationsAttempted: 0, monthsAttempted: 0, daysInserted: 0, errors: [] }

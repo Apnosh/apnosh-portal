@@ -56,12 +56,19 @@ async function getActiveTokenForClient(
   resourceName: string
 } | { error: string }> {
   const admin = createAdminClient()
+  /* Multi-location clients have one row per linked location after the
+     multi-select picker rollout. Tokens are identical across rows
+     (same OAuth flow), so picking the most recent works for any
+     location's resource. .maybeSingle() would explode on >1 row. */
   const { data: row } = await admin
     .from('channel_connections')
     .select('id, access_token, refresh_token, token_expires_at, platform_account_id')
     .eq('client_id', clientId)
     .eq('channel', 'google_business_profile')
     .eq('status', 'active')
+    .neq('platform_account_id', 'pending')
+    .order('connected_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
   const conn = row as TokenRow | null
   if (!conn?.access_token) return { error: 'No active Google Business Profile connection' }
@@ -93,10 +100,14 @@ async function getActiveTokenForClient(
       const refreshed = await refreshGoogleToken(conn.refresh_token)
       accessToken = refreshed.access_token
       const newExpires = new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
+      /* Update every active GBP row for this client so the other
+         locations' rows don't keep firing stale-token refreshes. */
       await admin
         .from('channel_connections')
         .update({ access_token: accessToken, token_expires_at: newExpires })
-        .eq('id', conn.id)
+        .eq('client_id', clientId)
+        .eq('channel', 'google_business_profile')
+        .eq('status', 'active')
     } catch (err) {
       return { error: `Token refresh failed: ${(err as Error).message}` }
     }

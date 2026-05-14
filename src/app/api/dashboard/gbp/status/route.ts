@@ -34,11 +34,17 @@ export async function GET() {
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
   const admin = createAdminClient()
+  /* Multi-location clients have N rows. Pick the most recent active
+     one as the representative status — siblings are tokens-only
+     replicas connected in the same OAuth flow. */
   const { data: row } = await admin
     .from('channel_connections')
     .select('id, status, platform_account_name, sync_error, last_sync_at')
     .eq('client_id', clientId)
     .eq('channel', 'google_business_profile')
+    .neq('platform_account_id', 'pending')
+    .order('connected_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   if (!row || row.status !== 'active') {

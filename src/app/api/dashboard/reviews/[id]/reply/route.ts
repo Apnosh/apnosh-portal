@@ -57,12 +57,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   }
   const [, accountId, locationId, reviewIdPath] = m
 
+  /* Multi-location: pick most recent active; tokens are shared. */
   const { data: connRow } = await admin
     .from('channel_connections')
     .select('id, access_token, refresh_token, token_expires_at')
     .eq('client_id', clientId)
     .eq('channel', 'google_business_profile')
     .eq('status', 'active')
+    .neq('platform_account_id', 'pending')
+    .order('connected_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
   if (!connRow?.access_token) {
     return NextResponse.json({ error: 'No active Google Business Profile connection' }, { status: 409 })
@@ -77,10 +81,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       const refreshed = await refreshGoogleToken(connRow.refresh_token as string)
       accessToken = refreshed.access_token
       const newExpires = new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
+      /* Refresh every sibling row for this client. */
       await admin
         .from('channel_connections')
         .update({ access_token: accessToken, token_expires_at: newExpires })
-        .eq('id', connRow.id)
+        .eq('client_id', clientId)
+        .eq('channel', 'google_business_profile')
+        .eq('status', 'active')
     } catch (err) {
       return NextResponse.json({ error: `Token refresh failed: ${(err as Error).message}` }, { status: 500 })
     }
