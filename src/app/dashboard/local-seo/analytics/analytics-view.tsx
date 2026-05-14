@@ -17,6 +17,13 @@ const RANGE_OPTIONS: Array<{ value: AnalyticsRange; label: string }> = [
   { value: '12m', label: '12 months' },
 ]
 
+/* "2026-05-11" parsed via new Date() resolves to UTC midnight, which
+   in PT renders as the prior calendar day. Treat the YMD string as
+   local-midnight to keep the displayed date matching the DB date. */
+function parseYmdLocal(ymd: string): Date {
+  return new Date(ymd + 'T00:00:00')
+}
+
 function fmt(n: number): string {
   if (n >= 100_000) return `${(n / 1000).toFixed(0)}k`
   if (n >= 10_000) return `${(n / 1000).toFixed(1)}k`
@@ -137,7 +144,7 @@ export default function AnalyticsView() {
             <p className="text-sm text-ink-3 mt-1">
               How customers are finding and interacting with your Google listing.{' '}
               <span className="text-ink-4 text-xs">
-                {new Date(data.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {new Date(data.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {parseYmdLocal(data.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {parseYmdLocal(data.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </span>
             </p>
           </div>
@@ -226,7 +233,7 @@ export default function AnalyticsView() {
             {peakMetric && peakMetric[activeMetric] > 0 && (
               <div className="text-xs text-ink-3">
                 Peak: <strong className="text-ink-2">{fmt(peakMetric[activeMetric])}</strong>{' '}
-                on {new Date(peakMetric.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                on {parseYmdLocal(peakMetric.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </div>
             )}
           </div>
@@ -266,7 +273,7 @@ export default function AnalyticsView() {
                 {[...data.daily].reverse().slice(0, 30).map(d => (
                   <tr key={d.date} className="border-t border-ink-7 hover:bg-bg-2/40">
                     <td className="px-4 py-2 text-ink-2 tabular-nums">
-                      {new Date(d.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {parseYmdLocal(d.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmt(d.impressions)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmt(d.directions)}</td>
@@ -405,7 +412,7 @@ function Sparkline({ data, metric }: {
       </svg>
       <div className="flex justify-between text-[10px] text-ink-4 px-1">
         {ticks.map((t, i) => (
-          <span key={i}>{new Date(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+          <span key={i}>{parseYmdLocal(t.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
         ))}
       </div>
     </div>
