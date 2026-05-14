@@ -137,9 +137,11 @@ export async function getLocalSeoView(
     .filter(m => m.date >= formatDate(thisMonthStart))
     .reduce((acc, m) => acc + (m.new_reviews ?? 0), 0)
 
-  if (gbpRows.length === 0 && reviews.length === 0 && reviewMetrics.length === 0) {
-    return emptyLocalSeoView()
-  }
+  /* Don't short-circuit on empty data — the rest of this function
+     works fine with empty arrays (every aggregate falls to zero).
+     A connected client with no traffic should see a dashboard of
+     zeros, not a "no data" placeholder. Connection-status decisions
+     belong to the page, not this view. */
 
   // ---- Same-day windows for fair MoM
   const thisMonthGbp = filterByDateRange(gbpRows, thisMonthStart, now)

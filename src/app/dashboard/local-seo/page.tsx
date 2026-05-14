@@ -90,8 +90,11 @@ function LocalSeoContent() {
     )
   }
 
-  // No data yet (GBP not connected or still syncing)
-  if (!view || view.num === '---') {
+  /* Only show the "connect" empty state when actually NOT connected.
+     A connected client with no data still renders the normal
+     dashboard (with zeros across the board) — much less confusing
+     than a "connect now" prompt for a listing that IS connected. */
+  if (!view || gbpConnected === false) {
     return (
       <div
         className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20"
