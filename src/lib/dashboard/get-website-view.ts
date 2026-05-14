@@ -158,6 +158,72 @@ export async function getWebsiteView(clientId: string): Promise<DashboardView | 
   // ---- Chart: daily unique visitors over time ranges
   const chartData = buildChartData(daily, 'visitors')
 
+  /* Per-range hero + metrics so clicking the time-range tab actually
+     changes the headline numbers (not just the chart). Mirrors what
+     Local SEO does — same shape via DashboardView.byRange. */
+  const rangeDays: Record<TimeRange, number> = {
+    '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365,
+  }
+  const byRange = {} as NonNullable<DashboardView['byRange']>
+  for (const [rk, days] of Object.entries(rangeDays) as Array<[TimeRange, number]>) {
+    const winEnd = now
+    const winStart = addDays(winEnd, -(days - 1))
+    /* Prior window of same length, immediately before this one
+       (not YoY — website data history is typically <1 year). */
+    const prevEnd = addDays(winStart, -1)
+    const prevStart = addDays(prevEnd, -(days - 1))
+    const curr = filterByDateRange(daily, winStart, winEnd)
+    const prev = filterByDateRange(daily, prevStart, prevEnd)
+    const currSearch = filterByDateRange(searchDaily, winStart, winEnd)
+    const prevSearch = filterByDateRange(searchDaily, prevStart, prevEnd)
+
+    const cVis = sumField(curr, 'visitors')
+    const pVis = sumField(prev, 'visitors')
+    const cSes = sumField(curr, 'sessions')
+    const pSes = sumField(prev, 'sessions')
+    const cImp = sumField(currSearch, 'total_impressions')
+    const pImp = sumField(prevSearch, 'total_impressions')
+    const cAct = curr.reduce((a, r) => a + (r.conversion_events?.total ?? 0), 0)
+    const pAct = prev.reduce((a, r) => a + (r.conversion_events?.total ?? 0), 0)
+
+    const hasPrev = pVis > 0
+    const pct = hasPrev ? Math.round(((cVis - pVis) / pVis) * 100) : 0
+    byRange[rk] = {
+      num: fmtNum(cVis),
+      pct: hasPrev ? (pct >= 0 ? '+' : '') + pct + '%' : 'New',
+      pctFull: hasPrev
+        ? (pct >= 0 ? '+' : '') + pct + '% vs the prior ' + (days === 7 ? 'week' : days === 30 ? 'month' : `${days} days`)
+        : 'Not enough history for a comparison yet',
+      up: pct >= 0,
+      metrics: [
+        {
+          label: 'Website visitors', value: fmtNum(cVis),
+          subtitle: 'Unique people who visited',
+          trend: fmtPct(cVis, pVis), up: cVis >= pVis,
+          sparkline: metricsCards[0].sparkline,
+        },
+        {
+          label: 'Website visits', value: fmtNum(cSes),
+          subtitle: 'Total visits, including return visits',
+          trend: fmtPct(cSes, pSes), up: cSes >= pSes,
+          sparkline: metricsCards[1].sparkline,
+        },
+        {
+          label: 'Shown on Google', value: fmtNum(cImp),
+          subtitle: 'Times you appeared in search',
+          trend: fmtPct(cImp, pImp), up: cImp >= pImp,
+          sparkline: metricsCards[2].sparkline,
+        },
+        {
+          label: 'Actions taken', value: fmtNum(cAct),
+          subtitle: 'Calls, directions, forms, bookings',
+          trend: fmtPct(cAct, pAct), up: cAct >= pAct,
+          sparkline: metricsCards[3].sparkline,
+        },
+      ],
+    }
+  }
+
   // ---- Insights: derive from real data
   const insights = buildWebsiteInsights({
     daily, searchDaily, thisMonthDaily, thisMonthSearch,
@@ -191,6 +257,7 @@ export async function getWebsiteView(clientId: string): Promise<DashboardView | 
     insights,
     am,
     chartData,
+    byRange,
   }
 }
 

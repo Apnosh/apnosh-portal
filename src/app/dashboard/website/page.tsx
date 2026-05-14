@@ -161,20 +161,33 @@ export default function WebsiteOverviewPage() {
       </div>
 
       {/* 3. Performance section — grouped together so the chart +
-         hero + breakdown read as one "how is this doing" answer. */}
+         hero + breakdown read as one "how is this doing" answer.
+         Hero number + metric cards now react to the time-range
+         selector via view.byRange (was previously chart-only). */}
       <section className="db-fade db-d3 pt-4 mt-2" style={{ borderTop: '1px solid var(--db-border)' }}>
         <h2 className="text-[15px] font-bold mb-3 text-ink">How your website is doing</h2>
-        <div className="space-y-4">
-          <HeroMetric ctx={view.ctx} num={view.num} pctFull={view.pctFull} up={view.up} />
-          <TrendChart
-            data={view.chartData}
-            timeRange={timeRange}
-            onTimeRangeChange={setTimeRange}
-            up={view.up}
-            unit={view.unit}
-          />
-          <MetricGrid title={view.bdtitle} metrics={view.metrics} />
-        </div>
+        {(() => {
+          const r = view.byRange?.[timeRange]
+          const num = r?.num ?? view.num
+          const pct = r?.pct ?? view.pct
+          const pctFull = r?.pctFull ?? view.pctFull
+          const up = r?.up ?? view.up
+          const metrics = r?.metrics ?? view.metrics
+          void pct  /* used by the strip elsewhere */
+          return (
+            <div className="space-y-4">
+              <HeroMetric ctx={view.ctx} num={num} pctFull={pctFull} up={up} />
+              <TrendChart
+                data={view.chartData}
+                timeRange={timeRange}
+                onTimeRangeChange={setTimeRange}
+                up={up}
+                unit={view.unit}
+              />
+              <MetricGrid title={view.bdtitle} metrics={metrics} />
+            </div>
+          )
+        })()}
       </section>
 
       {/* 4. AM note — only shows when there's an actual note. */}
