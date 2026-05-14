@@ -140,5 +140,33 @@ export async function finalizeGBPConnection(
   // Delete pending placeholder
   await supabase.from('channel_connections').delete().eq('id', pending.id)
 
+  /* Also stamp the linked location into gbp_locations so the daily
+     sync and backfill both pick it up immediately. Otherwise the
+     client_locations entry exists but gbp_locations is empty until
+     the first sync runs. */
+  const storeCode = location.name.replace('locations/', '')
+  await supabase
+    .from('gbp_locations')
+    .upsert({
+      store_code: storeCode,
+      location_name: location.title,
+      client_id: clientId,
+      last_seen_at: new Date().toISOString(),
+    }, { onConflict: 'store_code' })
+
+  /* Kick off the 18-month historical backfill in the background so a
+     brand-new client sees a full trend chart on their first visit to
+     the Overview / Full analytics pages instead of just the 7 days the
+     daily sync would catch. Fire-and-forget — we don't block the
+     redirect on it (takes 30-90 seconds for 18 months × N locations). */
+  void (async () => {
+    try {
+      const { backfillClientGbpMetrics } = await import('@/lib/gbp-backfill')
+      await backfillClientGbpMetrics(clientId, 18)
+    } catch (err) {
+      console.error('[finalizeGBPConnection] auto-backfill failed:', (err as Error).message)
+    }
+  })()
+
   return { success: true }
 }

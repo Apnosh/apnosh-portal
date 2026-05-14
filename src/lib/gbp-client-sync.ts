@@ -158,6 +158,18 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
         locationName: loc.name,
         title: loc.title,
       }
+      /* Fire-and-forget 18-month historical backfill — same idea as
+         the picker-finalize path. Without this, single-location clients
+         who auto-finalize would only get the 7 days the daily sync
+         covers and have to manually click "Backfill history" themselves. */
+      void (async () => {
+        try {
+          const { backfillClientGbpMetrics } = await import('@/lib/gbp-backfill')
+          await backfillClientGbpMetrics(clientId, 18)
+        } catch (err) {
+          console.error('[syncClientGbp] auto-backfill failed:', (err as Error).message)
+        }
+      })()
     } else {
       return {
         ok: false,
