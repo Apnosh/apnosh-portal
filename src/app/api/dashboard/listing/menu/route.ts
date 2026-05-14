@@ -5,7 +5,10 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
-import { getClientMenus, updateClientMenus, type FoodMenu } from '@/lib/gbp-menu'
+import {
+  getClientMenus, updateClientMenus, getClientMenuLink, updateClientMenuLink,
+  type FoodMenu,
+} from '@/lib/gbp-menu'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
@@ -18,9 +21,26 @@ export async function GET(req: NextRequest) {
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
   const locationId = req.nextUrl.searchParams.get('locationId')
-  const result = await getClientMenus(clientId, locationId)
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 })
-  return NextResponse.json({ menus: result.menus })
+
+  /* Always return the menu link (v1 — works without v4 approval).
+     Try the structured menu too, but tolerate failure (most accounts
+     don't have v4 yet so this 4xx's). */
+  const [linkRes, menusRes] = await Promise.all([
+    getClientMenuLink(clientId, locationId),
+    getClientMenus(clientId, locationId),
+  ])
+  const link = linkRes.ok ? linkRes.url : ''
+  const menus = menusRes.ok ? menusRes.menus : []
+  /* Only surface a hard error if BOTH paths failed — that means the
+     listing itself is unreachable, not just v4 being gated. */
+  if (!linkRes.ok && !menusRes.ok) {
+    return NextResponse.json({ error: linkRes.error }, { status: 502 })
+  }
+  return NextResponse.json({
+    menus,
+    menuUrl: link,
+    structuredMenusAvailable: menusRes.ok,
+  })
 }
 
 export async function PATCH(req: NextRequest) {
@@ -28,8 +48,21 @@ export async function PATCH(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
-  const body = await req.json().catch(() => null) as { menus?: FoodMenu[]; locationId?: string } | null
-  if (!body?.menus) return NextResponse.json({ error: 'Missing menus' }, { status: 400 })
+  const body = await req.json().catch(() => null) as {
+    menus?: FoodMenu[]
+    menuUrl?: string
+    locationId?: string
+  } | null
+  if (!body) return NextResponse.json({ error: 'Missing body' }, { status: 400 })
+
+  /* Menu-link only path (v1 — no v4 approval needed). */
+  if (typeof body.menuUrl === 'string' && !body.menus) {
+    const result = await updateClientMenuLink(clientId, body.menuUrl, body.locationId ?? null)
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 })
+    return NextResponse.json({ ok: true })
+  }
+
+  if (!body.menus) return NextResponse.json({ error: 'Missing menus or menuUrl' }, { status: 400 })
 
   const result = await updateClientMenus(clientId, body.menus, body.locationId ?? null)
 

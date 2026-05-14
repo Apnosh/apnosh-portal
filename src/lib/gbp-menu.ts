@@ -23,6 +23,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { refreshGoogleToken } from '@/lib/google'
 
 const V4_BASE = 'https://mybusiness.googleapis.com/v4'
+const V1_BASE = 'https://mybusinessbusinessinformation.googleapis.com/v1'
 
 export interface MenuItem {
   name: string
@@ -268,6 +269,73 @@ export async function updateClientMenus(
   if ('error' in tok) return { ok: false, error: tok.error }
   const url = `${V4_BASE}/${tok.v4Path}/foodMenus?updateMask=menus`
   const body = { menus: menusToGbp(menus) }
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${tok.accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const respBody = await res.json().catch(() => ({}))
+  if (!res.ok) return { ok: false, error: respBody?.error?.message || `HTTP ${res.status}` }
+  return { ok: true }
+}
+
+/* ── Menu link (v1, no v4 needed) ───────────────────────────────────
+   Until v4 approval comes through, restaurants can still set a link
+   to their menu via the v1 attributes endpoint. Google renders this
+   as a "Menu" button on the listing that opens the supplied URL. */
+
+interface V1Attribute {
+  name: string
+  uriValues?: Array<{ uri: string }>
+  values?: unknown[]
+}
+
+const MENU_URL_ATTR = 'attributes/url_menu'
+
+/** v4-independent path: locations/{l} from the v4Path returned above. */
+function v1LocationPath(v4Path: string): string {
+  const m = /locations\/([^/]+)/.exec(v4Path)
+  if (!m) throw new Error('Unrecognised location resource shape')
+  return `locations/${m[1]}`
+}
+
+export async function getClientMenuLink(
+  clientId: string,
+  locationId?: string | null,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const tok = await getActiveTokenForClient(clientId, locationId)
+  if ('error' in tok) return { ok: false, error: tok.error }
+  const loc = v1LocationPath(tok.v4Path)
+  const url = `${V1_BASE}/${loc}/attributes`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${tok.accessToken}` } })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) return { ok: false, error: body?.error?.message || `HTTP ${res.status}` }
+  const attrs = (body as { attributes?: V1Attribute[] }).attributes ?? []
+  const menu = attrs.find(a => a.name === MENU_URL_ATTR)
+  return { ok: true, url: menu?.uriValues?.[0]?.uri ?? '' }
+}
+
+export async function updateClientMenuLink(
+  clientId: string,
+  menuUrl: string,
+  locationId?: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const tok = await getActiveTokenForClient(clientId, locationId)
+  if ('error' in tok) return { ok: false, error: tok.error }
+  const loc = v1LocationPath(tok.v4Path)
+  /* Patch the attributes singleton. Setting url_menu to an empty
+     array clears it; otherwise we send the single URI value. */
+  const url = `${V1_BASE}/${loc}/attributes?updateMask=attributes`
+  const trimmed = menuUrl.trim()
+  const body = {
+    name: `${loc}/attributes`,
+    attributes: [
+      {
+        name: MENU_URL_ATTR,
+        uriValues: trimmed ? [{ uri: trimmed }] : [],
+      },
+    ],
+  }
   const res = await fetch(url, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${tok.accessToken}`, 'Content-Type': 'application/json' },
