@@ -1,10 +1,13 @@
 /**
  * Read and update a client's Google Business Profile food menus.
  *
- * Uses the v1 mybusinessbusinessinformation API. The `foodMenus`
- * field on a Location holds the structured menus that show on the
- * listing's Menu tab — sections of items with names, descriptions,
- * and prices.
+ * Food menus live on the legacy v4 mybusiness API — v1 dropped them
+ * entirely. v4 is still active for accounts that had Business Profile
+ * API access before the v4 sunset (posts and reviews live there too).
+ *
+ * Endpoint: `accounts/{a}/locations/{l}/foodMenus`
+ *   GET   → returns { name, menus: [...] }
+ *   PATCH → body { menus: [...] }, query updateMask=menus
  *
  * We expose a simplified shape that's easier for the UI to render:
  *   Menu[] → Section[] → Item[]
@@ -12,14 +15,14 @@
  * On save we round-trip the price into Google's structured money
  * format (currencyCode, units, nanos).
  *
- * Photos on menu items, dietary attributes, and serving size all
- * exist on v1 but we leave them out of the initial editor.
+ * Photos on menu items, dietary attributes, and serving size are
+ * supported by v4 but we leave them out of the initial editor.
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { refreshGoogleToken } from '@/lib/google'
 
-const V1_BASE = 'https://mybusinessbusinessinformation.googleapis.com/v1'
+const V4_BASE = 'https://mybusiness.googleapis.com/v4'
 
 export interface MenuItem {
   name: string
@@ -53,30 +56,15 @@ async function getActiveTokenForClient(
   locationId?: string | null,
 ): Promise<{
   accessToken: string
-  resourceName: string
+  /** Full v4 path: accounts/{a}/locations/{l} */
+  v4Path: string
 } | { error: string }> {
   const admin = createAdminClient()
-  /* Multi-location clients have one row per linked location after the
-     multi-select picker rollout. Tokens are identical across rows
-     (same OAuth flow), so picking the most recent works for any
-     location's resource. .maybeSingle() would explode on >1 row. */
-  const { data: row } = await admin
-    .from('channel_connections')
-    .select('id, access_token, refresh_token, token_expires_at, platform_account_id')
-    .eq('client_id', clientId)
-    .eq('channel', 'google_business_profile')
-    .eq('status', 'active')
-    .neq('platform_account_id', 'pending')
-    .order('connected_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  const conn = row as TokenRow | null
-  if (!conn?.access_token) return { error: 'No active Google Business Profile connection' }
-  if (!conn.platform_account_id || conn.platform_account_id === 'pending') {
-    return { error: 'Connection not finalized — re-sync first' }
-  }
-
-  let resourceName: string
+  /* For multi-location clients we need the channel_connections row
+     that matches the SELECTED location (not just any one), because
+     each row's platform_account_id carries the accounts/{a}/locations/{l}
+     prefix that v4 endpoints need. */
+  let row: TokenRow | null = null
   if (locationId) {
     const { data: loc } = await admin
       .from('client_locations')
@@ -86,11 +74,63 @@ async function getActiveTokenForClient(
       .maybeSingle()
     const rawId = loc?.gbp_location_id as string | null | undefined
     if (!rawId) return { error: 'Location not found for this client' }
-    resourceName = `locations/${rawId.replace(/^gbp_loc_/, '')}`
+    const stripped = rawId.replace(/^gbp_loc_/, '')
+    const { data } = await admin
+      .from('channel_connections')
+      .select('id, access_token, refresh_token, token_expires_at, platform_account_id')
+      .eq('client_id', clientId)
+      .eq('channel', 'google_business_profile')
+      .eq('status', 'active')
+      .neq('platform_account_id', 'pending')
+      .like('platform_account_id', `%locations/${stripped}`)
+      .order('connected_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    row = data as TokenRow | null
+  }
+  /* Fallback: any active row (used when no locationId or the
+     location-specific row isn't found). Tokens are shared across
+     siblings so this works for token purposes; the account prefix
+     comes from this row's platform_account_id. */
+  if (!row) {
+    const { data } = await admin
+      .from('channel_connections')
+      .select('id, access_token, refresh_token, token_expires_at, platform_account_id')
+      .eq('client_id', clientId)
+      .eq('channel', 'google_business_profile')
+      .eq('status', 'active')
+      .neq('platform_account_id', 'pending')
+      .order('connected_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    row = data as TokenRow | null
+  }
+  const conn = row
+  if (!conn?.access_token) return { error: 'No active Google Business Profile connection' }
+  if (!conn.platform_account_id || conn.platform_account_id === 'pending') {
+    return { error: 'Connection not finalized — re-sync first' }
+  }
+
+  /* platform_account_id is "accounts/{a}/locations/{l}". When the
+     caller specified a different locationId, swap the location
+     segment but keep the account segment. */
+  const acctMatch = /^(accounts\/[^/]+)\/locations\//.exec(conn.platform_account_id)
+  if (!acctMatch) return { error: 'Unrecognised location resource shape' }
+  const accountPath = acctMatch[1]
+
+  let v4Path: string
+  if (locationId) {
+    const { data: loc } = await admin
+      .from('client_locations')
+      .select('gbp_location_id')
+      .eq('id', locationId)
+      .eq('client_id', clientId)
+      .maybeSingle()
+    const rawId = loc?.gbp_location_id as string | null | undefined
+    if (!rawId) return { error: 'Location not found for this client' }
+    v4Path = `${accountPath}/locations/${rawId.replace(/^gbp_loc_/, '')}`
   } else {
-    const m = /locations\/([^/]+)/.exec(conn.platform_account_id)
-    if (!m) return { error: 'Unrecognised location resource shape' }
-    resourceName = `locations/${m[1]}`
+    v4Path = conn.platform_account_id
   }
 
   let accessToken = conn.access_token
@@ -100,8 +140,6 @@ async function getActiveTokenForClient(
       const refreshed = await refreshGoogleToken(conn.refresh_token)
       accessToken = refreshed.access_token
       const newExpires = new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
-      /* Update every active GBP row for this client so the other
-         locations' rows don't keep firing stale-token refreshes. */
       await admin
         .from('channel_connections')
         .update({ access_token: accessToken, token_expires_at: newExpires })
@@ -112,7 +150,7 @@ async function getActiveTokenForClient(
       return { error: `Token refresh failed: ${(err as Error).message}` }
     }
   }
-  return { accessToken, resourceName }
+  return { accessToken, v4Path }
 }
 
 /* ── GBP money <-> string price ─────────────────────────────────── */
@@ -208,12 +246,17 @@ export async function getClientMenus(clientId: string, locationId?: string | nul
 > {
   const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
-  const url = `${V1_BASE}/${tok.resourceName}?readMask=foodMenus`
+  const url = `${V4_BASE}/${tok.v4Path}/foodMenus`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${tok.accessToken}` } })
   const body = await res.json().catch(() => ({}))
+  /* v4 returns 404 when the location simply has no food menu set up
+     yet — that's not an error from the client's perspective, just
+     "empty state". Return an empty array so the editor renders the
+     "Start a menu" empty state. */
+  if (res.status === 404) return { ok: true, menus: [] }
   if (!res.ok) return { ok: false, error: body?.error?.message || `HTTP ${res.status}` }
-  const data = body as { foodMenus?: { menus?: GbpMenu[] } }
-  return { ok: true, menus: gbpToMenus(data.foodMenus?.menus) }
+  const data = body as { menus?: GbpMenu[] }
+  return { ok: true, menus: gbpToMenus(data.menus) }
 }
 
 export async function updateClientMenus(
@@ -223,8 +266,8 @@ export async function updateClientMenus(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
-  const body = { foodMenus: { menus: menusToGbp(menus) } }
-  const url = `${V1_BASE}/${tok.resourceName}?updateMask=foodMenus`
+  const url = `${V4_BASE}/${tok.v4Path}/foodMenus?updateMask=menus`
+  const body = { menus: menusToGbp(menus) }
   const res = await fetch(url, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${tok.accessToken}`, 'Content-Type': 'application/json' },
