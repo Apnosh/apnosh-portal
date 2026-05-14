@@ -1,16 +1,29 @@
 'use client'
 
+/**
+ * Website overview.
+ *
+ * Reading order optimized for restaurant owners:
+ *   1. Status strip — "is it working?" in one glance
+ *   2. Live preview — "what visitors see right now"
+ *   3. Open requests + recent team work — accountability + activity
+ *   4. Performance — hero number, trend, metric breakdown
+ *   5. AM note (only when present)
+ *
+ * The legacy StatusBanner + standalone "What we noticed" insights
+ * were dropped — both repeated information that the status strip
+ * + performance section already cover.
+ */
+
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Plus, Globe } from 'lucide-react'
 import type { TimeRange, DashboardView } from '@/types/dashboard'
 import { getWebsiteView } from '@/lib/dashboard/get-website-view'
 import { useClient } from '@/lib/client-context'
-import StatusBanner from '@/components/dashboard/status-banner'
 import HeroMetric from '@/components/dashboard/hero-metric'
 import TrendChart from '@/components/dashboard/trend-chart'
 import MetricGrid from '@/components/dashboard/metric-grid'
-import InsightCard from '@/components/dashboard/insight-card'
 import AMNote from '@/components/dashboard/am-note'
 import SiteStatusStrip from '@/components/dashboard/site-status-strip'
 import WebsitePreview from '@/components/dashboard/website-preview'
@@ -23,6 +36,7 @@ export default function WebsiteOverviewPage() {
   const [view, setView] = useState<DashboardView | null>(null)
   const [businessName, setBusinessName] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [analyticsConnected, setAnalyticsConnected] = useState<boolean | null>(null)
 
   useEffect(() => {
     async function loadData() {
@@ -42,20 +56,35 @@ export default function WebsiteOverviewPage() {
     loadData()
   }, [client?.id, client?.name, clientLoading])
 
+  /* Probe whether analytics is connected so the empty-state branch
+     can distinguish "connect now" from "connected, no data yet". */
+  useEffect(() => {
+    if (!client?.id) return
+    import('@/lib/website-health-score')
+      .then(({ getWebsiteHealth }) => getWebsiteHealth(client.id))
+      .then(h => {
+        const analytics = h?.checks.find(c => c.id === 'analytics')
+        setAnalyticsConnected(analytics?.status === 'pass')
+      })
+      .catch(() => setAnalyticsConnected(null))
+  }, [client?.id])
+
   if (loading) {
     return (
-      <div className="max-w-[840px] mx-auto px-8 max-sm:px-4 pt-12 text-center">
+      <div className="max-w-[840px] mx-auto px-8 max-sm:px-4 pt-12">
         <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-ink-6 rounded w-48 mx-auto" />
-          <div className="h-12 bg-ink-6 rounded w-32 mx-auto" />
+          <div className="h-6 bg-ink-6 rounded w-48" />
+          <div className="h-12 bg-ink-6 rounded" />
           <div className="h-64 bg-ink-6 rounded" />
         </div>
       </div>
     )
   }
 
-  // No connection or empty state
-  if (!view || view.num === '---') {
+  /* Empty state — only when analytics genuinely not connected.
+     If the view is empty but GA is connected, render the dashboard
+     with zeros (handled later in the normal render path). */
+  if (!view || (view.num === '---' && analyticsConnected === false)) {
     return (
       <div
         className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20"
@@ -88,13 +117,12 @@ export default function WebsiteOverviewPage() {
 
   return (
     <div
-      className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
+      className="max-w-[1100px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16 space-y-5"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
-      {/* Top-right primary action: Request a change. Promoted from
-         the buried 3rd-tier tile so owners realize this is the
-         fastest way to get help. */}
-      <div className="pt-6 pb-4 flex items-center justify-between gap-3 flex-wrap">
+      {/* Header + primary action — Request a change is the most
+         common task on this page, so it sits in the page title row. */}
+      <div className="pt-6 flex items-center justify-between gap-3 flex-wrap">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
             Website
@@ -112,72 +140,46 @@ export default function WebsiteOverviewPage() {
         </Link>
       </div>
 
-      {/* How your website is doing */}
-      <div className="db-fade db-d1">
-        <StatusBanner
-          headline={view.headline}
-          businessName={businessName}
-          pct={view.pct}
-          up={view.up}
-        />
-      </div>
-
-      {/* Your main number */}
-      <div className="db-fade db-d3">
-        <HeroMetric ctx={view.ctx} num={view.num} pctFull={view.pctFull} up={view.up} />
-      </div>
-
-      {/* Single-line status strip — the "is it working?" answer. */}
+      {/* 1. Status strip — answers "is my site working?" in one line.
+         The first thing owners need on every visit. */}
       {client?.id && (
-        <div className="db-fade db-d2 mb-4">
+        <div className="db-fade db-d1">
           <SiteStatusStrip clientId={client.id} />
         </div>
       )}
 
-      {/* Live preview + open requests side-by-side */}
-      {client?.id && (
-        <div className="db-fade db-d4 mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <WebsitePreview websiteUrl={client.website ?? null} />
-          <div className="space-y-3">
-            <RequestStatusFeed />
-            <HandledByTeamPanel />
-          </div>
+      {/* 2. Live preview — full width on mobile, takes the larger
+         column on desktop. Visceral "this is what visitors see". */}
+      <div className="db-fade db-d2 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2">
+          <WebsitePreview websiteUrl={client?.website ?? null} />
         </div>
-      )}
-
-      {/* Your trend over time */}
-      <div className="db-fade db-d4 mt-4">
-        <TrendChart
-          data={view.chartData}
-          timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
-          up={view.up}
-          unit={view.unit}
-        />
+        <div className="space-y-3">
+          <RequestStatusFeed />
+          <HandledByTeamPanel />
+        </div>
       </div>
 
-      {/* The breakdown */}
-      <div className="db-fade db-d5">
-        <MetricGrid title={view.bdtitle} metrics={view.metrics} />
-      </div>
-
-      {/* What we noticed */}
-      {view.insights.length > 0 && (
-        <div className="db-fade db-d6 pb-8 mb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
-          <h2 className="text-[15px] font-bold mb-3" style={{ color: 'var(--db-black)' }}>
-            What we noticed
-          </h2>
-          <div className="flex flex-col gap-2.5">
-            {view.insights.map((ins, i) => (
-              <InsightCard key={i} icon={ins.icon} title={ins.title} subtitle={ins.subtitle} />
-            ))}
-          </div>
+      {/* 3. Performance section — grouped together so the chart +
+         hero + breakdown read as one "how is this doing" answer. */}
+      <section className="db-fade db-d3 pt-4 mt-2" style={{ borderTop: '1px solid var(--db-border)' }}>
+        <h2 className="text-[15px] font-bold mb-3 text-ink">How your website is doing</h2>
+        <div className="space-y-4">
+          <HeroMetric ctx={view.ctx} num={view.num} pctFull={view.pctFull} up={view.up} />
+          <TrendChart
+            data={view.chartData}
+            timeRange={timeRange}
+            onTimeRangeChange={setTimeRange}
+            up={view.up}
+            unit={view.unit}
+          />
+          <MetricGrid title={view.bdtitle} metrics={view.metrics} />
         </div>
-      )}
+      </section>
 
-      {/* From your account manager */}
+      {/* 4. AM note — only shows when there's an actual note. */}
       {view.am.note && (
-        <div className="db-fade db-d7 pb-8 mb-8" style={{ borderBottom: '1px solid var(--db-border)' }}>
+        <div className="db-fade db-d4 pt-4 mt-2" style={{ borderTop: '1px solid var(--db-border)' }}>
           <AMNote
             name={view.am.name}
             initials={view.am.initials}
@@ -186,7 +188,6 @@ export default function WebsiteOverviewPage() {
           />
         </div>
       )}
-
     </div>
   )
 }
