@@ -61,9 +61,10 @@ export async function getWebsiteView(clientId: string): Promise<DashboardView | 
   const searchDaily = (searchRes.data ?? []) as SearchRow[]
   const monthly = (monthlyRes.data ?? []) as MonthlyRow[]
 
-  if (daily.length === 0 && searchDaily.length === 0) {
-    return emptyWebsiteView()
-  }
+  /* Don't short-circuit on empty data — the rest of this function
+     handles empty arrays cleanly (every aggregate falls to zero).
+     A connected client with no traffic should see a dashboard of
+     zeros, not a "no data" placeholder. */
 
   // ---- Hero: unique visitors this month (from monthly aggregate, authoritative)
   const thisY = now.getFullYear()

@@ -129,16 +129,20 @@ export async function syncGoogleAnalyticsForClient(
   start.setUTCDate(start.getUTCDate() - (daysBack - 1))
 
   let written = 0
+  let lastError: string | null = null
   for (const date of daysRange(start, end)) {
     const r = await ingestGA4DayForClient(clientId, conn.platform_account_id, token, date)
     if (r.ok) written++
+    else if (r.error) lastError = r.error
   }
+  /* Only clear sync_error when we actually wrote something. If every
+     day failed, surface the error on the connection row so the UI
+     and admins can see what's wrong. */
   await admin.from('channel_connections').update({
     last_sync_at: new Date().toISOString(),
-    status: 'active',
-    sync_error: null,
+    sync_error: written > 0 ? null : lastError,
   }).eq('id', conn.id)
-  return { daysWritten: written }
+  return { daysWritten: written, error: written === 0 ? lastError ?? 'no days written' : undefined }
 }
 
 /* ── GSC ───────────────────────────────────────────────────────── */
@@ -196,16 +200,17 @@ export async function syncSearchConsoleForClient(
   start.setUTCDate(start.getUTCDate() - (daysBack - 1))
 
   let written = 0
+  let lastError: string | null = null
   for (const date of daysRange(start, end)) {
     const r = await ingestGSCDayForClient(clientId, conn.platform_account_id, token, date)
     if (r.ok) written++
+    else if (r.error) lastError = r.error
   }
   await admin.from('channel_connections').update({
     last_sync_at: new Date().toISOString(),
-    status: 'active',
-    sync_error: null,
+    sync_error: written > 0 ? null : lastError,
   }).eq('id', conn.id)
-  return { daysWritten: written }
+  return { daysWritten: written, error: written === 0 ? lastError ?? 'no days written' : undefined }
 }
 
 /* ── Walk all clients ──────────────────────────────────────────── */
