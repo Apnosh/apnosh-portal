@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, ArrowUpRight, ArrowDownRight, Eye, MapPin, Phone, Globe,
-  Send, Download, BarChart3, AlertCircle,
+  Send, Download, BarChart3, AlertCircle, History, Loader2, CheckCircle2,
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { getGbpAnalytics, type AnalyticsRange, type AnalyticsSummary } from '@/lib/dashboard/get-gbp-analytics'
@@ -50,6 +50,31 @@ export default function AnalyticsView() {
   const [connected, setConnected] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeMetric, setActiveMetric] = useState<keyof AnalyticsSummary['totals']>('impressions')
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
+
+  async function runBackfill() {
+    if (!confirm('Pull the last 18 months of Google data for every linked location? Takes a few minutes and counts against the daily API quota.')) return
+    setBackfilling(true)
+    setBackfillMsg(null)
+    try {
+      const res = await fetch('/api/dashboard/gbp/backfill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monthsBack: 18 }),
+      })
+      const body = await res.json() as { ok: boolean; daysInserted?: number; locationsAttempted?: number; errors?: unknown[]; message?: string }
+      if (!res.ok || !body.ok) {
+        setBackfillMsg(`Failed: ${body.message || 'unknown error'}`)
+      } else {
+        setBackfillMsg(`Pulled ${body.daysInserted ?? 0} days across ${body.locationsAttempted ?? 0} locations${(body.errors?.length ?? 0) > 0 ? ` (with ${body.errors!.length} errors)` : ''}. Refresh to see.`)
+      }
+    } catch (err) {
+      setBackfillMsg(`Failed: ${(err as Error).message}`)
+    } finally {
+      setBackfilling(false)
+    }
+  }
 
   /* Load locations once — drives the location picker. */
   useEffect(() => {
@@ -202,8 +227,26 @@ export default function AnalyticsView() {
             <Download className="w-3 h-3" />
             CSV
           </button>
+          <button
+            onClick={runBackfill}
+            disabled={backfilling}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium text-ink-2 hover:text-ink ring-1 ring-ink-6 hover:ring-ink-4 disabled:opacity-50"
+            title="Pull historical Google Business Profile data going back 18 months"
+          >
+            {backfilling ? <Loader2 className="w-3 h-3 animate-spin" /> : <History className="w-3 h-3" />}
+            {backfilling ? 'Pulling history…' : 'Backfill history'}
+          </button>
         </div>
       </div>
+
+      {backfillMsg && (
+        <div className={`rounded-2xl border p-3 flex items-start gap-3 ${backfillMsg.startsWith('Failed') ? 'border-rose-200 bg-rose-50/70' : 'border-emerald-200 bg-emerald-50/70'}`}>
+          {backfillMsg.startsWith('Failed')
+            ? <AlertCircle className="w-4 h-4 text-rose-700 flex-shrink-0 mt-0.5" />
+            : <CheckCircle2 className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />}
+          <p className={`text-[12.5px] ${backfillMsg.startsWith('Failed') ? 'text-rose-900' : 'text-emerald-900'}`}>{backfillMsg}</p>
+        </div>
+      )}
 
       {/* KPI tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
