@@ -85,14 +85,14 @@ interface NavSection {
 const navSections: NavSection[] = [
   {
     /* Daily destinations — what an owner checks every time they open the
-       portal. Ordered by attention priority, not by service category:
-       Today (overview), Approvals (sign-offs gating publish), Reviews +
-       Messages (customer voice), Calendar (what's coming). */
+       portal. Reviews is no longer top-level since it lives natively
+       under Local SEO; promoting Marketplace here surfaces the
+       creator-booking flow that owners actually act on day-to-day. */
     label: null,
     items: [
       { label: 'Today', href: '/dashboard', icon: LayoutDashboard, exact: true },
       { label: 'Approvals', href: '/dashboard/approvals', icon: CheckSquare, exact: false },
-      { label: 'Reviews', href: '/dashboard/local-seo/reviews', icon: Star, exact: false },
+      { label: 'Marketplace', href: '/dashboard/marketplace', icon: Sparkles, exact: false },
       { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, exact: false },
       { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar, exact: false },
     ],
@@ -169,11 +169,12 @@ const navSections: NavSection[] = [
     ],
   },
   {
-    /* Workspace — who's working on this. Admin-flavored, not daily. */
+    /* Workspace — who's working on this. Marketplace was promoted
+       to the top "daily" group; this section is just the static
+       roster now. */
     label: 'Team',
     items: [
       { label: 'Team', href: '/dashboard/team', icon: Users, exact: false },
-      { label: 'Marketplace', href: '/dashboard/marketplace', icon: Sparkles, exact: false },
     ],
   },
   {
