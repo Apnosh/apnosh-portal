@@ -30,6 +30,7 @@ import WebsitePreview from '@/components/dashboard/website-preview'
 import HandledByTeamPanel from '@/components/dashboard/handled-by-team-panel'
 import RequestStatusFeed from '@/components/dashboard/request-status-feed'
 import FormInboxCard from '@/components/dashboard/form-inbox-card'
+import SiteAuditCard from '@/components/dashboard/site-audit-card'
 
 export default function WebsiteOverviewPage() {
   const { client, loading: clientLoading } = useClient()
@@ -158,6 +159,7 @@ export default function WebsiteOverviewPage() {
         <div className="space-y-3">
           <FormInboxCard />
           <RequestStatusFeed />
+          {client?.id && <SiteAuditCard clientId={client.id} />}
           <HandledByTeamPanel />
         </div>
       </div>

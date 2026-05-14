@@ -40,6 +40,14 @@
     {
       "path": "/api/cron/gsc-sync",
       "schedule": "45 13 * * *"
+    },
+    {
+      "path": "/api/cron/traffic-anomaly-check",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/site-audit",
+      "schedule": "0 5 * * 1"
     }
   ]
 }
