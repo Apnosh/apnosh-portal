@@ -17,7 +17,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Users, Target, Search, TrendingUp, TrendingDown, ChevronDown,
   MapPin, FileText, Globe, Phone, Navigation, Send, Calendar,
-  RefreshCw, BarChart3, Sparkles,
+  RefreshCw, BarChart3, Sparkles, Mail,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from '@/lib/realtime'
@@ -86,6 +86,12 @@ function previousRange(start: Date, end: Date): { start: Date; end: Date } {
   return { start: newStart, end: newEnd }
 }
 
+function yearAgoRange(start: Date, end: Date): { start: Date; end: Date } {
+  const ns = new Date(start); ns.setFullYear(ns.getFullYear() - 1)
+  const ne = new Date(end);   ne.setFullYear(ne.getFullYear() - 1)
+  return { start: ns, end: ne }
+}
+
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 10_000) return `${(n / 1000).toFixed(0)}k`
@@ -100,6 +106,7 @@ export default function WebsiteTrafficPage() {
   const { client, loading: clientLoading } = useClient()
 
   const [rangeKey, setRangeKey] = useState<RangeKey>('30d')
+  const [compareMode, setCompareMode] = useState<'prior' | 'yoy'>('prior')
   const [dailyWeb, setDailyWeb] = useState<DailyWebsiteRow[]>([])
   const [dailySearch, setDailySearch] = useState<DailySearchRow[]>([])
   const [monthlyUniques, setMonthlyUniques] = useState<Array<{
@@ -147,7 +154,11 @@ export default function WebsiteTrafficPage() {
     const endStr = toDateStr(end)
     const currDaily = dailyWeb.filter(r => r.date >= startStr && r.date <= endStr)
     const currSearch = dailySearch.filter(r => r.date >= startStr && r.date <= endStr)
-    const prev = previousRange(start, end)
+    /* Comparison window — prior period of same length, OR same
+       window from one year ago for YoY mode. */
+    const prev = compareMode === 'yoy'
+      ? yearAgoRange(start, end)
+      : previousRange(start, end)
     const prevStartStr = toDateStr(prev.start)
     const prevEndStr = toDateStr(prev.end)
     const prevDaily = dailyWeb.filter(r => r.date >= prevStartStr && r.date <= prevEndStr)
@@ -176,7 +187,59 @@ export default function WebsiteTrafficPage() {
       { daily: prevDaily, search: prevSearch, uniqueOverride: prevOverride },
       startStr, endStr,
     )
-  }, [dailyWeb, dailySearch, monthlyUniques, rangeKey, client?.id])
+  }, [dailyWeb, dailySearch, monthlyUniques, rangeKey, client?.id, compareMode])
+
+  /* Device-split estimate: mobile_pct × visitors gives a rough
+     mobile-visitor count; we use it to split actions by device. */
+  const deviceSplit = useMemo(() => {
+    const { start, end } = RANGE_OPTIONS[rangeKey].compute()
+    const startStr = toDateStr(start)
+    const endStr = toDateStr(end)
+    const rows = dailyWeb.filter(r => r.date >= startStr && r.date <= endStr)
+    let mobileVisits = 0, desktopVisits = 0
+    let mobileActions = 0, desktopActions = 0
+    for (const r of rows) {
+      const sessions = r.sessions ?? 0
+      const pct = (r.mobile_pct ?? 0) / 100
+      const mob = Math.round(sessions * pct)
+      const desk = sessions - mob
+      mobileVisits += mob
+      desktopVisits += desk
+      const actions = r.conversion_events?.total ?? 0
+      mobileActions += Math.round(actions * pct)
+      desktopActions += actions - Math.round(actions * pct)
+    }
+    return {
+      mobile: { visits: mobileVisits, actions: mobileActions, rate: mobileVisits === 0 ? 0 : Math.round((mobileActions / mobileVisits) * 1000) / 10 },
+      desktop: { visits: desktopVisits, actions: desktopActions, rate: desktopVisits === 0 ? 0 : Math.round((desktopActions / desktopVisits) * 1000) / 10 },
+    }
+  }, [dailyWeb, rangeKey])
+
+  /* Keyword position series — average GSC position over time. Lower
+     is better. Plotted inverted so "going up" visually = improving. */
+  const positionSeries = useMemo(() => {
+    const { start, end } = RANGE_OPTIONS[rangeKey].compute()
+    const startStr = toDateStr(start)
+    const endStr = toDateStr(end)
+    const rows = dailySearch
+      .filter(r => r.date >= startStr && r.date <= endStr && (r.avg_position ?? null) != null)
+      .sort((a, b) => a.date.localeCompare(b.date))
+    return rows.map(r => ({ date: r.date, position: r.avg_position as number }))
+  }, [dailySearch, rangeKey])
+
+  /* Newsletter signups via form_submissions (kind='newsletter'). */
+  const [newsletterCount, setNewsletterCount] = useState<number | null>(null)
+  useEffect(() => {
+    if (!client?.id) return
+    const { start } = RANGE_OPTIONS[rangeKey].compute()
+    supabase
+      .from('form_submissions')
+      .select('id', { count: 'exact', head: true })
+      .eq('client_id', client.id)
+      .eq('kind', 'newsletter')
+      .gte('submitted_at', start.toISOString())
+      .then(r => setNewsletterCount(r.count ?? 0))
+  }, [client?.id, rangeKey, supabase])
 
   /* Compute daily series for the trend chart. */
   const chartSeries = useMemo(() => {
@@ -233,7 +296,10 @@ export default function WebsiteTrafficPage() {
             How your site is doing
           </h1>
         </div>
-        <RangePills value={rangeKey} onChange={setRangeKey} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <RangePills value={rangeKey} onChange={setRangeKey} />
+          <CompareToggle value={compareMode} onChange={setCompareMode} />
+        </div>
       </div>
 
       {!hasAnyData || !insight ? (
@@ -358,6 +424,28 @@ export default function WebsiteTrafficPage() {
               )}
             </div>
           )}
+
+          {/* Mobile vs desktop conversion split + newsletter signups
+              side-by-side. */}
+          {(deviceSplit.mobile.visits > 0 || deviceSplit.desktop.visits > 0 || (newsletterCount ?? 0) > 0) && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <DeviceSplitCard
+                title="Mobile"
+                data={deviceSplit.mobile}
+                compareData={deviceSplit.desktop}
+              />
+              <DeviceSplitCard
+                title="Desktop"
+                data={deviceSplit.desktop}
+                compareData={deviceSplit.mobile}
+              />
+              <NewsletterCard count={newsletterCount ?? 0} rangeLabel={RANGE_OPTIONS[rangeKey].label} />
+            </div>
+          )}
+
+          {/* Google search position over time. Inverted (lower
+              position = better, so chart "going up" = improving). */}
+          {positionSeries.length >= 3 && <PositionChart series={positionSeries} />}
 
           {/* 6. Google search performance. */}
           {insight.search.hasData && (
@@ -604,6 +692,121 @@ function formatDuration(seconds: number | null): string {
   const m = Math.floor(seconds / 60)
   const s = Math.round(seconds % 60)
   return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+function CompareToggle({ value, onChange }: { value: 'prior' | 'yoy'; onChange: (v: 'prior' | 'yoy') => void }) {
+  return (
+    <div className="inline-flex rounded-full bg-bg-2 p-0.5 ring-1 ring-ink-6">
+      <button
+        onClick={() => onChange('prior')}
+        className={`px-3 py-1.5 rounded-full text-[11.5px] font-medium ${value === 'prior' ? 'bg-white text-ink shadow-sm' : 'text-ink-3'}`}
+      >
+        vs prior period
+      </button>
+      <button
+        onClick={() => onChange('yoy')}
+        className={`px-3 py-1.5 rounded-full text-[11.5px] font-medium ${value === 'yoy' ? 'bg-white text-ink shadow-sm' : 'text-ink-3'}`}
+      >
+        vs last year
+      </button>
+    </div>
+  )
+}
+
+function DeviceSplitCard({ title, data, compareData }: {
+  title: string
+  data: { visits: number; actions: number; rate: number }
+  compareData: { rate: number }
+}) {
+  const isMobile = title === 'Mobile'
+  const Icon = isMobile ? Mail : Globe  /* placeholder icons */
+  const totalShare = data.visits + compareData.rate === 0 ? 0 : 0
+  void totalShare
+  return (
+    <div className="rounded-2xl border border-ink-6 bg-white p-5">
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`text-[10px] uppercase tracking-wider font-semibold ${isMobile ? 'text-blue-700' : 'text-purple-700'}`}>
+          {isMobile ? '📱 ' : '🖥️ '}{title}
+        </span>
+      </div>
+      <div className="text-[24px] font-semibold text-ink tabular-nums leading-none">{formatNumber(data.visits)}</div>
+      <p className="text-[11px] text-ink-3 mt-0.5">visits</p>
+      <div className="mt-3 pt-3 border-t border-ink-7 grid grid-cols-2 gap-2 text-[12px]">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-ink-4">Actions</p>
+          <p className="text-[14px] font-semibold text-ink tabular-nums">{formatNumber(data.actions)}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-ink-4">Conversion</p>
+          <p className={`text-[14px] font-semibold tabular-nums ${data.rate > compareData.rate ? 'text-emerald-700' : 'text-ink'}`}>
+            {data.rate.toFixed(1)}%
+          </p>
+        </div>
+      </div>
+      {data.rate < compareData.rate && data.visits > 50 && (
+        <p className="mt-2 text-[10.5px] text-rose-700">
+          Converts lower than {isMobile ? 'desktop' : 'mobile'} ({compareData.rate.toFixed(1)}%).
+        </p>
+      )}
+    </div>
+  )
+}
+
+function NewsletterCard({ count, rangeLabel }: { count: number; rangeLabel: string }) {
+  return (
+    <div className="rounded-2xl border border-ink-6 bg-white p-5">
+      <div className="flex items-center gap-2 mb-2">
+        <Mail className="w-3.5 h-3.5 text-brand" />
+        <h2 className="text-[11px] uppercase tracking-wider font-semibold text-brand-dark">Newsletter signups</h2>
+      </div>
+      <div className="text-[24px] font-semibold text-ink tabular-nums leading-none">{formatNumber(count)}</div>
+      <p className="text-[11px] text-ink-3 mt-0.5">{rangeLabel.toLowerCase()}</p>
+      <p className="text-[10.5px] text-ink-4 mt-3 leading-relaxed">
+        Count of newsletter submissions through your site forms.
+      </p>
+    </div>
+  )
+}
+
+function PositionChart({ series }: { series: Array<{ date: string; position: number }> }) {
+  /* Position is "lower is better" (1 = top result). To show
+     improvement as "up" on the y-axis, invert: y = max - position. */
+  const max = Math.max(...series.map(s => s.position), 10)
+  const w = 800, h = 100
+  const stepX = w / Math.max(series.length - 1, 1)
+  const points = series.map((s, i) => `${i * stepX},${(s.position / max) * h}`).join(' ')
+  const latest = series[series.length - 1]?.position
+  const earliest = series[0]?.position
+  const delta = (earliest != null && latest != null) ? latest - earliest : null
+  /* Improvement = decreased rank. */
+  const improving = delta !== null && delta < 0
+  return (
+    <section className="rounded-2xl border border-ink-6 bg-white p-5 lg:p-6">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="w-3.5 h-3.5 text-brand" />
+          <h2 className="text-sm font-semibold text-ink">Where you rank on Google</h2>
+        </div>
+        {delta !== null && Math.abs(delta) >= 0.5 && (
+          <span className={`text-[11.5px] font-semibold ${improving ? 'text-emerald-700' : 'text-rose-700'}`}>
+            {improving ? '↑' : '↓'} {Math.abs(delta).toFixed(1)} {improving ? 'improved' : 'dropped'}
+          </span>
+        )}
+      </div>
+      <p className="text-[12.5px] text-ink-3 mb-4">
+        Average position in search results across your queries. Lower is better (1 = top spot).
+      </p>
+      <svg viewBox={`0 0 ${w} ${h + 16}`} className="w-full h-24" preserveAspectRatio="none">
+        <polyline points={points} fill="none" stroke="#4abd98" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <line x1="0" y1={h} x2={w} y2={h} stroke="#e8e8e6" strokeWidth="1" />
+      </svg>
+      <div className="flex justify-between text-[10px] text-ink-4 mt-1.5">
+        <span>{series[0] && new Date(series[0].date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+        <span className="font-medium text-ink-2">Latest: {latest?.toFixed(1) ?? '—'}</span>
+        <span>{series[series.length - 1] && new Date(series[series.length - 1].date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+      </div>
+    </section>
+  )
 }
 
 function EmptyState() {
