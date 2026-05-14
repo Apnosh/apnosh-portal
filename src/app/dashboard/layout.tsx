@@ -161,6 +161,7 @@ const navSections: NavSection[] = [
           { label: 'Overview', href: '/dashboard/website', exact: true },
           { label: 'Full analytics', href: '/dashboard/website/traffic' },
           { label: 'Your site', href: '/dashboard/website/manage' },
+          { label: 'Forms', href: '/dashboard/website/forms' },
           { label: 'Requests', href: '/dashboard/website/requests' },
         ],
       },

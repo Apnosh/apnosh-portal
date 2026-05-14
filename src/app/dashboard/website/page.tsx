@@ -29,6 +29,7 @@ import SiteStatusStrip from '@/components/dashboard/site-status-strip'
 import WebsitePreview from '@/components/dashboard/website-preview'
 import HandledByTeamPanel from '@/components/dashboard/handled-by-team-panel'
 import RequestStatusFeed from '@/components/dashboard/request-status-feed'
+import FormInboxCard from '@/components/dashboard/form-inbox-card'
 
 export default function WebsiteOverviewPage() {
   const { client, loading: clientLoading } = useClient()
@@ -155,6 +156,7 @@ export default function WebsiteOverviewPage() {
           <WebsitePreview websiteUrl={client?.website ?? null} />
         </div>
         <div className="space-y-3">
+          <FormInboxCard />
           <RequestStatusFeed />
           <HandledByTeamPanel />
         </div>
