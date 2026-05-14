@@ -96,5 +96,17 @@ export async function finalizeGA4Connection(
     .delete()
     .eq('id', pending.id)
 
+  /* Auto-backfill 90 days so the client sees a populated traffic
+     chart on their first dashboard visit. Fire-and-forget — runs
+     30-90s in background; we don't block the redirect on it. */
+  void (async () => {
+    try {
+      const { syncGoogleAnalyticsForClient } = await import('@/lib/web-analytics-sync')
+      await syncGoogleAnalyticsForClient(clientId, 90)
+    } catch (err) {
+      console.error('[finalizeGA4Connection] auto-backfill failed:', (err as Error).message)
+    }
+  })()
+
   return { success: true }
 }

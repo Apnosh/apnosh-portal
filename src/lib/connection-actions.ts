@@ -318,6 +318,32 @@ export async function syncConnection(
     }
   }
 
+  /* GA4: manual sync pulls the last 7 days into website_metrics. */
+  if (source === 'channel_connections' && channelOrPlatform === 'google_analytics') {
+    const lastSync = row.last_sync_at ? new Date(row.last_sync_at).getTime() : 0
+    if (Date.now() - lastSync < 60_000) {
+      const secsLeft = Math.ceil((60_000 - (Date.now() - lastSync)) / 1000)
+      return { success: false, error: `Try again in ${secsLeft}s — last sync was just a moment ago.` }
+    }
+    const { syncGoogleAnalyticsForClient } = await import('@/lib/web-analytics-sync')
+    const r = await syncGoogleAnalyticsForClient(clientId, 7)
+    if (r.error) return { success: false, error: r.error }
+    return { success: true, locationsDiscovered: 0, metricsImported: r.daysWritten, reviewsImported: 0, errors: [] }
+  }
+
+  /* GSC: same shape; pulls last 7 days minus the API's reporting lag. */
+  if (source === 'channel_connections' && channelOrPlatform === 'google_search_console') {
+    const lastSync = row.last_sync_at ? new Date(row.last_sync_at).getTime() : 0
+    if (Date.now() - lastSync < 60_000) {
+      const secsLeft = Math.ceil((60_000 - (Date.now() - lastSync)) / 1000)
+      return { success: false, error: `Try again in ${secsLeft}s — last sync was just a moment ago.` }
+    }
+    const { syncSearchConsoleForClient } = await import('@/lib/web-analytics-sync')
+    const r = await syncSearchConsoleForClient(clientId, 7)
+    if (r.error) return { success: false, error: r.error }
+    return { success: true, locationsDiscovered: 0, metricsImported: r.daysWritten, reviewsImported: 0, errors: [] }
+  }
+
   return { success: false, error: 'Sync not supported for this connection yet' }
 }
 

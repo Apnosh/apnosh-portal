@@ -93,5 +93,16 @@ export async function finalizeGSCConnection(
     .delete()
     .eq('id', pending.id)
 
+  /* Auto-backfill 90 days. Fire-and-forget; GSC has a 2-3 day
+     reporting lag so we anchor end at today-3 inside the lib. */
+  void (async () => {
+    try {
+      const { syncSearchConsoleForClient } = await import('@/lib/web-analytics-sync')
+      await syncSearchConsoleForClient(clientId, 90)
+    } catch (err) {
+      console.error('[finalizeGSCConnection] auto-backfill failed:', (err as Error).message)
+    }
+  })()
+
   return { success: true }
 }

@@ -32,6 +32,14 @@
     {
       "path": "/api/cron/holiday-hours-check",
       "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/cron/ga-sync",
+      "schedule": "15 13 * * *"
+    },
+    {
+      "path": "/api/cron/gsc-sync",
+      "schedule": "45 13 * * *"
     }
   ]
 }
