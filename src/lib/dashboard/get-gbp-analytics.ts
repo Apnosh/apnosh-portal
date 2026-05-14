@@ -110,6 +110,9 @@ export async function getGbpAnalytics(
   const prevStartDate = new Date(prevEndDate)
   prevStartDate.setUTCDate(prevStartDate.getUTCDate() - (days - 1))
 
+  /* Multi-location clients on the 12m range easily exceed Supabase's
+     default 1000-row limit (5 locs × 365 days = 1,825). Explicit cap
+     so we don't silently truncate. */
   let currQuery = admin
     .from('gbp_metrics')
     .select('date, impressions_total, directions, calls, website_clicks, post_views, conversations, bookings, food_orders, search_views')
@@ -117,12 +120,14 @@ export async function getGbpAnalytics(
     .gte('date', ymd(startDate))
     .lte('date', ymd(endDate))
     .order('date', { ascending: true })
+    .limit(10000)
   let prevQuery = admin
     .from('gbp_metrics')
     .select('impressions_total, directions, calls, website_clicks, post_views, conversations, bookings, food_orders, search_views')
     .eq('client_id', clientId)
     .gte('date', ymd(prevStartDate))
     .lte('date', ymd(prevEndDate))
+    .limit(10000)
 
   if (metricsLocationId) {
     currQuery = currQuery.eq('location_id', metricsLocationId)

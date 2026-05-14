@@ -57,12 +57,17 @@ export async function getLocalSeoView(
 
   const yearAgo = addDays(now, -365)
 
+  /* Supabase's default row limit is 1000. A multi-location client with
+     12 months of daily metrics easily exceeds that (5 locs × 365 days),
+     so we'd silently truncate to the oldest rows and miss the current
+     period. Explicit large limit forces the full dataset. */
   let gbpQuery = supabase
     .from('gbp_metrics')
     .select('date, directions, calls, website_clicks, search_views, search_views_maps, search_views_search, photo_views')
     .eq('client_id', clientId)
     .gte('date', formatDate(yearAgo))
     .order('date', { ascending: true })
+    .limit(10000)
   if (gbpLocationId) gbpQuery = gbpQuery.eq('location_id', gbpLocationId)
 
   let reviewsQuery = supabase
