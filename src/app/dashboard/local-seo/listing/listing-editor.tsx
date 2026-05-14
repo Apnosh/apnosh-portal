@@ -11,6 +11,7 @@ import { getClientLocations } from '@/lib/dashboard/get-client-locations'
 import type { ClientLocation } from '@/lib/dashboard/location-helpers'
 import { useClient } from '@/lib/client-context'
 import ConnectEmptyState from '../connect-empty-state'
+import MobileListingPreview from '@/components/dashboard/mobile-listing-preview'
 
 interface AttributeCatalogItem {
   id: string
@@ -434,6 +435,9 @@ export default function ListingEditor() {
           />
         </Section>
       )}
+
+      {/* Mobile preview — "this is what customers see" mockup. */}
+      <MobileListingPreview locationId={activeLocationId} />
 
       {/* Recent edits — surface the audit log so owners + strategists
          can see who changed what when, without having to ask Apnosh

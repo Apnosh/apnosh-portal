@@ -18,6 +18,7 @@ import QueueTab from './tabs/queue-tab'
 import MetricsTab from './tabs/metrics-tab'
 import KnowledgeTab from '@/components/admin/knowledge-tab'
 import LocalSeoTab from './tabs/local-seo-tab'
+import SeoToolkitTab from './tabs/seo-toolkit-tab'
 import ReviewsTab from './tabs/reviews-tab'
 import NotesTab from './tabs/notes-tab'
 import ConnectionsTab from './tabs/connections-tab'
@@ -83,6 +84,7 @@ const SUB_TABS: Partial<Record<Tab, SubTab[]>> = {
     { key: 'local_seo', label: 'Local SEO' },
     { key: 'reviews',   label: 'Reviews' },
     { key: 'website',   label: 'Website' },
+    { key: 'seo_toolkit', label: 'SEO Toolkit' },
   ],
   notes: [
     { key: 'am_notes',        label: 'AM Notes' },
@@ -493,6 +495,7 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
           {activeSub === 'local_seo' && <LocalSeoTab clientId={client.id} clientSlug={client.slug} />}
           {activeSub === 'reviews' && <ReviewsTab clientId={client.id} />}
           {activeSub === 'website' && <WebsiteTab clientId={client.id} />}
+          {activeSub === 'seo_toolkit' && <SeoToolkitTab clientId={client.id} />}
         </div>
       )}
 

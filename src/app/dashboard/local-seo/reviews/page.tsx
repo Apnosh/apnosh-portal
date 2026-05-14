@@ -15,6 +15,7 @@ import { getClientLocations } from '@/lib/dashboard/get-client-locations'
 import type { ClientLocation } from '@/lib/dashboard/location-helpers'
 import ChannelHero from '@/components/dashboard/channel-hero'
 import ReviewThemesPanel from '@/components/dashboard/review-themes-panel'
+import ReviewVelocityCard from '@/components/dashboard/review-velocity-card'
 import type { Review, ReviewSource } from '@/types/database'
 import ConnectEmptyState from '../connect-empty-state'
 
@@ -379,9 +380,15 @@ export default function ReviewsPage() {
         </div>
       )}
 
-      {/* AI-extracted themes from recent reviews — only the most
-         recurring topics, with praise vs critical split. */}
-      <ReviewThemesPanel locationId={locationFilter === 'all' ? null : locationFilter} />
+      {/* Review velocity + themes side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="lg:col-span-1">
+          <ReviewVelocityCard locationId={locationFilter === 'all' ? null : locationFilter} />
+        </div>
+        <div className="lg:col-span-2">
+          <ReviewThemesPanel locationId={locationFilter === 'all' ? null : locationFilter} />
+        </div>
+      </div>
 
       {!hasData ? (
         <div className="bg-white rounded-xl border border-ink-6 p-12 text-center">

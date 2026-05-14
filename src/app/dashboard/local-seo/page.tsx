@@ -15,6 +15,7 @@ import HeroMetric from '@/components/dashboard/hero-metric'
 import TrendChart from '@/components/dashboard/trend-chart'
 import MetricGrid from '@/components/dashboard/metric-grid'
 import ListingHealthCard from '@/components/dashboard/listing-health-card'
+import HandledByTeamPanel from '@/components/dashboard/handled-by-team-panel'
 import InsightCard from '@/components/dashboard/insight-card'
 import AMNote from '@/components/dashboard/am-note'
 import LocationSelector from '@/components/dashboard/location-selector'
@@ -212,8 +213,9 @@ function LocalSeoContent() {
               <MetricGrid title={view.bdtitle} metrics={metrics} />
             </div>
             {client?.id && (
-              <div className="db-fade db-d5 mt-4">
+              <div className="db-fade db-d5 mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
                 <ListingHealthCard clientId={client.id} locationId={selectedLocationId} />
+                <HandledByTeamPanel />
               </div>
             )}
           </>
