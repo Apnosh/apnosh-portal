@@ -153,16 +153,15 @@ const navSections: NavSection[] = [
       },
       {
         label: 'Website',
-        href: '/dashboard/website/traffic',  // analytics-first instead of /manage
+        href: '/dashboard/website',
         icon: Globe,
         exact: false,
         serviceArea: 'website',
         children: [
-          { label: 'Traffic', href: '/dashboard/website/traffic' },
-          { label: 'Site Health', href: '/dashboard/website/health' },
-          { label: 'Manage site', href: '/dashboard/website/manage' },
-          { label: 'Request a change', href: '/dashboard/website/requests/new' },
-          { label: 'Change Requests', href: '/dashboard/website/requests' },
+          { label: 'Overview', href: '/dashboard/website', exact: true },
+          { label: 'Full analytics', href: '/dashboard/website/traffic' },
+          { label: 'Your site', href: '/dashboard/website/manage' },
+          { label: 'Requests', href: '/dashboard/website/requests' },
         ],
       },
     ],

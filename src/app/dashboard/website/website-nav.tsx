@@ -1,14 +1,17 @@
 'use client'
 
 /**
- * Sticky sub-navigation for every Website page. Mirrors the Local SEO
- * tab strip so owners can move between Overview / Health / Traffic /
- * Manage / Requests without going through the global sidebar.
+ * Sticky sub-navigation for every Website page. Mirrors the Local
+ * SEO tab strip exactly so owners learn one navigation pattern that
+ * works for both channels.
+ *
+ * Local SEO: Overview / Full analytics / Reviews / Your listing / Menu
+ * Website:   Overview / Full analytics / Your site / Requests
  */
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BarChart3, LineChart, Settings2, Inbox } from 'lucide-react'
+import { BarChart3, LineChart, Globe, Inbox } from 'lucide-react'
 
 interface Tab {
   label: string
@@ -18,10 +21,10 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { label: 'Overview', href: '/dashboard/website', icon: BarChart3, exact: true },
-  { label: 'Manage', href: '/dashboard/website/manage', icon: Settings2 },
-  { label: 'Traffic', href: '/dashboard/website/traffic', icon: LineChart },
-  { label: 'Requests', href: '/dashboard/website/requests', icon: Inbox },
+  { label: 'Overview',       href: '/dashboard/website',          icon: BarChart3, exact: true },
+  { label: 'Full analytics', href: '/dashboard/website/traffic',  icon: LineChart },
+  { label: 'Your site',      href: '/dashboard/website/manage',   icon: Globe },
+  { label: 'Requests',       href: '/dashboard/website/requests', icon: Inbox },
 ]
 
 export default function WebsiteNav() {

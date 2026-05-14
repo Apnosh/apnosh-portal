@@ -64,7 +64,7 @@ export default async function MySitePage() {
       </Link>
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-ink mb-1">Manage your site</h1>
+        <h1 className="text-2xl font-bold text-ink mb-1">Your site</h1>
         <p className="text-sm text-ink-3">
           Quick changes here — bigger asks via Request a change.
         </p>
