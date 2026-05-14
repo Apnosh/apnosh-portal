@@ -40,6 +40,10 @@ export async function GET(req: NextRequest) {
     menus,
     menuUrl: link,
     structuredMenusAvailable: menusRes.ok,
+    /* Surface why structured menus aren't available so the UI can
+       distinguish "API not enabled" from "access not yet approved"
+       from "no menu yet". */
+    menusError: menusRes.ok ? null : menusRes.error,
   })
 }
 
