@@ -114,9 +114,10 @@ function ConnectionCard({ conn, clientId, onDisconnect, onSynced }: {
     setTimeout(() => setSyncMessage(null), 6000)
   }
 
-  /* Only platforms that have a per-client sync path get the button.
-     Right now that's Google Business Profile via channel_connections. */
-  const canSync = conn.source === 'channel_connections' && conn.platform === 'google_business_profile'
+  /* Platforms that have a per-client sync path in connection-actions:
+     GBP (gbp-client-sync), GA (web-analytics-sync), GSC (web-analytics-sync). */
+  const canSync = conn.source === 'channel_connections'
+    && ['google_business_profile', 'google_analytics', 'google_search_console'].includes(conn.platform)
 
   const needsAttention = conn.status === 'expired' || conn.status === 'error'
 
