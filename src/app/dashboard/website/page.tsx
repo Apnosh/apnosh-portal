@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, Activity, ListTodo, BarChart3, ChevronRight, Globe, Settings2 } from 'lucide-react'
+import { Plus, Globe } from 'lucide-react'
 import type { TimeRange, DashboardView } from '@/types/dashboard'
 import { getWebsiteView } from '@/lib/dashboard/get-website-view'
 import { useClient } from '@/lib/client-context'
@@ -12,6 +12,9 @@ import TrendChart from '@/components/dashboard/trend-chart'
 import MetricGrid from '@/components/dashboard/metric-grid'
 import InsightCard from '@/components/dashboard/insight-card'
 import AMNote from '@/components/dashboard/am-note'
+import WebsiteHealthCard from '@/components/dashboard/website-health-card'
+import WebsitePreview from '@/components/dashboard/website-preview'
+import HandledByTeamPanel from '@/components/dashboard/handled-by-team-panel'
 
 export default function WebsiteOverviewPage() {
   const { client, loading: clientLoading } = useClient()
@@ -87,6 +90,27 @@ export default function WebsiteOverviewPage() {
       className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
+      {/* Top-right primary action: Request a change. Promoted from
+         the buried 3rd-tier tile so owners realize this is the
+         fastest way to get help. */}
+      <div className="pt-6 pb-4 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
+            Website
+          </p>
+          <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1">
+            {businessName || 'Your website'}
+          </h1>
+        </div>
+        <Link
+          href="/dashboard/website/requests/new"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-sm shadow-brand/20"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Request a change
+        </Link>
+      </div>
+
       {/* How your website is doing */}
       <div className="db-fade db-d1">
         <StatusBanner
@@ -102,8 +126,19 @@ export default function WebsiteOverviewPage() {
         <HeroMetric ctx={view.ctx} num={view.num} pctFull={view.pctFull} up={view.up} />
       </div>
 
+      {/* Live preview + health side-by-side */}
+      {client?.id && (
+        <div className="db-fade db-d4 mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <WebsitePreview websiteUrl={client.website ?? null} />
+          <div className="space-y-3">
+            <WebsiteHealthCard clientId={client.id} />
+            <HandledByTeamPanel />
+          </div>
+        </div>
+      )}
+
       {/* Your trend over time */}
-      <div className="db-fade db-d4">
+      <div className="db-fade db-d4 mt-4">
         <TrendChart
           data={view.chartData}
           timeRange={timeRange}
@@ -144,86 +179,6 @@ export default function WebsiteOverviewPage() {
         </div>
       )}
 
-      {/* Website tools -- quick links to other sections */}
-      <div className="db-fade db-d7">
-        <h2 className="text-[15px] font-bold mb-3" style={{ color: 'var(--db-black)' }}>
-          Website tools
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          <Link
-            href="/dashboard/website/manage"
-            className="bg-white rounded-xl border-2 border-brand/30 p-4 flex items-center justify-between hover:border-brand hover:shadow-sm transition"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(74, 189, 152, 0.1)' }}>
-                <Settings2 className="w-5 h-5" style={{ color: '#4abd98' }} />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-ink">Manage your site</div>
-                <div className="text-xs text-ink-4">Update hours, menu, promos and more</div>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-ink-4" />
-          </Link>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Link
-            href="/dashboard/website/health"
-            className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-bg-2 flex items-center justify-center">
-                <Activity className="w-5 h-5 text-ink-3" />
-              </div>
-              <div>
-                <div className="text-sm font-medium text-ink">Site Health</div>
-                <div className="text-xs text-ink-4">Uptime, speed, security</div>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-ink-4" />
-          </Link>
-          <Link
-            href="/dashboard/website/traffic"
-            className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-bg-2 flex items-center justify-center">
-                <BarChart3 className="w-5 h-5 text-ink-3" />
-              </div>
-              <div>
-                <div className="text-sm font-medium text-ink">Full details</div>
-                <div className="text-xs text-ink-4">Sources, pages, advanced</div>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-ink-4" />
-          </Link>
-          <Link
-            href="/dashboard/website/requests"
-            className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-bg-2 flex items-center justify-center">
-                <ListTodo className="w-5 h-5 text-ink-3" />
-              </div>
-              <div>
-                <div className="text-sm font-medium text-ink">Change requests</div>
-                <div className="text-xs text-ink-4">Ask for updates</div>
-              </div>
-            </div>
-            <ChevronRight className="w-4 h-4 text-ink-4" />
-          </Link>
-        </div>
-
-        <div className="mt-4 flex justify-center">
-          <Link
-            href="/dashboard/website/requests/new"
-            className="inline-flex items-center gap-2 text-sm font-medium text-brand hover:text-brand-dark"
-          >
-            <Plus className="w-4 h-4" />
-            New change request
-          </Link>
-        </div>
-      </div>
     </div>
   )
 }
