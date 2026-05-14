@@ -23,9 +23,12 @@ export interface DailyPoint {
   calls: number
   websiteClicks: number
   postViews: number
+  postClicks: number
+  photoViews: number
   conversations: number
   bookings: number
   foodOrders: number
+  foodMenuClicks: number
 }
 
 export interface AnalyticsSummary {
@@ -39,13 +42,36 @@ export interface AnalyticsSummary {
     calls: number
     websiteClicks: number
     postViews: number
+    postClicks: number
+    photoViews: number
     conversations: number
     bookings: number
     foodOrders: number
+    foodMenuClicks: number
   }
   /* Totals for the SAME calendar window one year ago (YoY). Restaurants
      are seasonal, so YoY is more meaningful than prior-period. */
   prevTotals: AnalyticsSummary['totals']
+  /* Where impressions came from across the window — Search vs Maps,
+     Mobile vs Desktop. Each is a sum of impressions over the window. */
+  impressionBreakdown: {
+    searchMobile: number
+    searchDesktop: number
+    mapsMobile: number
+    mapsDesktop: number
+  }
+  /* Top search queries that surfaced the business in the window,
+     aggregated across days. Capped to top 25. */
+  topQueries: Array<{ query: string; impressions: number }>
+}
+
+function emptyDaily(date: string): DailyPoint {
+  return {
+    date,
+    impressions: 0, directions: 0, calls: 0, websiteClicks: 0,
+    postViews: 0, postClicks: 0, photoViews: 0,
+    conversations: 0, bookings: 0, foodOrders: 0, foodMenuClicks: 0,
+  }
 }
 
 function emptyTotals(): AnalyticsSummary['totals'] {
@@ -55,9 +81,12 @@ function emptyTotals(): AnalyticsSummary['totals'] {
     calls: 0,
     websiteClicks: 0,
     postViews: 0,
+    postClicks: 0,
+    photoViews: 0,
     conversations: 0,
     bookings: 0,
     foodOrders: 0,
+    foodMenuClicks: 0,
   }
 }
 
@@ -154,18 +183,26 @@ export async function getGbpAnalytics(
     calls: number | null
     website_clicks: number | null
     post_views: number | null
+    post_clicks: number | null
+    photo_views: number | null
     conversations: number | null
     bookings: number | null
     food_orders: number | null
+    food_menu_clicks: number | null
     search_views: number | null
+    impressions_search_mobile: number | null
+    impressions_search_desktop: number | null
+    impressions_maps_mobile: number | null
+    impressions_maps_desktop: number | null
+    top_queries: Array<{ query: string; impressions: number }> | null
   }
-  type PrevRow = Omit<CurrRow, 'date'>
+  type PrevRow = Omit<CurrRow, 'date' | 'top_queries' | 'impressions_search_mobile' | 'impressions_search_desktop' | 'impressions_maps_mobile' | 'impressions_maps_desktop'>
 
   const [currData, prevData] = await Promise.all([
     fetchAllPaged<CurrRow>((from, to) => {
       let q = admin
         .from('gbp_metrics')
-        .select('date, impressions_total, directions, calls, website_clicks, post_views, conversations, bookings, food_orders, search_views')
+        .select('date, impressions_total, directions, calls, website_clicks, post_views, post_clicks, photo_views, conversations, bookings, food_orders, food_menu_clicks, search_views, impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, top_queries')
         .eq('client_id', clientId)
         .gte('date', ymd(startDate))
         .lte('date', ymd(endDate))
@@ -177,7 +214,7 @@ export async function getGbpAnalytics(
     fetchAllPaged<PrevRow>((from, to) => {
       let q = admin
         .from('gbp_metrics')
-        .select('impressions_total, directions, calls, website_clicks, post_views, conversations, bookings, food_orders, search_views')
+        .select('impressions_total, directions, calls, website_clicks, post_views, post_clicks, photo_views, conversations, bookings, food_orders, food_menu_clicks, search_views')
         .eq('client_id', clientId)
         .gte('date', ymd(prevStartDate))
         .lte('date', ymd(prevEndDate))
@@ -191,26 +228,15 @@ export async function getGbpAnalytics(
   const prevRes = { data: prevData }
 
   const dailyByDate = new Map<string, DailyPoint>()
-  for (const r of (currRes.data ?? []) as Array<{
-    date: string
-    impressions_total: number | null
-    directions: number | null
-    calls: number | null
-    website_clicks: number | null
-    post_views: number | null
-    conversations: number | null
-    bookings: number | null
-    food_orders: number | null
-    search_views: number | null
-  }>) {
+  const impressionBreakdown = {
+    searchMobile: 0, searchDesktop: 0, mapsMobile: 0, mapsDesktop: 0,
+  }
+  const queryTotals = new Map<string, number>()
+  for (const r of (currRes.data ?? []) as CurrRow[]) {
     /* Some legacy rows store impressions under search_views; treat
        impressions_total as the authoritative field and fall back. */
     const impressions = r.impressions_total ?? r.search_views ?? 0
-    const existing = dailyByDate.get(r.date) ?? {
-      date: r.date,
-      impressions: 0, directions: 0, calls: 0, websiteClicks: 0,
-      postViews: 0, conversations: 0, bookings: 0, foodOrders: 0,
-    }
+    const existing = dailyByDate.get(r.date) ?? emptyDaily(r.date)
     /* Multi-location clients have one row per location per day, so
        sum the metrics across rows. */
     existing.impressions += impressions
@@ -218,21 +244,36 @@ export async function getGbpAnalytics(
     existing.calls += r.calls ?? 0
     existing.websiteClicks += r.website_clicks ?? 0
     existing.postViews += r.post_views ?? 0
+    existing.postClicks += r.post_clicks ?? 0
+    existing.photoViews += r.photo_views ?? 0
     existing.conversations += r.conversations ?? 0
     existing.bookings += r.bookings ?? 0
     existing.foodOrders += r.food_orders ?? 0
+    existing.foodMenuClicks += r.food_menu_clicks ?? 0
     dailyByDate.set(r.date, existing)
+
+    impressionBreakdown.searchMobile  += r.impressions_search_mobile  ?? 0
+    impressionBreakdown.searchDesktop += r.impressions_search_desktop ?? 0
+    impressionBreakdown.mapsMobile    += r.impressions_maps_mobile    ?? 0
+    impressionBreakdown.mapsDesktop   += r.impressions_maps_desktop   ?? 0
+
+    if (Array.isArray(r.top_queries)) {
+      for (const q of r.top_queries) {
+        if (!q?.query || typeof q.impressions !== 'number') continue
+        queryTotals.set(q.query, (queryTotals.get(q.query) ?? 0) + q.impressions)
+      }
+    }
   }
+  const topQueries = Array.from(queryTotals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 25)
+    .map(([query, impressions]) => ({ query, impressions }))
 
   /* Fill missing dates with zeros so the chart x-axis is continuous. */
   const daily: DailyPoint[] = []
   for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
     const key = ymd(d)
-    daily.push(dailyByDate.get(key) ?? {
-      date: key,
-      impressions: 0, directions: 0, calls: 0, websiteClicks: 0,
-      postViews: 0, conversations: 0, bookings: 0, foodOrders: 0,
-    })
+    daily.push(dailyByDate.get(key) ?? emptyDaily(key))
   }
 
   /* Trim trailing all-zero dates: the Performance API's 3-day lag is
@@ -242,42 +283,44 @@ export async function getGbpAnalytics(
   while (daily.length > 1) {
     const last = daily[daily.length - 1]
     const hasData = last.impressions || last.directions || last.calls
-      || last.websiteClicks || last.postViews || last.conversations
-      || last.bookings || last.foodOrders
+      || last.websiteClicks || last.postViews || last.postClicks
+      || last.photoViews || last.conversations || last.bookings
+      || last.foodOrders || last.foodMenuClicks
     if (hasData) break
     daily.pop()
   }
 
-  const totals = daily.reduce((acc, d) => ({
-    impressions: acc.impressions + d.impressions,
-    directions: acc.directions + d.directions,
-    calls: acc.calls + d.calls,
-    websiteClicks: acc.websiteClicks + d.websiteClicks,
-    postViews: acc.postViews + d.postViews,
-    conversations: acc.conversations + d.conversations,
-    bookings: acc.bookings + d.bookings,
-    foodOrders: acc.foodOrders + d.foodOrders,
-  }), emptyTotals())
+  /* Totals computed from the raw rows so we can include fields that
+     DailyPoint doesn't carry (postClicks, photoViews, foodMenuClicks). */
+  const visibleDates = new Set(daily.map(d => d.date))
+  const totals = ((currRes.data ?? []) as CurrRow[])
+    .filter(r => visibleDates.has(r.date))
+    .reduce<AnalyticsSummary['totals']>((acc, r) => ({
+      impressions: acc.impressions + (r.impressions_total ?? r.search_views ?? 0),
+      directions: acc.directions + (r.directions ?? 0),
+      calls: acc.calls + (r.calls ?? 0),
+      websiteClicks: acc.websiteClicks + (r.website_clicks ?? 0),
+      postViews: acc.postViews + (r.post_views ?? 0),
+      postClicks: acc.postClicks + (r.post_clicks ?? 0),
+      photoViews: acc.photoViews + (r.photo_views ?? 0),
+      conversations: acc.conversations + (r.conversations ?? 0),
+      bookings: acc.bookings + (r.bookings ?? 0),
+      foodOrders: acc.foodOrders + (r.food_orders ?? 0),
+      foodMenuClicks: acc.foodMenuClicks + (r.food_menu_clicks ?? 0),
+    }), emptyTotals())
 
-  const prevTotals = ((prevRes.data ?? []) as Array<{
-    impressions_total: number | null
-    directions: number | null
-    calls: number | null
-    website_clicks: number | null
-    post_views: number | null
-    conversations: number | null
-    bookings: number | null
-    food_orders: number | null
-    search_views: number | null
-  }>).reduce((acc, r) => ({
+  const prevTotals = ((prevRes.data ?? []) as PrevRow[]).reduce<AnalyticsSummary['totals']>((acc, r) => ({
     impressions: acc.impressions + (r.impressions_total ?? r.search_views ?? 0),
     directions: acc.directions + (r.directions ?? 0),
     calls: acc.calls + (r.calls ?? 0),
     websiteClicks: acc.websiteClicks + (r.website_clicks ?? 0),
     postViews: acc.postViews + (r.post_views ?? 0),
+    postClicks: acc.postClicks + (r.post_clicks ?? 0),
+    photoViews: acc.photoViews + (r.photo_views ?? 0),
     conversations: acc.conversations + (r.conversations ?? 0),
     bookings: acc.bookings + (r.bookings ?? 0),
     foodOrders: acc.foodOrders + (r.food_orders ?? 0),
+    foodMenuClicks: acc.foodMenuClicks + (r.food_menu_clicks ?? 0),
   }), emptyTotals())
 
   return {
@@ -287,5 +330,7 @@ export async function getGbpAnalytics(
     daily,
     totals,
     prevTotals,
+    impressionBreakdown,
+    topQueries,
   }
 }

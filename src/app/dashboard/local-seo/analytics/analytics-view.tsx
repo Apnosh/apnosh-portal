@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, ArrowUpRight, ArrowDownRight, Eye, MapPin, Phone, Globe,
-  Download, BarChart3, AlertCircle,
+  Download, BarChart3, AlertCircle, Camera, MessageSquare, Calendar,
+  UtensilsCrossed, ChevronDown, Search, FileText, Smartphone, Monitor, Map,
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { getGbpAnalytics, type AnalyticsRange, type AnalyticsSummary, type AnalyticsOptions } from '@/lib/dashboard/get-gbp-analytics'
@@ -104,9 +105,9 @@ export default function AnalyticsView() {
      drop these into spreadsheets. */
   function exportCsv() {
     if (!data) return
-    const header = 'date,impressions,directions,calls,website_clicks,post_views,conversations,bookings,food_orders\n'
+    const header = 'date,impressions,directions,calls,website_clicks,post_views,post_clicks,photo_views,conversations,bookings,food_orders,food_menu_clicks\n'
     const body = data.daily.map(d =>
-      [d.date, d.impressions, d.directions, d.calls, d.websiteClicks, d.postViews, d.conversations, d.bookings, d.foodOrders].join(',')
+      [d.date, d.impressions, d.directions, d.calls, d.websiteClicks, d.postViews, d.postClicks, d.photoViews, d.conversations, d.bookings, d.foodOrders, d.foodMenuClicks].join(',')
     ).join('\n')
     const blob = new Blob([header + body], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -315,52 +316,212 @@ export default function AnalyticsView() {
         </div>
       )}
 
-      {/* Secondary KPI grid (engagement actions) */}
+      {/* Where impressions came from — surface vs platform breakdown.
+         Only renders when at least one bucket has data (older rows
+         from manual CSV imports don't carry the split). */}
+      {hasData && (data.impressionBreakdown.searchMobile + data.impressionBreakdown.searchDesktop
+        + data.impressionBreakdown.mapsMobile + data.impressionBreakdown.mapsDesktop) > 0 && (
+        <ImpressionBreakdown data={data.impressionBreakdown} />
+      )}
+
+      {/* Engagement metrics — clickable like the primary tiles so the
+         chart can plot any of them. */}
       {hasData && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <SecondaryTile label="Post views" value={data.totals.postViews} prev={data.prevTotals.postViews} />
-          <SecondaryTile label="Conversations" value={data.totals.conversations} prev={data.prevTotals.conversations} />
-          <SecondaryTile label="Bookings" value={data.totals.bookings} prev={data.prevTotals.bookings} />
-          <SecondaryTile label="Food orders" value={data.totals.foodOrders} prev={data.prevTotals.foodOrders} />
+        <div>
+          <h2 className="text-sm font-semibold text-ink mb-2">Engagement</h2>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <SecondaryTile
+              label="Post views"
+              icon={FileText}
+              value={data.totals.postViews}
+              prev={data.prevTotals.postViews}
+              active={activeMetric === 'postViews'}
+              onClick={() => setActiveMetric('postViews')}
+            />
+            <SecondaryTile
+              label="Post clicks"
+              icon={FileText}
+              value={data.totals.postClicks}
+              prev={data.prevTotals.postClicks}
+              active={activeMetric === 'postClicks'}
+              onClick={() => setActiveMetric('postClicks')}
+            />
+            <SecondaryTile
+              label="Photo views"
+              icon={Camera}
+              value={data.totals.photoViews}
+              prev={data.prevTotals.photoViews}
+              active={activeMetric === 'photoViews'}
+              onClick={() => setActiveMetric('photoViews')}
+            />
+            <SecondaryTile
+              label="Conversations"
+              icon={MessageSquare}
+              value={data.totals.conversations}
+              prev={data.prevTotals.conversations}
+              active={activeMetric === 'conversations'}
+              onClick={() => setActiveMetric('conversations')}
+            />
+            <SecondaryTile
+              label="Bookings"
+              icon={Calendar}
+              value={data.totals.bookings}
+              prev={data.prevTotals.bookings}
+              active={activeMetric === 'bookings'}
+              onClick={() => setActiveMetric('bookings')}
+            />
+            <SecondaryTile
+              label="Food orders"
+              icon={UtensilsCrossed}
+              value={data.totals.foodOrders}
+              prev={data.prevTotals.foodOrders}
+              active={activeMetric === 'foodOrders'}
+              onClick={() => setActiveMetric('foodOrders')}
+            />
+            <SecondaryTile
+              label="Menu clicks"
+              icon={UtensilsCrossed}
+              value={data.totals.foodMenuClicks}
+              prev={data.prevTotals.foodMenuClicks}
+              active={activeMetric === 'foodMenuClicks'}
+              onClick={() => setActiveMetric('foodMenuClicks')}
+            />
+          </div>
         </div>
       )}
 
-      {/* Day-level table */}
+      {/* Top search queries — what people typed into Google to find
+         the business. Surfaced when present (Looker CSV ingest only). */}
+      {hasData && data.topQueries.length > 0 && (
+        <TopQueries queries={data.topQueries} />
+      )}
+
+      {/* Day-level table — collapsed by default. Power users open it
+         to sanity-check a specific day or grab a row for spreadsheets. */}
       {hasData && (
-        <div className="rounded-2xl border border-ink-6 bg-white overflow-hidden">
-          <div className="px-5 py-3 border-b border-ink-6 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-ink">Daily breakdown</h2>
-            <span className="text-[11px] text-ink-4">{data.daily.length} day{data.daily.length === 1 ? '' : 's'}</span>
-          </div>
-          <div className="overflow-x-auto">
+        <details className="rounded-2xl border border-ink-6 bg-white overflow-hidden group">
+          <summary className="px-5 py-3 flex items-center justify-between cursor-pointer hover:bg-bg-2/40 list-none">
+            <div className="flex items-center gap-2">
+              <ChevronDown className="w-4 h-4 text-ink-3 transition-transform group-open:rotate-180" />
+              <h2 className="text-sm font-semibold text-ink">Daily breakdown</h2>
+              <span className="text-[11px] text-ink-4">{data.daily.length} day{data.daily.length === 1 ? '' : 's'}</span>
+            </div>
+            <span className="text-[11px] text-ink-4 group-open:hidden">Show table</span>
+          </summary>
+          <div className="overflow-x-auto border-t border-ink-6">
             <table className="w-full text-[12.5px]">
               <thead className="bg-bg-2/40">
                 <tr className="text-left text-[10.5px] uppercase tracking-wider text-ink-4">
                   <th className="px-4 py-2 font-semibold">Date</th>
-                  <th className="px-3 py-2 font-semibold text-right">Impressions</th>
-                  <th className="px-3 py-2 font-semibold text-right">Directions</th>
+                  <th className="px-3 py-2 font-semibold text-right">Impr.</th>
+                  <th className="px-3 py-2 font-semibold text-right">Direct.</th>
                   <th className="px-3 py-2 font-semibold text-right">Calls</th>
-                  <th className="px-3 py-2 font-semibold text-right">Web clicks</th>
+                  <th className="px-3 py-2 font-semibold text-right">Web</th>
+                  <th className="px-3 py-2 font-semibold text-right">Post v.</th>
+                  <th className="px-3 py-2 font-semibold text-right">Post c.</th>
+                  <th className="px-3 py-2 font-semibold text-right">Photo v.</th>
+                  <th className="px-3 py-2 font-semibold text-right">Menu c.</th>
+                  <th className="px-3 py-2 font-semibold text-right">Orders</th>
                 </tr>
               </thead>
               <tbody>
-                {[...data.daily].reverse().slice(0, 30).map(d => (
+                {[...data.daily].reverse().map(d => (
                   <tr key={d.date} className="border-t border-ink-7 hover:bg-bg-2/40">
-                    <td className="px-4 py-2 text-ink-2 tabular-nums">
+                    <td className="px-4 py-2 text-ink-2 tabular-nums whitespace-nowrap">
                       {parseYmdLocal(d.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmt(d.impressions)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmt(d.directions)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmt(d.calls)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmt(d.websiteClicks)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmt(d.postViews)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmt(d.postClicks)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmt(d.photoViews)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmt(d.foodMenuClicks)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmt(d.foodOrders)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </details>
       )}
     </div>
+  )
+}
+
+function ImpressionBreakdown({ data }: { data: AnalyticsSummary['impressionBreakdown'] }) {
+  const total = data.searchMobile + data.searchDesktop + data.mapsMobile + data.mapsDesktop
+  const search = data.searchMobile + data.searchDesktop
+  const maps = data.mapsMobile + data.mapsDesktop
+  const mobile = data.searchMobile + data.mapsMobile
+  const desktop = data.searchDesktop + data.mapsDesktop
+  const pct = (n: number) => total === 0 ? 0 : Math.round((n / total) * 100)
+  return (
+    <div className="rounded-2xl border border-ink-6 bg-white p-5">
+      <h2 className="text-sm font-semibold text-ink mb-1">Where you&rsquo;re being seen</h2>
+      <p className="text-xs text-ink-4 mb-4">
+        {fmt(total)} impressions across Google Search and Maps.
+      </p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <BreakdownTile label="Google Search" icon={Search} value={search} pct={pct(search)} />
+        <BreakdownTile label="Google Maps" icon={Map} value={maps} pct={pct(maps)} />
+        <BreakdownTile label="Mobile" icon={Smartphone} value={mobile} pct={pct(mobile)} />
+        <BreakdownTile label="Desktop" icon={Monitor} value={desktop} pct={pct(desktop)} />
+      </div>
+    </div>
+  )
+}
+
+function BreakdownTile({ label, icon: Icon, value, pct }: {
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  value: number
+  pct: number
+}) {
+  return (
+    <div className="rounded-xl bg-bg-2/40 p-3">
+      <div className="flex items-center gap-2 mb-1">
+        <Icon className="w-3.5 h-3.5 text-ink-3" />
+        <span className="text-[11px] uppercase tracking-wider font-semibold text-ink-3">{label}</span>
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[20px] font-semibold text-ink tabular-nums">{fmt(value)}</span>
+        <span className="text-[11px] text-ink-4">{pct}%</span>
+      </div>
+      <div className="mt-1.5 h-1 rounded bg-ink-7 overflow-hidden">
+        <div className="h-full bg-brand" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function TopQueries({ queries }: { queries: Array<{ query: string; impressions: number }> }) {
+  const max = queries[0]?.impressions ?? 1
+  return (
+    <details className="rounded-2xl border border-ink-6 bg-white overflow-hidden group" open>
+      <summary className="px-5 py-3 flex items-center justify-between cursor-pointer hover:bg-bg-2/40 list-none">
+        <div className="flex items-center gap-2">
+          <ChevronDown className="w-4 h-4 text-ink-3 transition-transform group-open:rotate-180" />
+          <h2 className="text-sm font-semibold text-ink">Top search queries</h2>
+          <span className="text-[11px] text-ink-4">{queries.length} term{queries.length === 1 ? '' : 's'}</span>
+        </div>
+      </summary>
+      <div className="px-5 py-4 border-t border-ink-6">
+        <p className="text-[11px] text-ink-4 mb-3">What people typed into Google to find you.</p>
+        <ul className="space-y-1.5">
+          {queries.map((q) => (
+            <li key={q.query} className="flex items-center gap-3 text-[12.5px]">
+              <span className="flex-1 text-ink-2 truncate">{q.query}</span>
+              <span className="w-32 h-1.5 rounded bg-ink-7 overflow-hidden">
+                <span className="block h-full bg-brand" style={{ width: `${(q.impressions / max) * 100}%` }} />
+              </span>
+              <span className="w-14 text-right tabular-nums text-ink-3">{fmt(q.impressions)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
   )
 }
 
@@ -371,9 +532,12 @@ function labelFor(m: keyof AnalyticsSummary['totals']): string {
     case 'calls': return 'phone calls'
     case 'websiteClicks': return 'website clicks'
     case 'postViews': return 'post views'
+    case 'postClicks': return 'post clicks'
+    case 'photoViews': return 'photo views'
     case 'conversations': return 'conversations'
     case 'bookings': return 'bookings'
     case 'foodOrders': return 'food orders'
+    case 'foodMenuClicks': return 'menu clicks'
   }
 }
 
@@ -423,16 +587,33 @@ function KpiTile({
   )
 }
 
-function SecondaryTile({ label, value, prev }: { label: string; value: number; prev: number }) {
+function SecondaryTile({ label, icon: Icon, value, prev, active, onClick }: {
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  value: number
+  prev: number
+  active: boolean
+  onClick: () => void
+}) {
   const delta = pctDelta(value, prev)
   return (
-    <div className="rounded-2xl border border-ink-6 bg-white p-4">
-      <div className="text-[11px] uppercase tracking-wider font-semibold text-ink-3">{label}</div>
+    <button
+      onClick={onClick}
+      className={`text-left rounded-2xl border p-4 transition-all ${
+        active
+          ? 'border-brand bg-brand-tint/40 shadow-sm'
+          : 'border-ink-6 bg-white hover:border-ink-4'
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <Icon className={`w-3.5 h-3.5 ${active ? 'text-brand-dark' : 'text-ink-3'}`} />
+        <span className="text-[11px] uppercase tracking-wider font-semibold text-ink-3">{label}</span>
+      </div>
       <div className="mt-1.5 text-[20px] font-semibold text-ink tabular-nums leading-none">{fmt(value)}</div>
       <div className="mt-1 text-[11px] text-ink-4">
         {value === 0 && prev === 0 ? '—' : delta.new ? 'New' : `${delta.up ? '+' : '-'}${delta.value}% YoY`}
       </div>
-    </div>
+    </button>
   )
 }
 
