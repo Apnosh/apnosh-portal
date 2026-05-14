@@ -11,6 +11,8 @@ import { useRealtimeRefresh } from '@/lib/realtime'
 import { useClient } from '@/lib/client-context'
 import { getReviewsPerformance, type ReviewsPerformance } from '@/lib/dashboard/get-channel-performance'
 import { getPlatformReviewSnapshots, type PlatformSnapshot } from '@/lib/dashboard/get-platform-reviews'
+import { getClientLocations } from '@/lib/dashboard/get-client-locations'
+import type { ClientLocation } from '@/lib/dashboard/location-helpers'
 import ChannelHero from '@/components/dashboard/channel-hero'
 import type { Review, ReviewSource } from '@/types/database'
 import ConnectEmptyState from '../connect-empty-state'
@@ -220,6 +222,13 @@ export default function ReviewsPage() {
   const [sourceFilter, setSourceFilter] = useState<ReviewSource | 'all'>('all')
   const [ratingFilter, setRatingFilter] = useState<'all' | '5' | '4' | '3' | '2' | '1'>('all')
   const [showFlaggedOnly, setShowFlaggedOnly] = useState(false)
+  const [locationFilter, setLocationFilter] = useState<string | 'all'>('all')
+  const [locations, setLocations] = useState<ClientLocation[]>([])
+
+  useEffect(() => {
+    if (!client?.id) return
+    getClientLocations(client.id).then(setLocations).catch(() => { /* keep empty */ })
+  }, [client?.id])
 
   const load = useCallback(async () => {
     if (!client?.id) { setLoading(false); return }
@@ -265,9 +274,17 @@ export default function ReviewsPage() {
       if (sourceFilter !== 'all' && r.source !== sourceFilter) return false
       if (ratingFilter !== 'all' && Math.round(r.rating) !== Number(ratingFilter)) return false
       if (showFlaggedOnly && !r.flagged) return false
+      /* Location filter — reviews.location_id is the client_locations
+         FK. Reviews without a location_id (older data, or platforms
+         without per-location attribution) pass through on the "all"
+         selection but get hidden when filtering to a specific location. */
+      if (locationFilter !== 'all') {
+        const reviewLocId = (r as unknown as { location_id?: string | null }).location_id
+        if (reviewLocId !== locationFilter) return false
+      }
       return true
     })
-  }, [reviews, sourceFilter, ratingFilter, showFlaggedOnly])
+  }, [reviews, sourceFilter, ratingFilter, showFlaggedOnly, locationFilter])
 
   // Summary stats
   const stats = useMemo(() => {
@@ -473,6 +490,18 @@ export default function ReviewsPage() {
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-2">
             <Filter className="w-4 h-4 text-ink-4" />
+            {locations.length > 1 && (
+              <select
+                value={locationFilter}
+                onChange={e => setLocationFilter(e.target.value)}
+                className="text-xs border border-ink-6 rounded-lg px-2.5 py-1.5 text-ink-2 bg-white"
+              >
+                <option value="all">All {locations.length} locations</option>
+                {locations.map(l => (
+                  <option key={l.id} value={l.id}>{l.location_name}</option>
+                ))}
+              </select>
+            )}
             <select
               value={sourceFilter}
               onChange={e => setSourceFilter(e.target.value as ReviewSource | 'all')}

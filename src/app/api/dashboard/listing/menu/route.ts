@@ -12,12 +12,13 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const { user, clientId } = await resolveCurrentClient()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
-  const result = await getClientMenus(clientId)
+  const locationId = req.nextUrl.searchParams.get('locationId')
+  const result = await getClientMenus(clientId, locationId)
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 })
   return NextResponse.json({ menus: result.menus })
 }
@@ -27,10 +28,10 @@ export async function PATCH(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
-  const body = await req.json().catch(() => null) as { menus?: FoodMenu[] } | null
+  const body = await req.json().catch(() => null) as { menus?: FoodMenu[]; locationId?: string } | null
   if (!body?.menus) return NextResponse.json({ error: 'Missing menus' }, { status: 400 })
 
-  const result = await updateClientMenus(clientId, body.menus)
+  const result = await updateClientMenus(clientId, body.menus, body.locationId ?? null)
 
   try {
     const admin = createAdminClient()

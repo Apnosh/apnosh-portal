@@ -8,6 +8,8 @@ import {
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { getGbpAnalytics, type AnalyticsRange, type AnalyticsSummary } from '@/lib/dashboard/get-gbp-analytics'
+import { getClientLocations } from '@/lib/dashboard/get-client-locations'
+import type { ClientLocation } from '@/lib/dashboard/location-helpers'
 import ConnectEmptyState from '../connect-empty-state'
 
 const RANGE_OPTIONS: Array<{ value: AnalyticsRange; label: string }> = [
@@ -41,11 +43,19 @@ function pctDelta(curr: number, prev: number): { value: number; up: boolean; new
 export default function AnalyticsView() {
   const { client, loading: clientLoading } = useClient()
   const [range, setRange] = useState<AnalyticsRange>('30d')
+  const [locationId, setLocationId] = useState<string | null>(null)
+  const [locations, setLocations] = useState<ClientLocation[]>([])
   const [data, setData] = useState<AnalyticsSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState<boolean | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeMetric, setActiveMetric] = useState<keyof AnalyticsSummary['totals']>('impressions')
+
+  /* Load locations once — drives the location picker. */
+  useEffect(() => {
+    if (!client?.id) return
+    getClientLocations(client.id).then(setLocations).catch(() => { /* keep empty */ })
+  }, [client?.id])
 
   useEffect(() => {
     if (!client?.id) return
@@ -62,13 +72,13 @@ export default function AnalyticsView() {
       })
       .catch(() => { /* ignore */ })
 
-    getGbpAnalytics(client.id, range)
+    getGbpAnalytics(client.id, range, locationId)
       .then(d => { if (!cancelled) setData(d) })
       .catch(err => { if (!cancelled) setError((err as Error).message) })
       .finally(() => { if (!cancelled) setLoading(false) })
 
     return () => { cancelled = true }
-  }, [client?.id, range])
+  }, [client?.id, range, locationId])
 
   /* CSV export of the current range — owners and strategists frequently
      drop these into spreadsheets. */
@@ -142,7 +152,11 @@ export default function AnalyticsView() {
           <div>
             <h1 className="text-2xl font-semibold text-ink">Full analytics</h1>
             <p className="text-sm text-ink-3 mt-1">
-              How customers are finding and interacting with your Google listing.{' '}
+              {locations.length > 1 && !locationId
+                ? `Aggregated across ${locations.length} locations. `
+                : locationId && locations.find(l => l.id === locationId)
+                  ? `${locations.find(l => l.id === locationId)?.location_name}. `
+                  : 'How customers are finding and interacting with your Google listing. '}
               <span className="text-ink-4 text-xs">
                 {parseYmdLocal(data.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {parseYmdLocal(data.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </span>
@@ -150,6 +164,21 @@ export default function AnalyticsView() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {locations.length > 1 && (
+            /* Native select — keeps the page lightweight and works on
+               mobile without extra dropdown plumbing. Owners scan their
+               5-6 locations at a glance. */
+            <select
+              value={locationId ?? ''}
+              onChange={e => setLocationId(e.target.value || null)}
+              className="text-[12px] font-medium text-ink-2 bg-white ring-1 ring-ink-6 rounded-full px-3 py-1.5 focus:outline-none focus:ring-ink-3"
+            >
+              <option value="">All {locations.length} locations</option>
+              {locations.map(l => (
+                <option key={l.id} value={l.id}>{l.location_name}</option>
+              ))}
+            </select>
+          )}
           <div className="inline-flex rounded-full bg-bg-2 p-0.5 ring-1 ring-ink-6">
             {RANGE_OPTIONS.map(opt => (
               <button

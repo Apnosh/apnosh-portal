@@ -7,13 +7,31 @@ import {
   Utensils, GripVertical,
 } from 'lucide-react'
 import type { FoodMenu, MenuSection, MenuItem } from '@/lib/gbp-menu'
+import { getClientLocations } from '@/lib/dashboard/get-client-locations'
+import type { ClientLocation } from '@/lib/dashboard/location-helpers'
+import { useClient } from '@/lib/client-context'
 import ConnectEmptyState from '../connect-empty-state'
 
 export default function MenuEditor() {
+  const { client } = useClient()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [connected, setConnected] = useState<boolean | null>(null)
   const [menus, setMenus] = useState<FoodMenu[]>([])
+  const [locations, setLocations] = useState<ClientLocation[]>([])
+  const [activeLocationId, setActiveLocationId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!client?.id) return
+    getClientLocations(client.id).then(locs => {
+      setLocations(locs)
+      if (locs.length > 0 && !activeLocationId) {
+        const primary = locs.find(l => l.is_primary) ?? locs[0]
+        setActiveLocationId(primary.id)
+      }
+    }).catch(() => { /* leave empty */ })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client?.id])
   const [original, setOriginal] = useState<FoodMenu[]>([])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -21,10 +39,14 @@ export default function MenuEditor() {
   const [activeMenu, setActiveMenu] = useState(0)
 
   useEffect(() => {
+    /* Defer fetching until we know which location to load. */
+    if (locations.length > 1 && !activeLocationId) return
     async function load() {
+      const q = activeLocationId ? `?locationId=${encodeURIComponent(activeLocationId)}` : ''
+      setLoading(true)
       try {
         const [menuRes, statusRes] = await Promise.all([
-          fetch('/api/dashboard/listing/menu'),
+          fetch(`/api/dashboard/listing/menu${q}`),
           fetch('/api/dashboard/gbp/status'),
         ])
         if (statusRes.ok) {
@@ -46,7 +68,7 @@ export default function MenuEditor() {
       }
     }
     load()
-  }, [])
+  }, [activeLocationId, locations.length])
 
   const hasChanges = JSON.stringify(menus) !== JSON.stringify(original)
 
@@ -58,7 +80,7 @@ export default function MenuEditor() {
       const res = await fetch('/api/dashboard/listing/menu', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ menus }),
+        body: JSON.stringify({ menus, locationId: activeLocationId }),
       })
       const body = await res.json()
       if (!res.ok) {
@@ -186,12 +208,26 @@ export default function MenuEditor() {
           <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center ring-1 ring-emerald-100">
             <Utensils className="w-5 h-5" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-semibold text-ink">Menu</h1>
             <p className="text-sm text-ink-3 mt-1">
               What customers see when they tap the Menu tab on your Google listing.
+              {locations.length > 1 && (
+                <span className="text-ink-4 text-xs"> · Editing one location at a time.</span>
+              )}
             </p>
           </div>
+          {locations.length > 1 && (
+            <select
+              value={activeLocationId ?? ''}
+              onChange={e => setActiveLocationId(e.target.value || null)}
+              className="text-[12px] font-medium text-ink-2 bg-white ring-1 ring-ink-6 hover:ring-ink-4 rounded-full px-3 py-1.5 focus:outline-none focus:ring-ink-3 flex-shrink-0"
+            >
+              {locations.map(l => (
+                <option key={l.id} value={l.id}>{l.location_name}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 

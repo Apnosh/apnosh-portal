@@ -76,9 +76,25 @@ function ymd(d: Date): string {
 export async function getGbpAnalytics(
   clientId: string,
   range: AnalyticsRange = '30d',
+  /* Optional filter to a single client_locations.id. When set, only
+     that location's gbp_metrics rows contribute to the totals.
+     `null` = aggregate across all locations. */
+  locationId: string | null = null,
 ): Promise<AnalyticsSummary> {
   const admin = createAdminClient()
   const days = rangeToDays(range)
+
+  /* Resolve the location's gbp_location_id (with the gbp_loc_ prefix
+     our metrics rows use) when filtering to a specific location. */
+  let metricsLocationId: string | null = null
+  if (locationId) {
+    const { data: loc } = await admin
+      .from('client_locations')
+      .select('gbp_location_id')
+      .eq('id', locationId)
+      .maybeSingle()
+    metricsLocationId = (loc?.gbp_location_id as string | null) ?? null
+  }
 
   /* The Performance API typically lags ~3 days, so anchor the window
      end at 1 day ago to avoid leading zeros polluting the view. */
@@ -94,21 +110,26 @@ export async function getGbpAnalytics(
   const prevStartDate = new Date(prevEndDate)
   prevStartDate.setUTCDate(prevStartDate.getUTCDate() - (days - 1))
 
-  const [currRes, prevRes] = await Promise.all([
-    admin
-      .from('gbp_metrics')
-      .select('date, impressions_total, directions, calls, website_clicks, post_views, conversations, bookings, food_orders, search_views')
-      .eq('client_id', clientId)
-      .gte('date', ymd(startDate))
-      .lte('date', ymd(endDate))
-      .order('date', { ascending: true }),
-    admin
-      .from('gbp_metrics')
-      .select('impressions_total, directions, calls, website_clicks, post_views, conversations, bookings, food_orders, search_views')
-      .eq('client_id', clientId)
-      .gte('date', ymd(prevStartDate))
-      .lte('date', ymd(prevEndDate)),
-  ])
+  let currQuery = admin
+    .from('gbp_metrics')
+    .select('date, impressions_total, directions, calls, website_clicks, post_views, conversations, bookings, food_orders, search_views')
+    .eq('client_id', clientId)
+    .gte('date', ymd(startDate))
+    .lte('date', ymd(endDate))
+    .order('date', { ascending: true })
+  let prevQuery = admin
+    .from('gbp_metrics')
+    .select('impressions_total, directions, calls, website_clicks, post_views, conversations, bookings, food_orders, search_views')
+    .eq('client_id', clientId)
+    .gte('date', ymd(prevStartDate))
+    .lte('date', ymd(prevEndDate))
+
+  if (metricsLocationId) {
+    currQuery = currQuery.eq('location_id', metricsLocationId)
+    prevQuery = prevQuery.eq('location_id', metricsLocationId)
+  }
+
+  const [currRes, prevRes] = await Promise.all([currQuery, prevQuery])
 
   const dailyByDate = new Map<string, DailyPoint>()
   for (const r of (currRes.data ?? []) as Array<{

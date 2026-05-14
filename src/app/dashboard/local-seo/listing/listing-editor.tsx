@@ -7,6 +7,9 @@ import type {
   ListingFields, WeeklyHours, DayKey, SpecialHours, AttributeValues,
   ListingCategories, ListingCategory,
 } from '@/lib/gbp-listing'
+import { getClientLocations } from '@/lib/dashboard/get-client-locations'
+import type { ClientLocation } from '@/lib/dashboard/location-helpers'
+import { useClient } from '@/lib/client-context'
 import ConnectEmptyState from '../connect-empty-state'
 
 interface AttributeCatalogItem {
@@ -44,11 +47,14 @@ interface GbpStatus {
 }
 
 export default function ListingEditor() {
+  const { client } = useClient()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [title, setTitle] = useState<string | null>(null)
   const [status, setStatus] = useState<GbpStatus>({ connected: true })
   const [statusChecked, setStatusChecked] = useState(false)
+  const [locations, setLocations] = useState<ClientLocation[]>([])
+  const [activeLocationId, setActiveLocationId] = useState<string | null>(null)
 
   /* Form state — kept separate from the original so we know what
      changed. On save we only PATCH the diff. */
@@ -67,12 +73,31 @@ export default function ListingEditor() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<number | null>(null)
 
+  /* Load client_locations once so the picker has options. */
+  useEffect(() => {
+    if (!client?.id) return
+    getClientLocations(client.id).then(locs => {
+      setLocations(locs)
+      /* Default to the location flagged is_primary, or the first one. */
+      if (locs.length > 0 && !activeLocationId) {
+        const primary = locs.find(l => l.is_primary) ?? locs[0]
+        setActiveLocationId(primary.id)
+      }
+    }).catch(() => { /* leave empty */ })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client?.id])
+
   useEffect(() => {
     async function load() {
+      /* Wait until the active location is decided. For single-location
+         clients the API works with no locationId so we don't block. */
+      if (locations.length > 1 && !activeLocationId) return
+      const q = activeLocationId ? `?locationId=${encodeURIComponent(activeLocationId)}` : ''
+      setLoading(true)
       try {
         const [listingRes, attrRes, statusRes] = await Promise.all([
-          fetch('/api/dashboard/listing'),
-          fetch('/api/dashboard/listing/attributes'),
+          fetch(`/api/dashboard/listing${q}`),
+          fetch(`/api/dashboard/listing/attributes${q}`),
           fetch('/api/dashboard/gbp/status'),
         ])
         if (statusRes.ok) {
@@ -112,7 +137,7 @@ export default function ListingEditor() {
       }
     }
     load()
-  }, [])
+  }, [activeLocationId, locations.length])
 
   function diffFields(): ListingFields {
     if (!original) return {}
@@ -157,14 +182,14 @@ export default function ListingEditor() {
         calls.push(fetch('/api/dashboard/listing', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch),
+          body: JSON.stringify({ ...patch, locationId: activeLocationId }),
         }))
       }
       if (attributesChanged) {
         calls.push(fetch('/api/dashboard/listing/attributes', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: attributes }),
+          body: JSON.stringify({ values: attributes, locationId: activeLocationId }),
         }))
       }
       const results = await Promise.all(calls)
@@ -247,17 +272,32 @@ export default function ListingEditor() {
               Changes here update what people see on <strong className="text-ink-2">{title ?? 'your listing'}</strong> in Google Search and Maps.
             </p>
           </div>
-          <button
-            onClick={() => {
-              if (confirm('Pick a different Google listing? You\'ll re-authorize with Google and choose which listing to link.')) {
-                window.location.href = `/api/auth/google-business?clientId=${encodeURIComponent(status.clientId ?? '')}`
-              }
-            }}
-            className="text-[11px] font-medium text-ink-3 hover:text-ink ring-1 ring-ink-6 hover:ring-ink-4 rounded-full px-3 py-1.5"
-            title="Re-authorize and link a different listing"
-          >
-            Switch listing
-          </button>
+          {/* Multi-location clients get a picker to edit any of their
+             listings; single-location clients see the legacy "Switch
+             listing" button which re-runs the OAuth + picker flow. */}
+          {locations.length > 1 ? (
+            <select
+              value={activeLocationId ?? ''}
+              onChange={e => setActiveLocationId(e.target.value || null)}
+              className="text-[12px] font-medium text-ink-2 bg-white ring-1 ring-ink-6 hover:ring-ink-4 rounded-full px-3 py-1.5 focus:outline-none focus:ring-ink-3"
+            >
+              {locations.map(l => (
+                <option key={l.id} value={l.id}>{l.location_name}</option>
+              ))}
+            </select>
+          ) : (
+            <button
+              onClick={() => {
+                if (confirm('Pick a different Google listing? You\'ll re-authorize with Google and choose which listing to link.')) {
+                  window.location.href = `/api/auth/google-business?clientId=${encodeURIComponent(status.clientId ?? '')}`
+                }
+              }}
+              className="text-[11px] font-medium text-ink-3 hover:text-ink ring-1 ring-ink-6 hover:ring-ink-4 rounded-full px-3 py-1.5"
+              title="Re-authorize and link a different listing"
+            >
+              Switch listing
+            </button>
+          )}
         </div>
       </div>
 

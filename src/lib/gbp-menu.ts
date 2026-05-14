@@ -48,7 +48,10 @@ interface TokenRow {
   platform_account_id: string | null
 }
 
-async function getActiveTokenForClient(clientId: string): Promise<{
+async function getActiveTokenForClient(
+  clientId: string,
+  locationId?: string | null,
+): Promise<{
   accessToken: string
   resourceName: string
 } | { error: string }> {
@@ -65,9 +68,23 @@ async function getActiveTokenForClient(clientId: string): Promise<{
   if (!conn.platform_account_id || conn.platform_account_id === 'pending') {
     return { error: 'Connection not finalized — re-sync first' }
   }
-  const m = /locations\/([^/]+)/.exec(conn.platform_account_id)
-  if (!m) return { error: 'Unrecognised location resource shape' }
-  const resourceName = `locations/${m[1]}`
+
+  let resourceName: string
+  if (locationId) {
+    const { data: loc } = await admin
+      .from('client_locations')
+      .select('gbp_location_id')
+      .eq('id', locationId)
+      .eq('client_id', clientId)
+      .maybeSingle()
+    const rawId = loc?.gbp_location_id as string | null | undefined
+    if (!rawId) return { error: 'Location not found for this client' }
+    resourceName = `locations/${rawId.replace(/^gbp_loc_/, '')}`
+  } else {
+    const m = /locations\/([^/]+)/.exec(conn.platform_account_id)
+    if (!m) return { error: 'Unrecognised location resource shape' }
+    resourceName = `locations/${m[1]}`
+  }
 
   let accessToken = conn.access_token
   const expiresAt = conn.token_expires_at ? new Date(conn.token_expires_at).getTime() : 0
@@ -175,10 +192,10 @@ function menusToGbp(menus: FoodMenu[]): GbpMenu[] {
 
 /* ── Read + write ───────────────────────────────────────────────── */
 
-export async function getClientMenus(clientId: string): Promise<
+export async function getClientMenus(clientId: string, locationId?: string | null): Promise<
   { ok: true; menus: FoodMenu[] } | { ok: false; error: string }
 > {
-  const tok = await getActiveTokenForClient(clientId)
+  const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
   const url = `${V1_BASE}/${tok.resourceName}?readMask=foodMenus`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${tok.accessToken}` } })
@@ -191,8 +208,9 @@ export async function getClientMenus(clientId: string): Promise<
 export async function updateClientMenus(
   clientId: string,
   menus: FoodMenu[],
+  locationId?: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const tok = await getActiveTokenForClient(clientId)
+  const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
   const body = { foodMenus: { menus: menusToGbp(menus) } }
   const url = `${V1_BASE}/${tok.resourceName}?updateMask=foodMenus`

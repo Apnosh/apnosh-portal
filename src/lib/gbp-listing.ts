@@ -77,7 +77,14 @@ interface TokenRow {
   platform_account_id: string | null
 }
 
-async function getActiveTokenForClient(clientId: string): Promise<{
+async function getActiveTokenForClient(
+  clientId: string,
+  /* Optional client_locations.id. When set, we operate on that
+     location's GBP resource instead of the primary stored in
+     channel_connections — same OAuth token works for any location
+     the connecting account manages. */
+  locationId?: string | null,
+): Promise<{
   accessToken: string
   resourceName: string
 } | { error: string }> {
@@ -94,10 +101,30 @@ async function getActiveTokenForClient(clientId: string): Promise<{
   if (!conn.platform_account_id || conn.platform_account_id === 'pending') {
     return { error: 'Google Business Profile connection is not finalized — re-sync first' }
   }
-  /* Stored as accounts/{a}/locations/{l}; v1 endpoint takes just locations/{l}. */
-  const m = /locations\/([^/]+)/.exec(conn.platform_account_id)
-  if (!m) return { error: 'Unrecognised location resource shape' }
-  const resourceName = `locations/${m[1]}`
+
+  /* Resolve which location to operate on. Default = primary from
+     channel_connections.platform_account_id; override = caller-supplied
+     locationId (a client_locations.id). */
+  let resourceName: string
+  if (locationId) {
+    const { data: loc } = await admin
+      .from('client_locations')
+      .select('gbp_location_id')
+      .eq('id', locationId)
+      .eq('client_id', clientId)
+      .maybeSingle()
+    const rawId = loc?.gbp_location_id as string | null | undefined
+    if (!rawId) return { error: 'Location not found for this client' }
+    /* gbp_location_id stores "gbp_loc_<numeric>"; v1 endpoint needs
+       "locations/<numeric>". Tolerate either format defensively. */
+    const stripped = rawId.replace(/^gbp_loc_/, '')
+    resourceName = `locations/${stripped}`
+  } else {
+    /* Stored as accounts/{a}/locations/{l}; v1 endpoint takes just locations/{l}. */
+    const m = /locations\/([^/]+)/.exec(conn.platform_account_id)
+    if (!m) return { error: 'Unrecognised location resource shape' }
+    resourceName = `locations/${m[1]}`
+  }
 
   let accessToken = conn.access_token
   const expiresAt = conn.token_expires_at ? new Date(conn.token_expires_at).getTime() : 0
@@ -261,10 +288,10 @@ interface RawAttribute {
   values?: unknown[]
 }
 
-export async function getClientAttributes(clientId: string): Promise<
+export async function getClientAttributes(clientId: string, locationId?: string | null): Promise<
   { ok: true; values: AttributeValues } | { ok: false; error: string }
 > {
-  const tok = await getActiveTokenForClient(clientId)
+  const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
   const url = `${V1_BASE}/${tok.resourceName}/attributes`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${tok.accessToken}` } })
@@ -284,8 +311,9 @@ export async function getClientAttributes(clientId: string): Promise<
 export async function updateClientAttributes(
   clientId: string,
   values: AttributeValues,
+  locationId?: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const tok = await getActiveTokenForClient(clientId)
+  const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
   const attributes = Object.entries(values).map(([id, v]) => ({
     name: `attributes/${id}`,
@@ -305,13 +333,13 @@ export async function updateClientAttributes(
 
 /* ── Read current listing ──────────────────────────────────────── */
 
-export async function getClientListing(clientId: string): Promise<{
+export async function getClientListing(clientId: string, locationId?: string | null): Promise<{
   ok: true
   resourceName: string
   title: string | null
   fields: ListingFields
 } | { ok: false; error: string }> {
-  const tok = await getActiveTokenForClient(clientId)
+  const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
   const { accessToken, resourceName } = tok
 
@@ -364,7 +392,7 @@ export async function searchListingCategories(clientId: string, query: string): 
   { ok: true; categories: ListingCategory[] } | { ok: false; error: string }
 > {
   if (!query || query.trim().length < 2) return { ok: true, categories: [] }
-  const tok = await getActiveTokenForClient(clientId)
+  const tok = await getActiveTokenForClient(clientId, null)
   if ('error' in tok) return { ok: false, error: tok.error }
   const url = `${V1_BASE}/categories:search?searchTerm=${encodeURIComponent(query.trim())}&regionCode=US&languageCode=en&view=BASIC&pageSize=20`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${tok.accessToken}` } })
@@ -380,8 +408,9 @@ export async function searchListingCategories(clientId: string, query: string): 
 export async function updateClientListing(
   clientId: string,
   patch: ListingFields,
+  locationId?: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const tok = await getActiveTokenForClient(clientId)
+  const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
   const { accessToken, resourceName } = tok
 

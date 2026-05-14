@@ -18,12 +18,13 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const { user, clientId } = await resolveCurrentClient()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
-  const result = await getClientListing(clientId)
+  const locationId = req.nextUrl.searchParams.get('locationId')
+  const result = await getClientListing(clientId, locationId)
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 })
   return NextResponse.json(result)
 }
@@ -33,12 +34,13 @@ export async function PATCH(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
-  const body = await req.json().catch(() => null) as ListingFields | null
+  const body = await req.json().catch(() => null) as (ListingFields & { locationId?: string }) | null
   if (!body || typeof body !== 'object') {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
   }
 
-  const result = await updateClientListing(clientId, body)
+  const { locationId, ...patch } = body
+  const result = await updateClientListing(clientId, patch, locationId ?? null)
 
   /* Audit log — fire-and-forget. We capture which top-level fields
      the owner touched + the actor identity, not the values themselves
@@ -51,7 +53,7 @@ export async function PATCH(req: NextRequest) {
       actor_user_id: user.id,
       actor_email: user.email ?? null,
       action: 'update_listing',
-      fields: Object.keys(body),
+      fields: { changedFields: Object.keys(patch), locationId: locationId ?? null },
       error: result.ok ? null : result.error,
     })
   } catch { /* never block a save on audit failure */ }
