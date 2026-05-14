@@ -135,7 +135,7 @@ export async function syncGoogleAnalyticsForClient(
   }
   await admin.from('channel_connections').update({
     last_sync_at: new Date().toISOString(),
-    sync_status: 'ok',
+    status: 'active',
     sync_error: null,
   }).eq('id', conn.id)
   return { daysWritten: written }
@@ -202,7 +202,7 @@ export async function syncSearchConsoleForClient(
   }
   await admin.from('channel_connections').update({
     last_sync_at: new Date().toISOString(),
-    sync_status: 'ok',
+    status: 'active',
     sync_error: null,
   }).eq('id', conn.id)
   return { daysWritten: written }
@@ -246,7 +246,7 @@ async function walkClients(clientIds: string[], channel: Channel, daysBack: numb
       /* Stamp the failure on the row so the connect UI can surface it. */
       const admin = createAdminClient()
       await admin.from('channel_connections')
-        .update({ sync_status: 'error', sync_error: result.error })
+        .update({ sync_error: result.error })
         .eq('client_id', clientId)
         .eq('channel', channel)
         .eq('status', 'active')
