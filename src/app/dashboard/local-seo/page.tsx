@@ -33,6 +33,7 @@ function LocalSeoContent() {
   const [scoreboard, setScoreboard] = useState<LocationScoreRow[]>([])
   const [businessName, setBusinessName] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [gbpConnected, setGbpConnected] = useState<boolean | null>(null)
 
   useEffect(() => {
     async function loadData() {
@@ -59,6 +60,15 @@ function LocalSeoContent() {
     }
     loadData()
   }, [client?.id, client?.name, clientLoading, selectedLocationId])
+
+  /* Cheap connection probe so the empty state can distinguish
+     "not connected yet" from "connected, waiting for first sync". */
+  useEffect(() => {
+    fetch('/api/dashboard/gbp/status')
+      .then(r => r.ok ? r.json() : null)
+      .then(json => setGbpConnected(json?.connected !== false))
+      .catch(() => setGbpConnected(null))
+  }, [client?.id])
 
   function handleLocationChange(locId: string | null) {
     const params = new URLSearchParams(searchParams.toString())
@@ -104,17 +114,19 @@ function LocalSeoContent() {
             <MapPin className="w-7 h-7" style={{ color: '#4abd98' }} />
           </div>
           <h2 className="text-[20px] font-bold mb-2" style={{ color: 'var(--db-black, #111)' }}>
-            Connect Google Business Profile
+            {gbpConnected ? 'No data yet' : 'Connect Google Business Profile'}
           </h2>
           <p className="text-[14px] max-w-sm mx-auto mb-8" style={{ color: 'var(--db-ink-3, #888)' }}>
-            Once your Google Business Profile is connected, directions, calls, website clicks, and review data will show up here.
+            {gbpConnected
+              ? 'Your Google Business Profile is connected. The first numbers usually appear within a day of activity. Google’s reporting API also has a 3-day lag, so a brand-new listing can look empty even when traffic exists.'
+              : 'Once your Google Business Profile is connected, directions, calls, website clicks, and review data will show up here.'}
           </p>
           <Link
             href="/dashboard/connected-accounts"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
             style={{ background: '#4abd98' }}
           >
-            Connect accounts
+            {gbpConnected ? 'Manage connection' : 'Connect accounts'}
           </Link>
         </div>
 
