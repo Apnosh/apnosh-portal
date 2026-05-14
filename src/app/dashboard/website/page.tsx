@@ -12,7 +12,7 @@ import TrendChart from '@/components/dashboard/trend-chart'
 import MetricGrid from '@/components/dashboard/metric-grid'
 import InsightCard from '@/components/dashboard/insight-card'
 import AMNote from '@/components/dashboard/am-note'
-import WebsiteHealthCard from '@/components/dashboard/website-health-card'
+import SiteStatusStrip from '@/components/dashboard/site-status-strip'
 import WebsitePreview from '@/components/dashboard/website-preview'
 import HandledByTeamPanel from '@/components/dashboard/handled-by-team-panel'
 import RequestStatusFeed from '@/components/dashboard/request-status-feed'
@@ -127,12 +127,18 @@ export default function WebsiteOverviewPage() {
         <HeroMetric ctx={view.ctx} num={view.num} pctFull={view.pctFull} up={view.up} />
       </div>
 
-      {/* Live preview + health side-by-side */}
+      {/* Single-line status strip — the "is it working?" answer. */}
+      {client?.id && (
+        <div className="db-fade db-d2 mb-4">
+          <SiteStatusStrip clientId={client.id} />
+        </div>
+      )}
+
+      {/* Live preview + open requests side-by-side */}
       {client?.id && (
         <div className="db-fade db-d4 mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
           <WebsitePreview websiteUrl={client.website ?? null} />
           <div className="space-y-3">
-            <WebsiteHealthCard clientId={client.id} />
             <RequestStatusFeed />
             <HandledByTeamPanel />
           </div>
