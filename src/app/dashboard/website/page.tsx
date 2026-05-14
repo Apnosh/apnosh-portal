@@ -15,6 +15,7 @@ import AMNote from '@/components/dashboard/am-note'
 import WebsiteHealthCard from '@/components/dashboard/website-health-card'
 import WebsitePreview from '@/components/dashboard/website-preview'
 import HandledByTeamPanel from '@/components/dashboard/handled-by-team-panel'
+import RequestStatusFeed from '@/components/dashboard/request-status-feed'
 
 export default function WebsiteOverviewPage() {
   const { client, loading: clientLoading } = useClient()
@@ -132,6 +133,7 @@ export default function WebsiteOverviewPage() {
           <WebsitePreview websiteUrl={client.website ?? null} />
           <div className="space-y-3">
             <WebsiteHealthCard clientId={client.id} />
+            <RequestStatusFeed />
             <HandledByTeamPanel />
           </div>
         </div>
