@@ -255,7 +255,7 @@ export async function getClientMenus(clientId: string, locationId?: string | nul
      "empty state". Return an empty array so the editor renders the
      "Start a menu" empty state. */
   if (res.status === 404) return { ok: true, menus: [] }
-  if (!res.ok) return { ok: false, error: body?.error?.message || `HTTP ${res.status}` }
+  if (!res.ok) return { ok: false, error: friendlyMenuError(body?.error?.message || `HTTP ${res.status}`) }
   const data = body as { menus?: GbpMenu[] }
   return { ok: true, menus: gbpToMenus(data.menus) }
 }
@@ -275,7 +275,7 @@ export async function updateClientMenus(
     body: JSON.stringify(body),
   })
   const respBody = await res.json().catch(() => ({}))
-  if (!res.ok) return { ok: false, error: respBody?.error?.message || `HTTP ${res.status}` }
+  if (!res.ok) return { ok: false, error: friendlyMenuError(respBody?.error?.message || `HTTP ${res.status}`) }
   return { ok: true }
 }
 
@@ -306,19 +306,28 @@ export async function getClientMenuLink(
   const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
   const loc = v1LocationPath(tok.v4Path)
-  /* Read via locations.get with readMask=attributes — same endpoint
-     family we already use for hours/categories, so it works on any
-     project where the v1 BI API is enabled. The standalone
-     /attributes sub-resource often surfaces a "Google My Business
-     API not enabled" error pointing at the legacy v4 service even
-     when the actual issue is something else. */
-  const url = `${V1_BASE}/${loc}?readMask=attributes`
+  /* Attributes live behind a dedicated sub-resource on v1 — they
+     are NOT a valid readMask field on locations.get. */
+  const url = `${V1_BASE}/${loc}/attributes`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${tok.accessToken}` } })
   const body = await res.json().catch(() => ({}))
-  if (!res.ok) return { ok: false, error: body?.error?.message || `HTTP ${res.status}` }
+  if (!res.ok) {
+    return { ok: false, error: friendlyMenuError(body?.error?.message || `HTTP ${res.status}`) }
+  }
   const attrs = (body as { attributes?: V1Attribute[] }).attributes ?? []
   const menu = attrs.find(a => a.name === MENU_URL_ATTR)
   return { ok: true, url: menu?.uriValues?.[0]?.uri ?? '' }
+}
+
+/* Google surfaces a wall-of-text "API not enabled" error when the
+   legacy mybusiness.googleapis.com API isn't toggled on for the
+   project. Replace it with a short, actionable message so the UI
+   doesn't show a paragraph of console URLs. */
+function friendlyMenuError(raw: string): string {
+  if (/mybusiness\.googleapis\.com/i.test(raw) && /not been used|disabled/i.test(raw)) {
+    return 'The Google My Business API is not enabled for this project. Enable it in your Google Cloud Console (free, takes a few seconds), then reload. This is separate from your Business Profile API access request.'
+  }
+  return raw
 }
 
 export async function updateClientMenuLink(
@@ -329,13 +338,10 @@ export async function updateClientMenuLink(
   const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
   const loc = v1LocationPath(tok.v4Path)
-  /* Patch via locations.patch with updateMask=attributes — body
-     carries the Location resource with the attributes array set
-     to just the url_menu entry. */
-  const url = `${V1_BASE}/${loc}?updateMask=attributes`
+  const url = `${V1_BASE}/${loc}/attributes?updateMask=attributes`
   const trimmed = menuUrl.trim()
   const body = {
-    name: loc,
+    name: `${loc}/attributes`,
     attributes: [
       {
         name: MENU_URL_ATTR,
@@ -349,6 +355,6 @@ export async function updateClientMenuLink(
     body: JSON.stringify(body),
   })
   const respBody = await res.json().catch(() => ({}))
-  if (!res.ok) return { ok: false, error: respBody?.error?.message || `HTTP ${res.status}` }
+  if (!res.ok) return { ok: false, error: friendlyMenuError(respBody?.error?.message || `HTTP ${res.status}`) }
   return { ok: true }
 }
