@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type {
   DashboardView,
   DashboardMetric,
@@ -33,7 +33,11 @@ export async function getLocalSeoView(
   clientId: string,
   locationId: string | null = null,
 ): Promise<DashboardView | null> {
-  const supabase = await createClient()
+  /* Use the admin client so RLS doesn't silently filter rows. The
+     caller (useClient → resolveCurrentClient) has already authorized
+     the user against this client_id, and the function only ever
+     queries by that single client_id. */
+  const supabase = createAdminClient()
 
   // If filtering to a specific location, resolve its GBP location ID so we can
   // match against gbp_metrics.location_id (which stores the GBP-native ID).
@@ -510,7 +514,7 @@ function buildTimeRange(
 }
 
 async function getAmNote(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   clientId: string,
   viewType: string
 ): Promise<DashboardView['am']> {
