@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import {
-  ArrowLeft, Save, Loader2, AlertTriangle, CheckCircle2, Plus, X,
+  Save, Loader2, AlertTriangle, CheckCircle2, Plus, X,
   Utensils, GripVertical, ExternalLink, Info,
 } from 'lucide-react'
 import type { FoodMenu, MenuSection, MenuItem } from '@/lib/gbp-menu'
@@ -204,9 +203,7 @@ export default function MenuEditor() {
   if (loadError) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-10">
-        <Link href="/dashboard/local-seo" className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink mb-6">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Local SEO
-        </Link>
+        {/* No back link -- sticky sub-nav has Overview */}
         <div className="rounded-2xl bg-amber-50 border border-amber-200 p-5 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
           <div>
@@ -221,37 +218,35 @@ export default function MenuEditor() {
   const current = menus[activeMenu]
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-10 space-y-6">
-      {/* Header */}
-      <div>
-        <Link href="/dashboard/local-seo" className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink mb-4">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Local SEO
-        </Link>
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center ring-1 ring-emerald-100">
-            <Utensils className="w-5 h-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-semibold text-ink">Menu</h1>
-            <p className="text-sm text-ink-3 mt-1">
-              What customers see when they tap the Menu tab on your Google listing.
-              {locations.length > 1 && (
-                <span className="text-ink-4 text-xs"> · Editing one location at a time.</span>
-              )}
-            </p>
-          </div>
-          {locations.length > 1 && (
-            <select
-              value={activeLocationId ?? ''}
-              onChange={e => setActiveLocationId(e.target.value || null)}
-              className="text-[12px] font-medium text-ink-2 bg-white ring-1 ring-ink-6 hover:ring-ink-4 rounded-full px-3 py-1.5 focus:outline-none focus:ring-ink-3 flex-shrink-0"
-            >
-              {locations.map(l => (
-                <option key={l.id} value={l.id}>{l.location_name}</option>
-              ))}
-            </select>
-          )}
+    <div className="max-w-4xl mx-auto px-4 pt-6 pb-20 space-y-6">
+      {/* Header -- matches the portal-wide page-title pattern */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
+            Local SEO
+          </p>
+          <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1 flex items-center gap-2">
+            <Utensils className="w-6 h-6 text-ink-4" />
+            Menu
+          </h1>
+          <p className="text-ink-3 text-sm mt-0.5">
+            What customers see when they tap the Menu tab on your Google listing.
+            {locations.length > 1 && (
+              <span className="text-ink-4 text-xs"> · Editing one location at a time.</span>
+            )}
+          </p>
         </div>
+        {locations.length > 1 && (
+          <select
+            value={activeLocationId ?? ''}
+            onChange={e => setActiveLocationId(e.target.value || null)}
+            className="text-[12px] font-medium text-ink-2 bg-white ring-1 ring-ink-6 hover:ring-ink-4 rounded-full px-3 py-1.5 focus:outline-none focus:ring-ink-3 flex-shrink-0"
+          >
+            {locations.map(l => (
+              <option key={l.id} value={l.id}>{l.location_name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Menu link — primary path, works without v4 approval. */}

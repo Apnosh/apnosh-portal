@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, MapPin, Navigation, Phone, Globe, Star, TrendingUp, ChevronRight,
+  MapPin, Navigation, Phone, Globe, Star, TrendingUp, ChevronRight,
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { getLocationsScoreboard, type LocationScoreRow } from '@/lib/dashboard/get-locations-scoreboard'
@@ -47,20 +47,19 @@ export default function LocationsScoreboardPage() {
   const hasAnyData = rows.some(r => r.interactions > 0 || r.new_reviews > 0)
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-start gap-3">
-        <Link href="/dashboard/local-seo" className="text-ink-4 hover:text-ink transition-colors mt-1">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink flex items-center gap-2">
-            <MapPin className="w-6 h-6 text-ink-4" />
-            Locations
-          </h1>
-          <p className="text-ink-3 text-sm mt-0.5">
-            This month&apos;s performance for every location you run.
-          </p>
-        </div>
+    <div className="max-w-5xl mx-auto px-4 lg:px-6 pt-6 pb-20 space-y-5">
+      {/* Header -- matches the portal-wide page-title pattern */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
+          Local SEO
+        </p>
+        <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1 flex items-center gap-2">
+          <MapPin className="w-6 h-6 text-ink-4" />
+          Locations
+        </h1>
+        <p className="text-ink-3 text-sm mt-0.5">
+          This month&apos;s performance for every location you run.
+        </p>
       </div>
 
       {rows.length === 0 ? (

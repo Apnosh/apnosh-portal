@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Save, Loader2, MapPin, AlertTriangle, CheckCircle2, Plus, X, Search, Tag } from 'lucide-react'
+import { Save, Loader2, MapPin, AlertTriangle, CheckCircle2, Plus, X, Search, Tag } from 'lucide-react'
 import type {
   ListingFields, WeeklyHours, DayKey, SpecialHours, AttributeValues,
   ListingCategories, ListingCategory,
@@ -238,9 +238,7 @@ export default function ListingEditor() {
     }
     return (
       <div className="max-w-3xl mx-auto px-4 py-10">
-        <Link href="/dashboard/local-seo" className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink mb-6">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Local SEO
-        </Link>
+        {/* No back link -- sticky sub-nav has Overview */}
         <div className="rounded-2xl bg-amber-50 border border-amber-200 p-5 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
           <div>
@@ -257,22 +255,21 @@ export default function ListingEditor() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10 space-y-8">
-      {/* Header */}
-      <div>
-        <Link href="/dashboard/local-seo" className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink mb-4">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Local SEO
-        </Link>
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center ring-1 ring-emerald-100">
-            <MapPin className="w-5 h-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-semibold text-ink">Your Google listing</h1>
-            <p className="text-sm text-ink-3 mt-1">
-              Changes here update what people see on <strong className="text-ink-2">{title ?? 'your listing'}</strong> in Google Search and Maps.
-            </p>
-          </div>
+    <div className="max-w-3xl mx-auto px-4 pt-6 pb-20 space-y-6">
+      {/* Header -- matches the portal-wide page-title pattern */}
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
+            Local SEO
+          </p>
+          <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1 flex items-center gap-2">
+            <MapPin className="w-6 h-6 text-ink-4" />
+            Your listing
+          </h1>
+          <p className="text-ink-3 text-sm mt-0.5">
+            Changes here update what people see on <strong className="text-ink-2">{title ?? 'your listing'}</strong> in Google Search and Maps.
+          </p>
+        </div>
           {/* Multi-location clients get a picker to edit any of their
              listings; single-location clients see the legacy "Switch
              listing" button which re-runs the OAuth + picker flow. */}
@@ -299,7 +296,6 @@ export default function ListingEditor() {
               Switch listing
             </button>
           )}
-        </div>
       </div>
 
       {/* Token revoked banner — takes precedence over other states

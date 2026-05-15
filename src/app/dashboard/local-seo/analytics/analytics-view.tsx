@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import {
-  ArrowLeft, ArrowUpRight, ArrowDownRight, Eye, MapPin, Phone, Globe,
+  ArrowUpRight, ArrowDownRight, Eye, MapPin, Phone, Globe,
   Download, BarChart3, AlertCircle, Camera, MessageSquare, Calendar,
   UtensilsCrossed, ChevronDown, Search, FileText, Smartphone, Monitor, Map,
 } from 'lucide-react'
@@ -144,9 +143,7 @@ export default function AnalyticsView() {
   if (error) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-12">
-        <Link href="/dashboard/local-seo" className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink mb-6">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Local SEO
-        </Link>
+        {/* No back link needed -- sticky sub-nav above the page already has Overview */}
         <div className="rounded-2xl bg-amber-50 border border-amber-200 p-5 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-amber-900">{error}</p>
@@ -163,26 +160,28 @@ export default function AnalyticsView() {
                   data.totals.websiteClicks > 0
 
   return (
-    <div className="max-w-6xl mx-auto px-4 lg:px-6 py-8 space-y-6">
-      {/* Header */}
+    <div className="max-w-[1100px] mx-auto px-4 lg:px-6 pt-6 pb-20 space-y-5">
+      {/* Header -- matches the page-title pattern used across the portal
+         (Inbox / Performance / website pages). */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center ring-1 ring-emerald-100">
-            <BarChart3 className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">Full analytics</h1>
-            <p className="text-sm text-ink-3 mt-1">
-              {locations.length > 1 && !locationId
-                ? `Aggregated across ${locations.length} locations. `
-                : locationId && locations.find(l => l.id === locationId)
-                  ? `${locations.find(l => l.id === locationId)?.location_name}. `
-                  : 'How customers are finding and interacting with your Google listing. '}
-              <span className="text-ink-4 text-xs">
-                {parseYmdLocal(data.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {parseYmdLocal(data.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </span>
-            </p>
-          </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
+            Local SEO
+          </p>
+          <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1 flex items-center gap-2">
+            <BarChart3 className="w-6 h-6 text-ink-4" />
+            Full analytics
+          </h1>
+          <p className="text-sm text-ink-3 mt-0.5">
+            {locations.length > 1 && !locationId
+              ? `Aggregated across ${locations.length} locations. `
+              : locationId && locations.find(l => l.id === locationId)
+                ? `${locations.find(l => l.id === locationId)?.location_name}. `
+                : 'How customers are finding and interacting with your Google listing. '}
+            <span className="text-ink-4 text-xs">
+              {parseYmdLocal(data.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {parseYmdLocal(data.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </span>
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {locations.length > 1 && (
