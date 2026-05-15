@@ -1,18 +1,16 @@
 'use client'
 
 /**
- * Streamlined onboarding -- 5 steps + welcome screen.
+ * Restaurant-first onboarding -- 5 steps, ~3-5 min total.
  *
- * Replaces the 19-step deep wizard (now preserved at /onboarding/full
- * for AM-led deep onboarding). Goal: get the restaurant owner into
- * the portal in under 5 minutes with the essentials captured.
+ * Apnosh's primary market is restaurants, so this flow is tailored
+ * end-to-end for that buyer: restaurant subtype + cuisine + service
+ * styles + price tier on the basics step, reservations + delivery
+ * platforms on the connect step, restaurant-specific goal copy.
  *
- * The deeper questions (story, voice, content prefs, approval style,
- * customer types, etc.) move to contextual dashboard prompts the
- * portal surfaces after the owner has already experienced value.
- *
- * Data still writes to the businesses + clients tables using the same
- * column names as the deep wizard so AM tools keep working.
+ * Non-restaurant businesses can use the same flow (we accept 'other_food'
+ * + 'non_food' subtypes) or drop into the deeper /onboarding/full
+ * questionnaire for the AM-led path.
  */
 
 import { useEffect, useState } from 'react'
@@ -20,8 +18,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, ArrowRight, Loader2, Check, Sparkles,
-  MapPin, Target, Camera, Globe, Search,
-  Building2, ShoppingBag, Scissors, Dumbbell, Wrench, MoreHorizontal,
+  MapPin, Target, Camera, Globe, Search, UtensilsCrossed,
+  Coffee, Beer, Truck, Cookie, Soup, ChefHat, ShoppingBag,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { completeOnboardingCRM } from '@/lib/onboarding-actions'
@@ -29,9 +27,10 @@ import { completeOnboardingCRM } from '@/lib/onboarding-actions'
 interface OnboardingData {
   role: string
   biz_name: string
-  biz_type: string
+  restaurant_subtype: string
   cuisine: string
   service_styles: string[]
+  price_tier: string
   full_address: string
   city: string
   state: string
@@ -40,14 +39,18 @@ interface OnboardingData {
   primary_goal: string
   goal_detail: string
   connected: string[]
+  reservations_platform: string
+  delivery_platforms: string[]
+  website_url: string
 }
 
 const INITIAL: OnboardingData = {
   role: '',
   biz_name: '',
-  biz_type: '',
+  restaurant_subtype: '',
   cuisine: '',
   service_styles: [],
+  price_tier: '',
   full_address: '',
   city: '',
   state: '',
@@ -56,50 +59,84 @@ const INITIAL: OnboardingData = {
   primary_goal: '',
   goal_detail: '',
   connected: [],
+  reservations_platform: '',
+  delivery_platforms: [],
+  website_url: '',
 }
 
 const ROLES = [
-  { id: 'owner',    label: 'Owner',     desc: 'I own this business' },
-  { id: 'manager',  label: 'Manager',   desc: 'I run marketing here' },
+  { id: 'owner',    label: 'Owner',     desc: 'I own this restaurant' },
+  { id: 'manager',  label: 'Manager',   desc: 'I run things here' },
   { id: 'employee', label: 'Employee',  desc: 'I help with marketing' },
-  { id: 'agency',   label: 'Agency',    desc: 'I work for the owner' },
+  { id: 'agency',   label: 'Other',     desc: 'I work for the owner' },
 ]
 
-const BIZ_TYPES = [
-  { id: 'restaurant', label: 'Restaurant / café / bar', icon: Building2 },
-  { id: 'retail',     label: 'Retail store',            icon: ShoppingBag },
-  { id: 'salon',      label: 'Salon / spa / beauty',    icon: Scissors },
-  { id: 'fitness',    label: 'Fitness / gym',           icon: Dumbbell },
-  { id: 'service',    label: 'Service business',        icon: Wrench },
-  { id: 'other',      label: 'Something else',          icon: MoreHorizontal },
+const SUBTYPES = [
+  { id: 'restaurant',    label: 'Restaurant',     icon: UtensilsCrossed, desc: 'Full menu, seated service' },
+  { id: 'cafe',          label: 'Café / coffee',  icon: Coffee,          desc: 'Coffee, pastries, light fare' },
+  { id: 'bar',           label: 'Bar / pub',      icon: Beer,            desc: 'Drinks-led, small plates ok' },
+  { id: 'food_truck',    label: 'Food truck',     icon: Truck,           desc: 'Mobile or pop-up' },
+  { id: 'bakery',        label: 'Bakery',         icon: Cookie,          desc: 'Baked goods, dessert shop' },
+  { id: 'fast_casual',   label: 'Fast casual',    icon: Soup,            desc: 'Counter service, quick' },
+  { id: 'catering',      label: 'Catering',       icon: ChefHat,         desc: 'Events + private dining' },
+  { id: 'non_food',      label: 'Not food',       icon: ShoppingBag,     desc: 'Different industry' },
 ]
 
 const CUISINES = [
-  'American', 'Italian', 'Mexican', 'Asian', 'Mediterranean',
-  'Pizza', 'BBQ', 'Coffee shop', 'Bakery', 'Vegan',
-  'Bar / pub', 'Fine dining', 'Fast casual', 'Food truck', 'Other',
+  'American', 'Italian', 'Mexican', 'Asian fusion', 'Chinese', 'Japanese',
+  'Thai', 'Indian', 'Mediterranean', 'Middle Eastern', 'French',
+  'Pizza', 'BBQ', 'Seafood', 'Steakhouse',
+  'Vegan / plant-based', 'Health / bowls', 'Breakfast / brunch',
+  'Dessert', 'Bakery', 'Coffee', 'Cocktail bar', 'Wine bar',
+  'Other',
 ]
 
 const SERVICE_STYLES = [
-  { id: 'dine_in',  label: 'Dine in' },
-  { id: 'takeout',  label: 'Takeout' },
-  { id: 'delivery', label: 'Delivery' },
-  { id: 'catering', label: 'Catering' },
+  { id: 'dine_in',     label: 'Dine in' },
+  { id: 'takeout',     label: 'Takeout' },
+  { id: 'delivery',    label: 'Delivery' },
+  { id: 'catering',    label: 'Catering' },
+  { id: 'drive_thru',  label: 'Drive-thru' },
+]
+
+const PRICE_TIERS = [
+  { id: '$',    label: '$',    sub: 'Under $15 / person' },
+  { id: '$$',   label: '$$',   sub: '$15–$30' },
+  { id: '$$$',  label: '$$$',  sub: '$30–$60' },
+  { id: '$$$$', label: '$$$$', sub: '$60+' },
 ]
 
 const GOALS = [
-  { id: 'foot_traffic', label: 'More foot traffic',    desc: 'Get more locals walking in' },
-  { id: 'online_orders', label: 'More online orders',  desc: 'Drive delivery + pickup' },
-  { id: 'reservations', label: 'More reservations',    desc: 'Fill tables ahead of time' },
-  { id: 'brand',        label: 'Build the brand',      desc: 'Awareness, followers, story' },
-  { id: 'reviews',      label: 'Better reviews',       desc: 'Reputation across platforms' },
-  { id: 'social',       label: 'Grow social',          desc: 'Followers, engagement, reach' },
+  { id: 'foot_traffic',  label: 'More foot traffic',     desc: 'Get more locals walking in' },
+  { id: 'online_orders', label: 'More online orders',    desc: 'DoorDash / UberEats / your own' },
+  { id: 'reservations',  label: 'More reservations',     desc: 'Fill those Friday + Saturday nights' },
+  { id: 'reviews',       label: 'Better reviews',        desc: '4-star → 4.8-star reputation' },
+  { id: 'social',        label: 'Grow social',           desc: 'IG followers, viral Reels, real engagement' },
+  { id: 'brand',         label: 'Brand awareness',       desc: 'Be the new spot everyone knows' },
 ]
 
 const PLATFORMS = [
-  { id: 'instagram', label: 'Instagram',         icon: Camera, oauth: '/api/auth/instagram-direct' },
-  { id: 'facebook',  label: 'Facebook',          icon: Globe,  oauth: '/api/auth/instagram' },
-  { id: 'gbp',       label: 'Google Business',   icon: Search, oauth: '/api/auth/google-business' },
+  { id: 'instagram', label: 'Instagram',         icon: Camera, copy: 'Track followers, reach, engagement' },
+  { id: 'facebook',  label: 'Facebook',          icon: Globe,  copy: 'Page performance + linked Instagram' },
+  { id: 'gbp',       label: 'Google Business',   icon: Search, copy: 'Get found on Google + Maps' },
+]
+
+const RESERVATIONS = [
+  { id: 'opentable', label: 'OpenTable' },
+  { id: 'resy',      label: 'Resy' },
+  { id: 'tock',      label: 'Tock' },
+  { id: 'yelp',      label: 'Yelp Reservations' },
+  { id: 'in_house',  label: 'In-house only' },
+  { id: 'none',      label: 'No reservations' },
+]
+
+const DELIVERY = [
+  { id: 'doordash', label: 'DoorDash' },
+  { id: 'ubereats', label: 'Uber Eats' },
+  { id: 'grubhub',  label: 'Grubhub' },
+  { id: 'toast',    label: 'Toast' },
+  { id: 'own',      label: 'Our own' },
+  { id: 'none',     label: 'No delivery' },
 ]
 
 const TOTAL_STEPS = 5
@@ -116,7 +153,6 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
 
-  /* Bootstrap: load auth user + existing businesses row (if any). */
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -136,9 +172,10 @@ export default function OnboardingPage() {
           ...d,
           role: biz.user_role || '',
           biz_name: biz.name || '',
-          biz_type: biz.industry || '',
+          restaurant_subtype: biz.restaurant_subtype || '',
           cuisine: biz.cuisine || '',
           service_styles: biz.service_styles || [],
+          price_tier: biz.price_tier || '',
           full_address: biz.address || '',
           city: biz.city || '',
           state: biz.state || '',
@@ -147,6 +184,9 @@ export default function OnboardingPage() {
           primary_goal: biz.primary_goal || '',
           goal_detail: biz.goal_detail || '',
           connected: biz.current_platforms || [],
+          reservations_platform: biz.reservations_platform || '',
+          delivery_platforms: biz.delivery_platforms || [],
+          website_url: biz.website_url || '',
         }))
       }
       setLoading(false)
@@ -159,18 +199,20 @@ export default function OnboardingPage() {
     setData(d => ({ ...d, [field]: value }))
   }
 
-  /* Persist a partial row after every step so progress survives a
-     mid-flow refresh. Returns the businessId so subsequent calls can
-     update the same row. */
   async function persist(): Promise<string | null> {
     if (!userId) return null
+    const isFood = data.restaurant_subtype && data.restaurant_subtype !== 'non_food'
     const payload = {
       owner_id: userId,
       user_role: data.role || null,
       name: data.biz_name || null,
-      industry: data.biz_type || null,
+      /* Keep legacy industry column populated for backwards compat.
+         Restaurant subtype is the more granular field we filter on. */
+      industry: isFood ? 'restaurant' : (data.restaurant_subtype === 'non_food' ? 'other' : null),
+      restaurant_subtype: data.restaurant_subtype || null,
       cuisine: data.cuisine || null,
       service_styles: data.service_styles,
+      price_tier: data.price_tier || null,
       address: data.full_address || null,
       city: data.city || null,
       state: data.state || null,
@@ -179,6 +221,9 @@ export default function OnboardingPage() {
       primary_goal: data.primary_goal || null,
       goal_detail: data.goal_detail || null,
       current_platforms: data.connected,
+      reservations_platform: data.reservations_platform || null,
+      delivery_platforms: data.delivery_platforms,
+      website_url: data.website_url || null,
       onboarding_step: step,
     }
     if (businessId) {
@@ -223,50 +268,29 @@ export default function OnboardingPage() {
       .eq('id', businessId)
 
     await completeOnboardingCRM(businessId, userId, {
-      role: data.role,
-      biz_name: data.biz_name,
-      website: '',
-      phone: '',
-      biz_type: data.biz_type,
-      biz_other: '',
-      cuisine: data.cuisine,
-      cuisine_other: '',
+      role: data.role, biz_name: data.biz_name, website: data.website_url, phone: '',
+      biz_type: data.restaurant_subtype === 'non_food' ? 'other' : 'restaurant',
+      biz_other: '', cuisine: data.cuisine, cuisine_other: '',
       service_styles: data.service_styles,
-      full_address: data.full_address,
-      city: data.city,
-      state: data.state,
-      zip: data.zip,
-      location_count: data.location_count,
-      hours: {},
-      biz_desc: '',
-      unique: '',
-      competitors: '',
-      customer_types: [],
-      why_choose: [],
-      primary_goal: data.primary_goal,
-      goal_detail: data.goal_detail,
-      success_signs: [],
-      timeline: '',
-      main_offerings: '',
-      upcoming: '',
-      tones: [],
-      content_likes: [],
-      ref_accounts: '',
-      avoid_list: [],
+      full_address: data.full_address, city: data.city, state: data.state, zip: data.zip,
+      location_count: data.location_count, hours: {},
+      biz_desc: '', unique: '', competitors: '',
+      customer_types: [], why_choose: [],
+      primary_goal: data.primary_goal, goal_detail: data.goal_detail,
+      success_signs: [], timeline: '', main_offerings: '', upcoming: '',
+      tones: [], content_likes: [], ref_accounts: '', avoid_list: [],
       approval_style: '',
-      connected: data.connected,
-      logo_url: '',
-      logo_name: '',
-      photos: [],
+      connected: data.connected, logo_url: '', logo_name: '', photos: [],
     })
 
     setSaving(false)
     setDone(true)
   }
 
+  const isFood = data.restaurant_subtype && data.restaurant_subtype !== 'non_food'
   const valid =
-    step === 1 ? !!data.role :
-    step === 2 ? !!data.biz_name && !!data.biz_type && (data.biz_type !== 'restaurant' || !!data.cuisine) :
+    step === 1 ? !!data.role && !!data.biz_name && !!data.restaurant_subtype :
+    step === 2 ? !isFood || (!!data.cuisine && data.service_styles.length > 0) :
     step === 3 ? !!data.full_address || (!!data.city && !!data.state) :
     step === 4 ? !!data.primary_goal :
     step === 5 ? true :
@@ -308,11 +332,11 @@ export default function OnboardingPage() {
 
         {/* Step content */}
         <div className="bg-white rounded-3xl border border-ink-6 p-7 sm:p-9 shadow-sm">
-          {step === 1 && <RoleStep data={data} update={update} />}
-          {step === 2 && <BusinessStep data={data} update={update} />}
+          {step === 1 && <BasicsStep data={data} update={update} />}
+          {step === 2 && <KitchenStep data={data} update={update} isFood={!!isFood} />}
           {step === 3 && <LocationStep data={data} update={update} />}
           {step === 4 && <GoalStep data={data} update={update} />}
-          {step === 5 && <ConnectStep data={data} update={update} businessId={businessId} />}
+          {step === 5 && <PresenceStep data={data} update={update} />}
         </div>
 
         {/* Nav */}
@@ -344,57 +368,47 @@ export default function OnboardingPage() {
 
 /* ─────────────────────────────── Steps ─────────────────────────────── */
 
-function RoleStep({
+function BasicsStep({
   data, update,
 }: { data: OnboardingData; update: <K extends keyof OnboardingData>(f: K, v: OnboardingData[K]) => void }) {
   return (
     <div>
       <h1 className="text-[26px] font-semibold text-ink leading-tight">
-        Hi 👋 Who are you to this business?
+        Tell us about your spot
       </h1>
       <p className="text-[14px] text-ink-3 mt-1.5">
-        Helps us tailor what we ask next.
-      </p>
-      <div className="grid grid-cols-2 gap-2 mt-6">
-        {ROLES.map(r => {
-          const selected = data.role === r.id
-          return (
-            <button
-              key={r.id}
-              onClick={() => update('role', r.id)}
-              className={`text-left rounded-2xl px-4 py-3 transition-all ${
-                selected
-                  ? 'bg-brand/5 ring-2 ring-brand'
-                  : 'bg-bg-2 ring-1 ring-transparent hover:ring-ink-5'
-              }`}
-            >
-              <p className="text-[14px] font-semibold text-ink">{r.label}</p>
-              <p className="text-[12px] text-ink-3 mt-0.5">{r.desc}</p>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function BusinessStep({
-  data, update,
-}: { data: OnboardingData; update: <K extends keyof OnboardingData>(f: K, v: OnboardingData[K]) => void }) {
-  const isFood = data.biz_type === 'restaurant'
-  return (
-    <div>
-      <h1 className="text-[26px] font-semibold text-ink leading-tight">
-        Tell us about your business
-      </h1>
-      <p className="text-[14px] text-ink-3 mt-1.5">
-        Just the basics. Takes 60 seconds.
+        Three quick fields. Takes a minute.
       </p>
 
       <div className="mt-6 space-y-5">
         <div>
           <label className="block text-[12px] font-semibold text-ink-2 mb-1.5">
-            Business name
+            Your role
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {ROLES.map(r => {
+              const selected = data.role === r.id
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => update('role', r.id)}
+                  className={`text-left rounded-xl px-3 py-2.5 transition-all ${
+                    selected
+                      ? 'bg-brand/5 ring-2 ring-brand'
+                      : 'bg-bg-2 ring-1 ring-transparent hover:ring-ink-5'
+                  }`}
+                >
+                  <p className="text-[13px] font-semibold text-ink">{r.label}</p>
+                  <p className="text-[11px] text-ink-3 mt-0.5">{r.desc}</p>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[12px] font-semibold text-ink-2 mb-1.5">
+            Restaurant name
           </label>
           <input
             type="text"
@@ -402,93 +416,154 @@ function BusinessStep({
             onChange={e => update('biz_name', e.target.value)}
             placeholder="e.g. Marco's Pizza"
             className="w-full rounded-xl bg-bg-2 ring-1 ring-ink-6 focus:ring-ink-3 focus:outline-none px-3.5 py-2.5 text-[14px]"
-            autoFocus
           />
         </div>
 
         <div>
           <label className="block text-[12px] font-semibold text-ink-2 mb-1.5">
-            What kind of business?
+            What kind of spot?
           </label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {BIZ_TYPES.map(t => {
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {SUBTYPES.map(t => {
               const Icon = t.icon
-              const selected = data.biz_type === t.id
+              const selected = data.restaurant_subtype === t.id
               return (
                 <button
                   key={t.id}
-                  onClick={() => update('biz_type', t.id)}
-                  className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-left transition-all ${
+                  onClick={() => update('restaurant_subtype', t.id)}
+                  className={`flex flex-col items-start gap-1 rounded-xl px-3 py-2.5 text-left transition-all ${
                     selected
                       ? 'bg-brand/5 ring-2 ring-brand'
                       : 'bg-bg-2 ring-1 ring-transparent hover:ring-ink-5'
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5 text-ink-3 flex-shrink-0" />
-                  <span className="text-[12.5px] font-medium text-ink">{t.label}</span>
+                  <Icon className="w-4 h-4 text-ink-3 flex-shrink-0" />
+                  <span className="text-[12.5px] font-semibold text-ink">{t.label}</span>
+                  <span className="text-[10.5px] text-ink-3 leading-tight">{t.desc}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function KitchenStep({
+  data, update, isFood,
+}: {
+  data: OnboardingData
+  update: <K extends keyof OnboardingData>(f: K, v: OnboardingData[K]) => void
+  isFood: boolean
+}) {
+  if (!isFood) {
+    return (
+      <div>
+        <h1 className="text-[26px] font-semibold text-ink leading-tight">
+          Got it, not a food business
+        </h1>
+        <p className="text-[14px] text-ink-3 mt-1.5">
+          The portal works for any local business. Your strategist will tailor things.
+          Hit Continue to move on.
+        </p>
+        <div className="mt-6 rounded-2xl bg-bg-2 p-4 text-[12.5px] text-ink-2">
+          We can still help with: social content, local SEO, reviews, ads, website,
+          email/SMS, and brand. If you want a more tailored questionnaire, click
+          &quot;Need a deeper questionnaire?&quot; at the top.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <h1 className="text-[26px] font-semibold text-ink leading-tight">
+        What you serve
+      </h1>
+      <p className="text-[14px] text-ink-3 mt-1.5">
+        Helps your strategist pick the right voice, photos, and timing.
+      </p>
+
+      <div className="mt-6 space-y-5">
+        <div>
+          <label className="block text-[12px] font-semibold text-ink-2 mb-1.5">
+            Cuisine
+          </label>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+            {CUISINES.map(c => {
+              const selected = data.cuisine === c
+              return (
+                <button
+                  key={c}
+                  onClick={() => update('cuisine', c)}
+                  className={`rounded-lg px-2 py-1.5 text-[11.5px] font-medium transition-all ${
+                    selected
+                      ? 'bg-brand/5 ring-2 ring-brand text-ink'
+                      : 'bg-bg-2 ring-1 ring-transparent hover:ring-ink-5 text-ink-2'
+                  }`}
+                >
+                  {c}
                 </button>
               )
             })}
           </div>
         </div>
 
-        {isFood && (
-          <>
-            <div>
-              <label className="block text-[12px] font-semibold text-ink-2 mb-1.5">
-                Cuisine
-              </label>
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
-                {CUISINES.map(c => {
-                  const selected = data.cuisine === c
-                  return (
-                    <button
-                      key={c}
-                      onClick={() => update('cuisine', c)}
-                      className={`rounded-lg px-2 py-1.5 text-[11.5px] font-medium transition-all ${
-                        selected
-                          ? 'bg-brand/5 ring-2 ring-brand text-ink'
-                          : 'bg-bg-2 ring-1 ring-transparent hover:ring-ink-5 text-ink-2'
-                      }`}
-                    >
-                      {c}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-ink-2 mb-1.5">
+            Service styles <span className="text-ink-4 font-normal">(pick any)</span>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {SERVICE_STYLES.map(s => {
+              const selected = data.service_styles.includes(s.id)
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => {
+                    const next = selected
+                      ? data.service_styles.filter(x => x !== s.id)
+                      : [...data.service_styles, s.id]
+                    update('service_styles', next)
+                  }}
+                  className={`rounded-full px-3 py-1.5 text-[12px] font-medium transition-all ${
+                    selected
+                      ? 'bg-brand text-white'
+                      : 'bg-bg-2 ring-1 ring-ink-6 text-ink-2 hover:ring-ink-4'
+                  }`}
+                >
+                  {selected && <Check className="w-3 h-3 inline-block mr-1" />}
+                  {s.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
-            <div>
-              <label className="block text-[12px] font-semibold text-ink-2 mb-1.5">
-                Service styles (pick any)
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {SERVICE_STYLES.map(s => {
-                  const selected = data.service_styles.includes(s.id)
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => {
-                        const next = selected
-                          ? data.service_styles.filter(x => x !== s.id)
-                          : [...data.service_styles, s.id]
-                        update('service_styles', next)
-                      }}
-                      className={`rounded-full px-3 py-1.5 text-[12px] font-medium transition-all ${
-                        selected
-                          ? 'bg-brand text-white'
-                          : 'bg-bg-2 ring-1 ring-ink-6 text-ink-2 hover:ring-ink-4'
-                      }`}
-                    >
-                      {selected && <Check className="w-3 h-3 inline-block mr-1" />}
-                      {s.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </>
-        )}
+        <div>
+          <label className="block text-[12px] font-semibold text-ink-2 mb-1.5">
+            Price point
+          </label>
+          <div className="grid grid-cols-4 gap-2">
+            {PRICE_TIERS.map(p => {
+              const selected = data.price_tier === p.id
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => update('price_tier', p.id)}
+                  className={`rounded-xl px-3 py-2.5 text-center transition-all ${
+                    selected
+                      ? 'bg-brand/5 ring-2 ring-brand'
+                      : 'bg-bg-2 ring-1 ring-transparent hover:ring-ink-5'
+                  }`}
+                >
+                  <p className="text-[16px] font-bold text-ink">{p.label}</p>
+                  <p className="text-[10px] text-ink-3 mt-0.5">{p.sub}</p>
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -504,7 +579,7 @@ function LocationStep({
         Where are you?
       </h1>
       <p className="text-[14px] text-ink-3 mt-1.5">
-        Drives local search visibility and helps us match a strategist who knows your area.
+        Drives local search visibility and matches you with a strategist who knows the area.
       </p>
 
       <div className="mt-6 space-y-4">
@@ -518,7 +593,6 @@ function LocationStep({
             onChange={e => update('full_address', e.target.value)}
             placeholder="123 Main Street"
             className="w-full rounded-xl bg-bg-2 ring-1 ring-ink-6 focus:ring-ink-3 focus:outline-none px-3.5 py-2.5 text-[14px]"
-            autoFocus
           />
         </div>
 
@@ -581,10 +655,10 @@ function GoalStep({
     <div>
       <h1 className="text-[26px] font-semibold text-ink leading-tight flex items-center gap-2">
         <Target className="w-6 h-6 text-ink-4" />
-        What&apos;s the ONE thing you want most help with?
+        What&apos;s the ONE thing you want most?
       </h1>
       <p className="text-[14px] text-ink-3 mt-1.5">
-        Pick the top priority. We can add more later.
+        Pick the top priority. Your strategist focuses here first.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-6">
@@ -623,64 +697,134 @@ function GoalStep({
   )
 }
 
-function ConnectStep({
-  data, update, businessId,
-}: {
-  data: OnboardingData
-  update: <K extends keyof OnboardingData>(f: K, v: OnboardingData[K]) => void
-  businessId: string | null
-}) {
-  function toggle(platform: string) {
-    const next = data.connected.includes(platform)
-      ? data.connected.filter(p => p !== platform)
-      : [...data.connected, platform]
+function PresenceStep({
+  data, update,
+}: { data: OnboardingData; update: <K extends keyof OnboardingData>(f: K, v: OnboardingData[K]) => void }) {
+  function togglePlatform(p: string) {
+    const next = data.connected.includes(p)
+      ? data.connected.filter(x => x !== p)
+      : [...data.connected, p]
     update('connected', next)
+  }
+  function toggleDelivery(p: string) {
+    if (p === 'none') {
+      update('delivery_platforms', data.delivery_platforms.includes('none') ? [] : ['none'])
+      return
+    }
+    const without = data.delivery_platforms.filter(x => x !== 'none')
+    const next = without.includes(p) ? without.filter(x => x !== p) : [...without, p]
+    update('delivery_platforms', next)
   }
 
   return (
     <div>
       <h1 className="text-[26px] font-semibold text-ink leading-tight">
-        Connect your accounts
+        Your online presence
       </h1>
       <p className="text-[14px] text-ink-3 mt-1.5">
-        Mark which ones you have. You can connect them in the portal anytime; skipping is fine.
+        Tell us what you have. You can actually connect things later from the portal.
       </p>
 
-      <div className="space-y-2 mt-6">
-        {PLATFORMS.map(p => {
-          const Icon = p.icon
-          const selected = data.connected.includes(p.id)
-          return (
-            <button
-              key={p.id}
-              onClick={() => toggle(p.id)}
-              className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition-all ${
-                selected
-                  ? 'bg-brand/5 ring-2 ring-brand'
-                  : 'bg-bg-2 ring-1 ring-transparent hover:ring-ink-5'
-              }`}
-            >
-              <span className={`w-9 h-9 rounded-xl grid place-items-center flex-shrink-0 ${
-                selected ? 'bg-brand text-white' : 'bg-white ring-1 ring-ink-6 text-ink-3'
-              }`}>
-                {selected ? <Check className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-[14px] font-semibold text-ink">{p.label}</p>
-                <p className="text-[11.5px] text-ink-3 mt-0.5">
-                  {p.id === 'instagram' && 'Track followers, reach, engagement'}
-                  {p.id === 'facebook'  && 'Page performance + linked Instagram'}
-                  {p.id === 'gbp'       && 'Get found on Google + Maps'}
-                </p>
-              </div>
-            </button>
-          )
-        })}
+      <div className="mt-6 space-y-5">
+        {/* Website */}
+        <div>
+          <label className="block text-[12px] font-semibold text-ink-2 mb-1.5">
+            Website <span className="text-ink-4 font-normal">(optional)</span>
+          </label>
+          <input
+            type="url"
+            value={data.website_url}
+            onChange={e => update('website_url', e.target.value)}
+            placeholder="https://marcospizza.com"
+            className="w-full rounded-xl bg-bg-2 ring-1 ring-ink-6 focus:ring-ink-3 focus:outline-none px-3.5 py-2.5 text-[14px]"
+          />
+        </div>
+
+        {/* Social platforms */}
+        <div>
+          <label className="block text-[12px] font-semibold text-ink-2 mb-2">
+            Mark what you have
+          </label>
+          <div className="space-y-2">
+            {PLATFORMS.map(p => {
+              const Icon = p.icon
+              const selected = data.connected.includes(p.id)
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => togglePlatform(p.id)}
+                  className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
+                    selected
+                      ? 'bg-brand/5 ring-2 ring-brand'
+                      : 'bg-bg-2 ring-1 ring-transparent hover:ring-ink-5'
+                  }`}
+                >
+                  <span className={`w-8 h-8 rounded-lg grid place-items-center flex-shrink-0 ${
+                    selected ? 'bg-brand text-white' : 'bg-white ring-1 ring-ink-6 text-ink-3'
+                  }`}>
+                    {selected ? <Check className="w-3.5 h-3.5" /> : <Icon className="w-3.5 h-3.5" />}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13.5px] font-semibold text-ink">{p.label}</p>
+                    <p className="text-[11px] text-ink-3 mt-0.5">{p.copy}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Reservations */}
+        <div>
+          <label className="block text-[12px] font-semibold text-ink-2 mb-1.5">
+            Reservations <span className="text-ink-4 font-normal">(optional)</span>
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {RESERVATIONS.map(r => {
+              const selected = data.reservations_platform === r.id
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => update('reservations_platform', selected ? '' : r.id)}
+                  className={`rounded-full px-3 py-1.5 text-[11.5px] font-medium transition-all ${
+                    selected
+                      ? 'bg-brand text-white'
+                      : 'bg-bg-2 ring-1 ring-ink-6 text-ink-2 hover:ring-ink-4'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Delivery */}
+        <div>
+          <label className="block text-[12px] font-semibold text-ink-2 mb-1.5">
+            Delivery / online orders <span className="text-ink-4 font-normal">(pick any)</span>
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {DELIVERY.map(d => {
+              const selected = data.delivery_platforms.includes(d.id)
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => toggleDelivery(d.id)}
+                  className={`rounded-full px-3 py-1.5 text-[11.5px] font-medium transition-all ${
+                    selected
+                      ? 'bg-brand text-white'
+                      : 'bg-bg-2 ring-1 ring-ink-6 text-ink-2 hover:ring-ink-4'
+                  }`}
+                >
+                  {selected && <Check className="w-2.5 h-2.5 inline-block mr-1" />}
+                  {d.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </div>
-
-      <p className="text-[11.5px] text-ink-4 mt-4">
-        Your strategist will help you actually connect these inside the portal. For now just mark which ones exist.
-      </p>
     </div>
   )
 }
@@ -688,8 +832,6 @@ function ConnectStep({
 function DoneScreen({ bizName }: { bizName: string }) {
   const router = useRouter()
   useEffect(() => {
-    /* Auto-redirect after a beat so they feel the celebration but
-       don't have to click. */
     const t = setTimeout(() => router.push('/dashboard'), 1500)
     return () => clearTimeout(t)
   }, [router])
