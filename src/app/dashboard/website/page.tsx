@@ -17,7 +17,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, Globe } from 'lucide-react'
+import { Plus, Globe, Plug } from 'lucide-react'
 import type { TimeRange, DashboardView } from '@/types/dashboard'
 import { getWebsiteView } from '@/lib/dashboard/get-website-view'
 import { useClient } from '@/lib/client-context'
@@ -133,13 +133,22 @@ export default function WebsiteOverviewPage() {
             {businessName || 'Your website'}
           </h1>
         </div>
-        <Link
-          href="/dashboard/website/requests/new"
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-sm shadow-brand/20"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Request a change
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/website/setup"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-ink-2 bg-ink-7 hover:bg-ink-6"
+          >
+            <Plug className="w-3.5 h-3.5" />
+            Setup
+          </Link>
+          <Link
+            href="/dashboard/website/requests/new"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-sm shadow-brand/20"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Request a change
+          </Link>
+        </div>
       </div>
 
       {/* 1. Status strip — answers "is my site working?" in one line.

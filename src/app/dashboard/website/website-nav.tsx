@@ -11,7 +11,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BarChart3, LineChart, Globe, Inbox, Mail } from 'lucide-react'
+import { BarChart3, LineChart, Globe, Inbox, Mail, Plug } from 'lucide-react'
 
 interface Tab {
   label: string
@@ -26,6 +26,7 @@ const TABS: Tab[] = [
   { label: 'Your site',      href: '/dashboard/website/manage',   icon: Globe },
   { label: 'Forms',          href: '/dashboard/website/forms',    icon: Mail },
   { label: 'Requests',       href: '/dashboard/website/requests', icon: Inbox },
+  { label: 'Setup',          href: '/dashboard/website/setup',    icon: Plug },
 ]
 
 export default function WebsiteNav() {
