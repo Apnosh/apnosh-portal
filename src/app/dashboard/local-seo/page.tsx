@@ -212,30 +212,28 @@ function LocalSeoContent() {
             <div className="db-fade db-d1">
               <StatusBanner headline={view.headline} businessName={businessName} pct={pct} up={up} />
             </div>
-            {/* Hero + chart on left, contextual cards in a sidebar on right.
-               Mirrors the Website Overview pattern: primary visual on the
-               larger column, supplementary panels (listing health, team
-               status) docked alongside instead of pushed below. */}
-            <div className="db-fade db-d3 grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="lg:col-span-2 space-y-4">
-                <HeroMetric ctx={view.ctx} num={num} pctFull={pctFull} up={up} />
-                <TrendChart
-                  data={view.chartData}
-                  timeRange={timeRange}
-                  onTimeRangeChange={setTimeRange}
-                  up={up}
-                  unit={view.unit}
-                />
-              </div>
-              <div className="space-y-3">
-                {client?.id && (
-                  <ListingHealthCard clientId={client.id} locationId={selectedLocationId} />
-                )}
-                <HandledByTeamPanel />
-              </div>
+            <div className="db-fade db-d3">
+              <HeroMetric ctx={view.ctx} num={num} pctFull={pctFull} up={up} />
             </div>
-            <div className="db-fade db-d5 mt-4">
+            <div className="db-fade db-d4">
+              <TrendChart
+                data={view.chartData}
+                timeRange={timeRange}
+                onTimeRangeChange={setTimeRange}
+                up={up}
+                unit={view.unit}
+              />
+            </div>
+            <div className="db-fade db-d5">
               <MetricGrid title={view.bdtitle} metrics={metrics} />
+            </div>
+            {client?.id && (
+              <div className="db-fade db-d5 mt-4">
+                <ListingHealthCard clientId={client.id} locationId={selectedLocationId} />
+              </div>
+            )}
+            <div className="db-fade db-d5 mt-4">
+              <HandledByTeamPanel />
             </div>
           </>
         )
