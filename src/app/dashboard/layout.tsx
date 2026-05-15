@@ -114,6 +114,7 @@ const navSections: NavSection[] = [
         children: [
           { label: 'Overview', href: '/dashboard/social', exact: true },
           { label: 'Calendar', href: '/dashboard/social/calendar' },
+          { label: 'Ads', href: '/dashboard/social/ads' },
           { label: 'Inbox', href: '/dashboard/social/inbox' },
           { label: 'Performance', href: '/dashboard/social/performance' },
           { label: 'Library', href: '/dashboard/social/library' },
@@ -220,6 +221,7 @@ const navSections: NavSection[] = [
 // Footer items — true settings only. Frequently-used connections
 // and business profile are promoted up into the main nav.
 const bottomItems = [
+  { label: 'Services', href: '/dashboard/services', icon: ShoppingBag },
   { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { label: 'Agreements', href: '/dashboard/agreements', icon: FileText },
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
