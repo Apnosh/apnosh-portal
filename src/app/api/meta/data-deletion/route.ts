@@ -28,12 +28,20 @@ const APP_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://portal.apnosh.c
 
 export async function POST(req: Request) {
   if (!APP_SECRET) {
-    return NextResponse.json({ error: 'App secret not configured' }, { status: 500 })
+    return NextResponse.json({ error: 'App secret not configured' }, { status: 503 })
   }
 
-  const form = await req.formData()
-  const signedRequest = form.get('signed_request')
-  if (typeof signedRequest !== 'string') {
+  /* Meta always posts a form body. Guard against probes (empty body,
+     wrong content-type) so reviewers see a clean 400 instead of a 500. */
+  let signedRequest: string | null = null
+  try {
+    const form = await req.formData()
+    const raw = form.get('signed_request')
+    if (typeof raw === 'string') signedRequest = raw
+  } catch {
+    /* fall through to the 400 below */
+  }
+  if (!signedRequest) {
     return NextResponse.json({ error: 'Missing signed_request' }, { status: 400 })
   }
 
