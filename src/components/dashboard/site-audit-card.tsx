@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { CheckCircle2, AlertCircle, XCircle, Sparkles, ChevronDown, RefreshCw } from 'lucide-react'
+import { CheckCircle2, AlertCircle, XCircle, Sparkles, ChevronDown, RefreshCw, ExternalLink } from 'lucide-react'
 import { getSiteAudits, type SiteAuditRow } from '@/lib/site-audit'
 
 const AUDIT_LABELS: Record<string, { label: string; sub: string }> = {
@@ -15,6 +15,28 @@ const AUDIT_LABELS: Record<string, { label: string; sub: string }> = {
   page_speed:    { label: 'Page speed',       sub: 'Mobile performance (Lighthouse)' },
   schema_markup: { label: 'Schema markup',    sub: 'Restaurant/LocalBusiness JSON-LD' },
   stale_content: { label: 'Content freshness', sub: 'Pages unchanged for 90+ days' },
+}
+
+/**
+ * Per-audit "fix it" link. Each audit type gets a contextual external tool
+ * that helps the client (or their dev) act on the finding without having
+ * to know which tool to open.
+ */
+function fixItFor(auditType: string, url: string): { label: string; href: string } | null {
+  if (!url) return null
+  const encoded = encodeURIComponent(url)
+  switch (auditType) {
+    case 'broken_links':
+      return { label: 'Open page', href: url }
+    case 'page_speed':
+      return { label: 'Run PageSpeed', href: `https://pagespeed.web.dev/analysis?url=${encoded}` }
+    case 'schema_markup':
+      return { label: 'Check schema', href: `https://search.google.com/test/rich-results?url=${encoded}` }
+    case 'stale_content':
+      return { label: 'Open page', href: url }
+    default:
+      return { label: 'Open page', href: url }
+  }
 }
 
 export default function SiteAuditCard({ clientId }: { clientId: string }) {
@@ -113,17 +135,31 @@ function AuditRow({ row }: { row: SiteAuditRow }) {
       </button>
       {open && visibleFindings.length > 0 && (
         <ul className="px-5 pb-3 space-y-1">
-          {visibleFindings.slice(0, 10).map((f, i) => (
-            <li key={i} className="text-[11.5px] flex items-start gap-2">
-              <span className={`mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                f.severity === 'fail' ? 'bg-rose-500' : f.severity === 'warn' ? 'bg-amber-500' : 'bg-ink-5'
-              }`} />
-              <div className="flex-1 min-w-0">
-                <p className="text-ink-2">{f.message}</p>
-                <p className="text-[10.5px] text-ink-4 truncate font-mono">{f.url}</p>
-              </div>
-            </li>
-          ))}
+          {visibleFindings.slice(0, 10).map((f, i) => {
+            const fix = fixItFor(row.audit_type, f.url)
+            return (
+              <li key={i} className="text-[11.5px] flex items-start gap-2">
+                <span className={`mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                  f.severity === 'fail' ? 'bg-rose-500' : f.severity === 'warn' ? 'bg-amber-500' : 'bg-ink-5'
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-ink-2">{f.message}</p>
+                  <p className="text-[10.5px] text-ink-4 truncate font-mono">{f.url}</p>
+                </div>
+                {fix && (
+                  <a
+                    href={fix.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-shrink-0 inline-flex items-center gap-1 text-[10.5px] font-medium text-brand hover:text-brand/80 px-2 py-0.5 rounded border border-brand/30 hover:border-brand/60 hover:bg-brand/5 transition-colors"
+                  >
+                    {fix.label}
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
     </li>
