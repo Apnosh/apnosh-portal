@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  let state: { clientId: string; userId: string; returnTo?: string; popup?: boolean }
+  let state: { clientId?: string; userId: string; returnTo?: string; popup?: boolean; mode?: 'agency' }
   try {
     state = JSON.parse(Buffer.from(stateParam, 'base64url').toString())
   } catch {
@@ -43,6 +43,58 @@ export async function GET(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
+
+  /* Agency mode: store the token in `integrations` so all clients
+     can share it. AM picks which Pages map to which clients in the
+     /admin/integrations/meta-agency UI afterwards. */
+  if (state.mode === 'agency') {
+    try {
+      const shortLived = await exchangeCodeForToken(code)
+      const longLived = await exchangeForLongLivedToken(shortLived.access_token)
+      const expiresIn = longLived.expires_in || 5184000
+      const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString()
+
+      // Get the granting user's profile so we can show "granted by X" later.
+      const meRes = await fetch(
+        `https://graph.facebook.com/v21.0/me?fields=id,name`,
+        { headers: { Authorization: `Bearer ${longLived.access_token}` } }
+      )
+      const me = await meRes.json() as { id?: string; name?: string }
+
+      await supabase
+        .from('integrations')
+        .upsert({
+          provider: 'meta_agency',
+          access_token: longLived.access_token,
+          refresh_token: null,
+          token_expires_at: expiresAt,
+          metadata: {
+            facebook_user_id: me.id ?? null,
+            facebook_user_name: me.name ?? null,
+            scopes: 'pages_show_list,pages_read_engagement,pages_manage_posts,business_management',
+          },
+          granted_by: state.userId,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'provider' })
+
+      const returnTo = state.returnTo || '/admin/integrations/meta-agency'
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}${returnTo}?connected=1`
+      )
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Agency OAuth failed'
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/admin/integrations/meta-agency?error=${encodeURIComponent(msg)}`
+      )
+    }
+  }
+
+  // Per-client mode falls through to the existing logic below.
+  if (!state.clientId) {
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL}/admin?error=${encodeURIComponent('Missing client context')}`
+    )
+  }
 
   try {
     // 1. Token exchange

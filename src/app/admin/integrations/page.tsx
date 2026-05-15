@@ -139,6 +139,29 @@ export default function IntegrationsPage() {
             }
           />
 
+          {/* Meta agency card -- separate sub-page because the Page-mapping
+             UI gets long. One AM grant covers every client's IG + FB. */}
+          <Link
+            href="/admin/integrations/meta-agency"
+            className="block rounded-xl border border-ink-6 bg-white p-5 hover:border-ink-4 hover:shadow-sm transition-all"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-50 ring-1 ring-blue-100 grid place-items-center shrink-0">
+                <LinkIcon className="w-5 h-5 text-blue-700" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="font-bold text-ink mb-1">Meta agency access (Instagram + Facebook)</h2>
+                <p className="text-xs text-ink-3 leading-relaxed">
+                  One Apnosh staff Facebook account grant covers every client&apos;s Page + linked Instagram.
+                  Restaurants never have to OAuth themselves -- the AM already has Page Admin access via Meta Business Manager.
+                </p>
+                <p className="text-[11px] text-ink-4 mt-2 inline-flex items-center gap-1">
+                  Configure mappings →
+                </p>
+              </div>
+            </div>
+          </Link>
+
           <div className="text-xs text-ink-3 pt-2">
             <Link href="/admin/gbp/backfill" className="underline">
               Bulk CSV backfill page →
