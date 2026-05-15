@@ -102,7 +102,24 @@ async function resolveClientId(userId: string): Promise<string | null> {
 function humanizeSyncError(err: string | null): string | null {
   if (!err) return null
   const lower = err.toLowerCase()
-  if (lower.includes('permission') || lower.includes('not.*enabled') || lower.includes('awaiting')) {
+
+  /* Google My Business v4 API: Apnosh has applied for allowlist
+     access; until Google approves the request, reviews + Q&A + GBP
+     posts fail with 'API has not been used / is disabled'. The
+     listing + performance data still works via the newer Business
+     Profile API, so we surface a calm 'waiting on Google' message
+     rather than a scary technical error. */
+  const isV4PendingApproval =
+    lower.includes('mybusiness') ||
+    lower.includes('my business api') ||
+    lower.includes('has not been used') ||
+    lower.includes('api not enabled') ||
+    (lower.includes('api') && lower.includes('disabled')) ||
+    lower.includes('awaiting')
+  if (isV4PendingApproval) {
+    return 'Reviews are waiting on Google to approve our access. Listing + performance data still flows — no action needed.'
+  }
+  if (lower.includes('permission')) {
     return 'Waiting on Google to approve API access. No action needed — we\'re on it.'
   }
   if (lower.includes('token') && (lower.includes('expired') || lower.includes('invalid'))) {
