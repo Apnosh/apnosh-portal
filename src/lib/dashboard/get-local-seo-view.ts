@@ -238,25 +238,17 @@ export async function getLocalSeoView(
   const am = await getAmNote(supabase, clientId, 'local_seo')
 
   /* Per-range hero + metrics so clicking the time-range tab actually
-     changes the headline numbers (not just the chart). Restaurants are
-     seasonal, so the comparison is YoY (same window one year ago).
-     `1M` specifically aligns with Google's default 'last full calendar
-     month' window so the number cross-checks with the Google Business
-     Profile app. Other ranges stay as trailing days. */
+     changes the headline numbers (not just the chart). Every range
+     uses trailing-N-days ending 3 days back (to skip the GBP API
+     lag) compared against the same window one year ago. Restaurants
+     are seasonal, so YoY beats prior-period for an honest comparison. */
   const rangeDays: Record<TimeRange, number> = {
     '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365,
   }
   const byRange = {} as NonNullable<DashboardView['byRange']>
   for (const [rk, days] of Object.entries(rangeDays) as Array<[TimeRange, number]>) {
-    let winStart: Date, winEnd: Date
-    if (rk === '1M') {
-      /* Last full calendar month -- matches Google's default. */
-      winStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-      winEnd = new Date(now.getFullYear(), now.getMonth(), 0)
-    } else {
-      winEnd = addDays(now, -3)  // skip API lag tail
-      winStart = addDays(winEnd, -(days - 1))
-    }
+    const winEnd = addDays(now, -3)  // skip API lag tail
+    const winStart = addDays(winEnd, -(days - 1))
     const yoyEnd = addDays(winEnd, -365)
     const yoyStart = addDays(winStart, -365)
     const curr = filterByDateRange(gbpRows, winStart, winEnd)
@@ -268,11 +260,9 @@ export async function getLocalSeoView(
     const cDir = sumField(curr, 'directions'), pDir = sumField(prev, 'directions')
     const cCal = sumField(curr, 'calls'), pCal = sumField(prev, 'calls')
     const cClk = sumField(curr, 'website_clicks'), pClk = sumField(prev, 'website_clicks')
-    /* Human label for the exact window so clients can cross-check with
-       Google ('Apr 2026' for 1M, 'Apr 13 - May 12' for 1W/3M/6M, etc.) */
-    const windowLabel = rk === '1M'
-      ? winStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-      : `${winStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${winEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+    /* Human label for the exact window so clients see the precise
+       dates being summed ('Apr 13 – May 12'). */
+    const windowLabel = `${winStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${winEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
     byRange[rk] = {
       num: fmtNum(cInt),
       pct: hasPrev ? (pct >= 0 ? '+' : '') + pct + '%' : 'New',
@@ -547,13 +537,26 @@ function weeklyReviewSparkline(reviews: ReviewRow[], weeks: number): number[] {
   return result
 }
 
+/**
+ * Resolution per range is tuned so the line is dense enough to show
+ * shape but sparse enough that day-to-day noise doesn't dominate.
+ * Restaurants have spiky daily traffic (a Friday-night surge can be
+ * 3x a Monday) -- daily resolution past the 1W view obscures the
+ * underlying trend.
+ *
+ *   1W -> 7 daily points    (you want each day visible)
+ *   1M -> ~4-5 weekly points (smooth, shows week-over-week trend)
+ *   3M -> ~13 weekly points  (still smooth, more shape)
+ *   6M -> ~26 weekly points  (some shape, monthly seasonality)
+ *   1Y -> ~52 weekly points  (broad shape, seasonal pattern)
+ */
 function buildChartData(rows: GbpRow[], getValue: (r: GbpRow) => number): Record<TimeRange, ChartData> {
   const now = new Date()
   return {
     '1W': buildTimeRange(rows, getValue, 7, now, 'day'),
-    '1M': buildTimeRange(rows, getValue, 30, now, 'day'),
-    '3M': buildTimeRange(rows, getValue, 90, now, 'biday'),
-    '6M': buildTimeRange(rows, getValue, 180, now, 'biday'),
+    '1M': buildTimeRange(rows, getValue, 30, now, 'week'),
+    '3M': buildTimeRange(rows, getValue, 90, now, 'week'),
+    '6M': buildTimeRange(rows, getValue, 180, now, 'week'),
     '1Y': buildTimeRange(rows, getValue, 365, now, 'week'),
   }
 }
