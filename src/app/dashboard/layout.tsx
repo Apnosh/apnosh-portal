@@ -315,6 +315,51 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     approvals: 0,
   })
 
+  /* Channels in the sidebar unlock when EITHER:
+     - the client has a paid service in that area (enrolledServices), or
+     - the client has an actually-connected platform in that area.
+     This lets a free-tier owner connect Instagram and see Social
+     immediately, without forcing them to subscribe first. */
+  const [connectedChannels, setConnectedChannels] = useState<Set<ServiceArea>>(new Set())
+
+  useEffect(() => {
+    if (!client?.id) { setConnectedChannels(new Set()); return }
+    let cancelled = false
+    async function fetchConnections() {
+      try {
+        const supabase = (await import('@/lib/supabase/client')).createClient()
+        const [pcRes, ccRes] = await Promise.all([
+          supabase
+            .from('platform_connections')
+            .select('platform, access_token')
+            .eq('client_id', client!.id)
+            .not('access_token', 'is', null),
+          supabase
+            .from('channel_connections')
+            .select('channel, access_token, status')
+            .eq('client_id', client!.id)
+            .not('access_token', 'is', null),
+        ])
+        if (cancelled) return
+
+        const set = new Set<ServiceArea>()
+        for (const r of (pcRes.data ?? []) as Array<{ platform: string }>) {
+          if (['instagram', 'facebook', 'tiktok', 'linkedin'].includes(r.platform)) set.add('social')
+        }
+        for (const r of (ccRes.data ?? []) as Array<{ channel: string; status: string }>) {
+          if (r.status !== 'active') continue
+          if (r.channel === 'google_business_profile') set.add('local_seo')
+          if (r.channel === 'google_analytics' || r.channel === 'google_search_console') set.add('website')
+        }
+        setConnectedChannels(set)
+      } catch {
+        // Quiet fail; sidebar just stays as-is.
+      }
+    }
+    fetchConnections()
+    return () => { cancelled = true }
+  }, [client?.id])
+
   useEffect(() => {
     if (!client?.id) return
     let cancelled = false
@@ -497,11 +542,17 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           {navSections.map((section, idx) => {
-            // Filter service-gated items based on enrollment.
-            // While loading, hide service-gated items to avoid flicker — they
-            // appear once enrollment resolves.
+            // Filter service-gated items. A channel shows up when EITHER:
+            //   - the client subscribed to a service in that area, OR
+            //   - they actually connected a platform that maps to it.
+            // While the client + connections are loading, hide service-gated
+            // items to avoid flicker -- they appear once data resolves.
             const visibleItems = section.items.filter(item =>
-              !item.serviceArea || (!clientLoading && enrolledServices.has(item.serviceArea))
+              !item.serviceArea ||
+              (!clientLoading && (
+                enrolledServices.has(item.serviceArea) ||
+                connectedChannels.has(item.serviceArea)
+              ))
             )
             if (visibleItems.length === 0) return null
             return (

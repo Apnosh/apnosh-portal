@@ -26,6 +26,7 @@ import Link from 'next/link'
 import { useClient } from '@/lib/client-context'
 import AdminClientPicker from '@/components/admin/admin-client-picker'
 import FinishProfileBanner from '@/components/dashboard/finish-profile-banner'
+import GettingStarted from '@/components/dashboard/getting-started'
 import {
   Sparkles, MessageSquare, Image as ImgIcon, Video, Megaphone, Brush, Plus,
   Plug, Loader2, Users as UsersIcon, Clock, Check,
@@ -163,6 +164,14 @@ export default function DashboardPage() {
 
   if (isAdmin && !client) {
     return <AdminClientPicker />
+  }
+
+  /* First-run experience: fresh client with no platforms connected
+     and no active paid services sees a guided 4-card welcome rather
+     than the empty 'Today' briefing meant for active clients. */
+  const noActiveServices = (client?.services_active?.length ?? 0) === 0
+  if (state === 'empty' && noActiveServices) {
+    return <GettingStarted clientName={client?.name ?? ''} />
   }
 
   return (

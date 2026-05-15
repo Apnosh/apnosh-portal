@@ -76,7 +76,12 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
       location: location || '',
       website: biz.website_url || '',
       phone: biz.phone || '',
-      services_active: ['social'],
+      /* New clients start with NO active services. The portal itself is
+         free; services_active fills up as the client subscribes to
+         specific offerings from /dashboard/services. Previously this
+         was hardcoded to ['social'] which made the Social channel show
+         in the sidebar before the client had subscribed to anything. */
+      services_active: [],
       /* CHECK constraint requires title-case Basic/Standard/Pro/Internal. */
       tier: 'Basic',
       onboarding_date: new Date().toISOString().split('T')[0],
