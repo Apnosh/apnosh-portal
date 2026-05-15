@@ -186,7 +186,7 @@ export default function MenuEditor() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-10">
+      <div className="max-w-[1100px] mx-auto px-4 lg:px-6 py-10">
         <div className="animate-pulse space-y-4">
           <div className="h-6 w-48 bg-ink-6 rounded" />
           <div className="h-12 bg-ink-6 rounded-xl" />
@@ -202,7 +202,7 @@ export default function MenuEditor() {
 
   if (loadError) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-10">
+      <div className="max-w-[1100px] mx-auto px-4 lg:px-6 py-10">
         {/* No back link -- sticky sub-nav has Overview */}
         <div className="rounded-2xl bg-amber-50 border border-amber-200 p-5 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
@@ -218,7 +218,7 @@ export default function MenuEditor() {
   const current = menus[activeMenu]
 
   return (
-    <div className="max-w-4xl mx-auto px-4 pt-6 pb-20 space-y-6">
+    <div className="max-w-[1100px] mx-auto px-4 lg:px-6 pt-6 pb-20 space-y-6">
       {/* Header -- matches the portal-wide page-title pattern */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">

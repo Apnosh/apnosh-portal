@@ -37,7 +37,7 @@ export default function LocationsScoreboardPage() {
 
   if (clientLoading || loading) {
     return (
-      <div className="max-w-5xl mx-auto space-y-4 animate-pulse">
+      <div className="max-w-[1100px] mx-auto space-y-4 animate-pulse">
         <div className="h-8 w-48 bg-ink-6 rounded" />
         <div className="h-64 bg-white rounded-xl border border-ink-6" />
       </div>
@@ -47,7 +47,7 @@ export default function LocationsScoreboardPage() {
   const hasAnyData = rows.some(r => r.interactions > 0 || r.new_reviews > 0)
 
   return (
-    <div className="max-w-5xl mx-auto px-4 lg:px-6 pt-6 pb-20 space-y-5">
+    <div className="max-w-[1100px] mx-auto px-4 lg:px-6 pt-6 pb-20 space-y-5">
       {/* Header -- matches the portal-wide page-title pattern */}
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
