@@ -100,17 +100,17 @@ export default function WebsiteOverviewPage() {
             <Globe className="w-7 h-7" style={{ color: '#4abd98' }} />
           </div>
           <h2 className="text-[20px] font-bold mb-2" style={{ color: 'var(--db-black, #111)' }}>
-            Connect Google Analytics
+            Connect your website
           </h2>
           <p className="text-[14px] max-w-sm mx-auto mb-8" style={{ color: 'var(--db-ink-3, #888)' }}>
-            Once Google Analytics and Search Console are connected, your website numbers will show up here.
+            A quick 5-step wizard hooks up Google Analytics, Search Console, and Clarity so your website numbers land here.
           </p>
           <Link
-            href="/dashboard/connected-accounts"
+            href="/dashboard/website/setup"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
             style={{ background: '#4abd98' }}
           >
-            Connect accounts
+            Start setup
           </Link>
         </div>
       </div>
