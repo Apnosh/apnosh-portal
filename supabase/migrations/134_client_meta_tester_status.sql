@@ -50,6 +50,8 @@ create trigger trg_meta_tester_status_updated_at
   for each row execute function set_meta_tester_status_updated_at();
 
 -- RLS: only Apnosh staff (admins) can read or write this table.
+-- Uses the project's existing is_admin() helper, which checks
+-- profiles.role = 'admin' for the current auth user.
 alter table client_meta_tester_status enable row level security;
 
 drop policy if exists "admins manage meta tester status" on client_meta_tester_status;
@@ -57,12 +59,8 @@ create policy "admins manage meta tester status"
   on client_meta_tester_status
   for all
   to authenticated
-  using (exists (
-    select 1 from admin_users au where au.user_id = auth.uid()
-  ))
-  with check (exists (
-    select 1 from admin_users au where au.user_id = auth.uid()
-  ));
+  using (is_admin())
+  with check (is_admin());
 
 comment on table client_meta_tester_status is
   'Per-client Meta App tester onboarding state. Tracks FB and IG tester invites + acceptances while the Apnosh Meta app is in Development mode (Standard Access). Drives the ConnectionsTab helper panel.';

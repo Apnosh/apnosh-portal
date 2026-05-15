@@ -44,14 +44,15 @@ async function requireAdmin(): Promise<string> {
   const { data: { user } } = await userSupabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
+  // Project-wide admin check uses profiles.role = 'admin'.
   const admin = createAdminClient()
   const { data } = await admin
-    .from('admin_users')
-    .select('user_id')
-    .eq('user_id', user.id)
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
     .maybeSingle()
 
-  if (!data) throw new Error('Admin only')
+  if (data?.role !== 'admin') throw new Error('Admin only')
   return user.id
 }
 
