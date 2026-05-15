@@ -200,7 +200,11 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
         .update({
           location_name: linkedResource.title,
           last_seen_at: new Date().toISOString(),
-          ...(existing.client_id ? {} : { client_id: clientId }),
+          /* Flip to assigned + bind client_id whenever the row is being
+             linked to a client. The Local SEO pages query for status =
+             'assigned'; without this the location stays invisible. */
+          ...(existing.client_id ? {} : { client_id: clientId, status: 'assigned' }),
+          ...(existing.client_id === clientId ? { status: 'assigned' } : {}),
         })
         .eq('id', existing.id)
     } else {
@@ -210,6 +214,9 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
           store_code: storeCode,
           location_name: linkedResource.title,
           client_id: clientId,
+          /* Default is 'unassigned'; we know this row is for the
+             connecting client, so mark it assigned right away. */
+          status: 'assigned',
           last_seen_at: new Date().toISOString(),
         })
     }
