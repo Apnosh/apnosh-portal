@@ -126,7 +126,7 @@ function Hero({ data }: { data: SocialHubData }) {
           label="Needs you"
           sub="in review"
           value={data.counts.needsYou}
-          href="/dashboard/social/action-needed"
+          href="/dashboard/social/inbox"
           tone={data.counts.needsYou > 0 ? 'rose' : 'neutral'}
         />
       </div>

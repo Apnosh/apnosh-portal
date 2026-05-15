@@ -87,7 +87,7 @@ function DraftsTab({ drafts }: { drafts: DraftPost[] }) {
     return (
       <EmptyState
         title="No drafts right now"
-        body="When your strategist drafts a post for your review, it shows up here. Approve from /dashboard/social/action-needed."
+        body="When your strategist drafts a post for your review, it shows up here. Approve from /dashboard/social/inbox."
         Icon={FileText}
       />
     )
@@ -107,7 +107,7 @@ function DraftCard({ draft }: { draft: DraftPost }) {
   const statusLabel = draft.status === 'in_review' ? 'In review' : 'Draft'
   return (
     <Link
-      href="/dashboard/social/action-needed"
+      href="/dashboard/social/inbox"
       className="block rounded-2xl border bg-white overflow-hidden hover:shadow-sm transition-shadow"
       style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
     >

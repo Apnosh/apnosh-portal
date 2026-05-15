@@ -63,7 +63,7 @@ export async function getDashboardData(
     actionItems.push({
       icon: 'inbox',
       title: `${pendingApprovals} post${pendingApprovals === 1 ? '' : 's'} ready for your review`,
-      href: '/dashboard/social/action-needed',
+      href: '/dashboard/social/inbox',
     })
   }
   // Flag metric drops > 10%
