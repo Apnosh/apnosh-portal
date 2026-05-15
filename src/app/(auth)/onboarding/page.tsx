@@ -152,6 +152,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
+  const [completeError, setCompleteError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -257,34 +258,47 @@ export default function OnboardingPage() {
   async function handleComplete() {
     if (!businessId || !userId) return
     setSaving(true)
-    await supabase
-      .from('businesses')
-      .update({
-        onboarding_completed: true,
-        onboarding_step: TOTAL_STEPS + 1,
-        agreed_terms: true,
-        agreed_terms_at: new Date().toISOString(),
+    setCompleteError(null)
+    try {
+      const { error: bizErr } = await supabase
+        .from('businesses')
+        .update({
+          onboarding_completed: true,
+          onboarding_step: TOTAL_STEPS + 1,
+          agreed_terms: true,
+          agreed_terms_at: new Date().toISOString(),
+        })
+        .eq('id', businessId)
+      if (bizErr) throw new Error(`Couldn't update business: ${bizErr.message}`)
+
+      const result = await completeOnboardingCRM(businessId, userId, {
+        role: data.role, biz_name: data.biz_name, website: data.website_url, phone: '',
+        biz_type: data.restaurant_subtype === 'non_food' ? 'other' : 'restaurant',
+        biz_other: '', cuisine: data.cuisine, cuisine_other: '',
+        service_styles: data.service_styles,
+        full_address: data.full_address, city: data.city, state: data.state, zip: data.zip,
+        location_count: data.location_count, hours: {},
+        biz_desc: '', unique: '', competitors: '',
+        customer_types: [], why_choose: [],
+        primary_goal: data.primary_goal, goal_detail: data.goal_detail,
+        success_signs: [], timeline: '', main_offerings: '', upcoming: '',
+        tones: [], content_likes: [], ref_accounts: '', avoid_list: [],
+        approval_style: '',
+        /* Server expects an object keyed by platform. Convert from
+           the string[] we collected in the form. */
+        connected: data.connected.reduce((acc, p) => { acc[p] = true; return acc }, {} as Record<string, boolean>),
+        logo_url: '', logo_name: '', photos: [],
       })
-      .eq('id', businessId)
+      if (result?.error) throw new Error(result.error)
 
-    await completeOnboardingCRM(businessId, userId, {
-      role: data.role, biz_name: data.biz_name, website: data.website_url, phone: '',
-      biz_type: data.restaurant_subtype === 'non_food' ? 'other' : 'restaurant',
-      biz_other: '', cuisine: data.cuisine, cuisine_other: '',
-      service_styles: data.service_styles,
-      full_address: data.full_address, city: data.city, state: data.state, zip: data.zip,
-      location_count: data.location_count, hours: {},
-      biz_desc: '', unique: '', competitors: '',
-      customer_types: [], why_choose: [],
-      primary_goal: data.primary_goal, goal_detail: data.goal_detail,
-      success_signs: [], timeline: '', main_offerings: '', upcoming: '',
-      tones: [], content_likes: [], ref_accounts: '', avoid_list: [],
-      approval_style: '',
-      connected: data.connected, logo_url: '', logo_name: '', photos: [],
-    })
-
-    setSaving(false)
-    setDone(true)
+      setDone(true)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error'
+      setCompleteError(msg)
+      console.error('[onboarding complete] failed:', e)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const isFood = data.restaurant_subtype && data.restaurant_subtype !== 'non_food'
@@ -361,6 +375,27 @@ export default function OnboardingPage() {
             {!saving && <ArrowRight className="w-3.5 h-3.5" />}
           </button>
         </div>
+
+        {completeError && (
+          <div className="mt-4 rounded-xl bg-rose-50 ring-1 ring-rose-200 p-3 text-[12.5px] text-rose-800">
+            <p className="font-semibold mb-1">Couldn&apos;t finish setup</p>
+            <p>{completeError}</p>
+            <p className="mt-1.5 text-rose-700">
+              You can{' '}
+              <button
+                onClick={() => { setCompleteError(null); handleComplete() }}
+                className="underline font-medium hover:text-rose-900"
+              >
+                try again
+              </button>
+              {' '}or{' '}
+              <Link href="/dashboard" className="underline font-medium hover:text-rose-900">
+                continue to the portal
+              </Link>
+              {' '}— your progress is saved.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -832,7 +867,8 @@ function PresenceStep({
 function DoneScreen({ bizName }: { bizName: string }) {
   const router = useRouter()
   useEffect(() => {
-    const t = setTimeout(() => router.push('/dashboard'), 1500)
+    /* Short pause to let the celebration animation breathe, then redirect. */
+    const t = setTimeout(() => router.push('/dashboard'), 600)
     return () => clearTimeout(t)
   }, [router])
 
