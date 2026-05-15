@@ -319,7 +319,6 @@ function computeStats(data: SocialHubData, breakdown: SocialBreakdownResult): St
   let posts30d = 0, postsPrev30d = 0
   let reach30d = 0, reachPrev30d = 0
   let engagement30d = 0, engagementPrev30d = 0
-  let reachWindow = 0, reachPrevWindow = 0
 
   for (const r of breakdown.rows) {
     const d = new Date(r.date)
@@ -332,12 +331,10 @@ function computeStats(data: SocialHubData, breakdown: SocialBreakdownResult): St
       posts30d += posts
       reach30d += reach
       engagement30d += eng
-      reachWindow += reach
     } else if (isPrev) {
       postsPrev30d += posts
       reachPrev30d += reach
       engagementPrev30d += eng
-      reachPrevWindow += reach
     }
   }
 
@@ -345,11 +342,18 @@ function computeStats(data: SocialHubData, breakdown: SocialBreakdownResult): St
   if (reach30d === 0 && data.reach30d) reach30d = data.reach30d
   if (posts30d === 0) posts30d = data.counts.live
 
-  const engagementRate30d = reachWindow > 0
-    ? (engagement30d / reachWindow) * 100
+  /* Engagement rate uses the latest known follower count across all
+     platforms, not the reach window. Industry standard is
+     `engagement_events / followers * 100` for restaurants; using reach
+     blows up to thousands of percent on tiny test accounts where reach
+     can be ~10 but engagement events are ~500. */
+  const totalFollowersNow = pickLatestFollowers(breakdown, now)
+  const totalFollowersPrev = pickLatestFollowers(breakdown, start30)
+  const engagementRate30d = totalFollowersNow > 0
+    ? (engagement30d / totalFollowersNow) * 100
     : null
-  const engagementRatePrev30d = reachPrevWindow > 0
-    ? (engagementPrev30d / reachPrevWindow) * 100
+  const engagementRatePrev30d = totalFollowersPrev > 0
+    ? (engagementPrev30d / totalFollowersPrev) * 100
     : null
 
   return {
@@ -366,10 +370,16 @@ function computePlatformPulse(breakdown: SocialBreakdownResult): PlatformPulseDa
 
   return breakdown.platforms.map(platform => {
     const rows = breakdown.rows.filter(r => r.platform === platform)
-    // Latest follower snapshot
-    const latest = [...rows].reverse().find(r => r.followers_total != null)
-    const followers = Number(latest?.followers_total ?? 0)
-    // Followers gained in last 30 days (sum)
+    /* Walk backward through the sorted rows for the latest non-zero
+       follower count. Sync sometimes writes zero rows when the platform
+       API briefly returns empty (token issues, account hiccups); we
+       don't want a single bad day to make the pulse strip read "0
+       followers" when the real number is e.g. 2,067. */
+    const sorted = [...rows].sort((a, b) => b.date.localeCompare(a.date))
+    const latestNonZero = sorted.find(r => Number(r.followers_total ?? 0) > 0)
+    const followers = Number(latestNonZero?.followers_total ?? 0)
+    /* Followers gained in last 30 days. Sum followers_gained, but
+       skip zero-row days so a glitchy sync doesn't bury real growth. */
     const followersChange = rows
       .filter(r => new Date(r.date) >= start30)
       .reduce((s, r: SocialDailyRow) => s + Number(r.followers_gained ?? 0), 0)
@@ -386,6 +396,24 @@ function computePlatformPulse(breakdown: SocialBreakdownResult): PlatformPulseDa
     }
   }).filter(p => p.followers > 0 || p.reach30d > 0)
     .sort((a, b) => b.followers - a.followers)
+}
+
+/**
+ * Sum the latest known follower_total per platform up to a given
+ * cutoff date. Walks backward through each platform's rows so a single
+ * empty-sync day doesn't zero out the result.
+ */
+function pickLatestFollowers(breakdown: SocialBreakdownResult, asOf: Date): number {
+  const cutoff = asOf.toISOString().slice(0, 10)
+  let total = 0
+  for (const platform of breakdown.platforms) {
+    const rows = breakdown.rows
+      .filter(r => r.platform === platform && r.date <= cutoff)
+      .sort((a, b) => b.date.localeCompare(a.date))
+    const latest = rows.find(r => Number(r.followers_total ?? 0) > 0)
+    total += Number(latest?.followers_total ?? 0)
+  }
+  return total
 }
 
 /* ─────────────────────────────── Recent feed ─────────────────────────────── */
