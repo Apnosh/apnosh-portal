@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus,
+  ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus,
   Check, X, Eye, Loader2, AlertTriangle, MessageSquare, RefreshCw,
-  Image as ImageIcon, Film, Send,
+  Image as ImageIcon, Film, Send, Compass, Zap, ChevronRight as ChevronRightIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useClient } from '@/lib/client-context'
@@ -157,23 +157,56 @@ export default function SocialCalendarPage() {
   const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-[1100px] mx-auto px-4 lg:px-6 pt-6 pb-20 space-y-5">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <Link href="/dashboard/social" className="text-ink-4 hover:text-ink transition-colors mt-1">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <div>
-            <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Content Calendar</h1>
-            <p className="text-ink-3 text-sm mt-0.5">When your social posts are scheduled to go live.</p>
-          </div>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
+            Social
+          </p>
+          <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1 flex items-center gap-2">
+            <CalendarIcon className="w-6 h-6 text-ink-4" />
+            Calendar
+          </h1>
+          <p className="text-ink-3 text-sm mt-0.5">When your social posts are scheduled to go live.</p>
         </div>
         <Link
           href="/dashboard/social/requests/new"
-          className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-4 py-2 flex items-center gap-2 transition-colors flex-shrink-0"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-sm shadow-brand/20"
         >
-          <Plus className="w-4 h-4" /> New Request
+          <Plus className="w-3.5 h-3.5" /> Request a post
+        </Link>
+      </div>
+
+      {/* Discovery rail -- Plan + Boost live under the Calendar umbrella
+         per the sub-nav, so surface them right here for clients who
+         haven't memorized the URLs. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Link
+          href="/dashboard/social/plan"
+          className="group flex items-center gap-3 rounded-xl bg-white border border-ink-6 hover:border-ink-4 hover:shadow-sm px-4 py-3 transition-all"
+        >
+          <span className="w-9 h-9 rounded-lg flex items-center justify-center bg-amber-50 text-amber-700 ring-1 ring-amber-100 flex-shrink-0">
+            <Compass className="w-4 h-4" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-ink leading-tight">Editorial plan</p>
+            <p className="text-[11.5px] text-ink-3 leading-tight mt-0.5">This month&apos;s theme and content pillars</p>
+          </div>
+          <ChevronRightIcon className="w-4 h-4 text-ink-4 group-hover:text-ink-2 flex-shrink-0" />
+        </Link>
+        <Link
+          href="/dashboard/social/boost"
+          className="group flex items-center gap-3 rounded-xl bg-white border border-ink-6 hover:border-ink-4 hover:shadow-sm px-4 py-3 transition-all"
+        >
+          <span className="w-9 h-9 rounded-lg flex items-center justify-center bg-violet-50 text-violet-700 ring-1 ring-violet-100 flex-shrink-0">
+            <Zap className="w-4 h-4" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-ink leading-tight">Boost a post</p>
+            <p className="text-[11.5px] text-ink-3 leading-tight mt-0.5">Put paid reach behind your best content</p>
+          </div>
+          <ChevronRightIcon className="w-4 h-4 text-ink-4 group-hover:text-ink-2 flex-shrink-0" />
         </Link>
       </div>
 

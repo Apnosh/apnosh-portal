@@ -14,7 +14,7 @@
 
 import Link from 'next/link'
 import {
-  Sparkles, Plus, Calendar as CalendarIcon, TrendingUp, ArrowRight,
+  Sparkles, Plus, TrendingUp, ArrowRight,
   Camera, Globe, Image as ImageIcon, Video, Layers, Send, Zap, Music,
   Eye, MousePointer2, Footprints, FileText, CircleCheck,
 } from 'lucide-react'
@@ -39,7 +39,7 @@ const PLATFORM_TINT: Record<string, string> = {
 
 export default function SocialHubView({ data }: { data: SocialHubData }) {
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 lg:px-6">
+    <div className="max-w-[1100px] mx-auto py-8 px-4 lg:px-6">
       {/* Hero */}
       <Hero data={data} />
 
@@ -74,8 +74,9 @@ export default function SocialHubView({ data }: { data: SocialHubData }) {
         <LastBoostResult campaign={data.lastCompletedBoost} />
       )}
 
-      {/* Push bar */}
-      <PushBar />
+      {/* Push bar dropped -- Calendar / Performance / Inbox all live in
+         the sticky sub-nav now, and the primary "Request a post" CTA
+         sits in the hero header. No reason to repeat them at the bottom. */}
     </div>
   )
 }
@@ -99,12 +100,14 @@ function Hero({ data }: { data: SocialHubData }) {
             </p>
           </div>
         </div>
+        {/* Primary CTA -- the most common task on this page lives here
+           instead of in a redundant push bar at the bottom. */}
         <Link
-          href="/dashboard/social/performance"
-          className="hidden sm:inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-2 hover:text-ink bg-white border border-ink-6 hover:border-ink-4 hover:shadow-sm rounded-full px-3 py-1.5 transition-all"
+          href="/dashboard/social/request"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-sm shadow-brand/20"
         >
-          <TrendingUp className="w-3 h-3 text-emerald-600" />
-          Performance
+          <Plus className="w-3.5 h-3.5" />
+          Request a post
         </Link>
       </div>
       <h1 className="text-[32px] sm:text-[34px] leading-[1.05] font-bold text-ink tracking-tight">
@@ -586,59 +589,6 @@ function BoostStat({ icon, label, value }: { icon: React.ReactNode; label: strin
       </p>
       <p className="text-[20px] font-bold text-ink tabular-nums leading-none">{value}</p>
     </div>
-  )
-}
-
-/* ─────────────────────────────── Push bar ─────────────────────────────── */
-
-function PushBar() {
-  const actions = [
-    {
-      label: 'Request a post',
-      sub: 'Tell us what to share',
-      href: '/dashboard/social/request',
-      Icon: Plus,
-      tone: 'bg-emerald-600 hover:bg-emerald-700 text-white',
-    },
-    {
-      label: 'Open calendar',
-      sub: 'See everything dated',
-      href: '/dashboard/calendar',
-      Icon: CalendarIcon,
-      tone: 'bg-white hover:bg-bg-2 text-ink border border-ink-6',
-    },
-    // "Boost a post" hidden for v1 -- flow not wired. Re-add when ready.
-  ]
-  return (
-    <section className="mt-8">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {actions.map(a => {
-          const { Icon } = a
-          return (
-            <Link
-              key={a.href}
-              href={a.href}
-              className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-colors ${a.tone}`}
-            >
-              <span className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                a.tone.includes('emerald-600') ? 'bg-white/15' : 'bg-bg-2'
-              }`}>
-                <Icon className="w-4 h-4" />
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-semibold leading-tight">{a.label}</p>
-                <p className={`text-[11px] leading-tight mt-0.5 ${
-                  a.tone.includes('emerald-600') ? 'text-white/80' : 'text-ink-3'
-                }`}>
-                  {a.sub}
-                </p>
-              </div>
-              <ArrowRight className="w-4 h-4 opacity-60 flex-shrink-0" />
-            </Link>
-          )
-        })}
-      </div>
-    </section>
   )
 }
 
