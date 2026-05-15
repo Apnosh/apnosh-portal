@@ -77,7 +77,7 @@ export async function getLocalSeoView(
     for (let from = 0; ; from += page) {
       let q = supabase
         .from('gbp_metrics')
-        .select('date, directions, calls, website_clicks, search_views, search_views_maps, search_views_search, photo_views')
+        .select('date, directions, calls, website_clicks, search_views, search_views_maps, search_views_search, photo_views, bookings, food_orders, food_menu_clicks, conversations')
         .eq('client_id', clientId)
         .gte('date', formatDate(twoYearsAgo))
         .order('date', { ascending: true })
@@ -239,14 +239,24 @@ export async function getLocalSeoView(
 
   /* Per-range hero + metrics so clicking the time-range tab actually
      changes the headline numbers (not just the chart). Restaurants are
-     seasonal, so the comparison is YoY (same window one year ago). */
+     seasonal, so the comparison is YoY (same window one year ago).
+     `1M` specifically aligns with Google's default 'last full calendar
+     month' window so the number cross-checks with the Google Business
+     Profile app. Other ranges stay as trailing days. */
   const rangeDays: Record<TimeRange, number> = {
     '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365,
   }
   const byRange = {} as NonNullable<DashboardView['byRange']>
   for (const [rk, days] of Object.entries(rangeDays) as Array<[TimeRange, number]>) {
-    const winEnd = addDays(now, -3)  // skip API lag tail
-    const winStart = addDays(winEnd, -(days - 1))
+    let winStart: Date, winEnd: Date
+    if (rk === '1M') {
+      /* Last full calendar month -- matches Google's default. */
+      winStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      winEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+    } else {
+      winEnd = addDays(now, -3)  // skip API lag tail
+      winStart = addDays(winEnd, -(days - 1))
+    }
     const yoyEnd = addDays(winEnd, -365)
     const yoyStart = addDays(winStart, -365)
     const curr = filterByDateRange(gbpRows, winStart, winEnd)
@@ -258,12 +268,17 @@ export async function getLocalSeoView(
     const cDir = sumField(curr, 'directions'), pDir = sumField(prev, 'directions')
     const cCal = sumField(curr, 'calls'), pCal = sumField(prev, 'calls')
     const cClk = sumField(curr, 'website_clicks'), pClk = sumField(prev, 'website_clicks')
+    /* Human label for the exact window so clients can cross-check with
+       Google ('Apr 2026' for 1M, 'Apr 13 - May 12' for 1W/3M/6M, etc.) */
+    const windowLabel = rk === '1M'
+      ? winStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      : `${winStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${winEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
     byRange[rk] = {
       num: fmtNum(cInt),
       pct: hasPrev ? (pct >= 0 ? '+' : '') + pct + '%' : 'New',
       pctFull: hasPrev
-        ? (pct >= 0 ? '+' : '') + pct + '% vs same period last year'
-        : 'Not enough history for a comparison yet',
+        ? `${(pct >= 0 ? '+' : '') + pct}% vs ${windowLabel} last year`
+        : `${windowLabel} · not enough history for a comparison yet`,
       up: pct >= 0,
       metrics: [
         {
@@ -329,6 +344,10 @@ interface GbpRow {
   search_views_maps: number | null
   search_views_search: number | null
   photo_views: number | null
+  bookings: number | null
+  food_orders: number | null
+  food_menu_clicks: number | null
+  conversations: number | null
 }
 
 interface ReviewRow {
@@ -460,8 +479,27 @@ function buildLocalSeoInsights(d: {
 // Interaction helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Total "Business Profile interactions" -- match Google's own
+ * definition so the headline number in our portal cross-checks with
+ * the number a restaurant owner sees inside the Google Business
+ * Profile app. Google sums every customer interaction with the
+ * listing: directions, calls, website clicks, bookings, food orders,
+ * menu clicks, and messages.
+ *
+ * Previously we summed only directions + calls + website_clicks,
+ * which systematically undercounted vs Google by ~10-25% depending on
+ * restaurant type (fast-casual gets a lot of menu clicks, fine-dining
+ * gets bookings, etc.).
+ */
 function sumInteractionsOfOne(r: GbpRow): number {
-  return (r.directions ?? 0) + (r.calls ?? 0) + (r.website_clicks ?? 0)
+  return (r.directions ?? 0)
+    + (r.calls ?? 0)
+    + (r.website_clicks ?? 0)
+    + (r.bookings ?? 0)
+    + (r.food_orders ?? 0)
+    + (r.food_menu_clicks ?? 0)
+    + (r.conversations ?? 0)
 }
 
 function sumInteractions(rows: GbpRow[]): number {
