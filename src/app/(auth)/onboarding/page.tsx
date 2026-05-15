@@ -228,6 +228,49 @@ export default function OnboardingPage() {
     setShowSuccess(true)
   }
 
+  /**
+   * Save partial onboarding and jump into the portal. Requires the
+   * minimum essentials (role, biz_name, biz_type) so we have enough
+   * to provision a clients row. The dashboard surfaces a 'Complete
+   * your profile' prompt for anyone who finishes via this path.
+   */
+  async function handleSkipForNow() {
+    if (!businessId || !userId) return
+    const minReady = data.role && data.biz_name && data.biz_type
+    if (!minReady) {
+      // Not enough data yet. The Skip button is hidden until step >= 3.
+      return
+    }
+    setSaving(true)
+
+    await supabase
+      .from('businesses')
+      .update({
+        onboarding_completed: true,        // unlocks portal access
+        onboarding_step: step,             // remember where they left off
+        onboarding_paused: true,           // dashboard banner uses this
+        agreed_terms: true,
+        agreed_terms_at: new Date().toISOString(),
+      })
+      .eq('id', businessId)
+
+    await completeOnboardingCRM(businessId, userId, {
+      ...data,
+      biz_desc: data.biz_desc,
+      unique: data.unique,
+      upcoming: data.upcoming,
+      tones: data.tones,
+      content_likes: data.content_likes,
+      ref_accounts: data.ref_accounts,
+      avoid_list: data.avoid_list,
+      connected: data.connected,
+      logo_url: '',
+    })
+
+    setSaving(false)
+    router.push('/dashboard')
+  }
+
   // Logo upload handler
   async function handleLogoUpload(file: File) {
     if (!businessId) return
@@ -305,6 +348,8 @@ export default function OnboardingPage() {
           onBack={goBack}
           onGoToStep={goToStep}
           onComplete={handleComplete}
+          onSkipForNow={handleSkipForNow}
+          canSkip={!!(data.role && data.biz_name && data.biz_type) && !showSuccess && step < totalSteps}
           onLogoUpload={handleLogoUpload}
           onPhotosUpload={handlePhotosUpload}
           businessId={businessId}

@@ -34,21 +34,27 @@ interface Props {
   onBack: () => void
   onGoToStep: (stepId: StepId) => void
   onComplete: () => void
+  /** Save partial onboarding and jump straight into the portal. */
+  onSkipForNow: () => void
+  /** True once we have enough data to provision a clients row. */
+  canSkip: boolean
   onLogoUpload: (file: File) => void
   onPhotosUpload: (files: FileList) => void
   businessId: string | null
 }
 
 export default function StepRenderer(props: Props) {
-  const { stepId, data, update, valid, saving, step, totalSteps, onNext, onBack, onGoToStep, onComplete, onLogoUpload, onPhotosUpload } = props
+  const { stepId, data, update, valid, saving, step, totalSteps, onNext, onBack, onGoToStep, onComplete, onSkipForNow, canSkip, onLogoUpload, onPhotosUpload } = props
 
   const nav = (
     <Nav
       step={step}
       valid={valid}
       saving={saving}
+      canSkip={canSkip}
       onNext={onNext}
       onBack={onBack}
+      onSkipForNow={onSkipForNow}
     />
   )
 
@@ -87,24 +93,40 @@ export default function StepRenderer(props: Props) {
 }
 
 // Navigation bar
-function Nav({ step, valid, saving, onNext, onBack }: {
-  step: number; valid: boolean; saving: boolean; onNext: () => void; onBack: () => void
+function Nav({ step, valid, saving, canSkip, onNext, onBack, onSkipForNow }: {
+  step: number; valid: boolean; saving: boolean; canSkip: boolean
+  onNext: () => void; onBack: () => void; onSkipForNow: () => void
 }) {
   return (
     <div className="flex justify-between items-center mt-7 pt-4 border-t" style={{ borderColor: '#f0f0f0' }}>
-      {step > 1 ? (
-        <button
-          onClick={onBack}
-          className="text-sm font-semibold px-4 py-2.5 rounded-[10px] transition-colors"
-          style={{ color: '#999', background: 'none' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = '#555' }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = '#999' }}
-        >
-          Back
-        </button>
-      ) : (
-        <div />
-      )}
+      <div className="flex items-center gap-3">
+        {step > 1 ? (
+          <button
+            onClick={onBack}
+            className="text-sm font-semibold px-4 py-2.5 rounded-[10px] transition-colors"
+            style={{ color: '#999', background: 'none' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#555' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#999' }}
+          >
+            Back
+          </button>
+        ) : (
+          <div />
+        )}
+        {canSkip && (
+          <button
+            onClick={onSkipForNow}
+            disabled={saving}
+            className="text-xs font-medium px-3 py-2 rounded-[8px] transition-colors"
+            style={{ color: '#777', background: '#f6f6f6' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#eee'; e.currentTarget.style.color = '#333' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#f6f6f6'; e.currentTarget.style.color = '#777' }}
+            title="You can always finish your profile later from the dashboard."
+          >
+            Save and explore portal
+          </button>
+        )}
+      </div>
       <button
         onClick={onNext}
         disabled={!valid || saving}

@@ -25,6 +25,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useClient } from '@/lib/client-context'
 import AdminClientPicker from '@/components/admin/admin-client-picker'
+import FinishProfileBanner from '@/components/dashboard/finish-profile-banner'
 import {
   Sparkles, MessageSquare, Image as ImgIcon, Video, Megaphone, Brush, Plus,
   Plug, Loader2, Users as UsersIcon, Clock, Check,
@@ -166,6 +167,9 @@ export default function DashboardPage() {
 
   return (
     <div className="relative">
+      {/* Finish-your-profile nudge for clients who used 'Save and explore' */}
+      <FinishProfileBanner />
+
       {/* Page-level topbar: title + date + sync pill */}
       <div className="px-4 lg:px-8 pt-6 pb-2 flex items-center justify-between">
         <div className="flex items-baseline gap-2">
