@@ -48,6 +48,25 @@ const AUDIENCE_PRESETS = [
   { value: 'recent',  label: 'Recent visitors', sub: 'People who interacted with you in the last 90 days' },
 ]
 
+type CampaignType =
+  | 'post_boost' | 'reels_boost'
+  | 'foot_traffic' | 'reservations'
+  | 'lead_gen' | 'awareness'
+
+const CAMPAIGN_TYPES: Array<{
+  value: CampaignType
+  label: string
+  description: string
+  needsPost: boolean
+}> = [
+  { value: 'post_boost',   label: 'Boost a post',   description: 'Amplify a post that’s already working', needsPost: true },
+  { value: 'foot_traffic', label: 'Foot traffic',   description: 'Get more locals walking through your door', needsPost: false },
+  { value: 'reservations', label: 'Reservations',   description: 'Drive bookings via your reservation page',   needsPost: false },
+  { value: 'lead_gen',     label: 'Lead gen',       description: 'Collect emails for newsletters or offers',   needsPost: false },
+  { value: 'awareness',    label: 'Awareness',      description: 'Brand visibility, top-of-funnel reach',      needsPost: false },
+  { value: 'reels_boost',  label: 'Boost a Reel',   description: 'Amplify a video specifically as a Reel',     needsPost: true },
+]
+
 export default function BoostView({
   clientId, preselectedPostId, candidates, topPerformer,
   activeCampaigns, pastCampaigns,
@@ -59,13 +78,17 @@ export default function BoostView({
     candidates[0]?.id ??
     null
 
+  const [campaignType, setCampaignType] = useState<CampaignType>('post_boost')
   const [postId, setPostId] = useState<string | null>(initialPostId)
   const [budget, setBudget] = useState<number>(100)
   const [days, setDays] = useState<number>(7)
   const [audience, setAudience] = useState<string>('locals')
+  const [notes, setNotes] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const needsPost = campaignType === 'post_boost' || campaignType === 'reels_boost'
 
   const selectedPost = useMemo(
     () => candidates.find(c => c.id === postId) ?? null,
@@ -76,14 +99,23 @@ export default function BoostView({
   const estReach = Math.round(budget * 55) // ~55 reach/$1 baseline
 
   async function submit() {
-    if (!postId) return
+    if (needsPost && !postId) return
+    if (!needsPost && !notes.trim()) return
     setSubmitting(true)
     setError(null)
     try {
       const res = await fetch('/api/social/boost', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, postId, budget, days, audience }),
+        body: JSON.stringify({
+          clientId,
+          campaignType,
+          postId: needsPost ? postId : null,
+          budget,
+          days,
+          audience,
+          notes: notes.trim() || undefined,
+        }),
       })
       if (!res.ok) throw new Error(await res.text() || `Server returned ${res.status}`)
       setSubmitted(true)
@@ -131,9 +163,37 @@ export default function BoostView({
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-7">
-        {/* Left: post selection + targeting */}
+        {/* Left: campaign type + creative + targeting */}
         <section className="space-y-7">
-          {/* Pick a post */}
+          {/* Pick a campaign type */}
+          <div>
+            <p className="text-[13px] font-semibold text-ink mb-2">What are we running?</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {CAMPAIGN_TYPES.map(t => {
+                const selected = t.value === campaignType
+                return (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => setCampaignType(t.value)}
+                    className={`text-left rounded-xl px-3 py-2.5 ring-1 transition-all ${
+                      selected
+                        ? 'bg-brand/5 ring-brand text-ink'
+                        : 'bg-white ring-ink-6 hover:ring-ink-4 text-ink'
+                    }`}
+                  >
+                    <p className={`text-[12.5px] font-semibold ${selected ? 'text-brand-dark' : 'text-ink'}`}>
+                      {t.label}
+                    </p>
+                    <p className="text-[10.5px] text-ink-3 leading-tight mt-0.5">{t.description}</p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Conditional: post picker OR brief textarea */}
+          {needsPost ? (
           <div>
             <p className="text-[13px] font-semibold text-ink mb-2">Pick a post</p>
             {candidates.length === 0 ? (
@@ -156,6 +216,22 @@ export default function BoostView({
               </div>
             )}
           </div>
+          ) : (
+          <div>
+            <p className="text-[13px] font-semibold text-ink mb-2">Tell your strategist what to run</p>
+            <p className="text-[11.5px] text-ink-3 mb-2 leading-relaxed">
+              No post needed. Describe the offer, hook, or angle you want the ad to push.
+              Your strategist writes the copy and picks the creative.
+            </p>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={4}
+              placeholder="e.g. New brunch menu launching Saturday. Push the avocado toast photo from last week. Targeting the Sunday crowd."
+              className="w-full rounded-xl bg-white ring-1 ring-ink-6 focus:ring-ink-3 focus:outline-none p-3 text-[13px] text-ink resize-none"
+            />
+          </div>
+          )}
 
           {/* Budget */}
           <div>
@@ -249,30 +325,29 @@ export default function BoostView({
               Summary
             </p>
 
-            {selectedPost ? (
-              <div className="flex items-start gap-3 mb-4 pb-4 border-b" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
-                {selectedPost.mediaUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={selectedPost.mediaUrl} alt="" className="w-14 h-14 rounded-md object-cover flex-shrink-0" />
-                ) : (
-                  <div className="w-14 h-14 rounded-md bg-bg-2 flex items-center justify-center flex-shrink-0">
-                    <ImageIcon className="w-5 h-5 text-ink-4" />
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-                    Boosting
-                  </p>
-                  <p className="text-[12px] text-ink-2 mt-0.5 line-clamp-2 leading-snug">
+            <div className="flex items-start gap-3 mb-4 pb-4 border-b" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+                  Campaign
+                </p>
+                <p className="text-[13px] font-semibold text-ink mt-0.5">
+                  {CAMPAIGN_TYPES.find(t => t.value === campaignType)?.label ?? 'Boost'}
+                </p>
+                {needsPost && selectedPost && (
+                  <p className="text-[11.5px] text-ink-3 mt-1 line-clamp-2 leading-snug">
                     {selectedPost.text || 'Selected post'}
                   </p>
-                </div>
+                )}
+                {needsPost && !selectedPost && (
+                  <p className="text-[11.5px] text-ink-3 mt-1">Pick a post on the left.</p>
+                )}
+                {!needsPost && (
+                  <p className="text-[11.5px] text-ink-3 mt-1">
+                    {notes.trim() ? 'Brief captured' : 'Add a brief on the left'}
+                  </p>
+                )}
               </div>
-            ) : (
-              <div className="rounded-md bg-bg-2 p-3 mb-4 text-[12px] text-ink-3 leading-snug">
-                Pick a post on the left to continue.
-              </div>
-            )}
+            </div>
 
             <SummaryRow icon={<BarChart3 className="w-3.5 h-3.5" />} label="Total budget" value={`$${budget}`} />
             <SummaryRow icon={<CalendarIcon className="w-3.5 h-3.5" />} label="Runs for" value={`${days} days`} />
@@ -299,7 +374,7 @@ export default function BoostView({
 
             <button
               onClick={submit}
-              disabled={!postId || submitting}
+              disabled={(needsPost ? !postId : !notes.trim()) || submitting}
               className="mt-4 w-full inline-flex items-center justify-center gap-2 text-[13px] font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:bg-ink-6 disabled:cursor-not-allowed text-white rounded-full px-4 py-2.5 transition-colors"
             >
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}

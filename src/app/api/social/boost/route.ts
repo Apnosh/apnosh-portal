@@ -19,11 +19,29 @@ export const dynamic = 'force-dynamic'
 
 interface Body {
   clientId: string
-  postId: string
+  /** Required for post_boost / reels_boost. Optional for other types. */
+  postId?: string | null
   budget: number
   days: number
   audience: string
+  /**
+   * Campaign objective. Defaults to post_boost for backward compatibility
+   * with the original endpoint contract.
+   */
+  campaignType?:
+    | 'post_boost' | 'reels_boost'
+    | 'foot_traffic' | 'reservations'
+    | 'lead_gen' | 'awareness'
+  /** Free-form strategist brief; required when there's no source post. */
+  notes?: string
 }
+
+const ALLOWED_TYPES = [
+  'post_boost', 'reels_boost', 'foot_traffic',
+  'reservations', 'lead_gen', 'awareness',
+] as const
+type CampaignType = typeof ALLOWED_TYPES[number]
+const POST_REQUIRED_TYPES: ReadonlyArray<CampaignType> = ['post_boost', 'reels_boost']
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -37,8 +55,19 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Invalid JSON', { status: 400 })
   }
 
-  if (!body.clientId || !body.postId || !body.budget || !body.days || !body.audience) {
+  const campaignType: CampaignType = (body.campaignType && ALLOWED_TYPES.includes(body.campaignType))
+    ? body.campaignType
+    : 'post_boost'
+  const needsPost = POST_REQUIRED_TYPES.includes(campaignType)
+
+  if (!body.clientId || !body.budget || !body.days || !body.audience) {
     return new NextResponse('Missing required fields', { status: 400 })
+  }
+  if (needsPost && !body.postId) {
+    return new NextResponse('A source post is required for post boosts', { status: 400 })
+  }
+  if (!needsPost && !(body.notes ?? '').trim()) {
+    return new NextResponse('A strategist brief is required for this campaign type', { status: 400 })
   }
   if (!['locals', 'foodies', 'recent'].includes(body.audience)) {
     return new NextResponse('Invalid audience', { status: 400 })
@@ -63,31 +92,38 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminClient()
 
-  // Snapshot the post so the campaign still renders if the source is deleted later.
-  const { data: post } = await admin
-    .from('scheduled_posts')
-    .select('text, media_urls, platforms')
-    .eq('id', body.postId)
-    .eq('client_id', body.clientId)
-    .maybeSingle()
-  if (!post) {
-    return new NextResponse('Post not found for this client', { status: 404 })
-  }
-  const snapshot = {
-    text: ((post.text as string) ?? '').slice(0, 500),
-    media_url: ((post.media_urls as string[] | null) ?? [])[0] ?? null,
-    platforms: (post.platforms as string[] | null) ?? [],
+  /* Post snapshot only for boost-style campaigns. Custom campaigns
+     (foot_traffic, lead_gen, etc.) capture the brief in notes instead
+     of a source post. */
+  let snapshot: Record<string, unknown> | null = null
+  if (needsPost && body.postId) {
+    const { data: post } = await admin
+      .from('scheduled_posts')
+      .select('text, media_urls, platforms')
+      .eq('id', body.postId)
+      .eq('client_id', body.clientId)
+      .maybeSingle()
+    if (!post) {
+      return new NextResponse('Post not found for this client', { status: 404 })
+    }
+    snapshot = {
+      text: ((post.text as string) ?? '').slice(0, 500),
+      media_url: ((post.media_urls as string[] | null) ?? [])[0] ?? null,
+      platforms: (post.platforms as string[] | null) ?? [],
+    }
   }
 
   const { data: inserted, error: insertErr } = await admin
     .from('ad_campaigns')
     .insert({
       client_id: body.clientId,
-      source_post_id: body.postId,
+      campaign_type: campaignType,
+      source_post_id: needsPost ? body.postId : null,
       source_post_snapshot: snapshot,
       budget_total: body.budget,
       days: body.days,
       audience_preset: body.audience,
+      audience_notes: body.notes?.trim() || null,
       platform: 'meta',
       status: 'pending',
       approved_by: user.id,
@@ -107,12 +143,14 @@ export async function POST(req: NextRequest) {
     subject_id: inserted?.id ?? null,
     actor_id: user.id,
     actor_role: isAdmin ? 'admin' : 'client',
-    summary: `Boost request $${body.budget} × ${body.days}d`,
+    summary: `${campaignType.replace('_', ' ')} request $${body.budget} × ${body.days}d`,
     payload: {
-      post_id: body.postId,
+      campaign_type: campaignType,
+      post_id: body.postId ?? null,
       budget: body.budget,
       days: body.days,
       audience: body.audience,
+      notes: body.notes ?? null,
     },
   })
 
