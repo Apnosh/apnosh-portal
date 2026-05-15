@@ -159,8 +159,7 @@ interface StatSummary {
   reach30d: number
   reachPrev30d: number
   engagement30d: number
-  engagementRate30d: number | null
-  engagementRatePrev30d: number | null
+  engagementPrev30d: number
 }
 
 function StatStrip({ stats, queued }: { stats: StatSummary; queued: number }) {
@@ -184,12 +183,11 @@ function StatStrip({ stats, queued }: { stats: StatSummary; queued: number }) {
       />
       <StatCard
         icon={<Heart className="w-4 h-4" />}
-        label="Engagement rate"
-        value={stats.engagementRate30d}
-        current={stats.engagementRate30d ?? 0}
-        previous={stats.engagementRatePrev30d ?? 0}
-        sub="likes + comments / reach"
-        format="pct"
+        label="Engagement"
+        value={stats.engagement30d}
+        current={stats.engagement30d}
+        previous={stats.engagementPrev30d}
+        sub="likes, comments, shares, saves"
       />
     </div>
   )
@@ -342,25 +340,14 @@ function computeStats(data: SocialHubData, breakdown: SocialBreakdownResult): St
   if (reach30d === 0 && data.reach30d) reach30d = data.reach30d
   if (posts30d === 0) posts30d = data.counts.live
 
-  /* Engagement rate uses the latest known follower count across all
-     platforms, not the reach window. Industry standard is
-     `engagement_events / followers * 100` for restaurants; using reach
-     blows up to thousands of percent on tiny test accounts where reach
-     can be ~10 but engagement events are ~500. */
-  const totalFollowersNow = pickLatestFollowers(breakdown, now)
-  const totalFollowersPrev = pickLatestFollowers(breakdown, start30)
-  const engagementRate30d = totalFollowersNow > 0
-    ? (engagement30d / totalFollowersNow) * 100
-    : null
-  const engagementRatePrev30d = totalFollowersPrev > 0
-    ? (engagementPrev30d / totalFollowersPrev) * 100
-    : null
-
+  /* We show raw engagement count instead of a rate. Rates require
+     a reliable denominator (followers vs reach vs impressions) and
+     the dashboard reads better when clients see "1.2K engagements"
+     than "3.4% rate" they can't calibrate against. */
   return {
     posts30d, postsPrev30d,
     reach30d, reachPrev30d,
-    engagement30d,
-    engagementRate30d, engagementRatePrev30d,
+    engagement30d, engagementPrev30d,
   }
 }
 
@@ -396,24 +383,6 @@ function computePlatformPulse(breakdown: SocialBreakdownResult): PlatformPulseDa
     }
   }).filter(p => p.followers > 0 || p.reach30d > 0)
     .sort((a, b) => b.followers - a.followers)
-}
-
-/**
- * Sum the latest known follower_total per platform up to a given
- * cutoff date. Walks backward through each platform's rows so a single
- * empty-sync day doesn't zero out the result.
- */
-function pickLatestFollowers(breakdown: SocialBreakdownResult, asOf: Date): number {
-  const cutoff = asOf.toISOString().slice(0, 10)
-  let total = 0
-  for (const platform of breakdown.platforms) {
-    const rows = breakdown.rows
-      .filter(r => r.platform === platform && r.date <= cutoff)
-      .sort((a, b) => b.date.localeCompare(a.date))
-    const latest = rows.find(r => Number(r.followers_total ?? 0) > 0)
-    total += Number(latest?.followers_total ?? 0)
-  }
-  return total
 }
 
 /* ─────────────────────────────── Recent feed ─────────────────────────────── */
