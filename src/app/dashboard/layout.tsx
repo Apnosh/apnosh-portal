@@ -328,7 +328,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     async function fetchConnections() {
       try {
         const supabase = (await import('@/lib/supabase/client')).createClient()
-        const [pcRes, ccRes] = await Promise.all([
+        const [pcRes, ccRes, clientRes] = await Promise.all([
           supabase
             .from('platform_connections')
             .select('platform, access_token')
@@ -339,6 +339,11 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             .select('channel, access_token, status')
             .eq('client_id', client!.id)
             .not('access_token', 'is', null),
+          supabase
+            .from('clients')
+            .select('website')
+            .eq('id', client!.id)
+            .maybeSingle(),
         ])
         if (cancelled) return
 
@@ -351,6 +356,10 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
           if (r.channel === 'google_business_profile') set.add('local_seo')
           if (r.channel === 'google_analytics' || r.channel === 'google_search_console') set.add('website')
         }
+        // Having a website URL on file is enough to unlock the Website
+        // tab -- the tab's empty state pulls the owner into the setup
+        // wizard, so we want them in there as soon as possible.
+        if (clientRes.data?.website) set.add('website')
         setConnectedChannels(set)
       } catch {
         // Quiet fail; sidebar just stays as-is.
