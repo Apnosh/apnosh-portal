@@ -24,8 +24,8 @@ interface PlatformCatalog {
 }
 
 const CATALOG: PlatformCatalog[] = [
-  { id: 'instagram', label: 'Instagram', icon: Camera, color: 'from-purple-500 via-pink-500 to-orange-400', description: 'Track followers, reach, and engagement.', authPath: '/api/auth/instagram', category: 'social' },
-  { id: 'facebook', label: 'Facebook', icon: Globe, color: 'from-blue-600 to-blue-500', description: 'Track Page performance and engagement.', authPath: '/api/auth/instagram', category: 'social' },
+  { id: 'instagram', label: 'Instagram', icon: Camera, color: 'from-purple-500 via-pink-500 to-orange-400', description: 'Track followers, reach, and engagement.', authPath: '/api/auth/instagram-direct', category: 'social' },
+  { id: 'facebook', label: 'Facebook', icon: Globe, color: 'from-blue-600 to-blue-500', description: 'Track Page performance and engagement. Also pulls Instagram if your Page has it linked.', authPath: '/api/auth/instagram', category: 'social' },
   { id: 'tiktok', label: 'TikTok', icon: Tv, color: 'from-gray-900 to-gray-700', description: 'Track video views and engagement.', authPath: '/api/auth/tiktok', category: 'social' },
   { id: 'linkedin', label: 'LinkedIn', icon: Briefcase, color: 'from-blue-700 to-blue-600', description: 'Track followers and post engagement.', authPath: '/api/auth/linkedin', category: 'social' },
   { id: 'google_analytics', label: 'Google Analytics', icon: BarChart3, color: 'from-orange-500 to-yellow-500', description: 'Website visitors, traffic sources, top pages.', authPath: '/api/auth/google', category: 'google' },
@@ -187,7 +187,7 @@ function ConnectionCard({ conn, clientId, onDisconnect, onSynced }: {
             )}
             {needsAttention && conn.actions.canReconnect && conn.actions.reconnectUrl && (
               <a
-                href={`${conn.actions.reconnectUrl}?clientId=${clientId}`}
+                href={`${conn.actions.reconnectUrl}?clientId=${clientId}&returnTo=/dashboard/connected-accounts`}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-brand hover:bg-brand-dark rounded-lg transition-colors"
               >
                 <RefreshCw className="w-3 h-3" /> Reconnect
@@ -231,7 +231,7 @@ function AddCard({ platform, clientId }: { platform: PlatformCatalog; clientId: 
   const Icon = platform.icon
   return (
     <a
-      href={`${platform.authPath}?clientId=${clientId}`}
+      href={`${platform.authPath}?clientId=${clientId}&returnTo=/dashboard/connected-accounts`}
       className="bg-white rounded-xl border border-ink-6 p-4 hover:border-brand hover:bg-brand-tint/30 transition-colors flex items-center gap-3 group"
     >
       <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${platform.color} flex items-center justify-center flex-shrink-0`}>
