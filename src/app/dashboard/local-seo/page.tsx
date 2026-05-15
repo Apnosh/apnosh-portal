@@ -80,7 +80,7 @@ function LocalSeoContent() {
 
   if (loading) {
     return (
-      <div className="max-w-[840px] mx-auto px-8 max-sm:px-4 pt-12 text-center">
+      <div className="max-w-[1100px] mx-auto px-8 max-sm:px-4 pt-12 text-center">
         <div className="animate-pulse space-y-4">
           <div className="h-6 bg-ink-6 rounded w-48 mx-auto" />
           <div className="h-12 bg-ink-6 rounded w-32 mx-auto" />
@@ -97,7 +97,7 @@ function LocalSeoContent() {
   if (!view || gbpConnected === false) {
     return (
       <div
-        className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20"
+        className="max-w-[1100px] mx-auto px-8 max-sm:px-4 pb-20"
         style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
       >
         {locations.length > 1 && (
@@ -171,7 +171,7 @@ function LocalSeoContent() {
 
   return (
     <div
-      className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
+      className="max-w-[1100px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16"
       style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
     >
       {/* Location-aware header — for multi-location clients, makes it
@@ -212,27 +212,31 @@ function LocalSeoContent() {
             <div className="db-fade db-d1">
               <StatusBanner headline={view.headline} businessName={businessName} pct={pct} up={up} />
             </div>
-            <div className="db-fade db-d3">
-              <HeroMetric ctx={view.ctx} num={num} pctFull={pctFull} up={up} />
-            </div>
-            <div className="db-fade db-d4">
-              <TrendChart
-                data={view.chartData}
-                timeRange={timeRange}
-                onTimeRangeChange={setTimeRange}
-                up={up}
-                unit={view.unit}
-              />
-            </div>
-            <div className="db-fade db-d5">
-              <MetricGrid title={view.bdtitle} metrics={metrics} />
-            </div>
-            {client?.id && (
-              <div className="db-fade db-d5 mt-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
-                <ListingHealthCard clientId={client.id} locationId={selectedLocationId} />
+            {/* Hero + chart on left, contextual cards in a sidebar on right.
+               Mirrors the Website Overview pattern: primary visual on the
+               larger column, supplementary panels (listing health, team
+               status) docked alongside instead of pushed below. */}
+            <div className="db-fade db-d3 grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2 space-y-4">
+                <HeroMetric ctx={view.ctx} num={num} pctFull={pctFull} up={up} />
+                <TrendChart
+                  data={view.chartData}
+                  timeRange={timeRange}
+                  onTimeRangeChange={setTimeRange}
+                  up={up}
+                  unit={view.unit}
+                />
+              </div>
+              <div className="space-y-3">
+                {client?.id && (
+                  <ListingHealthCard clientId={client.id} locationId={selectedLocationId} />
+                )}
                 <HandledByTeamPanel />
               </div>
-            )}
+            </div>
+            <div className="db-fade db-d5 mt-4">
+              <MetricGrid title={view.bdtitle} metrics={metrics} />
+            </div>
           </>
         )
       })()}
@@ -453,7 +457,7 @@ function NeedsAttentionPanel({
 export default function LocalSeoOverviewPage() {
   return (
     <Suspense fallback={
-      <div className="max-w-[840px] mx-auto px-8 pt-12 text-center">
+      <div className="max-w-[1100px] mx-auto px-8 pt-12 text-center">
         <div className="animate-pulse h-12 bg-ink-6 rounded w-48 mx-auto" />
       </div>
     }>
