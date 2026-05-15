@@ -20,6 +20,11 @@ export interface DashboardInsight {
 export interface ChartData {
   data: number[]
   labels: string[]
+  /** Same buckets, same metric, but shifted 365 days back. When present
+      the TrendChart renders this as a dashed grey overlay so the client
+      can see 'are we up or down vs the same time last year' visually
+      without having to read the % delta. */
+  prevYearData?: number[]
 }
 
 export interface DashboardView {

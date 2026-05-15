@@ -57,14 +57,23 @@ export default function TrendChart({ data, timeRange, onTimeRangeChange, up, uni
     const isUp = up
     const chartLineColor = lineColor
 
-    // Y-axis range
-    const rawMin = Math.min(...d.data)
-    const rawMax = Math.max(...d.data)
+    // Y-axis range -- include the prev-year overlay if present so the
+    // dashed line doesn't get clipped off the top or bottom.
+    const allValues = d.prevYearData
+      ? [...d.data, ...d.prevYearData]
+      : d.data
+    const rawMin = Math.min(...allValues)
+    const rawMax = Math.max(...allValues)
     const range = rawMax - rawMin || 1
     const yFloor = Math.max(0, rawMin - range * 0.3)
     const yCeil = rawMax + range * 0.35
 
-    // Plugin: gradient fill
+    // Index of the current-period dataset. When the YoY overlay is
+    // present it's pushed first and the current series moves to index
+    // 1; otherwise the current series is at 0.
+    const currentIdx = d.prevYearData ? 1 : 0
+
+    // Plugin: gradient fill (only on the current-period dataset).
     const gradientPlugin = {
       id: 'grad',
       beforeDatasetsUpdate(c: Chart) {
@@ -80,7 +89,7 @@ export default function TrendChart({ data, timeRange, onTimeRangeChange, up, uni
           g.addColorStop(0.5, 'rgba(255,80,0,0.05)')
           g.addColorStop(1, 'rgba(255,80,0,0)')
         }
-        c.data.datasets[0].backgroundColor = g
+        c.data.datasets[currentIdx].backgroundColor = g
       },
     }
 
@@ -125,7 +134,7 @@ export default function TrendChart({ data, timeRange, onTimeRangeChange, up, uni
       afterDraw(c: Chart) {
         const a = c.chartArea
         if (!a) return
-        const meta = c.getDatasetMeta(0)
+        const meta = c.getDatasetMeta(currentIdx)
         if (!meta.data.length) return
         const cx = c.ctx
         const first = meta.data[0]
@@ -150,6 +159,25 @@ export default function TrendChart({ data, timeRange, onTimeRangeChange, up, uni
       data: {
         labels: d.data.map((_, i) => i.toString()),
         datasets: [
+          /* Dataset 0: previous year, drawn FIRST so it sits behind the
+             current-period line. Dashed grey so the eye reads it as
+             reference / background. Only rendered when we actually have
+             YoY data to compare against. */
+          ...(d.prevYearData ? [{
+            data: d.prevYearData,
+            borderColor: 'rgba(150,150,150,0.55)',
+            borderWidth: 1.5,
+            borderDash: [4, 4],
+            borderCapStyle: 'round' as const,
+            borderJoinStyle: 'round' as const,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            tension: 0.3,
+            fill: false,
+          }] : []),
+          /* Dataset 1 (or 0 when no prev year): current period. The
+             gradient fill + colored line sits in front so it reads as
+             the primary series. */
           {
             data: d.data,
             borderColor: chartLineColor,
@@ -178,7 +206,7 @@ export default function TrendChart({ data, timeRange, onTimeRangeChange, up, uni
           const rect = canvas.getBoundingClientRect()
           const x = (e.native as MouseEvent).clientX - rect.left
 
-          const meta = chart.getDatasetMeta(0)
+          const meta = chart.getDatasetMeta(currentIdx)
           const result = { px: 0, py: 0, idx: -1, dist: 9999 }
 
           meta.data.forEach((pt, i) => {
@@ -241,7 +269,7 @@ export default function TrendChart({ data, timeRange, onTimeRangeChange, up, uni
 
     // Position endpoint after animation
     const onComplete = () => {
-      const meta = chart.getDatasetMeta(0)
+      const meta = chart.getDatasetMeta(currentIdx)
       if (!meta.data.length) return
       const last = meta.data[meta.data.length - 1]
       if (endpointRef.current) {

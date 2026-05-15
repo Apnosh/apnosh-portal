@@ -584,6 +584,21 @@ function buildTimeRange(
   }
   while (data.length > 1 && data[data.length - 1] === 0) data.pop()
 
+  /* Build the same series shifted exactly 365 days back so the chart
+     can render a YoY comparison line. We only return it when there's
+     genuine prior-year volume so we don't draw a flat zero line that
+     looks like a bug. */
+  const prevYearData: number[] = []
+  const prevStart = addDays(start, -365)
+  let prevCursor = new Date(prevStart)
+  for (let i = 0; i < data.length; i++) {
+    const wEnd = addDays(prevCursor, step - 1)
+    const wRows = filterByDateRange(rows, prevCursor, wEnd)
+    prevYearData.push(wRows.reduce((a, r) => a + getValue(r), 0))
+    prevCursor = addDays(prevCursor, step)
+  }
+  const prevHasData = prevYearData.some(v => v > 0)
+
   const labelDates: Date[] = []
   if (days <= 7) {
     for (let i = days - 1; i >= 0; i--) labelDates.push(addDays(now, -i))
@@ -621,7 +636,11 @@ function buildTimeRange(
     }
   }
 
-  return { data, labels: xlabels }
+  return {
+    data,
+    labels: xlabels,
+    ...(prevHasData ? { prevYearData } : {}),
+  }
 }
 
 async function getAmNote(
