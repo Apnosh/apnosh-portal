@@ -6,6 +6,7 @@ import {
   Camera, ExternalLink, Globe, Tv, Briefcase,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import MetaTesterPanel from '@/components/admin/meta-tester-panel'
 
 interface PlatformConnection {
   id: string
@@ -226,6 +227,11 @@ export default function ConnectionsTab({ clientId }: { clientId: string }) {
 
   return (
     <div className="space-y-6">
+      {/* Meta tester onboarding -- the prerequisite to any IG/FB OAuth
+         while our Meta app is in Development mode. AM walks the client
+         through this once per onboarding. */}
+      <MetaTesterPanel clientId={clientId} />
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-[family-name:var(--font-display)] text-lg text-ink">Platform Connections</h2>
