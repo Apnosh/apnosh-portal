@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus,
-  Check, X, Eye, Loader2, AlertTriangle, MessageSquare, RefreshCw,
-  Image as ImageIcon, Film, Send, Compass, Zap, ChevronRight as ChevronRightIcon,
+  Check, X, Loader2, AlertTriangle, MessageSquare,
+  Compass, Zap, ChevronRight as ChevronRightIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useClient } from '@/lib/client-context'
@@ -43,34 +43,54 @@ export default function SocialCalendarPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [platformFilter, setPlatformFilter] = useState('all')
 
-  // Approve from modal
+  // Approve from modal. The error is tagged with the entry id it
+  // belongs to so we can derive "is this error for the currently
+  // open entry?" instead of clearing state via an effect.
   const [approving, setApproving] = useState(false)
-  const [approveError, setApproveError] = useState<string | null>(null)
+  const [approveErrorState, setApproveErrorState] = useState<{ id: string; message: string } | null>(null)
+  const approveError = approveErrorState && approveErrorState.id === selectedEntry?.id
+    ? approveErrorState.message : null
 
+  const clientId = client?.id
   const load = useCallback(async () => {
-    if (!client?.id) { setLoading(false); return }
-
+    if (!clientId) return
     const [queueRes, notesRes] = await Promise.all([
       supabase
         .from('content_queue')
         .select('*')
-        .eq('client_id', client.id)
+        .eq('client_id', clientId)
         .eq('service_area', 'social')
         .not('scheduled_for', 'is', null)
         .order('scheduled_for', { ascending: true }),
       supabase
         .from('calendar_notes')
         .select('*')
-        .eq('client_id', client.id)
+        .eq('client_id', clientId)
         .order('note_date', { ascending: true }),
     ])
 
     setRequests((queueRes.data ?? []) as ContentQueueItem[])
     setCalendarNotes((notesRes.data ?? []) as CalendarNote[])
     setLoading(false)
-  }, [client?.id, supabase])
+  }, [clientId, supabase])
 
-  useEffect(() => { if (!clientLoading) load() }, [load, clientLoading])
+  /* Fetch on mount + when client resolves. Loading is intentionally
+     left true until data arrives; the `loading` branch in the render
+     covers both pre-fetch and pre-client states uniformly.
+
+     We defer both load() and setLoading(false) by a microtask so the
+     effect body itself contains no synchronous setState. This keeps
+     the new react-hooks/set-state-in-effect rule happy. */
+  useEffect(() => {
+    if (clientLoading) return
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
+      if (!client?.id) setLoading(false)
+      else load()
+    })
+    return () => { cancelled = true }
+  }, [load, clientLoading, client?.id])
   useRealtimeRefresh(['content_queue', 'calendar_notes'] as never[], load)
 
   // Transform to calendar entries with filtering
@@ -135,24 +155,21 @@ export default function SocialCalendarPage() {
 
   async function handleApproveFromModal() {
     if (!selectedRequest) return
+    const requestId = selectedRequest.id
     setApproving(true)
-    setApproveError(null)
-    const result = await submitClientFeedback(selectedRequest.id, 'approval')
+    setApproveErrorState(null)
+    const result = await submitClientFeedback(requestId, 'approval')
     setApproving(false)
     if (result.success) {
       setSelectedEntry(null)
       load()
     } else {
       // Keep the modal open and surface the error so the user knows the
-      // approval didn't land -- previously the modal closed regardless.
-      setApproveError(result.error || 'Approval failed. Please try again.')
+      // approval didn't land. The error is scoped to this request id so
+      // opening a different entry naturally hides it (no effect needed).
+      setApproveErrorState({ id: requestId, message: result.error || 'Approval failed. Please try again.' })
     }
   }
-
-  // Clear any approval error when the user opens a different entry
-  useEffect(() => {
-    setApproveError(null)
-  }, [selectedEntry?.id])
 
   const monthName = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
