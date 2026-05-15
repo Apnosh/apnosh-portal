@@ -14,11 +14,12 @@
 
 import Link from 'next/link'
 import {
-  Sparkles, Plus, TrendingUp, ArrowRight,
+  Sparkles, Plus, TrendingUp, TrendingDown, ArrowRight, AlertCircle,
   Camera, Globe, Image as ImageIcon, Video, Layers, Send, Zap, Music,
-  Eye, MousePointer2, Footprints, FileText, CircleCheck,
+  Eye, MousePointer2, Footprints, FileText, CircleCheck, Heart,
 } from 'lucide-react'
 import type { SocialHubData, SocialPostCard, TopPerformer } from '@/lib/dashboard/get-social-hub'
+import type { SocialBreakdownResult, SocialDailyRow } from '@/lib/dashboard/get-social-breakdown'
 import type { CampaignRow } from '@/lib/dashboard/get-campaigns'
 import type { ContentPlan } from '@/lib/dashboard/get-content-plan'
 import type { ContentQuote } from '@/lib/dashboard/get-quotes'
@@ -37,18 +38,47 @@ const PLATFORM_TINT: Record<string, string> = {
   linkedin:  'bg-blue-50 text-blue-700',
 }
 
-export default function SocialHubView({ data }: { data: SocialHubData }) {
-  return (
-    <div className="max-w-[1100px] mx-auto px-4 lg:px-6 pt-6 pb-20">
-      {/* Hero */}
-      <Hero data={data} />
+export default function SocialHubView({
+  data, breakdown,
+}: { data: SocialHubData; breakdown: SocialBreakdownResult }) {
+  const stats = computeStats(data, breakdown)
+  const platforms = computePlatformPulse(breakdown)
+  const urgentCount = data.counts.needsYou + data.pendingQuotes.length
 
-      {/* Plan + Pending quotes */}
+  return (
+    <div className="max-w-[1100px] mx-auto px-4 lg:px-6 pt-6 pb-20 space-y-6">
+      {/* 1. Header */}
+      <PageHeader />
+
+      {/* 2. Needs you alert -- only when something is actually waiting.
+         Sits at the very top so the eye finds it before anything else. */}
+      {urgentCount > 0 && (
+        <NeedsYouAlert
+          approvals={data.counts.needsYou}
+          quotes={data.pendingQuotes.length}
+        />
+      )}
+
+      {/* 3. Stat strip -- three pills with values + trend deltas. */}
+      <StatStrip stats={stats} queued={data.counts.queued} />
+
+      {/* 4. Recent posts + Coming up */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 lg:gap-7">
+        <RecentFeed posts={data.recent} />
+        <ComingUp posts={data.upcoming} />
+      </div>
+
+      {/* 5. Platform pulse -- one row per connected platform */}
+      {platforms.length > 0 && <PlatformPulse platforms={platforms} />}
+
+      {/* 6. What's working */}
+      {data.topPerformer && <WhatsWorking perf={data.topPerformer} />}
+
+      {/* 7. Plan + Pending quotes */}
       {(shouldShowPlan(data.plan) || data.pendingQuotes.length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-7">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {shouldShowPlan(data.plan) && <PlanCard plan={data.plan} />}
           {data.pendingQuotes.length > 0 && <QuotesCard quotes={data.pendingQuotes} />}
-          {/* When only one is showing, balance the row. */}
           {shouldShowPlan(data.plan) && data.pendingQuotes.length === 0 && (
             <QuotesEmptyCard />
           )}
@@ -58,107 +88,304 @@ export default function SocialHubView({ data }: { data: SocialHubData }) {
         </div>
       )}
 
-      {/* Recent + Coming up */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 lg:gap-7 mt-7">
-        <RecentFeed posts={data.recent} />
-        <ComingUp posts={data.upcoming} />
-      </div>
-
-      {/* What's working */}
-      {data.topPerformer && (
-        <WhatsWorking perf={data.topPerformer} />
-      )}
-
-      {/* Last boost result */}
-      {data.lastCompletedBoost && (
-        <LastBoostResult campaign={data.lastCompletedBoost} />
-      )}
-
-      {/* Push bar dropped -- Calendar / Performance / Inbox all live in
-         the sticky sub-nav now, and the primary "Request a post" CTA
-         sits in the hero header. No reason to repeat them at the bottom. */}
+      {/* 8. Last boost result */}
+      {data.lastCompletedBoost && <LastBoostResult campaign={data.lastCompletedBoost} />}
     </div>
   )
 }
 
-/* ─────────────────────────────── Hero ─────────────────────────────── */
+/* ─────────────────────────────── Page header ─────────────────────────────── */
 
-function Hero({ data }: { data: SocialHubData }) {
+function PageHeader() {
   return (
-    <header className="space-y-5">
-      {/* Page title matches Inbox / Performance / Calendar pages so the
-         whole social section reads as one design family. */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
-            Social
-          </p>
-          <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1 flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-amber-600" />
-            Overview
-          </h1>
-        </div>
-        <Link
-          href="/dashboard/social/request"
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-sm shadow-brand/20"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Request a post
-        </Link>
-      </div>
-
-      {/* Dynamic hub headline -- still the hub's personality, just
-         sized to play nicely under the standardized page title. */}
+    <div className="flex items-start justify-between gap-4 flex-wrap">
       <div>
-        <h2 className="text-[26px] sm:text-[28px] leading-[1.1] font-bold text-ink tracking-tight">
-          {data.reach30d
-            ? <>Reaching <span className="text-emerald-700">{formatCompact(data.reach30d)}</span> people this month</>
-            : 'Your social feed'}
-        </h2>
-        <p className="text-[14px] text-ink-2 mt-2 leading-relaxed max-w-2xl">
-          {data.narrative}
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
+          Social
         </p>
+        <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1 flex items-center gap-2">
+          <Sparkles className="w-6 h-6 text-amber-600" />
+          Overview
+        </h1>
       </div>
-
-      <div
-        className="grid grid-cols-3 max-w-xl rounded-2xl bg-white border overflow-hidden divide-x"
-        style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
+      <Link
+        href="/dashboard/social/request"
+        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-sm shadow-brand/20"
       >
-        <PulseTile label="Live" sub="last 30 days" value={data.counts.live} href="/dashboard/social/performance" />
-        <PulseTile label="Queued" sub="upcoming" value={data.counts.queued} href="/dashboard/social/calendar" />
-        <PulseTile
-          label="Needs you"
-          sub="in review"
-          value={data.counts.needsYou}
-          href="/dashboard/social/inbox"
-          tone={data.counts.needsYou > 0 ? 'rose' : 'neutral'}
-        />
-      </div>
-    </header>
+        <Plus className="w-3.5 h-3.5" />
+        Request a post
+      </Link>
+    </div>
   )
 }
 
-function PulseTile({
-  label, sub, value, href, tone = 'neutral',
-}: {
-  label: string; sub: string; value: number; href: string; tone?: 'neutral' | 'rose'
-}) {
+/* ─────────────────────────────── Needs you alert ─────────────────────────────── */
+
+function NeedsYouAlert({ approvals, quotes }: { approvals: number; quotes: number }) {
+  const parts: string[] = []
+  if (approvals > 0) parts.push(`${approvals} ${approvals === 1 ? 'post' : 'posts'} to review`)
+  if (quotes > 0) parts.push(`${quotes} ${quotes === 1 ? 'quote' : 'quotes'} to approve`)
+  const label = parts.join(' and ')
+
   return (
     <Link
-      href={href}
-      className="group block px-4 py-3 hover:bg-bg-2/40 transition-colors"
+      href="/dashboard/social/inbox"
+      className="group flex items-center gap-4 rounded-2xl bg-gradient-to-r from-rose-50 via-amber-50 to-amber-50 ring-1 ring-rose-200/60 hover:ring-rose-300 px-5 py-4 transition-all"
     >
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-ink-4 leading-none mb-1.5 group-hover:text-ink-3 transition-colors">
-        {label}
-      </p>
-      <p className={`text-[22px] font-bold tabular-nums leading-none tracking-tight ${
-        tone === 'rose' && value > 0 ? 'text-rose-700' : 'text-ink'
-      }`}>
-        {value}
-      </p>
-      <p className="text-[10px] text-ink-4 mt-1 leading-none">{sub}</p>
+      <span className="w-11 h-11 rounded-full bg-white flex items-center justify-center ring-1 ring-rose-200/60 flex-shrink-0">
+        <AlertCircle className="w-5 h-5 text-rose-600" />
+      </span>
+      <div className="flex-1 min-w-0">
+        <p className="text-[15px] font-bold text-ink leading-tight">
+          {label}
+        </p>
+        <p className="text-[12.5px] text-ink-2 mt-0.5">
+          Nothing goes live until you say yes.
+        </p>
+      </div>
+      <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-rose-700 group-hover:text-rose-800 flex-shrink-0">
+        Open inbox
+        <ArrowRight className="w-3.5 h-3.5" />
+      </span>
     </Link>
   )
+}
+
+/* ─────────────────────────────── Stat strip ─────────────────────────────── */
+
+interface StatSummary {
+  posts30d: number
+  postsPrev30d: number
+  reach30d: number
+  reachPrev30d: number
+  engagement30d: number
+  engagementRate30d: number | null
+  engagementRatePrev30d: number | null
+}
+
+function StatStrip({ stats, queued }: { stats: StatSummary; queued: number }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <StatCard
+        icon={<Send className="w-4 h-4" />}
+        label="Posts"
+        value={stats.posts30d}
+        current={stats.posts30d}
+        previous={stats.postsPrev30d}
+        sub={queued > 0 ? `${queued} more queued` : 'last 30 days'}
+      />
+      <StatCard
+        icon={<Eye className="w-4 h-4" />}
+        label="Reach"
+        value={stats.reach30d}
+        current={stats.reach30d}
+        previous={stats.reachPrev30d}
+        sub="last 30 days"
+      />
+      <StatCard
+        icon={<Heart className="w-4 h-4" />}
+        label="Engagement rate"
+        value={stats.engagementRate30d}
+        current={stats.engagementRate30d ?? 0}
+        previous={stats.engagementRatePrev30d ?? 0}
+        sub="likes + comments / reach"
+        format="pct"
+      />
+    </div>
+  )
+}
+
+function StatCard({
+  icon, label, value, current, previous, sub, format = 'compact',
+}: {
+  icon: React.ReactNode
+  label: string
+  value: number | null
+  current: number
+  previous: number
+  sub: string
+  format?: 'compact' | 'pct'
+}) {
+  const change = previous > 0 ? ((current - previous) / previous) * 100 : null
+  const changeRounded = change == null ? null : Math.round(change * 10) / 10
+  const trend = changeRounded == null ? 'flat' : changeRounded > 1 ? 'up' : changeRounded < -1 ? 'down' : 'flat'
+  const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : null
+  const trendColor = trend === 'up' ? 'text-emerald-600' : trend === 'down' ? 'text-rose-500' : 'text-ink-4'
+
+  const display = value == null
+    ? '—'
+    : format === 'pct'
+      ? `${value.toFixed(1)}%`
+      : formatCompact(value)
+
+  return (
+    <div className="bg-white rounded-2xl border border-ink-6 p-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+          <span className="text-ink-4">{icon}</span>
+          {label}
+        </span>
+        {TrendIcon && changeRounded != null && (
+          <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${trendColor}`}>
+            <TrendIcon className="w-3 h-3" />
+            {changeRounded > 0 ? '+' : ''}{changeRounded}%
+          </span>
+        )}
+      </div>
+      <p className="text-[26px] font-bold text-ink leading-none tabular-nums">{display}</p>
+      <p className="text-[11.5px] text-ink-4 mt-1.5">{sub}</p>
+    </div>
+  )
+}
+
+/* ─────────────────────────────── Platform pulse ─────────────────────────────── */
+
+interface PlatformPulseData {
+  platform: string
+  label: string
+  followers: number
+  followersChange: number
+  reach30d: number
+}
+
+function PlatformPulse({ platforms }: { platforms: PlatformPulseData[] }) {
+  return (
+    <section>
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="text-[15px] font-bold text-ink tracking-tight">
+          By platform
+        </h2>
+        <Link
+          href="/dashboard/social/performance"
+          className="text-[12px] font-medium text-ink-3 hover:text-ink inline-flex items-center gap-1"
+        >
+          Full breakdown <ArrowRight className="w-3 h-3" />
+        </Link>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {platforms.map(p => {
+          const Icon = PLATFORM_ICON[p.platform] ?? Globe
+          const tint = PLATFORM_TINT[p.platform] ?? 'bg-ink-7 text-ink-2'
+          const trend = p.followersChange > 0 ? 'up' : p.followersChange < 0 ? 'down' : 'flat'
+          const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : null
+          const trendColor = trend === 'up' ? 'text-emerald-600' : trend === 'down' ? 'text-rose-500' : 'text-ink-4'
+          return (
+            <div key={p.platform} className="bg-white rounded-xl border border-ink-6 p-3.5">
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${tint}`}>
+                  <Icon className="w-3.5 h-3.5" />
+                </span>
+                <span className="text-[13px] font-semibold text-ink">{p.label}</span>
+              </div>
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-[18px] font-bold text-ink tabular-nums leading-none">
+                    {formatCompact(p.followers)}
+                  </p>
+                  <p className="text-[10.5px] text-ink-4 mt-1">followers</p>
+                </div>
+                {TrendIcon && p.followersChange !== 0 && (
+                  <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold ${trendColor}`}>
+                    <TrendIcon className="w-3 h-3" />
+                    {p.followersChange > 0 ? '+' : ''}{p.followersChange}
+                  </span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+/* ─────────────────────────────── Stat computation ─────────────────────────────── */
+
+const PLATFORM_LABELS: Record<string, string> = {
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  tiktok: 'TikTok',
+  linkedin: 'LinkedIn',
+  google_business: 'Google',
+  youtube: 'YouTube',
+  twitter: 'Twitter',
+}
+
+function computeStats(data: SocialHubData, breakdown: SocialBreakdownResult): StatSummary {
+  const now = new Date()
+  const start30 = new Date(now); start30.setDate(start30.getDate() - 30)
+  const start60 = new Date(now); start60.setDate(start60.getDate() - 60)
+
+  let posts30d = 0, postsPrev30d = 0
+  let reach30d = 0, reachPrev30d = 0
+  let engagement30d = 0, engagementPrev30d = 0
+  let reachWindow = 0, reachPrevWindow = 0
+
+  for (const r of breakdown.rows) {
+    const d = new Date(r.date)
+    const isCurrent = d >= start30 && d < now
+    const isPrev = d >= start60 && d < start30
+    const posts = Number(r.posts_published ?? 0)
+    const reach = Number(r.reach ?? 0)
+    const eng = Number(r.engagement ?? 0)
+    if (isCurrent) {
+      posts30d += posts
+      reach30d += reach
+      engagement30d += eng
+      reachWindow += reach
+    } else if (isPrev) {
+      postsPrev30d += posts
+      reachPrev30d += reach
+      engagementPrev30d += eng
+      reachPrevWindow += reach
+    }
+  }
+
+  // Fall back to hub data when breakdown is empty.
+  if (reach30d === 0 && data.reach30d) reach30d = data.reach30d
+  if (posts30d === 0) posts30d = data.counts.live
+
+  const engagementRate30d = reachWindow > 0
+    ? (engagement30d / reachWindow) * 100
+    : null
+  const engagementRatePrev30d = reachPrevWindow > 0
+    ? (engagementPrev30d / reachPrevWindow) * 100
+    : null
+
+  return {
+    posts30d, postsPrev30d,
+    reach30d, reachPrev30d,
+    engagement30d,
+    engagementRate30d, engagementRatePrev30d,
+  }
+}
+
+function computePlatformPulse(breakdown: SocialBreakdownResult): PlatformPulseData[] {
+  const now = new Date()
+  const start30 = new Date(now); start30.setDate(start30.getDate() - 30)
+
+  return breakdown.platforms.map(platform => {
+    const rows = breakdown.rows.filter(r => r.platform === platform)
+    // Latest follower snapshot
+    const latest = [...rows].reverse().find(r => r.followers_total != null)
+    const followers = Number(latest?.followers_total ?? 0)
+    // Followers gained in last 30 days (sum)
+    const followersChange = rows
+      .filter(r => new Date(r.date) >= start30)
+      .reduce((s, r: SocialDailyRow) => s + Number(r.followers_gained ?? 0), 0)
+    // Reach in last 30 days
+    const reach30d = rows
+      .filter(r => new Date(r.date) >= start30)
+      .reduce((s, r: SocialDailyRow) => s + Number(r.reach ?? 0), 0)
+    return {
+      platform,
+      label: PLATFORM_LABELS[platform] ?? platform,
+      followers,
+      followersChange,
+      reach30d,
+    }
+  }).filter(p => p.followers > 0 || p.reach30d > 0)
+    .sort((a, b) => b.followers - a.followers)
 }
 
 /* ─────────────────────────────── Recent feed ─────────────────────────────── */

@@ -2,17 +2,22 @@
  * /dashboard/social — the publisher's hub.
  *
  * Reading order, top to bottom:
- *   1. Pulse hero        — narrative + 3 count tiles (Live / Queued / Needs you)
- *   2. Recent feed       — IG-style 5-col grid of the last 12 published posts
- *   3. Coming up         — next 5 scheduled
- *   4. What's working    — best recent performer + Boost CTA
- *   5. Push bar          — Request post / Calendar / Boost
+ *   1. Header           — page title + primary CTA
+ *   2. Needs you alert  — only when approvals or quotes are waiting
+ *   3. Stat strip       — Posts, Reach, Engagement with trend deltas
+ *   4. Recent feed      — IG-style 5-col grid + Coming up sidebar
+ *   5. Platform pulse   — per-platform follower count + delta
+ *   6. What's working   — top performer
+ *   7. Plan + Quotes    — current plan usage + pending estimates
+ *   8. Last boost       — most recent campaign result
  *
- * Analytics deep-dive lives at /dashboard/social/performance.
+ * Two parallel server fetches: getSocialHub for the core data and
+ * getSocialBreakdown for per-platform metrics that power the pulse strip.
  */
 
 import { redirect } from 'next/navigation'
 import { getSocialHub } from '@/lib/dashboard/get-social-hub'
+import { getSocialBreakdown } from '@/lib/dashboard/get-social-breakdown'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import SocialHubView from './hub-view'
 
@@ -37,6 +42,10 @@ export default async function SocialHubPage({ searchParams }: PageProps) {
     )
   }
 
-  const data = await getSocialHub(clientId)
-  return <SocialHubView data={data} />
+  const [data, breakdown] = await Promise.all([
+    getSocialHub(clientId),
+    getSocialBreakdown(clientId),
+  ])
+
+  return <SocialHubView data={data} breakdown={breakdown} />
 }
