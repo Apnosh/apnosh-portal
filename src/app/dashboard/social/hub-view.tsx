@@ -14,7 +14,7 @@
 
 import Link from 'next/link'
 import {
-  Sparkles, Plus, TrendingUp, TrendingDown, ArrowRight, AlertCircle,
+  Sparkles, Plus, TrendingUp, TrendingDown, ArrowRight, AlertCircle, Megaphone,
   Camera, Globe, Image as ImageIcon, Video, Layers, Send, Zap, Music,
   Eye, MousePointer2, Footprints, FileText, CircleCheck, Heart,
 } from 'lucide-react'
@@ -108,13 +108,22 @@ function PageHeader() {
           Overview
         </h1>
       </div>
-      <Link
-        href="/dashboard/social/request"
-        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-sm shadow-brand/20"
-      >
-        <Plus className="w-3.5 h-3.5" />
-        Request a post
-      </Link>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Link
+          href="/dashboard/social/ads"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-ink-2 bg-white ring-1 ring-ink-6 hover:ring-ink-4 hover:bg-bg-2 transition-all"
+        >
+          <Megaphone className="w-3.5 h-3.5 text-emerald-600" />
+          Run an ad
+        </Link>
+        <Link
+          href="/dashboard/social/request"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-sm shadow-brand/20"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Request a post
+        </Link>
+      </div>
     </div>
   )
 }

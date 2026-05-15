@@ -13,23 +13,19 @@
 
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Calendar as CalendarIcon, Compass, Zap, Plus } from 'lucide-react'
+import { Calendar as CalendarIcon, Compass, Plus } from 'lucide-react'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { getEditorialPlan } from '@/lib/dashboard/get-editorial-plan'
-import { getSocialHub } from '@/lib/dashboard/get-social-hub'
-import { getActiveCampaigns, getPastCampaigns } from '@/lib/dashboard/get-campaigns'
 import { ScheduleView } from './schedule-view'
 import EditorialPlanView from '../plan/plan-view'
-import BoostView from '../boost/boost-view'
 
 export const dynamic = 'force-dynamic'
 
-type View = 'schedule' | 'plan' | 'boost'
+type View = 'schedule' | 'plan'
 
 const TABS: { id: View; label: string; icon: React.ComponentType<{ className?: string }>; description: string }[] = [
   { id: 'schedule', label: 'Schedule', icon: CalendarIcon, description: 'When your social posts are scheduled to go live.' },
   { id: 'plan',     label: 'Plan',     icon: Compass,      description: 'This month’s theme, content pillars, and key dates.' },
-  { id: 'boost',    label: 'Boost',    icon: Zap,          description: 'Put paid reach behind your best-performing posts.' },
 ]
 
 interface PageProps {
@@ -51,25 +47,20 @@ export default async function CalendarPage({ searchParams }: PageProps) {
     )
   }
 
-  const view: View = sp.view === 'plan' || sp.view === 'boost' ? sp.view : 'schedule'
+  /* Old ?view=boost links from the social hub keep working by
+     forwarding to the new top-level /ads page. */
+  if (sp.view === 'boost') {
+    const qs = sp.postId ? `?postId=${encodeURIComponent(sp.postId)}` : ''
+    redirect(`/dashboard/social/ads${qs}`)
+  }
+
+  const view: View = sp.view === 'plan' ? 'plan' : 'schedule'
 
   // Fetch only what the active tab needs.
   let planData: Awaited<ReturnType<typeof getEditorialPlan>> | null = null
-  let boostData: {
-    hub: Awaited<ReturnType<typeof getSocialHub>>
-    active: Awaited<ReturnType<typeof getActiveCampaigns>>
-    past: Awaited<ReturnType<typeof getPastCampaigns>>
-  } | null = null
 
   if (view === 'plan') {
     planData = await getEditorialPlan(clientId)
-  } else if (view === 'boost') {
-    const [hub, active, past] = await Promise.all([
-      getSocialHub(clientId),
-      getActiveCampaigns(clientId),
-      getPastCampaigns(clientId),
-    ])
-    boostData = { hub, active, past }
   }
 
   return (
@@ -129,16 +120,6 @@ export default async function CalendarPage({ searchParams }: PageProps) {
       {/* Active section */}
       {view === 'schedule' && <ScheduleView />}
       {view === 'plan' && planData && <EditorialPlanView data={planData} />}
-      {view === 'boost' && boostData && (
-        <BoostView
-          clientId={clientId}
-          preselectedPostId={sp.postId ?? null}
-          candidates={boostData.hub.recent.slice(0, 6)}
-          topPerformer={boostData.hub.topPerformer}
-          activeCampaigns={boostData.active}
-          pastCampaigns={boostData.past}
-        />
-      )}
     </div>
   )
 }

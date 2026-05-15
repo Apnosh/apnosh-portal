@@ -13,7 +13,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Calendar, Inbox, BarChart3, Folder } from 'lucide-react'
+import { Home, Calendar, Inbox, BarChart3, Folder, Megaphone } from 'lucide-react'
 
 interface Tab {
   label: string
@@ -26,7 +26,8 @@ interface Tab {
 
 const TABS: Tab[] = [
   { label: 'Overview',    href: '/dashboard/social',             icon: Home, exact: true },
-  { label: 'Calendar',    href: '/dashboard/social/calendar',    icon: Calendar, alsoMatch: ['/dashboard/social/plan', '/dashboard/social/boost'] },
+  { label: 'Calendar',    href: '/dashboard/social/calendar',    icon: Calendar, alsoMatch: ['/dashboard/social/plan'] },
+  { label: 'Ads',         href: '/dashboard/social/ads',         icon: Megaphone, alsoMatch: ['/dashboard/social/boost'] },
   { label: 'Inbox',       href: '/dashboard/social/inbox',       icon: Inbox, alsoMatch: ['/dashboard/social/action-needed', '/dashboard/social/quotes', '/dashboard/social/engage', '/dashboard/social/requests'] },
   { label: 'Performance', href: '/dashboard/social/performance', icon: BarChart3, alsoMatch: ['/dashboard/social/results'] },
   { label: 'Library',     href: '/dashboard/social/library',     icon: Folder },
