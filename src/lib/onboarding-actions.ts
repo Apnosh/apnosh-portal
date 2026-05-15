@@ -60,6 +60,13 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
 
   const location = [biz.city, biz.state].filter(Boolean).join(', ')
 
+  /* billing_status defaults to 'active'. We don't set 'pending' here
+     because the table's CHECK constraint only allows
+     active/paused/cancelled/past_due. In the new free-portal model the
+     client's billing_status is 'active' from day one -- they just have
+     no paid services yet. When they subscribe to one, client_services
+     rows appear; cancelling everything leaves billing_status='active'
+     but with no active services. */
   const { data: newClient, error: insertErr } = await supabase
     .from('clients')
     .insert({
@@ -70,8 +77,8 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
       website: biz.website_url || '',
       phone: biz.phone || '',
       services_active: ['social'],
-      tier: 'standard',
-      billing_status: 'pending',
+      /* CHECK constraint requires title-case Basic/Standard/Pro/Internal. */
+      tier: 'Basic',
       onboarding_date: new Date().toISOString().split('T')[0],
     })
     .select('id')
