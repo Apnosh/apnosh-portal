@@ -148,11 +148,14 @@ const navSections: NavSection[] = [
         ],
       },
       {
+        /* Website is shown to every client -- every restaurant has a
+           website (or needs one), and the tab's empty state is the
+           entry point to the /dashboard/website/setup wizard. No
+           serviceArea gating here, unlike the other channels. */
         label: 'Website',
         href: '/dashboard/website',
         icon: Globe,
         exact: false,
-        serviceArea: 'website',
         children: [
           { label: 'Overview', href: '/dashboard/website', exact: true },
           { label: 'Full analytics', href: '/dashboard/website/traffic' },
