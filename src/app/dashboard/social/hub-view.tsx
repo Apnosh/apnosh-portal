@@ -39,7 +39,7 @@ const PLATFORM_TINT: Record<string, string> = {
 
 export default function SocialHubView({ data }: { data: SocialHubData }) {
   return (
-    <div className="max-w-[1100px] mx-auto py-8 px-4 lg:px-6">
+    <div className="max-w-[1100px] mx-auto px-4 lg:px-6 pt-6 pb-20">
       {/* Hero */}
       <Hero data={data} />
 
@@ -85,23 +85,19 @@ export default function SocialHubView({ data }: { data: SocialHubData }) {
 
 function Hero({ data }: { data: SocialHubData }) {
   return (
-    <header>
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-50 text-amber-700 ring-1 ring-amber-100">
-            <Sparkles className="w-4.5 h-4.5" />
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
-              Social Media
-            </p>
-            <p className="text-[11px] text-ink-4 mt-1 leading-none">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-            </p>
-          </div>
+    <header className="space-y-5">
+      {/* Page title matches Inbox / Performance / Calendar pages so the
+         whole social section reads as one design family. */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
+            Social
+          </p>
+          <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1 flex items-center gap-2">
+            <Sparkles className="w-6 h-6 text-amber-600" />
+            Overview
+          </h1>
         </div>
-        {/* Primary CTA -- the most common task on this page lives here
-           instead of in a redundant push bar at the bottom. */}
         <Link
           href="/dashboard/social/request"
           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-sm shadow-brand/20"
@@ -110,21 +106,26 @@ function Hero({ data }: { data: SocialHubData }) {
           Request a post
         </Link>
       </div>
-      <h1 className="text-[32px] sm:text-[34px] leading-[1.05] font-bold text-ink tracking-tight">
-        {data.reach30d
-          ? <>Reaching <span className="text-emerald-700">{formatCompact(data.reach30d)}</span> people this month</>
-          : 'Your social feed'}
-      </h1>
-      <p className="text-[14px] text-ink-2 mt-2 leading-relaxed max-w-2xl">
-        {data.narrative}
-      </p>
+
+      {/* Dynamic hub headline -- still the hub's personality, just
+         sized to play nicely under the standardized page title. */}
+      <div>
+        <h2 className="text-[26px] sm:text-[28px] leading-[1.1] font-bold text-ink tracking-tight">
+          {data.reach30d
+            ? <>Reaching <span className="text-emerald-700">{formatCompact(data.reach30d)}</span> people this month</>
+            : 'Your social feed'}
+        </h2>
+        <p className="text-[14px] text-ink-2 mt-2 leading-relaxed max-w-2xl">
+          {data.narrative}
+        </p>
+      </div>
 
       <div
-        className="mt-5 grid grid-cols-3 max-w-xl rounded-2xl bg-white border overflow-hidden divide-x"
+        className="grid grid-cols-3 max-w-xl rounded-2xl bg-white border overflow-hidden divide-x"
         style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
       >
         <PulseTile label="Live" sub="last 30 days" value={data.counts.live} href="/dashboard/social/performance" />
-        <PulseTile label="Queued" sub="upcoming" value={data.counts.queued} href="/dashboard/calendar" />
+        <PulseTile label="Queued" sub="upcoming" value={data.counts.queued} href="/dashboard/social/calendar" />
         <PulseTile
           label="Needs you"
           sub="in review"
@@ -166,7 +167,7 @@ function RecentFeed({ posts }: { posts: SocialPostCard[] }) {
   return (
     <section>
       <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-[16px] font-bold text-ink tracking-tight">
+        <h2 className="text-[15px] font-bold text-ink tracking-tight">
           Recent posts
         </h2>
         {posts.length > 0 && (
@@ -260,11 +261,11 @@ function ComingUp({ posts }: { posts: SocialPostCard[] }) {
   return (
     <aside>
       <div className="flex items-baseline justify-between mb-3">
-        <h2 className="text-[16px] font-bold text-ink tracking-tight">
+        <h2 className="text-[15px] font-bold text-ink tracking-tight">
           Coming up
         </h2>
         <Link
-          href="/dashboard/calendar"
+          href="/dashboard/social/calendar"
           className="text-[12px] font-medium text-ink-3 hover:text-ink inline-flex items-center gap-1"
         >
           Calendar <ArrowRight className="w-3 h-3" />
