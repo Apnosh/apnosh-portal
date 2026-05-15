@@ -361,6 +361,32 @@ export default function TrendChart({ data, timeRange, onTimeRangeChange, up, uni
         style={{ cursor: 'crosshair' }}
         onMouseLeave={handleMouseLeave}
       >
+        {/* Legend chip — only when the YoY overlay is actually being
+           drawn. Sits in the chart's top padding so it doesn't push
+           layout, and labels each line so readers don't have to guess. */}
+        {data[timeRange]?.prevYearData && (
+          <div className="absolute top-2 left-2 z-10 flex items-center gap-3 text-[11px] font-medium pointer-events-none">
+            <span className="inline-flex items-center gap-1.5 text-ink-2">
+              <span
+                className="inline-block w-3 h-[2.5px] rounded-full"
+                style={{ background: lineColor }}
+              />
+              This period
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-ink-3">
+              <span
+                className="inline-block"
+                style={{
+                  width: 12,
+                  height: 0,
+                  borderTop: '1.5px dashed rgba(150,150,150,0.85)',
+                }}
+              />
+              Same period last year
+            </span>
+          </div>
+        )}
+
         <canvas ref={canvasRef} />
 
         {/* Crosshair line */}
