@@ -11,7 +11,7 @@
 
 import Link from 'next/link'
 import {
-  Sparkles, BookOpen, Calendar as CalendarIcon, ChevronRight,
+  Sparkles, ChevronRight,
   Image as ImageIcon, Camera, Globe, Music, Send,
 } from 'lucide-react'
 import type { EditorialPlanData, EditorialMonth, PlannedItem } from '@/lib/dashboard/get-editorial-plan'
@@ -33,33 +33,12 @@ const PILLAR_TINTS = [
 ]
 
 export default function EditorialPlanView({ data }: { data: EditorialPlanData }) {
+  /* Header lives in the parent Calendar page now -- this view renders
+     only the two month sections so it slots cleanly under the tab strip. */
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4 lg:px-6">
-      <header className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-50 text-amber-700 ring-1 ring-amber-100">
-            <BookOpen className="w-4.5 h-4.5" />
-          </div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
-            Editorial plan
-          </p>
-        </div>
-        <h1 className="text-[32px] sm:text-[34px] leading-[1.05] font-bold text-ink tracking-tight">
-          The plan behind the posts
-        </h1>
-        <p className="text-[14px] text-ink-2 mt-2 leading-relaxed max-w-2xl">
-          Your strategist&rsquo;s map for the month — the story they&rsquo;re telling, what pillars
-          they&rsquo;re leaning on, and the key dates everything is built around.
-        </p>
-      </header>
-
-      <section className="mb-10">
-        <MonthSection month={data.thisMonth} primary />
-      </section>
-
-      <section>
-        <MonthSection month={data.nextMonth} primary={false} />
-      </section>
+    <div className="space-y-10 pt-2">
+      <MonthSection month={data.thisMonth} primary />
+      <MonthSection month={data.nextMonth} primary={false} />
     </div>
   )
 }

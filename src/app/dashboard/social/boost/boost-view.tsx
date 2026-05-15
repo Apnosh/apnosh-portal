@@ -13,7 +13,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft, Zap, Calendar as CalendarIcon, Users, BarChart3, Info,
+  Zap, Calendar as CalendarIcon, Users, BarChart3, Info,
   Image as ImageIcon, Check, Loader2, TrendingUp, Clock, Play, Pause,
   MousePointer2, Eye,
 } from 'lucide-react'
@@ -122,31 +122,13 @@ export default function BoostView({
   }
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4 lg:px-6">
-      <header className="mb-7">
-        <Link
-          href="/dashboard/social"
-          className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-3 hover:text-ink mb-4"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back
-        </Link>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
-            <Zap className="w-4.5 h-4.5" />
-          </div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 leading-none">
-            Boost a post
-          </p>
-        </div>
-        <h1 className="text-[28px] sm:text-[30px] leading-tight font-bold text-ink tracking-tight">
-          Push paid reach behind a winner
-        </h1>
-        <p className="text-[14px] text-ink-2 mt-2 leading-relaxed max-w-2xl">
-          Boosting puts ad dollars behind a post that&rsquo;s already working. Your strategist
-          confirms the targeting and launches in Meta Ads Manager within a few hours.
-        </p>
-      </header>
+    <div className="pt-2">
+      {/* Header lives in the parent Calendar page now. Subtitle below
+         keeps the explanatory line for the boost flow specifically. */}
+      <p className="text-[14px] text-ink-2 leading-relaxed max-w-2xl mb-7">
+        Boosting puts ad dollars behind a post that&rsquo;s already working. Your strategist
+        confirms the targeting and launches in Meta Ads Manager within a few hours.
+      </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-7">
         {/* Left: post selection + targeting */}
