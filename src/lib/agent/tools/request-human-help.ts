@@ -84,12 +84,17 @@ async function handler(
     ctx.conversationId ? `\nConversation: ${ctx.conversationId}` : null,
   ].filter(Boolean).join('\n')
 
+  /* content_queue.submitted_by is constrained to 'admin' | 'client' --
+     'ai' isn't allowed by the existing CHECK. We use 'client' since
+     the AI is acting on behalf of the client; the "[AI escalation]"
+     prefix on input_text + the agent_tool_executions audit row let
+     strategists distinguish AI vs owner tickets when needed. */
   const { data: inserted, error } = await admin
     .from('content_queue')
     .insert({
       client_id: ctx.clientId,
       request_type: 'client_request',
-      submitted_by: 'ai',
+      submitted_by: 'client',
       input_text: description,
       service_area: input.category === 'billing' ? 'social' : 'website',
       size: 'feed',
