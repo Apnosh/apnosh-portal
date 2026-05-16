@@ -123,8 +123,11 @@ export async function syncGoogleAnalyticsForClient(
   const token = await ensureToken(conn)
   if (!token || !conn.platform_account_id) return { daysWritten: 0, error: 'token refresh failed' }
 
+  /* Anchor end at TODAY (not yesterday). GA's core reporting API
+     returns partial today-data with a small (~1-4h) lag, but having
+     a "0" sit there ALL DAY while traffic accumulates is worse than
+     showing a fresh partial-today number that updates on Refresh. */
   const end = new Date()
-  end.setUTCDate(end.getUTCDate() - 1)
   const start = new Date(end)
   start.setUTCDate(start.getUTCDate() - (daysBack - 1))
 
