@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useState, useRef, useTransition } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import {
   Sparkles, X, Send, ArrowRight, Loader2, CheckCircle2, AlertCircle, UserRound, Paperclip, ImageIcon, ThumbsUp, ThumbsDown,
 } from 'lucide-react'
@@ -59,6 +60,26 @@ export default function AgentChat() {
   const [, startTransition] = useTransition()
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  /* Deep-link from notifications etc: ?ask=<text> opens the panel
+     with the textarea pre-filled. We strip the param from the URL
+     after consuming it so refreshes don't keep re-opening the chat
+     or wiping what the owner has typed. */
+  useEffect(() => {
+    const ask = searchParams?.get('ask')
+    if (ask && ask.trim()) {
+      setOpen(true)
+      setInput(ask)
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('ask')
+      const next = params.toString()
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   // Lazy-load chat state when the panel is first opened.
   useEffect(() => {

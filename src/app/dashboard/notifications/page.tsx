@@ -5,6 +5,7 @@ import Link from 'next/link'
 import {
   Bell, Check, CheckCheck, Filter, Settings, ChevronRight,
   Eye, MessageSquare, FileText, CreditCard, Star, AlertCircle,
+  Sparkles,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from '@/lib/realtime'
@@ -22,6 +23,7 @@ const TYPE_ICON: Record<string, typeof Bell> = {
   payment: CreditCard,
   review: Star,
   system: AlertCircle,
+  agent_suggestion: Sparkles,
 }
 
 const TYPE_COLOR: Record<string, string> = {
@@ -36,6 +38,20 @@ const TYPE_COLOR: Record<string, string> = {
   payment: 'bg-emerald-50 text-emerald-600',
   review: 'bg-amber-50 text-amber-600',
   system: 'bg-ink-6 text-ink-3',
+  agent_suggestion: 'bg-brand-tint text-brand-dark',
+}
+
+/**
+ * Build a deep-link to the chat panel pre-filled with an action_prompt.
+ * Appends ?ask=<encoded> to the target URL; AgentChat reads that param
+ * on mount, opens itself, pre-fills the textarea, and clears the
+ * param. If no target is given, fall back to /dashboard (chat panel
+ * is mounted on every dashboard route).
+ */
+function buildAskUrl(actionPrompt: string, targetPath: string | null): string {
+  const base = targetPath && targetPath.startsWith('/') ? targetPath : '/dashboard'
+  const sep = base.includes('?') ? '&' : '?'
+  return `${base}${sep}ask=${encodeURIComponent(actionPrompt)}`
 }
 
 function timeAgo(iso: string): string {
@@ -212,6 +228,11 @@ export default function NotificationsPage() {
                   const Icon = TYPE_ICON[n.type] || Bell
                   const iconColor = TYPE_COLOR[n.type] || 'bg-ink-6 text-ink-3'
                   const isUnread = !n.read_at
+                  /* Proactive agent suggestions ship with an
+                     action_prompt in the payload. When present, show
+                     a dedicated "Ask Apnosh AI" CTA that deep-links
+                     into the chat with the prompt pre-filled. */
+                  const actionPrompt = ((n as unknown as { payload?: { action_prompt?: string } | null }).payload)?.action_prompt ?? null
 
                   const content = (
                     <div
@@ -234,8 +255,24 @@ export default function NotificationsPage() {
                         {n.body && (
                           <p className="text-xs text-ink-3 mt-0.5 line-clamp-2">{n.body}</p>
                         )}
-                        <div className="flex items-center gap-3 mt-1.5">
+                        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                           <span className="text-[10px] text-ink-4">{timeAgo(n.created_at)}</span>
+                          {actionPrompt && (
+                            <Link
+                              href={buildAskUrl(actionPrompt, n.link)}
+                              onClick={e => {
+                                /* Don't bubble to the parent card link;
+                                   we want the deep-link, not the
+                                   default linked page. */
+                                e.stopPropagation()
+                                if (isUnread) markAsRead(n.id)
+                              }}
+                              className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-brand-dark bg-brand-tint hover:bg-brand-tint/70 px-2 py-0.5 rounded-full"
+                            >
+                              <Sparkles className="w-3 h-3" />
+                              Ask Apnosh AI to handle this
+                            </Link>
+                          )}
                           {isUnread && (
                             <button
                               onClick={e => { e.preventDefault(); e.stopPropagation(); markAsRead(n.id) }}
