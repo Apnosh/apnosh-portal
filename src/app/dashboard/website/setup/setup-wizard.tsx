@@ -20,11 +20,12 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Globe, BarChart3, Search, Activity, Check, ArrowRight,
-  ArrowLeft, ExternalLink, Sparkles, AlertCircle,
+  ArrowLeft, ExternalLink, Sparkles, AlertCircle, HelpingHand,
 } from 'lucide-react'
 import {
   saveWebsiteUrl, saveClarityProjectId, type WebsiteSetupState,
 } from '@/lib/dashboard/website-setup'
+import { requestInstallHelp, type InstallTool } from '@/lib/dashboard/install-requests'
 
 type StepKey = 'url' | 'ga' | 'gsc' | 'clarity' | 'done'
 
@@ -255,6 +256,7 @@ function GaStep({
                 <li>Add a tracking tag to your website (your web designer can help, or message your AM)</li>
                 <li>Come back here and click &quot;Connect with Google&quot; above</li>
               </ol>
+              <InstallHelpButton tool="google_analytics" label="Google Analytics" />
             </div>
           </details>
           <StepNav onBack={onBack} onNext={onSkip} nextLabel="Skip for now" nextVariant="ghost" />
@@ -318,6 +320,7 @@ function GscStep({
                 <li>Verify ownership (the &quot;HTML tag&quot; method is easiest if you have GA)</li>
                 <li>Come back and click &quot;Connect with Google&quot; above</li>
               </ol>
+              <InstallHelpButton tool="search_console" label="Search Console" />
             </div>
           </details>
           <StepNav onBack={onBack} onNext={onSkip} nextLabel="Skip for now" nextVariant="ghost" />
@@ -384,6 +387,7 @@ function ClarityStep({
               <li>Copy the project ID from the setup page (short alphanumeric code)</li>
               <li>Paste it above</li>
             </ol>
+            <InstallHelpButton tool="clarity" label="Microsoft Clarity" />
           </div>
         </details>
         <StepNav
@@ -511,6 +515,67 @@ function StepNav({
         {nextLabel}
         <ArrowRight className="w-3.5 h-3.5" />
       </button>
+    </div>
+  )
+}
+
+/* "Have us install it" button — appears inside each step's
+ * "I don't have this yet" panel. Creates an install_requests row
+ * that the AM team picks up in /admin/website-installs. Persists
+ * a 'requested' chip on this device via localStorage so the owner
+ * sees confirmation across page refreshes. */
+function InstallHelpButton({ tool, label }: { tool: InstallTool; label: string }) {
+  const storageKey = `install-help-${tool}`
+  const [requested, setRequested] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(storageKey) === '1'
+  })
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleClick() {
+    if (requested || submitting) return
+    setSubmitting(true)
+    setError(null)
+    const res = await requestInstallHelp(tool)
+    setSubmitting(false)
+    if (!res.success) {
+      setError(res.error)
+      return
+    }
+    setRequested(true)
+    try { window.localStorage.setItem(storageKey, '1') } catch { /* ignore */ }
+  }
+
+  if (requested) {
+    return (
+      <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[13px]">
+        <Check className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <div>
+          <div className="font-medium">We&apos;ll handle the {label} install</div>
+          <div className="text-[12px] text-emerald-700 mt-0.5">
+            Your account manager has been notified. We&apos;ll be in touch within 1 business day.
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={submitting}
+        className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold text-ink-2 bg-ink-7 hover:bg-ink-6 disabled:opacity-50"
+      >
+        <HelpingHand className="w-4 h-4" />
+        {submitting ? 'Requesting...' : `Have us install ${label} for you`}
+      </button>
+      <p className="text-[11px] text-ink-4 text-center">
+        We&apos;ll create the account, generate the snippet, and either install it or send you the exact paste instructions.
+      </p>
+      {error && <ErrorBox message={error} />}
     </div>
   )
 }
