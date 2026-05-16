@@ -96,10 +96,40 @@ export default function BillingPage() {
     setLoading(false)
   }, [])
 
+  const [upgradeStarting, setUpgradeStarting] = useState<string | null>(null)
+  const [upgradeError, setUpgradeError] = useState<string | null>(null)
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get('success') === 'true') {
       window.history.replaceState({}, '', '/dashboard/billing')
+    }
+    // If we landed here from /dashboard/upgrade with ?upgrade=<tier>, kick
+    // off Stripe Checkout immediately. The user gets one fewer click and
+    // hands off to Stripe-hosted UI for the actual payment step.
+    const tier = params.get('upgrade')
+    if (tier && ['basic', 'standard', 'pro'].includes(tier.toLowerCase())) {
+      setUpgradeStarting(tier)
+      // Strip the param so a refresh doesn't re-trigger the redirect.
+      window.history.replaceState({}, '', '/dashboard/billing')
+      fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier: tier.toLowerCase() }),
+      })
+        .then(r => r.json())
+        .then(json => {
+          if (json.url) {
+            window.location.href = json.url
+          } else {
+            setUpgradeError(json.error || 'Could not start checkout')
+            setUpgradeStarting(null)
+          }
+        })
+        .catch(err => {
+          setUpgradeError(err instanceof Error ? err.message : 'Unknown error')
+          setUpgradeStarting(null)
+        })
     }
     load()
   }, [load])
@@ -158,6 +188,19 @@ export default function BillingPage() {
       {portalError && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
           {portalError}
+        </div>
+      )}
+
+      {upgradeStarting && !upgradeError && (
+        <div className="bg-brand-tint border border-brand/30 rounded-xl p-4 text-sm text-ink flex items-center gap-3">
+          <span className="w-4 h-4 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
+          Starting your {upgradeStarting} upgrade — taking you to Stripe...
+        </div>
+      )}
+
+      {upgradeError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+          Could not start upgrade: {upgradeError}
         </div>
       )}
 

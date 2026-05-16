@@ -287,6 +287,36 @@ async function upsertSubscription(
     monthly_rate: amount / 100,
   }
   if (mappedStatus) clientUpdate.billing_status = mappedStatus
+
+  // Sync clients.tier from the agent-tier metadata. The sync script tags
+  // both Product.metadata.tier_id and Price.metadata.tier_id; the checkout
+  // endpoint also sets it on subscription.metadata as a third fallback so
+  // the wire-up survives even if a price is recreated.
+  const tierFromSub = (sub.metadata?.tier_id as string | undefined)?.toLowerCase()
+  let tierFromPrice: string | undefined
+  if (!tierFromSub && price?.id) {
+    const priceMeta = price.metadata?.tier_id as string | undefined
+    if (priceMeta) {
+      tierFromPrice = priceMeta.toLowerCase()
+    } else {
+      // Fall back to product metadata (one network round-trip; rare path).
+      try {
+        const productId = typeof price.product === 'string' ? price.product : price.product?.id
+        if (productId) {
+          const product = await stripe.products.retrieve(productId)
+          const productTier = (product.metadata?.tier_id as string | undefined)?.toLowerCase()
+          if (productTier) tierFromPrice = productTier
+        }
+      } catch {
+        // Non-fatal — we just skip tier sync when product lookup fails.
+      }
+    }
+  }
+  const tier = tierFromSub ?? tierFromPrice
+  if (tier && ['starter', 'basic', 'standard', 'pro'].includes(tier)) {
+    clientUpdate.tier = tier
+  }
+
   await supabase.from('clients').update(clientUpdate).eq('id', clientId)
 }
 
@@ -312,10 +342,12 @@ async function handleSubscriptionDeleted(supabase: AdminClient, sub: Stripe.Subs
   const clientId = await findClientByStripeCustomer(supabase, customerId)
 
   // Also sync clients.billing_status so the legacy card reflects cancellation.
+  // Revert tier to 'starter' (free trial / read-only) so the agent immediately
+  // stops honoring paid-tier limits and tools.
   if (clientId) {
     await supabase
       .from('clients')
-      .update({ billing_status: 'cancelled' })
+      .update({ billing_status: 'cancelled', tier: 'starter' })
       .eq('id', clientId)
   }
 
