@@ -24,6 +24,7 @@ import {
   getOrStartChat, sendMessage, confirmPendingExecution,
   cancelPendingExecution, escalateConversation, uploadPhotoForAgent,
   judgeAssistantTurn, cancelWithReason, getMyUsage,
+  captureUnmetIntent, getEndOfSessionSurvey, submitSessionRating,
   type SerializedTurn, type ChatState, type JudgmentTag, type CancelReasonTag, type UsageMeter,
 } from '@/lib/agent/actions'
 
@@ -84,18 +85,22 @@ export default function AgentChat() {
   }, [searchParams])
 
   // Lazy-load chat state when the panel is first opened. Also fetch
-  // the usage meter so the header chip can render before the first
-  // message lands.
+  // the usage meter + the end-of-session survey candidate so the
+  // header chip + survey banner can render before the first message.
   useEffect(() => {
     if (!open || state) return
     setLoading(true)
     Promise.all([
       getOrStartChat(),
       getMyUsage(),
-    ]).then(([chatRes, usageRes]) => {
+      getEndOfSessionSurvey(),
+    ]).then(([chatRes, usageRes, surveyRes]) => {
       if (chatRes.success) setState(chatRes.data)
       else setError(chatRes.error)
       if (usageRes.success) setUsage(usageRes.data)
+      if (surveyRes.success && surveyRes.data) {
+        setSessionSurvey({ conversationId: surveyRes.data.conversationId, title: surveyRes.data.title })
+      }
       setLoading(false)
     })
   }, [open, state])
@@ -202,6 +207,12 @@ export default function AgentChat() {
 
   async function handleConfirm(executionId: string) {
     if (!state) return
+    /* Sniff: was this an escalation? If yes, after the confirm we
+       prompt the owner with "what did you wish I could do?" so we
+       capture the gap before they close the chat. */
+    const pending = state.pendingExecutions.find(p => p.id === executionId)
+    const wasEscalation = pending?.toolName === 'request_human_help'
+
     setSending(true)
     setError(null)
     const res = await confirmPendingExecution(executionId)
@@ -209,9 +220,34 @@ export default function AgentChat() {
     if (res.success) {
       const fresh = await getOrStartChat()
       if (fresh.success) startTransition(() => setState(fresh.data))
+      if (wasEscalation) {
+        setUnmetIntentPrompt({
+          kind: 'escalation',
+          executionId,
+          conversationId: state.conversationId,
+        })
+      }
     } else {
       setError(res.error)
     }
+  }
+
+  async function handleUnmetIntentSubmit(wishText: string) {
+    if (!unmetIntentPrompt) return
+    await captureUnmetIntent({
+      triggerKind: unmetIntentPrompt.kind,
+      wishText,
+      conversationId: unmetIntentPrompt.conversationId,
+      executionId: unmetIntentPrompt.executionId,
+    })
+    setUnmetIntentPrompt(null)
+  }
+
+  async function handleSessionRating(thumbs: 'up' | 'down', notes?: string) {
+    if (!sessionSurvey) return
+    await submitSessionRating({ conversationId: sessionSurvey.conversationId, thumbs, notes })
+    setSessionSurveyAnswered(true)
+    setTimeout(() => setSessionSurvey(null), 1500)
   }
 
   async function handleCancel(executionId: string, reason: CancelReasonTag, notes?: string) {
@@ -219,10 +255,32 @@ export default function AgentChat() {
     const res = await cancelWithReason({ executionId, reason, notes })
     if (res.success) {
       setState(s => s ? { ...s, pendingExecutions: s.pendingExecutions.filter(p => p.id !== executionId) } : s)
+      /* Cancel reasons that imply the agent picked the wrong action
+         deserve an "what did you wish I'd done?" follow-up. */
+      if (reason === 'not_what_i_asked' || reason === 'other') {
+        setUnmetIntentPrompt({
+          kind: reason === 'not_what_i_asked' ? 'cancel_not_what_i_asked' : 'cancel_other',
+          executionId,
+          conversationId: state.conversationId,
+        })
+      }
     } else {
       setError(res.error)
     }
   }
+
+  /* Unmet-intent capture form state. Shown inline when an action
+     was cancelled with an "agent got it wrong" reason, OR after the
+     agent escalates. Owner can dismiss or fill in. */
+  const [unmetIntentPrompt, setUnmetIntentPrompt] = useState<{
+    kind: 'escalation' | 'cancel_not_what_i_asked' | 'cancel_other'
+    executionId?: string
+    conversationId: string
+  } | null>(null)
+
+  /* End-of-session survey: load once on chat open, dismissable. */
+  const [sessionSurvey, setSessionSurvey] = useState<{ conversationId: string; title: string | null } | null>(null)
+  const [sessionSurveyAnswered, setSessionSurveyAnswered] = useState(false)
 
   /* Per-turn judgment kept in component state so the chip turns into
      "✓ noted" the moment the owner clicks, no roundtrip wait. */
@@ -304,8 +362,20 @@ export default function AgentChat() {
               <Loader2 className="w-5 h-5 text-ink-4 animate-spin" />
             </div>
           )}
-          {!loading && state && state.turns.length === 0 && (
+          {!loading && state && state.turns.length === 0 && !sessionSurvey && (
             <EmptyState />
+          )}
+          {!loading && sessionSurvey && !sessionSurveyAnswered && (
+            <SessionSurveyBanner
+              title={sessionSurvey.title}
+              onAnswer={handleSessionRating}
+              onDismiss={() => setSessionSurvey(null)}
+            />
+          )}
+          {!loading && sessionSurveyAnswered && (
+            <div className="text-[11px] text-emerald-700 text-center py-2 inline-flex items-center gap-1 justify-center w-full">
+              <CheckCircle2 className="w-3 h-3" /> Thanks — that helps us improve!
+            </div>
           )}
           {state?.turns.map(turn => (
             <TurnView
@@ -328,6 +398,13 @@ export default function AgentChat() {
             <div className="flex items-center gap-2 text-[12px] text-ink-3 pl-1">
               <Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking...
             </div>
+          )}
+          {unmetIntentPrompt && (
+            <UnmetIntentForm
+              kind={unmetIntentPrompt.kind}
+              onSubmit={handleUnmetIntentSubmit}
+              onDismiss={() => setUnmetIntentPrompt(null)}
+            />
           )}
           {error && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[12px]">
@@ -580,6 +657,105 @@ function MarkdownLite({ text }: { text: string }) {
   flushParagraph()
 
   return <>{blocks}</>
+}
+
+/* Inline form shown after escalation / "agent got it wrong" cancel.
+ * Captures owner intent gap for product roadmap. ~1 line of friction;
+ * dismissable. Saves to agent_unmet_intents. */
+function UnmetIntentForm({
+  kind, onSubmit, onDismiss,
+}: {
+  kind: 'escalation' | 'cancel_not_what_i_asked' | 'cancel_other'
+  onSubmit: (wishText: string) => void
+  onDismiss: () => void
+}) {
+  const [text, setText] = useState('')
+  const placeholder = kind === 'escalation'
+    ? 'What were you hoping I could do for you? (helps us build the right tools)'
+    : 'What were you actually trying to do? (helps us improve)'
+  return (
+    <div className="rounded-2xl border border-purple-200 bg-purple-50 p-3.5">
+      <div className="text-[12px] font-semibold text-purple-900 mb-2">Quick question</div>
+      <textarea
+        value={text}
+        onChange={e => setText(e.target.value)}
+        placeholder={placeholder}
+        rows={2}
+        autoFocus
+        className="w-full resize-none px-2.5 py-1.5 rounded-lg border border-purple-200 text-[12.5px] focus:outline-none focus:ring-2 focus:ring-purple-300 focus:border-purple-400 bg-white"
+      />
+      <div className="flex items-center justify-end gap-2 mt-2">
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-[11.5px] font-medium text-purple-700 hover:text-purple-900 px-2"
+        >
+          Skip
+        </button>
+        <button
+          type="button"
+          onClick={() => text.trim() && onSubmit(text.trim())}
+          disabled={!text.trim()}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11.5px] font-semibold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+        >
+          Send feedback
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* End-of-session survey: appears at the top of the message list on
+ * chat open when a prior conversation ended within the last 7 days
+ * and the owner hasn't rated it. One tap; dismissable. */
+function SessionSurveyBanner({
+  title, onAnswer, onDismiss,
+}: {
+  title: string | null
+  onAnswer: (thumbs: 'up' | 'down', notes?: string) => void
+  onDismiss: () => void
+}) {
+  return (
+    <div className="rounded-2xl border border-brand-tint bg-brand-tint/30 p-3.5">
+      <div className="flex items-start gap-2">
+        <Sparkles className="w-4 h-4 text-brand flex-shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <div className="text-[12.5px] font-semibold text-ink">
+            Quick check-in on our last chat
+          </div>
+          {title && (
+            <div className="text-[11px] text-ink-3 mt-0.5 truncate italic">&quot;{title}&quot;</div>
+          )}
+          <div className="text-[11.5px] text-ink-3 mt-1">Did that help you?</div>
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              type="button"
+              onClick={() => onAnswer('up')}
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11.5px] font-semibold bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-50"
+            >
+              <ThumbsUp className="w-3 h-3" />
+              Yes, helpful
+            </button>
+            <button
+              type="button"
+              onClick={() => onAnswer('down')}
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11.5px] font-semibold bg-white text-rose-700 border border-rose-200 hover:bg-rose-50"
+            >
+              <ThumbsDown className="w-3 h-3" />
+              Not really
+            </button>
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="text-[11px] text-ink-3 hover:text-ink-2 ml-1"
+            >
+              Skip
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function renderInline(text: string): React.ReactNode {

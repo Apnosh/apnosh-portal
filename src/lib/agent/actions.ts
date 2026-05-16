@@ -438,6 +438,125 @@ export async function getMyUsage(): Promise<
   }
 }
 
+// ─── Unmet-intent capture ─────────────────────────────────────────
+
+/**
+ * The "what did you wish I could do?" moment. Triggered when:
+ *   - The agent escalates to a human (intent didn't map to any tool)
+ *   - The owner cancels a preview with 'not_what_i_asked' or 'other'
+ *
+ * This is product-roadmap gold -- if 5 owners wish for the same
+ * thing, that's the next tool to build. Saved separately from
+ * agent_evaluations because it's about feature gaps, not output
+ * quality.
+ */
+export async function captureUnmetIntent(args: {
+  triggerKind: 'escalation' | 'cancel_not_what_i_asked' | 'cancel_other' | 'manual'
+  wishText: string
+  conversationId?: string
+  turnId?: string
+  executionId?: string
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const ctx = await requireClientContext()
+  if ('error' in ctx) return { success: false, error: ctx.error }
+  if (!args.wishText.trim()) return { success: false, error: 'Wish text is empty' }
+
+  const admin = createAdminClient()
+  const { error } = await admin.from('agent_unmet_intents').insert({
+    client_id: ctx.clientId,
+    conversation_id: args.conversationId ?? null,
+    turn_id: args.turnId ?? null,
+    execution_id: args.executionId ?? null,
+    trigger_kind: args.triggerKind,
+    wish_text: args.wishText.trim(),
+    status: 'new',
+  })
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+
+// ─── End-of-conversation survey ────────────────────────────────────
+
+/**
+ * Show the post-session 👍/👎 prompt? Returns true when:
+ *   - There's a prior conversation that ended (escalated/completed/abandoned)
+ *     within the last 7 days, AND
+ *   - The owner hasn't rated that conversation
+ *
+ * Called by the chat panel on open. If true, the chip renders;
+ * dismissing or rating it both stop it from re-appearing for that
+ * conversation.
+ */
+export async function getEndOfSessionSurvey(): Promise<
+  | { success: true; data: { conversationId: string; title: string | null; endedAt: string } | null }
+  | { success: false; error: string }
+> {
+  const ctx = await requireClientContext()
+  if ('error' in ctx) return { success: false, error: ctx.error }
+  const admin = createAdminClient()
+  const since = new Date()
+  since.setUTCDate(since.getUTCDate() - 7)
+
+  const { data } = await admin
+    .from('agent_conversations')
+    .select('id, title, ended_at, status')
+    .eq('client_id', ctx.clientId)
+    .in('status', ['completed', 'escalated', 'abandoned'])
+    .gte('ended_at', since.toISOString())
+    .not('ended_at', 'is', null)
+    .order('ended_at', { ascending: false })
+    .limit(5)
+
+  const candidates = (data ?? []) as Array<{ id: string; title: string | null; ended_at: string; status: string }>
+  if (candidates.length === 0) return { success: true, data: null }
+
+  /* Check which already have a session-level (turn_id null) owner
+     rating; first unrated one wins. */
+  const { data: rated } = await admin
+    .from('agent_evaluations')
+    .select('conversation_id')
+    .eq('rater_type', 'owner')
+    .is('turn_id', null)
+    .in('conversation_id', candidates.map(c => c.id))
+  const ratedSet = new Set(((rated ?? []) as Array<{ conversation_id: string }>).map(r => r.conversation_id))
+  const target = candidates.find(c => !ratedSet.has(c.id))
+  if (!target) return { success: true, data: null }
+  return {
+    success: true,
+    data: {
+      conversationId: target.id,
+      title: target.title,
+      endedAt: target.ended_at,
+    },
+  }
+}
+
+export async function submitSessionRating(args: {
+  conversationId: string
+  thumbs: 'up' | 'down'
+  notes?: string
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const ctx = await requireClientContext()
+  if ('error' in ctx) return { success: false, error: ctx.error }
+  const admin = createAdminClient()
+  const { data: conv } = await admin
+    .from('agent_conversations').select('client_id').eq('id', args.conversationId).maybeSingle()
+  if (!conv || conv.client_id !== ctx.clientId) {
+    return { success: false, error: 'Conversation not found' }
+  }
+  const { error } = await admin.from('agent_evaluations').upsert({
+    conversation_id: args.conversationId,
+    rater_type: 'owner',
+    rater_id: ctx.userId,
+    thumbs: args.thumbs,
+    notes: args.notes ?? null,
+    overall: args.thumbs === 'up' ? 5 : 2,
+    /* turn_id stays null -- this is the session-level rating. */
+  }, { onConflict: 'conversation_id,rater_type,rater_id' })
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+
 export async function escalateConversation(args: {
   conversationId: string
   reason: string

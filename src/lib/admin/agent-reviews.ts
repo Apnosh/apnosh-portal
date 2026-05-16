@@ -36,6 +36,7 @@ export interface QueueRow {
   conversationId: string
   clientId: string
   clientName: string
+  isBeta: boolean
   startedAt: string
   endedAt: string | null
   status: string
@@ -70,7 +71,7 @@ export async function listAgentReviewQueue(opts: ListQueueOptions = {}): Promise
 
   const [convRes, turnRes, execRes, evalRes] = await Promise.all([
     admin.from('agent_conversations')
-      .select('id, client_id, started_at, ended_at, status, title, summary, clients(name)')
+      .select('id, client_id, started_at, ended_at, status, title, summary, clients(name, is_beta)')
       .gte('started_at', since.toISOString())
       .order('started_at', { ascending: false })
       .limit(500),
@@ -88,7 +89,7 @@ export async function listAgentReviewQueue(opts: ListQueueOptions = {}): Promise
   const conversations = (convRes.data ?? []) as Array<{
     id: string; client_id: string; started_at: string; ended_at: string | null;
     status: string; title: string | null; summary: string | null;
-    clients: { name: string } | Array<{ name: string }> | null;
+    clients: { name: string; is_beta?: boolean | null } | Array<{ name: string; is_beta?: boolean | null }> | null;
   }>
 
   /* Aggregate counts by conversation. */
@@ -119,17 +120,21 @@ export async function listAgentReviewQueue(opts: ListQueueOptions = {}): Promise
   const rows: QueueRow[] = conversations.map(c => {
     const e = execCounts.get(c.id) ?? { total: 0, failed: 0, cancelled: 0 }
     const v = evalCounts.get(c.id) ?? { ownerUp: 0, ownerDown: 0, strategistRated: false }
+    const clientRow = Array.isArray(c.clients) ? c.clients[0] : c.clients
+    const isBeta = !!(clientRow?.is_beta)
     const score = computePriority({
       ownerDown: v.ownerDown,
       failed: e.failed,
       cancelled: e.cancelled,
       ageDays: (Date.now() - new Date(c.started_at).getTime()) / 86_400_000,
       strategistRated: v.strategistRated,
+      isBeta,
     })
     return {
       conversationId: c.id,
       clientId: c.client_id,
-      clientName: Array.isArray(c.clients) ? (c.clients[0]?.name ?? '—') : (c.clients?.name ?? '—'),
+      clientName: clientRow?.name ?? '—',
+      isBeta,
       startedAt: c.started_at,
       endedAt: c.ended_at,
       status: c.status,
@@ -161,12 +166,18 @@ function computePriority(args: {
   cancelled: number
   ageDays: number
   strategistRated: boolean
+  isBeta: boolean
 }): number {
   /* Reviewed convos get a permanent -1000 so they sink. Otherwise
      weight 👎 highest (owner explicitly said it was bad), then tool
-     failures, then cancels, with a freshness decay. */
+     failures, then cancels, with a freshness decay. Beta clients
+     get a +10 boost so we look at theirs first while we're tuning. */
   if (args.strategistRated) return -1000
-  return (args.ownerDown * 5) + (args.failed * 3) + (args.cancelled * 1) + Math.max(0, 14 - args.ageDays)
+  return (args.ownerDown * 5)
+    + (args.failed * 3)
+    + (args.cancelled * 1)
+    + Math.max(0, 14 - args.ageDays)
+    + (args.isBeta ? 10 : 0)
 }
 
 // ─── Detail ───────────────────────────────────────────────────────

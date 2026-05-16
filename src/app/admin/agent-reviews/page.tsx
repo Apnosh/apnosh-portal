@@ -84,12 +84,19 @@ export default async function AgentReviewsPage({
                 return (
                   <tr key={r.conversationId} className="border-t border-ink-6 hover:bg-bg-2/40">
                     <td className="py-2.5 px-4">
-                      <Link
-                        href={`/admin/agent-reviews/${r.conversationId}`}
-                        className="text-ink font-medium hover:text-brand"
-                      >
-                        {r.clientName}
-                      </Link>
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          href={`/admin/agent-reviews/${r.conversationId}`}
+                          className="text-ink font-medium hover:text-brand"
+                        >
+                          {r.clientName}
+                        </Link>
+                        {r.isBeta && (
+                          <span className="text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                            beta
+                          </span>
+                        )}
+                      </div>
                       {r.title && (
                         <div className="text-[11px] text-ink-3 truncate max-w-md">{r.title}</div>
                       )}
