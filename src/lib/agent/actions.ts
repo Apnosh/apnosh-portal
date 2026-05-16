@@ -19,6 +19,7 @@ import '@/lib/agent/tools/update-hours'
 import '@/lib/agent/tools/post-to-gbp'
 import '@/lib/agent/tools/request-human-help'
 import '@/lib/agent/tools/tag-photo'
+import '@/lib/agent/tools/search-business-data'
 import { runAgentTurn, type AgentTurnResult } from './runtime'
 import {
   getOrStartActiveConversation, loadConversationTurns,
