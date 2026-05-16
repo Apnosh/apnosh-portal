@@ -11,7 +11,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BarChart3, LineChart, Globe, Inbox, Mail, Plug } from 'lucide-react'
+import { BarChart3, LineChart, Globe, Inbox, Mail, Plug, Activity } from 'lucide-react'
 
 interface Tab {
   label: string
@@ -23,6 +23,7 @@ interface Tab {
 const TABS: Tab[] = [
   { label: 'Overview',       href: '/dashboard/website',          icon: BarChart3, exact: true },
   { label: 'Full analytics', href: '/dashboard/website/traffic',  icon: LineChart },
+  { label: 'Heatmaps',       href: '/dashboard/website/heatmaps', icon: Activity },
   { label: 'Your site',      href: '/dashboard/website/manage',   icon: Globe },
   { label: 'Forms',          href: '/dashboard/website/forms',    icon: Mail },
   { label: 'Requests',       href: '/dashboard/website/requests', icon: Inbox },
