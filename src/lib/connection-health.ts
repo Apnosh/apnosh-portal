@@ -120,10 +120,23 @@ async function probeOne(
       const fresh = await refreshGoogleToken(conn.refresh_token)
       accessToken = fresh.access_token
       const newExpiry = new Date(Date.now() + fresh.expires_in * 1000).toISOString()
-      await admin
-        .from('channel_connections')
-        .update({ access_token: fresh.access_token, token_expires_at: newExpiry })
-        .eq('id', conn.id)
+      /* Google sometimes rotates the refresh_token on refresh. If we
+         don't store the new one, the OLD one keeps being valid for a
+         while but eventually gets revoked — and then we're locked out
+         with no recovery. Persist the rotated value when present.
+         (The same fix is needed in 5 other refreshGoogleToken callers:
+         reviews reply route, gbp-menu, gbp-backfill, gbp-listing, and
+         the GA4/GSC edge functions. Tracked as a follow-up.) */
+      const update: Record<string, unknown> = {
+        access_token: fresh.access_token,
+        token_expires_at: newExpiry,
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rotatedRefresh = (fresh as any).refresh_token as string | undefined
+      if (rotatedRefresh && rotatedRefresh !== conn.refresh_token) {
+        update.refresh_token = rotatedRefresh
+      }
+      await admin.from('channel_connections').update(update).eq('id', conn.id)
     } catch (err) {
       const msg = (err as Error).message
       return { newState: 'error', errorMessage: `token_refresh_failed: ${msg}. Reconnect required.` }
