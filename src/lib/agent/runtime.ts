@@ -199,6 +199,7 @@ export async function runAgentTurn(args: {
         clientId: args.clientId,
         tool,
         input: use.input,
+        toolUseId: use.id,
       })
 
       if (tool.requiresConfirmation || tool.destructive) {
@@ -227,7 +228,7 @@ export async function runAgentTurn(args: {
       }
 
       // Non-destructive tool: execute now and feed result back.
-      const result = await runHandlerInline(tool, exec.id, args.clientId, args.conversationId, assistantTurn.id, use.input)
+      const result = await runHandlerInline(tool, exec.id, args.clientId, args.conversationId, assistantTurn.id, use.input, use.id)
       toolResultsForNextTurn.push({
         type: 'tool_result',
         tool_use_id: use.id,
@@ -267,6 +268,7 @@ async function runHandlerInline(
   conversationId: string,
   turnId: string,
   input: unknown,
+  toolUseId: string,
 ): Promise<unknown> {
   const admin = createAdminClient()
   const handler = getToolHandler(snakeToCamel(tool.handler))
@@ -295,7 +297,9 @@ async function runHandlerInline(
       event_payload: { client_id: clientId, tool: tool.name, version: tool.version, input, output },
     }).eq('id', executionId)
     if (conversationId) {
-      await appendToolResultTurn(conversationId, { toolCallId: executionId, result: output })
+      /* Use Claude's tool_use_id so the persisted tool_result block
+         matches its tool_use parent on the next message rebuild. */
+      await appendToolResultTurn(conversationId, { toolCallId: toolUseId, result: output })
     }
     return output
   } catch (err) {

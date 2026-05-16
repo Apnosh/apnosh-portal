@@ -351,23 +351,114 @@ function TurnView({ turn }: { turn: SerializedTurn }) {
   if (turn.role === 'assistant' && turn.text) {
     return (
       <div className="flex justify-start">
-        <div className="max-w-[85%] bg-bg-2 text-ink px-3.5 py-2 rounded-2xl rounded-tl-sm text-[13px] whitespace-pre-wrap">
-          {turn.text}
+        <div className="max-w-[85%] bg-bg-2 text-ink px-3.5 py-2 rounded-2xl rounded-tl-sm text-[13px]">
+          <MarkdownLite text={turn.text} />
         </div>
       </div>
     )
   }
   if (turn.role === 'tool') {
+    /* Tool turns are the persisted result of a tool call. Read-only
+       tools (e.g. search_business_data) shouldn't say "Change
+       applied" -- they didn't change anything. We don't know the
+       tool name from the persisted turn alone; if the content
+       looks like a structured object it's almost certainly a read
+       result, otherwise we treat it as a destructive completion.
+       Either way, keep it minimal -- the agent's next text turn
+       explains what happened. */
     return (
       <div className="flex justify-start ml-2">
-        <div className="text-[11px] text-emerald-700 inline-flex items-center gap-1">
-          <CheckCircle2 className="w-3 h-3" />
-          Change applied
+        <div className="text-[11px] text-ink-3 inline-flex items-center gap-1">
+          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+          Done
         </div>
       </div>
     )
   }
   return null
+}
+
+/* Tiny markdown renderer for chat bubbles. Handles the common cases
+ * Claude uses: headers (##), bold (**), numbered lists, line breaks.
+ * Deliberately not pulling in a full markdown lib to keep the bundle
+ * small and the styling tight. */
+function MarkdownLite({ text }: { text: string }) {
+  // Normalize line endings + collapse 3+ blank lines.
+  const lines = text.replace(/\r\n/g, '\n').split('\n')
+  const blocks: React.ReactNode[] = []
+  let listItems: string[] = []
+  let listType: 'ol' | 'ul' | null = null
+
+  function flushList() {
+    if (listItems.length === 0) return
+    const items = listItems.map((it, i) => <li key={i}>{renderInline(it)}</li>)
+    if (listType === 'ol') {
+      blocks.push(<ol key={blocks.length} className="list-decimal pl-5 my-1.5 space-y-0.5">{items}</ol>)
+    } else {
+      blocks.push(<ul key={blocks.length} className="list-disc pl-5 my-1.5 space-y-0.5">{items}</ul>)
+    }
+    listItems = []
+    listType = null
+  }
+
+  let paragraph: string[] = []
+  function flushParagraph() {
+    if (paragraph.length === 0) return
+    blocks.push(
+      <p key={blocks.length} className="my-1.5 first:mt-0 last:mb-0">
+        {renderInline(paragraph.join(' '))}
+      </p>
+    )
+    paragraph = []
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) {
+      flushList()
+      flushParagraph()
+      continue
+    }
+    const h2 = line.match(/^##\s+(.+)$/)
+    if (h2) {
+      flushList(); flushParagraph()
+      blocks.push(<h4 key={blocks.length} className="font-semibold text-ink mt-3 first:mt-0 mb-1">{renderInline(h2[1])}</h4>)
+      continue
+    }
+    const ol = line.match(/^\d+\.\s+(.+)$/)
+    if (ol) {
+      flushParagraph()
+      if (listType !== 'ol') flushList()
+      listType = 'ol'
+      listItems.push(ol[1])
+      continue
+    }
+    const ul = line.match(/^[-*]\s+(.+)$/)
+    if (ul) {
+      flushParagraph()
+      if (listType !== 'ul') flushList()
+      listType = 'ul'
+      listItems.push(ul[1])
+      continue
+    }
+    flushList()
+    paragraph.push(line)
+  }
+  flushList()
+  flushParagraph()
+
+  return <>{blocks}</>
+}
+
+function renderInline(text: string): React.ReactNode {
+  // Handle **bold** (split on the markers, alternate strong/text).
+  const parts = text.split(/(\*\*[^*]+\*\*)/)
+  return parts.map((p, i) => {
+    if (p.startsWith('**') && p.endsWith('**')) {
+      return <strong key={i} className="font-semibold">{p.slice(2, -2)}</strong>
+    }
+    return <span key={i}>{p}</span>
+  })
 }
 
 function PendingExecCard({

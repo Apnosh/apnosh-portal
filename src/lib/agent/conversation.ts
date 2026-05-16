@@ -188,6 +188,10 @@ export async function createPendingExecution(args: {
   clientId: string
   tool: AgentToolDefinition
   input: unknown
+  /* Claude's tool_use_id from the tool_use block. Stored so the
+     follow-up tool_result block can reference it (Anthropic requires
+     id match between tool_use and tool_result). */
+  toolUseId: string
 }): Promise<{ id: string }> {
   const admin = createAdminClient()
   const { data, error } = await admin
@@ -202,6 +206,7 @@ export async function createPendingExecution(args: {
       audit_event_type: args.tool.auditEventType,
       event_payload: {},  // finalized at execute time
       status: args.tool.requiresConfirmation ? 'pending_confirmation' : 'confirmed',
+      tool_use_id: args.toolUseId,
     })
     .select('id')
     .single()
@@ -265,8 +270,12 @@ export async function confirmAndExecute(args: {
     }).eq('id', args.executionId)
 
     if (row.conversation_id) {
+      /* Use Claude's tool_use_id (not our execution UUID) so the
+         tool_result block matches the original tool_use block when
+         we feed messages back to Claude on the next turn. */
+      const toolUseId = (row.tool_use_id as string | null) ?? args.executionId
       await appendToolResultTurn(row.conversation_id as string, {
-        toolCallId: args.executionId,
+        toolCallId: toolUseId,
         result: output,
       })
     }
