@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/client'
 import { CartProvider } from '@/lib/cart-context'
 import { ToastProvider } from '@/components/ui/toast'
 import { RealtimeProvider } from '@/lib/realtime'
+import AgentChat from '@/components/dashboard/agent-chat'
 import { ClientProvider, useClient } from '@/lib/client-context'
 import SentryUserContext from '@/components/sentry-user-context'
 import { LocationProvider, useLocationContext } from '@/lib/dashboard/location-context'
@@ -244,6 +245,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <SentryUserContext />
               <LocationLoader>
                 <DashboardShell>{children}</DashboardShell>
+                {/* Floating "Ask Apnosh" chat panel. Always
+                    available on every dashboard page; opens as a
+                    side panel on click. */}
+                <AgentChat />
               </LocationLoader>
             </ClientProvider>
           </Suspense>
