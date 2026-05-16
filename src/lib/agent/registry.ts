@@ -19,6 +19,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { AgentToolDefinition, ToolExecutionContext } from './types'
+import { resolveTier } from './tiers'
 
 // ─── Handler registry ─────────────────────────────────────────────
 
@@ -67,12 +68,17 @@ export async function loadEnabledToolsForClient(
   }>
   const overrides = new Map((overridesRes.data ?? []).map(o => [o.tool_name as string, o.enabled as boolean]))
 
+  /* Resolve the client's tier to its allowed tool list. Per-client
+     overrides in client_tool_overrides win over tier defaults so a
+     strategist can give a specific Basic-tier client access to
+     post_to_gbp (or revoke a tool for a specific client) without
+     promoting them to a new tier. */
+  const tier = resolveTier(clientTier)
   return tools
     .filter(t => {
       const override = overrides.get(t.name)
       if (override !== undefined) return override
-      // No override: check tier default.
-      return t.default_for_tiers.includes(clientTier)
+      return tier.enabledTools.includes(t.name)
     })
     .map(t => ({
       name: t.name,

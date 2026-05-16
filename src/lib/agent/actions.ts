@@ -29,6 +29,7 @@ import {
   confirmAndExecute, cancelExecution,
 } from './conversation'
 import type { ConversationTurn } from './types'
+import { checkAndEnforceLimits, getUsageSnapshot } from './limits'
 
 async function requireClientContext(): Promise<{ userId: string; clientId: string } | { error: string }> {
   const userSupabase = await createServerClient()
@@ -96,7 +97,7 @@ export async function sendMessage(args: {
   text: string
 }): Promise<
   | { success: true; result: AgentTurnResult; turns: SerializedTurn[] }
-  | { success: false; error: string }
+  | { success: false; error: string; capReached?: boolean; capKind?: string }
 > {
   const ctx = await requireClientContext()
   if ('error' in ctx) return { success: false, error: ctx.error }
@@ -111,6 +112,17 @@ export async function sendMessage(args: {
     .maybeSingle()
   if (!conv || conv.client_id !== ctx.clientId) {
     return { success: false, error: 'Conversation not found' }
+  }
+
+  /* Hard cap enforcement happens BEFORE we burn any tokens. */
+  const limit = await checkAndEnforceLimits(ctx.clientId)
+  if (!limit.allowed) {
+    return {
+      success: false,
+      error: limit.blockedReason ?? 'Usage cap reached',
+      capReached: true,
+      capKind: limit.blockedKind,
+    }
   }
 
   try {
@@ -397,6 +409,33 @@ export async function cancelWithReason(args: {
   }
 
   return { success: true }
+}
+
+// ─── Usage snapshot for the chat UI meter ──────────────────────────
+
+export interface UsageMeter {
+  tierLabel: string
+  primaryLimitLabel: string | null
+  /** 0..1 ratio of remaining capacity; null when no cap applies. */
+  ratio: number | null
+}
+
+export async function getMyUsage(): Promise<
+  { success: true; data: UsageMeter } | { success: false; error: string }
+> {
+  const ctx = await requireClientContext()
+  if ('error' in ctx) return { success: false, error: ctx.error }
+  const snapshot = await getUsageSnapshot(ctx.clientId)
+  return {
+    success: true,
+    data: {
+      tierLabel: snapshot.tier.label,
+      primaryLimitLabel: snapshot.primaryLimitLabel,
+      ratio: snapshot.primaryLimitTotal != null && snapshot.primaryLimitRemaining != null
+        ? snapshot.primaryLimitRemaining / snapshot.primaryLimitTotal
+        : null,
+    },
+  }
 }
 
 export async function escalateConversation(args: {

@@ -23,8 +23,8 @@ import {
 import {
   getOrStartChat, sendMessage, confirmPendingExecution,
   cancelPendingExecution, escalateConversation, uploadPhotoForAgent,
-  judgeAssistantTurn, cancelWithReason,
-  type SerializedTurn, type ChatState, type JudgmentTag, type CancelReasonTag,
+  judgeAssistantTurn, cancelWithReason, getMyUsage,
+  type SerializedTurn, type ChatState, type JudgmentTag, type CancelReasonTag, type UsageMeter,
 } from '@/lib/agent/actions'
 
 const POSITIVE_TAGS: { tag: JudgmentTag; label: string }[] = [
@@ -57,6 +57,8 @@ export default function AgentChat() {
   const [error, setError] = useState<string | null>(null)
   const [pendingPhoto, setPendingPhoto] = useState<{ assetId: string; fileUrl: string; fileName: string } | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [usage, setUsage] = useState<UsageMeter | null>(null)
+  const [capReached, setCapReached] = useState<{ message: string; kind: string } | null>(null)
   const [, startTransition] = useTransition()
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -81,16 +83,28 @@ export default function AgentChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
-  // Lazy-load chat state when the panel is first opened.
+  // Lazy-load chat state when the panel is first opened. Also fetch
+  // the usage meter so the header chip can render before the first
+  // message lands.
   useEffect(() => {
     if (!open || state) return
     setLoading(true)
-    getOrStartChat().then(r => {
-      if (r.success) setState(r.data)
-      else setError(r.error)
+    Promise.all([
+      getOrStartChat(),
+      getMyUsage(),
+    ]).then(([chatRes, usageRes]) => {
+      if (chatRes.success) setState(chatRes.data)
+      else setError(chatRes.error)
+      if (usageRes.success) setUsage(usageRes.data)
       setLoading(false)
     })
   }, [open, state])
+
+  /* Refresh the meter after every send so the count stays current. */
+  useEffect(() => {
+    if (!open || !state) return
+    getMyUsage().then(r => { if (r.success) setUsage(r.data) })
+  }, [open, state?.turns.length])
 
   // Auto-scroll to bottom on new turns.
   useEffect(() => {
@@ -134,6 +148,12 @@ export default function AgentChat() {
     if (res.success) {
       const fresh = await getOrStartChat()
       if (fresh.success) setState(fresh.data)
+    } else if (res.capReached) {
+      /* Cap-reached path: keep the user's message in place (so they
+         can resend after upgrading) but show the cap notice + CTA. */
+      setCapReached({ message: res.error, kind: res.capKind ?? 'cap' })
+      setInput(text)
+      setState(s => s ? { ...s, turns: s.turns.filter(t => t.id !== optimistic.id) } : s)
     } else {
       setError(res.error)
       setState(s => s ? { ...s, turns: s.turns.filter(t => t.id !== optimistic.id) } : s)
@@ -252,17 +272,27 @@ export default function AgentChat() {
         className={`fixed top-0 right-0 h-full w-full sm:w-[440px] bg-white shadow-2xl z-50 flex flex-col transition-transform duration-200 ${open ? 'translate-x-0' : 'translate-x-full'}`}
       >
         {/* Header */}
-        <div className="h-14 px-5 flex items-center justify-between border-b border-ink-6 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-brand/15 flex items-center justify-center">
+        <div className="px-5 py-2.5 flex items-center justify-between border-b border-ink-6 flex-shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-full bg-brand/15 flex items-center justify-center flex-shrink-0">
               <Sparkles className="w-3.5 h-3.5 text-brand" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="text-sm font-semibold text-ink">Apnosh AI</div>
-              <div className="text-[10px] text-ink-4">Always shows a preview before changing anything</div>
+              <div className="text-[10px] text-ink-4 truncate">
+                {usage?.tierLabel && (
+                  <>
+                    {usage.tierLabel} plan
+                    {usage.primaryLimitLabel && (
+                      <span className="text-ink-3"> · {usage.primaryLimitLabel}</span>
+                    )}
+                  </>
+                )}
+                {!usage?.tierLabel && 'Always shows a preview before changing anything'}
+              </div>
             </div>
           </div>
-          <button onClick={() => setOpen(false)} className="text-ink-4 hover:text-ink p-1">
+          <button onClick={() => setOpen(false)} className="text-ink-4 hover:text-ink p-1 flex-shrink-0 ml-2">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -306,6 +336,38 @@ export default function AgentChat() {
             </div>
           )}
         </div>
+
+        {/* Cap-reached banner. Shown above the composer when the
+            cap-check refused a turn. Includes upgrade CTA to settings
+            (where the upgrade flow lives). Dismissable so the owner
+            can keep reading prior turns. */}
+        {capReached && (
+          <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 flex-shrink-0">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="text-[12.5px] font-semibold text-amber-900">You&apos;ve hit your plan limit</div>
+                <div className="text-[11.5px] text-amber-800 mt-0.5">{capReached.message}</div>
+                <div className="mt-2 flex items-center gap-2">
+                  <a
+                    href="/dashboard/upgrade"
+                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11.5px] font-semibold text-white bg-brand hover:bg-brand-dark"
+                  >
+                    Upgrade plan
+                    <ArrowRight className="w-3 h-3" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setCapReached(null)}
+                    className="text-[11.5px] text-amber-800 hover:text-amber-900"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Composer */}
         <div className="border-t border-ink-6 p-3 flex-shrink-0">

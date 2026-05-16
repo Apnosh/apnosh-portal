@@ -30,6 +30,7 @@ import {
 } from './conversation'
 import { loadClientContext } from './context-loader'
 import { getToolHandler, toAnthropicTools } from './registry'
+import { computeCostCents } from './tiers'
 
 const anthropic = new Anthropic()
 
@@ -266,11 +267,53 @@ export async function runAgentTurn(args: {
     if (anyDestructivePending) break
   }
 
+  /* Update conversation-level totals so the cost dashboard + the
+     monthly cap check have something to read. We compute cost from
+     this turn's token usage at the configured model rate. */
+  const turnCostCents = computeCostCents(prompt.model, totalIn, totalOut)
+  await incrementConversationTotals(args.conversationId, {
+    inputTokens: totalIn,
+    outputTokens: totalOut,
+    costCents: turnCostCents,
+  })
+
   return {
     text: lastAssistantText,
     pendingExecutions,
     escalated,
     usage: { inputTokens: totalIn, outputTokens: totalOut, iterations },
+  }
+}
+
+/* Atomic-ish increment via RPC to avoid lost updates when a client
+   sends two messages in fast succession. */
+async function incrementConversationTotals(
+  conversationId: string,
+  delta: { inputTokens: number; outputTokens: number; costCents: number },
+): Promise<void> {
+  const admin = createAdminClient()
+  /* Postgres-side increment via raw SQL through the admin client. */
+  const { error } = await admin.rpc('increment_agent_conversation_totals', {
+    p_conversation_id: conversationId,
+    p_input_tokens: delta.inputTokens,
+    p_output_tokens: delta.outputTokens,
+    p_cost_cents: delta.costCents,
+  })
+  if (error) {
+    /* RPC may not exist on first deploy; fall back to a non-atomic
+       read-modify-write so we don't lose the data entirely. */
+    const { data: cur } = await admin
+      .from('agent_conversations')
+      .select('total_input_tokens, total_output_tokens, total_cost_usd')
+      .eq('id', conversationId)
+      .maybeSingle()
+    if (cur) {
+      await admin.from('agent_conversations').update({
+        total_input_tokens: (cur.total_input_tokens ?? 0) + delta.inputTokens,
+        total_output_tokens: (cur.total_output_tokens ?? 0) + delta.outputTokens,
+        total_cost_usd: Number(((cur.total_cost_usd ?? 0) + delta.costCents / 100).toFixed(6)),
+      }).eq('id', conversationId)
+    }
   }
 }
 

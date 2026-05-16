@@ -59,6 +59,41 @@ async function handler(
   const input = rawInput as UpdatePageCopyInput
   const admin = createAdminClient()
 
+  /* Schema-level safety (Constraint Layer 1).
+     If this client's site doesn't publish apnosh-content.json, an
+     update_page_copy write would persist in client_content_fields
+     but silently no-op on the live site (the build can't read what
+     it doesn't know about). Bail clearly instead so the agent can
+     explain why + escalate to a human to add the schema. */
+  const { data: schemaSettings } = await admin
+    .from('site_settings')
+    .select('external_site_url, site_type')
+    .eq('client_id', ctx.clientId)
+    .maybeSingle()
+  const siteUrl = (schemaSettings?.external_site_url as string | null) ?? null
+  if (!siteUrl) {
+    throw new Error('No website URL on file for this client. Ask your strategist to connect the site before editing copy.')
+  }
+  try {
+    const schemaUrl = new URL('/apnosh-content.json', siteUrl).toString()
+    const res = await fetch(schemaUrl, { signal: AbortSignal.timeout(8000) })
+    if (!res.ok) {
+      throw new Error(`This site doesn't publish an editable copy schema (no /apnosh-content.json). Page copy can't be edited automatically. Have your strategist add the schema first, or escalate this change to a human technician.`)
+    }
+    const json = await res.json() as { fields?: Array<{ key: string }> }
+    const fieldExists = (json.fields ?? []).some(f => f.key === input.field_key)
+    if (!fieldExists) {
+      const available = (json.fields ?? []).map(f => f.key).slice(0, 10).join(', ')
+      throw new Error(`Field "${input.field_key}" isn't declared editable in this site's apnosh-content.json. Available fields: ${available || '(none)'}. Pick from those or escalate to a human if you need a new field added.`)
+    }
+  } catch (err) {
+    /* AbortError / network error / etc. -- surface clearly. */
+    if (err instanceof Error && err.message.startsWith('This site') || err instanceof Error && err.message.startsWith('Field "')) {
+      throw err
+    }
+    throw new Error(`Couldn't verify the site's content schema (${(err as Error).message}). Aborting to avoid a silent no-op.`)
+  }
+
   // Snapshot the previous override (if any) so we can render
   // before/after + support undo.
   const { data: existing } = await admin
@@ -83,12 +118,12 @@ async function handler(
 
   // Fire the deploy hook so the site rebuilds with the new override.
   let deployTriggered = false
-  const { data: settings } = await admin
+  const { data: deployRow } = await admin
     .from('site_settings')
     .select('external_deploy_hook_url')
     .eq('client_id', ctx.clientId)
     .maybeSingle()
-  const hookUrl = settings?.external_deploy_hook_url as string | null
+  const hookUrl = (deployRow as { external_deploy_hook_url?: string | null } | null)?.external_deploy_hook_url ?? null
   if (hookUrl) {
     try {
       await fetch(hookUrl, { method: 'POST' })
