@@ -11,8 +11,13 @@
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-// Import tools to register handlers. NEW tools must be added here.
+// Import tools to register handlers. NEW tools must be added here so
+// their registerToolHandler() side-effect fires before any agent turn.
 import '@/lib/agent/tools/update-menu-item'
+import '@/lib/agent/tools/update-page-copy'
+import '@/lib/agent/tools/update-hours'
+import '@/lib/agent/tools/post-to-gbp'
+import '@/lib/agent/tools/request-human-help'
 import { runAgentTurn, type AgentTurnResult } from './runtime'
 import {
   getOrStartActiveConversation, loadConversationTurns,
