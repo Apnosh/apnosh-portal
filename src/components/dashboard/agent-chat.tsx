@@ -425,7 +425,8 @@ export default function AgentChat() {
               <div className="flex-1">
                 <div className="text-[12.5px] font-semibold text-amber-900">You&apos;ve hit your plan limit</div>
                 <div className="text-[11.5px] text-amber-800 mt-0.5">{capReached.message}</div>
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  {/* Primary: upgrade. Most owners convert after the 1-2nd cap hit. */}
                   <a
                     href="/dashboard/upgrade"
                     className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11.5px] font-semibold text-white bg-brand hover:bg-brand-dark"
@@ -433,10 +434,20 @@ export default function AgentChat() {
                     Upgrade plan
                     <ArrowRight className="w-3 h-3" />
                   </a>
+                  {/* Secondary: one-time top-up. Routes to messages for now —
+                      replace with /api/billing/buy-messages once overage
+                      billing + usage credits are wired. */}
+                  <a
+                    href={`/dashboard/messages?topic=${encodeURIComponent('One-time message top-up')}`}
+                    className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11.5px] font-semibold text-ink-2 bg-white border border-amber-300 hover:bg-amber-100"
+                    title="Get extra messages without upgrading your plan"
+                  >
+                    Buy a one-time top-up
+                  </a>
                   <button
                     type="button"
                     onClick={() => setCapReached(null)}
-                    className="text-[11.5px] text-amber-800 hover:text-amber-900"
+                    className="text-[11.5px] text-amber-800 hover:text-amber-900 ml-1"
                   >
                     Dismiss
                   </button>

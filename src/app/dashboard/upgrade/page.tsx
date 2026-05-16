@@ -1,17 +1,15 @@
 import Link from 'next/link'
-import { Check, Sparkles, ArrowRight } from 'lucide-react'
+import { Check, Sparkles, ArrowRight, Shield } from 'lucide-react'
 import { TIERS, type TierId } from '@/lib/agent/tiers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
  * Plan comparison page. Owners land here from the chat cap-reached
- * banner or from billing. Shows the four tiers, marks the current
- * one, and links the upgrade CTA to billing.
- *
- * The actual Stripe checkout flow lives in /dashboard/billing.
- * Stripe product/price IDs need to be created in your Stripe
- * dashboard + populated in service_catalog before checkout works.
+ * banner or from billing. Shows the three paid tiers (we hide
+ * "Inactive", which is the cancelled-sub fallback state), marks the
+ * current one, and links the upgrade CTA to /dashboard/billing which
+ * intercepts ?upgrade=<id> and starts Stripe Checkout.
  */
 export default async function UpgradePage() {
   const supabase = await createClient()
@@ -28,7 +26,8 @@ export default async function UpgradePage() {
     if (tierRaw && tierRaw.toLowerCase() in TIERS) currentTier = tierRaw.toLowerCase() as TierId
   }
 
-  const order: TierId[] = ['starter', 'basic', 'standard', 'pro']
+  /* Hide 'starter' — it's the cancelled-subscription fallback, not a buyable tier. */
+  const order: TierId[] = ['basic', 'standard', 'pro']
 
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-6 pt-8 pb-20">
@@ -41,12 +40,13 @@ export default async function UpgradePage() {
           Pick your plan
         </h1>
         <p className="text-ink-3 text-sm mt-1 max-w-2xl mx-auto">
-          The AI handles the routine work; humans handle the judgment calls. Upgrade or downgrade
-          anytime; changes take effect at the next billing cycle.
+          Per location, billed monthly. Cancel anytime — no contracts.
+          <br />
+          <span className="text-ink-4 text-[12px]">14-day money-back guarantee on first month.</span>
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {order.map(id => {
           const tier = TIERS[id]
           const isCurrent = id === currentTier
@@ -76,30 +76,28 @@ export default async function UpgradePage() {
               </div>
               <div className="mt-3 mb-1">
                 <span className="text-[28px] font-bold text-ink tabular-nums">
-                  {tier.priceCents === 0 ? 'Free' : `$${tier.priceCents / 100}`}
+                  ${tier.priceCents / 100}
                 </span>
-                {tier.priceCents > 0 && <span className="text-sm text-ink-3"> / mo</span>}
+                <span className="text-sm text-ink-3"> / location / mo</span>
               </div>
               <p className="text-[12px] text-ink-3 mb-4">{tier.pitch}</p>
               <ul className="space-y-1.5 mb-5 flex-1">
-                {tier.enabledTools.length === 3 && (
-                  <FeatureLine text="Read-only tools" />
-                )}
-                {tier.enabledTools.length > 3 && (
-                  <FeatureLine text="All AI tools (menu, copy, hours, posts, photos, reviews)" />
-                )}
-                <FeatureLine text={tier.dailyMessageLimit != null
-                  ? `${tier.monthlyMessageLimit?.toLocaleString() ?? '?'} AI messages / month`
+                <FeatureLine text={tier.monthlyMessageLimit != null
+                  ? `${tier.monthlyMessageLimit.toLocaleString()} AI messages / month`
                   : 'Unlimited AI messages'} />
-                <FeatureLine text={tier.locationsLimit != null
-                  ? `${tier.locationsLimit} location${tier.locationsLimit === 1 ? '' : 's'}`
-                  : 'Unlimited locations'} />
-                <FeatureLine text={tier.humanHoursPerMonth > 0
-                  ? `${tier.humanHoursPerMonth} hr${tier.humanHoursPerMonth === 1 ? '' : 's'} of human help / mo`
-                  : 'Escalation only (no included hours)'} />
-                {tier.isFreeTrial && (
-                  <FeatureLine text={`Free for ${tier.trialDays} days`} />
+                {id === 'basic' && (
+                  <FeatureLine text="Tactical tools: menu, hours, copy, review replies" />
                 )}
+                {(id === 'standard' || id === 'pro') && (
+                  <FeatureLine text="All tools: + Google posts, content ideas, ads, photos" />
+                )}
+                {id === 'pro' && (
+                  <FeatureLine text="Multi-location dashboard + priority queue" />
+                )}
+                <FeatureLine text={tier.locationsLimit != null
+                  ? `${tier.locationsLimit} location${tier.locationsLimit === 1 ? '' : 's'} (add more, discounted)`
+                  : 'Unlimited locations'} />
+                <FeatureLine text="Strategist sessions à la carte (optional)" />
               </ul>
               {isCurrent ? (
                 <button
@@ -127,10 +125,23 @@ export default async function UpgradePage() {
         })}
       </div>
 
-      <div className="mt-10 text-center text-[12px] text-ink-3 max-w-2xl mx-auto">
-        Need a custom plan? Multi-region chains, franchisors, or 5+ locations should talk to a
-        strategist directly.{' '}
-        <Link href="/dashboard/messages" className="text-brand hover:underline">Message us →</Link>
+      <div className="mt-8 max-w-3xl mx-auto bg-bg-2 rounded-2xl p-5 text-[12.5px] text-ink-2 space-y-2">
+        <div className="flex items-start gap-2">
+          <Shield className="w-4 h-4 text-brand flex-shrink-0 mt-0.5" />
+          <div>
+            <strong className="text-ink">14-day money-back guarantee.</strong> Try any plan
+            risk-free. Cancel within 14 days for a full refund — no questions asked.
+          </div>
+        </div>
+        <div className="text-ink-3 pt-1 border-t border-ink-6">
+          <strong className="text-ink-2">Multi-location pricing:</strong> 2nd location 20% off ·
+          3rd-5th 30% off · 6+ locations 40% off.
+        </div>
+        <div className="text-ink-3">
+          <strong className="text-ink-2">Need design, strategy, or one-off help?</strong>{' '}
+          <Link href="/dashboard/messages" className="text-brand hover:underline">Book a strategist session →</Link>
+          {' '}(sold separately, hourly).
+        </div>
       </div>
     </div>
   )

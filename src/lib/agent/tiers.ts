@@ -56,70 +56,115 @@ const ALL_TOOLS = [
   'generate_post_ideas',
 ]
 
+/* Essential tier: the routine "small stuff" an owner does themselves -
+   menu edits, hour changes, copy tweaks, drafted review replies.
+   Excludes content generation + GBP posting + photo work + ad creation,
+   which are the things that move the needle and justify Growth. */
+const TACTICAL_TOOLS = [
+  'search_business_data',
+  'weekly_recap',
+  'request_human_help',
+  'update_hours',
+  'update_menu_item',
+  'update_page_copy',
+  'draft_review_response',
+]
+
 const READ_ONLY_TOOLS = [
   'search_business_data',
   'weekly_recap',
   'request_human_help',
 ]
 
+/*
+ * Tier IDs (starter/basic/standard/pro) are internal slugs that
+ * existing client rows + Stripe metadata reference; we keep them
+ * stable and only change the user-facing label + pricing.
+ *
+ *  starter  -> "Inactive" — fallback when subscription is cancelled.
+ *              Owners see a paywall; only read-only tools work.
+ *  basic    -> "Essential" — $39/loc/mo
+ *  standard -> "Growth" ⭐ — $79/loc/mo (default recommendation)
+ *  pro      -> "Scale" — $149/loc/mo
+ *
+ * Strategist hours are NO LONGER bundled in any tier. They're sold
+ * separately à la carte via /dashboard/services. Keeps platform
+ * margins predictable and lets services scale with team capacity.
+ */
 export const TIERS: Record<TierId, TierSpec> = {
   starter: {
     id: 'starter',
-    label: 'Starter',
+    label: 'Inactive',
     priceCents: 0,
-    isFreeTrial: true,
-    trialDays: 30,
-    dailyMessageLimit: 10,
-    monthlyMessageLimit: 50,
-    monthlyCostCapCents: 1000,           // $10/mo hard ceiling
+    isFreeTrial: false,
+    trialDays: 0,
+    dailyMessageLimit: 5,
+    monthlyMessageLimit: 10,
+    monthlyCostCapCents: 200,
     humanHoursPerMonth: 0,
     locationsLimit: 1,
-    enabledTools: READ_ONLY_TOOLS,        // intentional: read-only during trial
-    pitch: 'See what Apnosh AI can do for you. Read-only access for 30 days.',
+    enabledTools: READ_ONLY_TOOLS,
+    pitch: 'Subscribe to start using Apnosh AI.',
   },
   basic: {
     id: 'basic',
-    label: 'Basic',
-    priceCents: 19900,
+    label: 'Essential',
+    priceCents: 3900,                     // $39/loc/mo
     isFreeTrial: false,
     trialDays: 0,
-    dailyMessageLimit: 30,
-    monthlyMessageLimit: 200,
-    monthlyCostCapCents: 3000,            // $30/mo hard ceiling
-    humanHoursPerMonth: 1,
+    dailyMessageLimit: 15,
+    monthlyMessageLimit: 150,
+    monthlyCostCapCents: 1500,            // $15/mo hard ceiling
+    humanHoursPerMonth: 0,
     locationsLimit: 1,
-    enabledTools: ALL_TOOLS,
-    pitch: 'Single-location, owner-driven. Everything wired up.',
+    enabledTools: TACTICAL_TOOLS,
+    pitch: 'Owner-driven AI for menus, hours, copy, and review responses.',
   },
   standard: {
     id: 'standard',
-    label: 'Standard',
-    priceCents: 49900,
+    label: 'Growth',
+    priceCents: 7900,                     // $79/loc/mo
     isFreeTrial: false,
     trialDays: 0,
-    dailyMessageLimit: 100,
-    monthlyMessageLimit: 1000,
-    monthlyCostCapCents: 15000,           // $150/mo hard ceiling
-    humanHoursPerMonth: 4,
-    locationsLimit: 3,
+    dailyMessageLimit: 50,
+    monthlyMessageLimit: 500,
+    monthlyCostCapCents: 5000,            // $50/mo hard ceiling
+    humanHoursPerMonth: 0,
+    locationsLimit: 1,
     enabledTools: ALL_TOOLS,
-    pitch: 'Up to 3 locations. More strategist hours. Where most clients land.',
+    pitch: 'Full AI: Google posts, content ideas, ads, and photos. Where most owners land.',
   },
   pro: {
     id: 'pro',
-    label: 'Pro',
-    priceCents: 99900,
+    label: 'Scale',
+    priceCents: 14900,                    // $149/loc/mo
     isFreeTrial: false,
     trialDays: 0,
     dailyMessageLimit: null,
     monthlyMessageLimit: null,
-    monthlyCostCapCents: 50000,           // $500/mo soft ceiling (alerts admin)
-    humanHoursPerMonth: 12,
+    monthlyCostCapCents: 20000,           // $200/mo soft ceiling (alerts admin)
+    humanHoursPerMonth: 0,
     locationsLimit: null,
     enabledTools: ALL_TOOLS,
-    pitch: 'Unlimited messages. Unlimited locations. Priority strategist queue.',
+    pitch: 'Unlimited messages and locations. Multi-location dashboard. Priority queue.',
   },
 }
+
+/* Per-message overage rate when an owner exceeds their monthly cap
+   AND chooses pay-as-you-go instead of upgrading. */
+export const OVERAGE_PRICE_PER_MESSAGE_CENTS = 9   // $0.09/msg
+export const OVERAGE_BUNDLE_SIZE = 100             // sold in packs of 100
+export const OVERAGE_BUNDLE_PRICE_CENTS = 900      // $9 for 100 extra messages
+
+/* Multi-location discount: applied as % off the per-location price for
+   each additional location beyond the first. Computed in the checkout
+   endpoint via Stripe graduated/tiered pricing. */
+export const MULTI_LOCATION_DISCOUNTS = [
+  { fromLocation: 1, percentOff: 0 },    // first location: full price
+  { fromLocation: 2, percentOff: 20 },   // 2nd: 20% off
+  { fromLocation: 3, percentOff: 30 },   // 3rd-5th: 30% off
+  { fromLocation: 6, percentOff: 40 },   // 6+: 40% off
+]
 
 export const DEFAULT_TIER: TierId = 'basic'
 
