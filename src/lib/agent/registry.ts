@@ -1,0 +1,139 @@
+/**
+ * Tool registry.
+ *
+ * Tools are declared in code (for type safety + executable handlers)
+ * but their *availability* is controlled by the agent_tools table.
+ * The table holds metadata (description, schema, version, kill switch)
+ * that we can edit without redeploying. The handler function is
+ * resolved at runtime via the `handler` field.
+ *
+ * Why two sources of truth? Because we want non-engineers (strategists)
+ * to be able to:
+ *   - retire a tool (set retired_at)
+ *   - bump a version (insert new row)
+ *   - tweak a description (update text)
+ *   - disable for one specific client (client_tool_overrides)
+ *
+ * ...without touching code or shipping a deploy.
+ */
+
+import { createAdminClient } from '@/lib/supabase/admin'
+import type { AgentToolDefinition, ToolExecutionContext } from './types'
+
+// ─── Handler registry ─────────────────────────────────────────────
+
+type ToolHandler = (input: unknown, ctx: ToolExecutionContext) => Promise<unknown>
+
+const handlers = new Map<string, ToolHandler>()
+
+/**
+ * Register a tool handler. Called at module-load time by each tool file.
+ * The `handler` string in agent_tools must match a registered name here.
+ */
+export function registerToolHandler(name: string, fn: ToolHandler): void {
+  if (handlers.has(name)) {
+    throw new Error(`Tool handler "${name}" registered twice`)
+  }
+  handlers.set(name, fn)
+}
+
+export function getToolHandler(name: string): ToolHandler | null {
+  return handlers.get(name) ?? null
+}
+
+// ─── DB-backed tool catalog ───────────────────────────────────────
+
+/** Return all tools currently available to the given client. */
+export async function loadEnabledToolsForClient(
+  clientId: string,
+  clientTier: string,
+): Promise<AgentToolDefinition[]> {
+  const admin = createAdminClient()
+  const [toolsRes, overridesRes] = await Promise.all([
+    admin.from('agent_tools')
+      .select('*')
+      .is('retired_at', null)
+      .eq('enabled_globally', true),
+    admin.from('client_tool_overrides')
+      .select('tool_name, enabled')
+      .eq('client_id', clientId),
+  ])
+
+  const tools = (toolsRes.data ?? []) as Array<{
+    name: string; version: number; description: string; json_schema: Record<string, unknown>;
+    handler: string; requires_confirmation: boolean; destructive: boolean;
+    audit_event_type: string; default_for_tiers: string[]; enabled_globally: boolean;
+    retired_at: string | null; notes: string | null;
+  }>
+  const overrides = new Map((overridesRes.data ?? []).map(o => [o.tool_name as string, o.enabled as boolean]))
+
+  return tools
+    .filter(t => {
+      const override = overrides.get(t.name)
+      if (override !== undefined) return override
+      // No override: check tier default.
+      return t.default_for_tiers.includes(clientTier)
+    })
+    .map(t => ({
+      name: t.name,
+      version: t.version,
+      description: t.description,
+      jsonSchema: t.json_schema,
+      handler: t.handler,
+      requiresConfirmation: t.requires_confirmation,
+      destructive: t.destructive,
+      auditEventType: t.audit_event_type,
+      defaultForTiers: t.default_for_tiers,
+      enabledGlobally: t.enabled_globally,
+      retiredAt: t.retired_at,
+      notes: t.notes,
+      execute: getToolHandler(t.handler) ?? undefined,
+    }))
+}
+
+/** Get one tool definition by name (the currently active version). */
+export async function getActiveTool(name: string): Promise<AgentToolDefinition | null> {
+  const admin = createAdminClient()
+  const { data } = await admin.from('agent_tools')
+    .select('*')
+    .eq('name', name)
+    .is('retired_at', null)
+    .maybeSingle()
+  if (!data) return null
+  const t = data as {
+    name: string; version: number; description: string; json_schema: Record<string, unknown>;
+    handler: string; requires_confirmation: boolean; destructive: boolean;
+    audit_event_type: string; default_for_tiers: string[]; enabled_globally: boolean;
+    retired_at: string | null; notes: string | null;
+  }
+  return {
+    name: t.name,
+    version: t.version,
+    description: t.description,
+    jsonSchema: t.json_schema,
+    handler: t.handler,
+    requiresConfirmation: t.requires_confirmation,
+    destructive: t.destructive,
+    auditEventType: t.audit_event_type,
+    defaultForTiers: t.default_for_tiers,
+    enabledGlobally: t.enabled_globally,
+    retiredAt: t.retired_at,
+    notes: t.notes,
+    execute: getToolHandler(t.handler) ?? undefined,
+  }
+}
+
+// ─── Anthropic tool-calling format ────────────────────────────────
+
+/**
+ * Reshape a list of tool definitions into the format Anthropic's
+ * tool-use API expects. The agent passes these to claude.messages.create
+ * via the `tools` parameter.
+ */
+export function toAnthropicTools(tools: AgentToolDefinition[]) {
+  return tools.map(t => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.jsonSchema,
+  }))
+}
