@@ -64,6 +64,28 @@ export async function runSyntheticEvals(args: {
 }): Promise<SuiteResult | { error: string }> {
   const ctx = await requireAdmin()
   if ('error' in ctx) return { error: ctx.error }
+  return runSyntheticEvalsCore({
+    testClientId: args.testClientId,
+    suiteName: args.suiteName,
+    cases: args.cases,
+    actingUserId: ctx.userId,
+  })
+}
+
+/**
+ * Same as runSyntheticEvals but takes the admin user id as a parameter
+ * instead of resolving via session. Used by CLI tools (smoke-test, CI)
+ * that have a service-role key but no user session.
+ *
+ * Do NOT call this from a request handler — it bypasses the auth check.
+ */
+export async function runSyntheticEvalsCore(args: {
+  testClientId: string
+  suiteName?: string
+  cases?: EvalCase[]
+  actingUserId: string
+}): Promise<SuiteResult | { error: string }> {
+  const ctx = { userId: args.actingUserId }
   const admin = createAdminClient()
   const cases = args.cases ?? CANONICAL_SUITE
   const startedAt = new Date()

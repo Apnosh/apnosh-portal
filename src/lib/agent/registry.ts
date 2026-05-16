@@ -85,16 +85,19 @@ export async function loadEnabledToolsForClient(
      post_to_gbp (or revoke a tool for a specific client) without
      promoting them to a new tier.
 
-     Website-gated tools (update_page_copy, update_menu_item) are an
-     additional check: they require has_apnosh_website=true regardless
-     of tier OR override, because the tool handler depends on the
-     Apnosh-managed schema/repo to exist. */
+     Website-gated tools (update_page_copy, update_menu_item) are special
+     — they belong to the SEPARATE "Apnosh Website" product, not to any
+     AI tier. So:
+       - has_apnosh_website=false → always excluded (the schema doesn't exist)
+       - has_apnosh_website=true → always included (any AI tier can edit
+         the site once the Website product is purchased)
+     Per-client overrides still apply as the ultimate trump. */
   const tier = resolveTier(clientTier)
   return tools
     .filter(t => {
-      if (WEBSITE_GATED_TOOLS.has(t.name) && !hasApnoshWebsite) return false
       const override = overrides.get(t.name)
       if (override !== undefined) return override
+      if (WEBSITE_GATED_TOOLS.has(t.name)) return hasApnoshWebsite
       return tier.enabledTools.includes(t.name)
     })
     .map(t => ({
