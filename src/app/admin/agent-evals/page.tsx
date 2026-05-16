@@ -7,7 +7,8 @@
  */
 
 import { requireAdminUser } from '@/lib/auth/require-admin'
-import { listRecentEvalRuns, CANONICAL_SUITE } from '@/lib/admin/synthetic-evals'
+import { listRecentEvalRuns } from '@/lib/admin/synthetic-evals'
+import { CANONICAL_SUITE } from '@/lib/admin/synthetic-evals-data'
 import EvalRunner from './eval-runner'
 
 export default async function AgentEvalsPage() {

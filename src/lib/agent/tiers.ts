@@ -85,6 +85,14 @@ const AI_ASSISTANT_TOOLS = [
   'generate_post_ideas',
 ]
 
+/* ALL_TOOLS = AI_ASSISTANT_TOOLS + WEBSITE_ONLY_TOOLS. Reserved for the
+   admin tool override path (per-client overrides can grant any tool by
+   name regardless of tier); also a single source of truth for new tools
+   we might add. Currently unused at runtime — tier tool lists explicitly
+   reference AI_ASSISTANT_TOOLS so the website-gated tools stay opt-in.
+   The registry layer (registry.ts) enforces WEBSITE_GATED_TOOLS based on
+   clients.has_apnosh_website, not on tier inclusion. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const ALL_TOOLS = [...AI_ASSISTANT_TOOLS, ...WEBSITE_ONLY_TOOLS]
 
 const READ_ONLY_TOOLS = [
