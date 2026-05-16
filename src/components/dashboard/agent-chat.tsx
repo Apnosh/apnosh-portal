@@ -17,13 +17,35 @@
 
 import { useEffect, useState, useRef, useTransition } from 'react'
 import {
-  Sparkles, X, Send, ArrowRight, Loader2, CheckCircle2, AlertCircle, UserRound, Paperclip, ImageIcon,
+  Sparkles, X, Send, ArrowRight, Loader2, CheckCircle2, AlertCircle, UserRound, Paperclip, ImageIcon, ThumbsUp, ThumbsDown,
 } from 'lucide-react'
 import {
   getOrStartChat, sendMessage, confirmPendingExecution,
   cancelPendingExecution, escalateConversation, uploadPhotoForAgent,
-  type SerializedTurn, type ChatState,
+  judgeAssistantTurn, cancelWithReason,
+  type SerializedTurn, type ChatState, type JudgmentTag, type CancelReasonTag,
 } from '@/lib/agent/actions'
+
+const POSITIVE_TAGS: { tag: JudgmentTag; label: string }[] = [
+  { tag: 'helpful', label: 'Helpful' },
+  { tag: 'on_brand', label: 'On brand' },
+  { tag: 'specific', label: 'Specific to us' },
+]
+const NEGATIVE_TAGS: { tag: JudgmentTag; label: string }[] = [
+  { tag: 'wrong_info', label: 'Wrong info' },
+  { tag: 'off_brand', label: 'Off brand' },
+  { tag: 'too_generic', label: 'Too generic' },
+  { tag: 'unhelpful', label: "Didn't help" },
+  { tag: 'too_long', label: 'Too long' },
+  { tag: 'other', label: 'Other' },
+]
+const CANCEL_REASONS: { tag: CancelReasonTag; label: string }[] = [
+  { tag: 'wrong_values', label: 'Wrong values' },
+  { tag: 'not_what_i_asked', label: "Not what I asked" },
+  { tag: 'changed_my_mind', label: 'Changed my mind' },
+  { tag: 'will_do_myself', label: "I'll do it myself" },
+  { tag: 'other', label: 'Other' },
+]
 
 export default function AgentChat() {
   const [open, setOpen] = useState(false)
@@ -151,13 +173,26 @@ export default function AgentChat() {
     }
   }
 
-  async function handleCancel(executionId: string) {
+  async function handleCancel(executionId: string, reason: CancelReasonTag, notes?: string) {
     if (!state) return
-    const res = await cancelPendingExecution(executionId)
+    const res = await cancelWithReason({ executionId, reason, notes })
     if (res.success) {
       setState(s => s ? { ...s, pendingExecutions: s.pendingExecutions.filter(p => p.id !== executionId) } : s)
     } else {
       setError(res.error)
+    }
+  }
+
+  /* Per-turn judgment kept in component state so the chip turns into
+     "✓ noted" the moment the owner clicks, no roundtrip wait. */
+  const [judged, setJudged] = useState<Record<string, 'up' | 'down'>>({})
+  async function handleJudge(turnId: string, thumbs: 'up' | 'down', tags: JudgmentTag[]) {
+    setJudged(j => ({ ...j, [turnId]: thumbs }))
+    const res = await judgeAssistantTurn({ turnId, thumbs, tags })
+    if (!res.success) {
+      setError(res.error)
+      // Roll back the chip if the write failed.
+      setJudged(j => { const next = { ...j }; delete next[turnId]; return next })
     }
   }
 
@@ -221,13 +256,20 @@ export default function AgentChat() {
           {!loading && state && state.turns.length === 0 && (
             <EmptyState />
           )}
-          {state?.turns.map(turn => <TurnView key={turn.id} turn={turn} />)}
+          {state?.turns.map(turn => (
+            <TurnView
+              key={turn.id}
+              turn={turn}
+              judged={judged[turn.id] ?? null}
+              onJudge={handleJudge}
+            />
+          ))}
           {state?.pendingExecutions.map(p => (
             <PendingExecCard
               key={p.id}
               execution={p}
               onConfirm={() => handleConfirm(p.id)}
-              onCancel={() => handleCancel(p.id)}
+              onCancel={(reason, notes) => handleCancel(p.id, reason, notes)}
               disabled={sending}
             />
           ))}
@@ -335,7 +377,13 @@ export default function AgentChat() {
 
 // ─── Sub-components ───────────────────────────────────────────────
 
-function TurnView({ turn }: { turn: SerializedTurn }) {
+function TurnView({
+  turn, judged, onJudge,
+}: {
+  turn: SerializedTurn
+  judged: 'up' | 'down' | null
+  onJudge: (turnId: string, thumbs: 'up' | 'down', tags: JudgmentTag[]) => void
+}) {
   // Only render user + assistant text turns visually. Tool calls are
   // represented by the PendingExecCard or by a "made the change" line
   // when already executed.
@@ -350,10 +398,11 @@ function TurnView({ turn }: { turn: SerializedTurn }) {
   }
   if (turn.role === 'assistant' && turn.text) {
     return (
-      <div className="flex justify-start">
+      <div className="flex flex-col items-start">
         <div className="max-w-[85%] bg-bg-2 text-ink px-3.5 py-2 rounded-2xl rounded-tl-sm text-[13px]">
           <MarkdownLite text={turn.text} />
         </div>
+        <JudgmentBar turnId={turn.id} judged={judged} onJudge={onJudge} />
       </div>
     )
   }
@@ -466,10 +515,12 @@ function PendingExecCard({
 }: {
   execution: { id: string; toolName: string; toolDescription: string; destructive: boolean; input: unknown }
   onConfirm: () => void
-  onCancel: () => void
+  onCancel: (reason: CancelReasonTag, notes?: string) => void
   disabled: boolean
 }) {
   const friendlyName = execution.toolName.replace(/_/g, ' ')
+  const [showCancelReasons, setShowCancelReasons] = useState(false)
+
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3.5">
       <div className="flex items-start gap-2 mb-2">
@@ -482,25 +533,121 @@ function PendingExecCard({
       <pre className="bg-white/70 rounded-lg p-2.5 text-[11px] font-mono text-ink-2 overflow-x-auto max-h-40 whitespace-pre-wrap">
 {JSON.stringify(execution.input, null, 2)}
       </pre>
-      <div className="flex items-center gap-2 mt-2.5">
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={disabled}
-          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[12px] font-semibold text-white bg-brand hover:bg-brand-dark disabled:opacity-50"
-        >
-          Confirm
-          <ArrowRight className="w-3 h-3" />
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={disabled}
-          className="text-[12px] font-medium text-ink-3 hover:text-ink-2 px-2 py-1.5 disabled:opacity-50"
-        >
-          Cancel
-        </button>
+      {!showCancelReasons ? (
+        <div className="flex items-center gap-2 mt-2.5">
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={disabled}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[12px] font-semibold text-white bg-brand hover:bg-brand-dark disabled:opacity-50"
+          >
+            Confirm
+            <ArrowRight className="w-3 h-3" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCancelReasons(true)}
+            disabled={disabled}
+            className="text-[12px] font-medium text-ink-3 hover:text-ink-2 px-2 py-1.5 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        /* Force a reason chip on cancel -- that's the AI-First
+           Principle #3 ("human judgment is gold") in action. Owners
+           cancel = training signal. Don't lose it. */
+        <div className="mt-3 pt-3 border-t border-amber-200">
+          <div className="text-[11px] font-medium text-amber-900 mb-2">Why not? (helps us improve)</div>
+          <div className="flex flex-wrap gap-1.5">
+            {CANCEL_REASONS.map(r => (
+              <button
+                key={r.tag}
+                type="button"
+                onClick={() => onCancel(r.tag)}
+                disabled={disabled}
+                className="text-[11px] font-medium px-2 py-1 rounded-full bg-white text-amber-900 hover:bg-amber-100 border border-amber-300 disabled:opacity-50"
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCancelReasons(false)}
+            className="mt-2 text-[10px] text-amber-700 hover:text-amber-900"
+          >
+            ← Back
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* 1-tap judgment chip under each assistant message. Two states:
+ * - Idle: shows 👍 and 👎 only
+ * - After 👎: shows tag chips so the owner can say what was wrong
+ * - After judging: shows "Thanks!" in muted text
+ * Tags are saved to agent_evaluations with rater_type='owner'. */
+function JudgmentBar({
+  turnId, judged, onJudge,
+}: {
+  turnId: string
+  judged: 'up' | 'down' | null
+  onJudge: (turnId: string, thumbs: 'up' | 'down', tags: JudgmentTag[]) => void
+}) {
+  const [showNegativeTags, setShowNegativeTags] = useState(false)
+  if (judged) {
+    return (
+      <div className="mt-1 ml-1 text-[10px] text-ink-4 inline-flex items-center gap-1">
+        {judged === 'up' ? <ThumbsUp className="w-2.5 h-2.5" /> : <ThumbsDown className="w-2.5 h-2.5" />}
+        Thanks — that helps us improve
       </div>
+    )
+  }
+  if (showNegativeTags) {
+    return (
+      <div className="mt-1.5 ml-1">
+        <div className="text-[10px] text-ink-4 mb-1">What went wrong?</div>
+        <div className="flex flex-wrap gap-1">
+          {NEGATIVE_TAGS.map(t => (
+            <button
+              key={t.tag}
+              type="button"
+              onClick={() => onJudge(turnId, 'down', [t.tag])}
+              className="text-[10.5px] font-medium px-1.5 py-0.5 rounded-full bg-bg-2 text-ink-3 hover:bg-rose-50 hover:text-rose-700 border border-ink-6"
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="mt-1 ml-1 flex items-center gap-1.5 opacity-50 hover:opacity-100 transition-opacity">
+      <button
+        type="button"
+        onClick={() => {
+          /* For 👍 we don't ask for a tag -- the act of approving is
+             the signal. Add 'helpful' as a default + 'on_brand' /
+             'specific' shortcuts if you want them broken out later. */
+          onJudge(turnId, 'up', ['helpful'])
+        }}
+        className="w-5 h-5 rounded-full inline-flex items-center justify-center text-ink-4 hover:bg-emerald-50 hover:text-emerald-700"
+        aria-label="Helpful"
+      >
+        <ThumbsUp className="w-3 h-3" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setShowNegativeTags(true)}
+        className="w-5 h-5 rounded-full inline-flex items-center justify-center text-ink-4 hover:bg-rose-50 hover:text-rose-700"
+        aria-label="Not helpful"
+      >
+        <ThumbsDown className="w-3 h-3" />
+      </button>
     </div>
   )
 }

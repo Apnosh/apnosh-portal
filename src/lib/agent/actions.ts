@@ -276,6 +276,126 @@ export async function cancelPendingExecution(executionId: string): Promise<
   return { success: true }
 }
 
+// ─── Judgment capture (AI-First Principle #3) ────────────────────
+
+/**
+ * One of the 8 AI-First Principles: every approve/revise/reject of an
+ * AI output records a reason. We surface these as 1-tap chips on each
+ * assistant turn. The tag set is short on purpose -- forced choice
+ * gives us clean training data; a free-text "other" lets owners say
+ * what doesn't fit.
+ */
+export type JudgmentTag =
+  | 'helpful'              // 👍 catch-all positive
+  | 'on_brand'             // captures voice well
+  | 'specific'             // referenced our actual data
+  | 'wrong_info'           // factual error or hallucination
+  | 'off_brand'            // tone is off
+  | 'too_generic'          // generic advice not specific to us
+  | 'unhelpful'            // didn't address what I asked
+  | 'too_long'
+  | 'too_short'
+  | 'other'
+
+export async function judgeAssistantTurn(args: {
+  turnId: string
+  thumbs: 'up' | 'down'
+  tags: JudgmentTag[]
+  notes?: string
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const ctx = await requireClientContext()
+  if ('error' in ctx) return { success: false, error: ctx.error }
+
+  const admin = createAdminClient()
+  /* Verify the turn belongs to this client (defense in depth -- the
+     turn -> conversation -> client_id join). */
+  const { data: turn } = await admin
+    .from('agent_conversation_turns')
+    .select('conversation_id, role')
+    .eq('id', args.turnId)
+    .maybeSingle()
+  if (!turn) return { success: false, error: 'Turn not found' }
+  if (turn.role !== 'assistant') return { success: false, error: 'Can only judge assistant turns' }
+
+  const { data: conv } = await admin
+    .from('agent_conversations')
+    .select('client_id')
+    .eq('id', turn.conversation_id)
+    .maybeSingle()
+  if (!conv || conv.client_id !== ctx.clientId) {
+    return { success: false, error: 'Conversation not found' }
+  }
+
+  /* One rating per (turn, owner). Owners can change their mind. */
+  const { error } = await admin.from('agent_evaluations').upsert({
+    conversation_id: turn.conversation_id,
+    turn_id: args.turnId,
+    rater_type: 'owner',
+    rater_id: ctx.userId,
+    thumbs: args.thumbs,
+    tags: args.tags,
+    notes: args.notes ?? null,
+    /* Map our user-friendly tags to the 1-5 scales for aggregate
+       reporting. Owners aren't going to fill in 4 numeric scores;
+       we derive them from tags so we still get the structured data
+       the AI-First Principles expect. */
+    overall: args.thumbs === 'up' ? 5 : 2,
+    output_on_brand: args.tags.includes('off_brand') ? 2 : args.tags.includes('on_brand') ? 5 : null,
+    understood_intent: args.tags.includes('unhelpful') ? 2 : args.tags.includes('specific') ? 5 : null,
+  }, { onConflict: 'turn_id,rater_id' })
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+
+/** Forced reason tag when an owner cancels a pending tool execution. */
+export type CancelReasonTag =
+  | 'wrong_values'         // numbers/text wrong
+  | 'not_what_i_asked'     // wrong action entirely
+  | 'changed_my_mind'
+  | 'will_do_myself'
+  | 'other'
+
+export async function cancelWithReason(args: {
+  executionId: string
+  reason: CancelReasonTag
+  notes?: string
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const ctx = await requireClientContext()
+  if ('error' in ctx) return { success: false, error: ctx.error }
+  const admin = createAdminClient()
+  const { data: exec } = await admin
+    .from('agent_tool_executions')
+    .select('client_id, conversation_id')
+    .eq('id', args.executionId)
+    .maybeSingle()
+  if (!exec || exec.client_id !== ctx.clientId) {
+    return { success: false, error: 'Execution not found' }
+  }
+  /* Mark the execution cancelled + persist the reason on its
+     event_payload so the strategist review queue + future training
+     can read it. */
+  await admin.from('agent_tool_executions').update({
+    status: 'cancelled',
+    failed_reason: `Cancelled by owner: ${args.reason}${args.notes ? ` -- ${args.notes}` : ''}`,
+  }).eq('id', args.executionId).in('status', ['pending_confirmation', 'confirmed'])
+
+  /* Also record on agent_evaluations against the conversation so the
+     cross-conversation view captures the pattern. */
+  if (exec.conversation_id) {
+    await admin.from('agent_evaluations').insert({
+      conversation_id: exec.conversation_id,
+      rater_type: 'owner',
+      rater_id: ctx.userId,
+      thumbs: 'down',
+      tags: [args.reason],
+      notes: args.notes ?? null,
+      overall: 2,
+    })
+  }
+
+  return { success: true }
+}
+
 export async function escalateConversation(args: {
   conversationId: string
   reason: string
