@@ -60,6 +60,10 @@
     {
       "path": "/api/cron/agent-proactive",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/agent-patterns",
+      "schedule": "0 7 * * *"
     }
   ]
 }

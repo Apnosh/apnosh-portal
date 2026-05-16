@@ -19,6 +19,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { renderFactsForPrompt } from './facts'
+import { relevantPatternsFor } from './cross-client-patterns'
 
 export interface ClientContextSnapshot {
   /** Full markdown-formatted block to splice into the system prompt. */
@@ -29,7 +30,7 @@ export interface ClientContextSnapshot {
 
 export async function loadClientContext(clientId: string): Promise<ClientContextSnapshot> {
   const admin = createAdminClient()
-  const [factsText, menu, reviews, recentUpdates, openRequests, channels, locations, contentFields, specials, perfSummary] = await Promise.all([
+  const [factsText, menu, reviews, recentUpdates, openRequests, channels, locations, contentFields, specials, perfSummary, patterns] = await Promise.all([
     renderFactsForPrompt(clientId, 0.5),
     loadMenuSummary(clientId),
     loadRecentReviews(clientId),
@@ -40,9 +41,10 @@ export async function loadClientContext(clientId: string): Promise<ClientContext
     loadContentFields(clientId),
     loadActiveSpecials(clientId),
     loadPerformanceSummary(clientId),
+    loadCrossClientPatterns(clientId),
   ]).catch(err => {
     console.error('[context-loader] partial failure:', (err as Error).message)
-    return ['', '', '', '', '', '', '', '', '', '']
+    return ['', '', '', '', '', '', '', '', '', '', '']
   })
   void admin  // each loader uses its own client
 
@@ -59,9 +61,28 @@ export async function loadClientContext(clientId: string): Promise<ClientContext
   if (recentUpdates) sections.push('\n## Recent activity (last 14 days)', recentUpdates)
   if (openRequests) sections.push('\n## Open requests in the queue', openRequests)
   if (perfSummary) sections.push('\n## Last 7-day performance snapshot', perfSummary)
+  if (patterns) sections.push('\n## What worked for similar restaurants', patterns)
 
   const text = sections.join('\n')
   return { text, approxTokens: Math.ceil(text.length / 4) }
+}
+
+async function loadCrossClientPatterns(clientId: string): Promise<string> {
+  /* Look up the client's vertical so we pull only relevant patterns. */
+  const admin = createAdminClient()
+  const { data: client } = await admin
+    .from('clients')
+    .select('industry')
+    .eq('id', clientId)
+    .maybeSingle()
+  const industry = (client?.industry as string | null) ?? null
+  const patterns = await relevantPatternsFor({ industry, limit: 5 }).catch(() => [])
+  if (patterns.length === 0) return ''
+  return patterns.map(p => {
+    const dir = p.avgPctChange != null && p.avgPctChange > 0 ? '+' : ''
+    const sample = `n=${p.sampleSize}, ${p.strongSignalCount} strong`
+    return `  - When clients use **${p.toolName}**, ${p.metricName} typically changes ${dir}${p.avgPctChange?.toFixed(1) ?? '?'}% (${sample})`
+  }).join('\n')
 }
 
 // ─── Loaders ──────────────────────────────────────────────────────
