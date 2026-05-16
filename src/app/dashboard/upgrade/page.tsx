@@ -1,22 +1,26 @@
 import Link from 'next/link'
-import { Check, Sparkles, ArrowRight, Shield } from 'lucide-react'
+import { Check, Sparkles, ArrowRight, Shield, Globe, Search, MessageCircle } from 'lucide-react'
 import { TIERS, type TierId } from '@/lib/agent/tiers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
- * Plan comparison page. Owners land here from the chat cap-reached
- * banner or from billing. Shows the three paid tiers (we hide
- * "Inactive", which is the cancelled-sub fallback state), marks the
- * current one, and links the upgrade CTA to /dashboard/billing which
- * intercepts ?upgrade=<id> and starts Stripe Checkout.
+ * Product picker (not a tier ladder). Two distinct products:
+ *   1. AI Assistant ($29) — works with your existing website. Manages
+ *      everything off-site: GBP, social, reviews, photos, insights.
+ *   2. Website + AI ($99) — your website lives on Apnosh; AI can
+ *      directly edit menu/hours/copy/photos.
+ *
+ * Setup fees are one-time and quoted separately. Strategist help is
+ * billed hourly outside any subscription. Owners can switch between
+ * the two products (cancel one, subscribe to the other) at any time.
  */
 export default async function UpgradePage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  /* Resolve the current tier so we can highlight it. */
-  let currentTier: TierId = 'basic'
+  /* Resolve the current tier so we can mark the active product. */
+  let currentTier: TierId = 'starter'
   if (user) {
     const admin = createAdminClient()
     const { data: cu } = await admin
@@ -26,110 +30,64 @@ export default async function UpgradePage() {
     if (tierRaw && tierRaw.toLowerCase() in TIERS) currentTier = tierRaw.toLowerCase() as TierId
   }
 
-  /* Hide 'starter' — it's the cancelled-subscription fallback, not a buyable tier. */
-  const order: TierId[] = ['basic', 'standard', 'pro']
-
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-6 pt-8 pb-20">
       <div className="text-center mb-8">
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
-          Apnosh AI
+          Apnosh
         </p>
         <h1 className="text-[28px] font-semibold text-ink mt-1 flex items-center justify-center gap-2">
           <Sparkles className="w-6 h-6 text-brand" />
-          Pick your plan
+          Pick your product
         </h1>
         <p className="text-ink-3 text-sm mt-1 max-w-2xl mx-auto">
           Per location, billed monthly. Cancel anytime — no contracts.
           <br />
-          <span className="text-ink-4 text-[12px]">14-day money-back guarantee on first month.</span>
+          <span className="text-ink-4 text-[12px]">14-day money-back guarantee on your first month.</span>
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {order.map(id => {
-          const tier = TIERS[id]
-          const isCurrent = id === currentTier
-          const recommended = id === 'standard'
-          return (
-            <div
-              key={id}
-              className={[
-                'rounded-2xl border p-5 flex flex-col',
-                isCurrent ? 'border-brand bg-brand-tint/30'
-                : recommended ? 'border-ink-4 bg-white shadow-md'
-                : 'border-ink-6 bg-white',
-              ].join(' ')}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="text-[15px] font-bold text-ink">{tier.label}</h2>
-                {recommended && !isCurrent && (
-                  <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-ink text-white">
-                    Most pick this
-                  </span>
-                )}
-                {isCurrent && (
-                  <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-brand text-white">
-                    Current
-                  </span>
-                )}
-              </div>
-              <div className="mt-3 mb-1">
-                <span className="text-[28px] font-bold text-ink tabular-nums">
-                  ${tier.priceCents / 100}
-                </span>
-                <span className="text-sm text-ink-3"> / location / mo</span>
-              </div>
-              <p className="text-[12px] text-ink-3 mb-4">{tier.pitch}</p>
-              <ul className="space-y-1.5 mb-5 flex-1">
-                <FeatureLine text={tier.monthlyMessageLimit != null
-                  ? `${tier.monthlyMessageLimit.toLocaleString()} AI messages / month`
-                  : 'Unlimited AI messages'} />
-                {id === 'basic' && (
-                  <FeatureLine text="Tactical tools: menu, hours, copy, review replies" />
-                )}
-                {(id === 'standard' || id === 'pro') && (
-                  <FeatureLine text="All tools: + Google posts, content ideas, ads, photos" />
-                )}
-                {id === 'pro' && (
-                  <FeatureLine text="Multi-location dashboard + priority queue" />
-                )}
-                <FeatureLine text={tier.locationsLimit != null
-                  ? `${tier.locationsLimit} location${tier.locationsLimit === 1 ? '' : 's'} (add more, discounted)`
-                  : 'Unlimited locations'} />
-                <FeatureLine text="Strategist sessions à la carte (optional)" />
-              </ul>
-              {isCurrent ? (
-                <button
-                  disabled
-                  className="w-full px-4 py-2 rounded-full text-sm font-semibold text-ink-3 bg-ink-7 cursor-not-allowed"
-                >
-                  Current plan
-                </button>
-              ) : (
-                <Link
-                  href={`/dashboard/billing?upgrade=${id}`}
-                  className={[
-                    'w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold',
-                    recommended || tier.priceCents > TIERS[currentTier].priceCents
-                      ? 'text-white bg-brand hover:bg-brand-dark'
-                      : 'text-ink-2 bg-ink-7 hover:bg-ink-6',
-                  ].join(' ')}
-                >
-                  {tier.priceCents > TIERS[currentTier].priceCents ? 'Upgrade' : 'Switch to this'}
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              )}
-            </div>
-          )
-        })}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-4xl mx-auto">
+        <ProductCard
+          id="basic"
+          icon={<Search className="w-5 h-5 text-brand" />}
+          headline="Keep your website. We handle everything else."
+          bullets={[
+            'Manages your Google Business Profile (posts, hours, photos)',
+            'Drafts thoughtful review responses for you to approve',
+            'Generates social content ideas based on your menu and reviews',
+            'Weekly insights: what worked, what to try next',
+            'Connects: Google Business, Instagram, Facebook, Analytics',
+          ]}
+          notIncluded="Cannot edit your existing website (Squarespace, Wix, WordPress, etc.) — we don't touch your site."
+          isCurrent={currentTier === 'basic'}
+          ctaLabel={currentTier === 'standard' ? 'Switch to AI Assistant' : 'Start AI Assistant'}
+          ctaStyle="secondary"
+        />
+        <ProductCard
+          id="standard"
+          icon={<Globe className="w-5 h-5 text-white" />}
+          headline="Your website + AI, all in one."
+          bullets={[
+            'Everything in AI Assistant, plus:',
+            'Your website hosted on Apnosh (fast, secure, mobile-first)',
+            'AI updates your menu, hours, page copy, and photos directly',
+            'One source of truth across your site, Google, and social',
+            'Setup billed separately: free template OR custom design',
+          ]}
+          notIncluded="Requires moving your website to Apnosh (we can migrate from most platforms)."
+          isCurrent={currentTier === 'standard' || currentTier === 'pro'}
+          ctaLabel={currentTier === 'basic' ? 'Add my website' : 'Get Website + AI'}
+          ctaStyle="primary"
+          recommended
+        />
       </div>
 
-      <div className="mt-8 max-w-3xl mx-auto bg-bg-2 rounded-2xl p-5 text-[12.5px] text-ink-2 space-y-2">
+      <div className="mt-8 max-w-4xl mx-auto bg-bg-2 rounded-2xl p-5 text-[12.5px] text-ink-2 space-y-3">
         <div className="flex items-start gap-2">
           <Shield className="w-4 h-4 text-brand flex-shrink-0 mt-0.5" />
           <div>
-            <strong className="text-ink">14-day money-back guarantee.</strong> Try any plan
+            <strong className="text-ink">14-day money-back guarantee.</strong> Try either product
             risk-free. Cancel within 14 days for a full refund — no questions asked.
           </div>
         </div>
@@ -137,21 +95,102 @@ export default async function UpgradePage() {
           <strong className="text-ink-2">Multi-location pricing:</strong> 2nd location 20% off ·
           3rd-5th 30% off · 6+ locations 40% off.
         </div>
-        <div className="text-ink-3">
-          <strong className="text-ink-2">Need design, strategy, or one-off help?</strong>{' '}
-          <Link href="/dashboard/messages" className="text-brand hover:underline">Book a strategist session →</Link>
-          {' '}(sold separately, hourly).
+        <div className="text-ink-3 pt-1 border-t border-ink-6">
+          <strong className="text-ink-2">Website setup (one-time):</strong>{' '}
+          <span className="text-emerald-700 font-semibold">Free</span> with a template ·
+          <strong> $1,500</strong> for custom design.
+          {' '}Template includes a 30-day commit; cancel sooner and we&apos;ll export your content.
+        </div>
+        <div className="text-ink-3 pt-1 border-t border-ink-6 flex items-start gap-1.5">
+          <MessageCircle className="w-3.5 h-3.5 text-ink-4 mt-0.5 flex-shrink-0" />
+          <div>
+            <strong className="text-ink-2">Strategist help</strong> (design, brand, one-off
+            campaigns) is billed hourly outside your subscription. $125/hr.{' '}
+            <Link href="/dashboard/messages" className="text-brand hover:underline">Book a session →</Link>
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function FeatureLine({ text }: { text: string }) {
+function ProductCard({
+  id, icon, headline, bullets, notIncluded, isCurrent, ctaLabel, ctaStyle, recommended,
+}: {
+  id: TierId
+  icon: React.ReactNode
+  headline: string
+  bullets: string[]
+  notIncluded: string
+  isCurrent: boolean
+  ctaLabel: string
+  ctaStyle: 'primary' | 'secondary'
+  recommended?: boolean
+}) {
+  const tier = TIERS[id]
   return (
-    <li className="flex items-start gap-1.5 text-[12.5px] text-ink-2">
-      <Check className="w-3.5 h-3.5 text-brand flex-shrink-0 mt-0.5" />
-      <span>{text}</span>
-    </li>
+    <div className={[
+      'rounded-2xl border p-6 flex flex-col bg-white',
+      isCurrent ? 'border-brand ring-2 ring-brand/20'
+        : recommended ? 'border-ink-3 shadow-md'
+          : 'border-ink-6',
+    ].join(' ')}>
+      <div className="flex items-center justify-between mb-3">
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+          ctaStyle === 'primary' ? 'bg-brand' : 'bg-brand-tint'
+        }`}>
+          {icon}
+        </div>
+        {isCurrent ? (
+          <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand text-white">
+            Current
+          </span>
+        ) : recommended ? (
+          <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-ink text-white">
+            Most popular
+          </span>
+        ) : null}
+      </div>
+      <h2 className="text-[18px] font-bold text-ink leading-tight">{tier.label}</h2>
+      <p className="text-[13px] text-ink-3 mt-1 mb-4">{headline}</p>
+      <div className="mb-4">
+        <span className="text-[32px] font-bold text-ink tabular-nums">
+          ${tier.priceCents / 100}
+        </span>
+        <span className="text-sm text-ink-3"> / location / mo</span>
+      </div>
+      <ul className="space-y-2 mb-4 flex-1">
+        {bullets.map((b, i) => (
+          <li key={i} className="flex items-start gap-2 text-[13px] text-ink-2">
+            <Check className="w-4 h-4 text-brand flex-shrink-0 mt-0.5" />
+            <span>{b}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="text-[11px] text-ink-3 mb-4 italic">
+        {notIncluded}
+      </div>
+      {isCurrent ? (
+        <button
+          disabled
+          className="w-full px-4 py-2.5 rounded-full text-sm font-semibold text-ink-3 bg-ink-7 cursor-not-allowed"
+        >
+          Current product
+        </button>
+      ) : (
+        <Link
+          href={`/dashboard/billing?upgrade=${id}`}
+          className={[
+            'w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-semibold',
+            ctaStyle === 'primary'
+              ? 'text-white bg-brand hover:bg-brand-dark'
+              : 'text-ink-2 bg-ink-7 hover:bg-ink-6',
+          ].join(' ')}
+        >
+          {ctaLabel}
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      )}
+    </div>
   )
 }

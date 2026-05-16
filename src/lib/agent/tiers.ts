@@ -43,32 +43,35 @@ export interface TierSpec {
   pitch: string
 }
 
-const ALL_TOOLS = [
+/*
+ * Tools that ONLY work when the owner's website is on Apnosh infra
+ * (Apnosh-managed GitHub repo with an apnosh-content.json schema).
+ * If the owner is on Squarespace/Wix/WordPress, these tools can't
+ * function — the data path doesn't exist. They're gated to the
+ * Website + AI tier accordingly.
+ */
+const WEBSITE_ONLY_TOOLS = [
+  'update_page_copy',
+  'update_menu_item',
+]
+
+/*
+ * Tools that work for ANY restaurant — they touch GBP, social,
+ * reviews, analytics, or the owner directly via chat. These are
+ * the AI Assistant baseline.
+ */
+const AI_ASSISTANT_TOOLS = [
   'search_business_data',
   'weekly_recap',
   'request_human_help',
-  'update_hours',
-  'update_menu_item',
-  'tag_photo',
-  'update_page_copy',
+  'update_hours',              // updates Google Business Profile hours
+  'tag_photo',                 // tags photos for GBP / social
   'post_to_gbp',
   'draft_review_response',
   'generate_post_ideas',
 ]
 
-/* Essential tier: the routine "small stuff" an owner does themselves -
-   menu edits, hour changes, copy tweaks, drafted review replies.
-   Excludes content generation + GBP posting + photo work + ad creation,
-   which are the things that move the needle and justify Growth. */
-const TACTICAL_TOOLS = [
-  'search_business_data',
-  'weekly_recap',
-  'request_human_help',
-  'update_hours',
-  'update_menu_item',
-  'update_page_copy',
-  'draft_review_response',
-]
+const ALL_TOOLS = [...AI_ASSISTANT_TOOLS, ...WEBSITE_ONLY_TOOLS]
 
 const READ_ONLY_TOOLS = [
   'search_business_data',
@@ -77,19 +80,24 @@ const READ_ONLY_TOOLS = [
 ]
 
 /*
- * Tier IDs (starter/basic/standard/pro) are internal slugs that
- * existing client rows + Stripe metadata reference; we keep them
- * stable and only change the user-facing label + pricing.
+ * Two distinct products, not a single tier ladder:
  *
- *  starter  -> "Inactive" — fallback when subscription is cancelled.
- *              Owners see a paywall; only read-only tools work.
- *  basic    -> "Essential" — $39/loc/mo
- *  standard -> "Growth" ⭐ — $79/loc/mo (default recommendation)
- *  pro      -> "Scale" — $149/loc/mo
+ *  AI Assistant ($29/loc/mo, internal slug 'basic')
+ *    For any restaurant. Works with their existing website (read-only)
+ *    and manages everything off-site: GBP, social, reviews, photos,
+ *    insights. Does NOT touch their website (we don't host it).
  *
- * Strategist hours are NO LONGER bundled in any tier. They're sold
- * separately à la carte via /dashboard/services. Keeps platform
- * margins predictable and lets services scale with team capacity.
+ *  Website + AI ($99/loc/mo, internal slug 'standard')
+ *    Includes AI Assistant + their website hosted on Apnosh infra.
+ *    AI can edit menu, hours, copy, and photos directly on the site.
+ *    Setup billed separately as one-time fee.
+ *
+ *  Internal slugs (basic/standard/starter) kept for DB/Stripe stability.
+ *  'pro' deprecated — was an artificial top tier; multi-loc revenue
+ *  comes from per-location pricing, not from a higher per-loc rate.
+ *  'starter' = "Inactive" fallback when subscription is cancelled.
+ *
+ *  Strategist hours sold separately à la carte. Setup fees one-time.
  */
 export const TIERS: Record<TierId, TierSpec> = {
   starter: {
@@ -108,45 +116,50 @@ export const TIERS: Record<TierId, TierSpec> = {
   },
   basic: {
     id: 'basic',
-    label: 'Essential',
-    priceCents: 3900,                     // $39/loc/mo
+    label: 'AI Assistant',
+    priceCents: 2900,                     // $29/loc/mo
     isFreeTrial: false,
     trialDays: 0,
-    dailyMessageLimit: 15,
-    monthlyMessageLimit: 150,
-    monthlyCostCapCents: 1500,            // $15/mo hard ceiling
+    dailyMessageLimit: 50,                // soft — most owners do 0-5/day
+    monthlyMessageLimit: 500,             // soft — abuse guard, not an upsell lever
+    monthlyCostCapCents: 1500,            // $15/mo AI ceiling
     humanHoursPerMonth: 0,
     locationsLimit: 1,
-    enabledTools: TACTICAL_TOOLS,
-    pitch: 'Owner-driven AI for menus, hours, copy, and review responses.',
+    enabledTools: AI_ASSISTANT_TOOLS,
+    pitch: 'AI manages your Google Business Profile, social, reviews, and insights. Keep your existing website.',
   },
   standard: {
     id: 'standard',
-    label: 'Growth',
-    priceCents: 7900,                     // $79/loc/mo
+    label: 'Website + AI',
+    priceCents: 9900,                     // $99/loc/mo
     isFreeTrial: false,
     trialDays: 0,
-    dailyMessageLimit: 50,
-    monthlyMessageLimit: 500,
-    monthlyCostCapCents: 5000,            // $50/mo hard ceiling
+    dailyMessageLimit: 100,
+    monthlyMessageLimit: 1000,            // soft
+    monthlyCostCapCents: 4000,            // $40/mo AI ceiling
     humanHoursPerMonth: 0,
     locationsLimit: 1,
     enabledTools: ALL_TOOLS,
-    pitch: 'Full AI: Google posts, content ideas, ads, and photos. Where most owners land.',
+    pitch: 'Includes your website hosted on Apnosh. AI directly updates menu, hours, copy, and photos.',
   },
+  /*
+   * pro is deprecated. Kept in the map so existing client rows
+   * with tier='pro' don't break (they get the Website + AI feature
+   * set automatically via the fallback in resolveTier).
+   */
   pro: {
     id: 'pro',
-    label: 'Scale',
-    priceCents: 14900,                    // $149/loc/mo
+    label: 'Website + AI',
+    priceCents: 9900,
     isFreeTrial: false,
     trialDays: 0,
-    dailyMessageLimit: null,
-    monthlyMessageLimit: null,
-    monthlyCostCapCents: 20000,           // $200/mo soft ceiling (alerts admin)
+    dailyMessageLimit: 100,
+    monthlyMessageLimit: 1000,
+    monthlyCostCapCents: 4000,
     humanHoursPerMonth: 0,
     locationsLimit: null,
     enabledTools: ALL_TOOLS,
-    pitch: 'Unlimited messages and locations. Multi-location dashboard. Priority queue.',
+    pitch: 'Includes your website hosted on Apnosh. AI directly updates menu, hours, copy, and photos.',
   },
 }
 
