@@ -10,8 +10,10 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getSiteSettings } from '@/lib/site-settings/actions'
 import SiteSettingsForm from '@/components/admin/site/site-settings-form'
+import ProvisionSiteCard from '@/components/admin/site/provision-site-card'
 import { requireAdminUser } from '@/lib/auth/require-admin'
 
 interface PageProps { params: Promise<{ slug: string }> }
@@ -31,6 +33,15 @@ export default async function ClientSitePage({ params }: PageProps) {
 
   const settingsResult = await getSiteSettings(client.id)
   const settings = settingsResult.success ? settingsResult.data : null
+
+  // Provisioning state: read the raw site_settings row so we know
+  // whether a GitHub-per-client repo + Vercel project already exist.
+  const adminDb = createAdminClient()
+  const { data: provisionRow } = await adminDb
+    .from('site_settings')
+    .select('site_type, external_repo_url, external_site_url, external_deploy_hook_url')
+    .eq('client_id', client.id)
+    .maybeSingle()
 
   return (
     <div className="max-w-3xl">
@@ -59,7 +70,19 @@ export default async function ClientSitePage({ params }: PageProps) {
         </Link>
       </div>
 
-      <SiteSettingsForm clientId={client.id} clientSlug={client.slug} initial={settings} />
+      <ProvisionSiteCard
+        clientId={client.id}
+        clientName={client.name}
+        clientSlug={client.slug}
+        siteType={(provisionRow?.site_type as string | null) ?? null}
+        repoUrl={(provisionRow?.external_repo_url as string | null) ?? null}
+        siteUrl={(provisionRow?.external_site_url as string | null) ?? null}
+        hasDeployHook={!!provisionRow?.external_deploy_hook_url}
+      />
+
+      <div className="mt-6">
+        <SiteSettingsForm clientId={client.id} clientSlug={client.slug} initial={settings} />
+      </div>
     </div>
   )
 }
