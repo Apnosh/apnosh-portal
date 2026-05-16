@@ -87,31 +87,94 @@ const EXTRACTORS: Array<(clientId: string) => Promise<FactWrite[]>> = [
   extractFromMenuItems,
 ]
 
+interface ClientRow {
+  name?: string | null
+  industry?: string | null
+  business_subtype?: string | null
+  location?: string | null
+  primary_contact?: string | null
+  socials?: Record<string, string> | null
+  content_pillars?: unknown
+  content_avoid?: unknown
+  hashtag_sets?: unknown
+  target_audience?: unknown
+  offerings?: unknown
+  key_people?: unknown
+  competitors?: unknown
+  seasonal_notes?: string | null
+  goals?: unknown
+  clarity_project_id?: string | null
+  business_name_display?: string | null
+}
+
 async function extractFromClient(clientId: string): Promise<FactWrite[]> {
   const admin = createAdminClient()
-  const { data } = await admin
+  const { data: raw } = await admin
     .from('clients')
-    .select('id, name, slug, industry, tier')
+    .select(
+      'name, industry, business_subtype, location, primary_contact, socials, ' +
+      'content_pillars, content_avoid, hashtag_sets, target_audience, ' +
+      'offerings, key_people, competitors, seasonal_notes, goals, ' +
+      'clarity_project_id, business_name_display'
+    )
     .eq('id', clientId)
     .maybeSingle()
-  if (!data) return []
+  if (!raw) return []
+  const data = raw as unknown as ClientRow
   const facts: FactWrite[] = []
-  if (data.industry) {
-    facts.push({
-      key: FACT_KEYS.BUSINESS_VERTICAL,
-      value: String(data.industry).toLowerCase(),
-      source: 'platform',
-    })
+
+  if (data.name) facts.push({ key: 'business.name', value: data.name, source: 'platform' })
+  if (data.business_name_display) facts.push({ key: 'business.display_name', value: data.business_name_display, source: 'platform' })
+  if (data.industry) facts.push({ key: FACT_KEYS.BUSINESS_VERTICAL, value: String(data.industry).toLowerCase(), source: 'platform' })
+  if (data.business_subtype) facts.push({ key: 'business.subtype', value: data.business_subtype, source: 'platform' })
+  if (data.location) facts.push({ key: 'business.location', value: data.location, source: 'platform' })
+  if (data.primary_contact) facts.push({ key: FACT_KEYS.OWNER_NAME, value: data.primary_contact, source: 'platform' })
+
+  // Brand voice / content guidelines -- the real gold for an on-brand agent.
+  if (Array.isArray(data.content_pillars) && data.content_pillars.length > 0) {
+    facts.push({ key: 'brand.content_pillars', value: data.content_pillars, source: 'strategist' })
   }
-  // Owner display name fallback (real name pulled separately if available)
-  if (data.name) {
-    facts.push({
-      key: 'business.name',
-      value: data.name,
-      source: 'platform',
-    })
+  if (Array.isArray(data.content_avoid) && data.content_avoid.length > 0) {
+    facts.push({ key: FACT_KEYS.BRAND_DONT_SAY, value: data.content_avoid, source: 'strategist' })
+  }
+  if (Array.isArray(data.hashtag_sets) && data.hashtag_sets.length > 0) {
+    facts.push({ key: 'brand.hashtag_sets', value: data.hashtag_sets, source: 'strategist' })
+  }
+  if (data.target_audience && !isEmpty(data.target_audience)) {
+    facts.push({ key: 'business.target_audience', value: data.target_audience, source: 'strategist' })
+  }
+  if (Array.isArray(data.offerings) && data.offerings.length > 0) {
+    facts.push({ key: 'business.offerings', value: data.offerings, source: 'strategist' })
+  }
+  if (Array.isArray(data.key_people) && data.key_people.length > 0) {
+    facts.push({ key: 'business.key_people', value: data.key_people, source: 'strategist' })
+  }
+  if (Array.isArray(data.competitors) && data.competitors.length > 0) {
+    facts.push({ key: 'business.competitors', value: data.competitors, source: 'strategist' })
+  }
+  if (data.seasonal_notes) facts.push({ key: 'business.seasonal_notes', value: data.seasonal_notes, source: 'strategist' })
+  if (data.goals && !isEmpty(data.goals)) {
+    facts.push({ key: FACT_KEYS.BUSINESS_GOAL, value: data.goals, source: 'strategist' })
+  }
+  if (data.clarity_project_id) facts.push({ key: 'channels.clarity.project_id', value: data.clarity_project_id, source: 'platform' })
+
+  // Socials JSONB -- typically { instagram, facebook, tiktok, x } URLs.
+  if (data.socials && typeof data.socials === 'object') {
+    const s = data.socials as Record<string, string | undefined>
+    if (s.instagram && s.instagram !== '#') {
+      const handle = extractHandle(s.instagram)
+      if (handle) facts.push({ key: FACT_KEYS.CHANNEL_INSTAGRAM_HANDLE, value: handle, source: 'platform' })
+    }
   }
   return facts
+}
+
+function isEmpty(v: unknown): boolean {
+  if (v == null) return true
+  if (Array.isArray(v)) return v.length === 0
+  if (typeof v === 'object') return Object.keys(v as object).length === 0
+  if (typeof v === 'string') return v.trim() === ''
+  return false
 }
 
 async function extractFromSiteSettings(clientId: string): Promise<FactWrite[]> {
@@ -205,30 +268,32 @@ async function extractFromGbpLocations(clientId: string): Promise<FactWrite[]> {
   const admin = createAdminClient()
   const { data } = await admin
     .from('gbp_locations')
-    .select('id, name, primary_phone, address, hours, is_primary, gbp_location_id')
+    .select('id, store_code, location_name, address, hours, status')
     .eq('client_id', clientId)
+    .order('created_at', { ascending: true })
   const locations = (data ?? []) as Array<{
-    id: string; name: string | null; primary_phone: string | null;
+    id: string; store_code: string | null; location_name: string | null;
     address: Record<string, unknown> | null; hours: Record<string, unknown> | null;
-    is_primary: boolean | null; gbp_location_id: string | null;
+    status: string | null;
   }>
   if (locations.length === 0) return []
 
   const facts: FactWrite[] = [
     { key: FACT_KEYS.BUSINESS_LOCATION_COUNT, value: locations.length, source: 'platform' },
   ]
-  const primary = locations.find(l => l.is_primary) ?? locations[0]
-  if (primary?.gbp_location_id) {
-    facts.push({ key: FACT_KEYS.CHANNEL_GBP_LOCATION_ID, value: primary.gbp_location_id, source: 'platform' })
+  // First location is the "primary" until we add an is_primary flag.
+  const primary = locations[0]
+  if (primary?.store_code) {
+    facts.push({ key: FACT_KEYS.CHANNEL_GBP_LOCATION_ID, value: primary.store_code, source: 'platform' })
+  }
+  if (primary?.location_name) {
+    facts.push({ key: 'business.primary_location_name', value: primary.location_name, source: 'platform' })
   }
   if (primary?.hours) {
     facts.push({ key: FACT_KEYS.CALENDAR_HOURS, value: primary.hours, source: 'platform' })
   }
   if (primary?.address) {
     facts.push({ key: 'business.primary_address', value: primary.address, source: 'platform' })
-  }
-  if (primary?.primary_phone) {
-    facts.push({ key: 'business.primary_phone', value: primary.primary_phone, source: 'platform' })
   }
   return facts
 }
