@@ -28,7 +28,7 @@ import {
   appendUserTurn, appendAssistantTurn, appendToolResultTurn,
   createPendingExecution, loadConversationTurns, loadEnabledToolsForClient,
 } from './conversation'
-import { renderFactsForPrompt } from './facts'
+import { loadClientContext } from './context-loader'
 import { getToolHandler, toAnthropicTools } from './registry'
 
 const anthropic = new Anthropic()
@@ -100,9 +100,9 @@ export async function runAgentTurn(args: {
     await appendUserTurn(args.conversationId, args.userMessage)
   }
 
-  const [prompt, factsText, tools, tier] = await Promise.all([
+  const [prompt, context, tools, tier] = await Promise.all([
     loadActivePrompt('main_agent'),
-    renderFactsForPrompt(args.clientId, 0.5),
+    loadClientContext(args.clientId),
     loadClientTier(args.clientId).then(t => loadEnabledToolsForClient(args.clientId, t)),
     loadClientTier(args.clientId),
   ])
@@ -118,10 +118,18 @@ export async function runAgentTurn(args: {
   const systemFull = [
     prompt.systemText.trim(),
     '',
-    '── Client knowledge (your context for this conversation) ──',
-    factsText,
+    '────────────────────────────────────────────────────────────',
+    '## CLIENT SNAPSHOT (fresh as of this turn)',
+    '────────────────────────────────────────────────────────────',
+    context.text,
+    '────────────────────────────────────────────────────────────',
     '',
-    `When you need to make a change, call the appropriate tool. Destructive tools will show the owner a preview before publishing -- you don't need to ask "are you sure?" yourself, the UI handles that. Only call request_human_help (if available) when no tool covers the request or when judgment is needed beyond your scope.`,
+    `Reasoning guidance:`,
+    `- ALWAYS ground your responses in the client snapshot above. Cite specific items (e.g. "your Banh Mi Combo is $12.99") instead of generic advice.`,
+    `- If the owner asks for a recommendation, reference their actual menu, recent activity, and connected channels -- not generic restaurant advice.`,
+    `- For metrics questions, call search_business_data for fresh numbers; the snapshot's 7-day perf is just a hint.`,
+    `- When you need to make a change, call the appropriate tool. Destructive tools show the owner a preview; you don't need to ask "are you sure?" yourself.`,
+    `- Only call request_human_help when no tool covers the request or when human judgment is needed beyond your scope.`,
   ].join('\n')
 
   let totalIn = 0
