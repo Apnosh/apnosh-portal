@@ -17,11 +17,11 @@
 
 import { useEffect, useState, useRef, useTransition } from 'react'
 import {
-  Sparkles, X, Send, ArrowRight, Loader2, CheckCircle2, AlertCircle, UserRound,
+  Sparkles, X, Send, ArrowRight, Loader2, CheckCircle2, AlertCircle, UserRound, Paperclip, ImageIcon,
 } from 'lucide-react'
 import {
   getOrStartChat, sendMessage, confirmPendingExecution,
-  cancelPendingExecution, escalateConversation,
+  cancelPendingExecution, escalateConversation, uploadPhotoForAgent,
   type SerializedTurn, type ChatState,
 } from '@/lib/agent/actions'
 
@@ -32,8 +32,11 @@ export default function AgentChat() {
   const [sending, setSending] = useState(false)
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [pendingPhoto, setPendingPhoto] = useState<{ assetId: string; fileUrl: string; fileName: string } | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [, startTransition] = useTransition()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Lazy-load chat state when the panel is first opened.
   useEffect(() => {
@@ -54,33 +57,83 @@ export default function AgentChat() {
   }, [open, state?.turns.length, state?.pendingExecutions.length])
 
   async function handleSend() {
-    if (!state || !input.trim() || sending) return
+    if (!state || (!input.trim() && !pendingPhoto) || sending) return
     const text = input.trim()
+    const photo = pendingPhoto
     setInput('')
+    setPendingPhoto(null)
     setSending(true)
     setError(null)
 
+    /* Build the message we send to the agent. If there's a photo, we
+       prepend a structured note so the agent knows: (a) a photo was
+       just uploaded, (b) its asset_id (for the tag_photo tool), (c)
+       its file_url (for tools like update_menu_item that accept
+       photo_url). Keeps the user-facing message clean. */
+    const messageForAgent = photo
+      ? `[Owner uploaded a photo: ${photo.fileName}]\nasset_id: ${photo.assetId}\nfile_url: ${photo.fileUrl}\n\n${text || '(no caption)'}`
+      : text
+
     // Optimistic: append the user turn locally so the UI feels instant.
+    // We show the friendly text + a photo chip, not the raw asset_id line.
     const optimistic: SerializedTurn = {
       id: `pending-${Date.now()}`,
       role: 'user',
-      text,
+      text: text || (photo ? `📎 ${photo.fileName}` : ''),
       toolCalls: null,
       toolCallId: null,
       createdAt: new Date().toISOString(),
     }
     setState(s => s ? { ...s, turns: [...s.turns, optimistic] } : s)
 
-    const res = await sendMessage({ conversationId: state.conversationId, text })
+    const res = await sendMessage({ conversationId: state.conversationId, text: messageForAgent })
     setSending(false)
     if (res.success) {
-      // Reload pending executions since runtime may have created some.
       const fresh = await getOrStartChat()
       if (fresh.success) setState(fresh.data)
     } else {
       setError(res.error)
-      // Roll back optimistic message.
       setState(s => s ? { ...s, turns: s.turns.filter(t => t.id !== optimistic.id) } : s)
+    }
+  }
+
+  async function handlePhotoSelect(file: File) {
+    if (!state || uploadingPhoto) return
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Photo too large (max 10MB)')
+      return
+    }
+    setUploadingPhoto(true)
+    setError(null)
+
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result as string
+        // Strip the "data:image/jpeg;base64," prefix.
+        const comma = result.indexOf(',')
+        resolve(comma >= 0 ? result.slice(comma + 1) : result)
+      }
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsDataURL(file)
+    }).catch(err => { setError(err.message); return null })
+
+    if (!base64) {
+      setUploadingPhoto(false)
+      return
+    }
+
+    const res = await uploadPhotoForAgent({
+      conversationId: state.conversationId,
+      fileName: file.name,
+      contentType: file.type || 'image/jpeg',
+      base64,
+    })
+    setUploadingPhoto(false)
+    if (res.success) {
+      setPendingPhoto({ assetId: res.assetId, fileUrl: res.fileUrl, fileName: file.name })
+    } else {
+      setError(res.error)
     }
   }
 
@@ -193,7 +246,51 @@ export default function AgentChat() {
 
         {/* Composer */}
         <div className="border-t border-ink-6 p-3 flex-shrink-0">
-          <div className="flex items-center gap-2">
+          {/* Pending photo chip -- shown above the textarea while the
+              owner has a photo staged but hasn't sent yet. */}
+          {pendingPhoto && (
+            <div className="mb-2 flex items-center gap-2 p-2 rounded-lg bg-bg-2 border border-ink-6">
+              <div className="w-10 h-10 rounded overflow-hidden bg-ink-7 flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={pendingPhoto.fileUrl} alt="" className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] text-ink-2 truncate">{pendingPhoto.fileName}</div>
+                <div className="text-[10px] text-ink-4">Will be attached to your message</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPendingPhoto(null)}
+                className="text-ink-4 hover:text-ink p-1"
+                aria-label="Remove photo"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-end gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => {
+                const f = e.target.files?.[0]
+                if (f) handlePhotoSelect(f)
+                e.target.value = ''  // allow re-selecting the same file
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!state || uploadingPhoto || !!pendingPhoto}
+              title={pendingPhoto ? 'Send the current photo first' : 'Attach a photo'}
+              className="w-9 h-9 rounded-full bg-ink-7 hover:bg-ink-6 text-ink-2 flex items-center justify-center disabled:opacity-50 flex-shrink-0"
+              aria-label="Attach photo"
+            >
+              {uploadingPhoto ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
+            </button>
             <textarea
               value={input}
               onChange={e => setInput(e.target.value)}
@@ -203,7 +300,7 @@ export default function AgentChat() {
                   handleSend()
                 }
               }}
-              placeholder="Ask anything — update hours, change a menu item, draft a post..."
+              placeholder={pendingPhoto ? 'Tell Apnosh what to do with this photo...' : 'Ask anything — update hours, change a menu item, draft a post...'}
               rows={2}
               disabled={!state || sending}
               className="flex-1 resize-none px-3 py-2 rounded-lg border border-ink-6 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand disabled:opacity-50"
@@ -211,7 +308,7 @@ export default function AgentChat() {
             <button
               type="button"
               onClick={handleSend}
-              disabled={!state || sending || !input.trim()}
+              disabled={!state || sending || (!input.trim() && !pendingPhoto)}
               className="w-9 h-9 rounded-full bg-brand hover:bg-brand-dark text-white flex items-center justify-center disabled:opacity-50 flex-shrink-0"
               aria-label="Send"
             >

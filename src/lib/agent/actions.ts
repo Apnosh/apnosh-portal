@@ -18,6 +18,7 @@ import '@/lib/agent/tools/update-page-copy'
 import '@/lib/agent/tools/update-hours'
 import '@/lib/agent/tools/post-to-gbp'
 import '@/lib/agent/tools/request-human-help'
+import '@/lib/agent/tools/tag-photo'
 import { runAgentTurn, type AgentTurnResult } from './runtime'
 import {
   getOrStartActiveConversation, loadConversationTurns,
@@ -161,6 +162,97 @@ export async function confirmPendingExecution(executionId: string): Promise<
     ? (await loadConversationTurns(exec.conversation_id as string)).map(serializeTurn)
     : []
   return { success: true, turns }
+}
+
+// ─── Photo upload ──────────────────────────────────────────────────
+
+/**
+ * Upload a photo into the client's asset library so it can be
+ * referenced by tool calls (update_menu_item, post_to_gbp, etc.) in
+ * subsequent agent turns. Returns the public URL the agent should
+ * receive in its next message.
+ *
+ * Photos land in the `client-photos` storage bucket + a row in
+ * `client_assets` tagged with the conversation id so the strategist
+ * review queue can see what the owner shared.
+ */
+export async function uploadPhotoForAgent(args: {
+  conversationId: string
+  fileName: string
+  contentType: string
+  base64: string             // raw base64, no data: prefix
+}): Promise<
+  | { success: true; assetId: string; fileUrl: string; orientation: 'landscape' | 'portrait' | 'square' }
+  | { success: false; error: string }
+> {
+  const ctx = await requireClientContext()
+  if ('error' in ctx) return { success: false, error: ctx.error }
+
+  const admin = createAdminClient()
+  // Verify ownership of the conversation.
+  const { data: conv } = await admin
+    .from('agent_conversations')
+    .select('client_id')
+    .eq('id', args.conversationId)
+    .maybeSingle()
+  if (!conv || conv.client_id !== ctx.clientId) {
+    return { success: false, error: 'Conversation not found' }
+  }
+
+  // Decode and upload.
+  let buffer: Buffer
+  try {
+    buffer = Buffer.from(args.base64, 'base64')
+  } catch (err) {
+    return { success: false, error: `Bad base64: ${(err as Error).message}` }
+  }
+  // 10MB cap to keep this honest.
+  if (buffer.length > 10 * 1024 * 1024) {
+    return { success: false, error: 'Photo too large (max 10MB)' }
+  }
+
+  const ext = (args.fileName.split('.').pop() ?? 'jpg').toLowerCase()
+  const safeExt = /^[a-z0-9]{2,5}$/.test(ext) ? ext : 'jpg'
+  const path = `${ctx.clientId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`
+
+  const { error: upErr } = await admin.storage
+    .from('client-photos')
+    .upload(path, buffer, {
+      contentType: args.contentType,
+      upsert: false,
+    })
+  if (upErr) return { success: false, error: `Storage upload failed: ${upErr.message}` }
+
+  const { data: urlData } = admin.storage.from('client-photos').getPublicUrl(path)
+  const fileUrl = urlData.publicUrl
+
+  // We don't have image dimensions server-side without pulling in a
+  // codec library; mark orientation 'square' as a safe default. The
+  // client UI can override via a follow-up update if needed.
+  const orientation: 'landscape' | 'portrait' | 'square' = 'square'
+
+  const { data: inserted, error: insErr } = await admin
+    .from('client_assets')
+    .insert({
+      client_id: ctx.clientId,
+      type: 'photo',
+      file_url: fileUrl,
+      filename: args.fileName,
+      tags: ['from_agent_chat', `conversation:${args.conversationId}`],
+      description: null,
+      quality_rating: 'good',
+      orientation,
+      mood: 'casual',
+      uploaded_by: 'client',
+      uploaded_by_user_id: ctx.userId,
+    })
+    .select('id')
+    .single()
+  if (insErr || !inserted) {
+    return { success: false, error: `Asset row insert failed: ${insErr?.message ?? 'unknown'}` }
+  }
+
+  return { success: true, assetId: inserted.id as string, fileUrl, orientation }
 }
 
 export async function cancelPendingExecution(executionId: string): Promise<
