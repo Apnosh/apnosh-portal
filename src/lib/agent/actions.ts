@@ -20,6 +20,9 @@ import '@/lib/agent/tools/post-to-gbp'
 import '@/lib/agent/tools/request-human-help'
 import '@/lib/agent/tools/tag-photo'
 import '@/lib/agent/tools/search-business-data'
+import '@/lib/agent/tools/draft-review-response'
+import '@/lib/agent/tools/generate-post-ideas'
+import '@/lib/agent/tools/weekly-recap'
 import { runAgentTurn, type AgentTurnResult } from './runtime'
 import {
   getOrStartActiveConversation, loadConversationTurns,
