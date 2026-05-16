@@ -17,7 +17,8 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, Globe, Plug } from 'lucide-react'
+import { Plus, Globe, Plug, RefreshCw } from 'lucide-react'
+import { refreshWebsiteData } from '@/lib/dashboard/website-setup'
 import type { TimeRange, DashboardView } from '@/types/dashboard'
 import { getWebsiteView } from '@/lib/dashboard/get-website-view'
 import { useClient } from '@/lib/client-context'
@@ -39,6 +40,8 @@ export default function WebsiteOverviewPage() {
   const [businessName, setBusinessName] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [analyticsConnected, setAnalyticsConnected] = useState<boolean | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadData() {
@@ -134,6 +137,39 @@ export default function WebsiteOverviewPage() {
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              if (refreshing) return
+              setRefreshing(true)
+              setRefreshMsg(null)
+              const res = await refreshWebsiteData()
+              setRefreshing(false)
+              if (res.success) {
+                const parts: string[] = []
+                if (res.ga.synced) parts.push(`GA ${res.ga.days}d`)
+                else if (res.ga.error && res.ga.error !== 'not connected') parts.push(`GA: ${res.ga.error}`)
+                if (res.gsc.synced) parts.push(`GSC ${res.gsc.days}d`)
+                else if (res.gsc.error && res.gsc.error !== 'not connected') parts.push(`GSC: ${res.gsc.error}`)
+                setRefreshMsg(parts.length ? parts.join(' · ') : 'No new data yet — try again later')
+                setTimeout(() => setRefreshMsg(null), 6000)
+                /* Force a fresh fetch of the website view. */
+                if (client?.id) {
+                  const v = await getWebsiteView(client.id).catch(() => null)
+                  if (v) setView(v)
+                }
+              } else {
+                setRefreshMsg(res.error)
+                setTimeout(() => setRefreshMsg(null), 6000)
+              }
+            }}
+            disabled={refreshing}
+            title="Pull the latest Google Analytics + Search Console data"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-ink-2 bg-ink-7 hover:bg-ink-6 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Syncing...' : 'Refresh data'}
+          </button>
           <Link
             href="/dashboard/website/setup"
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-ink-2 bg-ink-7 hover:bg-ink-6"
@@ -149,6 +185,9 @@ export default function WebsiteOverviewPage() {
             Request a change
           </Link>
         </div>
+        {refreshMsg && (
+          <div className="w-full mt-1 text-[12px] text-ink-3 text-right">{refreshMsg}</div>
+        )}
       </div>
 
       {/* 1. Status strip — answers "is my site working?" in one line.

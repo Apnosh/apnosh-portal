@@ -101,6 +101,64 @@ export async function saveWebsiteUrl(url: string): Promise<{ success: true } | {
   return { success: true }
 }
 
+export async function refreshWebsiteData(): Promise<
+  | { success: true; ga: { synced: boolean; days: number; error?: string }; gsc: { synced: boolean; days: number; error?: string } }
+  | { success: false; error: string }
+> {
+  /* Manual "Refresh data" button: re-runs the GA and GSC sync jobs
+     for the current client. The OAuth callbacks already do a 14-day
+     backfill, but if that times out (or the user wants fresher data
+     mid-day) this gives them a one-click retry. Both syncs run
+     serially to stay under Vercel's 60s server-action budget. */
+  const ctx = await requireClientContext()
+  if ('error' in ctx) return { success: false, error: ctx.error }
+  const admin = createAdminClient()
+  const { data: rows } = await admin
+    .from('channel_connections')
+    .select('id, channel, access_token, status')
+    .eq('client_id', ctx.clientId)
+    .in('channel', ['google_analytics', 'google_search_console'])
+    .eq('status', 'active')
+
+  const ga = (rows ?? []).find(r => r.channel === 'google_analytics' && r.access_token)
+  const gsc = (rows ?? []).find(r => r.channel === 'google_search_console' && r.access_token)
+
+  const gaResult = { synced: false, days: 0, error: undefined as string | undefined }
+  const gscResult = { synced: false, days: 0, error: undefined as string | undefined }
+
+  if (ga) {
+    try {
+      const { syncGoogleAnalyticsForClient } = await import('@/lib/web-analytics-sync')
+      const r = await syncGoogleAnalyticsForClient(ctx.clientId, 14)
+      gaResult.synced = r.daysWritten > 0
+      gaResult.days = r.daysWritten
+      gaResult.error = r.error
+    } catch (err) {
+      gaResult.error = (err as Error).message
+    }
+  } else {
+    gaResult.error = 'not connected'
+  }
+
+  if (gsc) {
+    try {
+      const { syncSearchConsoleForClient } = await import('@/lib/web-analytics-sync')
+      const r = await syncSearchConsoleForClient(ctx.clientId, 14)
+      gscResult.synced = r.daysWritten > 0
+      gscResult.days = r.daysWritten
+      gscResult.error = r.error
+    } catch (err) {
+      gscResult.error = (err as Error).message
+    }
+  } else {
+    gscResult.error = 'not connected'
+  }
+
+  revalidatePath('/dashboard/website')
+  revalidatePath('/dashboard/website/traffic')
+  return { success: true, ga: gaResult, gsc: gscResult }
+}
+
 export async function saveClarityProjectId(projectId: string): Promise<{ success: true } | { success: false; error: string }> {
   const ctx = await requireClientContext()
   if ('error' in ctx) return { success: false, error: ctx.error }

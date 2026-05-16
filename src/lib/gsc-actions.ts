@@ -93,16 +93,16 @@ export async function finalizeGSCConnection(
     .delete()
     .eq('id', pending.id)
 
-  /* Auto-backfill 90 days. Fire-and-forget; GSC has a 2-3 day
-     reporting lag so we anchor end at today-3 inside the lib. */
-  void (async () => {
-    try {
-      const { syncSearchConsoleForClient } = await import('@/lib/web-analytics-sync')
-      await syncSearchConsoleForClient(clientId, 90)
-    } catch (err) {
-      console.error('[finalizeGSCConnection] auto-backfill failed:', (err as Error).message)
-    }
-  })()
+  /* Auto-backfill. Awaited (was fire-and-forget, which Vercel killed
+     before completion). 14 days here keeps the wait short; daily
+     cron extends history later. GSC has a 2-3 day reporting lag,
+     handled in syncSearchConsoleForClient. */
+  try {
+    const { syncSearchConsoleForClient } = await import('@/lib/web-analytics-sync')
+    await syncSearchConsoleForClient(clientId, 14)
+  } catch (err) {
+    console.error('[finalizeGSCConnection] auto-backfill failed:', (err as Error).message)
+  }
 
   return { success: true }
 }
