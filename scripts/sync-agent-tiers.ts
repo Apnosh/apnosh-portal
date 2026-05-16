@@ -37,13 +37,6 @@ async function syncTiers() {
       console.log(`⏭  ${tier.label} — free trial, no Stripe product needed`)
       continue
     }
-    /* Deprecated tier: skip rather than create a duplicate product.
-       Existing client rows with tier='pro' fall back to standard at
-       runtime via resolveTier(). */
-    if (tier.id === 'pro') {
-      console.log(`⏭  ${tier.label} (pro) — deprecated, no Stripe sync`)
-      continue
-    }
 
     // 1. Find or create the Product.
     let product: Stripe.Product

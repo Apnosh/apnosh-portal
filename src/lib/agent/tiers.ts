@@ -41,6 +41,20 @@ export interface TierSpec {
   enabledTools: string[]
   /** One-line description for the upgrade UI. */
   pitch: string
+  /** How often the proactive insights / weekly recap cron runs for
+   *  this tier. Assistant = manual only; Strategist = weekly briefings;
+   *  Strategist+ = daily check-ins. The cron handler reads this to
+   *  decide which clients to run for. */
+  proactiveCadence: 'manual' | 'weekly' | 'daily'
+  /** Whether this tier loads the rich cross-client patterns + sales
+   *  trends + sentiment shifts context into every turn (vs. just the
+   *  basics). The "Strategist" experience hinges on this. */
+  richContextLoader: boolean
+  /** Whether the multi-location rollup dashboard is unlocked. */
+  multiLocationDashboard: boolean
+  /** Whether custom playbooks (brand-specific tone, scheduling rules,
+   *  and tool override defaults) can be authored for this client. */
+  customPlaybooks: boolean
 }
 
 /*
@@ -80,24 +94,33 @@ const READ_ONLY_TOOLS = [
 ]
 
 /*
- * Two distinct products, not a single tier ladder:
+ * Three AI tiers, each adding capability — not just usage. Website
+ * editing tools are NOT bundled in any tier; they're unlocked by
+ * subscribing to the separate "Apnosh Website" product (which sets
+ * clients.has_apnosh_website = true, enforced at the tool layer).
  *
- *  AI Assistant ($29/loc/mo, internal slug 'basic')
- *    For any restaurant. Works with their existing website (read-only)
- *    and manages everything off-site: GBP, social, reviews, photos,
- *    insights. Does NOT touch their website (we don't host it).
+ *  AI Assistant ($29, internal slug 'basic')
+ *    Manual mode. Owner asks, AI does. Hours updates, review drafts,
+ *    weekly recap, content ideas. Light context. Cap = abuse guard.
  *
- *  Website + AI ($99/loc/mo, internal slug 'standard')
- *    Includes AI Assistant + their website hosted on Apnosh infra.
- *    AI can edit menu, hours, copy, and photos directly on the site.
- *    Setup billed separately as one-time fee.
+ *  AI Strategist ($69, internal slug 'standard') ⭐ DEFAULT
+ *    Continuous data analysis + weekly proactive briefings.
+ *    "Your tacos beat burgers 3x on Tuesdays — push them."
+ *    Full context loader (sales + reviews + analytics + patterns).
+ *    Where most owners land.
  *
- *  Internal slugs (basic/standard/starter) kept for DB/Stripe stability.
- *  'pro' deprecated — was an artificial top tier; multi-loc revenue
- *  comes from per-location pricing, not from a higher per-loc rate.
- *  'starter' = "Inactive" fallback when subscription is cancelled.
+ *  AI Strategist+ ($129, internal slug 'pro')
+ *    Daily proactive runs. Multi-location dashboard. Custom playbooks.
+ *    Unlimited messages. For multi-loc operators and power users.
  *
- *  Strategist hours sold separately à la carte. Setup fees one-time.
+ *  Enterprise — coming soon (not in TIERS map). Custom integrations,
+ *  API access, dedicated AM. Quoted individually.
+ *
+ *  Internal slugs (starter/basic/standard/pro) kept stable for DB +
+ *  Stripe metadata stability.
+ *
+ *  Strategist hours sold separately à la carte. Apnosh Website sold
+ *  separately as its own product line.
  */
 export const TIERS: Record<TierId, TierSpec> = {
   starter: {
@@ -113,6 +136,10 @@ export const TIERS: Record<TierId, TierSpec> = {
     locationsLimit: 1,
     enabledTools: READ_ONLY_TOOLS,
     pitch: 'Subscribe to start using Apnosh AI.',
+    proactiveCadence: 'manual',
+    richContextLoader: false,
+    multiLocationDashboard: false,
+    customPlaybooks: false,
   },
   basic: {
     id: 'basic',
@@ -120,46 +147,53 @@ export const TIERS: Record<TierId, TierSpec> = {
     priceCents: 2900,                     // $29/loc/mo
     isFreeTrial: false,
     trialDays: 0,
-    dailyMessageLimit: 50,                // soft — most owners do 0-5/day
-    monthlyMessageLimit: 500,             // soft — abuse guard, not an upsell lever
-    monthlyCostCapCents: 1500,            // $15/mo AI ceiling
+    dailyMessageLimit: 30,                // soft, abuse guard
+    monthlyMessageLimit: 200,             // soft — most owners do 8-20/mo
+    monthlyCostCapCents: 1000,            // $10/mo AI ceiling
     humanHoursPerMonth: 0,
     locationsLimit: 1,
     enabledTools: AI_ASSISTANT_TOOLS,
-    pitch: 'AI manages your Google Business Profile, social, reviews, and insights. Keep your existing website.',
+    pitch: 'Quick AI for hours, reviews, posts, and weekly recap. Ask when you need it.',
+    proactiveCadence: 'manual',           // no proactive runs at this tier
+    richContextLoader: false,             // basic context only
+    multiLocationDashboard: false,
+    customPlaybooks: false,
   },
   standard: {
     id: 'standard',
-    label: 'Website + AI',
-    priceCents: 9900,                     // $99/loc/mo
+    label: 'AI Strategist',
+    priceCents: 6900,                     // $69/loc/mo
     isFreeTrial: false,
     trialDays: 0,
     dailyMessageLimit: 100,
     monthlyMessageLimit: 1000,            // soft
-    monthlyCostCapCents: 4000,            // $40/mo AI ceiling
+    monthlyCostCapCents: 3000,            // $30/mo AI ceiling
     humanHoursPerMonth: 0,
     locationsLimit: 1,
-    enabledTools: ALL_TOOLS,
-    pitch: 'Includes your website hosted on Apnosh. AI directly updates menu, hours, copy, and photos.',
+    enabledTools: AI_ASSISTANT_TOOLS,
+    pitch: 'AI reads your data, plans campaigns, and sends weekly insights. The real value tier.',
+    proactiveCadence: 'weekly',           // weekly briefings without owner asking
+    richContextLoader: true,              // full context: sales + reviews + analytics + cross-client patterns
+    multiLocationDashboard: false,
+    customPlaybooks: false,
   },
-  /*
-   * pro is deprecated. Kept in the map so existing client rows
-   * with tier='pro' don't break (they get the Website + AI feature
-   * set automatically via the fallback in resolveTier).
-   */
   pro: {
     id: 'pro',
-    label: 'Website + AI',
-    priceCents: 9900,
+    label: 'AI Strategist+',
+    priceCents: 12900,                    // $129/loc/mo
     isFreeTrial: false,
     trialDays: 0,
-    dailyMessageLimit: 100,
-    monthlyMessageLimit: 1000,
-    monthlyCostCapCents: 4000,
+    dailyMessageLimit: null,              // unlimited
+    monthlyMessageLimit: null,            // unlimited
+    monthlyCostCapCents: 8000,            // $80/mo AI ceiling (still bounded)
     humanHoursPerMonth: 0,
-    locationsLimit: null,
-    enabledTools: ALL_TOOLS,
-    pitch: 'Includes your website hosted on Apnosh. AI directly updates menu, hours, copy, and photos.',
+    locationsLimit: null,                 // unlimited
+    enabledTools: AI_ASSISTANT_TOOLS,
+    pitch: 'Unlimited messages, daily proactive runs, multi-location dashboard, custom playbooks.',
+    proactiveCadence: 'daily',
+    richContextLoader: true,
+    multiLocationDashboard: true,
+    customPlaybooks: true,
   },
 }
 
