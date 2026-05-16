@@ -119,17 +119,30 @@ function humanizeSyncError(err: string | null): string | null {
   if (isV4PendingApproval) {
     return 'Reviews are waiting on Google to approve our access. Listing + performance data still flows — no action needed.'
   }
-  if (lower.includes('permission')) {
-    return 'Waiting on Google to approve API access. No action needed — we\'re on it.'
-  }
   if (lower.includes('token') && (lower.includes('expired') || lower.includes('invalid'))) {
-    return 'Your login expired. Click Reconnect to refresh.'
+    return 'Your Google login expired. Click Reconnect to refresh.'
+  }
+  /* Bare "Unauthorized" from Google APIs typically means the connected
+     Google account no longer has access to this specific property
+     (someone removed them from Search Console, or they were a temporary
+     collaborator). NOT a token problem — refreshing won't fix it. The
+     fix is to reconnect with an account that's a verified user of the
+     property. */
+  if (lower === 'unauthorized' || lower.includes('permission_denied')
+    || lower.includes('does not have access') || lower.includes('not authorized')) {
+    return 'The Google account that connected this no longer has access. Click Reconnect — sign in with an account that owns the property in Search Console.'
   }
   if (lower.includes('403') || lower.includes('denied')) {
     return 'We don\'t have permission to read this account. Click Reconnect and accept all permissions.'
   }
+  if (lower.includes('permission')) {
+    return 'Waiting on Google to approve API access. No action needed — we\'re on it.'
+  }
   if (lower.includes('quota') || lower.includes('rate')) {
     return 'Hit a rate limit. This will sort itself out — try again in a few hours.'
+  }
+  if (lower.includes('not found') || lower.includes('404')) {
+    return 'Property not found in the connected account. The site may have been removed or re-verified by a different user. Click Reconnect.'
   }
   // Default: first sentence of error
   const firstSentence = err.split('.')[0]

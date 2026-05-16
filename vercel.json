@@ -22,6 +22,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/connection-health",
+      "schedule": "30 9 * * *"
+    },
+    {
       "path": "/api/cron/fetch-reviews",
       "schedule": "0 13 * * *"
     },

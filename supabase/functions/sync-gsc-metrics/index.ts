@@ -196,7 +196,30 @@ async function runDailyQuery(siteUrl: string, accessToken: string, date: string)
     queriesRes.json(), pagesRes.json(), totalsRes.json(),
   ])
 
-  if (totals.error) throw new Error(totals.error.message)
+  if (totals.error) {
+    /* Classify the GSC error so the downstream sync_error field carries
+       a code we can map to a clear owner message. GSC returns:
+         - code 401 / status UNAUTHENTICATED → token problem (refresh path)
+         - code 403 / status PERMISSION_DENIED → account lost access to
+           this property (the common failure mode for accounts that were
+           collaborators rather than owners)
+         - code 404 → property no longer exists or was re-verified
+       We prefix our stored error with a tag so humanizeSyncError can
+       reason about it without re-parsing Google's wire format. */
+    const code: number | undefined = totals.error.code
+    const status: string | undefined = totals.error.status
+    const baseMsg: string = totals.error.message || 'Unknown GSC error'
+    if (code === 403 || status === 'PERMISSION_DENIED') {
+      throw new Error(`permission_denied: ${baseMsg} (site: ${siteUrl})`)
+    }
+    if (code === 401 || status === 'UNAUTHENTICATED') {
+      throw new Error(`unauthenticated: ${baseMsg}`)
+    }
+    if (code === 404) {
+      throw new Error(`not_found: GSC property no longer accessible (site: ${siteUrl})`)
+    }
+    throw new Error(baseMsg)
+  }
 
   const totalsRow = (totals.rows && totals.rows[0]) || { clicks: 0, impressions: 0, ctr: 0, position: 0 }
 
