@@ -97,6 +97,24 @@ async function handler(
   const input = rawInput as UpdateMenuItemInput
   const admin = createAdminClient()
 
+  /* Defense-in-depth: registry already filters this tool out for clients
+     without an Apnosh-managed website, but if it somehow reaches the
+     handler (e.g. via an old pending execution, or a hand-written admin
+     trigger), refuse with a clear message rather than silently writing
+     menu_items rows that the front-end can't render. */
+  const { data: clientRow } = await admin
+    .from('clients')
+    .select('has_apnosh_website')
+    .eq('id', ctx.clientId)
+    .maybeSingle() as { data: { has_apnosh_website: boolean | null } | null }
+  if (!clientRow?.has_apnosh_website) {
+    throw new Error(
+      'This restaurant does not have an Apnosh-managed website, so the menu '
+      + 'cannot be edited from chat. Subscribe to Apnosh Website Hosting on '
+      + '/dashboard/upgrade to enable menu edits, or use the GBP menu tool.',
+    )
+  }
+
   // Snapshot the previous state for undo (no-op when creating new).
   // ctx.capturePreviousState wraps this in the right column on the
   // tool_executions row; we just produce the snapshot.

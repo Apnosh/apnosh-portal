@@ -30,7 +30,7 @@ import {
 } from './conversation'
 import { loadClientContext } from './context-loader'
 import { getToolHandler, toAnthropicTools } from './registry'
-import { computeCostCents } from './tiers'
+import { computeCostCents, resolveTier } from './tiers'
 
 const anthropic = new Anthropic()
 
@@ -101,13 +101,16 @@ export async function runAgentTurn(args: {
     await appendUserTurn(args.conversationId, args.userMessage)
   }
 
-  const [prompt, context, tools, tier] = await Promise.all([
+  /* Load the client's tier first so downstream loaders can tier-gate
+     their work (rich context vs. lightweight; tool list per tier). */
+  const tierSlug = await loadClientTier(args.clientId)
+  const tierSpec = resolveTier(tierSlug)
+
+  const [prompt, context, tools] = await Promise.all([
     loadActivePrompt('main_agent'),
-    loadClientContext(args.clientId),
-    loadClientTier(args.clientId).then(t => loadEnabledToolsForClient(args.clientId, t)),
-    loadClientTier(args.clientId),
+    loadClientContext(args.clientId, { rich: tierSpec.richContextLoader }),
+    loadEnabledToolsForClient(args.clientId, tierSlug),
   ])
-  void tier
 
   const toolByName = new Map(tools.map(t => [t.name, t]))
   const anthropicTools = toAnthropicTools(tools)

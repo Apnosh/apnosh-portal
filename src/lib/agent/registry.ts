@@ -44,13 +44,19 @@ export function getToolHandler(name: string): ToolHandler | null {
 
 // ─── DB-backed tool catalog ───────────────────────────────────────
 
+/* Tools that only work when the client is on the Apnosh-managed website
+   product. Even if an admin grants them via client_tool_overrides, they
+   would fail at runtime — we filter them out at the registry layer so
+   Claude never sees them in the tool list. */
+const WEBSITE_GATED_TOOLS = new Set(['update_page_copy', 'update_menu_item'])
+
 /** Return all tools currently available to the given client. */
 export async function loadEnabledToolsForClient(
   clientId: string,
   clientTier: string,
 ): Promise<AgentToolDefinition[]> {
   const admin = createAdminClient()
-  const [toolsRes, overridesRes] = await Promise.all([
+  const [toolsRes, overridesRes, clientRes] = await Promise.all([
     admin.from('agent_tools')
       .select('*')
       .is('retired_at', null)
@@ -58,6 +64,10 @@ export async function loadEnabledToolsForClient(
     admin.from('client_tool_overrides')
       .select('tool_name, enabled')
       .eq('client_id', clientId),
+    admin.from('clients')
+      .select('has_apnosh_website')
+      .eq('id', clientId)
+      .maybeSingle(),
   ])
 
   const tools = (toolsRes.data ?? []) as Array<{
@@ -67,15 +77,22 @@ export async function loadEnabledToolsForClient(
     retired_at: string | null; notes: string | null;
   }>
   const overrides = new Map((overridesRes.data ?? []).map(o => [o.tool_name as string, o.enabled as boolean]))
+  const hasApnoshWebsite = !!(clientRes.data as { has_apnosh_website?: boolean } | null)?.has_apnosh_website
 
   /* Resolve the client's tier to its allowed tool list. Per-client
      overrides in client_tool_overrides win over tier defaults so a
      strategist can give a specific Basic-tier client access to
      post_to_gbp (or revoke a tool for a specific client) without
-     promoting them to a new tier. */
+     promoting them to a new tier.
+
+     Website-gated tools (update_page_copy, update_menu_item) are an
+     additional check: they require has_apnosh_website=true regardless
+     of tier OR override, because the tool handler depends on the
+     Apnosh-managed schema/repo to exist. */
   const tier = resolveTier(clientTier)
   return tools
     .filter(t => {
+      if (WEBSITE_GATED_TOOLS.has(t.name) && !hasApnoshWebsite) return false
       const override = overrides.get(t.name)
       if (override !== undefined) return override
       return tier.enabledTools.includes(t.name)

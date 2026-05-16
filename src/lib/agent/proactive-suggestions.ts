@@ -37,12 +37,30 @@ export interface RunReport {
   errors: Array<{ clientId: string; message: string }>
 }
 
-export async function runProactiveSuggestions(): Promise<RunReport> {
+/* Cron schedule for this run. Set by the cron route (`/api/cron/agent-proactive`)
+   so we can filter clients to those whose tier opts in at this cadence.
+   - 'weekly' (default): includes Strategist + Strategist+ tiers
+   - 'daily': includes only Strategist+ tier (it's the tier that pays for daily) */
+export type ProactiveCadence = 'weekly' | 'daily'
+
+export async function runProactiveSuggestions(
+  opts: { cadence?: ProactiveCadence } = {},
+): Promise<RunReport> {
+  const cadence: ProactiveCadence = opts.cadence ?? 'weekly'
   const admin = createAdminClient()
+
+  /* Tier gate: Assistant tier doesn't get proactive runs at all.
+     Strategist gets weekly only. Strategist+ gets both weekly + daily
+     (the weekly run produces standard insights; daily picks up faster-
+     moving signals like overnight review spikes). */
+  const eligibleTiers = cadence === 'daily'
+    ? ['pro']                       // Strategist+ only
+    : ['standard', 'pro']           // Strategist + Strategist+
   const { data: clients } = await admin
     .from('clients')
-    .select('id, name')
+    .select('id, name, tier')
     .neq('status', 'churned')
+    .in('tier', eligibleTiers)
     .order('created_at', { ascending: true })
 
   const report: RunReport = {
@@ -52,7 +70,7 @@ export async function runProactiveSuggestions(): Promise<RunReport> {
     errors: [],
   }
 
-  for (const c of (clients ?? []) as Array<{ id: string; name: string }>) {
+  for (const c of (clients ?? []) as Array<{ id: string; name: string; tier: string }>) {
     try {
       const suggestions = await detectForClient(c.id)
       for (const s of suggestions) {

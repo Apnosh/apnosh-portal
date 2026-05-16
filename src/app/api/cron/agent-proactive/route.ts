@@ -1,13 +1,18 @@
 /**
- * Daily Vercel cron: run proactive suggestion detectors for every
- * client and write notifications into the existing notifications
- * table. The owner sees them on next dashboard visit.
+ * Vercel cron: run proactive suggestion detectors and write notifications
+ * into the existing notifications table. Owner sees them on next dashboard
+ * visit.
  *
- * Wired in vercel.json.
+ * Cadence is tier-gated:
+ *   - ?cadence=daily  → Strategist+ clients only
+ *   - ?cadence=weekly → Strategist + Strategist+ clients (default)
+ *
+ * Wire two cron schedules in vercel.json that hit different cadences.
+ * Assistant tier never runs (tier doesn't include proactive insights).
  */
 
 import { NextResponse } from 'next/server'
-import { runProactiveSuggestions } from '@/lib/agent/proactive-suggestions'
+import { runProactiveSuggestions, type ProactiveCadence } from '@/lib/agent/proactive-suggestions'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -23,6 +28,8 @@ export async function GET(req: Request) {
   if (!isVercelCron && querySecret !== CRON_SECRET && headerSecret !== CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  const report = await runProactiveSuggestions()
-  return NextResponse.json({ ok: true, ...report })
+  const cadenceParam = url.searchParams.get('cadence')
+  const cadence: ProactiveCadence = cadenceParam === 'daily' ? 'daily' : 'weekly'
+  const report = await runProactiveSuggestions({ cadence })
+  return NextResponse.json({ ok: true, cadence, ...report })
 }

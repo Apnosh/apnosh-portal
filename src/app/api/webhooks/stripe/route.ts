@@ -317,6 +317,35 @@ async function upsertSubscription(
     clientUpdate.tier = tier
   }
 
+  // Detect the Apnosh Website Hosting product. When subscribed to it,
+  // flip has_apnosh_website=true so the website-editing tools unlock.
+  // Read product metadata once if not already attached to the price.
+  let apnoshProduct: string | undefined =
+    (price?.metadata?.apnosh_product as string | undefined)
+    ?? (sub.metadata?.apnosh_product as string | undefined)
+  if (!apnoshProduct && price?.product) {
+    try {
+      const productId = typeof price.product === 'string' ? price.product : price.product.id
+      const product = await stripe.products.retrieve(productId)
+      apnoshProduct = product.metadata?.apnosh_product as string | undefined
+    } catch {
+      /* non-fatal */
+    }
+  }
+  if (apnoshProduct === 'website_hosting'
+    && (sub.status === 'active' || sub.status === 'trialing')) {
+    clientUpdate.has_apnosh_website = true
+    if (!('website_started_at' in clientUpdate)) {
+      // Stamp the first time only — don't overwrite the original start on renewals.
+      const { data: existing } = await supabase
+        .from('clients').select('website_started_at').eq('id', clientId).maybeSingle() as
+          { data: { website_started_at: string | null } | null }
+      if (!existing?.website_started_at) {
+        clientUpdate.website_started_at = new Date().toISOString()
+      }
+    }
+  }
+
   await supabase.from('clients').update(clientUpdate).eq('id', clientId)
 }
 
@@ -343,12 +372,27 @@ async function handleSubscriptionDeleted(supabase: AdminClient, sub: Stripe.Subs
 
   // Also sync clients.billing_status so the legacy card reflects cancellation.
   // Revert tier to 'starter' (free trial / read-only) so the agent immediately
-  // stops honoring paid-tier limits and tools.
+  // stops honoring paid-tier limits and tools. If the cancelled subscription
+  // was specifically the Website Hosting product, flip has_apnosh_website=false
+  // so the website-editing tools re-lock immediately.
   if (clientId) {
-    await supabase
-      .from('clients')
-      .update({ billing_status: 'cancelled', tier: 'starter' })
-      .eq('id', clientId)
+    const cancelUpdate: Record<string, unknown> = {
+      billing_status: 'cancelled',
+      tier: 'starter',
+    }
+    try {
+      const full = await stripe.subscriptions.retrieve(sub.id, {
+        expand: ['items.data.price.product'],
+      })
+      const wasWebsite = full.items.data.some(item => {
+        const product = item.price.product as Stripe.Product | undefined
+        return product?.metadata?.apnosh_product === 'website_hosting'
+      })
+      if (wasWebsite) cancelUpdate.has_apnosh_website = false
+    } catch {
+      /* non-fatal */
+    }
+    await supabase.from('clients').update(cancelUpdate).eq('id', clientId)
   }
 
   if (clientId) {

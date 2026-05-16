@@ -28,23 +28,57 @@ export interface ClientContextSnapshot {
   approxTokens: number
 }
 
-export async function loadClientContext(clientId: string): Promise<ClientContextSnapshot> {
+export async function loadClientContext(
+  clientId: string,
+  opts: { rich?: boolean } = {},
+): Promise<ClientContextSnapshot> {
+  /*
+   * Tier-aware loader.
+   *
+   * Lightweight (Assistant tier): facts + menu + locations + channels +
+   * recent reviews + content fields + open requests. ~1.5-2.5k tokens.
+   * Enough for "update my hours" or "draft a review reply" but skips the
+   * cross-client patterns + 7-day performance summary that the Strategist
+   * tiers pay for.
+   *
+   * Rich (Strategist + Strategist+): everything above PLUS performance
+   * snapshot + cross-client patterns + recent activity. ~3.5-5k tokens.
+   * Lets the agent reason about trends, suggest campaigns, and surface
+   * "what worked for similar restaurants."
+   */
+  const rich = opts.rich ?? false
   const admin = createAdminClient()
-  const [factsText, menu, reviews, recentUpdates, openRequests, channels, locations, contentFields, specials, perfSummary, patterns] = await Promise.all([
+
+  /* Always-loaded baseline. */
+  const baselineP = Promise.all([
     renderFactsForPrompt(clientId, 0.5),
     loadMenuSummary(clientId),
     loadRecentReviews(clientId),
-    loadRecentUpdates(clientId),
     loadOpenRequests(clientId),
     loadConnectedChannels(clientId),
     loadLocations(clientId),
     loadContentFields(clientId),
     loadActiveSpecials(clientId),
-    loadPerformanceSummary(clientId),
-    loadCrossClientPatterns(clientId),
-  ]).catch(err => {
+  ])
+
+  /* Rich-only loaders: skipped for Assistant tier to save tokens + cost. */
+  const richP = rich
+    ? Promise.all([
+        loadRecentUpdates(clientId),
+        loadPerformanceSummary(clientId),
+        loadCrossClientPatterns(clientId),
+      ])
+    : Promise.resolve(['', '', ''] as [string, string, string])
+
+  const [
+    [factsText, menu, reviews, openRequests, channels, locations, contentFields, specials],
+    [recentUpdates, perfSummary, patterns],
+  ] = await Promise.all([baselineP, richP]).catch(err => {
     console.error('[context-loader] partial failure:', (err as Error).message)
-    return ['', '', '', '', '', '', '', '', '', '', '']
+    return [
+      ['', '', '', '', '', '', '', ''],
+      ['', '', ''],
+    ] as [[string, string, string, string, string, string, string, string], [string, string, string]]
   })
   void admin  // each loader uses its own client
 
@@ -58,10 +92,10 @@ export async function loadClientContext(clientId: string): Promise<ClientContext
   if (specials) sections.push('\n## Active specials', specials)
   if (contentFields) sections.push('\n## Website copy (editable fields on file)', contentFields)
   if (reviews) sections.push('\n## Recent reviews', reviews)
-  if (recentUpdates) sections.push('\n## Recent activity (last 14 days)', recentUpdates)
   if (openRequests) sections.push('\n## Open requests in the queue', openRequests)
-  if (perfSummary) sections.push('\n## Last 7-day performance snapshot', perfSummary)
-  if (patterns) sections.push('\n## What worked for similar restaurants', patterns)
+  if (rich && recentUpdates) sections.push('\n## Recent activity (last 14 days)', recentUpdates)
+  if (rich && perfSummary) sections.push('\n## Last 7-day performance snapshot', perfSummary)
+  if (rich && patterns) sections.push('\n## What worked for similar restaurants', patterns)
 
   const text = sections.join('\n')
   return { text, approxTokens: Math.ceil(text.length / 4) }
