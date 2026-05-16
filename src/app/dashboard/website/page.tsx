@@ -17,8 +17,8 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, Globe, Plug, RefreshCw } from 'lucide-react'
-import { refreshWebsiteData } from '@/lib/dashboard/website-setup'
+import { Plus, Globe, Plug, RefreshCw, History } from 'lucide-react'
+import { refreshWebsiteData, backfillFullSearchHistory } from '@/lib/dashboard/website-setup'
 import type { TimeRange, DashboardView } from '@/types/dashboard'
 import { getWebsiteView } from '@/lib/dashboard/get-website-view'
 import { useClient } from '@/lib/client-context'
@@ -42,6 +42,7 @@ export default function WebsiteOverviewPage() {
   const [analyticsConnected, setAnalyticsConnected] = useState<boolean | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMsg, setRefreshMsg] = useState<string | null>(null)
+  const [backfilling, setBackfilling] = useState(false)
 
   useEffect(() => {
     async function loadData() {
@@ -169,6 +170,33 @@ export default function WebsiteOverviewPage() {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             {refreshing ? 'Syncing...' : 'Refresh data'}
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (backfilling) return
+              setBackfilling(true)
+              setRefreshMsg(null)
+              const res = await backfillFullSearchHistory()
+              setBackfilling(false)
+              if (res.success) {
+                setRefreshMsg(`Pulled ${res.days} days of search history`)
+                setTimeout(() => setRefreshMsg(null), 6000)
+                if (client?.id) {
+                  const v = await getWebsiteView(client.id).catch(() => null)
+                  if (v) setView(v)
+                }
+              } else {
+                setRefreshMsg(res.error)
+                setTimeout(() => setRefreshMsg(null), 6000)
+              }
+            }}
+            disabled={backfilling}
+            title="Pull the full 16 months of historical search data Google has on your site (~60-90s)"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-ink-2 bg-ink-7 hover:bg-ink-6 disabled:opacity-50"
+          >
+            <History className={`w-3.5 h-3.5 ${backfilling ? 'animate-pulse' : ''}`} />
+            {backfilling ? 'Pulling 16mo of history...' : 'Pull full history'}
           </button>
           <Link
             href="/dashboard/website/setup"

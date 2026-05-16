@@ -96,15 +96,14 @@ export async function finalizeGA4Connection(
     .delete()
     .eq('id', pending.id)
 
-  /* Auto-backfill so the client sees a populated traffic chart on
-     their first dashboard visit. Awaited (not fire-and-forget) --
-     Vercel was killing the background promise before it finished,
-     which left every new connection stuck at last_sync_at=null.
-     We only backfill 14 days here to keep the wait under ~30s; a
-     deeper backfill happens on the next daily cron tick. */
+  /* Auto-backfill 90 days inline. Awaited (not fire-and-forget) --
+     Vercel was killing the background promise before it finished.
+     GA only has data from the moment the tag was installed, so for
+     a fresh property this often returns zero rows; that's fine,
+     the client sees a real-zero, not a missing-data state. */
   try {
     const { syncGoogleAnalyticsForClient } = await import('@/lib/web-analytics-sync')
-    await syncGoogleAnalyticsForClient(clientId, 14)
+    await syncGoogleAnalyticsForClient(clientId, 90)
   } catch (err) {
     console.error('[finalizeGA4Connection] auto-backfill failed:', (err as Error).message)
     /* Non-fatal: connection is saved, daily cron will backfill. */

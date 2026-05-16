@@ -93,13 +93,15 @@ export async function finalizeGSCConnection(
     .delete()
     .eq('id', pending.id)
 
-  /* Auto-backfill. Awaited (was fire-and-forget, which Vercel killed
-     before completion). 14 days here keeps the wait short; daily
-     cron extends history later. GSC has a 2-3 day reporting lag,
-     handled in syncSearchConsoleForClient. */
+  /* Auto-backfill the last 90 days inline. Keeps the OAuth callback
+     under Vercel's serverless timeout (~18s for 90 GSC API calls).
+     Clients who want the full 16 months Google retains can click
+     "Pull full history" on the Website page -- that hits a separate
+     server action that's allowed a longer budget. GSC has a 2-3 day
+     reporting lag, handled inside syncSearchConsoleForClient. */
   try {
     const { syncSearchConsoleForClient } = await import('@/lib/web-analytics-sync')
-    await syncSearchConsoleForClient(clientId, 14)
+    await syncSearchConsoleForClient(clientId, 90)
   } catch (err) {
     console.error('[finalizeGSCConnection] auto-backfill failed:', (err as Error).message)
   }
