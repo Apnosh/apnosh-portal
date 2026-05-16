@@ -120,6 +120,29 @@ export default async function HeatmapsPage() {
         <EmptyState />
       ) : (
         <>
+          {/* Heads-up about Clarity's gating behavior. Until Clarity
+             records its first session, every link below force-redirects
+             to their "Almost there" install page. This is Clarity's
+             behavior, not ours, but the chip explains it so owners
+             aren't confused when they click. */}
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-[12px] text-amber-900">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
+            <div>
+              <div className="font-semibold">Clarity is waiting for your first visitor</div>
+              <p className="mt-0.5 leading-relaxed">
+                Until Clarity records its first session (usually 30 min – 2 hours after the snippet goes live),
+                clicking the cards below will land on Clarity&apos;s &quot;Almost there&quot; install page. Once data arrives,
+                these links open straight into the right view. Send a couple of test visits to{' '}
+                {state.websiteUrl ? (
+                  <a href={state.websiteUrl} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                    your site
+                  </a>
+                ) : 'your site'}{' '}
+                to speed it up.
+              </p>
+            </div>
+          </div>
+
           {/* Why iframe-free notice */}
           <div className="flex items-start gap-2 p-3 rounded-lg bg-bg-2 border border-ink-6 text-[12px] text-ink-3">
             <Sparkles className="w-4 h-4 flex-shrink-0 mt-0.5 text-brand" />
