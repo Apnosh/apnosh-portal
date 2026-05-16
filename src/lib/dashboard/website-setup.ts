@@ -159,40 +159,6 @@ export async function refreshWebsiteData(): Promise<
   return { success: true, ga: gaResult, gsc: gscResult }
 }
 
-export async function backfillFullSearchHistory(): Promise<
-  | { success: true; days: number }
-  | { success: false; error: string }
-> {
-  /* One-shot: pulls the full 16 months Google Search Console retains.
-     Long-running (~60-90s, ~480 sequential GSC API calls) -- the UI
-     should show an explicit loading state when calling this. Server
-     actions on Vercel Pro allow up to 60s by default; this should
-     fit inside that, but if it ever times out, partial progress is
-     already persisted day-by-day via upsert. */
-  const ctx = await requireClientContext()
-  if ('error' in ctx) return { success: false, error: ctx.error }
-  const admin = createAdminClient()
-  const { data: gsc } = await admin
-    .from('channel_connections')
-    .select('id, access_token')
-    .eq('client_id', ctx.clientId)
-    .eq('channel', 'google_search_console')
-    .eq('status', 'active')
-    .not('access_token', 'is', null)
-    .maybeSingle()
-  if (!gsc) return { success: false, error: 'Search Console not connected' }
-  try {
-    const { syncSearchConsoleForClient } = await import('@/lib/web-analytics-sync')
-    const r = await syncSearchConsoleForClient(ctx.clientId, 480)
-    if (r.error && r.daysWritten === 0) return { success: false, error: r.error }
-    revalidatePath('/dashboard/website')
-    revalidatePath('/dashboard/website/traffic')
-    return { success: true, days: r.daysWritten }
-  } catch (err) {
-    return { success: false, error: (err as Error).message }
-  }
-}
-
 export async function saveClarityProjectId(projectId: string): Promise<{ success: true } | { success: false; error: string }> {
   const ctx = await requireClientContext()
   if ('error' in ctx) return { success: false, error: ctx.error }

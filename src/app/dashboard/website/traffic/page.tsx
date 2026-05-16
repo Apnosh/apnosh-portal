@@ -296,6 +296,32 @@ export default function WebsiteTrafficPage() {
     insight.advanced.sessions > 0
   )
 
+  /* When there's no data yet, render the full page UI with zero
+     placeholders + a single banner explaining the state. Better
+     than a stark empty card because owners can see the layout
+     they're working toward + understand each section's purpose. */
+  const showAsEmpty = !hasAnyData || !insight
+  const zeroInsight: WebsiteInsight = {
+    headline: '',
+    narrative: '',
+    hero: {
+      visitors: { value: 0, label: 'Visitors', sublabel: null, trendPct: null, hasData: false },
+      actions: { value: 0, label: 'Actions', sublabel: null, trendPct: null, hasData: false },
+      searchVisibility: { value: 0, label: 'Search visibility', sublabel: null, trendPct: null, hasData: false },
+    },
+    sources: [],
+    cities: [],
+    topPages: [],
+    search: { hasData: false, impressions: 0, clicks: 0, topQuery: null, avgPosition: null, insight: null },
+    advanced: {
+      pageViews: 0, sessions: 0, bounceRate: null, avgSessionDuration: null, mobilePct: null,
+      newUsers: 0, returningUsers: 0, landingPages: [], referrers: [],
+      conversionBreakdown: { phone_clicks: 0, direction_clicks: 0, form_submits: 0, booking_clicks: 0, other: 0, total: 0 },
+    },
+    meta: { daysWithData: 0, startDate: '', endDate: '', usingMonthlyAggregate: false },
+  }
+  const renderInsight: WebsiteInsight = insight ?? zeroInsight
+
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-6 py-8 space-y-6">
       {/* Header */}
@@ -314,9 +340,11 @@ export default function WebsiteTrafficPage() {
         </div>
       </div>
 
-      {!hasAnyData || !insight ? (
-        <EmptyState />
-      ) : (
+      {showAsEmpty && <NoDataBanner gaConnected={latestSync != null} latestSync={latestSync} />}
+
+      {(() => {
+        const insight = renderInsight
+        return (
         <>
           {/* 1. Visitors — the headline number with a trend chart. */}
           <section className="rounded-2xl border border-ink-6 bg-white p-5 lg:p-6">
@@ -339,8 +367,10 @@ export default function WebsiteTrafficPage() {
             </div>
           </section>
 
-          {/* 2. What they did — conversion rate + breakdown. */}
-          {(insight.hero.actions.hasData || insight.advanced.conversionBreakdown.total > 0) && (
+          {/* 2. What they did — conversion rate + breakdown. Always
+             rendered so the page layout is consistent; the chips
+             show 0s when no actions have been tracked yet. */}
+          {(
             <section className="rounded-2xl border border-ink-6 bg-white p-5 lg:p-6">
               <div className="flex items-center gap-2 mb-1">
                 <Target className="w-3.5 h-3.5 text-brand" />
@@ -366,76 +396,85 @@ export default function WebsiteTrafficPage() {
             </section>
           )}
 
-          {/* 3. How they found you. */}
-          {insight.sources.length > 0 && (
-            <section className="rounded-2xl border border-ink-6 bg-white p-5 lg:p-6">
-              <div className="flex items-center gap-2 mb-1">
-                <Globe className="w-3.5 h-3.5 text-brand" />
-                <h2 className="text-sm font-semibold text-ink">How they found you</h2>
-              </div>
-              <p className="text-[12.5px] text-ink-3 mb-4">The channels driving visits.</p>
-              <StackedSources sources={insight.sources} />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mt-4">
-                {insight.sources.slice(0, 6).map(s => (
-                  <div key={s.label} className="flex items-center justify-between text-[12.5px]">
-                    <span className="text-ink-2 inline-flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full" style={{ background: sourceColor(s.label) }} />
-                      {s.label}
-                    </span>
-                    <span className="text-ink-3 tabular-nums">
-                      {formatNumber(s.count)} <span className="text-ink-4">· {s.pct.toFixed(0)}%</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* 4 + 5. Top pages and cities side-by-side. */}
-          {(insight.topPages.length > 0 || insight.cities.length > 0) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {insight.topPages.length > 0 && (
-                <section className="rounded-2xl border border-ink-6 bg-white p-5">
-                  <div className="flex items-center gap-2 mb-1">
-                    <FileText className="w-3.5 h-3.5 text-brand" />
-                    <h2 className="text-sm font-semibold text-ink">What they looked at</h2>
-                  </div>
-                  <p className="text-[11.5px] text-ink-3 mb-3">Pages people viewed most.</p>
-                  <ul className="space-y-2">
-                    {insight.topPages.slice(0, 5).map((p, i) => (
-                      <li key={i} className="flex items-center gap-3 text-[12.5px]">
-                        <span className="text-[10px] text-ink-4 font-mono w-4 tabular-nums">{i + 1}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-ink truncate">{p.label}</div>
-                          <div className="text-[10px] text-ink-4 truncate font-mono">{p.path}</div>
-                        </div>
-                        <span className="text-ink-2 font-medium tabular-nums">{formatNumber(p.views)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              {insight.cities.length > 0 && (
-                <section className="rounded-2xl border border-ink-6 bg-white p-5">
-                  <div className="flex items-center gap-2 mb-1">
-                    <MapPin className="w-3.5 h-3.5 text-brand" />
-                    <h2 className="text-sm font-semibold text-ink">Where they live</h2>
-                  </div>
-                  <p className="text-[11.5px] text-ink-3 mb-3">Top cities visitors came from.</p>
-                  <ul className="space-y-2">
-                    {insight.cities.slice(0, 5).map((c, i) => (
-                      <li key={c.city} className="flex items-center gap-3 text-[12.5px]">
-                        <span className="text-[10px] text-ink-4 font-mono w-4 tabular-nums">{i + 1}</span>
-                        <span className="flex-1 text-ink truncate">{c.city}</span>
-                        <span className="text-ink-2 font-medium tabular-nums">{formatNumber(c.sessions)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
+          {/* 3. How they found you. Always rendered; shows a
+             placeholder line when no traffic source data yet. */}
+          <section className="rounded-2xl border border-ink-6 bg-white p-5 lg:p-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Globe className="w-3.5 h-3.5 text-brand" />
+              <h2 className="text-sm font-semibold text-ink">How they found you</h2>
             </div>
-          )}
+            <p className="text-[12.5px] text-ink-3 mb-4">The channels driving visits.</p>
+            {insight.sources.length > 0 ? (
+              <>
+                <StackedSources sources={insight.sources} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mt-4">
+                  {insight.sources.slice(0, 6).map(s => (
+                    <div key={s.label} className="flex items-center justify-between text-[12.5px]">
+                      <span className="text-ink-2 inline-flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full" style={{ background: sourceColor(s.label) }} />
+                        {s.label}
+                      </span>
+                      <span className="text-ink-3 tabular-nums">
+                        {formatNumber(s.count)} <span className="text-ink-4">· {s.pct.toFixed(0)}%</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="text-[12.5px] text-ink-4 py-3">No traffic sources tracked yet. Once visitors land on your site, you&apos;ll see whether they came from Google, social media, direct, or referrals.</p>
+            )}
+          </section>
+
+          {/* 4 + 5. Top pages and cities side-by-side. Always
+             rendered for layout consistency; each shows a small
+             empty-state line when its list is empty. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <section className="rounded-2xl border border-ink-6 bg-white p-5">
+              <div className="flex items-center gap-2 mb-1">
+                <FileText className="w-3.5 h-3.5 text-brand" />
+                <h2 className="text-sm font-semibold text-ink">What they looked at</h2>
+              </div>
+              <p className="text-[11.5px] text-ink-3 mb-3">Pages people viewed most.</p>
+              {insight.topPages.length > 0 ? (
+                <ul className="space-y-2">
+                  {insight.topPages.slice(0, 5).map((p, i) => (
+                    <li key={i} className="flex items-center gap-3 text-[12.5px]">
+                      <span className="text-[10px] text-ink-4 font-mono w-4 tabular-nums">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-ink truncate">{p.label}</div>
+                        <div className="text-[10px] text-ink-4 truncate font-mono">{p.path}</div>
+                      </div>
+                      <span className="text-ink-2 font-medium tabular-nums">{formatNumber(p.views)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[12px] text-ink-4 py-2">No pageview data yet.</p>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-ink-6 bg-white p-5">
+              <div className="flex items-center gap-2 mb-1">
+                <MapPin className="w-3.5 h-3.5 text-brand" />
+                <h2 className="text-sm font-semibold text-ink">Where they live</h2>
+              </div>
+              <p className="text-[11.5px] text-ink-3 mb-3">Top cities visitors came from.</p>
+              {insight.cities.length > 0 ? (
+                <ul className="space-y-2">
+                  {insight.cities.slice(0, 5).map((c, i) => (
+                    <li key={c.city} className="flex items-center gap-3 text-[12.5px]">
+                      <span className="text-[10px] text-ink-4 font-mono w-4 tabular-nums">{i + 1}</span>
+                      <span className="flex-1 text-ink truncate">{c.city}</span>
+                      <span className="text-ink-2 font-medium tabular-nums">{formatNumber(c.sessions)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[12px] text-ink-4 py-2">No city data yet.</p>
+              )}
+            </section>
+          </div>
 
           {/* Mobile vs desktop conversion split + newsletter signups
               side-by-side. */}
@@ -477,8 +516,10 @@ export default function WebsiteTrafficPage() {
             <ClarityCard clientId={client.id} initialProjectId={clarityProjectId} />
           )}
 
-          {/* 6. Google search performance. */}
-          {insight.search.hasData && (
+          {/* 6. Google search performance. Always rendered; zeros
+             surface when Search Console is connected but has no
+             data yet, OR when not connected at all. */}
+          {(
             <section className="rounded-2xl border border-ink-6 bg-white p-5 lg:p-6">
               <div className="flex items-center gap-2 mb-1">
                 <Search className="w-3.5 h-3.5 text-brand" />
@@ -588,7 +629,7 @@ export default function WebsiteTrafficPage() {
             </p>
           )}
         </>
-      )}
+      )})()}
     </div>
   )
 }
@@ -840,6 +881,9 @@ function PositionChart({ series }: { series: Array<{ date: string; position: num
 }
 
 function EmptyState() {
+  /* Kept for backwards compatibility; not used by the page anymore.
+     The page now renders the full UI with zero placeholders + a
+     NoDataBanner at the top. */
   return (
     <div className="rounded-2xl border border-ink-6 bg-white p-12 text-center">
       <BarChart3 className="w-6 h-6 text-ink-4 mx-auto mb-3" />
@@ -847,6 +891,32 @@ function EmptyState() {
       <p className="text-xs text-ink-4 mt-1 max-w-sm mx-auto">
         If you just connected Google Analytics, data takes up to 24 hours to appear. Try widening the date range.
       </p>
+    </div>
+  )
+}
+
+function NoDataBanner({ gaConnected, latestSync }: { gaConnected: boolean; latestSync: string | null }) {
+  /* Shown at the top of Full Analytics when none of the hero metrics
+     have data yet. Distinguishes between "GA not connected" and
+     "GA connected but no data yet" so owners know what action (if
+     any) will fix the empty dashboard. */
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 lg:p-5 flex items-start gap-3">
+      <Sparkles className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+      <div className="text-[13px] text-amber-900">
+        <div className="font-semibold">No analytics data yet for this period</div>
+        <p className="mt-0.5 leading-relaxed">
+          {gaConnected ? (
+            <>
+              Google Analytics is connected{latestSync ? ` (last synced ${new Date(latestSync).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })})` : ''}, but no visits have landed in this date range yet. GA takes up to 24 hours after the tag is installed to start showing data — once visitors arrive, this whole page populates automatically. Try widening the date range to &quot;Last 90 days&quot; once data is available.
+            </>
+          ) : (
+            <>
+              Google Analytics isn&apos;t connected to this site. Head to <a href="/dashboard/website/setup" className="underline font-medium">Setup</a> to connect it. Once connected, the sections below populate within 24 hours.
+            </>
+          )}
+        </p>
+      </div>
     </div>
   )
 }
