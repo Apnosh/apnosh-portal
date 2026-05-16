@@ -158,6 +158,7 @@ async function ingestGSCDayForClient(
     const admin = createAdminClient()
     const { error } = await admin.from('search_metrics').upsert({
       client_id: clientId,
+      site_url: siteUrl,
       date,
       total_impressions: m.totalImpressions,
       total_clicks: m.totalClicks,
