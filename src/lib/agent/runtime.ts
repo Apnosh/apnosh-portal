@@ -88,10 +88,17 @@ export interface AgentTurnResult {
 export async function runAgentTurn(args: {
   conversationId: string
   clientId: string
-  userMessage: string
+  /* The new user message. When omitted, we don't append anything new
+     and just let Claude respond to whatever's already in the message
+     history -- used for follow-up turns after a confirmation, where
+     the tool_result is already in the DB and Claude just needs to
+     summarize. */
+  userMessage?: string
 }): Promise<AgentTurnResult> {
   // Append the user turn first so it's persisted even if Claude errors.
-  await appendUserTurn(args.conversationId, args.userMessage)
+  if (args.userMessage) {
+    await appendUserTurn(args.conversationId, args.userMessage)
+  }
 
   const [prompt, factsText, tools, tier] = await Promise.all([
     loadActivePrompt('main_agent'),

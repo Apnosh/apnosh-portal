@@ -144,15 +144,16 @@ export async function confirmPendingExecution(executionId: string): Promise<
   if (!res.ok) return { success: false, error: res.error }
 
   // Feed the tool result back into the agent so it can respond.
+  // The result was already appended as a tool-role turn by
+  // confirmAndExecute -- we call runAgentTurn WITHOUT a userMessage
+  // so Claude responds to the existing message history (which now
+  // ends in the tool_result) instead of seeing a synthetic user
+  // message in the chat.
   if (exec.conversation_id) {
-    // The result was already appended as a tool-role turn by
-    // confirmAndExecute. Trigger one more agent turn to let it
-    // summarize / continue.
     try {
       await runAgentTurn({
         conversationId: exec.conversation_id as string,
         clientId: ctx.clientId,
-        userMessage: '(tool execution completed -- continue)',
       })
     } catch (err) {
       console.error('[confirmPendingExecution] follow-up turn failed:', (err as Error).message)
