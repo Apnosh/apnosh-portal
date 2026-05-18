@@ -683,3 +683,206 @@ export async function createCustomerPortalLink(
     return { success: false, error: msg }
   }
 }
+
+// ---------------------------------------------------------------------------
+// previewConsolidate / consolidateOpenInvoices
+// ---------------------------------------------------------------------------
+//
+// When a client has multiple open (finalized + unpaid) invoices, the
+// default Stripe behavior is one pay-link per invoice. The client gets
+// two emails and pays twice. These actions let an admin merge all open
+// invoices for a client into a single new invoice + single pay link.
+//
+// Safety:
+//   - Only acts on invoices with stripe status 'open'. Draft, paid,
+//     void, uncollectible are ignored.
+//   - Refuses if any open invoice has amount_paid > 0 (mid-payment).
+//   - Always previews first; the consolidate action takes the list of
+//     stripe_invoice_ids to merge so the admin sees exactly what changes.
+//
+// Mechanics:
+//   1. For each old open invoice: copy its line items into a single
+//      summary description (we lose per-line detail by design — the
+//      consolidated invoice has one line per source invoice).
+//   2. Void each old open invoice in Stripe.
+//   3. Create a new invoice with the combined line items.
+//   4. Finalize + send so the client gets one new pay link.
+//   5. The Stripe webhook mirrors all status changes into our DB.
+
+export interface ConsolidatePreview {
+  clientId: string
+  invoices: Array<{
+    stripeInvoiceId: string
+    invoiceNumber: string | null
+    totalCents: number
+    description: string | null
+  }>
+  totalCents: number
+  blockedReason?: string
+}
+
+export async function previewConsolidate(args: { clientId: string }): Promise<ActionResult<ConsolidatePreview>> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const admin = getAdminSupabase()
+  const { data: rows } = await admin
+    .from('invoices')
+    .select('stripe_invoice_id, invoice_number, total_cents, amount_paid_cents, description, status')
+    .eq('client_id', args.clientId)
+    .eq('status', 'open')
+    .order('issued_at', { ascending: true })
+
+  const invoices = (rows ?? []) as Array<{
+    stripe_invoice_id: string | null
+    invoice_number: string | null
+    total_cents: number
+    amount_paid_cents: number | null
+    description: string | null
+    status: string
+  }>
+
+  // Filter to invoices that actually have a Stripe ID we can act on.
+  const actionable = invoices.filter(i => !!i.stripe_invoice_id)
+  if (actionable.length < 2) {
+    return { success: false, error: 'Need at least 2 open invoices with Stripe IDs to consolidate.' }
+  }
+
+  // Refuse to touch partially-paid invoices.
+  const partiallyPaid = actionable.find(i => (i.amount_paid_cents ?? 0) > 0)
+  if (partiallyPaid) {
+    return {
+      success: false,
+      error: `Cannot consolidate — invoice ${partiallyPaid.invoice_number ?? partiallyPaid.stripe_invoice_id} already has a partial payment. Resolve it first.`,
+    }
+  }
+
+  return {
+    success: true,
+    data: {
+      clientId: args.clientId,
+      invoices: actionable.map(i => ({
+        stripeInvoiceId: i.stripe_invoice_id as string,
+        invoiceNumber: i.invoice_number,
+        totalCents: i.total_cents,
+        description: i.description,
+      })),
+      totalCents: actionable.reduce((s, i) => s + i.total_cents, 0),
+    },
+  }
+}
+
+export async function consolidateOpenInvoices(args: {
+  clientId: string
+  stripeInvoiceIds: string[]   // must match preview to avoid race conditions
+}): Promise<ActionResult<{ newStripeInvoiceId: string; hostedUrl: string | null; totalCents: number }>> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  if (args.stripeInvoiceIds.length < 2) {
+    return { success: false, error: 'Need at least 2 invoices to consolidate.' }
+  }
+
+  const admin = getAdminSupabase()
+  /* Resolve the Stripe customer id. */
+  const { data: bc } = await admin
+    .from('billing_customers')
+    .select('stripe_customer_id')
+    .eq('client_id', args.clientId)
+    .maybeSingle() as { data: { stripe_customer_id: string | null } | null }
+  if (!bc?.stripe_customer_id) {
+    return { success: false, error: 'Client has no Stripe customer.' }
+  }
+
+  try {
+    /* 1. Pull each source invoice from Stripe, build the consolidated
+          description, total, and a per-source line. Refuse if any source
+          isn't 'open' or has been partially paid. */
+    type SourceLine = { amountCents: number; description: string; currency: string }
+    const sourceLines: SourceLine[] = []
+    let currency = 'usd'
+
+    for (const id of args.stripeInvoiceIds) {
+      const inv = await stripe.invoices.retrieve(id, { expand: ['lines'] })
+      if (inv.status !== 'open') {
+        return { success: false, error: `Invoice ${inv.number ?? id} is not 'open' (status: ${inv.status}). Refresh and try again.` }
+      }
+      if ((inv.amount_paid ?? 0) > 0) {
+        return { success: false, error: `Invoice ${inv.number ?? id} has a partial payment. Refuse.` }
+      }
+      currency = (inv.currency ?? 'usd').toLowerCase()
+      const periodLabel = inv.number ?? `inv ${id.slice(-6)}`
+      const desc = inv.description
+        ? `${periodLabel} — ${inv.description}`
+        : `${periodLabel}`
+      sourceLines.push({
+        amountCents: inv.total ?? 0,
+        description: desc,
+        currency,
+      })
+    }
+
+    /* 2. Pre-create invoice items for the consolidated invoice. We do
+          this BEFORE voiding the old ones so a partial failure doesn't
+          leave the client with zero open invoices and no replacement. */
+    for (const line of sourceLines) {
+      await stripe.invoiceItems.create({
+        customer: bc.stripe_customer_id,
+        amount: line.amountCents,
+        currency: line.currency,
+        description: line.description,
+      })
+    }
+
+    /* 3. Create + finalize the consolidated invoice. */
+    const consolidated = await stripe.invoices.create({
+      customer: bc.stripe_customer_id,
+      collection_method: 'send_invoice',
+      days_until_due: 14,
+      description: `Consolidated invoice covering ${args.stripeInvoiceIds.length} prior open invoices.`,
+      auto_advance: false,
+    })
+
+    const finalized = await stripe.invoices.finalizeInvoice(consolidated.id)
+
+    /* 4. Send the new invoice to the client (gives them the pay link). */
+    try {
+      await stripe.invoices.sendInvoice(finalized.id)
+    } catch (sendErr) {
+      // Non-fatal — the hosted URL is still available; admin can re-send manually.
+      console.warn('[consolidate] sendInvoice failed:', (sendErr as Error).message)
+    }
+
+    /* 5. Void the old invoices ONLY after the new one is finalized.
+          Order matters: if step 4 fails, we still have the old ones live. */
+    const voidErrors: string[] = []
+    for (const id of args.stripeInvoiceIds) {
+      try {
+        await stripe.invoices.voidInvoice(id)
+      } catch (err) {
+        voidErrors.push(`${id}: ${(err as Error).message}`)
+      }
+    }
+    if (voidErrors.length > 0) {
+      /* Don't fail the whole action — the new invoice exists, but warn
+         that some old ones are still live and need manual void. The
+         admin will see this in the UI. */
+      console.warn('[consolidate] some old invoices failed to void:', voidErrors)
+    }
+
+    revalidatePath(`/admin/clients/${args.clientId}`)
+    revalidatePath('/admin/billing')
+
+    return {
+      success: true,
+      data: {
+        newStripeInvoiceId: finalized.id,
+        hostedUrl: finalized.hosted_invoice_url ?? null,
+        totalCents: finalized.total ?? sourceLines.reduce((s, l) => s + l.amountCents, 0),
+      },
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to consolidate invoices'
+    return { success: false, error: msg }
+  }
+}

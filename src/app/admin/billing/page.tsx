@@ -15,9 +15,10 @@ import { createClient } from '@/lib/supabase/client'
 import {
   DollarSign, TrendingUp, AlertCircle, Clock, Search,
   FileText, RefreshCw, ExternalLink, ChevronDown, ChevronUp,
-  AlertTriangle, Eye,
+  AlertTriangle, Eye, Combine, X, CheckCircle2, Loader2,
 } from 'lucide-react'
 import { InvoiceDetailModal } from '@/components/admin/invoice-detail-modal'
+import { previewConsolidate, consolidateOpenInvoices, type ConsolidatePreview } from '@/lib/billing-actions'
 
 /* ------------------------------------------------------------------ */
 /*  Types (mirror billing v2 schema)                                   */
@@ -144,6 +145,42 @@ export default function AdminBillingPage() {
   const [search, setSearch] = useState('')
   const [sortAsc, setSortAsc] = useState(false)
   const [detailInvoiceId, setDetailInvoiceId] = useState<string | null>(null)
+  /* Consolidate-invoices modal state */
+  const [consolidateState, setConsolidateState] = useState<
+    | { stage: 'idle' }
+    | { stage: 'loading'; clientId: string; clientName: string }
+    | { stage: 'preview'; clientId: string; clientName: string; preview: ConsolidatePreview }
+    | { stage: 'running'; clientId: string; clientName: string }
+    | { stage: 'done'; hostedUrl: string | null; totalCents: number }
+    | { stage: 'error'; message: string }
+  >({ stage: 'idle' })
+
+  async function handleOpenConsolidate(clientId: string, clientName: string) {
+    setConsolidateState({ stage: 'loading', clientId, clientName })
+    const res = await previewConsolidate({ clientId })
+    if (res.success && res.data) {
+      setConsolidateState({ stage: 'preview', clientId, clientName, preview: res.data })
+    } else {
+      setConsolidateState({ stage: 'error', message: res.success ? 'Unknown error' : res.error })
+    }
+  }
+
+  async function handleConfirmConsolidate() {
+    if (consolidateState.stage !== 'preview') return
+    const { clientId, clientName, preview } = consolidateState
+    setConsolidateState({ stage: 'running', clientId, clientName })
+    const res = await consolidateOpenInvoices({
+      clientId,
+      stripeInvoiceIds: preview.invoices.map(i => i.stripeInvoiceId),
+    })
+    if (res.success && res.data) {
+      setConsolidateState({ stage: 'done', hostedUrl: res.data.hostedUrl, totalCents: res.data.totalCents })
+      // Refresh data so the new invoice + voided old ones reflect.
+      void fetchData()
+    } else {
+      setConsolidateState({ stage: 'error', message: res.success ? 'Unknown error' : res.error })
+    }
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -408,9 +445,21 @@ export default function AdminBillingPage() {
                         : <span className="text-red-700 font-bold">{row.oldestDays}d late</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Link href={`/admin/clients/${row.clientSlug}`} className="text-[11px] text-brand hover:text-brand-dark font-medium inline-flex items-center gap-1">
-                        Open client <ExternalLink className="w-3 h-3" />
-                      </Link>
+                      <div className="inline-flex items-center gap-3 justify-end">
+                        {row.count >= 2 && (
+                          <button
+                            onClick={() => handleOpenConsolidate(row.clientId, row.clientName)}
+                            className="text-[11px] text-ink-2 hover:text-ink font-medium inline-flex items-center gap-1 bg-bg-2 hover:bg-ink-7 px-2 py-1 rounded-md"
+                            title={`Combine ${row.count} open invoices into one pay link`}
+                          >
+                            <Combine className="w-3 h-3" />
+                            Consolidate {row.count}
+                          </button>
+                        )}
+                        <Link href={`/admin/clients/${row.clientSlug}`} className="text-[11px] text-brand hover:text-brand-dark font-medium inline-flex items-center gap-1">
+                          Open client <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -633,6 +682,129 @@ export default function AdminBillingPage() {
           onClose={() => setDetailInvoiceId(null)}
           onChange={() => fetchData()}
         />
+      )}
+
+      {/* Consolidate-invoices modal. Same backdrop pattern as InvoiceDetailModal. */}
+      {consolidateState.stage !== 'idle' && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={() => setConsolidateState({ stage: 'idle' })}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <h3 className="text-base font-semibold text-ink flex items-center gap-2">
+                <Combine className="w-4 h-4 text-brand" />
+                Consolidate invoices
+              </h3>
+              <button
+                onClick={() => setConsolidateState({ stage: 'idle' })}
+                className="text-ink-4 hover:text-ink"
+              ><X className="w-4 h-4" /></button>
+            </div>
+
+            {consolidateState.stage === 'loading' && (
+              <div className="py-8 text-center text-sm text-ink-3">
+                <Loader2 className="w-5 h-5 text-brand mx-auto animate-spin mb-2" />
+                Loading {consolidateState.clientName}&apos;s open invoices...
+              </div>
+            )}
+
+            {consolidateState.stage === 'preview' && (
+              <>
+                <p className="text-[13px] text-ink-2 mb-3">
+                  Combine these {consolidateState.preview.invoices.length} open invoices for{' '}
+                  <strong>{consolidateState.clientName}</strong> into a single new invoice with one pay link?
+                </p>
+                <div className="bg-bg-2 rounded-lg p-3 mb-3 space-y-1.5 max-h-48 overflow-y-auto">
+                  {consolidateState.preview.invoices.map(i => (
+                    <div key={i.stripeInvoiceId} className="flex items-center justify-between text-[12px]">
+                      <span className="text-ink-2 font-mono truncate">{i.invoiceNumber ?? i.stripeInvoiceId.slice(-8)}</span>
+                      <span className="text-ink tabular-nums font-medium">{formatCents(i.totalCents)}</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-ink-6 pt-1.5 mt-1.5 flex items-center justify-between text-[13px]">
+                    <span className="text-ink font-semibold">New total</span>
+                    <span className="text-ink font-bold tabular-nums">{formatCents(consolidateState.preview.totalCents)}</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-ink-3 mb-4">
+                  Old invoices will be voided in Stripe. A new consolidated invoice will be finalized
+                  and sent to the client. They&apos;ll receive <strong>one</strong> pay link for the
+                  full amount.
+                </p>
+                <div className="flex items-center gap-2 justify-end">
+                  <button
+                    onClick={() => setConsolidateState({ stage: 'idle' })}
+                    className="text-sm font-medium text-ink-3 hover:text-ink px-3 py-1.5"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmConsolidate}
+                    className="text-sm font-semibold text-white bg-brand hover:bg-brand-dark px-4 py-1.5 rounded-full inline-flex items-center gap-1.5"
+                  >
+                    <Combine className="w-3.5 h-3.5" />
+                    Consolidate &amp; send
+                  </button>
+                </div>
+              </>
+            )}
+
+            {consolidateState.stage === 'running' && (
+              <div className="py-8 text-center text-sm text-ink-3">
+                <Loader2 className="w-5 h-5 text-brand mx-auto animate-spin mb-2" />
+                Voiding old invoices and finalizing the new one...
+              </div>
+            )}
+
+            {consolidateState.stage === 'done' && (
+              <>
+                <div className="text-center py-3">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-ink">
+                    Consolidated — {formatCents(consolidateState.totalCents)}
+                  </p>
+                  <p className="text-[12px] text-ink-3 mt-1">
+                    Single pay link sent to the client.
+                  </p>
+                </div>
+                {consolidateState.hostedUrl && (
+                  <a
+                    href={consolidateState.hostedUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full text-center text-[12px] font-medium text-brand hover:text-brand-dark mb-3 truncate"
+                  >
+                    View pay link <ExternalLink className="w-3 h-3 inline" />
+                  </a>
+                )}
+                <button
+                  onClick={() => setConsolidateState({ stage: 'idle' })}
+                  className="w-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark px-4 py-2 rounded-full"
+                >
+                  Close
+                </button>
+              </>
+            )}
+
+            {consolidateState.stage === 'error' && (
+              <>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-[12.5px] text-red-700 mb-3">
+                  {consolidateState.message}
+                </div>
+                <button
+                  onClick={() => setConsolidateState({ stage: 'idle' })}
+                  className="w-full text-sm font-medium text-ink-3 hover:text-ink bg-bg-2 hover:bg-ink-7 px-4 py-2 rounded-full"
+                >
+                  Close
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
