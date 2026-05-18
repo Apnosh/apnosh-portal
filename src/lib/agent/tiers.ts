@@ -102,48 +102,48 @@ const READ_ONLY_TOOLS = [
 ]
 
 /*
- * Three AI tiers, each adding capability — not just usage. Website
- * editing tools are NOT bundled in any tier; they're unlocked by
- * subscribing to the separate "Apnosh Website" product (which sets
- * clients.has_apnosh_website = true, enforced at the tool layer).
+ * Pricing structure: PLG funnel for indie restaurant owners.
  *
- *  AI Assistant ($29, internal slug 'basic')
- *    Manual mode. Owner asks, AI does. Hours updates, review drafts,
- *    weekly recap, content ideas. Light context. Cap = abuse guard.
+ *  Free ($0, internal slug 'starter')
+ *    Front door. 5 msgs/mo, read-only. No credit card required.
+ *    Cost to deliver: ~$0.50/mo. Treated as acquisition cost.
  *
- *  AI Strategist ($69, internal slug 'standard') ⭐ DEFAULT
- *    Continuous data analysis + weekly proactive briefings.
- *    "Your tacos beat burgers 3x on Tuesdays — push them."
- *    Full context loader (sales + reviews + analytics + patterns).
- *    Where most owners land.
+ *  Starter ($15, internal slug 'basic')
+ *    The "obvious yes" entry. 100 msgs/mo, all write tools, 1 location.
+ *    Most indie owners land here.
  *
- *  AI Strategist+ ($129, internal slug 'pro')
- *    Daily proactive runs. Multi-location dashboard. Custom playbooks.
- *    Unlimited messages. For multi-loc operators and power users.
+ *  Pro ($35, internal slug 'standard') ⭐ DEFAULT for active operators
+ *    Unlimited messages, daily proactive insights, rich context loader,
+ *    multi-location dashboard. Per-location pricing — group operators
+ *    pay $35 × N locations (Stripe quantity-based; per-loc discounts
+ *    can be layered later via tiered pricing).
  *
- *  Enterprise — coming soon (not in TIERS map). Custom integrations,
- *  API access, dedicated AM. Quoted individually.
+ *  Apnosh Managed — quote-based, not in TIERS map. Sales-led. AI + our
+ *  team posts to socials, monthly strategy memo, photo direction. From
+ *  $199-499/loc/mo depending on scope.
  *
  *  Internal slugs (starter/basic/standard/pro) kept stable for DB +
- *  Stripe metadata stability.
+ *  Stripe metadata + webhook compatibility. 'pro' is deprecated as a
+ *  buyable tier (everything Pro-tier-related now lives under 'standard'),
+ *  but the slug remains so any existing tier='pro' client rows keep
+ *  working without a migration.
  *
- *  Strategist hours sold separately à la carte. Apnosh Website sold
- *  separately as its own product line.
+ *  Apnosh Website sold separately as its own product line.
  */
 export const TIERS: Record<TierId, TierSpec> = {
   starter: {
     id: 'starter',
-    label: 'Inactive',
+    label: 'Free',
     priceCents: 0,
     isFreeTrial: false,
     trialDays: 0,
-    dailyMessageLimit: 5,
-    monthlyMessageLimit: 10,
-    monthlyCostCapCents: 200,
+    dailyMessageLimit: 2,                 // 5/mo, capped to ~2/day burst
+    monthlyMessageLimit: 5,
+    monthlyCostCapCents: 50,              // ~$0.50/mo hard ceiling
     humanHoursPerMonth: 0,
     locationsLimit: 1,
     enabledTools: READ_ONLY_TOOLS,
-    pitch: 'Subscribe to start using Apnosh AI.',
+    pitch: 'Try Apnosh free. Read your data, see what AI can do. No credit card needed.',
     proactiveCadence: 'manual',
     richContextLoader: false,
     multiLocationDashboard: false,
@@ -151,53 +151,55 @@ export const TIERS: Record<TierId, TierSpec> = {
   },
   basic: {
     id: 'basic',
-    label: 'AI Assistant',
-    priceCents: 2900,                     // $29/loc/mo
+    label: 'Starter',
+    priceCents: 1500,                     // $15/mo
     isFreeTrial: false,
     trialDays: 0,
-    dailyMessageLimit: 30,                // soft, abuse guard
-    monthlyMessageLimit: 200,             // soft — most owners do 8-20/mo
-    monthlyCostCapCents: 1000,            // $10/mo AI ceiling
+    dailyMessageLimit: 20,
+    monthlyMessageLimit: 100,             // most owners do 8-20/mo, 100 = comfortable headroom
+    monthlyCostCapCents: 800,             // $8/mo AI ceiling
     humanHoursPerMonth: 0,
     locationsLimit: 1,
     enabledTools: AI_ASSISTANT_TOOLS,
-    pitch: 'Quick AI for hours, reviews, posts, and weekly recap. Ask when you need it.',
-    proactiveCadence: 'manual',           // no proactive runs at this tier
-    richContextLoader: false,             // basic context only
+    pitch: 'AI handles your Google posts, hours, review drafts, and content ideas. $15/mo, single location.',
+    proactiveCadence: 'manual',           // owner-driven; no auto runs
+    richContextLoader: false,
     multiLocationDashboard: false,
     customPlaybooks: false,
   },
   standard: {
     id: 'standard',
-    label: 'AI Strategist',
-    priceCents: 6900,                     // $69/loc/mo
-    isFreeTrial: false,
-    trialDays: 0,
-    dailyMessageLimit: 100,
-    monthlyMessageLimit: 1000,            // soft
-    monthlyCostCapCents: 3000,            // $30/mo AI ceiling
-    humanHoursPerMonth: 0,
-    locationsLimit: 1,
-    enabledTools: AI_ASSISTANT_TOOLS,
-    pitch: 'AI reads your data, plans campaigns, and sends weekly insights. The real value tier.',
-    proactiveCadence: 'weekly',           // weekly briefings without owner asking
-    richContextLoader: true,              // full context: sales + reviews + analytics + cross-client patterns
-    multiLocationDashboard: false,
-    customPlaybooks: false,
-  },
-  pro: {
-    id: 'pro',
-    label: 'AI Strategist+',
-    priceCents: 12900,                    // $129/loc/mo
+    label: 'Pro',
+    priceCents: 3500,                     // $35/mo per location
     isFreeTrial: false,
     trialDays: 0,
     dailyMessageLimit: null,              // unlimited
     monthlyMessageLimit: null,            // unlimited
-    monthlyCostCapCents: 8000,            // $80/mo AI ceiling (still bounded)
+    monthlyCostCapCents: 4000,            // $40/mo AI ceiling (abuse guard)
     humanHoursPerMonth: 0,
-    locationsLimit: null,                 // unlimited
+    locationsLimit: null,                 // unlimited (per-loc billing via quantity)
     enabledTools: AI_ASSISTANT_TOOLS,
-    pitch: 'Unlimited messages, daily proactive runs, multi-location dashboard, custom playbooks.',
+    pitch: 'Unlimited AI. Daily proactive insights. Multi-location dashboard. $35/location/mo.',
+    proactiveCadence: 'daily',            // proactive daily briefings
+    richContextLoader: true,              // full context: sales + reviews + analytics + patterns
+    multiLocationDashboard: true,
+    customPlaybooks: true,
+  },
+  /* Deprecated — kept in map so any existing tier='pro' client rows
+     resolve to the Pro feature set without a DB migration. */
+  pro: {
+    id: 'pro',
+    label: 'Pro',
+    priceCents: 3500,
+    isFreeTrial: false,
+    trialDays: 0,
+    dailyMessageLimit: null,
+    monthlyMessageLimit: null,
+    monthlyCostCapCents: 4000,
+    humanHoursPerMonth: 0,
+    locationsLimit: null,
+    enabledTools: AI_ASSISTANT_TOOLS,
+    pitch: 'Unlimited AI. Daily proactive insights. Multi-location dashboard. $35/location/mo.',
     proactiveCadence: 'daily',
     richContextLoader: true,
     multiLocationDashboard: true,

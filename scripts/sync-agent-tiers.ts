@@ -34,7 +34,13 @@ async function syncTiers() {
 
   for (const tier of Object.values(TIERS)) {
     if (tier.priceCents === 0) {
-      console.log(`⏭  ${tier.label} — free trial, no Stripe product needed`)
+      console.log(`⏭  ${tier.label} — free tier, no Stripe product needed`)
+      continue
+    }
+    /* 'pro' is deprecated — same feature set as 'standard' but slug
+       kept for back-compat. Don't create a duplicate Stripe product. */
+    if (tier.id === 'pro') {
+      console.log(`⏭  ${tier.label} (pro) — deprecated, no Stripe sync`)
       continue
     }
 

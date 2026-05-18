@@ -41,13 +41,13 @@ export default async function UpgradePage() {
           Pick your AI plan
         </h1>
         <p className="text-ink-3 text-sm mt-1 max-w-2xl mx-auto">
-          Per location, billed monthly. Cancel anytime, no contracts.
+          Start free. Upgrade when you outgrow it. Cancel anytime, no contracts.
           <br />
-          <span className="text-ink-4 text-[12px]">14-day money-back guarantee on your first month.</span>
+          <span className="text-ink-4 text-[12px]">14-day money-back guarantee on paid plans.</span>
         </p>
       </div>
 
-      {/* === The hybrid ladder: 3 self-serve AI tiers + Managed (sales-led) === */}
+      {/* === The hybrid ladder: Free + 2 paid self-serve + Managed (sales-led) === */}
       <div className="text-center text-[11px] uppercase tracking-wider text-ink-4 mb-2">
         <span className="bg-bg-2 rounded-full px-3 py-1">Self-serve · You drive the AI</span>
         <span className="mx-2">→</span>
@@ -55,51 +55,49 @@ export default async function UpgradePage() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <TierCard
-          id="basic"
-          headline="For owners who want AI when they ask"
+          id="starter"
+          headline="Try Apnosh free — no credit card"
           highlights={[
-            'Updates Google hours & info',
-            'Drafts review responses',
-            'Generates content ideas',
-            'Weekly recap of what changed',
+            'Read your Google insights',
+            'See AI-suggested actions',
+            '5 chat messages / month',
+            '1 location',
           ]}
-          gotchas="Manual mode — you ask, AI does"
-          isCurrent={currentTier === 'basic'}
+          gotchas="Read-only — upgrade to act on insights"
+          isCurrent={currentTier === 'starter'}
           ctaStyle="secondary"
         />
         <TierCard
-          id="standard"
-          headline="AI reads your data and plans for you"
+          id="basic"
+          headline="The obvious yes for indie owners"
           highlights={[
-            'Everything in AI Assistant +',
-            'Reads sales, reviews, analytics continuously',
-            'Weekly proactive briefings',
-            'Suggests campaigns from your actual data',
-            'Drafts a 2-week GBP post calendar',
-            'Tracks what worked, adapts over time',
+            'AI handles Google posts + hours',
+            'Drafts review responses',
+            'Generates content ideas',
+            'Weekly recap of what changed',
+            '100 messages / month',
           ]}
-          gotchas="Where most self-serve owners land"
-          isCurrent={currentTier === 'standard'}
+          gotchas="1 location · You ask, AI does"
+          isCurrent={currentTier === 'basic'}
           ctaStyle="primary"
           recommended
         />
         <TierCard
-          id="pro"
-          headline="For multi-location operators & power users"
+          id="standard"
+          headline="For active operators + multi-location"
           highlights={[
-            'Everything in AI Strategist +',
+            'Everything in Starter +',
             'Unlimited messages',
-            'Daily proactive check-ins',
+            'Daily proactive insights',
+            'Reads sales, reviews, analytics continuously',
             'Multi-location rollup dashboard',
             'Custom playbooks for your brand',
-            'Priority compute, latest model',
           ]}
-          gotchas="Up to 5 locations (more with multi-loc discount)"
-          isCurrent={currentTier === 'pro'}
+          gotchas="$35 per location — multi-loc scales linearly"
+          isCurrent={currentTier === 'standard' || currentTier === 'pro'}
           ctaStyle="secondary"
         />
-        {/* Managed: not in TIERS map — quote-based, sales-led. Renders as a
-            visually-distinct 4th rung at the end of the ladder. */}
+        {/* Managed: not in TIERS map — quote-based, sales-led. */}
         <ManagedCard />
       </div>
 
@@ -113,8 +111,8 @@ export default async function UpgradePage() {
           </div>
         </div>
         <div className="text-ink-3 pt-1 border-t border-ink-6">
-          <strong className="text-ink-2">Multi-location pricing:</strong> 2nd location 20% off ·
-          3rd-5th 30% off · 6+ locations 40% off.
+          <strong className="text-ink-2">Multi-location:</strong> $35 per location on Pro — a 3-location group is $105/mo.
+          Volume discounts available for 5+ locations — talk to us.
         </div>
         <div className="text-ink-3 pt-1 border-t border-ink-6 flex items-start gap-1.5">
           <MessageCircle className="w-3.5 h-3.5 text-ink-4 mt-0.5 flex-shrink-0" />
@@ -239,10 +237,19 @@ function TierCard({
       </div>
       <p className="text-[12.5px] text-ink-3 mb-3 min-h-[2.5em]">{headline}</p>
       <div className="mb-4">
-        <span className="text-[30px] font-bold text-ink tabular-nums">
-          ${tier.priceCents / 100}
-        </span>
-        <span className="text-sm text-ink-3"> / location / mo</span>
+        {tier.priceCents === 0 ? (
+          <>
+            <span className="text-[30px] font-bold text-ink tabular-nums">Free</span>
+            <span className="text-sm text-ink-3"> forever</span>
+          </>
+        ) : (
+          <>
+            <span className="text-[30px] font-bold text-ink tabular-nums">
+              ${tier.priceCents / 100}
+            </span>
+            <span className="text-sm text-ink-3"> / {id === 'standard' ? 'location / mo' : 'mo'}</span>
+          </>
+        )}
       </div>
       <ul className="space-y-1.5 mb-4 flex-1">
         {highlights.map((b, i) => (
@@ -257,6 +264,20 @@ function TierCard({
         <button disabled className="w-full px-4 py-2.5 rounded-full text-sm font-semibold text-ink-3 bg-ink-7 cursor-not-allowed">
           Current plan
         </button>
+      ) : id === 'starter' ? (
+        /* Free tier — no Stripe checkout. If they're already a logged-in
+           user, the "free plan" experience is just the dashboard; if they
+           landed here unsigned, the Apnosh login flow gets them there. */
+        <Link
+          href="/dashboard"
+          className={[
+            'w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-semibold',
+            'text-ink-2 bg-ink-7 hover:bg-ink-6',
+          ].join(' ')}
+        >
+          Get started free
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
       ) : (
         <Link
           href={`/dashboard/billing?upgrade=${id}`}
