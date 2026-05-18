@@ -47,8 +47,13 @@ export default async function UpgradePage() {
         </p>
       </div>
 
-      {/* === 3 AI Tier Cards === */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* === The hybrid ladder: 3 self-serve AI tiers + Managed (sales-led) === */}
+      <div className="text-center text-[11px] uppercase tracking-wider text-ink-4 mb-2">
+        <span className="bg-bg-2 rounded-full px-3 py-1">Self-serve · You drive the AI</span>
+        <span className="mx-2">→</span>
+        <span className="bg-ink-7 rounded-full px-3 py-1">Done for you · Our team + AI</span>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <TierCard
           id="basic"
           headline="For owners who want AI when they ask"
@@ -64,16 +69,16 @@ export default async function UpgradePage() {
         />
         <TierCard
           id="standard"
-          headline="AI that reads your data and plans for you"
+          headline="AI reads your data and plans for you"
           highlights={[
             'Everything in AI Assistant +',
             'Reads sales, reviews, analytics continuously',
-            'Weekly proactive briefings with insights',
-            'Suggests campaigns based on your actual data',
+            'Weekly proactive briefings',
+            'Suggests campaigns from your actual data',
             'Drafts a 2-week GBP post calendar',
             'Tracks what worked, adapts over time',
           ]}
-          gotchas="Where most owners land"
+          gotchas="Where most self-serve owners land"
           isCurrent={currentTier === 'standard'}
           ctaStyle="primary"
           recommended
@@ -84,15 +89,18 @@ export default async function UpgradePage() {
           highlights={[
             'Everything in AI Strategist +',
             'Unlimited messages',
-            'Daily proactive check-ins (vs weekly)',
+            'Daily proactive check-ins',
             'Multi-location rollup dashboard',
             'Custom playbooks for your brand',
             'Priority compute, latest model',
           ]}
-          gotchas="Up to 5 locations included (more with multi-loc discount)"
+          gotchas="Up to 5 locations (more with multi-loc discount)"
           isCurrent={currentTier === 'pro'}
           ctaStyle="secondary"
         />
+        {/* Managed: not in TIERS map — quote-based, sales-led. Renders as a
+            visually-distinct 4th rung at the end of the ladder. */}
+        <ManagedCard />
       </div>
 
       {/* === Multi-loc + guarantee + strategist note === */}
@@ -306,6 +314,60 @@ function WebsiteCard({
       <Link
         href={`/dashboard/messages?topic=Website+${encodeURIComponent(name)}`}
         className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-ink-2 bg-bg-2 hover:bg-ink-7"
+      >
+        Talk to us
+        <ArrowRight className="w-3.5 h-3.5" />
+      </Link>
+    </div>
+  )
+}
+
+/*
+ * ManagedCard — the 4th rung on the ladder. Not in TIERS map because
+ * it's quote-based / sales-led, not self-serve checkout. Renders as a
+ * dark-themed card to visually signal "different motion" without
+ * leaving the ladder.
+ */
+function ManagedCard() {
+  const bullets = [
+    'Everything in AI Strategist+',
+    'Our team posts to your socials 3-5x/week',
+    'Monthly strategy memo from a real strategist',
+    'Photo direction + ad campaign management',
+    'Dedicated point of contact',
+    'White-glove onboarding',
+  ]
+  return (
+    <div className="rounded-2xl border bg-ink text-white p-5 flex flex-col shadow-md border-ink-2">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[16px] font-bold text-white">Apnosh Managed</h3>
+        <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand text-white">
+          Done for you
+        </span>
+      </div>
+      <p className="text-[12.5px] text-white/70 mb-3 min-h-[2.5em]">
+        Our team does the work. AI does the heavy lifting behind the scenes.
+      </p>
+      <div className="mb-4">
+        <span className="text-[30px] font-bold text-white tabular-nums">
+          $399+
+        </span>
+        <span className="text-sm text-white/60"> / location / mo</span>
+      </div>
+      <ul className="space-y-1.5 mb-4 flex-1">
+        {bullets.map((b, i) => (
+          <li key={i} className="flex items-start gap-2 text-[12.5px] text-white/90">
+            <Check className="w-3.5 h-3.5 text-brand flex-shrink-0 mt-0.5" />
+            <span>{b}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="text-[11px] text-white/50 italic mb-3">
+        Quote-based · Custom to your locations + scope
+      </div>
+      <Link
+        href="/dashboard/messages?topic=Apnosh+Managed+—+let%27s+talk"
+        className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-semibold text-ink bg-white hover:bg-white/90"
       >
         Talk to us
         <ArrowRight className="w-3.5 h-3.5" />
