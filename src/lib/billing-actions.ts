@@ -822,19 +822,16 @@ export async function consolidateOpenInvoices(args: {
       })
     }
 
-    /* 2. Pre-create invoice items for the consolidated invoice. We do
-          this BEFORE voiding the old ones so a partial failure doesn't
-          leave the client with zero open invoices and no replacement. */
-    for (const line of sourceLines) {
-      await stripe.invoiceItems.create({
-        customer: bc.stripe_customer_id,
-        amount: line.amountCents,
-        currency: line.currency,
-        description: line.description,
-      })
-    }
-
-    /* 3. Create + finalize the consolidated invoice. */
+    /* 2. Create the consolidated invoice FIRST in draft mode, then
+          attach each line item to it explicitly via `invoice: <id>`.
+          IMPORTANT: this used to call invoiceItems.create() without an
+          invoice id and then invoices.create() separately — but that
+          path made the items "pending on the customer" and the new
+          invoice didn't pick them up (Stripe default is
+          pending_invoice_items_behavior='exclude'), producing a $0
+          consolidated invoice. Explicit attachment is safer than
+          relying on the include behavior because it can't accidentally
+          pull in unrelated pending items. */
     const consolidated = await stripe.invoices.create({
       customer: bc.stripe_customer_id,
       collection_method: 'send_invoice',
@@ -843,7 +840,33 @@ export async function consolidateOpenInvoices(args: {
       auto_advance: false,
     })
 
-    const finalized = await stripe.invoices.finalizeInvoice(consolidated.id)
+    for (const line of sourceLines) {
+      await stripe.invoiceItems.create({
+        customer: bc.stripe_customer_id,
+        invoice: consolidated.id,        // attach to THIS invoice explicitly
+        amount: line.amountCents,
+        currency: line.currency,
+        description: line.description,
+      })
+    }
+
+    /* 3. Finalize the new invoice. Re-retrieve afterwards so the
+          returned object reflects the now-populated total + lines. */
+    const finalizedRaw = await stripe.invoices.finalizeInvoice(consolidated.id)
+    const finalized = await stripe.invoices.retrieve(finalizedRaw.id, { expand: ['lines'] })
+
+    /* Sanity check: refuse to proceed (and skip voiding originals) if
+       the new invoice still totals $0. Caller will see a clear error
+       and the originals stay live + payable. */
+    const expectedTotal = sourceLines.reduce((s, l) => s + l.amountCents, 0)
+    if ((finalized.total ?? 0) === 0 && expectedTotal > 0) {
+      // Abort: void the (broken) new invoice, leave originals alone.
+      try { await stripe.invoices.voidInvoice(finalized.id) } catch { /* ignore */ }
+      return {
+        success: false,
+        error: `Consolidated invoice finalized at $0 (expected ${(expectedTotal / 100).toFixed(2)}). The original invoices were left intact. Please retry.`,
+      }
+    }
 
     /* 4. Send the new invoice to the client (gives them the pay link). */
     try {
@@ -884,5 +907,102 @@ export async function consolidateOpenInvoices(args: {
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to consolidate invoices'
     return { success: false, error: msg }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// recreateConsolidatedInvoice
+// ---------------------------------------------------------------------------
+//
+// Recovery action for the v1 consolidate bug that finalized $0 invoices.
+// Takes a client + a list of voided stripe invoice ids whose amounts
+// should be put on a NEW consolidated invoice. Reads the originals'
+// totals from our `invoices` DB mirror (Stripe still has them as voided,
+// but their totals are preserved in our table) and creates a proper
+// consolidated invoice with line items attached explicitly.
+
+export async function recreateConsolidatedInvoice(args: {
+  clientId: string
+  /** Stripe invoice ids (from our DB) of the voided source invoices
+   *  whose totals should be put on the new consolidated invoice. */
+  voidedStripeInvoiceIds: string[]
+  /** Optional: also void this empty/broken consolidated invoice. */
+  brokenStripeInvoiceId?: string
+}): Promise<ActionResult<{ newStripeInvoiceId: string; hostedUrl: string | null; totalCents: number }>> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const admin = getAdminSupabase()
+  const { data: bc } = await admin
+    .from('billing_customers')
+    .select('stripe_customer_id')
+    .eq('client_id', args.clientId)
+    .maybeSingle() as { data: { stripe_customer_id: string | null } | null }
+  if (!bc?.stripe_customer_id) return { success: false, error: 'Client has no Stripe customer.' }
+
+  /* Pull the source totals from our DB mirror (Stripe has them voided,
+     but the amounts are still in our `invoices` table). */
+  const { data: sources } = await admin
+    .from('invoices')
+    .select('stripe_invoice_id, invoice_number, total_cents, currency')
+    .in('stripe_invoice_id', args.voidedStripeInvoiceIds) as {
+      data: Array<{ stripe_invoice_id: string; invoice_number: string | null; total_cents: number; currency: string | null }> | null
+    }
+  const rows = sources ?? []
+  if (rows.length === 0) return { success: false, error: 'No matching invoice rows found in DB.' }
+
+  try {
+    const currency = rows[0]?.currency ?? 'usd'
+    const consolidated = await stripe.invoices.create({
+      customer: bc.stripe_customer_id,
+      collection_method: 'send_invoice',
+      days_until_due: 14,
+      description: `Reissued: covering ${rows.length} previously voided invoices.`,
+      auto_advance: false,
+    })
+
+    for (const r of rows) {
+      const label = r.invoice_number ?? `inv ${r.stripe_invoice_id.slice(-6)}`
+      await stripe.invoiceItems.create({
+        customer: bc.stripe_customer_id,
+        invoice: consolidated.id,
+        amount: r.total_cents,
+        currency: currency.toLowerCase(),
+        description: `${label} (reissued)`,
+      })
+    }
+
+    const finalizedRaw = await stripe.invoices.finalizeInvoice(consolidated.id)
+    const finalized = await stripe.invoices.retrieve(finalizedRaw.id, { expand: ['lines'] })
+
+    const expectedTotal = rows.reduce((s, r) => s + r.total_cents, 0)
+    if ((finalized.total ?? 0) !== expectedTotal) {
+      try { await stripe.invoices.voidInvoice(finalized.id) } catch { /* ignore */ }
+      return { success: false, error: `Reissued invoice total ${(finalized.total ?? 0) / 100} != expected ${expectedTotal / 100}. Voided new invoice.` }
+    }
+
+    try { await stripe.invoices.sendInvoice(finalized.id) } catch { /* non-fatal */ }
+
+    /* If the caller passed the broken $0 consolidated invoice, void it
+       so the client doesn't see it. */
+    if (args.brokenStripeInvoiceId) {
+      try { await stripe.invoices.voidInvoice(args.brokenStripeInvoiceId) } catch (err) {
+        console.warn('[recreate] failed to void broken invoice:', (err as Error).message)
+      }
+    }
+
+    revalidatePath(`/admin/clients/${args.clientId}`)
+    revalidatePath('/admin/billing')
+
+    return {
+      success: true,
+      data: {
+        newStripeInvoiceId: finalized.id,
+        hostedUrl: finalized.hosted_invoice_url ?? null,
+        totalCents: finalized.total ?? expectedTotal,
+      },
+    }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Recreate failed' }
   }
 }
