@@ -14,6 +14,10 @@
       "schedule": "0 15 * * *"
     },
     {
+      "path": "/api/cron/gbp-profile-sync",
+      "schedule": "30 15 * * *"
+    },
+    {
       "path": "/api/cron/run-operator",
       "schedule": "0 15 * * 1"
     },

@@ -152,7 +152,7 @@ async function checkProfileCompleteness(ctx: CheckContext): Promise<Finding> {
       .eq('client_id', clientId)
       .maybeSingle(),
     admin.from('gbp_locations')
-      .select('location_name, address, hours')
+      .select('location_name, address, hours, phone, website, primary_category, profile_description')
       .eq('client_id', clientId)
       .limit(1)
       .maybeSingle(),
@@ -166,11 +166,16 @@ async function checkProfileCompleteness(ctx: CheckContext): Promise<Finding> {
   const FIELDS: Array<{ label: string; present: boolean }> = [
     { label: 'Business name', present: has(c.name) || has(g.location_name) },
     { label: 'Address',       present: has(c.location) || has(p.full_address) || has(p.city) || has(g.address) },
-    { label: 'Phone',         present: has(c.phone) || has(p.business_phone) },
-    { label: 'Website',       present: has(c.website) || has(p.website_url) },
+    /* Phone / website / hours / category / description now also check
+       the synced GBP profile columns. That means if a client has a
+       complete Google Business Profile, we credit them automatically
+       even if the equivalent fields aren't filled in Apnosh's own
+       client_profiles table. */
+    { label: 'Phone',         present: has(c.phone) || has(p.business_phone) || has(g.phone) },
+    { label: 'Website',       present: has(c.website) || has(p.website_url) || has(g.website) },
     { label: 'Hours',         present: has(g.hours) || has(p.hours) },
-    { label: 'Description',   present: has(p.business_description) },
-    { label: 'Cuisine type',  present: has(p.cuisine) },
+    { label: 'Description',   present: has(p.business_description) || has(g.profile_description) },
+    { label: 'Cuisine type',  present: has(p.cuisine) || has(g.primary_category) },
     { label: 'Price range',   present: has(p.price_range) },
   ]
   const filled = FIELDS.filter(f => f.present).length
