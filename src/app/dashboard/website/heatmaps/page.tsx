@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import {
   Activity, ExternalLink, Eye, Film, Flame, Zap, MousePointerClick,
-  ArrowDownToLine, Plug, Sparkles, AlertCircle,
+  ArrowDownToLine, Plug, Sparkles, AlertCircle, CheckCircle2,
 } from 'lucide-react'
 import { getWebsiteSetupState } from '@/lib/dashboard/website-setup'
+import { clarityScriptSnippet } from '@/lib/dashboard/clarity-verify'
+import ClaritySnippetCard from '@/components/dashboard/clarity-snippet-card'
 
 /**
  * Heatmaps tab. Anchors a client's Microsoft Clarity project inside
@@ -72,7 +74,12 @@ const FEATURES: ClarityFeature[] = [
   },
 ]
 
-export default async function HeatmapsPage() {
+export default async function HeatmapsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ verified?: string }>
+}) {
+  const params = await searchParams
   const state = await getWebsiteSetupState()
 
   // No client context (shouldn't happen for a signed-in client, but
@@ -86,9 +93,36 @@ export default async function HeatmapsPage() {
   }
 
   const projectId = state.clarityProjectId
+  const installVerified = state.clarityInstallVerified
+  const snippet = projectId ? await clarityScriptSnippet(projectId) : null
 
   return (
     <div className="max-w-[1100px] mx-auto px-4 lg:px-6 pt-6 pb-20 space-y-5">
+      {/* Post-verification result banner */}
+      {params.verified === '1' && (
+        installVerified ? (
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-[12.5px] text-emerald-900">
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-600" />
+            <div>
+              <div className="font-semibold">Snippet detected — heatmaps + recordings will start filling up.</div>
+              <p className="mt-0.5 leading-relaxed">
+                Clarity takes 30 min – 2 hours after first visit to render its first heatmap. Send a couple of test visits to speed it up.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-rose-50 border border-rose-200 text-[12.5px] text-rose-900">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-600" />
+            <div>
+              <div className="font-semibold">Snippet not detected on your homepage.</div>
+              <p className="mt-0.5 leading-relaxed">
+                Double-check you pasted the snippet into your site&apos;s <code className="font-mono">&lt;head&gt;</code> and saved. Squarespace sometimes requires re-publishing the site for changes to go live.
+              </p>
+            </div>
+          </div>
+        )
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
@@ -120,28 +154,40 @@ export default async function HeatmapsPage() {
         <EmptyState />
       ) : (
         <>
-          {/* Heads-up about Clarity's gating behavior. Until Clarity
-             records its first session, every link below force-redirects
-             to their "Almost there" install page. This is Clarity's
-             behavior, not ours, but the chip explains it so owners
-             aren't confused when they click. */}
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-[12px] text-amber-900">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
-            <div>
-              <div className="font-semibold">Clarity is waiting for your first visitor</div>
-              <p className="mt-0.5 leading-relaxed">
-                Until Clarity records its first session (usually 30 min – 2 hours after the snippet goes live),
-                clicking the cards below will land on Clarity&apos;s &quot;Almost there&quot; install page. Once data arrives,
-                these links open straight into the right view. Send a couple of test visits to{' '}
-                {state.websiteUrl ? (
-                  <a href={state.websiteUrl} target="_blank" rel="noopener noreferrer" className="underline font-medium">
-                    your site
-                  </a>
-                ) : 'your site'}{' '}
-                to speed it up.
-              </p>
+          {/* Install state — three cases:
+              1. installVerified=true  → silent (heatmaps + recordings work)
+              2. installVerified=null  → never checked. Show install card + prompt to verify.
+              3. installVerified=false → checked, snippet missing. Show install card prominently. */}
+          {installVerified !== true && snippet && (
+            <ClaritySnippetCard
+              snippet={snippet}
+              projectId={projectId!}
+              variant={installVerified === false ? 'banner' : 'standalone'}
+            />
+          )}
+
+          {/* Once verified, gentle reminder that Clarity still takes time
+             to record its first heatmap. */}
+          {installVerified === true && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-[12px] text-amber-900">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
+              <div>
+                <div className="font-semibold">Snippet installed — Clarity is collecting now</div>
+                <p className="mt-0.5 leading-relaxed">
+                  Clarity records its first session 30 min – 2 hours after install. Until then, clicking the
+                  cards below will land on Clarity&apos;s &quot;Almost there&quot; page.{' '}
+                  {state.websiteUrl && (
+                    <>Send a couple of test visits to{' '}
+                      <a href={state.websiteUrl} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                        your site
+                      </a>{' '}
+                      to speed it up.
+                    </>
+                  )}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Why iframe-free notice */}
           <div className="flex items-start gap-2 p-3 rounded-lg bg-bg-2 border border-ink-6 text-[12px] text-ink-3">

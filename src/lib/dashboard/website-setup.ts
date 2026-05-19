@@ -44,6 +44,11 @@ export interface WebsiteSetupState {
   gscConnected: boolean
   gscSiteUrl: string | null
   clarityProjectId: string | null
+  /** True/false/null: whether the Clarity snippet was last seen on
+   *  the live site. null = never checked. false = checked + missing.
+   *  Used by heatmaps + setup pages to show install banner. */
+  clarityInstallVerified: boolean | null
+  clarityInstallCheckedAt: string | null
 }
 
 export async function getWebsiteSetupState(): Promise<WebsiteSetupState | null> {
@@ -52,7 +57,7 @@ export async function getWebsiteSetupState(): Promise<WebsiteSetupState | null> 
   const admin = createAdminClient()
 
   const [clientRes, chanRes] = await Promise.all([
-    admin.from('clients').select('website, clarity_project_id').eq('id', ctx.clientId).maybeSingle(),
+    admin.from('clients').select('website, clarity_project_id, clarity_install_verified, clarity_install_checked_at').eq('id', ctx.clientId).maybeSingle(),
     admin.from('channel_connections')
       .select('channel, access_token, status, platform_account_name, platform_url')
       .eq('client_id', ctx.clientId)
@@ -74,6 +79,8 @@ export async function getWebsiteSetupState(): Promise<WebsiteSetupState | null> 
     gscConnected: !!gsc,
     gscSiteUrl: gsc?.platform_url ?? null,
     clarityProjectId: (clientRes.data?.clarity_project_id as string | null) ?? null,
+    clarityInstallVerified: ((clientRes.data as { clarity_install_verified?: boolean | null } | null)?.clarity_install_verified) ?? null,
+    clarityInstallCheckedAt: ((clientRes.data as { clarity_install_checked_at?: string | null } | null)?.clarity_install_checked_at) ?? null,
   }
 }
 
