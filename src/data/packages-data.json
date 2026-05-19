@@ -1,7 +1,7 @@
 {
-  "version": "1.0.0",
-  "lastUpdated": "2026-03-28",
-  "annualDiscount": "2 months free",
+  "version": "2.0.0",
+  "lastUpdated": "2026-05-19",
+  "annualDiscount": "Save 20% with annual prepay",
   "industries": [
     {
       "id": "restaurant",
@@ -9,20 +9,72 @@
       "icon": "🍽️",
       "packages": [
         {
-          "name": "The First Table",
-          "stage": "Just Started",
-          "popular": false,
-          "monthly": 847,
-          "setup": 898,
-          "services": [
-            "Basic Website (5 pages)",
-            "Google Business Profile Setup",
-            "Local SEO Starter",
-            "Social Media Essentials",
-            "Basic Hosting & Care",
-            "Review Monitoring"
+          "name": "Starter Plate",
+          "stage": "Get Found",
+          "popular": true,
+          "monthly": 299,
+          "setup": 0,
+          "firstMonthFree": true,
+          "tagline": "We get you on Google Maps, fill your Instagram, and handle your hours updates everywhere — so you can focus on the food.",
+          "onboarding": {
+            "deliveredBy": "day 45",
+            "totalValue": 2599,
+            "items": [
+              { "name": "Full Google Business Profile optimization", "detail": "Claim, verify, categories, services, products, attributes, Q&A", "value": 500 },
+              { "name": "30-photo content shoot", "detail": "Food, interior, exterior, signature dishes, behind-the-scenes", "value": 599 },
+              { "name": "Instagram setup + bio optimization", "detail": "Handle review, link-in-bio, story highlight covers", "value": 200 },
+              { "name": "20 design templates in your brand colors", "detail": "Specials, hours, holidays, closures, events, new dishes, thank-yous, and more", "value": 400 },
+              { "name": "Top 25 directory listings sync", "detail": "Apple Maps, Yelp, TripAdvisor, Bing, Foursquare, and more", "value": 400 },
+              { "name": "Review-generation system setup", "detail": "Automated post-visit asks via text or email", "value": 300 },
+              { "name": "Customer Eye View baseline report", "detail": "What a potential customer sees when they research you today", "value": 200 }
+            ]
+          },
+          "monthly_recurring": [
+            { "name": "AI Pro", "detail": "Unlimited AI chat, daily insights, custom playbooks" },
+            { "name": "8 Google Business Profile posts/mo", "detail": "Drives your Maps result, 2 per week" },
+            { "name": "8 Instagram feed posts/mo", "detail": "Auto-cross-posted to Facebook" },
+            { "name": "8 Instagram stories/mo", "detail": "Auto-generated from posts + photo gallery" },
+            { "name": "Hours broadcast", "detail": "Holiday hours, weather closures auto-fanout across GBP, IG, FB, Yelp, website" },
+            { "name": "Unlimited AI template designs", "detail": "Specials, deals, events, hours updates — AI fills your templates in seconds" },
+            { "name": "2 designer-touched designs/mo", "detail": "When the AI draft needs a human polish" },
+            { "name": "Proactive design auto-suggestions", "detail": "AI watches your calendar, weather, holidays, reviews — suggests posts before you have to ask" },
+            { "name": "Photo refresh", "detail": "5-10 new photos every quarter (mini shoot)" },
+            { "name": "Review responses", "detail": "AI drafts within 1 hour of every new review, you approve with one click" },
+            { "name": "Review generation system", "detail": "Automated post-visit ask, monitors inbound review trends" },
+            { "name": "Customer Eye View", "detail": "Re-runs weekly, alerts on drops" },
+            { "name": "Monthly impact report", "detail": "Plain-English summary of searches, direction requests, new reviews, what changed" }
           ],
-          "content": ["8 feed posts/mo", "4 stories/mo", "1 reel/mo"]
+          "promises": [
+            "First month free",
+            "Cancel anytime after day 90",
+            "30-day money-back guarantee",
+            "No long-term contract",
+            "Pause for up to 3 months without losing your spot",
+            "Annual prepay saves 20%"
+          ],
+          "comparison": {
+            "headline": "What you'd pay elsewhere for the same",
+            "items": [
+              { "name": "Local social media person", "monthly": "$1,200-2,000" },
+              { "name": "Photographer (one shoot)", "monthly": "$400-800" },
+              { "name": "Canva Pro + your time designing", "monthly": "$20 + 5+ hrs/week" },
+              { "name": "GBP/listings agency", "monthly": "$300-500" },
+              { "name": "Review management tool", "monthly": "$75-150" }
+            ],
+            "totalElsewhere": "$2,000-2,800+",
+            "apnosh": "$299"
+          },
+          "services": [
+            "Full Google Business Profile setup + management",
+            "Instagram + Facebook content (cross-posted)",
+            "Top 25 directory listings",
+            "Review responses + generation system",
+            "Graphic design (unlimited AI + 2 designer-touched/mo)",
+            "Hours broadcast across all platforms",
+            "AI Pro (unlimited chat + insights)",
+            "Monthly impact report"
+          ],
+          "content": ["8 GBP posts/mo", "8 IG feed posts/mo", "8 IG stories/mo", "30 photos (onboarding) + quarterly refresh"]
         },
         {
           "name": "Full House",

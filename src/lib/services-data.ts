@@ -44,6 +44,29 @@ export interface Service {
   tierId?: string
 }
 
+export interface OnboardingItem {
+  name: string
+  detail: string
+  value: number
+}
+
+export interface MonthlyRecurringItem {
+  name: string
+  detail: string
+}
+
+export interface ComparisonItem {
+  name: string
+  monthly: string
+}
+
+export interface PackageComparison {
+  headline: string
+  items: ComparisonItem[]
+  totalElsewhere: string
+  apnosh: string
+}
+
 export interface IndustryPackage {
   name: string
   stage: string
@@ -52,6 +75,17 @@ export interface IndustryPackage {
   setup: number
   services: string[]
   content: string[]
+  /* New structured fields (v2 packages, optional for backwards compat). */
+  firstMonthFree?: boolean
+  tagline?: string
+  onboarding?: {
+    deliveredBy: string
+    totalValue: number
+    items: OnboardingItem[]
+  }
+  monthly_recurring?: MonthlyRecurringItem[]
+  promises?: string[]
+  comparison?: PackageComparison
 }
 
 export interface Industry {
