@@ -336,7 +336,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     async function fetchConnections() {
       try {
         const supabase = (await import('@/lib/supabase/client')).createClient()
-        const [pcRes, ccRes, clientRes] = await Promise.all([
+        const [pcRes, ccRes, clientRes, gbpRes] = await Promise.all([
           supabase
             .from('platform_connections')
             .select('platform, access_token')
@@ -349,9 +349,15 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             .not('access_token', 'is', null),
           supabase
             .from('clients')
-            .select('website')
+            .select('website, location')
             .eq('id', client!.id)
             .maybeSingle(),
+          /* Fallback unlock: any GBP location row means we have GBP
+             context, even if channel_connections is stale or blocked. */
+          supabase
+            .from('gbp_locations')
+            .select('id', { count: 'exact', head: true })
+            .eq('client_id', client!.id),
         ])
         if (cancelled) return
 
@@ -368,6 +374,12 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         // tab -- the tab's empty state pulls the owner into the setup
         // wizard, so we want them in there as soon as possible.
         if (clientRes.data?.website) set.add('website')
+        /* Symmetric to Website: if we have ANY gbp_locations row OR the
+           client has a location on file, Local SEO is meaningful. The
+           tab's empty state guides them to claim/connect. */
+        if ((gbpRes.count ?? 0) > 0 || (clientRes.data as { location?: string } | null)?.location) {
+          set.add('local_seo')
+        }
         setConnectedChannels(set)
       } catch {
         // Quiet fail; sidebar just stays as-is.
