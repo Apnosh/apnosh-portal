@@ -77,55 +77,245 @@
           "content": ["8 GBP posts/mo", "8 IG feed posts/mo", "8 IG stories/mo", "30 photos (onboarding) + quarterly refresh"]
         },
         {
-          "name": "Full House",
-          "stage": "Growing",
+          "name": "Full Plate",
+          "stage": "Grow Your Audience",
           "popular": false,
-          "monthly": 1616,
-          "setup": 1747,
-          "services": [
-            "Standard Website + Menu Design",
-            "Local SEO Growth",
-            "Social Media Growth (IG + FB + TikTok)",
-            "Review Generation System",
-            "Growth Hosting & Care",
-            "Google Business Optimization"
+          "monthly": 599,
+          "setup": 0,
+          "firstMonthFree": true,
+          "tagline": "Once you're getting found, we help you grow a real audience. Monthly content shoots, reels, email, and a website that converts.",
+          "onboarding": {
+            "deliveredBy": "day 90",
+            "totalValue": 5997,
+            "items": [
+              { "name": "Full content day (photo + video)", "detail": "5 hours on site, 30 edited photos + 5 short reels", "value": 1199 },
+              { "name": "5-page custom website", "detail": "Home, menu, about, contact, reservations or order online", "value": 1999 },
+              { "name": "Brand kit setup", "detail": "Logo refinement, 3 colors, font pair, full style guide", "value": 400 },
+              { "name": "Email setup + 3 automation flows", "detail": "Welcome series, birthday, lapsed customer", "value": 499 },
+              { "name": "Full Google Business Profile optimization", "detail": "Advanced setup with Q&A, services, products, attributes", "value": 600 },
+              { "name": "Top 25 directory listings + citations", "detail": "Full local SEO foundation", "value": 500 },
+              { "name": "Reels launch campaign", "detail": "4 launch reels showcasing your refresh, scripted + edited", "value": 800 }
+            ]
+          },
+          "monthly_recurring": [
+            { "name": "AI Pro", "detail": "Unlimited chat + daily insights + multi-location dashboard" },
+            { "name": "Visibility Standard", "detail": "12 GBP posts/mo + citations maintained + Q&A monitoring + monthly photo refresh" },
+            { "name": "16 Instagram feed posts/mo", "detail": "Auto-cross-posted to Facebook" },
+            { "name": "4 Instagram reels/mo", "detail": "Scripted, shot, and edited by our team" },
+            { "name": "Full Instagram story management", "detail": "Daily stories curated from your posts + behind-the-scenes" },
+            { "name": "Monthly content shoot", "detail": "2-hour shoot day, ~15 new photos + 3 short reels" },
+            { "name": "Hours broadcast", "detail": "Cross-platform sync (GBP, IG, FB, Yelp, website) when hours change" },
+            { "name": "Unlimited AI template designs", "detail": "Specials, deals, events, hours updates" },
+            { "name": "4 designer-touched designs/mo", "detail": "Premium designs polished by our team" },
+            { "name": "Proactive design auto-suggestions", "detail": "AI watches calendar, weather, holidays, reviews — suggests posts before you ask" },
+            { "name": "Reviews Standard", "detail": "AI-drafted responses + monthly review-generation campaigns (email + table cards)" },
+            { "name": "Email Light", "detail": "2 emails per month, list under 1,000" },
+            { "name": "Website hosting + monthly content updates", "detail": "Hours, menu changes, seasonal swaps all handled" },
+            { "name": "Quarterly menu refresh shoot", "detail": "Coordinated with seasonal menu changes" },
+            { "name": "Performance reports", "detail": "Monthly written recap from your account manager" },
+            { "name": "Named account manager", "detail": "Monthly 15-min phone check-in" }
           ],
-          "content": ["16 feed posts/mo", "8 stories/mo", "4 reels/mo", "1 carousel/mo"]
+          "promises": [
+            "First month free",
+            "Cancel anytime after day 90",
+            "30-day money-back guarantee",
+            "No long-term contract",
+            "Pause for up to 3 months without losing your spot",
+            "Annual prepay saves 20%",
+            "Priority support: 12-hour response"
+          ],
+          "comparison": {
+            "headline": "What you'd pay elsewhere for the same",
+            "items": [
+              { "name": "Marketing agency retainer", "monthly": "$2,500-5,000" },
+              { "name": "Part-time social media manager", "monthly": "$1,500-2,500" },
+              { "name": "Monthly photographer + videographer", "monthly": "$800-1,500" },
+              { "name": "Website (build + hosting)", "monthly": "$200-400" },
+              { "name": "Email tool + your time", "monthly": "$50-300" },
+              { "name": "Review management tool", "monthly": "$75-150" }
+            ],
+            "totalElsewhere": "$5,125-9,850+",
+            "apnosh": "$599"
+          },
+          "services": [
+            "Everything in Starter Plate, plus:",
+            "5-page custom website",
+            "Monthly photo + video shoots",
+            "Email marketing setup + 2 emails/mo",
+            "Full Instagram story management",
+            "16 social posts + 4 reels per month",
+            "Brand kit setup",
+            "Reviews Standard with monthly campaigns",
+            "Named account manager"
+          ],
+          "content": ["12 GBP posts/mo", "16 IG feed posts/mo", "4 reels/mo", "Daily stories", "Monthly content shoots"]
         },
         {
-          "name": "The Packed House",
-          "stage": "Scaling",
-          "popular": true,
-          "monthly": 3142,
-          "setup": 2747,
-          "services": [
-            "Standard Website + Menu Design",
-            "Local SEO Authority",
-            "Social Media Growth",
-            "Email Marketing Starter",
-            "Review Automation",
-            "Growth Hosting & Care",
-            "Monthly Analytics Report"
+          "name": "Chef's Counter",
+          "stage": "Become a Destination",
+          "popular": false,
+          "monthly": 1299,
+          "setup": 499,
+          "firstMonthFree": true,
+          "tagline": "For restaurants ready to become the neighborhood destination. Full brand refresh, premium content, dedicated strategist.",
+          "onboarding": {
+            "deliveredBy": "day 120",
+            "totalValue": 13695,
+            "items": [
+              { "name": "Brand identity refresh", "detail": "New logo or refresh, full style guide, color system, typography, voice guide", "value": 2499 },
+              { "name": "Full menu photography", "detail": "Every dish photographed, 50+ edited photos", "value": 2499 },
+              { "name": "10-page custom website", "detail": "Full restaurant site with reservations, online ordering, blog", "value": 3999 },
+              { "name": "Content launch campaign", "detail": "8 social posts + 2 reels announcing your refresh", "value": 1500 },
+              { "name": "Email migration + 5 automation flows", "detail": "Welcome, birthday, lapsed customer, loyalty, post-visit", "value": 1499 },
+              { "name": "Full local SEO foundation", "detail": "60+ directory citations, schema markup, local landing pages for each neighborhood", "value": 1500 },
+              { "name": "Strategist Blueprint", "detail": "45-min Zoom call with your dedicated strategist + written 90-day plan", "value": 199 }
+            ]
+          },
+          "monthly_recurring": [
+            { "name": "AI Pro with custom playbooks", "detail": "Brand-specific tone, scheduling rules, automation defaults" },
+            { "name": "Visibility Full", "detail": "Full local SEO program + monthly citation audit + competitor tracking + neighborhood landing pages refreshed quarterly" },
+            { "name": "24 Instagram feed posts + 8 reels + carousels", "detail": "Auto-cross-posted to Facebook with platform-tailored copy" },
+            { "name": "Full Instagram + Facebook story management", "detail": "Daily stories across up to 3 platforms (IG + FB + TikTok or LinkedIn)" },
+            { "name": "2 monthly content shoots", "detail": "Photo + video team, full menu and behind-the-scenes coverage" },
+            { "name": "Seasonal menu refresh shoot", "detail": "Quarterly, coordinated with your menu changes" },
+            { "name": "Hours broadcast", "detail": "Cross-platform sync across all channels" },
+            { "name": "Unlimited AI template designs", "detail": "Specials, deals, events, custom requests" },
+            { "name": "Unlimited designer-touched designs", "detail": "Within reason — our designers polish anything our AI drafts" },
+            { "name": "1 fully custom design per month", "detail": "Ad creatives, menu redesigns, brand campaign assets" },
+            { "name": "Proactive design auto-suggestions", "detail": "AI surfaces opportunities daily" },
+            { "name": "Reviews Full", "detail": "Full response handling + monthly review campaigns + crisis playbook + competitor benchmark report" },
+            { "name": "Email Standard", "detail": "4 emails + 2 SMS per month, list under 5,000, A/B testing" },
+            { "name": "Website hosting + monthly content updates + design refresh", "detail": "We keep your site fresh, owner approves changes" },
+            { "name": "Brand maintenance", "detail": "Quarterly brand audit + asset library access + 3 ad-hoc graphic requests/mo" },
+            { "name": "Monthly strategy memo", "detail": "3-5 page written analysis from your strategist" },
+            { "name": "Dedicated strategist + named account manager", "detail": "Monthly 30-min strategy call + quarterly business review" },
+            { "name": "Priority support", "detail": "4-hour response during business hours" }
           ],
-          "content": ["24 feed posts/mo", "12 stories/mo", "8 reels/mo", "2 carousels/mo"]
+          "promises": [
+            "First month free",
+            "Cancel anytime after day 90",
+            "30-day money-back guarantee",
+            "No long-term contract",
+            "Pause for up to 3 months without losing your spot",
+            "Annual prepay saves 20%",
+            "Setup fee waived if you stay 3 months",
+            "Priority support: 4-hour response during business hours"
+          ],
+          "comparison": {
+            "headline": "What you'd pay elsewhere for the same",
+            "items": [
+              { "name": "Mid-tier marketing agency", "monthly": "$4,000-8,000" },
+              { "name": "Brand identity refresh (one-time)", "monthly": "$3,000-10,000" },
+              { "name": "In-house social media manager (full-time)", "monthly": "$4,000-6,000" },
+              { "name": "Monthly content production (photo + video)", "monthly": "$1,500-3,000" },
+              { "name": "Local SEO authority program", "monthly": "$1,000-2,500" },
+              { "name": "Email + SMS marketing platform + manager", "monthly": "$400-800" },
+              { "name": "Reputation management service", "monthly": "$300-600" }
+            ],
+            "totalElsewhere": "$11,200-20,900+",
+            "apnosh": "$1,299"
+          },
+          "services": [
+            "Everything in Full Plate, plus:",
+            "Full brand identity refresh",
+            "10-page custom website with reservations + ordering",
+            "Full menu photography",
+            "2 monthly content shoots (photo + video)",
+            "24 social posts + 8 reels + carousels",
+            "Email Standard (4 emails + 2 SMS/mo)",
+            "Reviews Full (responses + campaigns + crisis playbook)",
+            "Dedicated strategist + monthly 30-min strategy call",
+            "Monthly strategy memo + quarterly business review"
+          ],
+          "content": ["16+ GBP posts/mo", "24 IG posts/mo", "8 reels/mo", "Daily stories on 3 platforms", "2 shoots/mo"]
         },
         {
           "name": "The Empire",
-          "stage": "Established",
+          "stage": "Dominate Your Market",
           "popular": false,
-          "monthly": 5934,
-          "setup": 5497,
-          "services": [
-            "Advanced Website (20 pages)",
-            "Complete Brand & Launch",
-            "Local SEO Authority + Citations",
-            "Social Media Pro",
-            "Email & SMS Marketing",
-            "AI Chatbot",
-            "Lead & CRM Automation",
-            "Pro Hosting & Care"
+          "monthly": 2999,
+          "setup": 999,
+          "firstMonthFree": true,
+          "tagline": "Total marketing infrastructure for multi-location operators and category leaders. Custom website, full brand book, quarterly campaigns, dedicated team.",
+          "onboarding": {
+            "deliveredBy": "day 120",
+            "totalValue": 33493,
+            "items": [
+              { "name": "Full brand book", "detail": "Logo system, complete visual identity, voice + messaging guide, brand storytelling, photography style guide", "value": 4999 },
+              { "name": "Custom website (unlimited pages)", "detail": "Full custom design + dev, reservations, ordering, events calendar, gift cards, multi-location locator", "value": 9999 },
+              { "name": "Quarterly brand campaign #1", "detail": "Concept, creative direction, photo + video shoot, social rollout, paid amplification setup", "value": 4999 },
+              { "name": "Complete photography library", "detail": "Signature dishes, full menu, interior, exterior, team, behind-the-scenes — 150+ photos", "value": 4999 },
+              { "name": "Email + SMS migration + 10 automation flows", "detail": "Full lifecycle marketing setup", "value": 2999 },
+              { "name": "Local SEO authority package", "detail": "100+ citations, schema, neighborhood pages, competitor displacement plan", "value": 2500 },
+              { "name": "Strategist onboarding intensive", "detail": "4-hour deep dive workshop + 90-day roadmap + KPI framework", "value": 999 },
+              { "name": "PR + media kit", "detail": "Press one-pager, founder bio, signature dish stories, journalist outreach list", "value": 1999 }
+            ]
+          },
+          "monthly_recurring": [
+            { "name": "AI Pro with custom playbooks + early access", "detail": "First in line for new Apnosh AI tools and features" },
+            { "name": "Visibility Full + competitor displacement", "detail": "Monthly competitor monitoring + neighborhood domination strategy + paid local SEO push" },
+            { "name": "Unlimited social content", "detail": "24+ posts + 8+ reels + carousels across IG + FB + TikTok + LinkedIn" },
+            { "name": "Full story management on all platforms", "detail": "Daily stories, curated and posted by our team" },
+            { "name": "Influencer outreach", "detail": "1 confirmed collab per month with local food influencers" },
+            { "name": "2 monthly content shoots", "detail": "Photo + video team, reels-first content production" },
+            { "name": "Quarterly brand campaign", "detail": "New creative direction every 3 months — concept, shoot, rollout" },
+            { "name": "Hours broadcast", "detail": "Cross-platform sync across all channels" },
+            { "name": "Unlimited custom designs", "detail": "Within reason — our designers handle anything you need" },
+            { "name": "Proactive design auto-suggestions", "detail": "AI surfaces opportunities daily" },
+            { "name": "Reviews Full + 24/7 monitoring", "detail": "Full response handling + monthly campaigns + crisis playbook + reputation monitoring + competitor benchmark" },
+            { "name": "Email Full", "detail": "Weekly email cadence + automations + list growth campaigns + SMS broadcasts" },
+            { "name": "Website hosting + monthly design refresh + new feature builds", "detail": "2 hours of dev time per month for new functionality" },
+            { "name": "Monthly 5-page strategy memo", "detail": "From your strategist, includes KPI deep-dive" },
+            { "name": "Quarterly business review", "detail": "In-person or video, full strategic assessment" },
+            { "name": "Annual strategy retreat", "detail": "Half-day session (in-person or Zoom) for the upcoming year" },
+            { "name": "Strategist Office Hours", "detail": "Monthly 30-min call + plan updates + Slack DM access" },
+            { "name": "PR support", "detail": "Quarterly journalist pitch + press release for major moments" },
+            { "name": "Ad management", "detail": "$500/mo ad spend management included (you fund the ads separately)" },
+            { "name": "Dedicated strategist + dedicated account manager", "detail": "Direct Slack channel with the Apnosh team" },
+            { "name": "Priority support", "detail": "1-hour response during business hours" }
           ],
-          "content": ["Daily posts", "Stories 7x/week", "12 reels/mo", "4 carousels/mo", "Video production"]
+          "promises": [
+            "First month free",
+            "Cancel anytime after day 90",
+            "30-day money-back guarantee",
+            "No long-term contract",
+            "Pause for up to 3 months without losing your spot",
+            "Annual prepay saves 20%",
+            "Setup fee waived if you stay 6 months",
+            "Multi-location discounts: 20% off 2nd, 30% off 3rd-5th, 40% off 6+",
+            "Priority support: 1-hour response during business hours"
+          ],
+          "comparison": {
+            "headline": "What you'd pay elsewhere for the same",
+            "items": [
+              { "name": "Top-tier marketing agency retainer", "monthly": "$10,000-25,000" },
+              { "name": "Full-time marketing director", "monthly": "$8,000-12,000" },
+              { "name": "Full-time social media manager", "monthly": "$5,000-7,000" },
+              { "name": "Brand book (one-time)", "monthly": "$10,000-30,000" },
+              { "name": "Custom website (one-time)", "monthly": "$15,000-50,000" },
+              { "name": "Quarterly brand campaigns", "monthly": "$5,000-15,000/quarter" },
+              { "name": "Monthly content production (photo + video)", "monthly": "$3,000-6,000" },
+              { "name": "Email/SMS platform + manager", "monthly": "$800-1,500" },
+              { "name": "PR retainer", "monthly": "$3,000-8,000" }
+            ],
+            "totalElsewhere": "$35,000-80,000+",
+            "apnosh": "$2,999"
+          },
+          "services": [
+            "Everything in Chef's Counter, plus:",
+            "Full brand book",
+            "Custom website (unlimited pages)",
+            "Quarterly brand campaigns",
+            "Complete photography library (150+ photos)",
+            "Unlimited social content across 4 platforms",
+            "Monthly influencer collaboration",
+            "Email Full (weekly cadence + SMS broadcasts)",
+            "PR support + media kit",
+            "Ad management ($500/mo spend included)",
+            "Annual strategy retreat",
+            "Dedicated team with Slack access"
+          ],
+          "content": ["Unlimited social posts", "Daily stories across all platforms", "12+ reels/mo", "Quarterly brand campaigns", "150+ onboarding photos"]
         }
       ]
     },
