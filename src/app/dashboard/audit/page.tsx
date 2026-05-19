@@ -153,6 +153,13 @@ export default async function AuditPage({
               <p className="text-[14px] text-ink leading-relaxed whitespace-pre-wrap">
                 {audit.narrative}
               </p>
+              <a
+                href={clientSlug ? `/dashboard/customer-view?client=${clientSlug}` : '/dashboard/customer-view'}
+                className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-brand-dark hover:text-brand mt-3"
+              >
+                See how a customer sees you
+                <ArrowRight className="w-3.5 h-3.5" />
+              </a>
             </div>
           </div>
         </div>
