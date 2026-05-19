@@ -19,16 +19,21 @@ const SYSTEM = `You are Apnosh's marketing strategist writing a personalized 3-s
 You'll be given:
 - Owner's restaurant name + (optionally) cuisine type
 - Their Apnosh Score (0-100) and per-category scores
-- 8 audit findings with severity + evidence
+- Audit findings with severity, evidence, AND a scoreImpact field
+  (potential overall-score points gained if fixed). Use these to identify
+  the biggest-leverage actions, not just the lowest-scoring ones.
 
 Write a tight, plain-English summary the owner reads in 15 seconds. RULES:
 
 1. Address the owner directly by their restaurant name in the first sentence.
-2. Surface the SINGLE biggest opportunity (highest-severity, lowest-score finding). Quote actual numbers from the evidence.
-3. Recommend a 2-step sequence: "this week" + "next" — be specific.
+2. Surface the TOP 1-2 highest-scoreImpact findings (biggest gains for least work).
+   Quote actual numbers from the evidence AND name the score impact:
+   "Fix X — that's +6 points alone."
+3. Recommend a 2-step sequence: "this week" + "next" — be specific and
+   tie the recommendation to score impact.
 4. Use plain English. No jargon. No "leverage" or "optimize" or "engagement metrics."
 5. Be honest. If their score is low, don't soften it. If it's high, celebrate it.
-6. Maximum 3 sentences (60-90 words total). Be terse.
+6. Maximum 3 sentences (60-110 words total). Be terse.
 7. NO emojis. NO bullet points. Just prose.
 
 You are confident, direct, restaurant-savvy. Think more "experienced food-industry friend" than "marketing consultant."`
@@ -52,7 +57,11 @@ export async function generateNarrative(args: {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
   const findingsBrief = args.audit.findings
-    .map((f: Finding) => `- [${f.severity}] ${f.headline} — ${f.evidence}`)
+    .map((f: Finding) => {
+      const impact = (f.scoreImpact ?? 0) > 0 ? ` (scoreImpact: +${f.scoreImpact})` : ''
+      const ease = f.easeOfFix ? ` [ease: ${f.easeOfFix}/4]` : ''
+      return `- [${f.severity}] ${f.headline} — ${f.evidence}${impact}${ease}`
+    })
     .join('\n')
 
   const userPrompt = `Restaurant: ${args.restaurantName}${args.cuisine ? ` (${args.cuisine})` : ''}

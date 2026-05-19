@@ -305,22 +305,35 @@ export default async function AuditPage({
 function QuickWinCard({ finding, index, clientSlug }: { finding: Finding; index: number; clientSlug?: string }) {
   const ringClass = finding.severity === 'critical' ? 'border-rose-200' : 'border-amber-200'
   const numClass = finding.severity === 'critical' ? 'bg-rose-600' : 'bg-amber-600'
-  /* CTA opens the AI chat with finding.ctaPrompt pre-filled in the
-     textarea. The chat reads `?ask=<text>` on mount (see agent-chat.tsx).
-     Preserve ?client= if we got here via admin override. */
   const params = new URLSearchParams()
   if (finding.ctaPrompt) params.set('ask', finding.ctaPrompt)
   if (clientSlug) params.set('client', clientSlug)
   const ctaHref = finding.ctaPrompt ? `/dashboard/audit?${params.toString()}` : undefined
+  const impact = finding.scoreImpact ?? 0
   return (
     <div className={`bg-white rounded-xl border ${ringClass} p-4 flex items-start gap-3`}>
       <div className={`w-7 h-7 rounded-full ${numClass} text-white flex items-center justify-center text-[12px] font-bold flex-shrink-0`}>
         {index}
       </div>
       <div className="flex-1 min-w-0">
-        <h3 className="text-[14px] font-semibold text-ink">{finding.headline}</h3>
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <h3 className="text-[14px] font-semibold text-ink">{finding.headline}</h3>
+          {impact > 0 && (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 flex-shrink-0">
+              +{impact} pts possible
+            </span>
+          )}
+        </div>
         <p className="text-[12.5px] text-ink-3 mt-1">{finding.evidence}</p>
         <p className="text-[11px] text-ink-4 mt-1 italic">{finding.benchmark}</p>
+        {finding.whyItMatters && (
+          <details className="mt-2">
+            <summary className="text-[11px] text-ink-3 hover:text-ink cursor-pointer font-medium">
+              Why this matters →
+            </summary>
+            <p className="text-[11.5px] text-ink-2 mt-1.5 leading-relaxed pl-1">{finding.whyItMatters}</p>
+          </details>
+        )}
         <div className="mt-3 flex items-center gap-2 flex-wrap">
           {finding.ctaPrimary && (
             ctaHref ? (

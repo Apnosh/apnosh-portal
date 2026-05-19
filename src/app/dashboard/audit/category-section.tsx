@@ -57,7 +57,6 @@ export default function AuditCategorySection({
 }
 
 function FindingRow({ finding, clientSlug }: { finding: Finding; clientSlug?: string }) {
-  /* Preserve admin client override when navigating to chat. */
   const params = new URLSearchParams()
   if (finding.ctaPrompt) params.set('ask', finding.ctaPrompt)
   if (clientSlug) params.set('client', clientSlug)
@@ -65,13 +64,29 @@ function FindingRow({ finding, clientSlug }: { finding: Finding; clientSlug?: st
   const icon = finding.severity === 'critical' ? <AlertCircle className="w-4 h-4 text-rose-600" />
     : finding.severity === 'warning' ? <AlertTriangle className="w-4 h-4 text-amber-600" />
     : <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+  const impact = finding.scoreImpact ?? 0
   return (
     <div className="bg-white rounded-lg border border-ink-7 p-3 flex items-start gap-2.5">
       <div className="flex-shrink-0 mt-0.5">{icon}</div>
       <div className="flex-1 min-w-0">
-        <h4 className="text-[13px] font-semibold text-ink">{finding.headline}</h4>
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          <h4 className="text-[13px] font-semibold text-ink">{finding.headline}</h4>
+          {impact > 0 && (
+            <span className="text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 flex-shrink-0">
+              +{impact} pts
+            </span>
+          )}
+        </div>
         <p className="text-[12px] text-ink-3 mt-0.5">{finding.evidence}</p>
         <p className="text-[11px] text-ink-4 mt-0.5 italic">{finding.benchmark}</p>
+        {finding.whyItMatters && (
+          <details className="mt-1.5">
+            <summary className="text-[10.5px] text-ink-3 hover:text-ink cursor-pointer font-medium">
+              Why this matters →
+            </summary>
+            <p className="text-[11px] text-ink-2 mt-1 leading-relaxed pl-1">{finding.whyItMatters}</p>
+          </details>
+        )}
         {(finding.ctaPrimary || finding.ctaSecondary) && (
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             {finding.ctaPrimary && (

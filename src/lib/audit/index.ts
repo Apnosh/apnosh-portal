@@ -39,6 +39,14 @@ export interface Finding {
   score: number
   /** Relative weight of this finding within its category. */
   weight: number
+  /** Estimated overall-score points gained if this finding hits 100.
+   *  Used for "+X points possible" badges and smart quick-win ranking. */
+  scoreImpact?: number
+  /** 1-2 sentence trust builder: why does this matter? Cite source. */
+  whyItMatters?: string
+  /** How easy is this to fix? 1=one-click, 2=10-min owner action,
+   *  3=requires real work, 4=requires outside help. Used to rank quick wins. */
+  easeOfFix?: 1 | 2 | 3 | 4
 }
 
 export interface AuditResult {
@@ -72,6 +80,44 @@ const CATEGORY_WEIGHTS: Record<Category, number> = {
   stay_active: 30,
 }
 
+/* Per-cuisine benchmarks. Defaults at the bottom apply when cuisine
+   isn't in the table. Adjust as we gather real client data. */
+interface Benchmarks {
+  photoTarget: number          // GBP photo count: "top performers have N+"
+  reviewsPerMonth: number      // baseline expected for healthy operation
+  postsPerMonth: number        // baseline posting cadence
+  monthlyImpressions: number   // baseline GSC impressions
+}
+const CUISINE_BENCHMARKS: Record<string, Benchmarks> = {
+  fine_dining:    { photoTarget: 50, reviewsPerMonth: 8,  postsPerMonth: 6,  monthlyImpressions: 1800 },
+  steakhouse:     { photoTarget: 40, reviewsPerMonth: 8,  postsPerMonth: 5,  monthlyImpressions: 1500 },
+  italian:        { photoTarget: 35, reviewsPerMonth: 10, postsPerMonth: 5,  monthlyImpressions: 1500 },
+  pizza:          { photoTarget: 25, reviewsPerMonth: 15, postsPerMonth: 5,  monthlyImpressions: 2500 },
+  taqueria:       { photoTarget: 20, reviewsPerMonth: 12, postsPerMonth: 4,  monthlyImpressions: 1800 },
+  cafe:           { photoTarget: 25, reviewsPerMonth: 10, postsPerMonth: 5,  monthlyImpressions: 1200 },
+  bakery:         { photoTarget: 30, reviewsPerMonth: 8,  postsPerMonth: 5,  monthlyImpressions: 1000 },
+  fast_casual:    { photoTarget: 20, reviewsPerMonth: 12, postsPerMonth: 4,  monthlyImpressions: 1800 },
+  food_truck:     { photoTarget: 15, reviewsPerMonth: 6,  postsPerMonth: 5,  monthlyImpressions: 800 },
+  bar:            { photoTarget: 25, reviewsPerMonth: 10, postsPerMonth: 6,  monthlyImpressions: 1500 },
+  asian:          { photoTarget: 25, reviewsPerMonth: 10, postsPerMonth: 4,  monthlyImpressions: 1500 },
+  mexican:        { photoTarget: 25, reviewsPerMonth: 12, postsPerMonth: 4,  monthlyImpressions: 1800 },
+  default:        { photoTarget: 30, reviewsPerMonth: 10, postsPerMonth: 4,  monthlyImpressions: 1500 },
+}
+
+function getBenchmarks(cuisine: string | null | undefined): Benchmarks {
+  if (!cuisine) return CUISINE_BENCHMARKS.default
+  const key = cuisine.toLowerCase().replace(/\s+/g, '_')
+  return CUISINE_BENCHMARKS[key] ?? CUISINE_BENCHMARKS.default
+}
+
+/* Per-finding context passed to each check function. */
+interface CheckContext {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any
+  clientId: string
+  benchmarks: Benchmarks
+}
+
 function getAdmin() {
   return createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -82,8 +128,8 @@ function getAdmin() {
 // ─── individual checks ────────────────────────────────────────────────
 
 /* GET FOUND — Profile completeness on GBP + client_profiles. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function checkProfileCompleteness(admin: any, clientId: string): Promise<Finding> {
+async function checkProfileCompleteness(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId } = ctx
   const { data: gbp } = await admin
     .from('gbp_locations')
     .select('location_name, address, store_code, hours, phone, website')
@@ -129,8 +175,11 @@ async function checkProfileCompleteness(admin: any, clientId: string): Promise<F
       headline: `Profile is ${Math.round(pctFilled)}% complete`,
       evidence: `${filled} of ${FIELDS.length} key fields filled.`,
       benchmark: `Top performers fill 95%+ of available fields. You're ahead of the curve.`,
+      whyItMatters: 'Google ranks complete profiles higher in local search. Owners typically miss 2-4 fields after initial setup and never go back.',
       score,
       weight: 1,
+      scoreImpact: 0,
+      easeOfFix: 1,
     }
   }
   return {
@@ -140,17 +189,19 @@ async function checkProfileCompleteness(admin: any, clientId: string): Promise<F
     headline: `Your profile is missing ${missing.length} key field${missing.length === 1 ? '' : 's'}`,
     evidence: `Missing: ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? `, and ${missing.length - 4} more` : ''}.`,
     benchmark: `Top performers fill 95%+ of available fields. You're at ${Math.round(pctFilled)}%.`,
+    whyItMatters: 'Google ranks complete profiles higher in local search. Each missing field is a signal that lowers your visibility. Fields like phone and website also directly affect customer action — without them, people can\'t call or click through.',
     ctaPrimary: 'Help me fill these in',
     ctaSecondary: 'Skip',
     ctaPrompt: `My Google profile is missing ${missing.length} fields: ${missing.join(', ')}. Can you walk me through filling each one in?`,
     score,
-    weight: 1,
+    weight: 1.5,
+    easeOfFix: 1,
   }
 }
 
 /* GET FOUND — Local search demand from GSC. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function checkSearchDemand(admin: any, clientId: string): Promise<Finding> {
+async function checkSearchDemand(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId, benchmarks } = ctx
   const since = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
   const { data } = await admin
     .from('search_metrics')
@@ -169,13 +220,19 @@ async function checkSearchDemand(admin: any, clientId: string): Promise<Finding>
       headline: 'No search data yet',
       evidence: 'We don\'t have Search Console data for the last 30 days.',
       benchmark: 'Connect Google Search Console so we can show local search demand for your business.',
+      whyItMatters: 'Search Console shows how often people see your business in Google. Without it, you\'re flying blind on what queries drive traffic.',
       ctaPrimary: 'Connect Search Console',
+      ctaPrompt: 'How do I connect Google Search Console to Apnosh?',
       score: 30,
       weight: 1,
+      easeOfFix: 2,
     }
   }
-  /* Score based on absolute impressions — anything above 1000/mo is healthy. */
-  const score = Math.min(100, Math.round((impressions / 1000) * 50 + (clicks / impressions) * 5000))
+  /* Score: impressions vs cuisine benchmark + ctr bonus. */
+  const score = Math.min(100, Math.round(
+    (impressions / benchmarks.monthlyImpressions) * 60
+    + (clicks / impressions) * 4000,
+  ))
   const severity: Severity = score >= 70 ? 'strength' : score >= 40 ? 'warning' : 'critical'
 
   return {
@@ -188,15 +245,17 @@ async function checkSearchDemand(admin: any, clientId: string): Promise<Finding>
     evidence: `${clicks.toLocaleString()} clicks · ${((clicks / impressions) * 100).toFixed(1)}% click rate.`,
     benchmark: severity === 'strength'
       ? 'Strong demand for your business. Capitalize with content + posts.'
-      : 'A healthy single-location restaurant typically sees 2,000+ impressions/mo. Posting, photos, and reviews are the biggest levers.',
+      : `Cuisine benchmark: ${benchmarks.monthlyImpressions.toLocaleString()}+ impressions/mo. Posting, photos, and reviews are the biggest levers.`,
+    whyItMatters: 'Search impressions are the top of your funnel — the more people see you, the more visits, calls, and orders. CTR shows whether your listing convinces them once they see it.',
     score,
     weight: 1,
+    easeOfFix: 3,
   }
 }
 
 /* GET FOUND — Connection health. Broken connections = invisible data = poor SEO signals. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function checkConnectionHealth(admin: any, clientId: string): Promise<Finding> {
+async function checkConnectionHealth(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId } = ctx
   const { data } = await admin
     .from('channel_connections')
     .select('channel, status, sync_error')
@@ -213,10 +272,12 @@ async function checkConnectionHealth(admin: any, clientId: string): Promise<Find
       headline: 'No accounts connected yet',
       evidence: 'Connect your Google Business Profile and Search Console so we can start working.',
       benchmark: 'Connected accounts unlock posts, review responses, hours updates, and analytics.',
+      whyItMatters: 'Apnosh AI needs read/write access to your Google accounts to act on your behalf. Without connections, the AI can\'t see your data or take action.',
       ctaPrimary: 'Connect accounts',
       ctaPrompt: 'I haven\'t connected my Google accounts yet. Can you walk me through it?',
       score: 0,
-      weight: 1,
+      weight: 1.5,
+      easeOfFix: 2,
     }
   }
   if (errored.length === 0) {
@@ -227,8 +288,9 @@ async function checkConnectionHealth(admin: any, clientId: string): Promise<Find
       headline: `All ${total} Google connections healthy`,
       evidence: 'Data flowing for Business Profile, Search Console, Analytics.',
       benchmark: 'Keep them connected to maintain visibility and feed the AI fresh data.',
+      whyItMatters: 'Healthy connections mean the AI has the latest data, can post updates, and can flag issues in real time.',
       score: 100,
-      weight: 1,
+      weight: 1.5,
     }
   }
   const channelNames: Record<string, string> = {
@@ -243,17 +305,19 @@ async function checkConnectionHealth(admin: any, clientId: string): Promise<Find
     headline: `${errored.length} of ${total} Google connections need attention`,
     evidence: errored.map(e => channelNames[e.channel] ?? e.channel).join(', ') + ' — sync failing.',
     benchmark: 'Broken connections mean missed analytics, lost review notifications, and stale Google data.',
+    whyItMatters: 'When a connection breaks, we stop seeing new data and lose the ability to act. Most breakages are token expirations or scope-permission changes on Google\'s side — a quick reconnect fixes them.',
     ctaPrimary: 'Help me fix these',
     ctaSecondary: 'Skip',
     ctaPrompt: `Some of my Google connections are failing: ${errored.map(e => channelNames[e.channel] ?? e.channel).join(', ')}. Can you walk me through reconnecting them?`,
     score: Math.round(((total - errored.length) / total) * 60),  // capped at 60 if anything's broken
-    weight: 1,
+    weight: 1.5,
+    easeOfFix: 1,
   }
 }
 
 /* LOOK ENGAGED — Reviews waiting for reply. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function checkReviewsWaiting(admin: any, clientId: string): Promise<Finding> {
+async function checkReviewsWaiting(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId, benchmarks } = ctx
   const since = new Date(Date.now() - 90 * 86_400_000).toISOString()
   const { data } = await admin
     .from('local_reviews')
@@ -271,10 +335,13 @@ async function checkReviewsWaiting(admin: any, clientId: string): Promise<Findin
       severity: 'warning',
       headline: 'No recent reviews',
       evidence: 'No reviews captured in the last 90 days.',
-      benchmark: 'Active restaurants get 5-20 reviews/month. Connect Google Business Profile to pull them in.',
+      benchmark: `Active restaurants like yours get ${benchmarks.reviewsPerMonth}+ reviews/month. Connect GBP to pull them in.`,
+      whyItMatters: 'Reviews are social proof. People reading reviews are 3-5x more likely to visit. Zero recent reviews signals either no traffic or no ask system — both fixable.',
       ctaPrimary: 'Check connections',
-      score: 50,
+      ctaPrompt: 'I have no recent reviews coming in. Can you check my connections and help me start asking customers for reviews?',
+      score: 30,
       weight: 2,
+      easeOfFix: 3,
     }
   }
 
@@ -286,6 +353,7 @@ async function checkReviewsWaiting(admin: any, clientId: string): Promise<Findin
       headline: 'All recent reviews replied to',
       evidence: `${total} reviews in the last 90 days, all addressed.`,
       benchmark: 'Restaurants replying within 24h see 18% more repeat customers.',
+      whyItMatters: 'Replying to reviews shows future customers you care. Google also rewards active engagement in local search rankings.',
       score: 100,
       weight: 2,
     }
@@ -314,17 +382,19 @@ async function checkReviewsWaiting(admin: any, clientId: string): Promise<Findin
     headline: `${open.length} review${open.length === 1 ? '' : 's'} waiting for a reply`,
     evidence: `${sourceBreakdown}. Oldest unanswered is ${oldestDays} days old.`,
     benchmark: 'Restaurants replying within 24h see 18% more repeat customers.',
+    whyItMatters: 'Unanswered reviews tell future customers nobody\'s listening. A response — even a generic "thanks" — flips the perception. Replies within 24h get rewarded by Google\'s ranking algorithm.',
     ctaPrimary: 'Draft replies for me',
     ctaSecondary: 'Skip',
     ctaPrompt: `I have ${open.length} reviews waiting for a reply across ${sourceBreakdown}. Can you draft replies for the most recent ones?`,
     score,
     weight: 2,
+    easeOfFix: 1,
   }
 }
 
 /* LOOK ENGAGED — Review sentiment / recurring themes. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function checkReviewSentiment(admin: any, clientId: string): Promise<Finding> {
+async function checkReviewSentiment(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId } = ctx
   const { data } = await admin
     .from('review_themes')
     .select('themes, review_count, window_start, window_end, generated_at')
@@ -341,8 +411,10 @@ async function checkReviewSentiment(admin: any, clientId: string): Promise<Findi
       headline: 'No sentiment analysis yet',
       evidence: 'We haven\'t analyzed your review themes yet (needs 5+ reviews).',
       benchmark: 'Theme analysis surfaces recurring praise and complaints — gold for menu + service decisions.',
+      whyItMatters: 'Single reviews are anecdotes. Patterns are insight. When 5 reviews say the same thing, that\'s the truth.',
       score: 50,
       weight: 1,
+      easeOfFix: 3,
     }
   }
 
@@ -360,6 +432,7 @@ async function checkReviewSentiment(admin: any, clientId: string): Promise<Findi
       headline: 'Strong sentiment — no recurring complaints',
       evidence: positive.length > 0 ? `Top praise themes: ${topPraise}.` : 'Reviews are overwhelmingly positive.',
       benchmark: 'Lean into what people love. Use praise themes in your marketing copy.',
+      whyItMatters: 'Praise themes are your free copywriting. The exact words customers use to describe what they love beat anything an agency would write.',
       score: 100,
       weight: 1,
     }
@@ -374,17 +447,19 @@ async function checkReviewSentiment(admin: any, clientId: string): Promise<Findi
     headline: `${negative.length} recurring issue${negative.length === 1 ? '' : 's'} in recent reviews`,
     evidence: `Top complaint: "${topNeg.theme}" (${topNeg.mentions} mention${topNeg.mentions === 1 ? '' : 's'}).`,
     benchmark: 'Recurring complaints rarely fix themselves. The pattern is the signal.',
+    whyItMatters: 'The same complaint from multiple reviewers in 90 days is operational signal, not noise. Most owners ignore patterns until they become 1-star tanks. Catch them early and fix the root cause.',
     ctaPrimary: 'Show me these reviews',
     ctaSecondary: 'Skip for now',
     ctaPrompt: `Show me the reviews that mention "${topNeg.theme}" — what are people specifically saying?`,
     score: Math.max(20, 100 - topNeg.mentions * 10),
     weight: 1,
+    easeOfFix: 4,
   }
 }
 
 /* LOOK ENGAGED — Photo coverage on GBP. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function checkPhotoCoverage(admin: any, clientId: string): Promise<Finding> {
+async function checkPhotoCoverage(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId, benchmarks } = ctx
   const { data } = await admin
     .from('gbp_metrics')
     .select('photo_count, date')
@@ -401,18 +476,22 @@ async function checkPhotoCoverage(admin: any, clientId: string): Promise<Finding
       severity: 'warning',
       headline: 'Photo count unknown',
       evidence: 'We don\'t have GBP photo count data yet.',
-      benchmark: 'Top performers have 30+ photos. Photos drive ~27% more profile views.',
+      benchmark: `Top performers in your category have ${benchmarks.photoTarget}+ photos. Photos drive ~27% more profile views.`,
+      whyItMatters: 'Photos are how people decide whether to visit. Without them, the algorithm shows you less and customers scroll past.',
       ctaPrimary: 'Connect Business Profile',
+      ctaPrompt: 'Help me connect my Google Business Profile so we can track photos.',
       score: 40,
       weight: 1,
+      easeOfFix: 2,
     }
   }
 
+  const target = benchmarks.photoTarget
   let severity: Severity = 'critical'
   let score = 0
-  if (count >= 30) { severity = 'strength'; score = 100 }
-  else if (count >= 15) { severity = 'warning'; score = 70 }
-  else if (count >= 5) { severity = 'warning'; score = 40 }
+  if (count >= target) { severity = 'strength'; score = 100 }
+  else if (count >= target * 0.5) { severity = 'warning'; score = 70 }
+  else if (count >= target * 0.2) { severity = 'warning'; score = 40 }
   else { severity = 'critical'; score = 20 }
 
   if (severity === 'strength') {
@@ -421,8 +500,9 @@ async function checkPhotoCoverage(admin: any, clientId: string): Promise<Finding
       category: 'look_engaged',
       severity,
       headline: `Strong: ${count} photos on Google Business Profile`,
-      evidence: 'You\'re in the top tier for photo coverage.',
+      evidence: `Above the ${target}+ benchmark for your category. You're in the top tier.`,
       benchmark: 'Keep adding fresh photos monthly to stay top-ranked.',
+      whyItMatters: 'Photos compound: each new addition signals to Google that the business is alive and active, boosting rankings.',
       score,
       weight: 1,
     }
@@ -432,19 +512,21 @@ async function checkPhotoCoverage(admin: any, clientId: string): Promise<Finding
     category: 'look_engaged',
     severity,
     headline: `${count} photo${count === 1 ? '' : 's'} on your Google Business Profile`,
-    evidence: `Top performers have 30+. Fresh photos correlate with 27% more profile views.`,
-    benchmark: 'Aim for 30+. Add fresh photos monthly.',
+    evidence: `Target for your category: ${target}+. Fresh photos correlate with 27% more profile views.`,
+    benchmark: `Aim for ${target}+. Mix food (60%) + interior (20%) + exterior + team.`,
+    whyItMatters: 'Restaurants with more photos rank higher in Google Maps and get more clicks. Owners who add 4+ photos/month outperform photo-stagnant peers by 35% on profile views.',
     ctaPrimary: 'Help me plan a photo refresh',
     ctaSecondary: 'Upload from your phone',
-    ctaPrompt: `I only have ${count} photos on my Google profile. What dishes / shots should I prioritize for a fresh photo session, and how do I get them up to 30+?`,
+    ctaPrompt: `I only have ${count} photos on my Google profile (target: ${target}+). What dishes / shots should I prioritize for a fresh photo session?`,
     score,
     weight: 1,
+    easeOfFix: 3,
   }
 }
 
 /* STAY ACTIVE — Menu freshness (internal menu_items). */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function checkMenuFreshness(admin: any, clientId: string): Promise<Finding> {
+async function checkMenuFreshness(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId } = ctx
   const { data } = await admin
     .from('menu_items')
     .select('updated_at')
@@ -461,9 +543,12 @@ async function checkMenuFreshness(admin: any, clientId: string): Promise<Finding
       headline: 'No menu items on file',
       evidence: 'We don\'t have a menu for your restaurant yet.',
       benchmark: 'A current menu lets the AI suggest features, draft posts about specific dishes, and answer customer questions.',
+      whyItMatters: 'Apnosh AI can only help with menu/specials/promos if we have the menu data. Adding it unlocks half the AI\'s value.',
       ctaPrimary: 'Add your menu',
+      ctaPrompt: 'I don\'t have my menu in Apnosh yet. Can you walk me through adding it?',
       score: 30,
       weight: 1,
+      easeOfFix: 2,
     }
   }
   const daysSince = Math.floor((Date.now() - new Date(data.updated_at).getTime()) / 86_400_000)
@@ -475,6 +560,7 @@ async function checkMenuFreshness(admin: any, clientId: string): Promise<Finding
       headline: 'Menu is fresh',
       evidence: `Last menu update was ${daysSince} day${daysSince === 1 ? '' : 's'} ago.`,
       benchmark: 'Restaurants updating menus monthly see more engagement from regulars.',
+      whyItMatters: 'Regulars stop returning when the menu never changes. Quarterly tweaks signal you\'re evolving and give people a reason to come back.',
       score: 100,
       weight: 1,
     }
@@ -487,17 +573,19 @@ async function checkMenuFreshness(admin: any, clientId: string): Promise<Finding
     headline: `Menu hasn't changed in ${daysSince} days`,
     evidence: `Last update: ${new Date(data.updated_at).toLocaleDateString()}.`,
     benchmark: 'Stale menus lead to "they didn\'t have what was advertised" reviews. Refresh quarterly at minimum.',
+    whyItMatters: 'Menus go stale operationally (prices drift, items get 86\'d) and emotionally (regulars get bored). Every menu update is also a marketing opportunity — Google posts, IG carousels, email blasts.',
     ctaPrimary: 'Walk me through my menu',
     ctaSecondary: 'Skip',
     ctaPrompt: `My menu hasn't been updated in ${daysSince} days. Can you pull it up and help me decide what to refresh — prices, descriptions, photos, or items to add/remove?`,
     score: Math.max(20, 100 - daysSince),
     weight: 1,
+    easeOfFix: 2,
   }
 }
 
 /* STAY ACTIVE — Recent agent activity. Have we actually been doing things? */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function checkRecentActivity(admin: any, clientId: string): Promise<Finding> {
+async function checkRecentActivity(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId } = ctx
   const since30 = new Date(Date.now() - 30 * 86_400_000).toISOString()
   const { data } = await admin
     .from('agent_tool_executions')
@@ -516,10 +604,12 @@ async function checkRecentActivity(admin: any, clientId: string): Promise<Findin
       headline: 'No AI activity in the last 30 days',
       evidence: 'You haven\'t used Apnosh AI to do anything yet.',
       benchmark: 'Active clients run 5-15 AI actions/month. Start small — ask the AI to draft a Google post.',
+      whyItMatters: 'Apnosh AI is your unfair advantage — but only if you use it. Owners who try one action in their first week stay 3x longer than those who don\'t.',
       ctaPrimary: 'Try the AI now',
       ctaPrompt: 'What\'s one quick thing I can do today to make my marketing better? Pick something specific to my restaurant.',
       score: 10,
       weight: 1,
+      easeOfFix: 1,
     }
   }
   let severity: Severity = 'critical'
@@ -538,17 +628,343 @@ async function checkRecentActivity(admin: any, clientId: string): Promise<Findin
     benchmark: severity === 'strength'
       ? 'Keep going — momentum compounds.'
       : 'Active clients run 5-15 AI actions/month. Try the chat for review replies and Google posts.',
+    whyItMatters: severity === 'strength'
+      ? 'High usage signals you\'re extracting value. Each tool call captures judgment, builds your context library, and improves future suggestions.'
+      : 'Light usage means you\'re paying for capability you\'re not capturing. The Top 3 quick wins above each take <2 minutes via chat.',
     score,
     weight: 1,
+    easeOfFix: 1,
+  }
+}
+
+// ─── NEW v2 findings ───────────────────────────────────────────────────
+
+/* GET FOUND — Channel diversity. Are we beyond just Google? */
+async function checkChannelDiversity(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId } = ctx
+  const { data } = await admin
+    .from('channel_connections')
+    .select('channel, status')
+    .eq('client_id', clientId)
+    .eq('status', 'active')
+  const channels = (data ?? []) as Array<{ channel: string }>
+  const active = new Set(channels.map(c => c.channel))
+  /* Count distinct "platforms" — group Google services together. */
+  const hasGoogle = ['google_business_profile', 'google_search_console', 'google_analytics']
+    .some(c => active.has(c))
+  const hasInstagram = active.has('instagram') || active.has('instagram_direct')
+  const hasFacebook = active.has('facebook')
+  const hasTiktok = active.has('tiktok')
+  const hasYelp = active.has('yelp')
+  const platforms = [hasGoogle, hasInstagram, hasFacebook, hasTiktok, hasYelp].filter(Boolean).length
+  const missing = [
+    !hasGoogle && 'Google',
+    !hasInstagram && 'Instagram',
+    !hasFacebook && 'Facebook',
+    !hasTiktok && 'TikTok',
+    !hasYelp && 'Yelp',
+  ].filter(Boolean) as string[]
+
+  if (platforms >= 4) {
+    return {
+      id: 'channel_diversity',
+      category: 'get_found',
+      severity: 'strength',
+      headline: `Strong: ${platforms} channels connected`,
+      evidence: 'Google + social + reviews — broad coverage.',
+      benchmark: 'You\'re feeding the AI from multiple angles.',
+      whyItMatters: 'Multi-channel connections mean the AI sees a fuller picture and can post coordinated campaigns across platforms.',
+      score: 100,
+      weight: 1,
+    }
+  }
+  const severity: Severity = platforms === 0 ? 'critical' : platforms <= 1 ? 'critical' : 'warning'
+  return {
+    id: 'channel_diversity',
+    category: 'get_found',
+    severity,
+    headline: `${platforms} of 5 channels connected`,
+    evidence: missing.length > 0 ? `Missing: ${missing.join(', ')}.` : '',
+    benchmark: 'Most restaurants benefit from at least Google + Instagram + Yelp.',
+    whyItMatters: 'Each unconnected channel is a blind spot — we can\'t draft posts for IG if we can\'t see it, and we can\'t reply to Yelp reviews if we\'re not authorized.',
+    ctaPrimary: 'Connect more channels',
+    ctaSecondary: 'Skip',
+    ctaPrompt: `I only have ${platforms} channels connected. Walk me through connecting ${missing.slice(0, 2).join(' and ')}.`,
+    score: Math.round((platforms / 5) * 100),
+    weight: 1,
+    easeOfFix: 2,
+  }
+}
+
+/* LOOK ENGAGED — Yelp presence health. */
+async function checkYelpPresence(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId } = ctx
+  const since = new Date(Date.now() - 90 * 86_400_000).toISOString()
+  const { data } = await admin
+    .from('local_reviews')
+    .select('id, rating, status, created_at_platform')
+    .eq('client_id', clientId)
+    .eq('source', 'yelp')
+    .gte('created_at_platform', since)
+  const yelpReviews = (data ?? []) as Array<{ rating: number; status: string }>
+  if (yelpReviews.length === 0) {
+    return {
+      id: 'yelp_presence',
+      category: 'look_engaged',
+      severity: 'warning',
+      headline: 'No recent Yelp activity',
+      evidence: 'No Yelp reviews captured in the last 90 days.',
+      benchmark: 'Even quiet Yelp listings deserve monitoring — silent reviews can tank your average.',
+      whyItMatters: 'Yelp matters most for first-time customers researching options. A neglected Yelp listing with one bad review and zero responses is worse than no listing at all.',
+      ctaPrimary: 'Check Yelp connection',
+      ctaPrompt: 'I don\'t see Yelp data — can you check if it\'s connected and help me claim my listing if not?',
+      score: 50,
+      weight: 0.5,
+      easeOfFix: 3,
+    }
+  }
+  const avg = yelpReviews.reduce((s, r) => s + (r.rating ?? 0), 0) / yelpReviews.length
+  const open = yelpReviews.filter(r => r.status === 'open').length
+  const responseRate = ((yelpReviews.length - open) / yelpReviews.length) * 100
+  /* Yelp score: half weight on avg rating, half on response rate. */
+  const ratingScore = ((avg - 1) / 4) * 100   // 1★=0, 5★=100
+  const score = Math.round(ratingScore * 0.5 + responseRate * 0.5)
+  const severity: Severity = score >= 75 ? 'strength' : score >= 50 ? 'warning' : 'critical'
+  return {
+    id: 'yelp_presence',
+    category: 'look_engaged',
+    severity,
+    headline: `Yelp: ${avg.toFixed(1)}★ avg · ${responseRate.toFixed(0)}% response rate`,
+    evidence: `${yelpReviews.length} Yelp reviews in 90d. ${open} unanswered.`,
+    benchmark: 'Aim for 4.0★+ and 80%+ response rate on Yelp.',
+    whyItMatters: 'Yelp users skew "researching where to eat tonight." Good ratings + active responses convert; weak ratings drive them to a competitor.',
+    ctaPrimary: 'Reply to Yelp reviews',
+    ctaPrompt: `Draft replies to my unanswered Yelp reviews from the last 90 days.`,
+    score,
+    weight: 0.5,
+    easeOfFix: 1,
+  }
+}
+
+/* LOOK ENGAGED — Review rating trend (improving or declining?). */
+async function checkRatingTrend(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId } = ctx
+  const now = Date.now()
+  const last30 = new Date(now - 30 * 86_400_000).toISOString()
+  const prior30 = new Date(now - 60 * 86_400_000).toISOString()
+  const { data: recentR } = await admin
+    .from('local_reviews')
+    .select('rating, created_at_platform')
+    .eq('client_id', clientId)
+    .gte('created_at_platform', last30)
+  const { data: priorR } = await admin
+    .from('local_reviews')
+    .select('rating, created_at_platform')
+    .eq('client_id', clientId)
+    .gte('created_at_platform', prior30)
+    .lt('created_at_platform', last30)
+  const recent = (recentR ?? []) as Array<{ rating: number }>
+  const prior = (priorR ?? []) as Array<{ rating: number }>
+  if (recent.length < 3 || prior.length < 3) {
+    return {
+      id: 'rating_trend',
+      category: 'look_engaged',
+      severity: 'warning',
+      headline: 'Not enough data for trend',
+      evidence: `${recent.length} reviews in last 30d · ${prior.length} in prior 30d.`,
+      benchmark: 'We need 3+ reviews in each period to detect a meaningful trend.',
+      whyItMatters: 'Trend matters more than average. A 4.5★ business sliding to 4.2★ is much more urgent than a stable 4.0★.',
+      score: 50,
+      weight: 0.5,
+      easeOfFix: 4,
+    }
+  }
+  const recentAvg = recent.reduce((s, r) => s + (r.rating ?? 0), 0) / recent.length
+  const priorAvg = prior.reduce((s, r) => s + (r.rating ?? 0), 0) / prior.length
+  const delta = recentAvg - priorAvg
+  if (Math.abs(delta) < 0.15) {
+    return {
+      id: 'rating_trend',
+      category: 'look_engaged',
+      severity: 'strength',
+      headline: `Rating stable at ${recentAvg.toFixed(1)}★`,
+      evidence: `Last 30d vs prior 30d: ${priorAvg.toFixed(2)}★ → ${recentAvg.toFixed(2)}★ (Δ${delta >= 0 ? '+' : ''}${delta.toFixed(2)}).`,
+      benchmark: 'Consistency is good. Now focus on quantity.',
+      whyItMatters: 'Stable ratings let you focus on growth instead of damage control.',
+      score: 90,
+      weight: 0.7,
+    }
+  }
+  if (delta > 0) {
+    return {
+      id: 'rating_trend',
+      category: 'look_engaged',
+      severity: 'strength',
+      headline: `Rating climbing: ${priorAvg.toFixed(1)}★ → ${recentAvg.toFixed(1)}★`,
+      evidence: `Delta: +${delta.toFixed(2)} over last 30d.`,
+      benchmark: 'Whatever changed, do more of it.',
+      whyItMatters: 'A rising rating is a signal you\'ve found something that works. Capture it: ask the AI what changed.',
+      ctaPrimary: 'What changed?',
+      ctaPrompt: `My average rating went from ${priorAvg.toFixed(1)}★ to ${recentAvg.toFixed(1)}★ in the last 30 days. What's driving the improvement based on recent review content?`,
+      score: 100,
+      weight: 0.7,
+    }
+  }
+  return {
+    id: 'rating_trend',
+    category: 'look_engaged',
+    severity: Math.abs(delta) > 0.3 ? 'critical' : 'warning',
+    headline: `Rating slipping: ${priorAvg.toFixed(1)}★ → ${recentAvg.toFixed(1)}★`,
+    evidence: `Delta: ${delta.toFixed(2)} over last 30d.`,
+    benchmark: 'Slips usually reflect operational issues. Catch the cause now.',
+    whyItMatters: 'A 0.3★ drop in 30 days is a 5-alarm signal. If it continues, you\'re 60-90 days from a tanked Google ranking. Find the cause now while it\'s fixable.',
+    ctaPrimary: 'Diagnose this',
+    ctaPrompt: `My rating dropped ${Math.abs(delta).toFixed(2)} stars in 30 days (from ${priorAvg.toFixed(1)}★ to ${recentAvg.toFixed(1)}★). Pull the most recent negative reviews and tell me what's driving the slip.`,
+    score: Math.max(20, 70 - Math.abs(delta) * 100),
+    weight: 1,
+    easeOfFix: 4,
+  }
+}
+
+/* STAY ACTIVE — Content production in the last 30 days. */
+async function checkContentProduction(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId } = ctx
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString()
+  const { data } = await admin
+    .from('client_updates')
+    .select('type, status, created_at')
+    .eq('client_id', clientId)
+    .eq('status', 'published')
+    .gte('created_at', since)
+  const published = (data ?? []) as Array<{ type: string }>
+  const posts = published.filter(u => u.type === 'promotion' || u.type === 'event' || u.type === 'gbp_post').length
+  if (posts === 0) {
+    return {
+      id: 'content_production',
+      category: 'stay_active',
+      severity: 'critical',
+      headline: 'No content published in 30 days',
+      evidence: 'No GBP posts, promotions, or events have gone out.',
+      benchmark: 'Restaurants posting weekly get 30% more profile clicks.',
+      whyItMatters: 'Silence reads as "closed." Even one post per week tells Google + customers that you\'re active and current.',
+      ctaPrimary: 'Plan 2 weeks of content',
+      ctaPrompt: 'I haven\'t published anything in 30 days. Can you plan and draft 2 weeks of Google posts for me, then queue them for my approval?',
+      score: 10,
+      weight: 1.5,
+      easeOfFix: 1,
+    }
+  }
+  if (posts >= 8) {
+    return {
+      id: 'content_production',
+      category: 'stay_active',
+      severity: 'strength',
+      headline: `Strong: ${posts} pieces of content in 30 days`,
+      evidence: 'You\'re actively engaging your audience.',
+      benchmark: 'Keep the pace — momentum is your moat.',
+      whyItMatters: 'Active content production signals to Google + customers that you\'re alive. It also gives you a feedback loop: which posts get clicks tells you what your audience wants.',
+      score: 100,
+      weight: 1.5,
+    }
+  }
+  return {
+    id: 'content_production',
+    category: 'stay_active',
+    severity: posts >= 4 ? 'warning' : 'critical',
+    headline: `${posts} piece${posts === 1 ? '' : 's'} of content in 30 days`,
+    evidence: `Target: 8+ posts/month (2x/week).`,
+    benchmark: 'Restaurants posting weekly get 30% more profile clicks.',
+    whyItMatters: 'Posting is the single highest-leverage habit. AI can draft 8 posts in 5 minutes — the only constraint is approving them.',
+    ctaPrimary: 'Plan more content',
+    ctaPrompt: `I've only posted ${posts} times in 30 days. Help me get to 8/month — draft a 2-week content calendar I can approve.`,
+    score: Math.round((posts / 8) * 100),
+    weight: 1.5,
+    easeOfFix: 1,
+  }
+}
+
+/* GET FOUND — Sentiment topic depth (food/service/atmosphere breakdown). */
+async function checkSentimentTopics(ctx: CheckContext): Promise<Finding> {
+  const { admin, clientId } = ctx
+  const { data } = await admin
+    .from('review_themes')
+    .select('themes, review_count')
+    .eq('client_id', clientId)
+    .order('generated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle() as { data: { themes: Array<{ theme: string; mentions: number; praise?: number; critical?: number; category?: string }> | null; review_count: number } | null }
+
+  if (!data || !data.themes || data.themes.length === 0) {
+    /* Already covered by checkReviewSentiment — skip with neutral score. */
+    return {
+      id: 'sentiment_topics',
+      category: 'look_engaged',
+      severity: 'warning',
+      headline: 'Topic breakdown unavailable',
+      evidence: 'Theme data not yet generated.',
+      benchmark: 'Topic-level sentiment helps you target fixes precisely.',
+      whyItMatters: 'Aggregate sentiment is a number. Topic-level sentiment is a roadmap — it tells you whether to fix the kitchen, the service, the ambiance, or the pricing.',
+      score: 50,
+      weight: 0.7,
+      easeOfFix: 4,
+    }
+  }
+  /* Look at top 5 themes, surface 1 positive + 1 negative for narrative. */
+  const sorted = [...data.themes].sort((a, b) => b.mentions - a.mentions).slice(0, 5)
+  const topPraise = sorted.filter(t => (t.praise ?? 0) > (t.critical ?? 0))[0]
+  const topCritical = sorted.filter(t => (t.critical ?? 0) > (t.praise ?? 0))[0]
+  if (!topCritical && topPraise) {
+    return {
+      id: 'sentiment_topics',
+      category: 'look_engaged',
+      severity: 'strength',
+      headline: `Customers love: "${topPraise.theme}"`,
+      evidence: `Mentioned in ${topPraise.mentions} reviews — almost all positive.`,
+      benchmark: 'Use the exact words customers used in your marketing copy.',
+      whyItMatters: 'Customer language outperforms marketing-speak every time. The phrases people use in praise reviews are your free copywriting library.',
+      ctaPrimary: 'Use this in marketing',
+      ctaPrompt: `My customers love "${topPraise.theme}". Help me work this language into my Google posts, Instagram captions, and website copy.`,
+      score: 90,
+      weight: 0.7,
+      easeOfFix: 2,
+    }
+  }
+  if (topCritical && topPraise) {
+    return {
+      id: 'sentiment_topics',
+      category: 'look_engaged',
+      severity: 'warning',
+      headline: `Customers love "${topPraise.theme}", but flag "${topCritical.theme}"`,
+      evidence: `Top praise: ${topPraise.mentions} mentions. Top complaint: ${topCritical.mentions} mentions.`,
+      benchmark: 'Lean into the praise, address the complaint at the root.',
+      whyItMatters: 'Knowing exactly what customers love + hate is more useful than any 5-star average. Marketing the love + fixing the complaint = compounding improvement.',
+      ctaPrimary: 'Build a plan around these',
+      ctaPrompt: `My customers love "${topPraise.theme}" but complain about "${topCritical.theme}". Help me build a marketing + operations response.`,
+      score: 65,
+      weight: 0.7,
+      easeOfFix: 3,
+    }
+  }
+  return {
+    id: 'sentiment_topics',
+    category: 'look_engaged',
+    severity: 'warning',
+    headline: 'Mixed signals in recent themes',
+    evidence: `${sorted.length} themes tracked.`,
+    benchmark: 'Look for repeating language to identify root causes.',
+    whyItMatters: 'Mixed reviews are a signal that consistency is wobbly. Customers experiencing the same place but seeing different outcomes.',
+    score: 55,
+    weight: 0.7,
+    easeOfFix: 4,
   }
 }
 
 // ─── orchestration ────────────────────────────────────────────────────
 
-const CATEGORY_OF: Record<Category, Array<(admin: ReturnType<typeof getAdmin>, clientId: string) => Promise<Finding>>> = {
-  get_found: [checkProfileCompleteness, checkSearchDemand, checkConnectionHealth],
-  look_engaged: [checkReviewsWaiting, checkReviewSentiment, checkPhotoCoverage],
-  stay_active: [checkMenuFreshness, checkRecentActivity],
+const CATEGORY_OF: Record<Category, Array<(ctx: CheckContext) => Promise<Finding>>> = {
+  get_found: [checkProfileCompleteness, checkSearchDemand, checkConnectionHealth, checkChannelDiversity],
+  look_engaged: [checkReviewsWaiting, checkReviewSentiment, checkSentimentTopics, checkPhotoCoverage, checkYelpPresence, checkRatingTrend],
+  stay_active: [checkMenuFreshness, checkRecentActivity, checkContentProduction],
 }
 
 export async function runAudit(
@@ -563,10 +979,12 @@ export async function runAudit(
   } = {},
 ): Promise<AuditResult> {
   const admin = getAdmin()
+  const benchmarks = getBenchmarks(opts.cuisine)
+  const ctx: CheckContext = { admin, clientId, benchmarks }
   const allFindings: Finding[] = []
 
   for (const category of Object.keys(CATEGORY_OF) as Category[]) {
-    const results = await Promise.all(CATEGORY_OF[category].map(fn => fn(admin, clientId)))
+    const results = await Promise.all(CATEGORY_OF[category].map(fn => fn(ctx)))
     allFindings.push(...results)
   }
 
@@ -580,6 +998,17 @@ export async function runAudit(
   const scoreGetFound = scoreCategory('get_found')
   const scoreLookEngaged = scoreCategory('look_engaged')
   const scoreStayActive = scoreCategory('stay_active')
+
+  /* Compute scoreImpact per finding: how many overall-score points
+     would this finding move if fixed to 100? Formula:
+       (100 - findingScore) × (findingWeight / totalCategoryWeight) × (categoryWeight / 100) */
+  for (const f of allFindings) {
+    const sameCat = allFindings.filter(x => x.category === f.category)
+    const totalCatWeight = sameCat.reduce((s, x) => s + x.weight, 0)
+    const catWeight = CATEGORY_WEIGHTS[f.category] / 100
+    const upside = ((100 - f.score) * f.weight / totalCatWeight) * catWeight
+    f.scoreImpact = Math.round(upside)
+  }
 
   const scoreOverall = Math.round(
     (scoreGetFound * CATEGORY_WEIGHTS.get_found
@@ -696,7 +1125,19 @@ export function sortFindings(findings: Finding[]): Finding[] {
   })
 }
 
-/* Pick the top N findings sorted by severity, exclude strengths for "quick wins". */
+/* Pick the top N findings as "quick wins". Ranks by:
+   1. Highest scoreImpact (biggest point gain)
+   2. Lowest easeOfFix (one-click first)
+   3. Severity (critical first as tie-breaker)
+   Excludes strengths. */
 export function quickWins(findings: Finding[], n = 3): Finding[] {
-  return sortFindings(findings).filter(f => f.severity !== 'strength').slice(0, n)
+  const candidates = findings.filter(f => f.severity !== 'strength')
+  return [...candidates].sort((a, b) => {
+    const impactDiff = (b.scoreImpact ?? 0) - (a.scoreImpact ?? 0)
+    if (Math.abs(impactDiff) >= 1) return impactDiff
+    const easeDiff = (a.easeOfFix ?? 3) - (b.easeOfFix ?? 3)
+    if (easeDiff !== 0) return easeDiff
+    const sevOrder: Record<Severity, number> = { critical: 0, warning: 1, strength: 2 }
+    return sevOrder[a.severity] - sevOrder[b.severity]
+  }).slice(0, n)
 }
