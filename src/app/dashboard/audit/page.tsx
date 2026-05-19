@@ -20,47 +20,92 @@ import AuditCategorySection from './category-section'
 export default async function AuditPage({
   searchParams,
 }: {
-  searchParams: Promise<{ persist?: string }>
+  searchParams: Promise<{ persist?: string; client?: string }>
 }) {
   const params = await searchParams
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  /* Resolve client_id + restaurant context for this signed-in user. */
   const admin = createAdminClient()
-  const { data: cu } = await admin
-    .from('client_users')
-    .select('client_id, clients(name)')
-    .eq('auth_user_id', user.id)
-    .maybeSingle() as { data: { client_id: string; clients: { name: string } | Array<{ name: string }> | null } | null }
-  if (!cu?.client_id) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 lg:px-6 pt-8 pb-20">
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-sm text-amber-900">
-          No client account found for your user. Contact your Apnosh team.
+
+  /* Resolve client_id. Two paths:
+       1. Normal: signed-in client_users → their client
+       2. Admin override: ?client=<slug> when an admin wants to test
+          another client's audit (only honored if user has role='admin') */
+  let clientId: string | null = null
+  let clientName = 'your restaurant'
+
+  if (params.client) {
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle() as { data: { role: string } | null }
+    if (profile?.role !== 'admin') {
+      return (
+        <div className="max-w-3xl mx-auto px-4 lg:px-6 pt-8 pb-20">
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-5 text-sm text-rose-700">
+            Admin override requires admin role.
+          </div>
         </div>
-      </div>
-    )
+      )
+    }
+    const { data: c } = await admin
+      .from('clients')
+      .select('id, name')
+      .eq('slug', params.client)
+      .maybeSingle() as { data: { id: string; name: string } | null }
+    if (!c) {
+      return (
+        <div className="max-w-3xl mx-auto px-4 lg:px-6 pt-8 pb-20">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-sm text-amber-900">
+            No client found with slug &quot;{params.client}&quot;.
+          </div>
+        </div>
+      )
+    }
+    clientId = c.id
+    clientName = c.name
+  } else {
+    const { data: cu } = await admin
+      .from('client_users')
+      .select('client_id, clients(name)')
+      .eq('auth_user_id', user.id)
+      .maybeSingle() as { data: { client_id: string; clients: { name: string } | Array<{ name: string }> | null } | null }
+    if (!cu?.client_id) {
+      return (
+        <div className="max-w-3xl mx-auto px-4 lg:px-6 pt-8 pb-20">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-sm text-amber-900 space-y-2">
+            <p className="font-semibold">No client account linked to your user.</p>
+            <p className="text-[12.5px]">
+              If you&apos;re an admin testing, append <code className="bg-amber-100 px-1 rounded">?client=&lt;slug&gt;</code> to the URL.
+              For example: <code className="bg-amber-100 px-1 rounded">/dashboard/audit?client=yellowbee-market-cafe-1778830617</code>
+            </p>
+          </div>
+        </div>
+      )
+    }
+    clientId = cu.client_id
+    clientName = (Array.isArray(cu.clients) ? cu.clients[0]?.name : cu.clients?.name) ?? 'your restaurant'
   }
-  const clientName = (Array.isArray(cu.clients) ? cu.clients[0]?.name : cu.clients?.name) ?? 'your restaurant'
 
   /* Pull cuisine for personalizing the narrative. */
-  const { data: profile } = await admin
+  const { data: clientProfile } = await admin
     .from('client_profiles')
     .select('cuisine')
-    .eq('client_id', cu.client_id)
+    .eq('client_id', clientId)
     .maybeSingle() as { data: { cuisine: string | null } | null }
 
   /* Run audit (with narrative) + pull trend in parallel. */
   const [audit, trend] = await Promise.all([
-    runAudit(cu.client_id, {
+    runAudit(clientId, {
       persist: params.persist === '1',
       withNarrative: true,
       restaurantName: clientName,
-      cuisine: profile?.cuisine ?? null,
+      cuisine: clientProfile?.cuisine ?? null,
     }),
-    getAuditTrend(cu.client_id),
+    getAuditTrend(clientId),
   ])
   const wins = quickWins(audit.findings, 3)
   const delta = trend.previous ? audit.scoreOverall - trend.previous.scoreOverall : null
