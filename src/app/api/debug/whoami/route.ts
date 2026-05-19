@@ -33,11 +33,32 @@ export async function GET() {
   if (clientId) {
     const r = await supabase
       .from('channel_connections')
-      .select('channel, access_token, status')
+      .select('channel, status')   // omit token from output for privacy
       .eq('client_id', clientId)
       .not('access_token', 'is', null)
     ccData = r.data
     ccErr = r.error
+  }
+
+  /* Simulate the exact sidebar logic. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (ccData ?? []) as Array<{ channel: string; status: string }>
+  const sidebarSet = new Set<string>()
+  for (const r of rows) {
+    if (r.status !== 'active') continue
+    if (r.channel === 'google_business_profile') sidebarSet.add('local_seo')
+    if (r.channel === 'google_analytics' || r.channel === 'google_search_console') sidebarSet.add('website')
+  }
+
+  /* Also fetch client.services_active to mirror the enrolledServices path. */
+  let clientData = null
+  if (clientId) {
+    const r = await supabase
+      .from('clients')
+      .select('services_active, website')
+      .eq('id', clientId)
+      .maybeSingle()
+    clientData = r.data
   }
 
   return NextResponse.json({
@@ -47,5 +68,8 @@ export async function GET() {
     clientLookupError: cuErr?.message,
     channelConnections: ccData,
     channelConnectionsError: ccErr?.message,
+    sidebarConnectedChannels: Array.from(sidebarSet),
+    servicesActive: (clientData as { services_active?: string[]; website?: string } | null)?.services_active,
+    website: (clientData as { website?: string } | null)?.website,
   })
 }
