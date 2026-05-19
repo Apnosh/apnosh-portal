@@ -127,42 +127,55 @@ function getAdmin() {
 
 // ─── individual checks ────────────────────────────────────────────────
 
-/* GET FOUND — Profile completeness on GBP + client_profiles. */
+/* GET FOUND — Profile completeness across all data sources.
+ *
+ * Truth lives in different tables for the same logical field:
+ *   - Business name: clients.name OR gbp_locations.location_name
+ *   - Address: clients.location OR client_profiles.full_address OR gbp_locations.address
+ *   - Phone: clients.phone OR client_profiles.business_phone
+ *   - Website: clients.website OR client_profiles.website_url
+ *   - Hours: gbp_locations.hours OR client_profiles.hours
+ *   - Description / Cuisine / Price: client_profiles only
+ *
+ * We give credit if ANY source has the field. Avoids false "missing"
+ * claims from looking in the wrong place.
+ */
 async function checkProfileCompleteness(ctx: CheckContext): Promise<Finding> {
   const { admin, clientId } = ctx
-  const { data: gbp } = await admin
-    .from('gbp_locations')
-    .select('location_name, address, store_code, hours, phone, website')
-    .eq('client_id', clientId)
-    .limit(1)
-    .maybeSingle() as { data: Record<string, unknown> | null }
+  const [clientRes, profileRes, gbpRes] = await Promise.all([
+    admin.from('clients')
+      .select('name, location, website, phone')
+      .eq('id', clientId)
+      .maybeSingle(),
+    admin.from('client_profiles')
+      .select('business_description, cuisine, price_range, full_address, city, state, business_phone, website_url, hours')
+      .eq('client_id', clientId)
+      .maybeSingle(),
+    admin.from('gbp_locations')
+      .select('location_name, address, hours')
+      .eq('client_id', clientId)
+      .limit(1)
+      .maybeSingle(),
+  ])
+  const c = (clientRes.data ?? {}) as Record<string, unknown>
+  const p = (profileRes.data ?? {}) as Record<string, unknown>
+  const g = (gbpRes.data ?? {}) as Record<string, unknown>
 
-  const { data: profile } = await admin
-    .from('client_profiles')
-    .select('business_description, service_styles, cuisine, price_range')
-    .eq('client_id', clientId)
-    .maybeSingle() as { data: Record<string, unknown> | null }
+  const has = (v: unknown) => v !== null && v !== undefined && v !== ''
 
-  /* Score based on how many of the key fields are populated. */
-  const FIELDS = [
-    { key: 'location_name', from: gbp, label: 'Business name' },
-    { key: 'address', from: gbp, label: 'Address' },
-    { key: 'phone', from: gbp, label: 'Phone' },
-    { key: 'website', from: gbp, label: 'Website URL' },
-    { key: 'hours', from: gbp, label: 'Hours' },
-    { key: 'business_description', from: profile, label: 'Description' },
-    { key: 'cuisine', from: profile, label: 'Cuisine type' },
-    { key: 'price_range', from: profile, label: 'Price range' },
+  const FIELDS: Array<{ label: string; present: boolean }> = [
+    { label: 'Business name', present: has(c.name) || has(g.location_name) },
+    { label: 'Address',       present: has(c.location) || has(p.full_address) || has(p.city) || has(g.address) },
+    { label: 'Phone',         present: has(c.phone) || has(p.business_phone) },
+    { label: 'Website',       present: has(c.website) || has(p.website_url) },
+    { label: 'Hours',         present: has(g.hours) || has(p.hours) },
+    { label: 'Description',   present: has(p.business_description) },
+    { label: 'Cuisine type',  present: has(p.cuisine) },
+    { label: 'Price range',   present: has(p.price_range) },
   ]
-  const filled = FIELDS.filter(f => {
-    const v = f.from?.[f.key]
-    return v !== null && v !== undefined && v !== ''
-  }).length
+  const filled = FIELDS.filter(f => f.present).length
   const pctFilled = (filled / FIELDS.length) * 100
-  const missing = FIELDS.filter(f => {
-    const v = f.from?.[f.key]
-    return v === null || v === undefined || v === ''
-  }).map(f => f.label)
+  const missing = FIELDS.filter(f => !f.present).map(f => f.label)
 
   const severity: Severity = pctFilled >= 90 ? 'strength' : pctFilled >= 60 ? 'warning' : 'critical'
   const score = Math.round(pctFilled)
@@ -263,6 +276,13 @@ async function checkConnectionHealth(ctx: CheckContext): Promise<Finding> {
     .in('channel', ['google_business_profile', 'google_search_console', 'google_analytics'])
   const conns = (data ?? []) as Array<{ channel: string; status: string; sync_error: string | null }>
   const errored = conns.filter(c => c.status === 'error')
+  /* Partially-broken: connection is "active" but sync_error contains a
+     pending-API or quota message (e.g., "Google My Business API has not
+     been used in project..."). These connections feed some data but not
+     all — should be flagged distinctly from healthy. */
+  const PARTIAL_RE = /api has not been used|api not enabled|disabled|quota|awaiting|pending/i
+  const partial = conns.filter(c =>
+    c.status === 'active' && c.sync_error && PARTIAL_RE.test(c.sync_error))
   const total = conns.length
   if (total === 0) {
     return {
@@ -280,7 +300,13 @@ async function checkConnectionHealth(ctx: CheckContext): Promise<Finding> {
       easeOfFix: 2,
     }
   }
-  if (errored.length === 0) {
+  const channelNames: Record<string, string> = {
+    google_business_profile: 'Business Profile',
+    google_search_console: 'Search Console',
+    google_analytics: 'Analytics',
+  }
+
+  if (errored.length === 0 && partial.length === 0) {
     return {
       id: 'connection_health',
       category: 'get_found',
@@ -293,11 +319,27 @@ async function checkConnectionHealth(ctx: CheckContext): Promise<Finding> {
       weight: 1.5,
     }
   }
-  const channelNames: Record<string, string> = {
-    google_business_profile: 'Business Profile',
-    google_search_console: 'Search Console',
-    google_analytics: 'Analytics',
+
+  if (errored.length === 0 && partial.length > 0) {
+    /* Special-case the most common partial state we see today: Google
+       My Business API not yet enabled / approved. Listing + performance
+       data still flows; only reviews + posts API is blocked. */
+    return {
+      id: 'connection_health',
+      category: 'get_found',
+      severity: 'warning',
+      headline: `${partial.length} connection${partial.length === 1 ? '' : 's'} partially working`,
+      evidence: `${partial.map(p => channelNames[p.channel] ?? p.channel).join(', ')} — listing + insights flow, but reviews/posts API is pending.`,
+      benchmark: 'Most clients resolve this by enabling the Google My Business API in Google Cloud Console.',
+      whyItMatters: 'The performance & insights side works fine. What\'s blocked is reading/responding to reviews and publishing posts directly via API. Once the API is enabled (or Apnosh\'s allowlist clears), this auto-resolves.',
+      ctaPrimary: 'Tell me what\'s blocked',
+      ctaPrompt: `My GBP connection shows 'partially working'. What does that mean for my marketing, and can you help me enable the missing API?`,
+      score: 70,
+      weight: 1.5,
+      easeOfFix: 3,
+    }
   }
+
   return {
     id: 'connection_health',
     category: 'get_found',
@@ -319,14 +361,39 @@ async function checkConnectionHealth(ctx: CheckContext): Promise<Finding> {
 async function checkReviewsWaiting(ctx: CheckContext): Promise<Finding> {
   const { admin, clientId, benchmarks } = ctx
   const since = new Date(Date.now() - 90 * 86_400_000).toISOString()
-  const { data } = await admin
-    .from('local_reviews')
-    .select('id, status, created_at_platform, source')
-    .eq('client_id', clientId)
-    .gte('created_at_platform', since)
-  const reviews = (data ?? []) as Array<{ status: string; created_at_platform: string; source: string }>
+  /* Pull both reviews + the GBP sync status so we can distinguish
+     "no reviews" from "we can't see your reviews yet (API blocked)." */
+  const [revRes, gbpRes] = await Promise.all([
+    admin.from('local_reviews')
+      .select('id, status, created_at_platform, source')
+      .eq('client_id', clientId)
+      .gte('created_at_platform', since),
+    admin.from('channel_connections')
+      .select('status, sync_error')
+      .eq('client_id', clientId)
+      .eq('channel', 'google_business_profile')
+      .maybeSingle(),
+  ])
+  const reviews = (revRes.data ?? []) as Array<{ status: string; created_at_platform: string; source: string }>
   const open = reviews.filter(r => r.status === 'open')
   const total = reviews.length
+  const gbp = gbpRes.data as { status: string; sync_error: string | null } | null
+  const gbpReviewsBlocked = !!(gbp && /api has not been used|api not enabled|disabled|awaiting|pending/i.test(gbp.sync_error ?? ''))
+
+  if (total === 0 && gbpReviewsBlocked) {
+    return {
+      id: 'reviews_waiting',
+      category: 'look_engaged',
+      severity: 'warning',
+      headline: 'Reviews waiting on Google API approval',
+      evidence: 'Your Google Business Profile is connected, but the reviews API is still pending approval. Listing + insights work; reviews don\'t flow yet.',
+      benchmark: 'This is a Google-side process we kicked off. Usually clears within days.',
+      whyItMatters: 'You almost certainly have reviews — we just can\'t pull them through the API yet. Once Google approves the call, the backlog appears here.',
+      score: 60,
+      weight: 2,
+      easeOfFix: 4,
+    }
+  }
 
   if (total === 0) {
     return {
