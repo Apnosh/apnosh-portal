@@ -35,6 +35,9 @@ export default async function AuditPage({
           another client's audit (only honored if user has role='admin') */
   let clientId: string | null = null
   let clientName = 'your restaurant'
+  /* Only set when this view was loaded via admin override; threaded into
+     CTAs so subsequent navigation preserves the impersonation. */
+  let clientSlug: string | undefined
 
   if (params.client) {
     const { data: profile } = await admin
@@ -67,6 +70,7 @@ export default async function AuditPage({
     }
     clientId = c.id
     clientName = c.name
+    clientSlug = params.client
   } else {
     const { data: cu } = await admin
       .from('client_users')
@@ -220,7 +224,7 @@ export default async function AuditPage({
             Top {wins.length} {wins.length === 1 ? 'quick win' : 'quick wins'} — start here
           </h2>
           <div className="space-y-2">
-            {wins.map((f, i) => <QuickWinCard key={f.id} finding={f} index={i + 1} />)}
+            {wins.map((f, i) => <QuickWinCard key={f.id} finding={f} index={i + 1} clientSlug={clientSlug} />)}
           </div>
         </div>
       )}
@@ -234,6 +238,7 @@ export default async function AuditPage({
           subtitle="Local SEO + Google Business Profile + connections"
           score={audit.scoreGetFound}
           findings={findingsByCategory.get_found}
+          clientSlug={clientSlug}
         />
         <AuditCategorySection
           icon="engage"
@@ -241,6 +246,7 @@ export default async function AuditPage({
           subtitle="Reviews + photos + visual presence"
           score={audit.scoreLookEngaged}
           findings={findingsByCategory.look_engaged}
+          clientSlug={clientSlug}
         />
         <AuditCategorySection
           icon="active"
@@ -248,6 +254,7 @@ export default async function AuditPage({
           subtitle="Menu freshness + AI usage"
           score={audit.scoreStayActive}
           findings={findingsByCategory.stay_active}
+          clientSlug={clientSlug}
         />
       </div>
 
@@ -295,14 +302,16 @@ export default async function AuditPage({
   )
 }
 
-function QuickWinCard({ finding, index }: { finding: Finding; index: number }) {
+function QuickWinCard({ finding, index, clientSlug }: { finding: Finding; index: number; clientSlug?: string }) {
   const ringClass = finding.severity === 'critical' ? 'border-rose-200' : 'border-amber-200'
   const numClass = finding.severity === 'critical' ? 'bg-rose-600' : 'bg-amber-600'
   /* CTA opens the AI chat with finding.ctaPrompt pre-filled in the
-     textarea. The chat reads `?ask=<text>` on mount (see agent-chat.tsx). */
-  const ctaHref = finding.ctaPrompt
-    ? `/dashboard/audit?ask=${encodeURIComponent(finding.ctaPrompt)}`
-    : undefined
+     textarea. The chat reads `?ask=<text>` on mount (see agent-chat.tsx).
+     Preserve ?client= if we got here via admin override. */
+  const params = new URLSearchParams()
+  if (finding.ctaPrompt) params.set('ask', finding.ctaPrompt)
+  if (clientSlug) params.set('client', clientSlug)
+  const ctaHref = finding.ctaPrompt ? `/dashboard/audit?${params.toString()}` : undefined
   return (
     <div className={`bg-white rounded-xl border ${ringClass} p-4 flex items-start gap-3`}>
       <div className={`w-7 h-7 rounded-full ${numClass} text-white flex items-center justify-center text-[12px] font-bold flex-shrink-0`}>

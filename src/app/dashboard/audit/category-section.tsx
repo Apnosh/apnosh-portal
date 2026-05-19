@@ -14,13 +14,14 @@ const ICONS = {
 }
 
 export default function AuditCategorySection({
-  icon, title, subtitle, score, findings,
+  icon, title, subtitle, score, findings, clientSlug,
 }: {
   icon: keyof typeof ICONS
   title: string
   subtitle: string
   score: number
   findings: Finding[]
+  clientSlug?: string
 }) {
   const [open, setOpen] = useState(false)
   return (
@@ -48,14 +49,19 @@ export default function AuditCategorySection({
       </button>
       {open && (
         <div className="border-t border-ink-6 p-4 space-y-3 bg-bg-2/20">
-          {findings.map(f => <FindingRow key={f.id} finding={f} />)}
+          {findings.map(f => <FindingRow key={f.id} finding={f} clientSlug={clientSlug} />)}
         </div>
       )}
     </div>
   )
 }
 
-function FindingRow({ finding }: { finding: Finding }) {
+function FindingRow({ finding, clientSlug }: { finding: Finding; clientSlug?: string }) {
+  /* Preserve admin client override when navigating to chat. */
+  const params = new URLSearchParams()
+  if (finding.ctaPrompt) params.set('ask', finding.ctaPrompt)
+  if (clientSlug) params.set('client', clientSlug)
+  const ctaHref = finding.ctaPrompt ? `/dashboard/audit?${params.toString()}` : null
   const icon = finding.severity === 'critical' ? <AlertCircle className="w-4 h-4 text-rose-600" />
     : finding.severity === 'warning' ? <AlertTriangle className="w-4 h-4 text-amber-600" />
     : <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -69,9 +75,9 @@ function FindingRow({ finding }: { finding: Finding }) {
         {(finding.ctaPrimary || finding.ctaSecondary) && (
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             {finding.ctaPrimary && (
-              finding.ctaPrompt ? (
+              ctaHref ? (
                 <a
-                  href={`/dashboard/audit?ask=${encodeURIComponent(finding.ctaPrompt)}`}
+                  href={ctaHref}
                   className={[
                     'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold',
                     finding.severity === 'strength' ? 'text-ink-2 bg-ink-7 hover:bg-ink-6' : 'text-white bg-brand hover:bg-brand-dark',
