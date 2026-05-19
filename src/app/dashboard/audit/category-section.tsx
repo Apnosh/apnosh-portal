@@ -69,13 +69,26 @@ function FindingRow({ finding }: { finding: Finding }) {
         {(finding.ctaPrimary || finding.ctaSecondary) && (
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             {finding.ctaPrimary && (
-              <button className={[
-                'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold',
-                finding.severity === 'strength' ? 'text-ink-2 bg-ink-7 hover:bg-ink-6' : 'text-white bg-brand hover:bg-brand-dark',
-              ].join(' ')}>
-                {finding.ctaPrimary}
-                <ArrowRight className="w-3 h-3" />
-              </button>
+              finding.ctaPrompt ? (
+                <a
+                  href={`/dashboard/audit?ask=${encodeURIComponent(finding.ctaPrompt)}`}
+                  className={[
+                    'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold',
+                    finding.severity === 'strength' ? 'text-ink-2 bg-ink-7 hover:bg-ink-6' : 'text-white bg-brand hover:bg-brand-dark',
+                  ].join(' ')}
+                >
+                  {finding.ctaPrimary}
+                  <ArrowRight className="w-3 h-3" />
+                </a>
+              ) : (
+                <button className={[
+                  'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold',
+                  finding.severity === 'strength' ? 'text-ink-2 bg-ink-7 hover:bg-ink-6' : 'text-white bg-brand hover:bg-brand-dark',
+                ].join(' ')}>
+                  {finding.ctaPrimary}
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              )
             )}
             {finding.ctaSecondary && (
               <button className="text-[11px] text-ink-3 hover:text-ink px-1">

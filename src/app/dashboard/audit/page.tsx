@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { runAudit, sortFindings, quickWins, type Finding, type Category } from '@/lib/audit'
+import { runAudit, getAuditTrend, sortFindings, quickWins, type Finding, type Category } from '@/lib/audit'
 import AuditCategorySection from './category-section'
 
 export default async function AuditPage({
@@ -27,7 +27,7 @@ export default async function AuditPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  /* Resolve client_id for this signed-in user. */
+  /* Resolve client_id + restaurant context for this signed-in user. */
   const admin = createAdminClient()
   const { data: cu } = await admin
     .from('client_users')
@@ -43,10 +43,27 @@ export default async function AuditPage({
       </div>
     )
   }
-  const clientName = Array.isArray(cu.clients) ? cu.clients[0]?.name : cu.clients?.name
+  const clientName = (Array.isArray(cu.clients) ? cu.clients[0]?.name : cu.clients?.name) ?? 'your restaurant'
 
-  const audit = await runAudit(cu.client_id, { persist: params.persist === '1' })
+  /* Pull cuisine for personalizing the narrative. */
+  const { data: profile } = await admin
+    .from('client_profiles')
+    .select('cuisine')
+    .eq('client_id', cu.client_id)
+    .maybeSingle() as { data: { cuisine: string | null } | null }
+
+  /* Run audit (with narrative) + pull trend in parallel. */
+  const [audit, trend] = await Promise.all([
+    runAudit(cu.client_id, {
+      persist: params.persist === '1',
+      withNarrative: true,
+      restaurantName: clientName,
+      cuisine: profile?.cuisine ?? null,
+    }),
+    getAuditTrend(cu.client_id),
+  ])
   const wins = quickWins(audit.findings, 3)
+  const delta = trend.previous ? audit.scoreOverall - trend.previous.scoreOverall : null
 
   const breakdown = [
     { key: 'get_found' as Category, label: 'Get Found', score: audit.scoreGetFound, weight: 40 },
@@ -73,6 +90,25 @@ export default async function AuditPage({
         </p>
       </div>
 
+      {/* AI narrative — Claude's read of the situation */}
+      {audit.narrative && (
+        <div className="bg-brand-tint/40 border border-brand/30 rounded-2xl p-5">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-brand/15 flex items-center justify-center flex-shrink-0">
+              <Sparkles className="w-4 h-4 text-brand-dark" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-dark mb-1">
+                Apnosh AI · reading your data
+              </p>
+              <p className="text-[14px] text-ink leading-relaxed whitespace-pre-wrap">
+                {audit.narrative}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Score card */}
       <div className="bg-white rounded-2xl border border-ink-6 p-6 shadow-sm">
         <div className="flex flex-col md:flex-row gap-6 items-start">
@@ -80,9 +116,17 @@ export default async function AuditPage({
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3 mb-1">
               Your Apnosh Score
             </p>
-            <div className="flex items-baseline gap-1">
+            <div className="flex items-baseline gap-2">
               <span className="text-[72px] leading-none font-bold text-ink tabular-nums">{audit.scoreOverall}</span>
               <span className="text-[16px] text-ink-3">/ 100</span>
+              {delta !== null && delta !== 0 && (
+                <span className={[
+                  'text-[12px] font-bold px-2 py-1 rounded-full',
+                  delta > 0 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50',
+                ].join(' ')}>
+                  {delta > 0 ? '+' : ''}{delta} this week
+                </span>
+              )}
             </div>
             <div className="mt-2 text-[11px] text-ink-3">
               Top quartile: <strong className="text-ink-2">72</strong> · Next goal:{' '}
@@ -91,6 +135,14 @@ export default async function AuditPage({
             <div className="mt-2 inline-flex items-center gap-1 text-[11px] text-emerald-700 font-medium bg-emerald-50 rounded-full px-2 py-0.5">
               Live — re-scored on visit
             </div>
+
+            {/* Sparkline of recent scores */}
+            {trend.history.length >= 2 && (
+              <div className="mt-3">
+                <p className="text-[10px] text-ink-3 mb-1">Last {trend.history.length} scores</p>
+                <Sparkline values={trend.history.map(h => h.scoreOverall)} />
+              </div>
+            )}
           </div>
           <div className="flex-1 w-full space-y-3 md:pl-6 md:border-l md:border-ink-7">
             {breakdown.map(b => (
@@ -201,6 +253,11 @@ export default async function AuditPage({
 function QuickWinCard({ finding, index }: { finding: Finding; index: number }) {
   const ringClass = finding.severity === 'critical' ? 'border-rose-200' : 'border-amber-200'
   const numClass = finding.severity === 'critical' ? 'bg-rose-600' : 'bg-amber-600'
+  /* CTA opens the AI chat with finding.ctaPrompt pre-filled in the
+     textarea. The chat reads `?ask=<text>` on mount (see agent-chat.tsx). */
+  const ctaHref = finding.ctaPrompt
+    ? `/dashboard/audit?ask=${encodeURIComponent(finding.ctaPrompt)}`
+    : undefined
   return (
     <div className={`bg-white rounded-xl border ${ringClass} p-4 flex items-start gap-3`}>
       <div className={`w-7 h-7 rounded-full ${numClass} text-white flex items-center justify-center text-[12px] font-bold flex-shrink-0`}>
@@ -212,10 +269,20 @@ function QuickWinCard({ finding, index }: { finding: Finding; index: number }) {
         <p className="text-[11px] text-ink-4 mt-1 italic">{finding.benchmark}</p>
         <div className="mt-3 flex items-center gap-2 flex-wrap">
           {finding.ctaPrimary && (
-            <button className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11.5px] font-semibold text-white bg-brand hover:bg-brand-dark">
-              {finding.ctaPrimary}
-              <ArrowRight className="w-3 h-3" />
-            </button>
+            ctaHref ? (
+              <a
+                href={ctaHref}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11.5px] font-semibold text-white bg-brand hover:bg-brand-dark"
+              >
+                {finding.ctaPrimary}
+                <ArrowRight className="w-3 h-3" />
+              </a>
+            ) : (
+              <button className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-[11.5px] font-semibold text-white bg-brand hover:bg-brand-dark">
+                {finding.ctaPrimary}
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            )
           )}
           {finding.ctaSecondary && (
             <button className="text-[11.5px] text-ink-3 hover:text-ink px-2 py-1">
@@ -225,6 +292,29 @@ function QuickWinCard({ finding, index }: { finding: Finding; index: number }) {
         </div>
       </div>
     </div>
+  )
+}
+
+function Sparkline({ values }: { values: number[] }) {
+  if (values.length < 2) return null
+  const width = 140
+  const height = 28
+  const min = Math.min(...values, 0)
+  const max = Math.max(...values, 100)
+  const range = max - min || 1
+  const stepX = width / (values.length - 1)
+  const points = values.map((v, i) => {
+    const x = i * stepX
+    const y = height - ((v - min) / range) * height
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+  const last = values[values.length - 1]
+  const first = values[0]
+  const stroke = last >= first ? 'rgb(5 150 105)' : 'rgb(225 29 72)'
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-label="Score history">
+      <polyline points={points} fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 

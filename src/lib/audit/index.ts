@@ -32,6 +32,9 @@ export interface Finding {
   benchmark: string
   ctaPrimary?: string
   ctaSecondary?: string
+  /** Pre-filled chat prompt — when set, clicking ctaPrimary opens
+   *  the AI chat with this text in the textarea. */
+  ctaPrompt?: string
   /** 0-100 score for THIS finding (used to compute category score). */
   score: number
   /** Relative weight of this finding within its category. */
@@ -46,6 +49,21 @@ export interface AuditResult {
   scoreLookEngaged: number
   scoreStayActive: number
   findings: Finding[]
+  /** Optional Claude-written 3-sentence personalized summary. */
+  narrative?: string | null
+}
+
+export interface AuditTrend {
+  /** Most recent audit run before today. */
+  previous: {
+    ranAt: string
+    scoreOverall: number
+    scoreGetFound: number
+    scoreLookEngaged: number
+    scoreStayActive: number
+  } | null
+  /** Recent history (up to 8 weeks of scores) for sparkline rendering. */
+  history: Array<{ ranAt: string; scoreOverall: number }>
 }
 
 const CATEGORY_WEIGHTS: Record<Category, number> = {
@@ -122,8 +140,9 @@ async function checkProfileCompleteness(admin: any, clientId: string): Promise<F
     headline: `Your profile is missing ${missing.length} key field${missing.length === 1 ? '' : 's'}`,
     evidence: `Missing: ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? `, and ${missing.length - 4} more` : ''}.`,
     benchmark: `Top performers fill 95%+ of available fields. You're at ${Math.round(pctFilled)}%.`,
-    ctaPrimary: 'Complete my profile',
+    ctaPrimary: 'Help me fill these in',
     ctaSecondary: 'Skip',
+    ctaPrompt: `My Google profile is missing ${missing.length} fields: ${missing.join(', ')}. Can you walk me through filling each one in?`,
     score,
     weight: 1,
   }
@@ -195,6 +214,7 @@ async function checkConnectionHealth(admin: any, clientId: string): Promise<Find
       evidence: 'Connect your Google Business Profile and Search Console so we can start working.',
       benchmark: 'Connected accounts unlock posts, review responses, hours updates, and analytics.',
       ctaPrimary: 'Connect accounts',
+      ctaPrompt: 'I haven\'t connected my Google accounts yet. Can you walk me through it?',
       score: 0,
       weight: 1,
     }
@@ -223,8 +243,9 @@ async function checkConnectionHealth(admin: any, clientId: string): Promise<Find
     headline: `${errored.length} of ${total} Google connections need attention`,
     evidence: errored.map(e => channelNames[e.channel] ?? e.channel).join(', ') + ' — sync failing.',
     benchmark: 'Broken connections mean missed analytics, lost review notifications, and stale Google data.',
-    ctaPrimary: 'Reconnect now',
+    ctaPrimary: 'Help me fix these',
     ctaSecondary: 'Skip',
+    ctaPrompt: `Some of my Google connections are failing: ${errored.map(e => channelNames[e.channel] ?? e.channel).join(', ')}. Can you walk me through reconnecting them?`,
     score: Math.round(((total - errored.length) / total) * 60),  // capped at 60 if anything's broken
     weight: 1,
   }
@@ -293,8 +314,9 @@ async function checkReviewsWaiting(admin: any, clientId: string): Promise<Findin
     headline: `${open.length} review${open.length === 1 ? '' : 's'} waiting for a reply`,
     evidence: `${sourceBreakdown}. Oldest unanswered is ${oldestDays} days old.`,
     benchmark: 'Restaurants replying within 24h see 18% more repeat customers.',
-    ctaPrimary: 'Have AI draft replies for review',
+    ctaPrimary: 'Draft replies for me',
     ctaSecondary: 'Skip',
+    ctaPrompt: `I have ${open.length} reviews waiting for a reply across ${sourceBreakdown}. Can you draft replies for the most recent ones?`,
     score,
     weight: 2,
   }
@@ -352,8 +374,9 @@ async function checkReviewSentiment(admin: any, clientId: string): Promise<Findi
     headline: `${negative.length} recurring issue${negative.length === 1 ? '' : 's'} in recent reviews`,
     evidence: `Top complaint: "${topNeg.theme}" (${topNeg.mentions} mention${topNeg.mentions === 1 ? '' : 's'}).`,
     benchmark: 'Recurring complaints rarely fix themselves. The pattern is the signal.',
-    ctaPrimary: 'See the reviews flagging this',
+    ctaPrimary: 'Show me these reviews',
     ctaSecondary: 'Skip for now',
+    ctaPrompt: `Show me the reviews that mention "${topNeg.theme}" — what are people specifically saying?`,
     score: Math.max(20, 100 - topNeg.mentions * 10),
     weight: 1,
   }
@@ -411,8 +434,9 @@ async function checkPhotoCoverage(admin: any, clientId: string): Promise<Finding
     headline: `${count} photo${count === 1 ? '' : 's'} on your Google Business Profile`,
     evidence: `Top performers have 30+. Fresh photos correlate with 27% more profile views.`,
     benchmark: 'Aim for 30+. Add fresh photos monthly.',
-    ctaPrimary: 'Schedule a photo shoot',
+    ctaPrimary: 'Help me plan a photo refresh',
     ctaSecondary: 'Upload from your phone',
+    ctaPrompt: `I only have ${count} photos on my Google profile. What dishes / shots should I prioritize for a fresh photo session, and how do I get them up to 30+?`,
     score,
     weight: 1,
   }
@@ -463,8 +487,9 @@ async function checkMenuFreshness(admin: any, clientId: string): Promise<Finding
     headline: `Menu hasn't changed in ${daysSince} days`,
     evidence: `Last update: ${new Date(data.updated_at).toLocaleDateString()}.`,
     benchmark: 'Stale menus lead to "they didn\'t have what was advertised" reviews. Refresh quarterly at minimum.',
-    ctaPrimary: 'Review menu with AI',
+    ctaPrimary: 'Walk me through my menu',
     ctaSecondary: 'Skip',
+    ctaPrompt: `My menu hasn't been updated in ${daysSince} days. Can you pull it up and help me decide what to refresh — prices, descriptions, photos, or items to add/remove?`,
     score: Math.max(20, 100 - daysSince),
     weight: 1,
   }
@@ -491,7 +516,8 @@ async function checkRecentActivity(admin: any, clientId: string): Promise<Findin
       headline: 'No AI activity in the last 30 days',
       evidence: 'You haven\'t used Apnosh AI to do anything yet.',
       benchmark: 'Active clients run 5-15 AI actions/month. Start small — ask the AI to draft a Google post.',
-      ctaPrimary: 'Ask AI to help',
+      ctaPrimary: 'Try the AI now',
+      ctaPrompt: 'What\'s one quick thing I can do today to make my marketing better? Pick something specific to my restaurant.',
       score: 10,
       weight: 1,
     }
@@ -525,7 +551,17 @@ const CATEGORY_OF: Record<Category, Array<(admin: ReturnType<typeof getAdmin>, c
   stay_active: [checkMenuFreshness, checkRecentActivity],
 }
 
-export async function runAudit(clientId: string, opts: { persist?: boolean } = {}): Promise<AuditResult> {
+export async function runAudit(
+  clientId: string,
+  opts: {
+    persist?: boolean
+    /** When true, generate (or reuse cached) Claude narrative. */
+    withNarrative?: boolean
+    /** Restaurant context for narrative generation. */
+    restaurantName?: string
+    cuisine?: string | null
+  } = {},
+): Promise<AuditResult> {
   const admin = getAdmin()
   const allFindings: Finding[] = []
 
@@ -559,6 +595,44 @@ export async function runAudit(clientId: string, opts: { persist?: boolean } = {
     scoreLookEngaged,
     scoreStayActive,
     findings: allFindings,
+    narrative: null,
+  }
+
+  /* Generate narrative if requested. Try reusing a recent one (last 6 hours)
+     with the same score to avoid re-billing the AI on every page visit. */
+  if (opts.withNarrative && opts.restaurantName) {
+    const sixHoursAgo = new Date(Date.now() - 6 * 3_600_000).toISOString()
+    const { data: recent } = await admin
+      .from('audit_runs')
+      .select('narrative, score_overall, score_get_found, score_look_engaged, score_stay_active')
+      .eq('client_id', clientId)
+      .gte('ran_at', sixHoursAgo)
+      .not('narrative', 'is', null)
+      .order('ran_at', { ascending: false })
+      .limit(1)
+      .maybeSingle() as { data: { narrative: string; score_overall: number; score_get_found: number; score_look_engaged: number; score_stay_active: number } | null }
+
+    if (recent
+      && recent.score_overall === scoreOverall
+      && recent.score_get_found === scoreGetFound
+      && recent.score_look_engaged === scoreLookEngaged
+      && recent.score_stay_active === scoreStayActive) {
+      /* Same scores → narrative is still valid. Reuse. */
+      result.narrative = recent.narrative
+    } else {
+      try {
+        const { generateNarrative } = await import('./narrative')
+        const gen = await generateNarrative({
+          audit: result,
+          restaurantName: opts.restaurantName,
+          cuisine: opts.cuisine,
+        })
+        result.narrative = gen.narrative
+      } catch (err) {
+        /* Don't fail the audit if narrative generation breaks — log + continue. */
+        console.error('[audit] narrative generation failed:', (err as Error).message)
+      }
+    }
   }
 
   if (opts.persist) {
@@ -570,10 +644,46 @@ export async function runAudit(clientId: string, opts: { persist?: boolean } = {
       score_look_engaged: scoreLookEngaged,
       score_stay_active: scoreStayActive,
       findings: allFindings,
+      narrative: result.narrative,
     })
   }
 
   return result
+}
+
+/* Pull the most recent prior audit and a short history for trend display. */
+export async function getAuditTrend(clientId: string): Promise<AuditTrend> {
+  const admin = getAdmin()
+  /* Look for runs from at least 1 day ago — same-day re-runs aren't "previous." */
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString()
+  const { data: prev } = await admin
+    .from('audit_runs')
+    .select('ran_at, score_overall, score_get_found, score_look_engaged, score_stay_active')
+    .eq('client_id', clientId)
+    .lt('ran_at', yesterday)
+    .order('ran_at', { ascending: false })
+    .limit(1)
+    .maybeSingle() as { data: { ran_at: string; score_overall: number; score_get_found: number; score_look_engaged: number; score_stay_active: number } | null }
+
+  const { data: hist } = await admin
+    .from('audit_runs')
+    .select('ran_at, score_overall')
+    .eq('client_id', clientId)
+    .order('ran_at', { ascending: false })
+    .limit(8) as { data: Array<{ ran_at: string; score_overall: number }> | null }
+
+  return {
+    previous: prev ? {
+      ranAt: prev.ran_at,
+      scoreOverall: prev.score_overall,
+      scoreGetFound: prev.score_get_found,
+      scoreLookEngaged: prev.score_look_engaged,
+      scoreStayActive: prev.score_stay_active,
+    } : null,
+    history: ((hist ?? []) as Array<{ ran_at: string; score_overall: number }>)
+      .reverse()
+      .map(h => ({ ranAt: h.ran_at, scoreOverall: h.score_overall })),
+  }
 }
 
 /* Order findings by severity (critical first), then by score (worst first within severity). */

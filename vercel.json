@@ -26,6 +26,10 @@
       "schedule": "30 9 * * *"
     },
     {
+      "path": "/api/cron/audit-runs",
+      "schedule": "0 6 * * 0"
+    },
+    {
       "path": "/api/cron/fetch-reviews",
       "schedule": "0 13 * * *"
     },
