@@ -39,21 +39,21 @@ export default async function AuditPage({
      CTAs so subsequent navigation preserves the impersonation. */
   let clientSlug: string | undefined
 
+  /* If ?client= is present, only honor it for admins. Non-admins silently
+     fall through to their normal client_users resolution — this happens
+     when a CTA preserves the param through chat navigation but the user
+     isn't actually an admin. Don't surface a scary error. */
+  let useOverride = false
   if (params.client) {
     const { data: profile } = await admin
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .maybeSingle() as { data: { role: string } | null }
-    if (profile?.role !== 'admin') {
-      return (
-        <div className="max-w-3xl mx-auto px-4 lg:px-6 pt-8 pb-20">
-          <div className="bg-rose-50 border border-rose-200 rounded-xl p-5 text-sm text-rose-700">
-            Admin override requires admin role.
-          </div>
-        </div>
-      )
-    }
+    useOverride = profile?.role === 'admin'
+  }
+
+  if (useOverride && params.client) {
     const { data: c } = await admin
       .from('clients')
       .select('id, name')
