@@ -82,8 +82,8 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
       key: 'business',
       icon: Building2,
       label: 'Update business info',
-      description: 'Hours, photos, menu, and contact',
-      href: '/dashboard/local-seo/listing',
+      description: 'Hours, contact, and description',
+      href: '/dashboard/business-info',
       tint: 'bg-blue-50 text-blue-700',
     },
     {
