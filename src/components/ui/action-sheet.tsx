@@ -15,8 +15,7 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  X, Sparkles, MessageCircle, Camera, Clock, Tag,
-  ArrowRight, ClipboardList,
+  X, Sparkles, MessageCircle, Building2, Wand2, ArrowRight,
 } from 'lucide-react'
 
 interface ActionSheetProps {
@@ -32,11 +31,6 @@ interface SheetAction {
   description: string
   href: string
   tint: string
-}
-
-interface SheetGroup {
-  label: string
-  actions: SheetAction[]
 }
 
 export default function ActionSheet({ open, onClose, strategistId }: ActionSheetProps) {
@@ -60,76 +54,45 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
 
   if (!open) return null
 
-  /* Quick actions are grouped by intent:
-       CREATE  — the impulse moments an owner acts on instantly. These
-                 route through the AI orchestrator (?ask=) so the agent
-                 handles captioning, special graphics, and the
-                 multi-platform hours broadcast we built.
-       GET HELP — reach a human or the assistant, or queue a bigger ask.
+  /* Four broad, intuitive actions. An owner instantly knows which one
+     they want without parsing granular sub-choices.
 
      Deep-link conventions:
-       ?ask=<text>   → AgentChat opens with the text prefilled
        ?chat=open    → AgentChat opens blank
-       ?request=open → QuickRequest opens
+       ?request=open → QuickRequest (content) opens
      Plain paths navigate to a real page. */
-  const groups: SheetGroup[] = [
+  const actions: SheetAction[] = [
     {
-      label: 'Create',
-      actions: [
-        {
-          key: 'photo',
-          icon: Camera,
-          label: 'Share a photo',
-          description: 'Snap a dish — we\'ll write the caption',
-          href: `${pathname}?ask=${encodeURIComponent('I want to share a new photo')}`,
-          tint: 'bg-emerald-50 text-emerald-700',
-        },
-        {
-          key: 'special',
-          icon: Tag,
-          label: 'Post a special',
-          description: 'Promote tonight\'s deal or event',
-          href: `${pathname}?ask=${encodeURIComponent('Help me post a special or deal')}`,
-          tint: 'bg-amber-50 text-amber-700',
-        },
-        {
-          key: 'hours',
-          icon: Clock,
-          label: 'Update your hours',
-          description: 'Holiday or special hours, synced everywhere',
-          href: `${pathname}?ask=${encodeURIComponent('I need to update my hours')}`,
-          tint: 'bg-rose-50 text-rose-700',
-        },
-      ],
+      key: 'business',
+      icon: Building2,
+      label: 'Update business info',
+      description: 'Hours, photos, menu, and contact',
+      href: '/dashboard/local-seo/listing',
+      tint: 'bg-blue-50 text-blue-700',
     },
     {
-      label: 'Get help',
-      actions: [
-        {
-          key: 'ai',
-          icon: Sparkles,
-          label: 'Ask Apnosh AI',
-          description: 'Ideas, answers, anything',
-          href: `${pathname}?chat=open`,
-          tint: 'bg-brand-tint text-brand-dark',
-        },
-        {
-          key: 'message',
-          icon: MessageCircle,
-          label: 'Message your team',
-          description: 'Talk to a real human',
-          href: strategistId ? `/dashboard/messages?to=${strategistId}` : '/dashboard/messages',
-          tint: 'bg-blue-50 text-blue-700',
-        },
-        {
-          key: 'request',
-          icon: ClipboardList,
-          label: 'Request content',
-          description: 'Have us make something for you',
-          href: `${pathname}?request=open`,
-          tint: 'bg-purple-50 text-purple-700',
-        },
-      ],
+      key: 'create',
+      icon: Wand2,
+      label: 'Create content',
+      description: 'Posts, specials, and graphics',
+      href: `${pathname}?request=open`,
+      tint: 'bg-purple-50 text-purple-700',
+    },
+    {
+      key: 'ai',
+      icon: Sparkles,
+      label: 'Ask Apnosh AI',
+      description: 'Questions, ideas, instant help',
+      href: `${pathname}?chat=open`,
+      tint: 'bg-brand-tint text-brand-dark',
+    },
+    {
+      key: 'message',
+      icon: MessageCircle,
+      label: 'Message your strategist',
+      description: 'Talk to your human team',
+      href: strategistId ? `/dashboard/messages?to=${strategistId}` : '/dashboard/messages',
+      tint: 'bg-emerald-50 text-emerald-700',
     },
   ]
 
@@ -167,39 +130,30 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
           </button>
         </div>
 
-        {/* Grouped actions */}
-        <div className="px-3 pb-3 overflow-y-auto touch-scroll">
-          {groups.map(group => (
-            <div key={group.label} className="mb-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-3 px-3 pt-3 pb-1.5">
-                {group.label}
-              </p>
-              <ul>
-                {group.actions.map(a => {
-                  const Icon = a.icon
-                  return (
-                    <li key={a.key}>
-                      <Link
-                        href={a.href}
-                        onClick={onClose}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-2xl active:bg-ink-7 transition-colors min-h-[60px]"
-                      >
-                        <span className={`inline-flex items-center justify-center w-11 h-11 rounded-2xl flex-shrink-0 ${a.tint}`}>
-                          <Icon className="w-5 h-5" />
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[15px] font-semibold text-ink leading-tight">{a.label}</p>
-                          <p className="text-[12.5px] text-ink-3 mt-0.5">{a.description}</p>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-ink-4 flex-shrink-0" />
-                      </Link>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-          ))}
-        </div>
+        {/* Actions */}
+        <ul className="px-3 pb-3 pt-1 overflow-y-auto touch-scroll">
+          {actions.map(a => {
+            const Icon = a.icon
+            return (
+              <li key={a.key}>
+                <Link
+                  href={a.href}
+                  onClick={onClose}
+                  className="flex items-center gap-3 px-3 py-3 rounded-2xl active:bg-ink-7 transition-colors min-h-[64px]"
+                >
+                  <span className={`inline-flex items-center justify-center w-11 h-11 rounded-2xl flex-shrink-0 ${a.tint}`}>
+                    <Icon className="w-5 h-5" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[15px] font-semibold text-ink leading-tight">{a.label}</p>
+                    <p className="text-[12.5px] text-ink-3 mt-0.5">{a.description}</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-ink-4 flex-shrink-0" />
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
       </div>
     </>
   )
