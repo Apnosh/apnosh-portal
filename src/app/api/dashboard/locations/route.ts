@@ -89,9 +89,8 @@ export async function GET(req: NextRequest) {
   const admin = adminDb()
   const { data: gbp } = await admin
     .from('gbp_locations')
-    .select('id, location_name, address, gbp_location_id')
+    .select('id, location_name, address, store_code')
     .eq('client_id', clientId)
-    .eq('status', 'assigned')
     .order('created_at', { ascending: true })
 
   const locations: LocationOut[] = (gbp ?? []).map((l, idx) => ({
@@ -102,7 +101,7 @@ export async function GET(req: NextRequest) {
     full_address: (l.address as string | null) ?? null,
     is_primary: idx === 0,
     is_active: true,
-    gbp_location_id: (l.gbp_location_id as string | null) ?? null,
+    gbp_location_id: l.store_code != null ? String(l.store_code) : null,
   }))
 
   return NextResponse.json({ locations }, { headers: { 'Cache-Control': 'no-store' } })

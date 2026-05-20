@@ -81,7 +81,7 @@ export async function loadBusinessInfo(): Promise<LoadResult> {
       .from('gbp_locations')
       .select('location_name, phone, website, profile_description, hours, store_code, links')
       .eq('client_id', clientId)
-      .order('is_primary', { ascending: false })
+      .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle() as unknown as Promise<{ data: { location_name: string | null; phone: string | null; website: string | null; profile_description: string | null; hours: WeeklyHours | null; store_code: string | null; links: BusinessLinks | null } | null }>,
   ])
@@ -169,7 +169,7 @@ export async function saveBusinessInfo(input: Partial<BusinessInfo>): Promise<Sa
       .from('gbp_locations')
       .select('id, store_code')
       .eq('client_id', clientId)
-      .order('is_primary', { ascending: false })
+      .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle() as unknown as Promise<{ data: { id: string; store_code: string | null } | null }>,
     admin

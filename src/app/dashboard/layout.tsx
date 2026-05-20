@@ -397,7 +397,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     let cancelled = false
     async function fetchCounts() {
       try {
-        const r = await fetch(`/api/dashboard/load?clientId=${encodeURIComponent(client!.id)}`)
+        const r = await fetch(`/api/dashboard/counts?clientId=${encodeURIComponent(client!.id)}`)
         if (!r.ok) return
         const json = await r.json() as {
           counts?: { unansweredReviews?: number; pendingApprovals?: number; inboxNeeds?: number }
