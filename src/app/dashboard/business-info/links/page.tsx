@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
-import { loadBusinessInfo, EMPTY_LINKS } from '../actions'
+import { loadBusinessInfo } from '../actions'
+import { EMPTY_LINKS } from '../constants'
 import LinksEditor from './links-editor'
 
 export const dynamic = 'force-dynamic'

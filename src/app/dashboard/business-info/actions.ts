@@ -22,6 +22,7 @@ import { revalidatePath } from 'next/cache'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { updateClientListing, getClientListing, type WeeklyHours, type SpecialHours } from '@/lib/gbp-listing'
+import { EMPTY_LINKS } from './constants'
 
 export interface LinkEntry {
   label: string
@@ -39,8 +40,6 @@ export interface BusinessLinks {
     x?: string
   }
 }
-
-export const EMPTY_LINKS: BusinessLinks = { ordering: [], reservations: [], social: {} }
 
 export interface BusinessInfo {
   name: string
