@@ -121,14 +121,14 @@ export default function MobileAnalytics() {
       <div className="px-4 pt-5 pb-3 bg-white sticky top-14 z-20 border-b border-ink-6">
         <div className="flex items-center justify-between">
           <h1 className="text-[22px] font-semibold text-ink leading-tight">Performance</h1>
-          <div className="inline-flex bg-ink-7 rounded-full p-0.5">
+          <div className="flex items-center gap-1.5">
             {PERIODS.map(p => (
               <button
                 key={p.key}
                 onClick={() => setPeriod(p.key)}
                 className={[
-                  'px-3 h-8 rounded-full text-[12px] font-semibold transition-colors',
-                  period === p.key ? 'bg-white text-ink shadow-sm' : 'text-ink-3 active:text-ink-2',
+                  'px-3 py-1.5 rounded-full text-[12.5px] font-semibold transition-colors',
+                  period === p.key ? 'bg-brand text-white' : 'text-brand-dark active:bg-brand-tint',
                 ].join(' ')}
               >
                 {p.label}
@@ -183,7 +183,7 @@ export default function MobileAnalytics() {
 
       {/* ═══ CHANNELS (expandable) ═══ */}
       <div className="px-4 pt-5 pb-2">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-3">Your channels</p>
+        <p className="text-[17px] font-semibold text-ink leading-none">Your channels</p>
       </div>
       <div className="px-4 space-y-2.5">
         {/* Google */}
@@ -340,7 +340,7 @@ export default function MobileAnalytics() {
       {/* ═══ WHAT TO DO ═══ */}
       {actions.length > 0 && (
         <section className="px-4 pt-6 pb-2">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-3 mb-2.5">What to do next</p>
+          <p className="text-[17px] font-semibold text-ink leading-none mb-3">What to do next</p>
           <div className="space-y-2.5">
             {actions.map((a, i) => (
               <Link
