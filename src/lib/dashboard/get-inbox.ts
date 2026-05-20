@@ -18,6 +18,20 @@ import { createAdminClient } from '@/lib/supabase/admin'
 
 export type InboxItemKind = 'approval' | 'post_review' | 'review' | 'task' | 'connection'
 
+/* Where the item originated. Drives the source badge on the row
+   (Google "G", Yelp "Y", Instagram camera, etc.) and the
+   per-source filter chips. */
+export type InboxSource =
+  | 'google'
+  | 'yelp'
+  | 'facebook'
+  | 'instagram'
+  | 'tripadvisor'
+  | 'apple_maps'
+  | 'tiktok'
+  | 'apnosh'      // internal Apnosh-generated items (approvals, tasks)
+  | 'system'      // platform / integration health
+
 export interface InboxItem {
   id: string
   kind: InboxItemKind
@@ -32,6 +46,16 @@ export interface InboxItem {
   whenIso: string
   /** Short status chip, e.g. "Awaiting review", "4★", "Due Tuesday" */
   status?: string
+  /** Where the item came from (powers source filter chips + badges). */
+  source: InboxSource
+  /** Display name for the conversational style header (Sarah M, Vinason
+   *  Pho Kitchen, etc). NULL for items where Apnosh itself is the sender. */
+  senderName?: string | null
+  /** Avatar URL if we have one (only set for reviewers / vendors that
+   *  ship a profile photo). NULL falls back to initials. */
+  avatarUrl?: string | null
+  /** Has the owner seen this item yet (drives the unread dot). */
+  unread?: boolean
 }
 
 const URGENCY_RANK: Record<InboxItem['urgency'], number> = { high: 0, medium: 1, low: 2 }
@@ -56,7 +80,7 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
       .limit(20),
     admin
       .from('reviews')
-      .select('id, author_name, rating, posted_at, review_text')
+      .select('id, author_name, rating, posted_at, review_text, source')
       .eq('client_id', clientId)
       .is('response_text', null)
       .order('posted_at', { ascending: false })
@@ -104,6 +128,9 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
       href: `/dashboard/approvals/${d.id}`,
       whenIso: d.created_at as string,
       status: 'Awaiting your review',
+      source: 'apnosh',
+      senderName: 'Apnosh team',
+      unread: true,
     })
   }
 
@@ -120,6 +147,9 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
       href: '/dashboard/social/calendar',
       whenIso: (p.updated_at as string) ?? (p.created_at as string),
       status: 'In review',
+      source: 'apnosh',
+      senderName: 'Apnosh team',
+      unread: true,
     })
   }
 
@@ -127,15 +157,19 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
     const rating = Number(r.rating ?? 0)
     const urgency: InboxItem['urgency'] = rating <= 3 ? 'high' : rating <= 4 ? 'medium' : 'low'
     const excerpt = (r.review_text as string) ?? ''
+    const reviewSource = ((r.source as string) ?? 'google') as InboxSource
     items.push({
       id: `review-${r.id}`,
       kind: 'review',
-      title: `${r.author_name ?? 'A customer'} left a ${rating}-star review`,
-      detail: excerpt ? excerpt.slice(0, 120) + (excerpt.length > 120 ? '...' : '') : undefined,
+      title: `New ${rating}-star review`,
+      detail: excerpt ? excerpt.slice(0, 120) + (excerpt.length > 120 ? '...' : '') : 'No comment left',
       urgency,
       href: '/dashboard/local-seo/reviews',
       whenIso: r.posted_at as string,
       status: `${rating}★`,
+      source: reviewSource,
+      senderName: (r.author_name as string) ?? 'A customer',
+      unread: true,
     })
   }
 
@@ -190,6 +224,9 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
       href: '/dashboard/inbox',
       whenIso: (t.created_at as string) ?? new Date().toISOString(),
       status: workflowLabel ?? dueLabel,
+      source: 'apnosh',
+      senderName: 'Your team',
+      unread: true,
     })
   }
 
@@ -209,6 +246,9 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
       href: `/dashboard/preview/${d.id}`,
       whenIso: (d.approved_at as string) ?? (d.updated_at as string) ?? new Date().toISOString(),
       status: 'Ready for your review',
+      source: 'apnosh',
+      senderName: 'Apnosh team',
+      unread: true,
     })
   }
 
@@ -223,6 +263,18 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
     google_business_profile: 'Google Business Profile',
     google_search_console: 'Search Console',
     yelp: 'Yelp',
+  }
+  /* Map channel string to InboxSource. Anything we don't recognize
+     falls back to 'system' so connection rows still render with a
+     sensible badge. */
+  const CHANNEL_TO_SOURCE: Record<string, InboxSource> = {
+    instagram: 'instagram',
+    facebook: 'facebook',
+    tiktok: 'tiktok',
+    google_business_profile: 'google',
+    google_analytics: 'google',
+    google_search_console: 'google',
+    yelp: 'yelp',
   }
   for (const c of connectionsRow.data ?? []) {
     const channel = (c.channel as string) ?? 'integration'
@@ -241,6 +293,9 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
       href: '/dashboard/connected-accounts',
       whenIso: ((c.last_sync_at as string) ?? (c.connected_at as string)) ?? new Date().toISOString(),
       status: status === 'expired' ? 'Expired' : status === 'disconnected' ? 'Disconnected' : 'Needs attention',
+      source: CHANNEL_TO_SOURCE[channel] ?? 'system',
+      senderName: label,
+      unread: true,
     })
   }
 
