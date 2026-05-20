@@ -320,11 +320,14 @@ export default function AgentChat() {
 
   return (
     <>
-      {/* Floating launcher */}
+      {/* Floating launcher — hidden on mobile. The bottom tab bar's
+          "+" ActionSheet has an "Ask Apnosh AI" entry that triggers
+          ?chat=open, which opens this same panel. Keeping the floating
+          launcher on desktop where there's no tab bar. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 px-5 py-3 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-lg shadow-brand/30 transition-transform ${open ? 'scale-0' : 'scale-100'}`}
+        className={`hidden lg:inline-flex fixed bottom-6 right-6 z-40 items-center gap-2 px-5 py-3 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-lg shadow-brand/30 transition-transform ${open ? 'scale-0' : 'scale-100'}`}
       >
         <Sparkles className="w-4 h-4" />
         Ask Apnosh

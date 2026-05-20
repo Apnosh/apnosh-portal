@@ -126,7 +126,10 @@ export default function QuickRequest() {
   return (
     <>
       {/* ── FAB ─────────────────────────────────────────────────── */}
-      <div className="fixed bottom-6 right-6 z-50 group">
+      {/* Hidden on mobile — the bottom tab bar's center "+" already
+          exposes Request Content via the ActionSheet. Desktop keeps
+          the floating button (no tab bar there). */}
+      <div className="hidden lg:flex fixed bottom-6 right-6 z-50 group">
         {/* Tooltip */}
         <span className="absolute bottom-full right-0 mb-2 px-2.5 py-1 rounded-lg bg-ink text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
           Request Content
