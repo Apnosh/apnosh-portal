@@ -81,35 +81,52 @@ export default function ClientAnalyticsPage() {
     return METRIC_CARD_CONFIGS.filter(cfg => cfg.compute(latest) > 0)
   }, [latest])
 
+  /* IMPORTANT: the loading + empty-state early returns below are
+     DESKTOP-ONLY (hidden lg:block). The desktop view reads
+     gbp_monthly_data (legacy CSV path); the mobile view reads
+     gbp_metrics (connected-sync path) via its own useClient +
+     getGbpAnalytics, with its own loading + empty handling. We must
+     always render <MobileAnalytics /> so a desktop-data gap never
+     blanks the phone experience. */
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto space-y-4">
-        <div className="h-8 w-48 bg-ink-6 rounded animate-pulse" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-ink-6 rounded-xl animate-pulse" />)}
+      <>
+        <div className="lg:hidden">
+          <MobileAnalytics />
         </div>
-        <div className="grid lg:grid-cols-2 gap-4">
-          {[1, 2].map(i => <div key={i} className="h-80 bg-ink-6 rounded-xl animate-pulse" />)}
+        <div className="hidden lg:block max-w-6xl mx-auto space-y-4">
+          <div className="h-8 w-48 bg-ink-6 rounded animate-pulse" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-ink-6 rounded-xl animate-pulse" />)}
+          </div>
+          <div className="grid lg:grid-cols-2 gap-4">
+            {[1, 2].map(i => <div key={i} className="h-80 bg-ink-6 rounded-xl animate-pulse" />)}
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
   if (!data.length) {
     return (
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Analytics</h1>
-          <p className="text-ink-3 text-sm mt-1">Your Google Business Profile performance.</p>
+      <>
+        <div className="lg:hidden">
+          <MobileAnalytics />
         </div>
-        <div className="rounded-2xl bg-white/55 backdrop-blur-xl border border-white/70 p-12 text-center">
-          <BarChart3 className="w-10 h-10 text-ink-4 mx-auto mb-3" />
-          <h2 className="text-lg font-[family-name:var(--font-display)] text-ink mb-1">No data yet</h2>
-          <p className="text-ink-3 text-sm max-w-md mx-auto">
-            Your analytics dashboard will show up here once we start tracking your Google Business Profile performance.
-          </p>
+        <div className="hidden lg:block max-w-6xl mx-auto space-y-6">
+          <div>
+            <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Analytics</h1>
+            <p className="text-ink-3 text-sm mt-1">Your Google Business Profile performance.</p>
+          </div>
+          <div className="rounded-2xl bg-white/55 backdrop-blur-xl border border-white/70 p-12 text-center">
+            <BarChart3 className="w-10 h-10 text-ink-4 mx-auto mb-3" />
+            <h2 className="text-lg font-[family-name:var(--font-display)] text-ink mb-1">No data yet</h2>
+            <p className="text-ink-3 text-sm max-w-md mx-auto">
+              Your analytics dashboard will show up here once we start tracking your Google Business Profile performance.
+            </p>
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
