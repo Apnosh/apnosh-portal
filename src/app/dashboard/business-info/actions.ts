@@ -22,7 +22,6 @@ import { revalidatePath } from 'next/cache'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { updateClientListing, getClientListing, type WeeklyHours, type SpecialHours } from '@/lib/gbp-listing'
-import { upsertJsonFile } from '@/lib/github/client'
 
 export interface BusinessInfo {
   name: string
@@ -131,8 +130,8 @@ export async function saveBusinessInfo(input: BusinessInfo): Promise<SaveResult>
   /* Keep only well-formed, future-or-today special-hours entries. */
   const specialHours: SpecialHours = (input.specialHours ?? []).filter(s => !!s.date)
 
-  /* Resolve the primary location + website connection. */
-  const [{ data: loc }, { data: clientRow }] = await Promise.all([
+  /* Resolve the primary location + website deploy hook. */
+  const [{ data: loc }, { data: settings }] = await Promise.all([
     admin
       .from('gbp_locations')
       .select('id, store_code')
@@ -141,10 +140,10 @@ export async function saveBusinessInfo(input: BusinessInfo): Promise<SaveResult>
       .limit(1)
       .maybeSingle() as unknown as Promise<{ data: { id: string; store_code: string | null } | null }>,
     admin
-      .from('clients')
-      .select('has_apnosh_website, website_content_repo, website_content_path, website_content_branch')
-      .eq('id', clientId)
-      .maybeSingle() as unknown as Promise<{ data: { has_apnosh_website: boolean | null; website_content_repo: string | null; website_content_path: string | null; website_content_branch: string | null } | null }>,
+      .from('site_settings')
+      .select('site_type, external_deploy_hook_url')
+      .eq('client_id', clientId)
+      .maybeSingle() as unknown as Promise<{ data: { site_type: string | null; external_deploy_hook_url: string | null } | null }>,
   ])
 
   /* ── 1. Google Business Profile (live) ── */
@@ -179,48 +178,32 @@ export async function saveBusinessInfo(input: BusinessInfo): Promise<SaveResult>
       website: website || null,
       profile_description: description || null,
       hours,
+      /* Persist special hours to our DB too — the public sites API
+         (/api/public/sites/[slug]) serves this to the website. */
+      special_hours: specialHours,
     }).eq('id', loc.id)
   }
 
   /* ── 3. Website ──
-     Priority: a connected external repo gets a live commit (Vercel
-     auto-deploys). Otherwise, an Apnosh-managed site is queued via
-     client_updates. Otherwise skipped. */
+     The owner's site pulls fresh data from our public API on rebuild.
+     So we just fire the Vercel deploy hook (if connected) to trigger
+     that rebuild. The data is already in our DB above. */
   let websiteStatus: SaveResult['synced']['website'] = 'skipped'
   let websiteError: string | undefined
-  if (clientRow?.website_content_repo) {
+  if (settings?.external_deploy_hook_url) {
     try {
-      await upsertJsonFile({
-        repo: clientRow.website_content_repo,
-        path: clientRow.website_content_path ?? 'apnosh-content.json',
-        branch: clientRow.website_content_branch ?? 'main',
-        data: {
-          name, phone, website, description, hours, specialHours,
-          updatedAt: new Date().toISOString(),
-          source: 'apnosh',
-        },
-        message: 'Apnosh: sync business info',
-      })
-      await admin.from('clients').update({ website_last_synced_at: new Date().toISOString() }).eq('id', clientId)
-      websiteStatus = 'committed'
+      const res = await fetch(settings.external_deploy_hook_url, { method: 'POST' })
+      if (res.ok) {
+        await admin.from('clients').update({ website_last_synced_at: new Date().toISOString() }).eq('id', clientId)
+        websiteStatus = 'committed'
+      } else {
+        websiteStatus = 'failed'
+        websiteError = `Deploy hook returned ${res.status}`
+      }
     } catch (err) {
       websiteStatus = 'failed'
-      websiteError = err instanceof Error ? err.message : 'Website commit failed'
+      websiteError = err instanceof Error ? err.message : 'Deploy hook failed'
     }
-  } else if (clientRow?.has_apnosh_website) {
-    await admin.from('client_updates').insert({
-      client_id: clientId,
-      location_id: loc?.id ?? null,
-      type: 'info',
-      payload: { name, phone, website, description, hours, specialHours },
-      targets: ['website'],
-      summary: 'Updated business info',
-      status: 'scheduled',
-      source: 'manual',
-      created_by: user.id,
-      approval_required: false,
-    })
-    websiteStatus = 'queued'
   }
 
   /* Refresh surfaces that show this data. */

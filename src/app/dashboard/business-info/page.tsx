@@ -28,8 +28,8 @@ export default async function BusinessInfoPage() {
     <BusinessInfoEditor
       initial={loaded.info ?? null}
       gbpConnected={loaded.gbpConnected}
-      hasWebsite={loaded.hasWebsite}
-      websiteRepo={websiteConn.connected ? websiteConn.repo : null}
+      websiteConnected={websiteConn.connected}
+      websiteSiteUrl={websiteConn.siteUrl}
       loadError={loaded.ok ? null : (loaded.error ?? 'Could not load your info')}
     />
   )

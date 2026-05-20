@@ -42,15 +42,15 @@ const EMPTY_HOURS: WeeklyHours = { mon: [], tue: [], wed: [], thu: [], fri: [], 
 interface Props {
   initial: BusinessInfo | null
   gbpConnected: boolean
-  hasWebsite: boolean
-  /* Connected external website repo ("owner/name"), or null. */
-  websiteRepo: string | null
+  /* Whether an external website (deploy hook) is connected. */
+  websiteConnected: boolean
+  websiteSiteUrl: string | null
   loadError: string | null
 }
 
 type SectionKey = 'contact' | 'hours' | 'special'
 
-export default function BusinessInfoEditor({ initial, gbpConnected, hasWebsite, websiteRepo, loadError }: Props) {
+export default function BusinessInfoEditor({ initial, gbpConnected, websiteConnected, websiteSiteUrl, loadError }: Props) {
   const router = useRouter()
   const [name, setName] = useState(initial?.name ?? '')
   const [phone, setPhone] = useState(initial?.phone ?? '')
@@ -131,7 +131,7 @@ export default function BusinessInfoEditor({ initial, gbpConnected, hasWebsite, 
             skipped={result.synced.website === 'skipped'}
             label="Your website"
             detail={
-              result.synced.website === 'committed' ? 'Committed — deploying now'
+              result.synced.website === 'committed' ? 'Rebuilding now'
                 : result.synced.website === 'queued' ? 'Updating shortly'
                 : result.synced.website === 'failed' ? (result.websiteError ?? 'Sync failed')
                 : 'Not connected'
@@ -155,8 +155,8 @@ export default function BusinessInfoEditor({ initial, gbpConnected, hasWebsite, 
         </button>
         <h1 className="text-[24px] font-semibold text-ink leading-tight">Business info</h1>
         <p className="text-[12.5px] text-ink-3 mt-0.5">
-          {gbpConnected || hasWebsite
-            ? <>Edits sync to {[gbpConnected && 'Google', hasWebsite && 'your website'].filter(Boolean).join(' + ')} automatically.</>
+          {gbpConnected || websiteConnected
+            ? <>Edits sync to {[gbpConnected && 'Google', websiteConnected && 'your website'].filter(Boolean).join(' + ')} automatically.</>
             : 'Saved to your Apnosh records.'}
         </p>
       </div>
@@ -285,9 +285,9 @@ export default function BusinessInfoEditor({ initial, gbpConnected, hasWebsite, 
             <LinkRow icon={Tag} tint="bg-cyan-50 text-cyan-700" label="Cuisine & amenities" sub="Categories, dining options, parking" href="/dashboard/local-seo/listing" />
             <LinkRow
               icon={Globe}
-              tint={websiteRepo ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-7 text-ink-3'}
-              label="Connect your website"
-              sub={websiteRepo ? `Connected · ${websiteRepo}` : 'Sync changes to your Vercel/GitHub site'}
+              tint={websiteConnected ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-7 text-ink-3'}
+              label={websiteConnected ? 'Website connected' : 'Connect your website'}
+              sub={websiteConnected ? (websiteSiteUrl ?? 'Changes auto-publish to your site') : 'Sync changes to your Vercel site'}
               href="/dashboard/business-info/connect-website"
             />
           </div>
@@ -302,7 +302,7 @@ export default function BusinessInfoEditor({ initial, gbpConnected, hasWebsite, 
           <ul className="space-y-1.5 text-[12.5px] text-ink-2">
             <li className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-brand-dark" /> Your Apnosh records</li>
             <li className="flex items-center gap-2"><Globe className="w-3.5 h-3.5 text-brand-dark" /> Google Business Profile {gbpConnected ? '' : <span className="text-ink-4">(connect to enable)</span>}</li>
-            {hasWebsite && <li className="flex items-center gap-2"><Globe className="w-3.5 h-3.5 text-brand-dark" /> Your website</li>}
+            {websiteConnected && <li className="flex items-center gap-2"><Globe className="w-3.5 h-3.5 text-brand-dark" /> Your website</li>}
           </ul>
         </div>
 

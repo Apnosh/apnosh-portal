@@ -1,139 +1,135 @@
 'use server'
 
 /**
- * Connect / disconnect an owner's own website (Vercel + GitHub) so
- * business-info changes commit an apnosh-content.json into their repo,
- * which their Vercel project auto-deploys and their site reads.
+ * Connect / disconnect an owner's own website (Vercel/GitHub).
  *
- *   testWebsiteConnection(repo)  — verify Apnosh can write to the repo
- *   saveWebsiteConnection(...)   — persist repo + path + branch, do a
- *                                  first content push
- *   disconnectWebsite()          — clear the connection
- *   getWebsiteConnection()       — current connection state for the UI
+ * These sites already pull fresh data from
+ * portal.apnosh.com/api/public/sites/[slug] at build time (see the
+ * site's src/_data/apnosh.js). So "connecting" a site means storing a
+ * Vercel DEPLOY HOOK URL — when business info changes, we POST to the
+ * hook, Vercel rebuilds, and the rebuild re-fetches our API.
  *
- * Write access is via APNOSH_GITHUB_PAT — the owner must grant it
- * collaborator/app access to their repo first (the test step confirms).
+ * No GitHub file commits needed: the data lives in our DB and is
+ * served by the public API; the deploy hook is just the rebuild
+ * trigger. State lives in site_settings (site_type +
+ * external_deploy_hook_url), matching update-page-copy / menu-actions.
  */
 
 import { revalidatePath } from 'next/cache'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { checkRepoAccess, upsertJsonFile } from '@/lib/github/client'
-import { loadBusinessInfo } from './actions'
-
-/* Normalize a GitHub repo input to "owner/name". Accepts a full URL
-   or the bare "owner/name" form. */
-function normalizeRepo(input: string): string | null {
-  const trimmed = input.trim().replace(/\.git$/, '')
-  const urlMatch = trimmed.match(/github\.com[/:]([^/]+\/[^/]+)/i)
-  if (urlMatch) return urlMatch[1]
-  if (/^[^/\s]+\/[^/\s]+$/.test(trimmed)) return trimmed
-  return null
-}
 
 export interface WebsiteConnection {
   connected: boolean
-  repo: string | null
-  path: string
-  branch: string
-  connectedAt: string | null
+  deployHookUrl: string | null
+  siteUrl: string | null
+  slug: string | null
   lastSyncedAt: string | null
+}
+
+function isValidHook(url: string): boolean {
+  try {
+    const u = new URL(url)
+    return u.protocol === 'https:' && /vercel\.com|vercel\.app/.test(u.hostname)
+  } catch {
+    return false
+  }
 }
 
 export async function getWebsiteConnection(): Promise<WebsiteConnection> {
   const { clientId } = await resolveCurrentClient(null)
-  const blank: WebsiteConnection = { connected: false, repo: null, path: 'apnosh-content.json', branch: 'main', connectedAt: null, lastSyncedAt: null }
+  const blank: WebsiteConnection = { connected: false, deployHookUrl: null, siteUrl: null, slug: null, lastSyncedAt: null }
   if (!clientId) return blank
   const admin = createAdminClient()
-  const { data } = await admin
-    .from('clients')
-    .select('website_content_repo, website_content_path, website_content_branch, website_connected_at, website_last_synced_at')
-    .eq('id', clientId)
-    .maybeSingle() as unknown as { data: { website_content_repo: string | null; website_content_path: string | null; website_content_branch: string | null; website_connected_at: string | null; website_last_synced_at: string | null } | null }
-  if (!data) return blank
+
+  const [settingsRes, clientRes] = await Promise.all([
+    admin
+      .from('site_settings')
+      .select('external_deploy_hook_url, external_site_url, site_type')
+      .eq('client_id', clientId)
+      .maybeSingle() as unknown as Promise<{ data: { external_deploy_hook_url: string | null; external_site_url: string | null; site_type: string | null } | null }>,
+    admin
+      .from('clients')
+      .select('slug, website_last_synced_at')
+      .eq('id', clientId)
+      .maybeSingle() as unknown as Promise<{ data: { slug: string | null; website_last_synced_at: string | null } | null }>,
+  ])
+
+  const s = settingsRes.data
   return {
-    connected: !!data.website_content_repo,
-    repo: data.website_content_repo,
-    path: data.website_content_path ?? 'apnosh-content.json',
-    branch: data.website_content_branch ?? 'main',
-    connectedAt: data.website_connected_at,
-    lastSyncedAt: data.website_last_synced_at,
+    connected: !!s?.external_deploy_hook_url,
+    deployHookUrl: s?.external_deploy_hook_url ?? null,
+    siteUrl: s?.external_site_url ?? null,
+    slug: clientRes.data?.slug ?? null,
+    lastSyncedAt: clientRes.data?.website_last_synced_at ?? null,
   }
 }
 
-export async function testWebsiteConnection(repoInput: string): Promise<
-  { ok: true; repo: string; canWrite: boolean; defaultBranch: string } | { ok: false; error: string }
-> {
-  const repo = normalizeRepo(repoInput)
-  if (!repo) return { ok: false, error: 'Enter a repo like "yourname/your-website" or a github.com URL.' }
-  const access = await checkRepoAccess(repo)
-  if (!access.ok) return { ok: false, error: access.error }
-  if (!access.canWrite) {
-    return { ok: false, error: 'Apnosh can see the repo but can\'t write to it yet. Add Apnosh as a collaborator with write access, then test again.' }
+/* Fire the deploy hook to verify it triggers a real build. */
+export async function testWebsiteConnection(hookUrl: string): Promise<{ ok: boolean; error?: string }> {
+  if (!isValidHook(hookUrl)) {
+    return { ok: false, error: 'That doesn\'t look like a Vercel deploy hook URL. It should start with https://api.vercel.com/...' }
   }
-  return { ok: true, repo, canWrite: true, defaultBranch: access.defaultBranch }
+  try {
+    const res = await fetch(hookUrl, { method: 'POST' })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      return { ok: false, error: `Hook returned ${res.status}. ${body.slice(0, 120)}` }
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Could not reach the deploy hook' }
+  }
 }
 
 export async function saveWebsiteConnection(input: {
-  repoInput: string
-  path?: string
-  branch?: string
-}): Promise<{ ok: boolean; error?: string; firstPush?: boolean }> {
-  const { user, clientId } = await resolveCurrentClient(null)
-  if (!user) return { ok: false, error: 'Not authenticated' }
+  hookUrl: string
+  siteUrl?: string
+}): Promise<{ ok: boolean; error?: string }> {
+  const { clientId } = await resolveCurrentClient(null)
   if (!clientId) return { ok: false, error: 'No client account linked' }
-
-  const repo = normalizeRepo(input.repoInput)
-  if (!repo) return { ok: false, error: 'Invalid repo' }
-
-  /* Re-verify access at save time. */
-  const access = await checkRepoAccess(repo)
-  if (!access.ok) return { ok: false, error: access.error }
-  if (!access.canWrite) return { ok: false, error: 'Apnosh needs write access to this repo.' }
-
-  const path = (input.path?.trim() || 'apnosh-content.json')
-  const branch = (input.branch?.trim() || access.defaultBranch || 'main')
+  if (!isValidHook(input.hookUrl)) return { ok: false, error: 'Invalid deploy hook URL' }
 
   const admin = createAdminClient()
-  await admin.from('clients').update({
-    website_content_repo: repo,
-    website_content_path: path,
-    website_content_branch: branch,
-    website_connected_at: new Date().toISOString(),
-  }).eq('id', clientId)
 
-  /* First push — write the current business info so the file exists and
-     the site has data immediately. */
-  let firstPush = false
-  try {
-    const loaded = await loadBusinessInfo()
-    if (loaded.ok && loaded.info) {
-      await upsertJsonFile({
-        repo,
-        path,
-        branch,
-        data: { ...loaded.info, updatedAt: new Date().toISOString(), source: 'apnosh' },
-        message: 'Apnosh: connect website + sync business info',
-      })
-      await admin.from('clients').update({ website_last_synced_at: new Date().toISOString() }).eq('id', clientId)
-      firstPush = true
-    }
-  } catch {
-    /* Connection saved even if the first push hiccups; next save retries. */
+  /* Upsert site_settings for this client. */
+  const { data: existing } = await admin
+    .from('site_settings')
+    .select('id')
+    .eq('client_id', clientId)
+    .maybeSingle() as unknown as { data: { id: string } | null }
+
+  const patch = {
+    site_type: 'external_repo',
+    external_deploy_hook_url: input.hookUrl.trim(),
+    ...(input.siteUrl?.trim() ? { external_site_url: input.siteUrl.trim() } : {}),
+    is_published: true,
   }
 
+  if (existing?.id) {
+    await admin.from('site_settings').update(patch).eq('id', existing.id)
+  } else {
+    await admin.from('site_settings').insert({ client_id: clientId, ...patch })
+  }
+
+  /* Fire once so the site rebuilds with current data immediately. */
+  try {
+    await fetch(input.hookUrl, { method: 'POST' })
+    await admin.from('clients').update({ website_last_synced_at: new Date().toISOString() }).eq('id', clientId)
+  } catch { /* non-fatal */ }
+
   revalidatePath('/dashboard/business-info')
-  return { ok: true, firstPush }
+  return { ok: true }
 }
 
 export async function disconnectWebsite(): Promise<{ ok: boolean; error?: string }> {
   const { clientId } = await resolveCurrentClient(null)
   if (!clientId) return { ok: false, error: 'No client account linked' }
   const admin = createAdminClient()
-  await admin.from('clients').update({
-    website_content_repo: null,
-    website_connected_at: null,
-  }).eq('id', clientId)
+  await admin
+    .from('site_settings')
+    .update({ external_deploy_hook_url: null, site_type: 'none' })
+    .eq('client_id', clientId)
   revalidatePath('/dashboard/business-info')
   return { ok: true }
 }
