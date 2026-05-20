@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Apnosh — Mobile preview</title>
+<style>
+  @font-face {
+    font-family: 'Cal Sans';
+    font-style: normal; font-weight: 600; font-display: swap;
+    src: url('https://cdn.jsdelivr.net/gh/calcom/font/fonts/webfonts/CalSans-SemiBold.woff2') format('woff2');
+  }
+  :root {
+    --font-display: 'Cal Sans', 'Inter', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+    --ink:#1d1d1f; --ink-2:#424245; --ink-3:#6e6e73; --ink-4:#aeaeb2;
+    --bg:#ffffff; --surface:#ffffff;
+    --brand:#4abd98; --brand-d:#2e9a78; --brand-g:rgba(74,189,152,0.12);
+    --drop:#c2453d;
+    --hairline-2:#ececf0;
+    --t-fast:140ms; --ease-out:cubic-bezier(.16,1,.3,1);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    background:#e7e7ec; font-family:var(--font-body); color:var(--ink);
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+    min-height:100vh;
+  }
+  /* Phone frame only shows on wide screens; on a real phone it fills. */
+  .frame {
+    max-width:402px; margin:0 auto; background:var(--bg); min-height:100vh;
+  }
+  @media (min-width:440px) {
+    body { padding:24px 0; }
+    .frame { border-radius:32px; overflow:hidden; box-shadow:0 24px 70px rgba(0,0,0,.18); min-height:auto; }
+  }
+  .screen { background:var(--bg); padding-bottom:28px; }
+  .spot { background:linear-gradient(180deg, rgba(74,189,152,0.10), rgba(74,189,152,0) 55%); }
+  .t-eyebrow { font-size:11px; font-weight:600; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-3); margin:0; }
+  .t-body-strong { font-size:16px; font-weight:600; color:var(--ink); margin:0; }
+  .t-small { font-size:13px; }
+  .sx { padding:24px 22px 6px; }
+  .sx-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .btn-quiet { display:inline-flex; align-items:center; gap:4px; background:none; border:0; color:var(--brand-d); font-weight:600; font-size:13px; cursor:pointer; padding:0; }
+  .list { list-style:none; margin:0; padding:0; }
+  .row { display:flex; align-items:center; gap:12px; width:100%; background:none; border:0; padding:16px 0; text-align:left; border-top:1px solid var(--hairline-2); cursor:pointer; font-family:inherit; }
+  .list li:first-child .row { border-top:0; }
+  .row:active { opacity:.5; }
+  .pill { font-size:13px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
+  .delta-up { color:var(--brand-d); }
+  .delta-down { color:var(--drop); }
+  .truncate { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .nowrap { white-space:nowrap; }
+  .tabular { font-variant-numeric:tabular-nums; }
+  button { font-family:inherit; }
+</style>
+</head>
+<body>
+<div class="frame"><div id="root"></div></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useRef } = React;
+
+/* ── Inline icon set ── */
+const I = {
+  Bell: ({size=20, stroke=1.8, color="currentColor"}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </svg>
+  ),
+  ChevR: ({size=13, stroke=1.8, color="currentColor"}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+  ),
+  ArrowUp: ({size=14, stroke=2.4, color="currentColor"}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg>
+  ),
+  ArrowDown: ({size=14, stroke=2.4, color="currentColor"}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14" /><path d="m19 12-7 7-7-7" /></svg>
+  ),
+};
+
+/* ── Mock Yellow Bee data ── */
+const wave = (base, n, amp, drift) =>
+  Array.from({length:n}, (_, i) => Math.max(0, Math.round(
+    base + Math.sin(i/1.7)*amp + (i/n)*drift + (Math.random()*amp*0.4)
+  )));
+const mkPoints = (vals, labels) => vals.map((v,i) => ({ value:v, label: labels ? labels[i] : '' }));
+
+const sources = [
+  { key:'google', label:'Google', value:89 },
+  { key:'maps',   label:'Maps',   value:27 },
+  { key:'site',   label:'Site',   value:11 },
+];
+function range(total, n, delta, dir, x0, x1, ptLabels) {
+  const vals = wave(total/n*0.85, n, total/n*0.5, total/n*0.4);
+  return { total, delta, deltaDir:dir, points: mkPoints(vals, ptLabels), xLabels:[x0,x1], sources };
+}
+const customers = {
+  week:  range(127, 14, '+23', 'up', 'May 6', 'Today', null),
+  month: range(512, 30, '+8%', 'up', 'Apr 20', 'Today', null),
+  '3m':  range(1480, 13, '+19%', 'up', 'Feb', 'May', null),
+  year:  range(6120, 12, '+34%', 'up', '2025', '2026', null),
+  all:   range(9400, 18, null, 'up', 'Start', 'Now', null),
+};
+const yb = {
+  restaurant: { name: 'Yellow Bee Market' },
+  needs: [
+    { id:'r', title:'Reply to a 3-star review',        time:'2 min',  href:'review' },
+    { id:'a', title:"Approve Friday's Instagram post", time:'30 sec', href:'approval' },
+    { id:'h', title:'Set Memorial Day hours',          time:'1 min',  href:'hours' },
+  ],
+  heroRanges: { customers, reputation: customers, reach: customers },
+  shipped: { count: 7 },
+  upcoming: [1,2,3],
+  strategist: { firstName: 'Maria' },
+};
+const tweaks = { plan: 'standard', headline: 'customers', showUpcoming: true };
+
+/* ════════════ Prototype home.jsx (verbatim) ════════════ */
+function Home({ tweaks, data, onTabClick, onOpen }) {
+  const yb = data;
+  const needs = yb.needs;
+  const isStandard = tweaks.plan === "standard" || tweaks.plan === "pro";
+
+  return (
+    <div className="screen" style={{ paddingTop: 0 }}>
+      <SlimHeader restaurant={yb.restaurant} hasNotifications={needs.length > 0} onBell={() => onTabClick("inbox")} />
+      <HeroMetric headlineKey={tweaks.headline} ranges={yb.heroRanges?.[tweaks.headline] ?? yb.heroRanges?.customers} />
+
+      <Section eyebrow={`Needs you · ${needs.length}`} action={{ label: "Inbox", onClick: () => onTabClick("inbox") }}>
+        <ul className="list">
+          {needs.slice(0, 3).map((item) => (
+            <li key={item.id}>
+              <button onClick={() => onOpen(item.href, item)} className="row">
+                <p className="t-body-strong" style={{ flex: 1, minWidth: 0, fontSize: 16 }}>{item.title}</p>
+                <span className="pill" style={{ flexShrink: 0 }}>{item.time}</span>
+                <I.ChevR size={13} color="var(--ink-4)" stroke={1.8} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      <Section eyebrow="This week">
+        <ul className="list">
+          {isStandard ? (
+            <li>
+              <button onClick={() => onOpen("shippedDetail")} className="row">
+                <p className="t-body-strong" style={{ flex: 1, minWidth: 0, fontSize: 16 }}>
+                  <span style={{ fontWeight: 700, color: "var(--ink)" }}>{yb.shipped.count}</span>{" "}
+                  <span style={{ color: "var(--ink-3)", fontWeight: 400 }}>shipped</span>
+                </p>
+                <I.ChevR size={13} color="var(--ink-4)" stroke={1.8} />
+              </button>
+            </li>
+          ) : (
+            <li>
+              <button onClick={() => onOpen("plans")} className="row">
+                <p className="t-body-strong" style={{ flex: 1, minWidth: 0, fontSize: 16 }}>See done-for-you plans</p>
+                <I.ChevR size={13} color="var(--ink-4)" stroke={1.8} />
+              </button>
+            </li>
+          )}
+          {tweaks.showUpcoming && yb.upcoming.length > 0 && (
+            <li>
+              <button onClick={() => onOpen("calendar")} className="row">
+                <p className="t-body-strong" style={{ flex: 1, minWidth: 0, fontSize: 16 }}>
+                  <span style={{ fontWeight: 700, color: "var(--ink)" }}>{yb.upcoming.length}</span>{" "}
+                  <span style={{ color: "var(--ink-3)", fontWeight: 400 }}>coming up</span>
+                </p>
+                <I.ChevR size={13} color="var(--ink-4)" stroke={1.8} />
+              </button>
+            </li>
+          )}
+          <li>
+            <button onClick={() => onOpen("messages")} className="row">
+              <p className="t-body-strong" style={{ flex: 1, minWidth: 0, fontSize: 16 }}>
+                <span style={{ color: "var(--ink)", fontWeight: 600 }}>{yb.strategist.firstName}</span>
+                <span style={{ color: "var(--ink-3)", fontWeight: 400, marginLeft: 6 }}>your strategist</span>
+              </p>
+              <I.ChevR size={13} color="var(--ink-4)" stroke={1.8} />
+            </button>
+          </li>
+        </ul>
+      </Section>
+    </div>
+  );
+}
+
+function Section({ eyebrow, action, children }) {
+  return (
+    <section className="sx">
+      <div className="sx-head">
+        <p className="t-eyebrow">{eyebrow}</p>
+        {action && (
+          <button onClick={action.onClick} className="btn-quiet">{action.label} <I.ChevR size={12} stroke={2.2} /></button>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SlimHeader({ restaurant, hasNotifications, onBell }) {
+  return (
+    <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px 4px", gap: 12 }}>
+      <p className="truncate" style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 400, letterSpacing: "-0.01em", color: "var(--ink)", flex: 1, minWidth: 0 }}>{restaurant.name}</p>
+      <button onClick={onBell} aria-label="Inbox" style={{ width: 40, height: 40, borderRadius: 9999, color: "var(--ink-2)", display: "inline-flex", alignItems: "center", justifyContent: "center", position: "relative", flexShrink: 0, marginRight: -8, background:"none", border:0 }}>
+        <I.Bell size={20} stroke={1.8} />
+        {hasNotifications && (<span style={{ position: "absolute", top: 7, right: 8, width: 8, height: 8, borderRadius: 9999, background: "var(--brand)", boxShadow: "0 0 0 2px var(--bg)" }} />)}
+      </button>
+    </header>
+  );
+}
+
+function HeroMetric({ ranges }) {
+  const [range, setRange] = useState("week");
+  const [scrubIdx, setScrubIdx] = useState(null);
+  const r = ranges[range] ?? ranges.week;
+  const scrubbing = scrubIdx != null && scrubIdx >= 0 && scrubIdx < r.points.length;
+  const displayValue = scrubbing ? r.points[scrubIdx].value : r.total;
+  const deltaMagnitude = r.delta ? (r.delta.match(/^[+-]?\d[\d,]*%?/)?.[0] ?? r.delta) : null;
+
+  return (
+    <section className="spot" style={{ position: "relative", padding: "20px 22px 22px" }}>
+      <p className="t-eyebrow">Customers</p>
+      <p style={{ fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 96, letterSpacing: "-0.05em", lineHeight: 0.95, color: "var(--ink)", marginTop: 16, marginBottom: 0, fontVariantNumeric: "tabular-nums" }}>
+        {displayValue.toLocaleString()}
+      </p>
+      <div style={{ marginTop: 14, minHeight: 22, display: "flex", alignItems: "center", gap: 6 }}>
+        {scrubbing ? (
+          <span className="t-small nowrap" style={{ color: "var(--ink-2)", fontWeight: 600 }}>{r.points[scrubIdx].label}</span>
+        ) : deltaMagnitude ? (
+          <span className={`${r.deltaDir === "up" ? "delta-up" : "delta-down"} nowrap`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 600, fontSize: 16 }}>
+            {r.deltaDir === "up" ? <I.ArrowUp size={14} stroke={2.4} /> : <I.ArrowDown size={14} stroke={2.4} />}
+            {deltaMagnitude}
+          </span>
+        ) : null}
+      </div>
+      <div style={{ marginTop: 28, marginLeft: -22, marginRight: -22 }}>
+        <TrendChart points={r.points} deltaDir={r.deltaDir ?? "up"} scrubIdx={scrubIdx} onScrub={setScrubIdx} />
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, padding: "0 22px", fontSize: 10.5, color: "var(--ink-4)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+          <span>{r.xLabels?.[0] ?? ""}</span><span>{r.xLabels?.[1] ?? ""}</span>
+        </div>
+      </div>
+      <RangePills value={range} onChange={(v) => { setRange(v); setScrubIdx(null); }} />
+      <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--hairline-2)" }}>
+        <SourceBar sources={r.sources} />
+      </div>
+    </section>
+  );
+}
+
+function smoothPath(pts) {
+  if (pts.length === 0) return "";
+  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
+  const t = 0.18;
+  let d = `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] ?? p2;
+    const cp1x = p1.x + (p2.x - p0.x) * t, cp1y = p1.y + (p2.y - p0.y) * t;
+    const cp2x = p2.x - (p3.x - p1.x) * t, cp2y = p2.y - (p3.y - p1.y) * t;
+    d += ` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+  }
+  return d;
+}
+
+function TrendChart({ points, deltaDir, scrubIdx, onScrub }) {
+  const ref = useRef(null);
+  const lastIdx = useRef(-1);
+  const W = 402, H = 180, padT = 12, padB = 6, innerH = H - padT - padB;
+  const values = points.map((p) => p.value);
+  const min = Math.min(...values), max = Math.max(...values), yRange = Math.max(max - min, 0.0001);
+  const toX = (i) => (points.length === 1 ? W / 2 : (i * W) / (points.length - 1));
+  const toY = (v) => padT + innerH - ((v - min) / yRange) * innerH;
+  const coords = points.map((p, i) => ({ x: toX(i), y: toY(p.value) }));
+  const pathD = smoothPath(coords);
+  const areaD = pathD + ` L ${W} ${padT + innerH} L 0 ${padT + innerH} Z`;
+  const lineColor = deltaDir === "down" ? "var(--drop)" : "var(--brand)";
+  const fillId = deltaDir === "down" ? "fillDrop" : "fillBrand";
+  const fillFrom = deltaDir === "down" ? "rgba(194,69,61,0.18)" : "rgba(74,189,152,0.26)";
+
+  function pointerToIdx(e) {
+    const rect = ref.current.getBoundingClientRect();
+    const cx = e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? 0;
+    const x = cx - rect.left, t = Math.max(0, Math.min(1, x / rect.width));
+    return Math.round(t * (points.length - 1));
+  }
+  function down(e){ e.preventDefault(); try{ref.current.setPointerCapture(e.pointerId);}catch(_){} const idx=pointerToIdx(e); lastIdx.current=idx; onScrub(idx); }
+  function move(e){ if(lastIdx.current===-1)return; const idx=pointerToIdx(e); if(idx!==lastIdx.current){lastIdx.current=idx; onScrub(idx);} }
+  function up(e){ try{ref.current.releasePointerCapture(e.pointerId);}catch(_){} lastIdx.current=-1; onScrub(null); }
+  const sx = scrubIdx != null ? toX(scrubIdx) : null;
+  const sy = scrubIdx != null ? toY(points[scrubIdx].value) : null;
+
+  return (
+    <div ref={ref} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+      style={{ width: "100%", height: H, position: "relative", touchAction: "none", cursor: "ew-resize", userSelect: "none" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" aria-hidden style={{ display: "block" }}>
+        <defs>
+          <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={fillFrom} /><stop offset="100%" stopColor="rgba(74,189,152,0)" />
+          </linearGradient>
+        </defs>
+        <path d={areaD} fill={`url(#${fillId})`} />
+        <path d={pathD} fill="none" stroke={lineColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        {scrubIdx == null && (<circle cx={toX(points.length - 1)} cy={toY(points[points.length - 1].value)} r="4" fill="var(--surface)" stroke={lineColor} strokeWidth="2.2" />)}
+        {scrubIdx != null && (
+          <g>
+            <line x1={sx} x2={sx} y1={padT} y2={padT + innerH} stroke="var(--ink-4)" strokeWidth="1" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />
+            <circle cx={sx} cy={sy} r="5.5" fill="var(--surface)" stroke={lineColor} strokeWidth="2.4" />
+          </g>
+        )}
+      </svg>
+    </div>
+  );
+}
+
+function RangePills({ value, onChange }) {
+  const opts = [
+    { value: "week", label: "Week" }, { value: "month", label: "Month" },
+    { value: "3m", label: "3M" }, { value: "year", label: "Year" }, { value: "all", label: "All" },
+  ];
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, gap: 4 }}>
+      {opts.map((o) => {
+        const active = o.value === value;
+        return (
+          <button key={o.value} onClick={() => onChange(o.value)}
+            style={{ flex: 1, height: 32, borderRadius: 9999, border:0, cursor:"pointer",
+              background: active ? "var(--brand-g)" : "transparent",
+              color: active ? "var(--brand-d)" : "var(--ink-3)",
+              fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap" }}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SourceBar({ sources }) {
+  if (!sources?.length) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 16, paddingTop: 4 }}>
+      {sources.map((s) => (
+        <div key={s.key} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+          <span style={{ fontSize: 11, fontWeight: 500, color: "var(--ink-3)", letterSpacing: "0.02em", textTransform: "uppercase" }}>{s.label}</span>
+          <span className="tabular" style={{ fontFamily: "var(--font-body)", fontSize: 20, fontWeight: 600, color: "var(--ink)", letterSpacing: "-0.02em", lineHeight: 1 }}>
+            {typeof s.value === "number" ? s.value.toLocaleString() : s.value}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <Home tweaks={tweaks} data={yb} onTabClick={() => {}} onOpen={() => {}} />
+);
+</script>
+</body>
+</html>
