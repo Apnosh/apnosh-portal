@@ -21,7 +21,7 @@
 import { revalidatePath } from 'next/cache'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { updateClientListing, type WeeklyHours } from '@/lib/gbp-listing'
+import { updateClientListing, getClientListing, type WeeklyHours, type SpecialHours } from '@/lib/gbp-listing'
 
 export interface BusinessInfo {
   name: string
@@ -29,6 +29,7 @@ export interface BusinessInfo {
   website: string
   description: string
   hours: WeeklyHours
+  specialHours: SpecialHours
 }
 
 export interface LoadResult {
@@ -69,12 +70,27 @@ export async function loadBusinessInfo(): Promise<LoadResult> {
   const c = clientRes.data
   const loc = locRes.data
 
+  /* Special hours are the source-of-truth on GBP, not mirrored in our
+     DB. Load them best-effort so the editor shows the real list and a
+     save doesn't clobber existing holiday entries. If GBP is down or
+     not connected, we fall back to empty + the UI notes it. */
+  let specialHours: SpecialHours = []
+  if (loc?.store_code) {
+    try {
+      const listing = await getClientListing(clientId, null)
+      if (listing.ok && listing.fields.specialHours) {
+        specialHours = listing.fields.specialHours
+      }
+    } catch { /* best-effort */ }
+  }
+
   const info: BusinessInfo = {
     name: c?.name ?? loc?.location_name ?? '',
     phone: loc?.phone ?? c?.phone ?? '',
     website: loc?.website ?? c?.website ?? '',
     description: loc?.profile_description ?? '',
     hours: (loc?.hours && typeof loc.hours === 'object') ? { ...EMPTY_HOURS, ...loc.hours } : EMPTY_HOURS,
+    specialHours,
   }
 
   return {
@@ -110,6 +126,8 @@ export async function saveBusinessInfo(input: BusinessInfo): Promise<SaveResult>
   const website = input.website.trim()
   const description = input.description.trim()
   const hours: WeeklyHours = { ...EMPTY_HOURS, ...input.hours }
+  /* Keep only well-formed, future-or-today special-hours entries. */
+  const specialHours: SpecialHours = (input.specialHours ?? []).filter(s => !!s.date)
 
   /* Resolve the primary location for store_code + has_apnosh_website. */
   const [{ data: loc }, { data: clientRow }] = await Promise.all([
@@ -136,6 +154,7 @@ export async function saveBusinessInfo(input: BusinessInfo): Promise<SaveResult>
       websiteUri: website || null,
       description: description || null,
       regularHours: hours,
+      specialHours,
     })
     if (result.ok) {
       google = 'ok'
@@ -168,7 +187,7 @@ export async function saveBusinessInfo(input: BusinessInfo): Promise<SaveResult>
       client_id: clientId,
       location_id: loc?.id ?? null,
       type: 'info',
-      payload: { name, phone, website, description, hours },
+      payload: { name, phone, website, description, hours, specialHours },
       targets: ['website'],
       summary: 'Updated business info',
       status: 'scheduled',
