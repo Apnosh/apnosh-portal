@@ -21,7 +21,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Home, Inbox, Plus, BarChart3, Menu,
+  Home, Inbox, Plus, BarChart3, LayoutGrid,
   LayoutDashboard, Users, Kanban, CreditCard, FileBarChart,
 } from 'lucide-react'
 
@@ -37,17 +37,20 @@ interface ActionTab {
   kind: 'action'
   label: string
   icon: typeof Plus
-  action: 'plus' | 'menu'
+  action: 'plus'
 }
 
 type Tab = NavTab | ActionTab
 
 const clientTabs: Tab[] = [
-  { kind: 'nav',    label: 'Home',     href: '/dashboard',          icon: Home,      match: 'exact' },
-  { kind: 'nav',    label: 'Inbox',    href: '/dashboard/inbox',    icon: Inbox,     match: 'prefix' },
-  { kind: 'action', label: 'Quick',    icon: Plus, action: 'plus' },
-  { kind: 'nav',    label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, match: 'prefix' },
-  { kind: 'action', label: 'Menu',     icon: Menu, action: 'menu' },
+  { kind: 'nav',    label: 'Home',      href: '/dashboard',           icon: Home,       match: 'exact' },
+  { kind: 'nav',    label: 'Inbox',     href: '/dashboard/inbox',     icon: Inbox,      match: 'prefix' },
+  { kind: 'action', label: 'Quick',     icon: Plus, action: 'plus' },
+  { kind: 'nav',    label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3,  match: 'prefix' },
+  /* Menu now points at a real /dashboard/menu page (grouped nav cards)
+     instead of opening the slide-in drawer. The drawer remains for
+     desktop (sidebar is always visible there). */
+  { kind: 'nav',    label: 'Menu',      href: '/dashboard/menu',      icon: LayoutGrid, match: 'prefix' },
 ]
 
 const adminTabs: Tab[] = [
@@ -61,17 +64,15 @@ const adminTabs: Tab[] = [
 interface ClientTabBarProps {
   inboxBadge?: number
   onPlusClick?: () => void
-  onMenuClick?: () => void
 }
 
-export function ClientTabBar({ inboxBadge = 0, onPlusClick, onMenuClick }: ClientTabBarProps) {
+export function ClientTabBar({ inboxBadge = 0, onPlusClick }: ClientTabBarProps) {
   return (
     <TabBar
       tabs={clientTabs}
       badges={{ '/dashboard/inbox': inboxBadge }}
       onAction={(a) => {
         if (a === 'plus') onPlusClick?.()
-        if (a === 'menu') onMenuClick?.()
       }}
     />
   )
@@ -88,7 +89,7 @@ function TabBar({
 }: {
   tabs: Tab[]
   badges?: Record<string, number>
-  onAction?: (action: 'plus' | 'menu') => void
+  onAction?: (action: 'plus') => void
 }) {
   const pathname = usePathname()
 
@@ -104,7 +105,7 @@ function TabBar({
     >
       <div className="flex items-stretch relative">
         {tabs.map((tab, i) => {
-          if (tab.kind === 'action' && tab.action === 'plus') {
+          if (tab.kind === 'action') {
             /* Elevated center FAB — pokes above the bar via negative
                top margin + drop shadow. Brand-colored, larger touch
                target. Opens the bottom sheet. */
@@ -128,28 +129,7 @@ function TabBar({
             )
           }
 
-          if (tab.kind === 'action') {
-            /* Menu button — same shape as a nav item but no href.
-               Triggers the sidebar drawer. */
-            const Icon = tab.icon
-            return (
-              <button
-                key={`action-${tab.action}-${i}`}
-                onClick={() => onAction?.(tab.action)}
-                aria-label={tab.label}
-                className="relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[60px] active:bg-ink-7/50 transition-colors"
-              >
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-4">
-                  <Icon className="w-[18px] h-[18px]" strokeWidth={2} />
-                </span>
-                <span className="text-[10px] leading-none font-semibold text-ink-4">
-                  {tab.label}
-                </span>
-              </button>
-            )
-          }
-
-          /* Real navigation tab (Home / Inbox / Analytics). */
+          /* Real navigation tab (Home / Inbox / Analytics / Menu). */
           const active = isActive(tab)
           const badge = badges[tab.href] ?? 0
           const Icon = tab.icon

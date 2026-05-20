@@ -696,7 +696,6 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       <ClientTabBar
         inboxBadge={navCounts.reviews + navCounts.approvals}
         onPlusClick={() => setActionSheetOpen(true)}
-        onMenuClick={() => setSidebarOpen(true)}
       />
     </div>
   )
