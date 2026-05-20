@@ -21,7 +21,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  ChevronRight, ChevronDown, ArrowUpRight, ArrowDownRight,
+  ChevronRight, ChevronDown,
   Star, Sparkles, CheckCircle2, Plug, Calendar as CalendarIcon, Settings2,
 } from 'lucide-react'
 
@@ -139,7 +139,7 @@ export default function MobileHome({
   const shippedCount = weekly.generatedThisWeek ?? weekly.items.length
 
   return (
-    <div className="px-5 pt-5 pb-3 space-y-7">
+    <div className="px-5 pt-5 pb-3 space-y-8">
       {/* Quiet greeting — the hero number leads, not the greeting */}
       <p className="text-[13px] text-ink-3">{greeting()}, {firstName}</p>
 
@@ -154,9 +154,8 @@ export default function MobileHome({
       {topNeeds.length > 0 && (
         <section>
           <SectionHead
-            label={`Needs you${totalNeeds > 0 ? ` · ${totalNeeds}` : ''}`}
+            title={`Needs you${totalNeeds > 0 ? ` · ${totalNeeds}` : ''}`}
             href="/dashboard/inbox"
-            cta="Open inbox"
           />
           <ul className="divide-y divide-ink-7">
             {topNeeds.map(item => {
@@ -191,7 +190,7 @@ export default function MobileHome({
       {/* Next 7 days — the planning view */}
       {comingUp.length > 0 && (
         <section>
-          <SectionHead label="Next 7 days" href="/dashboard/calendar" cta="Calendar" />
+          <SectionHead title="Next 7 days" href="/dashboard/calendar" />
           <ul className="divide-y divide-ink-7">
             {comingUp.slice(0, 3).map((item, i) => (
               <li key={i} className="flex items-center gap-3.5 py-3.5 min-h-[52px]">
@@ -299,15 +298,14 @@ function Hero({
 
       {hasData ? (
         <Link href="/dashboard/analytics" className="block active:opacity-70">
-          <p className="text-[52px] font-bold text-ink tabular-nums leading-none tracking-tight mt-1.5">
+          <p className="text-[60px] font-bold text-ink tabular-nums leading-[0.95] tracking-tight mt-1.5">
             {data.value}
           </p>
           {data.delta ? (
-            <p className={`inline-flex items-center gap-1 text-[14px] font-semibold mt-2.5 ${
-              data.up ? 'text-emerald-700' : data.up === false ? 'text-rose-700' : 'text-ink-3'
+            <p className={`inline-flex items-center gap-1.5 text-[15px] font-semibold mt-3 ${
+              data.up ? 'text-brand-dark' : data.up === false ? 'text-rose-600' : 'text-ink-3'
             }`}>
-              {data.up === true && <ArrowUpRight className="w-4 h-4" />}
-              {data.up === false && <ArrowDownRight className="w-4 h-4" />}
+              {data.up != null && <Tri up={data.up} />}
               {data.delta}
               <span className="text-ink-3 font-normal">vs last week</span>
             </p>
@@ -316,8 +314,9 @@ function Hero({
           )}
 
           {series.length >= 2 && (
-            <div className="mt-4">
+            <div className="mt-5">
               <HeroChart values={series} up={data.up ?? null} />
+              <p className="text-[11px] text-ink-4 mt-2">Past 14 days</p>
             </div>
           )}
         </Link>
@@ -335,10 +334,20 @@ function Hero({
   )
 }
 
-/* Robinhood-style area chart. Minimal: a soft fill, a clean line, no
-   axes or gridlines. Brand green when flat or up, muted red when down. */
+/* Small filled triangle delta indicator, Robinhood-style. */
+function Tri({ up }: { up: boolean }) {
+  return (
+    <svg width="9" height="8" viewBox="0 0 9 8" className="inline-block" aria-hidden="true">
+      <path d={up ? 'M4.5 0 9 8H0z' : 'M4.5 8 0 0h9z'} fill="currentColor" />
+    </svg>
+  )
+}
+
+/* Robinhood-style chart. Minimal and airy: a clean line with a barely
+   there fill, no axes or gridlines. Brand green when flat or up, muted
+   red when down. */
 function HeroChart({ values, up }: { values: number[]; up: boolean | null }) {
-  const w = 320, h = 76, pad = 4
+  const w = 320, h = 108, pad = 6
   const min = Math.min(...values)
   const max = Math.max(...values)
   const range = max - min || 1
@@ -362,7 +371,7 @@ function HeroChart({ values, up }: { values: number[]; up: boolean | null }) {
     >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.16" />
+          <stop offset="0%" stopColor={color} stopOpacity="0.10" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
@@ -371,7 +380,7 @@ function HeroChart({ values, up }: { values: number[]; up: boolean | null }) {
         d={line}
         fill="none"
         stroke={color}
-        strokeWidth="2"
+        strokeWidth="2.5"
         strokeLinejoin="round"
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
@@ -380,17 +389,16 @@ function HeroChart({ values, up }: { values: number[]; up: boolean | null }) {
   )
 }
 
-function SectionHead({ label, href, cta }: { label: string; href?: string; cta?: string }) {
-  return (
-    <div className="flex items-baseline justify-between mb-1.5">
-      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-3">{label}</p>
-      {href && cta && (
-        <Link href={href} className="text-[12.5px] font-semibold text-brand-dark active:text-brand">
-          {cta}
-        </Link>
-      )}
-    </div>
-  )
+function SectionHead({ title, href }: { title: string; href?: string }) {
+  if (href) {
+    return (
+      <Link href={href} className="flex items-center gap-1 mb-2.5 active:opacity-60">
+        <span className="text-[17px] font-semibold text-ink leading-none">{title}</span>
+        <ChevronRight className="w-[18px] h-[18px] text-ink-4" />
+      </Link>
+    )
+  }
+  return <p className="text-[17px] font-semibold text-ink leading-none mb-2.5">{title}</p>
 }
 
 function CustomizeSheet({
