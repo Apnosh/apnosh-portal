@@ -23,6 +23,25 @@ import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { updateClientListing, getClientListing, type WeeklyHours, type SpecialHours } from '@/lib/gbp-listing'
 
+export interface LinkEntry {
+  label: string
+  url: string
+}
+
+export interface BusinessLinks {
+  ordering: LinkEntry[]
+  reservations: LinkEntry[]
+  social: {
+    instagram?: string
+    facebook?: string
+    tiktok?: string
+    youtube?: string
+    x?: string
+  }
+}
+
+export const EMPTY_LINKS: BusinessLinks = { ordering: [], reservations: [], social: {} }
+
 export interface BusinessInfo {
   name: string
   phone: string
@@ -30,6 +49,7 @@ export interface BusinessInfo {
   description: string
   hours: WeeklyHours
   specialHours: SpecialHours
+  links: BusinessLinks
 }
 
 export interface LoadResult {
@@ -60,11 +80,11 @@ export async function loadBusinessInfo(): Promise<LoadResult> {
       .maybeSingle() as unknown as Promise<{ data: { name: string | null; phone: string | null; website: string | null; has_apnosh_website: boolean | null } | null }>,
     admin
       .from('gbp_locations')
-      .select('location_name, phone, website, profile_description, hours, store_code')
+      .select('location_name, phone, website, profile_description, hours, store_code, links')
       .eq('client_id', clientId)
       .order('is_primary', { ascending: false })
       .limit(1)
-      .maybeSingle() as unknown as Promise<{ data: { location_name: string | null; phone: string | null; website: string | null; profile_description: string | null; hours: WeeklyHours | null; store_code: string | null } | null }>,
+      .maybeSingle() as unknown as Promise<{ data: { location_name: string | null; phone: string | null; website: string | null; profile_description: string | null; hours: WeeklyHours | null; store_code: string | null; links: BusinessLinks | null } | null }>,
   ])
 
   const c = clientRes.data
@@ -91,6 +111,9 @@ export async function loadBusinessInfo(): Promise<LoadResult> {
     description: loc?.profile_description ?? '',
     hours: (loc?.hours && typeof loc.hours === 'object') ? { ...EMPTY_HOURS, ...loc.hours } : EMPTY_HOURS,
     specialHours,
+    links: (loc?.links && typeof loc.links === 'object')
+      ? { ...EMPTY_LINKS, ...loc.links, social: { ...loc.links.social } }
+      : EMPTY_LINKS,
   }
 
   return {
@@ -130,6 +153,7 @@ export async function saveBusinessInfo(input: Partial<BusinessInfo>): Promise<Sa
   const hasDescription = input.description !== undefined
   const hasHours = input.hours !== undefined
   const hasSpecial = input.specialHours !== undefined
+  const hasLinks = input.links !== undefined
 
   const name = (input.name ?? '').trim()
   const phone = (input.phone ?? '').trim()
@@ -190,6 +214,8 @@ export async function saveBusinessInfo(input: Partial<BusinessInfo>): Promise<Sa
     if (hasHours && hours) locPatch.hours = hours
     /* The public sites API serves special_hours to the website. */
     if (hasSpecial && specialHours) locPatch.special_hours = specialHours
+    /* Order/reserve/social links — served to the website too. */
+    if (hasLinks && input.links) locPatch.links = input.links
     if (Object.keys(locPatch).length > 0) {
       await admin.from('gbp_locations').update(locPatch).eq('id', loc.id)
     }

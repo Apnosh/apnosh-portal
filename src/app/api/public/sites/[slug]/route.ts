@@ -74,7 +74,7 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
   // 4. Primary location
   const { data: location } = await db
     .from('gbp_locations')
-    .select('location_name, address, hours, special_hours, profile_description, phone, website')
+    .select('location_name, address, hours, special_hours, profile_description, phone, website, links')
     .eq('client_id', client.id)
     .eq('status', 'assigned')
     .order('created_at', { ascending: true })
@@ -124,6 +124,14 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
   const social: Record<string, string> = {}
   for (const s of socials ?? []) {
     if (s.profile_url) social[s.platform.toLowerCase()] = s.profile_url
+  }
+  /* Owner-managed social links (business-info editor) override the
+     OAuth-connection URLs when present. */
+  const ownerLinks = (location?.links ?? {}) as { ordering?: unknown; reservations?: unknown; social?: Record<string, string> }
+  if (ownerLinks.social && typeof ownerLinks.social === 'object') {
+    for (const [k, v] of Object.entries(ownerLinks.social)) {
+      if (v) social[k.toLowerCase()] = v
+    }
   }
 
   // 8. Hero photo (asset tagged 'hero')
@@ -228,6 +236,11 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
       location: location ?? null,
       hours: (location?.hours as WeeklyHours | null) ?? null,
       specialHours: (location?.special_hours as SpecialHoursEntry[] | null) ?? null,
+      /* Owner-managed order + reserve links (social merged above). */
+      links: {
+        ordering: (ownerLinks.ordering as Array<{ label: string; url: string }> | undefined) ?? [],
+        reservations: (ownerLinks.reservations as Array<{ label: string; url: string }> | undefined) ?? [],
+      },
       activePromo,
       upcomingEvents,
       social,

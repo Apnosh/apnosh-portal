@@ -14,10 +14,10 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import {
   Clock, CalendarDays, Phone, UtensilsCrossed, ImageIcon, Tag,
-  Globe, ChevronRight, CheckCircle2,
+  Globe, ChevronRight, CheckCircle2, ShoppingBag, Share2,
 } from 'lucide-react'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
-import { loadBusinessInfo } from './actions'
+import { loadBusinessInfo, type BusinessInfo } from './actions'
 import { getWebsiteConnection } from './website-actions'
 import type { WeeklyHours, DayKey } from '@/lib/gbp-listing'
 
@@ -30,6 +30,16 @@ function hoursSummary(hours: WeeklyHours | undefined): string {
   if (openDays.length === 0) return 'Set your weekly hours'
   if (openDays.length === 7) return 'Open every day'
   return `Open ${openDays.length} days a week`
+}
+
+function orderReserveHint(info: BusinessInfo | undefined): string {
+  const n = (info?.links?.ordering?.length ?? 0) + (info?.links?.reservations?.length ?? 0)
+  return n > 0 ? `${n} link${n > 1 ? 's' : ''}` : 'DoorDash, OpenTable...'
+}
+
+function socialHint(info: BusinessInfo | undefined): string {
+  const n = Object.values(info?.links?.social ?? {}).filter(Boolean).length
+  return n > 0 ? `${n} profile${n > 1 ? 's' : ''}` : 'Instagram, TikTok...'
 }
 
 export default async function BusinessInfoPage() {
@@ -72,6 +82,16 @@ export default async function BusinessInfoPage() {
       icon: Tag, label: 'Cuisine & amenities', color: 'bg-cyan-500',
       hint: 'Categories, parking',
       href: '/dashboard/local-seo/listing',
+    },
+    {
+      icon: ShoppingBag, label: 'Order & reserve', color: 'bg-orange-500',
+      hint: orderReserveHint(info),
+      href: '/dashboard/business-info/links',
+    },
+    {
+      icon: Share2, label: 'Social links', color: 'bg-fuchsia-500',
+      hint: socialHint(info),
+      href: '/dashboard/business-info/links',
     },
   ]
 
