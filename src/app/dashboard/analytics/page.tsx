@@ -122,11 +122,7 @@ export default function ClientAnalyticsPage() {
           AI insights. Built mobile-first; desktop falls through to
           the original chart-heavy layout below. */}
       <div className="lg:hidden">
-        <MobileAnalytics
-          data={data}
-          loading={loading}
-          businessName={business?.name ?? undefined}
-        />
+        <MobileAnalytics />
       </div>
 
       <div className="hidden lg:block max-w-6xl mx-auto space-y-6">

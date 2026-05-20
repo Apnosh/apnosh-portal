@@ -3,41 +3,39 @@
 /**
  * Mobile analytics — visually-rich, scannable, owner-grade.
  *
+ * Pulls data from getGbpAnalytics() via a server-action call. This
+ * is the same fetcher /dashboard/local-seo/analytics uses and works
+ * with the client_users path (gbp_metrics keyed by client_id) rather
+ * than the legacy businesses-table path the desktop view uses.
+ *
  * Layout:
  *   Header: title + period picker (7d / 30d / 90d)
- *   Hero: owner-chosen primary metric, large number, animated sparkline
- *   Where they found you: source breakdown with horizontal bars
- *   Actions: 3-up grid of action counters with mini sparklines
+ *   Hero: total reach number, animated sparkline
+ *   Where they found you: source breakdown
+ *   Actions: 3-up grid of action counters
  *   Reviews: rating + new-review count + distribution
  *   Social: top post + 3 metric tiles
- *   AI insights: 2-3 narrative-style observations
+ *   AI insights: 2-3 narrative observations
  *
- * All charts are inline SVG — no chart library imports, keeps the
- * mobile bundle lean. Sparklines, horizontal bars, rating dots, and
- * gradient backgrounds are all hand-rolled.
+ * All charts are inline SVG — no chart library imports.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import {
   ArrowUpRight, ArrowDownRight, Search, Phone, MapPin, Globe,
   Star, TrendingUp, Eye, Heart, Sparkles, Users, Calendar,
   ChevronRight, Settings2,
 } from 'lucide-react'
-import type { GBPMonthlyData } from '@/types/database'
+import { useClient } from '@/lib/client-context'
+import { getGbpAnalytics, type AnalyticsSummary, type AnalyticsRange } from '@/lib/dashboard/get-gbp-analytics'
 
 type Period = '7d' | '30d' | '90d'
 
-interface Props {
-  data: GBPMonthlyData[]
-  loading: boolean
-  businessName?: string
-}
-
-const PERIODS: Array<{ key: Period; label: string; days: number }> = [
-  { key: '7d',  label: '7d',  days: 7 },
-  { key: '30d', label: '30d', days: 30 },
-  { key: '90d', label: '90d', days: 90 },
+const PERIODS: Array<{ key: Period; label: string }> = [
+  { key: '7d',  label: '7d' },
+  { key: '30d', label: '30d' },
+  { key: '90d', label: '90d' },
 ]
 
 /* Helpers */
@@ -56,74 +54,56 @@ function pctChange(curr: number, prev: number): { delta: string; up: boolean | n
   return { delta: `${sign}${d.toFixed(1)}%`, up: d > 0 ? true : d < 0 ? false : null }
 }
 
-/* Aggregate the monthly rows into per-period totals + period-over-period delta + sparkline series. */
-function aggregateData(rows: GBPMonthlyData[], days: number) {
-  /* Treat each monthly row as a single data point. For a more accurate
-     daily picture we'd query gbp_metrics_daily, but monthly is what's
-     wired in this hook. Pick the most recent N months based on days. */
-  const months = Math.max(1, Math.ceil(days / 30))
-  const sorted = [...rows].sort((a, b) =>
-    a.year === b.year ? a.month - b.month : a.year - b.year,
-  )
-  const recent = sorted.slice(-months)
-  const prior = sorted.slice(-(months * 2), -months)
-
-  const sum = (key: keyof GBPMonthlyData) =>
-    recent.reduce((s, r) => s + (Number(r[key] ?? 0) || 0), 0)
-  const sumPrior = (key: keyof GBPMonthlyData) =>
-    prior.reduce((s, r) => s + (Number(r[key] ?? 0) || 0), 0)
-
-  const searchTotal = sum('search_mobile') + sum('search_desktop')
-  const mapsTotal = sum('maps_mobile') + sum('maps_desktop')
-  const totalViews = searchTotal + mapsTotal
-  const directions = sum('directions')
-  const calls = sum('calls')
-  const websiteClicks = sum('website_clicks')
-
-  const totalViewsPrior = sumPrior('search_mobile') + sumPrior('search_desktop')
-    + sumPrior('maps_mobile') + sumPrior('maps_desktop')
-
-  /* Build a sparkline series of total-views per month for the recent
-     window. Pad to at least 7 points for a smoother visual. */
-  const series = recent.map(r =>
-    (Number(r.search_mobile ?? 0) || 0)
-    + (Number(r.search_desktop ?? 0) || 0)
-    + (Number(r.maps_mobile ?? 0) || 0)
-    + (Number(r.maps_desktop ?? 0) || 0)
-  )
-  const sparkline = series.length >= 2 ? series : [...series, ...Array(Math.max(0, 7 - series.length)).fill(0)]
-
-  return {
-    totalViews,
-    totalViewsPrior,
-    searchTotal,
-    mapsTotal,
-    directions,
-    directionsPrior: sumPrior('directions'),
-    calls,
-    callsPrior: sumPrior('calls'),
-    websiteClicks,
-    websiteClicksPrior: sumPrior('website_clicks'),
-    sparkline,
-  }
-}
-
 /* ─── COMPONENT ──────────────────────────────────────────────────── */
 
-export default function MobileAnalytics({ data, loading, businessName }: Props) {
+export default function MobileAnalytics() {
+  const { client, loading: clientLoading } = useClient()
   const [period, setPeriod] = useState<Period>('30d')
-  const periodSpec = PERIODS.find(p => p.key === period)!
+  const [data, setData] = useState<AnalyticsSummary | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [, startTransition] = useTransition()
 
-  const agg = useMemo(() => aggregateData(data, periodSpec.days), [data, periodSpec.days])
-  const totalChange = pctChange(agg.totalViews, agg.totalViewsPrior)
+  useEffect(() => {
+    if (!client?.id) return
+    let cancelled = false
+    setLoading(true)
+    startTransition(async () => {
+      try {
+        const result = await getGbpAnalytics(client.id, period as AnalyticsRange)
+        if (!cancelled) setData(result)
+      } catch (err) {
+        console.error('Failed to load analytics', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })
+    return () => { cancelled = true }
+  }, [client?.id, period])
 
-  if (loading) {
+  if (clientLoading || (loading && !data)) {
     return <SkeletonState />
   }
 
-  const hasData = data.length > 0
+  if (!data) {
+    return <EmptyState />
+  }
 
-  if (!hasData) {
+  /* Derive a 7-point sparkline series from the daily impressions feed.
+     If we have fewer than 7 days, pad with zeros at the start. */
+  const sparkSeries = (() => {
+    const series = data.daily.map(d => d.impressions)
+    return series.length >= 2 ? series : [...Array(Math.max(0, 7 - series.length)).fill(0), ...series]
+  })()
+
+  const totalReach = data.totals.impressions
+  const totalReachPrior = data.prevTotals.impressions
+  const totalChange = pctChange(totalReach, totalReachPrior)
+
+  const searchTotal = data.impressionBreakdown.searchMobile + data.impressionBreakdown.searchDesktop
+  const mapsTotal = data.impressionBreakdown.mapsMobile + data.impressionBreakdown.mapsDesktop
+
+  /* No data at all in the period — show a friendlier empty state. */
+  if (totalReach === 0 && data.totals.directions === 0 && data.totals.calls === 0) {
     return <EmptyState />
   }
 
@@ -134,7 +114,7 @@ export default function MobileAnalytics({ data, loading, businessName }: Props) 
         <div className="flex items-baseline justify-between mb-3">
           <div>
             <h1 className="text-[24px] font-semibold text-ink leading-tight">Analytics</h1>
-            <p className="text-[12px] text-ink-3 mt-0.5">{businessName ?? 'Your performance'}</p>
+            <p className="text-[12px] text-ink-3 mt-0.5">{client?.name ?? 'Your performance'}</p>
           </div>
           <button
             className="text-ink-3 active:text-ink p-1"
@@ -160,31 +140,26 @@ export default function MobileAnalytics({ data, loading, businessName }: Props) 
         </div>
       </div>
 
-      {/* Hero: total customer reach */}
+      {/* Hero */}
       <section className="bg-gradient-to-br from-brand to-brand-dark text-white px-5 pt-6 pb-5 relative overflow-hidden">
-        {/* Subtle decorative gradient orb */}
         <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-white/10 blur-3xl pointer-events-none" />
-
         <div className="relative">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/70 mb-2">
-            Total reach · {periodSpec.label}
+            Total reach · {period}
           </p>
           <p className="text-[56px] font-bold tabular-nums leading-none">
-            {formatNumber(agg.totalViews)}
+            {formatNumber(totalReach)}
           </p>
-          {totalChange.up !== null && (
+          {totalChange.up !== null && totalReachPrior > 0 && (
             <p className={`inline-flex items-center gap-1 text-[14px] font-semibold mt-2 ${totalChange.up ? 'text-emerald-200' : 'text-rose-200'}`}>
               {totalChange.up ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
               {totalChange.delta}
-              <span className="text-white/60 font-normal">vs prior {periodSpec.label}</span>
+              <span className="text-white/60 font-normal">vs prior {period}</span>
             </p>
           )}
-
-          {/* Sparkline */}
           <div className="mt-5">
-            <Sparkline values={agg.sparkline} color="rgba(255,255,255,0.85)" fill="rgba(255,255,255,0.15)" />
+            <Sparkline values={sparkSeries} color="rgba(255,255,255,0.85)" fill="rgba(255,255,255,0.15)" />
           </div>
-
           <p className="text-[11px] text-white/70 mt-3">
             Search views + Maps views combined
           </p>
@@ -198,10 +173,10 @@ export default function MobileAnalytics({ data, loading, businessName }: Props) 
         </p>
         <SourceBars
           items={[
-            { label: 'Google Search', value: agg.searchTotal, color: 'bg-blue-500' },
-            { label: 'Google Maps',   value: agg.mapsTotal,   color: 'bg-emerald-500' },
+            { label: 'Google Search', value: searchTotal, color: 'bg-blue-500' },
+            { label: 'Google Maps',   value: mapsTotal,   color: 'bg-emerald-500' },
           ]}
-          total={agg.totalViews}
+          total={totalReach}
         />
       </section>
 
@@ -214,22 +189,22 @@ export default function MobileAnalytics({ data, loading, businessName }: Props) 
           <ActionTile
             icon={Phone}
             label="Calls"
-            value={agg.calls}
-            delta={pctChange(agg.calls, agg.callsPrior)}
+            value={data.totals.calls}
+            delta={pctChange(data.totals.calls, data.prevTotals.calls)}
             tint="bg-amber-50 text-amber-700"
           />
           <ActionTile
             icon={MapPin}
             label="Directions"
-            value={agg.directions}
-            delta={pctChange(agg.directions, agg.directionsPrior)}
+            value={data.totals.directions}
+            delta={pctChange(data.totals.directions, data.prevTotals.directions)}
             tint="bg-emerald-50 text-emerald-700"
           />
           <ActionTile
             icon={Globe}
             label="Website"
-            value={agg.websiteClicks}
-            delta={pctChange(agg.websiteClicks, agg.websiteClicksPrior)}
+            value={data.totals.websiteClicks}
+            delta={pctChange(data.totals.websiteClicks, data.prevTotals.websiteClicks)}
             tint="bg-blue-50 text-blue-700"
           />
         </div>
@@ -263,25 +238,44 @@ export default function MobileAnalytics({ data, loading, businessName }: Props) 
             icon={Search}
             tint="bg-purple-100 text-purple-700"
             text="You appeared in"
-            highlight={`${formatNumber(agg.searchTotal)} searches`}
-            tail="this period — more than 80% of similar restaurants."
+            highlight={`${formatNumber(searchTotal)} searches`}
+            tail={searchTotal > 0 ? "across Google. Solid search visibility." : "across Google in this window."}
           />
           <InsightItem
             icon={Calendar}
             tint="bg-amber-100 text-amber-700"
-            text="Direction requests up"
-            highlight={pctChange(agg.directions, agg.directionsPrior).delta}
-            tail="suggests your Maps pin is working harder than before."
+            text="Direction requests"
+            highlight={pctChange(data.totals.directions, data.prevTotals.directions).delta || '—'}
+            tail={data.totals.directions > 0 ? "vs prior period — real customers heading your way." : "no direction requests this period yet."}
           />
           <InsightItem
             icon={Sparkles}
             tint="bg-emerald-100 text-emerald-700"
             text="Conversion rate"
-            highlight={`${agg.totalViews > 0 ? ((agg.directions + agg.calls) / agg.totalViews * 100).toFixed(1) : '0'}%`}
-            tail="of views became real customers reaching out."
+            highlight={`${totalReach > 0 ? ((data.totals.directions + data.totals.calls) / totalReach * 100).toFixed(1) : '0'}%`}
+            tail="of views turned into real customer actions."
           />
         </ul>
       </section>
+
+      {/* Top queries (if available) */}
+      {data.topQueries.length > 0 && (
+        <section className="px-4 py-5 bg-bg-2 border-t border-ink-6">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3 mb-3">
+            Top searches finding you
+          </p>
+          <ul className="bg-white rounded-2xl border border-ink-6 divide-y divide-ink-7 overflow-hidden">
+            {data.topQueries.slice(0, 5).map((q, i) => (
+              <li key={i} className="flex items-center justify-between px-4 py-3">
+                <span className="text-[13.5px] text-ink truncate flex-1">{q.query}</span>
+                <span className="text-[12.5px] font-semibold text-ink-2 tabular-nums ml-3">
+                  {formatNumber(q.impressions)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Deep dive footer */}
       <section className="px-4 py-5 bg-bg-2">
@@ -302,7 +296,7 @@ export default function MobileAnalytics({ data, loading, businessName }: Props) 
   )
 }
 
-/* ─── CHARTS (inline SVG, no library) ───────────────────────────── */
+/* ─── CHARTS ────────────────────────────────────────────────────── */
 
 function Sparkline({
   values,
@@ -319,7 +313,6 @@ function Sparkline({
     x: i * w,
     y: 100 - ((v - min) / range) * 100,
   }))
-  /* Smooth path using catmull-rom-ish bezier. */
   const path = points.reduce((acc, p, i, arr) => {
     if (i === 0) return `M ${p.x.toFixed(2)} ${p.y.toFixed(2)}`
     const prev = arr[i - 1]
@@ -337,7 +330,6 @@ function Sparkline({
     >
       <path d={areaPath} fill={fill} />
       <path d={path} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      {/* Last-point emphasis dot */}
       {points.length > 0 && (
         <circle
           cx={points[points.length - 1].x}
@@ -414,20 +406,17 @@ function ActionTile({
 }
 
 function ReviewsSnapshot() {
-  /* Static demo data for v1. Phase 2 wires real review aggregates. */
+  /* TODO Phase 2: wire real aggregates from the reviews table. */
   const rating = 4.6
   const newCount = 12
   const newDelta = '+3'
-  /* Distribution: 5-star, 4-star, 3-star, 2-star, 1-star counts. */
   const dist = [42, 18, 5, 2, 1]
   const distTotal = dist.reduce((a, b) => a + b, 0)
 
   return (
     <>
       <div className="flex items-baseline justify-between mb-3">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
-          Reviews
-        </p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">Reviews</p>
         <Link
           href="/dashboard/local-seo/reviews"
           className="text-[12px] font-semibold text-brand-dark active:text-brand"
@@ -450,7 +439,6 @@ function ReviewsSnapshot() {
             {newCount} new this period <span className="text-emerald-700 font-semibold">{newDelta}</span>
           </p>
         </div>
-        {/* Distribution bars */}
         <div className="flex-1 space-y-1">
           {dist.map((count, i) => {
             const star = 5 - i
@@ -476,13 +464,11 @@ function ReviewsSnapshot() {
 }
 
 function SocialSnapshot() {
-  /* Static demo data for v1. Phase 2 wires real social metrics. */
+  /* TODO Phase 2: wire social_metrics. */
   return (
     <>
       <div className="flex items-baseline justify-between mb-3">
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
-          Social performance
-        </p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">Social performance</p>
         <Link
           href="/dashboard/social"
           className="text-[12px] font-semibold text-brand-dark active:text-brand"
@@ -490,8 +476,6 @@ function SocialSnapshot() {
           Open social
         </Link>
       </div>
-
-      {/* Top post card */}
       <div className="bg-gradient-to-br from-pink-50 to-amber-50 border border-amber-100 rounded-2xl p-4 mb-3">
         <div className="flex items-start gap-3">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 via-pink-500 to-amber-400 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
@@ -513,23 +497,17 @@ function SocialSnapshot() {
           </div>
         </div>
       </div>
-
-      {/* 3-up metric tiles */}
       <div className="grid grid-cols-3 gap-3">
-        <SocialTile icon={Eye}        label="Reach"      value={1247} delta="+42%" />
-        <SocialTile icon={Heart}      label="Engagement" value="4.2%" delta="+0.8" suffix="" />
-        <SocialTile icon={Users}      label="Followers"  value={24}   delta="+12" />
+        <SocialTile icon={Eye}   label="Reach"      value={1247} delta="+42%" />
+        <SocialTile icon={Heart} label="Engagement" value="4.2%" delta="+0.8" suffix="" />
+        <SocialTile icon={Users} label="Followers"  value={24}   delta="+12" />
       </div>
     </>
   )
 }
 
 function SocialTile({
-  icon: Icon,
-  label,
-  value,
-  delta,
-  suffix,
+  icon: Icon, label, value, delta, suffix,
 }: {
   icon: React.ComponentType<{ className?: string }>
   label: string
@@ -576,8 +554,6 @@ function InsightItem({
   )
 }
 
-/* ─── States ─────────────────────────────────────────────────────── */
-
 function SkeletonState() {
   return (
     <div className="pb-tabbar -mx-4 -mt-4 lg:mx-0 lg:mt-0 space-y-3 p-4">
@@ -596,7 +572,7 @@ function SkeletonState() {
 
 function EmptyState() {
   return (
-    <div className="px-4 py-12 text-center">
+    <div className="px-4 py-12 text-center -mx-4 -mt-4 lg:mx-0 lg:mt-0">
       <div className="w-16 h-16 rounded-full bg-brand-tint mx-auto mb-4 flex items-center justify-center">
         <TrendingUp className="w-7 h-7 text-brand-dark" />
       </div>
