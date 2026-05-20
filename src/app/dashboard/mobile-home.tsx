@@ -1,29 +1,21 @@
 'use client'
 
 /**
- * Mobile home — operator-grade, calm, action-first.
+ * Mobile home — Apnosh design-system look (radical typography minimalism).
  *
- * Restaurant owners are operators, not players. No streaks, no scores,
- * no badges. The screen answers, in order:
+ * Matches the Claude Design prototype: Cal Sans display numerals, a large
+ * hero metric with an edge-to-edge trend chart and a range selector, then
+ * quiet full-width row lists separated by hairline dividers. No colored
+ * icon tiles, no cards. Type, spacing, and a single brand accent do the
+ * work. 22px edge padding, generous vertical rhythm.
  *
- *   1. How am I doing?      — the hero metric + trend chart (Robinhood-style)
- *   2. Is anything on me?   — Needs you (the daily action list)
- *   3. What's coming up?    — Next 7 days (the planning view)
- *   4. What did I get?      — one quiet "Apnosh shipped" line (proof of value)
- *   5. Who has my back?     — the strategist line
- *
- * Design: cardless and airy. Sections are separated by whitespace and
- * hairline dividers, not nested boxes, so content reads big and clean.
- * The owner can switch the headline metric; the choice persists in
- * localStorage for v1.
+ * Answers two things at a glance: how am I doing (hero) and what's on me
+ * (Needs you), with a compact "This week" list linking to the detail tabs.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import {
-  ChevronRight, ChevronDown,
-  Star, Sparkles, CheckCircle2, Plug, Calendar as CalendarIcon, Settings2,
-} from 'lucide-react'
+import { ChevronRight, ChevronDown } from 'lucide-react'
 
 interface AgendaItem {
   id: string
@@ -97,24 +89,7 @@ const RANGE_SUFFIX: Record<RangeKey, string> = {
 
 const STORAGE_KEY_METRIC = 'apnosh:home:primaryMetric'
 
-const TYPE_ICONS: Record<AgendaItem['type'], React.ComponentType<{ className?: string }>> = {
-  review:     Star,
-  approval:   CheckCircle2,
-  connection: Plug,
-  draft:      Sparkles,
-  task:       CalendarIcon,
-  suggestion: Sparkles,
-}
-
-function greeting(): string {
-  const h = new Date().getHours()
-  if (h < 12) return 'Good morning'
-  if (h < 18) return 'Good afternoon'
-  return 'Good evening'
-}
-
 export default function MobileHome({
-  displayName,
   agenda,
   pulse,
   metricHistory,
@@ -138,22 +113,12 @@ export default function MobileHome({
     try { localStorage.setItem(STORAGE_KEY_METRIC, m) } catch { /* ignore */ }
   }
 
-  const firstName = displayName.split(' ')[0]
-
-  /* Needs you — the action core. Hide the low-urgency noise; show the
-     few that actually want a decision. */
-  const topNeeds = useMemo(
-    () => agenda.filter(a => a.urgency !== 'low').slice(0, 3),
-    [agenda],
-  )
-
+  /* Needs you — the action core. The few items that want a decision. */
+  const topNeeds = agenda.filter(a => a.urgency !== 'low').slice(0, 4)
   const shippedCount = weekly.generatedThisWeek ?? weekly.items.length
 
   return (
-    <div className="px-5 pt-5 pb-3 space-y-8">
-      {/* Quiet greeting — the hero number leads, not the greeting */}
-      <p className="text-[13px] text-ink-3">{greeting()}, {firstName}</p>
-
+    <div className="px-[22px] pt-4 pb-5 space-y-9">
       {/* Hero metric + trend chart */}
       <Hero
         metric={primaryMetric}
@@ -166,117 +131,46 @@ export default function MobileHome({
         onSwitch={() => setCustomizeOpen(true)}
       />
 
-      {/* Needs you — the daily action list, right under the hero */}
+      {/* Needs you — pure type rows, dividers, no icon tiles */}
       {topNeeds.length > 0 && (
         <section>
-          <SectionHead
-            title={`Needs you${totalNeeds > 0 ? ` · ${totalNeeds}` : ''}`}
-            href="/dashboard/inbox"
-          />
-          <ul className="divide-y divide-ink-7">
-            {topNeeds.map(item => {
-              const Icon = TYPE_ICONS[item.type] ?? Sparkles
-              return (
-                <li key={item.id}>
-                  <Link
-                    href={item.href}
-                    prefetch={false}
-                    className="flex items-center gap-3.5 py-3.5 min-h-[56px] active:opacity-60"
-                  >
-                    <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-ink-7 text-ink-2 flex-shrink-0">
-                      <Icon className="w-[17px] h-[17px]" />
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14.5px] font-semibold text-ink leading-snug line-clamp-1">
-                        {item.label}
-                      </p>
-                      {item.detail && (
-                        <p className="text-[12px] text-ink-3 mt-0.5 line-clamp-1">{item.detail}</p>
-                      )}
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-ink-4 flex-shrink-0" />
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        </section>
-      )}
-
-      {/* Next 7 days — the planning view */}
-      {comingUp.length > 0 && (
-        <section>
-          <SectionHead title="Next 7 days" href="/dashboard/calendar" />
-          <ul className="divide-y divide-ink-7">
-            {comingUp.slice(0, 3).map((item, i) => (
-              <li key={i} className="flex items-center gap-3.5 py-3.5 min-h-[52px]">
-                <div className="flex flex-col items-center justify-center w-10 flex-shrink-0">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-ink-3 leading-none">
-                    {weekdayLabel(item.daysUntil)}
-                  </span>
-                  <span className="text-[19px] font-semibold text-ink leading-none mt-0.5 tabular-nums">
-                    {dayOfMonth(item.date)}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-semibold text-ink leading-snug line-clamp-1">
+          <Eyebrow>{`Needs you${totalNeeds > 0 ? ` · ${totalNeeds}` : ''}`}</Eyebrow>
+          <ul className="divide-y divide-ink-6">
+            {topNeeds.map(item => (
+              <li key={item.id}>
+                <Link
+                  href={item.href}
+                  prefetch={false}
+                  className="flex items-center gap-3 py-4 active:opacity-50"
+                >
+                  <span className="flex-1 min-w-0 text-[15.5px] font-medium text-ink leading-snug line-clamp-1">
                     {item.label}
-                  </p>
-                  {item.hook && (
-                    <p className="text-[12px] text-ink-3 mt-0.5 line-clamp-1">{item.hook}</p>
-                  )}
-                </div>
+                  </span>
+                  <ChevronRight className="w-[18px] h-[18px] text-ink-4 flex-shrink-0" />
+                </Link>
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      {/* Apnosh shipped — one quiet proof-of-value line */}
-      {shippedCount > 0 && (
-        <Link
-          href="/dashboard/briefs"
-          className="flex items-center gap-2.5 py-1 active:opacity-60"
-        >
-          <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-brand-tint text-brand-dark flex-shrink-0">
-            <Sparkles className="w-[17px] h-[17px]" />
-          </span>
-          <p className="flex-1 text-[14px] font-semibold text-ink leading-snug">
-            Apnosh shipped {shippedCount} {shippedCount === 1 ? 'thing' : 'things'} this week
-          </p>
-          <ChevronRight className="w-4 h-4 text-ink-4 flex-shrink-0" />
-        </Link>
-      )}
-
-      {/* Strategist line */}
-      {strategist && (
-        <section className="pt-1">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-3 mb-1.5">
-            {strategist.firstName}, your strategist
-          </p>
-          <p className="text-[13px] text-ink-2 leading-snug">
-            {strategistNote({ totalNeeds })}
-          </p>
-          <Link
-            href={`/dashboard/messages?to=${strategist.id}`}
-            className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-brand-dark active:text-brand mt-2"
-          >
-            Send a message
-            <ChevronRight className="w-3.5 h-3.5" />
-          </Link>
+      {/* This week — compact links into the detail tabs */}
+      {(shippedCount > 0 || comingUp.length > 0 || strategist) && (
+        <section>
+          <Eyebrow>This week</Eyebrow>
+          <ul className="divide-y divide-ink-6">
+            {shippedCount > 0 && (
+              <RowLink href="/dashboard/briefs" label={`${shippedCount} shipped`} />
+            )}
+            {comingUp.length > 0 && (
+              <RowLink href="/dashboard/calendar" label={`${comingUp.length} coming up`} />
+            )}
+            {strategist && (
+              <RowLink href={`/dashboard/messages?to=${strategist.id}`} label={strategist.firstName} />
+            )}
+          </ul>
         </section>
       )}
-
-      {/* Customize — subtle, bottom */}
-      <div className="pt-1">
-        <button
-          onClick={() => setCustomizeOpen(true)}
-          className="w-full inline-flex items-center justify-center gap-1.5 text-[12px] font-semibold text-ink-3 active:text-ink py-3"
-        >
-          <Settings2 className="w-3.5 h-3.5" />
-          Customize home
-        </button>
-      </div>
 
       {customizeOpen && (
         <CustomizeSheet
@@ -286,6 +180,25 @@ export default function MobileHome({
         />
       )}
     </div>
+  )
+}
+
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-3 mb-1.5">
+      {children}
+    </p>
+  )
+}
+
+function RowLink({ href, label }: { href: string; label: string }) {
+  return (
+    <li>
+      <Link href={href} className="flex items-center py-4 active:opacity-50">
+        <span className="flex-1 text-[15.5px] font-medium text-ink">{label}</span>
+        <ChevronRight className="w-[18px] h-[18px] text-ink-4 flex-shrink-0" />
+      </Link>
+    </li>
   )
 }
 
@@ -305,8 +218,6 @@ function Hero({
   const [range, setRange] = useState<RangeKey>(() =>
     available.includes('1W') ? '1W' : (available[0] ?? '1W'),
   )
-  /* Keep the selected range valid when the metric (and thus its
-     available ranges) changes. */
   useEffect(() => {
     if (available.length && !available.includes(range)) {
       setRange(available.includes('1W') ? '1W' : (available[0] ?? '1W'))
@@ -327,7 +238,7 @@ function Hero({
     <section>
       <button
         onClick={onSwitch}
-        className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.16em] text-ink-3 active:text-ink"
+        className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-3 active:text-ink"
       >
         {labels.headline}
         <ChevronDown className="w-3.5 h-3.5" />
@@ -336,7 +247,7 @@ function Hero({
       {hasData ? (
         <>
           <Link href="/dashboard/analytics" className="block active:opacity-70">
-            <p className="text-[60px] font-bold text-ink tabular-nums leading-[0.95] tracking-tight mt-1.5">
+            <p className="font-cal text-[84px] font-semibold text-ink tabular-nums leading-[0.9] mt-1">
               {value}
             </p>
             {delta ? (
@@ -348,20 +259,19 @@ function Hero({
                 {suffix && <span className="text-ink-3 font-normal">{suffix}</span>}
               </p>
             ) : (
-              <p className="text-[12.5px] text-ink-4 mt-2">{labels.sub}</p>
+              <p className="text-[13px] text-ink-4 mt-2.5">{labels.sub}</p>
             )}
 
             {series.length >= 2 && (
-              <div className="mt-5">
+              <div className="mt-6 -mx-[22px]">
                 <HeroChart values={series} up={up} />
               </div>
             )}
           </Link>
 
-          {/* Range selector — outside the Link so taps switch range
-              instead of opening analytics. */}
+          {/* Range selector — outside the Link so taps switch range. */}
           {showSelector ? (
-            <div className="flex items-center gap-1.5 mt-4">
+            <div className="flex items-center gap-1 mt-4">
               {available.map(rk => (
                 <button
                   key={rk}
@@ -376,13 +286,13 @@ function Hero({
               ))}
             </div>
           ) : series.length >= 2 ? (
-            <p className="text-[11px] text-ink-4 mt-2">{history ? 'All time' : 'Past 14 days'}</p>
+            <p className="text-[11px] text-ink-4 mt-3">{history ? 'All time' : 'Past 14 days'}</p>
           ) : null}
         </>
       ) : (
         <div className="mt-2">
-          <p className="text-[17px] font-semibold text-ink">No data yet</p>
-          <p className="text-[12.5px] text-ink-3 mt-1">
+          <p className="text-[18px] font-semibold text-ink">No data yet</p>
+          <p className="text-[13px] text-ink-3 mt-1">
             {data.state === 'no-data'
               ? 'Connect your channels to start seeing this.'
               : 'Loading…'}
@@ -393,7 +303,7 @@ function Hero({
   )
 }
 
-/* Small filled triangle delta indicator, Robinhood-style. */
+/* Small filled triangle delta indicator. */
 function Tri({ up }: { up: boolean }) {
   return (
     <svg width="9" height="8" viewBox="0 0 9 8" className="inline-block" aria-hidden="true">
@@ -402,11 +312,9 @@ function Tri({ up }: { up: boolean }) {
   )
 }
 
-/* Robinhood-style chart. Minimal and airy: a clean line with a barely
-   there fill, no axes or gridlines. Brand green when flat or up, muted
-   red when down. */
+/* Edge-to-edge trend chart. Clean line, barely-there fill, no axes. */
 function HeroChart({ values, up }: { values: number[]; up: boolean | null }) {
-  const w = 320, h = 108, pad = 6
+  const w = 360, h = 116, pad = 8
   const min = Math.min(...values)
   const max = Math.max(...values)
   const range = max - min || 1
@@ -430,7 +338,7 @@ function HeroChart({ values, up }: { values: number[]; up: boolean | null }) {
     >
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.10" />
+          <stop offset="0%" stopColor={color} stopOpacity="0.12" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
@@ -446,18 +354,6 @@ function HeroChart({ values, up }: { values: number[]; up: boolean | null }) {
       />
     </svg>
   )
-}
-
-function SectionHead({ title, href }: { title: string; href?: string }) {
-  if (href) {
-    return (
-      <Link href={href} className="flex items-center gap-1 mb-2.5 active:opacity-60">
-        <span className="text-[17px] font-semibold text-ink leading-none">{title}</span>
-        <ChevronRight className="w-[18px] h-[18px] text-ink-4" />
-      </Link>
-    )
-  }
-  return <p className="text-[17px] font-semibold text-ink leading-none mb-2.5">{title}</p>
 }
 
 function CustomizeSheet({
@@ -492,7 +388,7 @@ function CustomizeSheet({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Customize home"
+        aria-label="Choose headline metric"
         className="fixed bottom-0 left-0 right-0 z-[61] bg-white rounded-t-3xl sheet-up safe-bottom max-h-[85vh] flex flex-col"
       >
         <div className="flex justify-center pt-2 pb-1">
@@ -500,71 +396,40 @@ function CustomizeSheet({
         </div>
 
         <div className="flex items-center justify-between px-5 py-2">
-          <h2 className="text-[17px] font-semibold text-ink">Customize home</h2>
+          <h2 className="text-[17px] font-semibold text-ink">Headline metric</h2>
           <button onClick={onClose} className="text-[13.5px] font-semibold text-brand-dark active:text-brand">
             Done
           </button>
         </div>
 
-        <div className="overflow-y-auto touch-scroll px-4 py-2 space-y-5">
-          <section>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3 mb-1.5 px-1">
-              Headline metric
-            </p>
-            <p className="text-[12px] text-ink-3 mb-3 px-1">
-              The big number at the top of your home.
-            </p>
-            <div className="bg-white border border-ink-6 rounded-2xl divide-y divide-ink-7 overflow-hidden">
-              {(['customers', 'reputation', 'reach'] as MetricKey[]).map(m => {
-                const active = primaryMetric === m
-                const meta = PRIMARY_METRIC_LABELS[m]
-                return (
+        <div className="overflow-y-auto touch-scroll px-[22px] py-2">
+          <ul className="divide-y divide-ink-6">
+            {(['customers', 'reputation', 'reach'] as MetricKey[]).map(m => {
+              const active = primaryMetric === m
+              const meta = PRIMARY_METRIC_LABELS[m]
+              return (
+                <li key={m}>
                   <button
-                    key={m}
                     onClick={() => { onMetricChange(m); onClose() }}
-                    className="w-full flex items-start gap-3 px-4 py-3 text-left active:bg-ink-7 transition-colors"
+                    className="w-full flex items-center gap-3 py-3.5 text-left active:opacity-50"
                   >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[15px] font-medium text-ink">{meta.headline}</p>
+                      <p className="text-[12.5px] text-ink-3 mt-0.5">{meta.sub}</p>
+                    </div>
                     <span className={[
-                      'inline-flex items-center justify-center w-6 h-6 rounded-full border-2 mt-0.5 flex-shrink-0 transition-all',
+                      'inline-flex items-center justify-center w-6 h-6 rounded-full border-2 flex-shrink-0',
                       active ? 'bg-brand border-brand' : 'bg-white border-ink-5',
                     ].join(' ')}>
                       {active && <span className="w-2.5 h-2.5 rounded-full bg-white" />}
                     </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-ink">{meta.headline}</p>
-                      <p className="text-[12px] text-ink-3 mt-0.5">{meta.sub}</p>
-                    </div>
                   </button>
-                )
-              })}
-            </div>
-          </section>
-
-          <p className="text-[11px] text-ink-4 text-center px-4 py-2">
-            More customization coming soon.
-          </p>
+                </li>
+              )
+            })}
+          </ul>
         </div>
       </div>
     </>
   )
-}
-
-function strategistNote({ totalNeeds }: { totalNeeds: number }): string {
-  if (totalNeeds === 0) return "Nothing needs you right now. I'm watching your data and will reach out if something changes."
-  if (totalNeeds === 1) return 'One item is waiting on your decision. A quick tap in the inbox handles it.'
-  if (totalNeeds <= 3) return `${totalNeeds} items are waiting on you. Tap through the inbox when you have a minute.`
-  return `${totalNeeds} items in your inbox. Let me know if you want help prioritizing.`
-}
-
-function weekdayLabel(daysUntil: number): string {
-  if (daysUntil === 0) return 'Today'
-  if (daysUntil === 1) return 'Tmrw'
-  const d = new Date()
-  d.setDate(d.getDate() + daysUntil)
-  return d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
-}
-
-function dayOfMonth(iso: string): string {
-  const d = new Date(iso)
-  return String(d.getDate())
 }

@@ -20,6 +20,20 @@
 html { scroll-behavior: smooth; }
 body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
+/* Cal Sans — display font used by the mobile app screens (hero numbers,
+   big figures) to match the Apnosh design-system look. */
+@font-face {
+  font-family: 'Cal Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/gh/calcom/font/fonts/webfonts/CalSans-SemiBold.woff2') format('woff2');
+}
+.font-cal {
+  font-family: 'Cal Sans', var(--font-inter), system-ui, -apple-system, sans-serif;
+  letter-spacing: -0.01em;
+}
+
 /* ================================================================== */
 /* Dashboard v4 — Robinhood-style metrics dashboard                    */
 /* ================================================================== */
