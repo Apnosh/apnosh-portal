@@ -200,8 +200,14 @@ interface VendorFilterOpts {
   state?: string                // 'WA' etc.
   verifiedOnly?: boolean
   search?: string
-  /* If true, include Apnosh as a featured-first result regardless of
-     category filter (used for "all categories" view). */
+  /* Filter by listing offering type:
+       'packages' = subscription or package listings (multi-service bundles)
+       'services' = one_off or quote listings (individual deliverables)
+     Undefined returns all. */
+  offeringType?: 'packages' | 'services'
+  /* If true, prefer Apnosh-or-verified vendors in the sort order
+     without giving Apnosh a separate visual treatment. The UI no
+     longer "features" Apnosh as a hero; this is purely sort weight. */
   featureApnosh?: boolean
 }
 
