@@ -71,17 +71,6 @@
   .range-pill { color:var(--pill-fg); }
   .range-pill.on { background:var(--pill-active-bg); color:var(--pill-active-fg); }
 
-  /* ───────── MIDNIGHT ───────── */
-  .frame[data-theme="midnight"] {
-    --ink:#f4f5f7; --ink-2:#c4c8cf; --ink-3:#8b909a; --ink-4:#5a5f69;
-    --bg:#0e0f12; --surface:#16181d; --hairline-2:#23252b;
-    --brand:#54d3aa; --brand-d:#54d3aa; --brand-g:rgba(84,211,170,0.16);
-    --chart-line:#54d3aa; --chart-fill:rgba(84,211,170,0.30);
-    --spot-bg:radial-gradient(120% 70% at 50% 0%, rgba(84,211,170,0.14), rgba(14,15,18,0) 60%);
-    --pill-active-bg:rgba(84,211,170,0.18); --pill-active-fg:#54d3aa; --pill-fg:#8b909a;
-  }
-  body:has(.frame[data-theme="midnight"]) { background:#000; }
-
   /* ───────── EDITORIAL ───────── */
   .frame[data-theme="editorial"] {
     --ink:#1c1813; --ink-2:#4a4338; --ink-3:#857b6c; --ink-4:#b6ab98;
@@ -93,26 +82,6 @@
     --pill-active-bg:rgba(47,125,94,0.14); --pill-active-fg:#2f7d5e; --pill-fg:#857b6c;
   }
   body:has(.frame[data-theme="editorial"]) { background:#cfc7b6; }
-
-  /* ───────── BOLD (vibrant gradient hero) ───────── */
-  .frame[data-theme="bold"] { --ink:#15171c; --ink-3:#6e6e73; --hairline-2:#eceef1; }
-  .frame[data-theme="bold"] .spot {
-    background:linear-gradient(150deg, #5fd0a8 0%, #2e9a78 55%, #1f7e8c 110%);
-    color:#fff; margin:0 12px; border-radius:26px; padding:22px 20px 20px !important;
-    box-shadow:0 18px 40px rgba(46,154,120,0.30);
-  }
-  .frame[data-theme="bold"] .spot .t-eyebrow { color:rgba(255,255,255,0.82); }
-  .frame[data-theme="bold"] .spot .hero-num { color:#fff; }
-  .frame[data-theme="bold"] .spot .delta-up { color:#eafff6; }
-  .frame[data-theme="bold"] .spot {
-    --chart-line:#ffffff; --chart-fill:rgba(255,255,255,0.30);
-    --pill-active-bg:rgba(255,255,255,0.22); --pill-active-fg:#fff; --pill-fg:rgba(255,255,255,0.7);
-  }
-  .frame[data-theme="bold"] .spot div[style*="border-top"] { border-top-color:rgba(255,255,255,0.22) !important; }
-  .frame[data-theme="bold"] .spot .tabular { color:#fff !important; }
-  .frame[data-theme="bold"] .spot span[style*="uppercase"] { color:rgba(255,255,255,0.78) !important; }
-  body:has(.frame[data-theme="bold"]) { background:#e7e7ec; }
-  .frame[data-theme="bold"] { padding-top:8px; }
 </style>
 </head>
 <body>
@@ -292,8 +261,8 @@ function SourceBar({ sources }) {
 }
 
 function App() {
-  const [theme, setTheme] = useState("bold");
-  const themes = [ {k:"clean",label:"Clean"}, {k:"bold",label:"Bold"}, {k:"editorial",label:"Editorial"} ];
+  const [theme, setTheme] = useState("clean");
+  const themes = [ {k:"clean",label:"Clean"}, {k:"editorial",label:"Editorial"} ];
   return (
     <div>
       <div className="switcher">
