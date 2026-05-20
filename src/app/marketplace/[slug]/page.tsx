@@ -13,10 +13,11 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import {
   Sparkles, Star, MapPin, ShieldCheck, Building2, ArrowLeft,
-  CheckCircle2, Calendar, Camera, Film, Palette, Code,
+  CheckCircle2, Camera, Film, Palette, Code,
   Megaphone, Mail, Newspaper, Compass,
 } from 'lucide-react'
 import { getVendorBySlug } from '@/lib/dashboard/get-marketplace'
+import BookButton from './book-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -217,13 +218,12 @@ export default async function VendorProfilePage({ params }: PageProps) {
                       Category: {CATEGORY_LABELS[l.category] ?? l.category}
                     </p>
 
-                    <Link
-                      href={`/dashboard/marketplace?book=${vendor.slug}&listing=${l.slug}`}
-                      className="inline-flex items-center gap-1.5 bg-ink text-white text-[12.5px] font-semibold rounded-full px-4 py-2 hover:bg-ink-2 transition"
-                    >
-                      <Calendar className="w-3.5 h-3.5" />
-                      {l.listingType === 'subscription' ? 'Subscribe' : 'Request booking'}
-                    </Link>
+                    <BookButton
+                      vendorSlug={vendor.slug}
+                      listingSlug={l.slug}
+                      listingType={l.listingType}
+                      isApnosh={vendor.isApnosh}
+                    />
                   </div>
                 </div>
               </div>
