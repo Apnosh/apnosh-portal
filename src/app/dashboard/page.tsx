@@ -169,10 +169,36 @@ export default function DashboardPage() {
 
   /* First-run experience: fresh client with no platforms connected
      and no active paid services sees a guided 4-card welcome rather
-     than the empty 'Today' briefing meant for active clients. */
+     than the empty 'Today' briefing meant for active clients.
+     On mobile we render the new MobileHome instead — its own state
+     handling shows the right empty UI without the heavy GettingStarted
+     deck that's tuned for desktop. */
   const noActiveServices = (client?.services_active?.length ?? 0) === 0
-  if (state === 'empty' && noActiveServices) {
-    return <GettingStarted clientName={client?.name ?? ''} />
+  const showGettingStarted = state === 'empty' && noActiveServices
+  if (showGettingStarted) {
+    return (
+      <>
+        <div className="lg:hidden -m-4">
+          <MobileHome
+            displayName={client?.name ?? 'there'}
+            agenda={data?.agenda ?? []}
+            pulse={data?.pulse ?? {
+              customers: { label: 'Customers', state: 'no-data' },
+              reputation: { label: 'Reputation', state: 'no-data' },
+              reach: { label: 'Reach', state: 'no-data' },
+            }}
+            weekly={data?.weekly ?? { items: [] }}
+            strategist={strategist}
+            comingUp={data?.comingUp ?? []}
+            state={state}
+            totalNeeds={totalNeeds}
+          />
+        </div>
+        <div className="hidden lg:block">
+          <GettingStarted clientName={client?.name ?? ''} />
+        </div>
+      </>
+    )
   }
 
   const displayNameForMobile = client?.name ?? 'there'

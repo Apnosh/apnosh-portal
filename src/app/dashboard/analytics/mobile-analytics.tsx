@@ -102,11 +102,6 @@ export default function MobileAnalytics() {
   const searchTotal = data.impressionBreakdown.searchMobile + data.impressionBreakdown.searchDesktop
   const mapsTotal = data.impressionBreakdown.mapsMobile + data.impressionBreakdown.mapsDesktop
 
-  /* No data at all in the period — show a friendlier empty state. */
-  if (totalReach === 0 && data.totals.directions === 0 && data.totals.calls === 0) {
-    return <EmptyState />
-  }
-
   return (
     <div className="pb-tabbar -mx-4 -mt-4 lg:mx-0 lg:mt-0 bg-bg-2 min-h-screen">
       {/* Header */}
