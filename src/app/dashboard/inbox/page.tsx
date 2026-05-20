@@ -38,6 +38,6 @@ export default async function InboxPage({ searchParams }: PageProps) {
     )
   }
 
-  const items = await getInbox(clientId)
+  const items = await getInbox(clientId, user.id)
   return <InboxView items={items} initialFilter={filter ?? 'all'} />
 }

@@ -12,13 +12,15 @@
  * tap target with everything readable without zooming.
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import {
   Search, SlidersHorizontal, MoreHorizontal, ChevronRight,
   CheckCircle2, Star, Calendar, Plug, Image as ImageIcon, Sparkles,
+  CheckCheck,
 } from 'lucide-react'
 import type { InboxItem, InboxItemKind, InboxSource } from '@/lib/dashboard/get-inbox'
+import { markInboxRead, markAllInboxRead } from './actions'
 
 type PrimaryTab = 'all' | 'action' | 'reviews' | 'updates'
 
@@ -101,11 +103,49 @@ export default function InboxView({ items, initialFilter }: Props) {
   })
   const [search, setSearch] = useState('')
   const [showSearch, setShowSearch] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const [chip, setChip] = useState<ChipFilter>({
     unread: false,
     priority: false,
     sources: new Set<InboxSource>(),
   })
+
+  /* Optimistic read set — tracks ids we've marked read in this session
+     so the dot disappears instantly without waiting for the page to
+     re-fetch. Server state catches up via the action's revalidate. */
+  const [readIds, setReadIds] = useState<Set<string>>(() => new Set())
+  const [, startTransition] = useTransition()
+
+  const isUnread = (item: InboxItem) => Boolean(item.unread) && !readIds.has(item.id)
+
+  const markOneRead = (item: InboxItem) => {
+    if (!item.unread || readIds.has(item.id)) return
+    setReadIds(prev => {
+      const next = new Set(prev)
+      next.add(item.id)
+      return next
+    })
+    startTransition(() => {
+      markInboxRead(item.id).catch(() => { /* fire-and-forget; UI already updated */ })
+    })
+  }
+
+  const markAllRead = () => {
+    const unreadIds = items.filter(isUnread).map(i => i.id)
+    if (unreadIds.length === 0) {
+      setMoreOpen(false)
+      return
+    }
+    setReadIds(prev => {
+      const next = new Set(prev)
+      unreadIds.forEach(id => next.add(id))
+      return next
+    })
+    setMoreOpen(false)
+    startTransition(() => {
+      markAllInboxRead(unreadIds).catch(() => { /* fire-and-forget */ })
+    })
+  }
 
   /* Counts for primary tabs — computed from raw items so chips don't
      reduce them. */
@@ -134,7 +174,7 @@ export default function InboxView({ items, initialFilter }: Props) {
     const tab = PRIMARY_TABS.find(t => t.key === primaryTab)
     let out = items.filter(i => tab?.kinds.includes(i.kind))
 
-    if (chip.unread) out = out.filter(i => i.unread)
+    if (chip.unread) out = out.filter(i => i.unread && !readIds.has(i.id))
     if (chip.priority) out = out.filter(i => i.urgency === 'high')
     if (chip.sources.size > 0) out = out.filter(i => chip.sources.has(i.source))
 
@@ -147,7 +187,7 @@ export default function InboxView({ items, initialFilter }: Props) {
     }
 
     return out
-  }, [items, primaryTab, chip, search])
+  }, [items, primaryTab, chip, search, readIds])
 
   const toggleSource = (s: InboxSource) => {
     setChip(prev => {
@@ -186,12 +226,40 @@ export default function InboxView({ items, initialFilter }: Props) {
             >
               <SlidersHorizontal className="w-5 h-5" />
             </button>
-            <button
-              className="w-10 h-10 rounded-full flex items-center justify-center text-ink-2 active:bg-ink-7"
-              aria-label="More"
-            >
-              <MoreHorizontal className="w-5 h-5" />
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setMoreOpen(o => !o)}
+                className="w-10 h-10 rounded-full flex items-center justify-center text-ink-2 active:bg-ink-7"
+                aria-label="More"
+                aria-expanded={moreOpen}
+              >
+                <MoreHorizontal className="w-5 h-5" />
+              </button>
+              {moreOpen && (
+                <>
+                  {/* Backdrop dismisses on tap-outside. */}
+                  <button
+                    type="button"
+                    aria-hidden="true"
+                    onClick={() => setMoreOpen(false)}
+                    className="fixed inset-0 z-30 cursor-default"
+                  />
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full mt-1 z-40 bg-white border border-ink-6 rounded-2xl shadow-lg overflow-hidden min-w-[200px]"
+                  >
+                    <button
+                      onClick={markAllRead}
+                      className="w-full flex items-center gap-2 px-4 py-3 text-left text-[13.5px] font-semibold text-ink-2 active:bg-ink-7 min-h-[44px]"
+                      role="menuitem"
+                    >
+                      <CheckCheck className="w-4 h-4" />
+                      Mark all as read
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -281,7 +349,12 @@ export default function InboxView({ items, initialFilter }: Props) {
       ) : (
         <ul className="bg-white divide-y divide-ink-7">
           {visible.map(item => (
-            <InboxRow key={item.id} item={item} />
+            <InboxRow
+              key={item.id}
+              item={item}
+              isUnread={isUnread(item)}
+              onTap={() => markOneRead(item)}
+            />
           ))}
         </ul>
       )}
@@ -324,7 +397,9 @@ function SourceChip({
   )
 }
 
-function InboxRow({ item }: { item: InboxItem }) {
+function InboxRow({
+  item, isUnread, onTap,
+}: { item: InboxItem; isUnread: boolean; onTap: () => void }) {
   const Icon = KIND_ICONS[item.kind] ?? Sparkles
   const senderName = item.senderName ?? item.title
   const previewText = item.kind === 'review' && item.detail
@@ -340,6 +415,7 @@ function InboxRow({ item }: { item: InboxItem }) {
       <Link
         href={item.href}
         prefetch={false}
+        onClick={onTap}
         className="flex items-start gap-3 px-4 py-3.5 min-h-[72px] active:bg-ink-7 transition-colors"
       >
         {/* Avatar with source badge overlay */}
@@ -371,14 +447,14 @@ function InboxRow({ item }: { item: InboxItem }) {
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2 mb-0.5">
-            <p className={`text-[14.5px] truncate ${item.unread ? 'font-bold text-ink' : 'font-semibold text-ink-2'}`}>
+            <p className={`text-[14.5px] truncate ${isUnread ? 'font-bold text-ink' : 'font-semibold text-ink-2'}`}>
               {senderName}
             </p>
             <span className="text-[11px] text-ink-3 flex-shrink-0">{relativeTime(item.whenIso)}</span>
           </div>
           <p className={[
             'text-[13.5px] line-clamp-2 leading-snug',
-            item.unread ? 'text-ink' : 'text-ink-2',
+            isUnread ? 'text-ink' : 'text-ink-3',
           ].join(' ')}>
             {item.kind === 'review' && item.status && (
               <span className="text-amber-600 mr-1 font-semibold">{item.status}</span>
@@ -397,14 +473,13 @@ function InboxRow({ item }: { item: InboxItem }) {
           </div>
         </div>
 
-        {/* Right side: unread indicator */}
-        {item.unread && (
+        {/* Right side: unread dot OR chevron */}
+        {isUnread ? (
           <span
             className="w-2.5 h-2.5 rounded-full bg-brand flex-shrink-0 mt-2"
             aria-label="Unread"
           />
-        )}
-        {!item.unread && (
+        ) : (
           <ChevronRight className="w-4 h-4 text-ink-4 flex-shrink-0 mt-2" />
         )}
       </Link>

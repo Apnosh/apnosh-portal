@@ -60,8 +60,22 @@ export interface InboxItem {
 
 const URGENCY_RANK: Record<InboxItem['urgency'], number> = { high: 0, medium: 1, low: 2 }
 
-export async function getInbox(clientId: string): Promise<InboxItem[]> {
+export async function getInbox(clientId: string, userId?: string): Promise<InboxItem[]> {
   const admin = createAdminClient()
+
+  /* If we have a userId, fetch this user's read-state set in parallel
+     with the other queries. Items whose composite id is in the set
+     render with unread=false. Without userId (e.g. admin impersonation
+     view) we just treat everything as unread. */
+  const readSetPromise: Promise<Set<string>> = userId
+    ? (async () => {
+        const { data } = await admin
+          .from('user_inbox_read')
+          .select('item_id')
+          .eq('user_id', userId)
+        return new Set((data ?? []).map((r: { item_id: string }) => r.item_id))
+      })()
+    : Promise.resolve(new Set<string>())
 
   const [delivsRow, postsRow, reviewsRow, tasksRow, draftApprovalsRow, connectionsRow] = await Promise.all([
     admin
@@ -297,6 +311,13 @@ export async function getInbox(clientId: string): Promise<InboxItem[]> {
       senderName: label,
       unread: true,
     })
+  }
+
+  /* Apply read state — items whose id is in the user's read set get
+     unread=false. Items default to unread=true at construction time. */
+  const readSet = await readSetPromise
+  for (const item of items) {
+    if (readSet.has(item.id)) item.unread = false
   }
 
   items.sort((a, b) => {
