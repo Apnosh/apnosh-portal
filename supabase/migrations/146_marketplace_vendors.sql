@@ -291,7 +291,7 @@ select
   /* Slug from person_id (short prefix). Profiles likely have a display
      name we can use — fall back to person_id otherwise. */
   'creator-' || substring(cp.person_id::text from 1 for 8),
-  coalesce(p.first_name || ' ' || p.last_name, 'Creator'),
+  coalesce(p.full_name, 'Creator'),
   'individual',
   cp.person_id,
   null,
