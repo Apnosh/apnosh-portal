@@ -25,6 +25,7 @@ import Notifications from '@/components/ui/notifications'
 import Breadcrumbs from '@/components/ui/breadcrumbs'
 import { ClientTabBar } from '@/components/ui/mobile-tab-bar'
 import QuickRequest from '@/components/ui/quick-request'
+import ActionSheet from '@/components/ui/action-sheet'
 import WorkspaceSwitcher from '@/components/dashboard/workspace-switcher'
 import { useUser, signOut } from '@/lib/supabase/hooks'
 
@@ -311,6 +312,7 @@ function HeaderLocationSelector() {
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [actionSheetOpen, setActionSheetOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { data: user, loading: userLoading } = useUser()
   const { client, enrolledServices, loading: clientLoading } = useClient()
@@ -645,13 +647,10 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
             Desktop keeps the full chrome (workspace switcher + location
             selector + messages icon + notifications) since space allows it. */}
         <header className="h-14 bg-white border-b border-ink-6 flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden text-ink-3 hover:text-ink min-h-[44px] min-w-[44px] flex items-center justify-center"
-            aria-label="Open menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
+          {/* Hamburger removed on mobile — the Menu tab in the bottom
+              bar opens the drawer now. Kept hidden so the layout flex
+              spacing stays predictable. Desktop never showed this
+              button anyway (it had lg:hidden). */}
           {/* WorkspaceSwitcher is admin-only on mobile to keep the bar
               uncluttered for regular owners (they have one workspace). */}
           <div className={user?.role === 'admin' ? 'flex items-center gap-2' : 'hidden lg:flex items-center gap-2'}>
@@ -690,7 +689,15 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <QuickRequest />
-      <ClientTabBar inboxBadge={navCounts.reviews + navCounts.approvals} />
+      <ActionSheet
+        open={actionSheetOpen}
+        onClose={() => setActionSheetOpen(false)}
+      />
+      <ClientTabBar
+        inboxBadge={navCounts.reviews + navCounts.approvals}
+        onPlusClick={() => setActionSheetOpen(true)}
+        onMenuClick={() => setSidebarOpen(true)}
+      />
     </div>
   )
 }

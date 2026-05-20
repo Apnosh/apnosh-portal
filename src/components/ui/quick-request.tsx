@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Plus, X, ChevronDown, Upload, CheckCircle2, ArrowRight, Camera, Globe, Video, Mail, Zap } from 'lucide-react'
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -56,6 +57,24 @@ export default function QuickRequest() {
     const t = setTimeout(() => setShowPulse(false), 4000)
     return () => clearTimeout(t)
   }, [])
+
+  /* Deep-link open from the mobile action sheet's "Request content"
+     button. Same pattern as AgentChat's ?chat=open. We strip the
+     param after consuming so refresh doesn't keep re-opening. */
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  useEffect(() => {
+    if (searchParams?.get('request') === 'open') {
+      setOpen(true)
+      setShowPulse(false)
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('request')
+      const next = params.toString()
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   // Auto-close success after 3 seconds
   useEffect(() => {

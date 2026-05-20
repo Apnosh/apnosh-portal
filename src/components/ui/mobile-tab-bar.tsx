@@ -1,63 +1,80 @@
 'use client'
 
 /**
- * Mobile bottom tab bar — 5 thumb-reachable destinations.
+ * Mobile bottom tab bar — 5 items with an elevated center action.
  *
- * Client (restaurant owner):
- *   Home    /dashboard                  Today + score + AI nudge
- *   Inbox   /dashboard/inbox            Unified approvals + reviews + messages
- *                                       + notifications with filter chips
- *   AI      /dashboard/chat             AI strategist chat
- *   Explore /dashboard/marketplace      Find vendors, services, packages
- *   Profile /dashboard/profile          Restaurant + brand + account settings
+ * Layout (client / restaurant owner):
+ *   [Home]  [Inbox]   (+)   [Analytics]  [Menu]
  *
- * Admin path keeps the existing 5 (Overview / Clients / Pipeline /
- * Billing / Reports) for staff.
+ * The center "+" is a FAB-style action button that opens a bottom
+ * sheet of quick actions (Ask AI, Request content, Message strategist,
+ * etc.). It does NOT navigate — it triggers an in-page sheet.
  *
- * Active state is based on path prefix. Badges flow in via props so
- * the parent layout (already polling counts) can light up the Inbox
- * tab when there's pending work.
+ * The rightmost "Menu" tab opens the existing sidebar drawer (the
+ * full nav with 36+ surfaces). It does NOT navigate either.
+ *
+ * Home / Inbox / Analytics are real route destinations.
+ *
+ * Admin path keeps a simpler 5-item navigation bar (no FAB).
  */
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Home, Inbox, Sparkles, Compass, User,
+  Home, Inbox, Plus, BarChart3, Menu,
   LayoutDashboard, Users, Kanban, CreditCard, FileBarChart,
 } from 'lucide-react'
 
-interface Tab {
+interface NavTab {
+  kind: 'nav'
   label: string
   href: string
   icon: typeof Home
-  /* Match strategy:
-       'prefix' = active if pathname starts with href
-       'exact'  = active only when pathname === href */
   match: 'prefix' | 'exact'
 }
 
+interface ActionTab {
+  kind: 'action'
+  label: string
+  icon: typeof Plus
+  action: 'plus' | 'menu'
+}
+
+type Tab = NavTab | ActionTab
+
 const clientTabs: Tab[] = [
-  { label: 'Home',    href: '/dashboard',             icon: Home,      match: 'exact' },
-  { label: 'Inbox',   href: '/dashboard/inbox',       icon: Inbox,     match: 'prefix' },
-  { label: 'AI',      href: '/dashboard/chat',        icon: Sparkles,  match: 'prefix' },
-  { label: 'Explore', href: '/dashboard/marketplace', icon: Compass,   match: 'prefix' },
-  { label: 'Profile', href: '/dashboard/profile',     icon: User,      match: 'prefix' },
+  { kind: 'nav',    label: 'Home',     href: '/dashboard',          icon: Home,      match: 'exact' },
+  { kind: 'nav',    label: 'Inbox',    href: '/dashboard/inbox',    icon: Inbox,     match: 'prefix' },
+  { kind: 'action', label: 'Quick',    icon: Plus, action: 'plus' },
+  { kind: 'nav',    label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, match: 'prefix' },
+  { kind: 'action', label: 'Menu',     icon: Menu, action: 'menu' },
 ]
 
 const adminTabs: Tab[] = [
-  { label: 'Overview', href: '/admin',          icon: LayoutDashboard, match: 'exact' },
-  { label: 'Clients',  href: '/admin/clients',  icon: Users,           match: 'prefix' },
-  { label: 'Pipeline', href: '/admin/pipeline', icon: Kanban,          match: 'prefix' },
-  { label: 'Billing',  href: '/admin/billing',  icon: CreditCard,      match: 'prefix' },
-  { label: 'Reports',  href: '/admin/reports',  icon: FileBarChart,    match: 'prefix' },
+  { kind: 'nav', label: 'Overview', href: '/admin',          icon: LayoutDashboard, match: 'exact' },
+  { kind: 'nav', label: 'Clients',  href: '/admin/clients',  icon: Users,           match: 'prefix' },
+  { kind: 'nav', label: 'Pipeline', href: '/admin/pipeline', icon: Kanban,          match: 'prefix' },
+  { kind: 'nav', label: 'Billing',  href: '/admin/billing',  icon: CreditCard,      match: 'prefix' },
+  { kind: 'nav', label: 'Reports',  href: '/admin/reports',  icon: FileBarChart,    match: 'prefix' },
 ]
 
 interface ClientTabBarProps {
   inboxBadge?: number
+  onPlusClick?: () => void
+  onMenuClick?: () => void
 }
 
-export function ClientTabBar({ inboxBadge = 0 }: ClientTabBarProps) {
-  return <TabBar tabs={clientTabs} badges={{ '/dashboard/inbox': inboxBadge }} />
+export function ClientTabBar({ inboxBadge = 0, onPlusClick, onMenuClick }: ClientTabBarProps) {
+  return (
+    <TabBar
+      tabs={clientTabs}
+      badges={{ '/dashboard/inbox': inboxBadge }}
+      onAction={(a) => {
+        if (a === 'plus') onPlusClick?.()
+        if (a === 'menu') onMenuClick?.()
+      }}
+    />
+  )
 }
 
 export function AdminTabBar() {
@@ -67,13 +84,15 @@ export function AdminTabBar() {
 function TabBar({
   tabs,
   badges = {},
+  onAction,
 }: {
   tabs: Tab[]
   badges?: Record<string, number>
+  onAction?: (action: 'plus' | 'menu') => void
 }) {
   const pathname = usePathname()
 
-  const isActive = (tab: Tab) => {
+  const isActive = (tab: NavTab) => {
     if (tab.match === 'exact') return pathname === tab.href
     return pathname === tab.href || pathname.startsWith(tab.href + '/')
   }
@@ -83,8 +102,54 @@ function TabBar({
       className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur border-t border-ink-6 lg:hidden safe-bottom"
       aria-label="Primary mobile navigation"
     >
-      <div className="flex items-stretch">
-        {tabs.map((tab) => {
+      <div className="flex items-stretch relative">
+        {tabs.map((tab, i) => {
+          if (tab.kind === 'action' && tab.action === 'plus') {
+            /* Elevated center FAB — pokes above the bar via negative
+               top margin + drop shadow. Brand-colored, larger touch
+               target. Opens the bottom sheet. */
+            return (
+              <button
+                key={`fab-${i}`}
+                onClick={() => onAction?.('plus')}
+                aria-label="Quick actions"
+                className="flex-1 flex flex-col items-center justify-end pb-1 min-h-[60px] active:scale-95 transition-transform"
+              >
+                <span
+                  className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-brand text-white shadow-lg shadow-brand/40 -mt-6 mb-1 active:bg-brand-dark transition-colors"
+                  style={{ boxShadow: '0 8px 20px -4px rgba(74,189,152,0.5), 0 0 0 4px white' }}
+                >
+                  <Plus className="w-7 h-7" strokeWidth={2.5} />
+                </span>
+                <span className="text-[10px] leading-none font-semibold text-ink-3">
+                  {tab.label}
+                </span>
+              </button>
+            )
+          }
+
+          if (tab.kind === 'action') {
+            /* Menu button — same shape as a nav item but no href.
+               Triggers the sidebar drawer. */
+            const Icon = tab.icon
+            return (
+              <button
+                key={`action-${tab.action}-${i}`}
+                onClick={() => onAction?.(tab.action)}
+                aria-label={tab.label}
+                className="relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-[60px] active:bg-ink-7/50 transition-colors"
+              >
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-ink-4">
+                  <Icon className="w-[18px] h-[18px]" strokeWidth={2} />
+                </span>
+                <span className="text-[10px] leading-none font-semibold text-ink-4">
+                  {tab.label}
+                </span>
+              </button>
+            )
+          }
+
+          /* Real navigation tab (Home / Inbox / Analytics). */
           const active = isActive(tab)
           const badge = badges[tab.href] ?? 0
           const Icon = tab.icon

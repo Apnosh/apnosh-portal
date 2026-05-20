@@ -1,0 +1,187 @@
+'use client'
+
+/**
+ * ActionSheet — mobile-first bottom sheet for quick actions.
+ *
+ * Triggered by the center "+" FAB in the bottom tab bar. Slides up
+ * from below, blurs the backdrop, dismisses on backdrop tap or
+ * swipe-down. Each action is a large touch target (56px+) with an
+ * icon + label.
+ *
+ * Items can be Links (navigate on tap) or buttons (call a callback).
+ */
+
+import { useEffect } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import {
+  X, Sparkles, MessageCircle, Send, Camera, Image as ImageIcon,
+  ArrowRight, Star, Calendar,
+} from 'lucide-react'
+
+interface ActionSheetProps {
+  open: boolean
+  onClose: () => void
+  strategistId?: string | null
+}
+
+interface SheetAction {
+  key: string
+  icon: typeof Sparkles
+  label: string
+  description: string
+  href: string
+  tint: string
+}
+
+export default function ActionSheet({ open, onClose, strategistId }: ActionSheetProps) {
+  const pathname = usePathname()
+
+  /* Lock body scroll while sheet is open. */
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [open])
+
+  /* Dismiss on Escape. */
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  /* Actions deep-link via URL params where the target component
+     already has a "open me" trigger:
+       ?chat=open    → AgentChat slides in (handled in agent-chat.tsx)
+       ?request=open → QuickRequest opens (handled in quick-request.tsx)
+     For the rest we navigate to a real page. */
+  const actions: SheetAction[] = [
+    {
+      key: 'ai',
+      icon: Sparkles,
+      label: 'Ask Apnosh AI',
+      description: 'Chat with your AI strategist',
+      href: `${pathname}?chat=open`,
+      tint: 'bg-brand-tint text-brand-dark',
+    },
+    {
+      key: 'request',
+      icon: Send,
+      label: 'Request content',
+      description: 'Posts, videos, designs',
+      href: `${pathname}?request=open`,
+      tint: 'bg-purple-50 text-purple-700',
+    },
+    {
+      key: 'message',
+      icon: MessageCircle,
+      label: 'Message your strategist',
+      description: 'Talk to a real human',
+      href: strategistId ? `/dashboard/messages?to=${strategistId}` : '/dashboard/messages',
+      tint: 'bg-blue-50 text-blue-700',
+    },
+    {
+      key: 'post',
+      icon: ImageIcon,
+      label: 'Make a post',
+      description: 'Schedule a social or GBP post',
+      href: '/dashboard/social/calendar?action=new',
+      tint: 'bg-amber-50 text-amber-700',
+    },
+    {
+      key: 'photo',
+      icon: Camera,
+      label: 'Upload photos',
+      description: 'Add to your library',
+      href: '/dashboard/assets?upload=1',
+      tint: 'bg-emerald-50 text-emerald-700',
+    },
+    {
+      key: 'review',
+      icon: Star,
+      label: 'Respond to reviews',
+      description: 'AI drafts ready for approval',
+      href: '/dashboard/local-seo/reviews',
+      tint: 'bg-rose-50 text-rose-700',
+    },
+  ]
+
+  return (
+    <>
+      {/* Backdrop */}
+      <button
+        type="button"
+        aria-label="Close quick actions"
+        onClick={onClose}
+        className="fixed inset-0 z-[60] bg-black/40 sheet-backdrop lg:hidden"
+      />
+
+      {/* Sheet */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Quick actions"
+        className="fixed bottom-0 left-0 right-0 z-[61] bg-white rounded-t-3xl sheet-up safe-bottom lg:hidden max-h-[85vh] flex flex-col"
+      >
+        {/* Grab handle */}
+        <div className="flex justify-center pt-2 pb-1">
+          <div className="w-10 h-1 rounded-full bg-ink-6" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-2">
+          <h2 className="text-[17px] font-semibold text-ink">Quick actions</h2>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-ink-7 text-ink-3 flex items-center justify-center active:bg-ink-6"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Action list */}
+        <ul className="px-3 py-2 overflow-y-auto touch-scroll">
+          {actions.map(a => {
+            const Icon = a.icon
+            return (
+              <li key={a.key}>
+                <Link
+                  href={a.href}
+                  onClick={onClose}
+                  className="flex items-center gap-3 px-3 py-3 rounded-2xl active:bg-ink-7 transition-colors min-h-[64px]"
+                >
+                  <span className={`inline-flex items-center justify-center w-11 h-11 rounded-2xl flex-shrink-0 ${a.tint}`}>
+                    <Icon className="w-5 h-5" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[15px] font-semibold text-ink leading-tight">{a.label}</p>
+                    <p className="text-[12.5px] text-ink-3 mt-0.5">{a.description}</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-ink-4 flex-shrink-0" />
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+
+        {/* Bottom calendar shortcut */}
+        <div className="px-5 pb-4 pt-2 border-t border-ink-7">
+          <Link
+            href="/dashboard/calendar"
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-3 active:text-ink"
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            Open content calendar
+          </Link>
+        </div>
+      </div>
+    </>
+  )
+}
