@@ -5,6 +5,7 @@ import { BarChart3 } from 'lucide-react'
 import { useBusiness } from '@/lib/supabase/hooks'
 import { useClientGBPData } from '@/hooks/useGBPData'
 import { fetchAiAnalysis } from '@/lib/ai-analysis'
+import MobileAnalytics from './mobile-analytics'
 import {
   GBPMetricCard, METRIC_CARD_CONFIGS, METRIC_ICONS,
   GBPChart, DEFAULT_METRICS, VIEWS_METRICS,
@@ -113,7 +114,22 @@ export default function ClientAnalyticsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <>
+      {/* ─── MOBILE ANALYTICS ─────────────────────────────────────
+          Visually-rich operator dashboard for phone. Same data
+          source as the desktop view, presented as a hero metric +
+          channel breakdown + action tiles + reviews + social +
+          AI insights. Built mobile-first; desktop falls through to
+          the original chart-heavy layout below. */}
+      <div className="lg:hidden">
+        <MobileAnalytics
+          data={data}
+          loading={loading}
+          businessName={business?.name ?? undefined}
+        />
+      </div>
+
+      <div className="hidden lg:block max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -157,6 +173,7 @@ export default function ClientAnalyticsPage() {
         </button>
       )}
       <AiAnalysisPanel analysis={aiAnalysis} loading={aiLoading} onRefresh={runAiAnalysis} />
-    </div>
+      </div>
+    </>
   )
 }
