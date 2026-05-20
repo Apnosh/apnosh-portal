@@ -74,7 +74,7 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
   // 4. Primary location
   const { data: location } = await db
     .from('gbp_locations')
-    .select('location_name, address, hours, special_hours')
+    .select('location_name, address, hours, special_hours, profile_description, phone, website')
     .eq('client_id', client.id)
     .eq('status', 'assigned')
     .order('created_at', { ascending: true })
@@ -217,8 +217,12 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
         id: client.id,
         name: client.name,
         slug: client.slug,
-        description: null,
-        website: client.website,
+        /* Description + phone now flow from the business-info editor
+           (writes gbp_locations.profile_description / phone). Fall back
+           to the client-level website. */
+        description: (location?.profile_description as string | null) ?? null,
+        phone: (location?.phone as string | null) ?? null,
+        website: (location?.website as string | null) ?? client.website,
       },
       brand: brand ?? null,
       location: location ?? null,
