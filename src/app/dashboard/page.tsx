@@ -196,6 +196,7 @@ export default function DashboardPage() {
             reputation: { label: 'Reputation', state: 'no-data' },
             reach: { label: 'Reach', state: 'no-data' },
           }}
+          weekly={data?.weekly ?? { items: [] }}
           strategist={strategist}
           comingUp={data?.comingUp ?? []}
           state={state}

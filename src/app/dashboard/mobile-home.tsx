@@ -1,33 +1,29 @@
 'use client'
 
 /**
- * Mobile-only home view (lg: and below).
+ * Mobile home — operator-grade dashboard.
  *
- * Drastically simplified from the desktop dashboard. The phone-using
- * owner gets a 30-second scan from top to bottom:
+ * Restaurant owners are operators, not players. No streaks, no scores,
+ * no badges. This view answers four questions in 30 seconds:
  *
- *   1. Greeting (time-aware) + date
- *   2. Health hero — score-like callout with one big number + delta
- *   3. Needs You — top 3 agenda items as tap-rows
- *   4. This Week — 3-up metric strip (customers / rating / reach)
- *   5. Strategist nudge — compact letter if present
- *   6. Coming Up — next 3 calendar items
- *   7. Footer quick links
+ *   1. What's the number I care about doing? — primary metric block
+ *   2. What's the health of each channel? — health panel
+ *   3. What did Apnosh ship for me? — activity feed with attribution
+ *   4. What needs my eyes? — inbox preview
  *
- * Receives already-computed data + helpers as props so we don't
- * re-fetch or re-derive anything.
+ * The owner picks their primary metric and which channels to show.
+ * Preferences persist in localStorage for v1; we'll back them with
+ * a user_dashboard_layout table in Phase B.
  */
 
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  Sparkles, CheckCircle2, AlertCircle, AlertTriangle, ChevronRight,
-  ArrowUpRight, ArrowDownRight, Star, Users, Eye, MessageCircle,
-  Calendar as CalendarIcon, Plug,
+  ChevronRight, ArrowUpRight, ArrowDownRight,
+  Users, Star, TrendingUp, Globe, Settings2, Sparkles,
+  CheckCircle2, Plug, Calendar as CalendarIcon, MapPin,
 } from 'lucide-react'
 
-/* Local copies of the types from dashboard/page.tsx — keeping inline
-   to avoid coupling the redesign to the desktop file. If the API
-   shape evolves both views update together via that file. */
 interface AgendaItem {
   id: string
   type: 'review' | 'approval' | 'connection' | 'draft' | 'task' | 'suggestion'
@@ -45,6 +41,12 @@ interface PulseCardData {
   delta?: string | null
   up?: boolean | null
   subtitle?: string
+}
+
+interface WeeklyItem {
+  label: string
+  detail?: string
+  icon?: string
 }
 
 interface ComingUpItem {
@@ -66,14 +68,38 @@ interface Props {
   displayName: string
   agenda: AgendaItem[]
   pulse: { customers: PulseCardData; reputation: PulseCardData; reach: PulseCardData }
+  weekly: { items: WeeklyItem[]; generatedThisWeek?: number }
   strategist: PrimaryStrategist | null
   comingUp: ComingUpItem[]
   state: 'empty' | 'partial' | 'steady'
   totalNeeds: number
-  /* Optional Apnosh Score, if we want to pass it down later. NULL for now. */
-  apnoshScore?: number | null
-  scoreDelta?: number | null
 }
+
+type MetricKey = 'customers' | 'reputation' | 'reach'
+type ChannelKey = 'customers' | 'reputation' | 'reach' | 'website'
+
+const PRIMARY_METRIC_LABELS: Record<MetricKey, { headline: string; sub: string }> = {
+  customers:  { headline: 'New customers',          sub: 'Direction requests + calls' },
+  reputation: { headline: 'Reputation',             sub: 'Average rating + new reviews' },
+  reach:      { headline: 'Total reach',            sub: 'Views across your channels' },
+}
+
+const CHANNEL_META: Record<ChannelKey, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
+  customers:  { label: 'Get Found',   icon: MapPin },
+  reputation: { label: 'Reputation',  icon: Star },
+  reach:      { label: 'Social',      icon: TrendingUp },
+  website:    { label: 'Website',     icon: Globe },
+}
+
+const DEFAULT_VISIBLE_CHANNELS: Record<ChannelKey, boolean> = {
+  customers: true,
+  reputation: true,
+  reach: true,
+  website: false, // Hidden by default until we wire website analytics into pulse.
+}
+
+const STORAGE_KEY_METRIC = 'apnosh:home:primaryMetric'
+const STORAGE_KEY_CHANNELS = 'apnosh:home:visibleChannels'
 
 function greeting(): string {
   const h = new Date().getHours()
@@ -85,12 +111,6 @@ function greeting(): string {
 function shortDate(): string {
   const d = new Date()
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
-}
-
-const URGENCY_META: Record<AgendaItem['urgency'], { dot: string; label: string }> = {
-  high:   { dot: 'bg-rose-500',    label: 'High' },
-  medium: { dot: 'bg-amber-500',   label: 'Med' },
-  low:    { dot: 'bg-emerald-500', label: 'Low' },
 }
 
 const TYPE_ICONS: Record<AgendaItem['type'], React.ComponentType<{ className?: string }>> = {
@@ -106,60 +126,138 @@ export default function MobileHome({
   displayName,
   agenda,
   pulse,
+  weekly,
   strategist,
   comingUp,
-  state,
   totalNeeds,
-  apnoshScore = null,
-  scoreDelta = null,
 }: Props) {
-  const top3 = agenda.filter(a => a.urgency !== 'low').slice(0, 3)
+  /* Customization state — persisted in localStorage. Initialized
+     lazily from storage on mount so we don't cascade re-renders from
+     an effect-driven hydration. SSR-safe via typeof window check. */
+  const [primaryMetric, setPrimaryMetric] = useState<MetricKey>(() => {
+    if (typeof window === 'undefined') return 'customers'
+    try {
+      const m = localStorage.getItem(STORAGE_KEY_METRIC) as MetricKey | null
+      if (m && m in PRIMARY_METRIC_LABELS) return m
+    } catch { /* ignore */ }
+    return 'customers'
+  })
+  const [visibleChannels, setVisibleChannels] = useState<Record<ChannelKey, boolean>>(() => {
+    if (typeof window === 'undefined') return DEFAULT_VISIBLE_CHANNELS
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_CHANNELS)
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<Record<ChannelKey, boolean>>
+        return { ...DEFAULT_VISIBLE_CHANNELS, ...parsed }
+      }
+    } catch { /* ignore */ }
+    return DEFAULT_VISIBLE_CHANNELS
+  })
+  const [customizeOpen, setCustomizeOpen] = useState(false)
+
+  const updateMetric = (m: MetricKey) => {
+    setPrimaryMetric(m)
+    try { localStorage.setItem(STORAGE_KEY_METRIC, m) } catch { /* ignore */ }
+  }
+  const updateChannel = (c: ChannelKey, v: boolean) => {
+    const next = { ...visibleChannels, [c]: v }
+    setVisibleChannels(next)
+    try { localStorage.setItem(STORAGE_KEY_CHANNELS, JSON.stringify(next)) } catch { /* ignore */ }
+  }
+
   const firstName = displayName.split(' ')[0]
+
+  /* Build the activity feed from weekly.items. Caps at 5. */
+  const activityItems = useMemo(() => weekly.items.slice(0, 5), [weekly.items])
+
+  /* Top inbox items shown inline (max 2). Owner taps through to full Inbox. */
+  const topInbox = useMemo(
+    () => agenda.filter(a => a.urgency !== 'low').slice(0, 2),
+    [agenda],
+  )
+
+  /* Channels to render in the health panel, filtered by user preference
+     AND data availability. A channel with no-data state is hidden so
+     we don't show a row of dashes. */
+  const channelsToShow: ChannelKey[] = (
+    ['customers', 'reputation', 'reach', 'website'] as ChannelKey[]
+  ).filter(c => visibleChannels[c]).filter(c => {
+    if (c === 'website') return false /* not wired in pulse yet */
+    return pulse[c as MetricKey].state === 'live'
+  })
 
   return (
     <div className="px-4 pt-4 pb-2 space-y-5">
       {/* Greeting */}
       <div>
-        <h1 className="text-[24px] font-semibold text-ink leading-tight">
+        <p className="text-[12px] text-ink-3">{shortDate()}</p>
+        <h1 className="text-[22px] font-semibold text-ink leading-tight mt-0.5">
           {greeting()}, {firstName}
         </h1>
-        <p className="text-[13px] text-ink-3 mt-0.5">{shortDate()}</p>
       </div>
 
-      {/* Health hero — score or "all good" state */}
-      <ScoreHero score={apnoshScore} delta={scoreDelta} totalNeeds={totalNeeds} state={state} />
+      {/* Primary metric block — the headline number */}
+      <PrimaryMetric
+        metric={primaryMetric}
+        pulse={pulse}
+        onTap={() => setCustomizeOpen(true)}
+      />
 
-      {/* Needs You */}
-      {top3.length > 0 && (
+      {/* Health panel — channel-level KPIs */}
+      {channelsToShow.length > 0 && (
         <section>
           <div className="flex items-baseline justify-between mb-2">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
-              Needs you ({totalNeeds})
+              This week
+            </p>
+            <Link
+              href="/dashboard/analytics"
+              className="text-[12px] font-semibold text-brand-dark active:text-brand"
+            >
+              Open analytics
+            </Link>
+          </div>
+          <div className="bg-white border border-ink-6 rounded-2xl divide-y divide-ink-7 overflow-hidden">
+            {channelsToShow.map(c => (
+              <ChannelRow
+                key={c}
+                channel={c}
+                pulse={c === 'website' ? null : pulse[c as MetricKey]}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Inbox preview */}
+      {topInbox.length > 0 && (
+        <section>
+          <div className="flex items-baseline justify-between mb-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
+              Needs your eyes ({totalNeeds})
             </p>
             <Link
               href="/dashboard/inbox"
               className="text-[12px] font-semibold text-brand-dark active:text-brand"
             >
-              See all
+              Open inbox
             </Link>
           </div>
           <ul className="bg-white border border-ink-6 rounded-2xl divide-y divide-ink-7 overflow-hidden">
-            {top3.map(item => {
+            {topInbox.map(item => {
               const Icon = TYPE_ICONS[item.type] ?? Sparkles
-              const meta = URGENCY_META[item.urgency]
               return (
                 <li key={item.id}>
                   <Link
                     href={item.href}
                     prefetch={false}
-                    className="flex items-center gap-3 px-4 py-3 min-h-[60px] active:bg-ink-7 transition-colors"
+                    className="flex items-center gap-3 px-4 py-3 min-h-[56px] active:bg-ink-7"
                   >
-                    <span className={`w-1 h-9 rounded-full ${meta.dot} flex-shrink-0`} />
                     <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-ink-7 text-ink-2 flex-shrink-0">
                       <Icon className="w-[18px] h-[18px]" />
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-ink leading-snug line-clamp-1">
+                      <p className="text-[13.5px] font-semibold text-ink leading-snug line-clamp-1">
                         {item.label}
                       </p>
                       {item.detail && (
@@ -177,69 +275,60 @@ export default function MobileHome({
         </section>
       )}
 
-      {top3.length === 0 && state !== 'empty' && (
-        <section className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-start gap-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[14px] font-semibold text-ink">All caught up</p>
-            <p className="text-[12.5px] text-ink-2 mt-0.5">
-              Nothing needs you right now. Nice work.
+      {/* Activity feed — what Apnosh shipped this week */}
+      {activityItems.length > 0 && (
+        <section>
+          <div className="flex items-baseline justify-between mb-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
+              Apnosh shipped {weekly.generatedThisWeek ?? activityItems.length} things this week
             </p>
+            <Link
+              href="/dashboard/briefs"
+              className="text-[12px] font-semibold text-brand-dark active:text-brand"
+            >
+              See all
+            </Link>
           </div>
+          <ul className="bg-white border border-ink-6 rounded-2xl divide-y divide-ink-7 overflow-hidden">
+            {activityItems.map((item, i) => (
+              <li key={i} className="px-4 py-3 min-h-[56px]">
+                <div className="flex items-start gap-3">
+                  <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-tint text-brand-dark flex-shrink-0">
+                    <Sparkles className="w-[18px] h-[18px]" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13.5px] font-semibold text-ink leading-snug">
+                      {item.label}
+                    </p>
+                    {item.detail && (
+                      <p className="text-[12px] text-ink-2 mt-1 leading-snug">
+                        → {item.detail}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
-      {/* This week — 3-up metric strip */}
-      <section>
-        <div className="flex items-baseline justify-between mb-2">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
-            This week
+      {/* Strategist line (no avatar, no fluff — operator tone) */}
+      {strategist && (
+        <section className="bg-white border border-ink-6 rounded-2xl p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3 mb-1.5">
+            Your strategist · {strategist.firstName}
+          </p>
+          <p className="text-[13px] text-ink-2 leading-snug">
+            {strategistNote({ totalNeeds })}
           </p>
           <Link
-            href="/dashboard/analytics"
-            className="text-[12px] font-semibold text-brand-dark active:text-brand"
+            href={`/dashboard/messages?to=${strategist.id}`}
+            className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-dark active:text-brand mt-2"
           >
-            Open analytics
+            Send a message
+            <ChevronRight className="w-3.5 h-3.5" />
           </Link>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          <MetricTile icon={Users}        label="Customers"  pulse={pulse.customers} />
-          <MetricTile icon={Star}         label="Reputation" pulse={pulse.reputation} />
-          <MetricTile icon={Eye}          label="Reach"      pulse={pulse.reach} />
-        </div>
-      </section>
-
-      {/* Strategist nudge */}
-      {strategist && (
-        <section className="bg-gradient-to-br from-brand-tint/50 to-white border border-brand/20 rounded-2xl p-4">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-full bg-brand text-white text-[13px] font-bold flex items-center justify-center flex-shrink-0">
-              {strategist.initials}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-dark mb-1">
-                {strategist.firstName} · Your strategist
-              </p>
-              <p className="text-[13.5px] text-ink leading-snug">
-                {nudgeMessage({ state, totalNeeds, firstName })}
-              </p>
-              <div className="flex gap-2 mt-3">
-                <Link
-                  href={`/dashboard/messages?to=${strategist.id}`}
-                  className="inline-flex items-center gap-1 bg-ink text-white text-[12px] font-semibold rounded-full px-3 py-1.5 active:bg-ink-2"
-                >
-                  <MessageCircle className="w-3.5 h-3.5" />
-                  Reply
-                </Link>
-                <Link
-                  href="/dashboard/weekly-briefs"
-                  className="inline-flex items-center gap-1 bg-white border border-ink-6 text-ink-2 text-[12px] font-semibold rounded-full px-3 py-1.5 active:bg-ink-7"
-                >
-                  This week&apos;s brief
-                </Link>
-              </div>
-            </div>
-          </div>
         </section>
       )}
 
@@ -248,7 +337,7 @@ export default function MobileHome({
         <section>
           <div className="flex items-baseline justify-between mb-2">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
-              Coming up
+              Next 7 days
             </p>
             <Link
               href="/dashboard/calendar"
@@ -259,24 +348,22 @@ export default function MobileHome({
           </div>
           <ul className="bg-white border border-ink-6 rounded-2xl divide-y divide-ink-7 overflow-hidden">
             {comingUp.slice(0, 3).map((item, i) => (
-              <li key={i}>
-                <div className="flex items-start gap-3 px-4 py-3 min-h-[56px]">
-                  <div className="flex flex-col items-center justify-center w-12 flex-shrink-0">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-ink-3 leading-none">
-                      {weekdayLabel(item.daysUntil)}
-                    </span>
-                    <span className="text-[18px] font-semibold text-ink leading-none mt-0.5">
-                      {dayOfMonth(item.date)}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13.5px] font-semibold text-ink leading-snug line-clamp-1">
-                      {item.label}
-                    </p>
-                    {item.hook && (
-                      <p className="text-[11.5px] text-ink-3 mt-0.5 line-clamp-1">{item.hook}</p>
-                    )}
-                  </div>
+              <li key={i} className="flex items-start gap-3 px-4 py-3 min-h-[52px]">
+                <div className="flex flex-col items-center justify-center w-12 flex-shrink-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-ink-3 leading-none">
+                    {weekdayLabel(item.daysUntil)}
+                  </span>
+                  <span className="text-[18px] font-semibold text-ink leading-none mt-0.5 tabular-nums">
+                    {dayOfMonth(item.date)}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13.5px] font-semibold text-ink leading-snug line-clamp-1">
+                    {item.label}
+                  </p>
+                  {item.hook && (
+                    <p className="text-[11.5px] text-ink-3 mt-0.5 line-clamp-1">{item.hook}</p>
+                  )}
                 </div>
               </li>
             ))}
@@ -284,158 +371,257 @@ export default function MobileHome({
         </section>
       )}
 
-      {/* Quick links footer */}
-      <section className="grid grid-cols-2 gap-2 pt-2">
-        <QuickLink href="/dashboard/audit"        label="Audit"      tint="bg-brand-tint text-brand-dark" />
-        <QuickLink href="/dashboard/marketplace"  label="Explore"    tint="bg-blue-50 text-blue-700" />
-      </section>
-    </div>
-  )
-}
-
-function ScoreHero({
-  score,
-  delta,
-  totalNeeds,
-  state,
-}: {
-  score: number | null
-  delta: number | null
-  totalNeeds: number
-  state: 'empty' | 'partial' | 'steady'
-}) {
-  /* If we don't have a score yet (no data feed), render a state-aware
-     hero instead of a meaningless 0. */
-  if (score === null) {
-    const isEmpty = state === 'empty'
-    return (
-      <section className="bg-white border border-ink-6 rounded-2xl p-5">
-        <div className="flex items-center gap-3">
-          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${isEmpty ? 'bg-amber-50 text-amber-700' : 'bg-brand-tint text-brand-dark'}`}>
-            {isEmpty ? <AlertCircle className="w-6 h-6" /> : <Sparkles className="w-6 h-6" />}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[16px] font-semibold text-ink leading-tight">
-              {isEmpty ? 'Let\'s get you set up' : "You're on track"}
-            </p>
-            <p className="text-[12.5px] text-ink-3 mt-0.5">
-              {isEmpty
-                ? 'Connect your channels to start seeing your score.'
-                : totalNeeds > 0
-                  ? `${totalNeeds} ${totalNeeds === 1 ? 'thing needs' : 'things need'} your attention.`
-                  : "You're all caught up."}
-            </p>
-          </div>
-          <Link
-            href={isEmpty ? '/dashboard/connected-accounts' : '/dashboard/audit'}
-            className="inline-flex items-center gap-0.5 text-[12.5px] font-semibold text-brand-dark active:text-brand flex-shrink-0"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </Link>
-        </div>
-      </section>
-    )
-  }
-
-  /* Real score render. */
-  const status = score >= 70 ? 'on-track' : score >= 50 ? 'mid' : 'behind'
-  const ring = status === 'on-track' ? 'ring-emerald-200' : status === 'mid' ? 'ring-amber-200' : 'ring-rose-200'
-  const badge = status === 'on-track' ? 'On track' : status === 'mid' ? 'Improving' : 'Needs work'
-  const badgeCls = status === 'on-track' ? 'bg-emerald-100 text-emerald-700'
-    : status === 'mid' ? 'bg-amber-100 text-amber-800'
-    : 'bg-rose-100 text-rose-700'
-
-  return (
-    <Link
-      href="/dashboard/audit"
-      className={`block bg-white border border-ink-6 rounded-2xl p-5 ring-4 ${ring} active:opacity-90 transition-opacity`}
-    >
-      <div className="flex items-center gap-4">
-        <div className="flex flex-col items-center">
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3 mb-1">Score</span>
-          <span className="text-[44px] font-bold text-ink leading-none tabular-nums">{score}</span>
-          <span className="text-[11px] text-ink-4 mt-0.5">/ 100</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${badgeCls} mb-2`}>
-            {badge}
-          </span>
-          {delta !== null && delta !== 0 && (
-            <div className={`flex items-center gap-1 text-[13px] font-semibold ${delta > 0 ? 'text-emerald-700' : 'text-rose-700'} mb-1`}>
-              {delta > 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-              {Math.abs(delta)} this week
-            </div>
-          )}
-          <p className="text-[12.5px] text-ink-3 leading-snug">
-            {totalNeeds > 0
-              ? `${totalNeeds} ${totalNeeds === 1 ? 'thing needs' : 'things need'} you. Tap to see audit.`
-              : 'Tap to see breakdown.'}
-          </p>
-        </div>
+      {/* Customize button — subtle, bottom of page */}
+      <div className="pt-2">
+        <button
+          onClick={() => setCustomizeOpen(true)}
+          className="w-full inline-flex items-center justify-center gap-1.5 text-[12px] font-semibold text-ink-3 active:text-ink py-3"
+        >
+          <Settings2 className="w-3.5 h-3.5" />
+          Customize home
+        </button>
       </div>
-    </Link>
-  )
-}
 
-function MetricTile({
-  icon: Icon,
-  label,
-  pulse,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  pulse: PulseCardData
-}) {
-  const showData = pulse.state === 'live' && pulse.value
-  return (
-    <div className="bg-white border border-ink-6 rounded-2xl p-3 flex flex-col">
-      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-ink-7 text-ink-3 mb-1.5">
-        <Icon className="w-3.5 h-3.5" />
-      </span>
-      <p className="text-[10px] uppercase tracking-wider font-bold text-ink-3 leading-none mb-1">{label}</p>
-      {showData ? (
-        <>
-          <p className="text-[20px] font-bold text-ink tabular-nums leading-none">{pulse.value}</p>
-          {pulse.delta && (
-            <p className={`text-[10.5px] font-semibold mt-0.5 flex items-center gap-0.5 ${pulse.up ? 'text-emerald-700' : pulse.up === false ? 'text-rose-700' : 'text-ink-3'}`}>
-              {pulse.up === true && <ArrowUpRight className="w-3 h-3" />}
-              {pulse.up === false && <ArrowDownRight className="w-3 h-3" />}
-              {pulse.delta}
-            </p>
-          )}
-        </>
-      ) : (
-        <p className="text-[12px] text-ink-4 mt-0.5">No data yet</p>
+      {/* Customize sheet */}
+      {customizeOpen && (
+        <CustomizeSheet
+          primaryMetric={primaryMetric}
+          visibleChannels={visibleChannels}
+          onMetricChange={updateMetric}
+          onChannelChange={updateChannel}
+          onClose={() => setCustomizeOpen(false)}
+        />
       )}
     </div>
   )
 }
 
-function QuickLink({ href, label, tint }: { href: string; label: string; tint: string }) {
+function PrimaryMetric({
+  metric,
+  pulse,
+  onTap,
+}: {
+  metric: MetricKey
+  pulse: { customers: PulseCardData; reputation: PulseCardData; reach: PulseCardData }
+  onTap: () => void
+}) {
+  const data = pulse[metric]
+  const labels = PRIMARY_METRIC_LABELS[metric]
+
+  const hasData = data.state === 'live' && data.value
+
   return (
-    <Link
-      href={href}
-      className={`flex items-center justify-between rounded-2xl px-4 py-3 min-h-[56px] active:opacity-90 transition ${tint}`}
-    >
-      <span className="text-[14px] font-semibold">{label}</span>
-      <ChevronRight className="w-4 h-4" />
-    </Link>
+    <section className="bg-white border border-ink-6 rounded-2xl p-5">
+      <button
+        onClick={onTap}
+        className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3 active:text-ink"
+      >
+        {labels.headline}
+        <ChevronRight className="w-3 h-3 rotate-90" />
+      </button>
+      {hasData ? (
+        <>
+          <p className="text-[40px] font-bold text-ink tabular-nums leading-none mt-1.5">
+            {data.value}
+          </p>
+          {data.delta && (
+            <p className={`inline-flex items-center gap-1 text-[13.5px] font-semibold mt-2 ${data.up ? 'text-emerald-700' : data.up === false ? 'text-rose-700' : 'text-ink-3'}`}>
+              {data.up === true && <ArrowUpRight className="w-4 h-4" />}
+              {data.up === false && <ArrowDownRight className="w-4 h-4" />}
+              {data.delta} <span className="text-ink-3 font-normal">vs last week</span>
+            </p>
+          )}
+          <p className="text-[11.5px] text-ink-4 mt-2">{labels.sub}</p>
+        </>
+      ) : (
+        <>
+          <p className="text-[16px] font-semibold text-ink mt-2">
+            No data yet
+          </p>
+          <p className="text-[12.5px] text-ink-3 mt-1">
+            {data.state === 'no-data' ? 'Connect your channels to start seeing this.' : 'Loading...'}
+          </p>
+        </>
+      )}
+    </section>
   )
 }
 
-function nudgeMessage({
-  state, totalNeeds, firstName,
-}: { state: 'empty' | 'partial' | 'steady'; totalNeeds: number; firstName: string }) {
-  if (state === 'empty') {
-    return `Welcome ${firstName}. Connect your channels and I'll start finding ways to help.`
+function ChannelRow({
+  channel,
+  pulse,
+}: {
+  channel: ChannelKey
+  pulse: PulseCardData | null
+}) {
+  const meta = CHANNEL_META[channel]
+  const Icon = meta.icon
+
+  if (!pulse || pulse.state !== 'live') {
+    return null
   }
-  if (totalNeeds === 0) {
-    return "You're all caught up. I'm watching your data and will ping if anything needs attention."
-  }
-  if (totalNeeds >= 3) {
-    return `${totalNeeds} things need your eyes today. Let me know if you want help prioritizing.`
-  }
-  return `A couple things need you today. Quick taps in your inbox handle them.`
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 min-h-[52px]">
+      <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-ink-7 text-ink-2 flex-shrink-0">
+        <Icon className="w-[16px] h-[16px]" />
+      </span>
+      <p className="flex-1 text-[13.5px] font-semibold text-ink">{meta.label}</p>
+      <p className="text-[15px] font-bold text-ink tabular-nums">{pulse.value}</p>
+      {pulse.delta && (
+        <span className={`inline-flex items-center gap-0.5 text-[12px] font-semibold min-w-[52px] justify-end ${pulse.up ? 'text-emerald-700' : pulse.up === false ? 'text-rose-700' : 'text-ink-3'}`}>
+          {pulse.up === true && <ArrowUpRight className="w-3.5 h-3.5" />}
+          {pulse.up === false && <ArrowDownRight className="w-3.5 h-3.5" />}
+          {pulse.delta}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function CustomizeSheet({
+  primaryMetric,
+  visibleChannels,
+  onMetricChange,
+  onChannelChange,
+  onClose,
+}: {
+  primaryMetric: MetricKey
+  visibleChannels: Record<ChannelKey, boolean>
+  onMetricChange: (m: MetricKey) => void
+  onChannelChange: (c: ChannelKey, v: boolean) => void
+  onClose: () => void
+}) {
+  /* Lock body scroll while open. */
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  /* Escape closes. */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Close customize"
+        onClick={onClose}
+        className="fixed inset-0 z-[60] bg-black/40 sheet-backdrop"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Customize home"
+        className="fixed bottom-0 left-0 right-0 z-[61] bg-white rounded-t-3xl sheet-up safe-bottom max-h-[85vh] flex flex-col"
+      >
+        <div className="flex justify-center pt-2 pb-1">
+          <div className="w-10 h-1 rounded-full bg-ink-6" />
+        </div>
+
+        <div className="flex items-center justify-between px-5 py-2">
+          <h2 className="text-[17px] font-semibold text-ink">Customize home</h2>
+          <button
+            onClick={onClose}
+            className="text-[13.5px] font-semibold text-brand-dark active:text-brand"
+          >
+            Done
+          </button>
+        </div>
+
+        <div className="overflow-y-auto touch-scroll px-4 py-2 space-y-5">
+          {/* Primary metric */}
+          <section>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3 mb-2 px-1">
+              Headline metric
+            </p>
+            <p className="text-[12px] text-ink-3 mb-3 px-1">
+              The big number at the top of your home.
+            </p>
+            <div className="bg-white border border-ink-6 rounded-2xl divide-y divide-ink-7 overflow-hidden">
+              {(['customers', 'reputation', 'reach'] as MetricKey[]).map(m => {
+                const active = primaryMetric === m
+                const meta = PRIMARY_METRIC_LABELS[m]
+                return (
+                  <button
+                    key={m}
+                    onClick={() => onMetricChange(m)}
+                    className="w-full flex items-start gap-3 px-4 py-3 text-left active:bg-ink-7 transition-colors"
+                  >
+                    <span className={[
+                      'inline-flex items-center justify-center w-6 h-6 rounded-full border-2 mt-0.5 flex-shrink-0 transition-all',
+                      active ? 'bg-brand border-brand' : 'bg-white border-ink-5',
+                    ].join(' ')}>
+                      {active && <span className="w-2.5 h-2.5 rounded-full bg-white" />}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-semibold text-ink">{meta.headline}</p>
+                      <p className="text-[12px] text-ink-3 mt-0.5">{meta.sub}</p>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* Channel toggles */}
+          <section>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3 mb-2 px-1">
+              Show on home
+            </p>
+            <p className="text-[12px] text-ink-3 mb-3 px-1">
+              Which channels show in the &quot;This week&quot; panel.
+            </p>
+            <div className="bg-white border border-ink-6 rounded-2xl divide-y divide-ink-7 overflow-hidden">
+              {(['customers', 'reputation', 'reach', 'website'] as ChannelKey[]).map(c => {
+                const meta = CHANNEL_META[c]
+                const Icon = meta.icon
+                const on = visibleChannels[c]
+                return (
+                  <button
+                    key={c}
+                    onClick={() => onChannelChange(c, !on)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-ink-7 transition-colors"
+                  >
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-ink-7 text-ink-2 flex-shrink-0">
+                      <Icon className="w-[16px] h-[16px]" />
+                    </span>
+                    <p className="flex-1 text-[14px] font-semibold text-ink">{meta.label}</p>
+                    <span className={[
+                      'relative w-11 h-6 rounded-full transition-colors flex-shrink-0',
+                      on ? 'bg-brand' : 'bg-ink-6',
+                    ].join(' ')}>
+                      <span className={[
+                        'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform',
+                        on ? 'translate-x-5' : 'translate-x-0',
+                      ].join(' ')} />
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* Coming-soon hint */}
+          <p className="text-[11px] text-ink-4 text-center px-4 py-2">
+            More customization (rearrange sections, set goals, hide widgets) coming soon.
+          </p>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function strategistNote({ totalNeeds }: { totalNeeds: number }): string {
+  if (totalNeeds === 0) return "Nothing needs your eyes right now. I'm watching your data and will ping if something changes."
+  if (totalNeeds === 1) return 'One item is waiting on your decision. Quick tap in the inbox handles it.'
+  if (totalNeeds <= 3) return `${totalNeeds} items are waiting on you. Tap through the inbox when you have a minute.`
+  return `${totalNeeds} items in your inbox. Let me know if you want help prioritizing.`
 }
 
 function weekdayLabel(daysUntil: number): string {
