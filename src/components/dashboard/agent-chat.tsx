@@ -73,11 +73,21 @@ export default function AgentChat() {
      or wiping what the owner has typed. */
   useEffect(() => {
     const ask = searchParams?.get('ask')
+    const chat = searchParams?.get('chat')
     if (ask && ask.trim()) {
       setOpen(true)
       setInput(ask)
       const params = new URLSearchParams(searchParams.toString())
       params.delete('ask')
+      const next = params.toString()
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
+    } else if (chat === 'open') {
+      /* Bare deep-link from the mobile tab bar's AI tab — opens the
+         floating chat without prefilling. Strip the param so back
+         button + refresh don't keep re-opening. */
+      setOpen(true)
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('chat')
       const next = params.toString()
       router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
     }

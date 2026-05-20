@@ -551,7 +551,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-bg-2 flex pb-14 lg:pb-0">
+    <div className="min-h-screen bg-bg-2 flex pb-tabbar lg:pb-0">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
@@ -641,18 +641,42 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
       {/* Main */}
       <div className="flex-1 lg:ml-[260px]">
-        {/* Top bar */}
+        {/* Top bar — mobile shows just hamburger + workspace label + bell.
+            Desktop keeps the full chrome (workspace switcher + location
+            selector + messages icon + notifications) since space allows it. */}
         <header className="h-14 bg-white border-b border-ink-6 flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
-          <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-ink-3 hover:text-ink min-h-[44px] min-w-[44px] flex items-center justify-center">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="lg:hidden text-ink-3 hover:text-ink min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label="Open menu"
+          >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2">
+          {/* WorkspaceSwitcher is admin-only on mobile to keep the bar
+              uncluttered for regular owners (they have one workspace). */}
+          <div className={user?.role === 'admin' ? 'flex items-center gap-2' : 'hidden lg:flex items-center gap-2'}>
             <WorkspaceSwitcher />
           </div>
+          {/* Mobile-only workspace label for regular owners. Just shows
+              their restaurant name, no switcher. */}
+          {user?.role !== 'admin' && (
+            <span className="lg:hidden text-[14px] font-semibold text-ink truncate max-w-[180px]">
+              {client?.name ?? 'Apnosh'}
+            </span>
+          )}
           <div className="flex-1" />
           <div className="flex items-center gap-3">
-            <HeaderLocationSelector />
-            <Link href="/dashboard/messages" className="text-ink-4 hover:text-ink transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center">
+            {/* Location selector hidden on mobile for single-loc clients;
+                multi-loc clients still see it on desktop. */}
+            <div className="hidden lg:block">
+              <HeaderLocationSelector />
+            </div>
+            {/* Messages icon removed on mobile (Inbox tab carries it). */}
+            <Link
+              href="/dashboard/messages"
+              className="hidden lg:flex text-ink-4 hover:text-ink transition-colors min-h-[44px] min-w-[44px] items-center justify-center"
+              aria-label="Messages"
+            >
               <MessageSquare className="w-5 h-5" />
             </Link>
             <Notifications />
@@ -666,7 +690,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <QuickRequest />
-      <ClientTabBar />
+      <ClientTabBar inboxBadge={navCounts.reviews + navCounts.approvals} />
     </div>
   )
 }
