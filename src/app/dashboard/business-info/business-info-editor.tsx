@@ -43,12 +43,14 @@ interface Props {
   initial: BusinessInfo | null
   gbpConnected: boolean
   hasWebsite: boolean
+  /* Connected external website repo ("owner/name"), or null. */
+  websiteRepo: string | null
   loadError: string | null
 }
 
 type SectionKey = 'contact' | 'hours' | 'special'
 
-export default function BusinessInfoEditor({ initial, gbpConnected, hasWebsite, loadError }: Props) {
+export default function BusinessInfoEditor({ initial, gbpConnected, hasWebsite, websiteRepo, loadError }: Props) {
   const router = useRouter()
   const [name, setName] = useState(initial?.name ?? '')
   const [phone, setPhone] = useState(initial?.phone ?? '')
@@ -124,10 +126,16 @@ export default function BusinessInfoEditor({ initial, gbpConnected, hasWebsite, 
               : 'Not connected'}
           />
           <SyncRow
-            ok={result.synced.website === 'queued'}
+            ok={result.synced.website === 'committed' || result.synced.website === 'queued'}
+            warn={result.synced.website === 'failed'}
             skipped={result.synced.website === 'skipped'}
             label="Your website"
-            detail={result.synced.website === 'queued' ? 'Updating shortly' : 'No Apnosh site'}
+            detail={
+              result.synced.website === 'committed' ? 'Committed — deploying now'
+                : result.synced.website === 'queued' ? 'Updating shortly'
+                : result.synced.website === 'failed' ? (result.websiteError ?? 'Sync failed')
+                : 'Not connected'
+            }
           />
         </div>
         <div className="flex gap-2 mt-6">
@@ -275,6 +283,13 @@ export default function BusinessInfoEditor({ initial, gbpConnected, hasWebsite, 
             <LinkRow icon={UtensilsCrossed} tint="bg-amber-50 text-amber-700" label="Menu" sub="Items, prices, sections" href="/dashboard/local-seo/menu" />
             <LinkRow icon={ImageIcon} tint="bg-purple-50 text-purple-700" label="Photos" sub="Logo, cover, food gallery" href="/dashboard/assets" />
             <LinkRow icon={Tag} tint="bg-cyan-50 text-cyan-700" label="Cuisine & amenities" sub="Categories, dining options, parking" href="/dashboard/local-seo/listing" />
+            <LinkRow
+              icon={Globe}
+              tint={websiteRepo ? 'bg-emerald-50 text-emerald-700' : 'bg-ink-7 text-ink-3'}
+              label="Connect your website"
+              sub={websiteRepo ? `Connected · ${websiteRepo}` : 'Sync changes to your Vercel/GitHub site'}
+              href="/dashboard/business-info/connect-website"
+            />
           </div>
         </div>
 

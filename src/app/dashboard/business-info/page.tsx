@@ -9,6 +9,7 @@
 
 import { redirect } from 'next/navigation'
 import { loadBusinessInfo } from './actions'
+import { getWebsiteConnection } from './website-actions'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import BusinessInfoEditor from './business-info-editor'
 
@@ -18,13 +19,17 @@ export default async function BusinessInfoPage() {
   const { user } = await resolveCurrentClient(null)
   if (!user) redirect('/login')
 
-  const loaded = await loadBusinessInfo()
+  const [loaded, websiteConn] = await Promise.all([
+    loadBusinessInfo(),
+    getWebsiteConnection(),
+  ])
 
   return (
     <BusinessInfoEditor
       initial={loaded.info ?? null}
       gbpConnected={loaded.gbpConnected}
       hasWebsite={loaded.hasWebsite}
+      websiteRepo={websiteConn.connected ? websiteConn.repo : null}
       loadError={loaded.ok ? null : (loaded.error ?? 'Could not load your info')}
     />
   )

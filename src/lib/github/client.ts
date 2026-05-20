@@ -160,4 +160,56 @@ export async function patchJsonFile(args: {
   })
 }
 
+/**
+ * Create or overwrite a whole JSON file. Unlike patchJsonFile (which
+ * requires the file to exist and merges), this writes the full object,
+ * creating the file if it's missing. Used to sync apnosh-content.json
+ * into a client's own website repo.
+ */
+export async function upsertJsonFile(args: {
+  repo: string
+  path: string
+  branch?: string
+  data: Record<string, unknown>
+  message: string
+  authorName?: string
+  authorEmail?: string
+}): Promise<{ created: boolean }> {
+  const existing = await getFile({ repo: args.repo, path: args.path, ref: args.branch })
+  await putFile({
+    repo: args.repo,
+    path: args.path,
+    contentUtf8: JSON.stringify(args.data, null, 2) + '\n',
+    message: args.message,
+    sha: existing?.sha,
+    branch: args.branch,
+    authorName: args.authorName,
+    authorEmail: args.authorEmail,
+  })
+  return { created: !existing }
+}
+
+/**
+ * Lightweight repo-access check. Returns whether the PAT can read the
+ * repo + whether it has push (write) permission. Used by the website
+ * connect flow to verify access before saving the connection.
+ */
+export async function checkRepoAccess(repo: string): Promise<
+  { ok: true; canWrite: boolean; defaultBranch: string } | { ok: false; error: string }
+> {
+  try {
+    const res = await ghFetch(`/repos/${repo}`)
+    if (res.status === 404) return { ok: false, error: 'Repo not found, or Apnosh doesn\'t have access yet.' }
+    if (!res.ok) {
+      const text = await res.text()
+      return { ok: false, error: `GitHub error (${res.status}): ${text.slice(0, 120)}` }
+    }
+    const data = await res.json() as { default_branch?: string; permissions?: { push?: boolean; admin?: boolean } }
+    const canWrite = !!(data.permissions?.push || data.permissions?.admin)
+    return { ok: true, canWrite, defaultBranch: data.default_branch ?? 'main' }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Access check failed' }
+  }
+}
+
 export { ORG as APNOSH_GH_ORG }
