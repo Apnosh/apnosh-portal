@@ -93,11 +93,17 @@ interface ComingUpItem {
   queuedCount: number
 }
 
+type RangeKey = '1W' | '1M' | '3M' | '1Y' | 'ALL'
+interface RangePoint { value: string; delta: string | null; up: boolean | null; series: number[] }
+interface MetricRanges { available: RangeKey[]; ranges: Partial<Record<RangeKey, RangePoint>> }
+interface MetricHistory { customers: MetricRanges | null; reach: MetricRanges | null }
+
 interface DashboardLoad {
   agenda: AgendaItem[]
   primaryStrategist: PrimaryStrategist | null
   recentReviews: RecentReviewsBundle
   pulse: { customers: PulseCardData; reputation: PulseCardData; reach: PulseCardData }
+  metricHistory: MetricHistory | null
   weekly: { items: { label: string; detail?: string; icon: string }[]; generatedThisWeek?: number }
   comingUp: ComingUpItem[]
   setup: { shapeSet: boolean; goalsSet: boolean; anyChannelConnected: boolean }
@@ -187,6 +193,7 @@ export default function DashboardPage() {
               reputation: { label: 'Reputation', state: 'no-data' },
               reach: { label: 'Reach', state: 'no-data' },
             }}
+            metricHistory={data?.metricHistory ?? null}
             weekly={data?.weekly ?? { items: [] }}
             strategist={strategist}
             comingUp={data?.comingUp ?? []}
@@ -222,6 +229,7 @@ export default function DashboardPage() {
             reputation: { label: 'Reputation', state: 'no-data' },
             reach: { label: 'Reach', state: 'no-data' },
           }}
+          metricHistory={data?.metricHistory ?? null}
           weekly={data?.weekly ?? { items: [] }}
           strategist={strategist}
           comingUp={data?.comingUp ?? []}

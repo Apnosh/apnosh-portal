@@ -66,10 +66,16 @@ interface PrimaryStrategist {
   initials: string
 }
 
+type RangeKey = '1W' | '1M' | '3M' | '1Y' | 'ALL'
+interface RangePoint { value: string; delta: string | null; up: boolean | null; series: number[] }
+interface MetricRanges { available: RangeKey[]; ranges: Partial<Record<RangeKey, RangePoint>> }
+interface MetricHistory { customers: MetricRanges | null; reach: MetricRanges | null }
+
 interface Props {
   displayName: string
   agenda: AgendaItem[]
   pulse: { customers: PulseCardData; reputation: PulseCardData; reach: PulseCardData }
+  metricHistory: MetricHistory | null
   weekly: { items: WeeklyItem[]; generatedThisWeek?: number }
   strategist: PrimaryStrategist | null
   comingUp: ComingUpItem[]
@@ -80,9 +86,13 @@ interface Props {
 type MetricKey = 'customers' | 'reputation' | 'reach'
 
 const PRIMARY_METRIC_LABELS: Record<MetricKey, { headline: string; sub: string }> = {
-  customers:  { headline: 'Customers this week', sub: 'Calls, directions, and bookings' },
-  reputation: { headline: 'Reputation',          sub: 'Average rating and new reviews' },
-  reach:      { headline: 'Reach this week',     sub: 'People who saw your content' },
+  customers:  { headline: 'Customers', sub: 'Calls, directions, and bookings' },
+  reputation: { headline: 'Reputation', sub: 'Average rating and new reviews' },
+  reach:      { headline: 'Reach', sub: 'People who saw your content' },
+}
+
+const RANGE_SUFFIX: Record<RangeKey, string> = {
+  '1W': 'vs last week', '1M': 'vs last month', '3M': 'vs prior 3 months', '1Y': 'vs last year', 'ALL': '',
 }
 
 const STORAGE_KEY_METRIC = 'apnosh:home:primaryMetric'
@@ -107,6 +117,7 @@ export default function MobileHome({
   displayName,
   agenda,
   pulse,
+  metricHistory,
   weekly,
   strategist,
   comingUp,
@@ -147,6 +158,11 @@ export default function MobileHome({
       <Hero
         metric={primaryMetric}
         data={pulse[primaryMetric]}
+        history={
+          primaryMetric === 'customers' ? metricHistory?.customers ?? null
+          : primaryMetric === 'reach' ? metricHistory?.reach ?? null
+          : null
+        }
         onSwitch={() => setCustomizeOpen(true)}
       />
 
@@ -276,15 +292,36 @@ export default function MobileHome({
 function Hero({
   metric,
   data,
+  history,
   onSwitch,
 }: {
   metric: MetricKey
   data: PulseCardData
+  history: MetricRanges | null
   onSwitch: () => void
 }) {
   const labels = PRIMARY_METRIC_LABELS[metric]
-  const hasData = data.state === 'live' && !!data.value
-  const series = data.series ?? []
+  const available = history?.available ?? []
+  const [range, setRange] = useState<RangeKey>(() =>
+    available.includes('1W') ? '1W' : (available[0] ?? '1W'),
+  )
+  /* Keep the selected range valid when the metric (and thus its
+     available ranges) changes. */
+  useEffect(() => {
+    if (available.length && !available.includes(range)) {
+      setRange(available.includes('1W') ? '1W' : (available[0] ?? '1W'))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history])
+
+  const rp = history?.ranges?.[range]
+  const value = rp?.value ?? data.value
+  const delta = rp ? rp.delta : (data.delta ?? null)
+  const up = rp ? rp.up : (data.up ?? null)
+  const series = rp?.series ?? data.series ?? []
+  const suffix = rp ? RANGE_SUFFIX[range] : 'vs last week'
+  const hasData = data.state === 'live' && !!value
+  const showSelector = available.length > 1
 
   return (
     <section>
@@ -297,29 +334,51 @@ function Hero({
       </button>
 
       {hasData ? (
-        <Link href="/dashboard/analytics" className="block active:opacity-70">
-          <p className="text-[60px] font-bold text-ink tabular-nums leading-[0.95] tracking-tight mt-1.5">
-            {data.value}
-          </p>
-          {data.delta ? (
-            <p className={`inline-flex items-center gap-1.5 text-[15px] font-semibold mt-3 ${
-              data.up ? 'text-brand-dark' : data.up === false ? 'text-rose-600' : 'text-ink-3'
-            }`}>
-              {data.up != null && <Tri up={data.up} />}
-              {data.delta}
-              <span className="text-ink-3 font-normal">vs last week</span>
+        <>
+          <Link href="/dashboard/analytics" className="block active:opacity-70">
+            <p className="text-[60px] font-bold text-ink tabular-nums leading-[0.95] tracking-tight mt-1.5">
+              {value}
             </p>
-          ) : (
-            <p className="text-[12.5px] text-ink-4 mt-2">{labels.sub}</p>
-          )}
+            {delta ? (
+              <p className={`inline-flex items-center gap-1.5 text-[15px] font-semibold mt-3 ${
+                up ? 'text-brand-dark' : up === false ? 'text-rose-600' : 'text-ink-3'
+              }`}>
+                {up != null && <Tri up={up} />}
+                {delta}
+                {suffix && <span className="text-ink-3 font-normal">{suffix}</span>}
+              </p>
+            ) : (
+              <p className="text-[12.5px] text-ink-4 mt-2">{labels.sub}</p>
+            )}
 
-          {series.length >= 2 && (
-            <div className="mt-5">
-              <HeroChart values={series} up={data.up ?? null} />
-              <p className="text-[11px] text-ink-4 mt-2">Past 14 days</p>
+            {series.length >= 2 && (
+              <div className="mt-5">
+                <HeroChart values={series} up={up} />
+              </div>
+            )}
+          </Link>
+
+          {/* Range selector — outside the Link so taps switch range
+              instead of opening analytics. */}
+          {showSelector ? (
+            <div className="flex items-center gap-1.5 mt-4">
+              {available.map(rk => (
+                <button
+                  key={rk}
+                  onClick={() => setRange(rk)}
+                  className={[
+                    'px-3 py-1.5 rounded-full text-[12.5px] font-semibold transition-colors',
+                    range === rk ? 'bg-brand text-white' : 'text-brand-dark active:bg-brand-tint',
+                  ].join(' ')}
+                >
+                  {rk}
+                </button>
+              ))}
             </div>
-          )}
-        </Link>
+          ) : series.length >= 2 ? (
+            <p className="text-[11px] text-ink-4 mt-2">{history ? 'All time' : 'Past 14 days'}</p>
+          ) : null}
+        </>
       ) : (
         <div className="mt-2">
           <p className="text-[17px] font-semibold text-ink">No data yet</p>
