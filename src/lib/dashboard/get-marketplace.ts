@@ -3,14 +3,38 @@
 /**
  * Marketplace data for /dashboard/marketplace.
  *
- * Returns bookable creators (food influencers, photographers,
- * videographers) joined with their profile display info.
+ * Two surfaces live here:
+ *   1. getMarketplaceCreators — legacy creator-only flow (food influencers,
+ *      photographers, videographers as people). Powers the existing
+ *      influencer booking UI.
+ *   2. getMarketplaceVendors — new multi-category vendor flow that
+ *      includes Apnosh's own bundles, third-party companies, and
+ *      individual creators. Powers /dashboard/marketplace v2 and the
+ *      public /marketplace/[slug] vendor pages.
+ *
  * Geographic scope is Washington-only for v1 — broaden by adding
- * states to creator_profiles.service_area.
+ * states to creator_profiles.service_area or vendors.service_area.
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
+/* Expanded category list (matches migration 146 vendor_listings check). */
+export type VendorCategory =
+  | 'food_influencer'
+  | 'photographer'
+  | 'videographer'
+  | 'graphic_designer'
+  | 'web_designer'
+  | 'social_manager'
+  | 'local_seo'
+  | 'email_marketer'
+  | 'pr_specialist'
+  | 'strategist'
+  | 'full_service_agency'
+  | 'other'
+
+/* Legacy alias kept for backwards compatibility with existing call sites
+   that import CreatorCategory. */
 export type CreatorCategory = 'food_influencer' | 'photographer' | 'videographer' | 'other'
 
 export interface MarketplaceCreator {
@@ -130,4 +154,256 @@ export async function getMarketplaceCreators(
   })
 
   return out
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Marketplace v2: vendors + listings
+// ─────────────────────────────────────────────────────────────────────
+
+export interface MarketplaceListing {
+  id: string
+  slug: string
+  title: string
+  category: VendorCategory
+  listingType: 'subscription' | 'one_off' | 'package' | 'quote'
+  description: string | null
+  priceCents: number | null
+  billingPeriod: 'monthly' | 'annual' | 'one_time' | null
+  details: Record<string, unknown> | null
+  displayOrder: number
+  featured: boolean
+}
+
+export interface MarketplaceVendor {
+  id: string
+  slug: string
+  name: string
+  vendorType: 'individual' | 'company' | 'apnosh'
+  description: string | null
+  logoUrl: string | null
+  coverUrl: string | null
+  serviceArea: string[]
+  tier: 'free' | 'pro' | 'verified' | 'apnosh'
+  isApnosh: boolean
+  verified: boolean
+  avgRating: number | null
+  totalBookings: number
+  /* Listings under this vendor, ordered by display_order. */
+  listings: MarketplaceListing[]
+  /* Starting price in cents across listings, for card display.
+     NULL if all listings are quote-based. */
+  startingPriceCents: number | null
+}
+
+interface VendorFilterOpts {
+  category?: VendorCategory
+  state?: string                // 'WA' etc.
+  verifiedOnly?: boolean
+  search?: string
+  /* If true, include Apnosh as a featured-first result regardless of
+     category filter (used for "all categories" view). */
+  featureApnosh?: boolean
+}
+
+interface VendorRow {
+  id: string
+  slug: string
+  name: string
+  vendor_type: 'individual' | 'company' | 'apnosh'
+  description: string | null
+  logo_url: string | null
+  cover_url: string | null
+  service_area: string[] | null
+  tier: 'free' | 'pro' | 'verified' | 'apnosh'
+  is_apnosh: boolean
+  verified: boolean
+  avg_rating: number | null
+  total_bookings: number
+}
+
+interface ListingRow {
+  id: string
+  vendor_id: string
+  slug: string
+  title: string
+  category: VendorCategory
+  listing_type: 'subscription' | 'one_off' | 'package' | 'quote'
+  description: string | null
+  price_cents: number | null
+  billing_period: 'monthly' | 'annual' | 'one_time' | null
+  details: Record<string, unknown> | null
+  display_order: number
+  featured: boolean
+}
+
+function rowsToVendor(v: VendorRow, listings: ListingRow[]): MarketplaceVendor {
+  const sorted = [...listings].sort((a, b) => a.display_order - b.display_order)
+  const priced = sorted
+    .map(l => l.price_cents)
+    .filter((p): p is number => p !== null && p > 0)
+  const startingPriceCents = priced.length > 0 ? Math.min(...priced) : null
+
+  return {
+    id: v.id,
+    slug: v.slug,
+    name: v.name,
+    vendorType: v.vendor_type,
+    description: v.description,
+    logoUrl: v.logo_url,
+    coverUrl: v.cover_url,
+    serviceArea: v.service_area ?? [],
+    tier: v.tier,
+    isApnosh: v.is_apnosh,
+    verified: v.verified,
+    avgRating: v.avg_rating,
+    totalBookings: v.total_bookings,
+    listings: sorted.map(l => ({
+      id: l.id,
+      slug: l.slug,
+      title: l.title,
+      category: l.category,
+      listingType: l.listing_type,
+      description: l.description,
+      priceCents: l.price_cents,
+      billingPeriod: l.billing_period,
+      details: l.details,
+      displayOrder: l.display_order,
+      featured: l.featured,
+    })),
+    startingPriceCents,
+  }
+}
+
+/**
+ * Pull marketplace vendors with their listings. Apnosh is always
+ * surfaced first when featureApnosh is true (default behavior on the
+ * landing view). Category filter narrows to vendors that have at
+ * least one listing in that category — Apnosh's bundles surface in
+ * every category because they span photography, social, design, etc.
+ */
+export async function getMarketplaceVendors(
+  filters: VendorFilterOpts = {},
+): Promise<MarketplaceVendor[]> {
+  const admin = createAdminClient()
+
+  let vendorQ = admin
+    .from('vendors')
+    .select('id, slug, name, vendor_type, description, logo_url, cover_url, service_area, tier, is_apnosh, verified, avg_rating, total_bookings')
+    .eq('bookable', true)
+  if (filters.state) vendorQ = vendorQ.contains('service_area', [filters.state])
+  if (filters.verifiedOnly) vendorQ = vendorQ.eq('verified', true)
+
+  const { data: vendorRows } = await vendorQ as { data: VendorRow[] | null }
+  if (!vendorRows?.length) return []
+
+  const vendorIds = vendorRows.map(v => v.id)
+
+  /* Pull active listings under those vendors. */
+  let listingQ = admin
+    .from('vendor_listings')
+    .select('id, vendor_id, slug, title, category, listing_type, description, price_cents, billing_period, details, display_order, featured')
+    .in('vendor_id', vendorIds)
+    .eq('active', true)
+  if (filters.category) {
+    /* For category filter: include listings in that exact category
+       OR listings under Apnosh (because Apnosh bundles span all
+       categories). The "via [bundle] →" cross-sell happens in the UI. */
+    listingQ = listingQ.or(
+      `category.eq.${filters.category},vendor_id.eq.${vendorRows.find(v => v.is_apnosh)?.id ?? ''}`,
+    )
+  }
+  const { data: listingRows } = await listingQ as { data: ListingRow[] | null }
+  const listingsByVendor = new Map<string, ListingRow[]>()
+  for (const l of listingRows ?? []) {
+    const arr = listingsByVendor.get(l.vendor_id) ?? []
+    arr.push(l)
+    listingsByVendor.set(l.vendor_id, arr)
+  }
+
+  const search = filters.search?.trim().toLowerCase() ?? ''
+
+  let vendors = vendorRows
+    .map(v => rowsToVendor(v, listingsByVendor.get(v.id) ?? []))
+    /* Drop vendors that have no matching listings when a category
+       filter is active (except Apnosh, which is always shown). */
+    .filter(v => {
+      if (filters.category && v.listings.length === 0 && !v.isApnosh) return false
+      return true
+    })
+
+  if (search) {
+    vendors = vendors.filter(v => {
+      const haystack = [
+        v.name,
+        v.description ?? '',
+        ...v.listings.map(l => l.title),
+        ...v.listings.map(l => l.description ?? ''),
+      ].join(' ').toLowerCase()
+      return haystack.includes(search)
+    })
+  }
+
+  /* Sort: Apnosh first (featureApnosh), then verified, then by avg_rating,
+     then by total_bookings, then alphabetical. */
+  vendors.sort((a, b) => {
+    if (filters.featureApnosh !== false) {
+      if (a.isApnosh && !b.isApnosh) return -1
+      if (!a.isApnosh && b.isApnosh) return 1
+    }
+    if (a.verified !== b.verified) return a.verified ? -1 : 1
+    const ar = a.avgRating ?? 0
+    const br = b.avgRating ?? 0
+    if (ar !== br) return br - ar
+    if (a.totalBookings !== b.totalBookings) return b.totalBookings - a.totalBookings
+    return a.name.localeCompare(b.name)
+  })
+
+  return vendors
+}
+
+/**
+ * Single vendor lookup for the public profile page
+ * (/marketplace/[slug]). Returns null if not found or not bookable.
+ */
+export async function getVendorBySlug(slug: string): Promise<MarketplaceVendor | null> {
+  const admin = createAdminClient()
+
+  const { data: v } = await admin
+    .from('vendors')
+    .select('id, slug, name, vendor_type, description, logo_url, cover_url, service_area, tier, is_apnosh, verified, avg_rating, total_bookings')
+    .eq('slug', slug)
+    .eq('bookable', true)
+    .maybeSingle() as { data: VendorRow | null }
+  if (!v) return null
+
+  const { data: listings } = await admin
+    .from('vendor_listings')
+    .select('id, vendor_id, slug, title, category, listing_type, description, price_cents, billing_period, details, display_order, featured')
+    .eq('vendor_id', v.id)
+    .eq('active', true) as { data: ListingRow[] | null }
+
+  return rowsToVendor(v, listings ?? [])
+}
+
+/**
+ * Counts per category for the category-browse chips on the marketplace
+ * landing. Excludes the Apnosh agency listings from per-category counts
+ * (Apnosh is shown as its own featured row, not folded into "Photographers
+ * (1)" etc.).
+ */
+export async function getMarketplaceCategoryCounts(state = 'WA'): Promise<Record<VendorCategory, number>> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('vendor_listings')
+    .select('category, vendors!inner(is_apnosh, service_area, bookable)')
+    .eq('active', true) as { data: Array<{ category: VendorCategory; vendors: { is_apnosh: boolean; service_area: string[] | null; bookable: boolean } }> | null }
+
+  const counts: Record<string, number> = {}
+  for (const row of data ?? []) {
+    if (!row.vendors.bookable) continue
+    if (row.vendors.is_apnosh) continue
+    if (state && !(row.vendors.service_area ?? []).includes(state)) continue
+    counts[row.category] = (counts[row.category] ?? 0) + 1
+  }
+  return counts as Record<VendorCategory, number>
 }
