@@ -27,6 +27,7 @@ import { useClient } from '@/lib/client-context'
 import AdminClientPicker from '@/components/admin/admin-client-picker'
 import FinishProfileBanner from '@/components/dashboard/finish-profile-banner'
 import GettingStarted from '@/components/dashboard/getting-started'
+import MobileHome from './mobile-home'
 import {
   Sparkles, MessageSquare, Image as ImgIcon, Video, Megaphone, Brush, Plus,
   Plug, Loader2, Users as UsersIcon, Clock, Check,
@@ -174,10 +175,36 @@ export default function DashboardPage() {
     return <GettingStarted clientName={client?.name ?? ''} />
   }
 
+  const displayNameForMobile = client?.name ?? 'there'
+
   return (
     <div className="relative">
       {/* Finish-your-profile nudge for clients who used 'Save and explore' */}
       <FinishProfileBanner />
+
+      {/* ─── MOBILE HOME ────────────────────────────────────────────
+          Simplified, thumb-first home for phones. Receives the same
+          DashboardLoad data and renders a 30-second scan: greeting →
+          health hero → top 3 needs → 3-metric strip → strategist nudge
+          → coming up. Desktop keeps the existing rich layout below. */}
+      <div className="lg:hidden -m-4">
+        <MobileHome
+          displayName={displayNameForMobile}
+          agenda={data?.agenda ?? []}
+          pulse={data?.pulse ?? {
+            customers: { label: 'Customers', state: 'no-data' },
+            reputation: { label: 'Reputation', state: 'no-data' },
+            reach: { label: 'Reach', state: 'no-data' },
+          }}
+          strategist={strategist}
+          comingUp={data?.comingUp ?? []}
+          state={state}
+          totalNeeds={totalNeeds}
+        />
+      </div>
+
+      {/* ─── DESKTOP HOME ────────────────────────────────────────── */}
+      <div className="hidden lg:block">
 
       {/* Page-level topbar: title + date + sync pill */}
       <div className="px-4 lg:px-8 pt-6 pb-2 flex items-center justify-between">
@@ -349,6 +376,7 @@ export default function DashboardPage() {
           {toast}
         </div>
       )}
+      </div>
     </div>
   )
 }
