@@ -17,6 +17,7 @@ import {
   Megaphone, Mail, Newspaper, Compass,
 } from 'lucide-react'
 import { getVendorBySlug } from '@/lib/dashboard/get-marketplace'
+import { getVendorPortfolio } from '@/lib/marketplace/portfolio'
 import BookButton from './book-button'
 
 export const dynamic = 'force-dynamic'
@@ -67,6 +68,7 @@ export default async function VendorProfilePage({ params }: PageProps) {
   const { slug } = await params
   const vendor = await getVendorBySlug(slug)
   if (!vendor) notFound()
+  const portfolio = await getVendorPortfolio(vendor.id)
 
   const typeLabel = vendor.vendorType === 'company' ? 'Agency'
     : vendor.vendorType === 'individual' ? 'Freelancer'
@@ -138,6 +140,39 @@ export default async function VendorProfilePage({ params }: PageProps) {
       {vendor.description && (
         <div className="bg-white rounded-2xl border border-ink-6 p-5">
           <p className="text-[14px] text-ink leading-relaxed">{vendor.description}</p>
+        </div>
+      )}
+
+      {/* Portfolio gallery */}
+      {portfolio.length > 0 && (
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3 mb-3">
+            Selected work ({portfolio.length})
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {portfolio.map(item => (
+              <a
+                key={item.id}
+                href={item.externalUrl ?? item.url}
+                target={item.externalUrl ? '_blank' : undefined}
+                rel={item.externalUrl ? 'noopener noreferrer' : undefined}
+                className="group block aspect-square overflow-hidden rounded-xl bg-ink-7 relative"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={item.thumbnailUrl ?? item.url}
+                  alt={item.caption ?? ''}
+                  className="w-full h-full object-cover group-hover:scale-105 transition"
+                  loading="lazy"
+                />
+                {item.caption && (
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent text-white text-[11px] p-2 opacity-0 group-hover:opacity-100 transition">
+                    {item.caption}
+                  </div>
+                )}
+              </a>
+            ))}
+          </div>
         </div>
       )}
 

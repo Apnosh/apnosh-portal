@@ -17,6 +17,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getFeaturedPortfolio, getVendorPortfolio } from '@/lib/marketplace/portfolio'
 
 /* Expanded category list (matches migration 146 vendor_listings check). */
 export type VendorCategory =
@@ -174,6 +175,13 @@ export interface MarketplaceListing {
   featured: boolean
 }
 
+export interface PortfolioPreview {
+  id: string
+  url: string
+  thumbnailUrl: string | null
+  caption: string | null
+}
+
 export interface MarketplaceVendor {
   id: string
   slug: string
@@ -193,6 +201,9 @@ export interface MarketplaceVendor {
   /* Starting price in cents across listings, for card display.
      NULL if all listings are quote-based. */
   startingPriceCents: number | null
+  /* Up to 3 portfolio items for the card hero carousel. Empty array
+     if the vendor hasn't uploaded any yet. */
+  portfolio: PortfolioPreview[]
 }
 
 interface VendorFilterOpts {
@@ -242,7 +253,11 @@ interface ListingRow {
   featured: boolean
 }
 
-function rowsToVendor(v: VendorRow, listings: ListingRow[]): MarketplaceVendor {
+function rowsToVendor(
+  v: VendorRow,
+  listings: ListingRow[],
+  portfolio: PortfolioPreview[] = [],
+): MarketplaceVendor {
   const sorted = [...listings].sort((a, b) => a.display_order - b.display_order)
   const priced = sorted
     .map(l => l.price_cents)
@@ -277,6 +292,7 @@ function rowsToVendor(v: VendorRow, listings: ListingRow[]): MarketplaceVendor {
       featured: l.featured,
     })),
     startingPriceCents,
+    portfolio,
   }
 }
 
@@ -326,10 +342,22 @@ export async function getMarketplaceVendors(
     listingsByVendor.set(l.vendor_id, arr)
   }
 
+  /* Featured portfolio previews (up to 3 each) for hero carousels. */
+  const portfolioByVendor = await getFeaturedPortfolio(vendorIds)
+
   const search = filters.search?.trim().toLowerCase() ?? ''
 
   let vendors = vendorRows
-    .map(v => rowsToVendor(v, listingsByVendor.get(v.id) ?? []))
+    .map(v => rowsToVendor(
+      v,
+      listingsByVendor.get(v.id) ?? [],
+      (portfolioByVendor.get(v.id) ?? []).map(p => ({
+        id: p.id,
+        url: p.url,
+        thumbnailUrl: p.thumbnailUrl,
+        caption: p.caption,
+      })),
+    ))
     /* Drop vendors that have no matching listings when a category
        filter is active (except Apnosh, which is always shown). */
     .filter(v => {
@@ -382,13 +410,21 @@ export async function getVendorBySlug(slug: string): Promise<MarketplaceVendor |
     .maybeSingle() as { data: VendorRow | null }
   if (!v) return null
 
-  const { data: listings } = await admin
-    .from('vendor_listings')
-    .select('id, vendor_id, slug, title, category, listing_type, description, price_cents, billing_period, details, display_order, featured')
-    .eq('vendor_id', v.id)
-    .eq('active', true) as { data: ListingRow[] | null }
+  const [listingsRes, portfolio] = await Promise.all([
+    admin
+      .from('vendor_listings')
+      .select('id, vendor_id, slug, title, category, listing_type, description, price_cents, billing_period, details, display_order, featured')
+      .eq('vendor_id', v.id)
+      .eq('active', true),
+    getVendorPortfolio(v.id),
+  ])
 
-  return rowsToVendor(v, listings ?? [])
+  const listings = (listingsRes.data ?? []) as unknown as ListingRow[]
+  return rowsToVendor(
+    v,
+    listings,
+    portfolio.map(p => ({ id: p.id, url: p.url, thumbnailUrl: p.thumbnailUrl, caption: p.caption })),
+  )
 }
 
 /**

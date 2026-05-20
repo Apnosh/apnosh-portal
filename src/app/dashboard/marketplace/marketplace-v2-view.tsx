@@ -284,7 +284,32 @@ function VendorCard({
   }, [vendor.listings])
 
   return (
-    <div className="bg-white rounded-2xl border border-ink-6 hover:border-ink-4 transition p-5 flex flex-col">
+    <div className="bg-white rounded-2xl border border-ink-6 hover:border-ink-4 transition overflow-hidden flex flex-col">
+      {/* Portfolio hero carousel */}
+      {vendor.portfolio.length > 0 && (
+        <div className="grid grid-cols-3 gap-0.5 bg-ink-7">
+          {vendor.portfolio.slice(0, 3).map((p, i) => (
+            <Link
+              key={p.id}
+              href={`/marketplace/${vendor.slug}`}
+              className={[
+                'block aspect-square overflow-hidden bg-ink-7',
+                i === 0 && vendor.portfolio.length === 1 ? 'col-span-3 aspect-[3/1]' : '',
+              ].join(' ')}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={p.thumbnailUrl ?? p.url}
+                alt={p.caption ?? ''}
+                className="w-full h-full object-cover hover:scale-105 transition"
+                loading="lazy"
+              />
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <div className="p-5 flex flex-col flex-1">
       {/* Header */}
       <div className="flex items-start gap-3 mb-3">
         <div className="w-12 h-12 rounded-xl bg-ink-7 flex items-center justify-center flex-shrink-0 overflow-hidden">
@@ -412,6 +437,7 @@ function VendorCard({
         >
           View profile <ArrowRight className="w-3.5 h-3.5" />
         </Link>
+      </div>
       </div>
     </div>
   )
