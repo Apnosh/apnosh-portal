@@ -114,21 +114,31 @@ export interface SaveResult {
   websiteError?: string
 }
 
-export async function saveBusinessInfo(input: BusinessInfo): Promise<SaveResult> {
+export async function saveBusinessInfo(input: Partial<BusinessInfo>): Promise<SaveResult> {
   const { user, clientId } = await resolveCurrentClient(null)
   if (!user) return { ok: false, error: 'Not authenticated', synced: { saved: false, google: 'skipped', website: 'skipped' } }
   if (!clientId) return { ok: false, error: 'No client account linked', synced: { saved: false, google: 'skipped', website: 'skipped' } }
 
   const admin = createAdminClient()
 
-  /* Normalize. Trim strings; ensure hours is well-formed. */
-  const name = input.name.trim()
-  const phone = input.phone.trim()
-  const website = input.website.trim()
-  const description = input.description.trim()
-  const hours: WeeklyHours = { ...EMPTY_HOURS, ...input.hours }
-  /* Keep only well-formed, future-or-today special-hours entries. */
-  const specialHours: SpecialHours = (input.specialHours ?? []).filter(s => !!s.date)
+  /* Partial update: only fields present in `input` are touched. A
+     focused editor (e.g. just Hours) sends only its slice and never
+     clobbers the rest. Track which fields are provided. */
+  const hasName = input.name !== undefined
+  const hasPhone = input.phone !== undefined
+  const hasWebsite = input.website !== undefined
+  const hasDescription = input.description !== undefined
+  const hasHours = input.hours !== undefined
+  const hasSpecial = input.specialHours !== undefined
+
+  const name = (input.name ?? '').trim()
+  const phone = (input.phone ?? '').trim()
+  const website = (input.website ?? '').trim()
+  const description = (input.description ?? '').trim()
+  const hours: WeeklyHours | undefined = hasHours ? { ...EMPTY_HOURS, ...input.hours } : undefined
+  const specialHours: SpecialHours | undefined = hasSpecial
+    ? (input.specialHours ?? []).filter(s => !!s.date)
+    : undefined
 
   /* Resolve the primary location + website deploy hook. */
   const [{ data: loc }, { data: settings }] = await Promise.all([
@@ -146,42 +156,43 @@ export async function saveBusinessInfo(input: BusinessInfo): Promise<SaveResult>
       .maybeSingle() as unknown as Promise<{ data: { site_type: string | null; external_deploy_hook_url: string | null } | null }>,
   ])
 
-  /* ── 1. Google Business Profile (live) ── */
+  /* ── 1. Google Business Profile (live) — only the provided fields ── */
   let google: SaveResult['synced']['google'] = 'skipped'
   let googleError: string | undefined
   if (loc?.store_code) {
-    const result = await updateClientListing(clientId, {
-      primaryPhone: phone || null,
-      websiteUri: website || null,
-      description: description || null,
-      regularHours: hours,
-      specialHours,
-    })
-    if (result.ok) {
-      google = 'ok'
-    } else {
-      google = 'failed'
-      googleError = result.error
+    const patch: Parameters<typeof updateClientListing>[1] = {}
+    if (hasPhone) patch.primaryPhone = phone || null
+    if (hasWebsite) patch.websiteUri = website || null
+    if (hasDescription) patch.description = description || null
+    if (hasHours && hours) patch.regularHours = hours
+    if (hasSpecial && specialHours) patch.specialHours = specialHours
+    if (Object.keys(patch).length > 0) {
+      const result = await updateClientListing(clientId, patch)
+      if (result.ok) google = 'ok'
+      else { google = 'failed'; googleError = result.error }
     }
   }
 
-  /* ── 2. Our DB (always) ── */
-  await admin.from('clients').update({
-    ...(name ? { name } : {}),
-    phone: phone || null,
-    website: website || null,
-  }).eq('id', clientId)
+  /* ── 2. Our DB — only the provided columns ── */
+  const clientPatch: Record<string, unknown> = {}
+  if (hasName && name) clientPatch.name = name
+  if (hasPhone) clientPatch.phone = phone || null
+  if (hasWebsite) clientPatch.website = website || null
+  if (Object.keys(clientPatch).length > 0) {
+    await admin.from('clients').update(clientPatch).eq('id', clientId)
+  }
   if (loc?.id) {
-    await admin.from('gbp_locations').update({
-      ...(name ? { location_name: name } : {}),
-      phone: phone || null,
-      website: website || null,
-      profile_description: description || null,
-      hours,
-      /* Persist special hours to our DB too — the public sites API
-         (/api/public/sites/[slug]) serves this to the website. */
-      special_hours: specialHours,
-    }).eq('id', loc.id)
+    const locPatch: Record<string, unknown> = {}
+    if (hasName && name) locPatch.location_name = name
+    if (hasPhone) locPatch.phone = phone || null
+    if (hasWebsite) locPatch.website = website || null
+    if (hasDescription) locPatch.profile_description = description || null
+    if (hasHours && hours) locPatch.hours = hours
+    /* The public sites API serves special_hours to the website. */
+    if (hasSpecial && specialHours) locPatch.special_hours = specialHours
+    if (Object.keys(locPatch).length > 0) {
+      await admin.from('gbp_locations').update(locPatch).eq('id', loc.id)
+    }
   }
 
   /* ── 3. Website ──
