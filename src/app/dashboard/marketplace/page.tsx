@@ -1,16 +1,23 @@
 /**
- * /dashboard/marketplace — one-off creator bookings.
+ * /dashboard/marketplace — multi-category vendor marketplace.
  *
- * Distinct from /dashboard/team. Team is ongoing roster; Marketplace
- * is per-engagement: book a food influencer for a single feature,
- * book a photographer for one shoot, etc. Each booking is a
- * separate transaction handled offline by the strategist.
+ * Browse agencies, freelancers, and creators who serve restaurants.
+ * Apnosh's own bundles (Starter Plate through Empire) appear as
+ * featured listings; everyone else is third-party. Geographic scope
+ * is Washington-only for v1.
+ *
+ * Distinct from /dashboard/team. Team is the client's ongoing roster.
+ * Marketplace is discovery + booking — the supply side of restaurant
+ * marketing help.
  */
 
 import { redirect } from 'next/navigation'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
-import { getMarketplaceCreators } from '@/lib/dashboard/get-marketplace'
-import MarketplaceView from './marketplace-view'
+import {
+  getMarketplaceVendors,
+  getMarketplaceCategoryCounts,
+} from '@/lib/dashboard/get-marketplace'
+import MarketplaceV2View from './marketplace-v2-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,8 +37,10 @@ export default async function MarketplacePage({ searchParams }: PageProps) {
     )
   }
 
-  /* Default to Washington for v1. The state filter is in the URL so
-     deep-links survive future expansion. */
-  const creators = await getMarketplaceCreators({ state: 'WA' })
-  return <MarketplaceView clientId={clientId} creators={creators} />
+  const [vendors, categoryCounts] = await Promise.all([
+    getMarketplaceVendors({ state: 'WA', featureApnosh: true }),
+    getMarketplaceCategoryCounts('WA'),
+  ])
+
+  return <MarketplaceV2View vendors={vendors} categoryCounts={categoryCounts} />
 }
