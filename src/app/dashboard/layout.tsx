@@ -692,8 +692,6 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       <ActionSheet
         open={actionSheetOpen}
         onClose={() => setActionSheetOpen(false)}
-        pendingReviews={navCounts.reviews}
-        pendingApprovals={navCounts.approvals}
       />
       <ClientTabBar
         inboxBadge={navCounts.reviews + navCounts.approvals}
