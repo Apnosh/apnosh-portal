@@ -88,13 +88,32 @@ export default function MobileAnalytics() {
     return () => { cancelled = true }
   }, [client?.id, period, clientLoading])
 
+  /* TEMP DEBUG STRIP — visible diagnostic so we can see exactly which
+     state the component is in on a real phone. Remove once analytics
+     is confirmed rendering. */
+  const debugStrip = (
+    <div className="bg-ink text-white text-[10px] font-mono px-3 py-1.5 leading-tight break-all">
+      clientLoading={String(clientLoading)} · clientId={client?.id ? client.id.slice(0, 8) : 'NONE'} · loading={String(loading)} · err={fetchError ? 'YES' : 'no'} · days={data?.daily.length ?? 'null'} · reach={data?.totals.impressions ?? 'null'}
+    </div>
+  )
+
   if (clientLoading || (loading && !data)) {
-    return <SkeletonState />
+    return (
+      <div className="-mx-4 -mt-4 lg:mx-0 lg:mt-0">
+        {debugStrip}
+        <SkeletonState />
+      </div>
+    )
   }
 
   /* If we have no data and no client, show the empty state. */
   if (!data && !client?.id) {
-    return <EmptyState />
+    return (
+      <div className="-mx-4 -mt-4 lg:mx-0 lg:mt-0">
+        {debugStrip}
+        <EmptyState />
+      </div>
+    )
   }
 
   /* If the server action failed, render the layout with zeros and a
@@ -136,6 +155,7 @@ export default function MobileAnalytics() {
 
   return (
     <div className="pb-tabbar -mx-4 -mt-4 lg:mx-0 lg:mt-0 bg-bg-2 min-h-screen">
+      {debugStrip}
       {/* Header */}
       <div className="px-4 pt-4 pb-3 bg-white border-b border-ink-6">
         <div className="flex items-baseline justify-between mb-3">
