@@ -20,12 +20,12 @@
  * All charts are inline SVG — no chart library imports.
  */
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowUpRight, ArrowDownRight, Search, Phone, MapPin, Globe,
   Star, TrendingUp, Eye, Heart, Sparkles, Users, Calendar,
-  ChevronRight, Settings2,
+  ChevronRight, Settings2, AlertCircle,
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { getGbpAnalytics, type AnalyticsSummary, type AnalyticsRange } from '@/lib/dashboard/get-gbp-analytics'
@@ -61,46 +61,78 @@ export default function MobileAnalytics() {
   const [period, setPeriod] = useState<Period>('30d')
   const [data, setData] = useState<AnalyticsSummary | null>(null)
   const [loading, setLoading] = useState(true)
-  const [, startTransition] = useTransition()
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!client?.id) return
+    if (!client?.id) {
+      /* No client_id from context — stop the spinner so we render the
+         layout with zeros instead of an indefinite skeleton. */
+      if (!clientLoading) setLoading(false)
+      return
+    }
     let cancelled = false
     setLoading(true)
-    startTransition(async () => {
+    setFetchError(null)
+    ;(async () => {
       try {
         const result = await getGbpAnalytics(client.id, period as AnalyticsRange)
         if (!cancelled) setData(result)
       } catch (err) {
-        console.error('Failed to load analytics', err)
+        const msg = err instanceof Error ? err.message : 'Failed to load analytics'
+        console.error('Mobile analytics fetch failed:', err)
+        if (!cancelled) setFetchError(msg)
       } finally {
         if (!cancelled) setLoading(false)
       }
-    })
+    })()
     return () => { cancelled = true }
-  }, [client?.id, period])
+  }, [client?.id, period, clientLoading])
 
   if (clientLoading || (loading && !data)) {
     return <SkeletonState />
   }
 
-  if (!data) {
+  /* If we have no data and no client, show the empty state. */
+  if (!data && !client?.id) {
     return <EmptyState />
+  }
+
+  /* If the server action failed, render the layout with zeros and a
+     visible error banner instead of hiding everything behind EmptyState.
+     Owners can still see the design and we get clear feedback in the
+     UI rather than a silent empty page. */
+  const safeData: AnalyticsSummary = data ?? {
+    range: period,
+    start: '',
+    end: '',
+    daily: [],
+    totals: {
+      impressions: 0, directions: 0, calls: 0, websiteClicks: 0,
+      postViews: 0, postClicks: 0, photoViews: 0, conversations: 0,
+      bookings: 0, foodOrders: 0, foodMenuClicks: 0,
+    },
+    prevTotals: {
+      impressions: 0, directions: 0, calls: 0, websiteClicks: 0,
+      postViews: 0, postClicks: 0, photoViews: 0, conversations: 0,
+      bookings: 0, foodOrders: 0, foodMenuClicks: 0,
+    },
+    impressionBreakdown: { searchMobile: 0, searchDesktop: 0, mapsMobile: 0, mapsDesktop: 0 },
+    topQueries: [],
   }
 
   /* Derive a 7-point sparkline series from the daily impressions feed.
      If we have fewer than 7 days, pad with zeros at the start. */
   const sparkSeries = (() => {
-    const series = data.daily.map(d => d.impressions)
+    const series = safeData.daily.map(d => d.impressions)
     return series.length >= 2 ? series : [...Array(Math.max(0, 7 - series.length)).fill(0), ...series]
   })()
 
-  const totalReach = data.totals.impressions
-  const totalReachPrior = data.prevTotals.impressions
+  const totalReach = safeData.totals.impressions
+  const totalReachPrior = safeData.prevTotals.impressions
   const totalChange = pctChange(totalReach, totalReachPrior)
 
-  const searchTotal = data.impressionBreakdown.searchMobile + data.impressionBreakdown.searchDesktop
-  const mapsTotal = data.impressionBreakdown.mapsMobile + data.impressionBreakdown.mapsDesktop
+  const searchTotal = safeData.impressionBreakdown.searchMobile + safeData.impressionBreakdown.searchDesktop
+  const mapsTotal = safeData.impressionBreakdown.mapsMobile + safeData.impressionBreakdown.mapsDesktop
 
   return (
     <div className="pb-tabbar -mx-4 -mt-4 lg:mx-0 lg:mt-0 bg-bg-2 min-h-screen">
@@ -134,6 +166,27 @@ export default function MobileAnalytics() {
           ))}
         </div>
       </div>
+
+      {/* Diagnostic banner: fetch error OR no client_id resolved.
+          Renders inline above the hero so it's visible without
+          masking the rest of the layout. */}
+      {fetchError && (
+        <div className="bg-rose-50 border-b border-rose-200 px-4 py-3 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[12.5px] font-semibold text-rose-900">Couldn&apos;t load analytics data</p>
+            <p className="text-[11.5px] text-rose-700 mt-0.5 break-words">{fetchError}</p>
+          </div>
+        </div>
+      )}
+      {!client?.id && !clientLoading && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-[12.5px] text-amber-900">
+            No client account linked to your login. Analytics needs a client to query.
+          </p>
+        </div>
+      )}
 
       {/* Hero */}
       <section className="bg-gradient-to-br from-brand to-brand-dark text-white px-5 pt-6 pb-5 relative overflow-hidden">
@@ -184,22 +237,22 @@ export default function MobileAnalytics() {
           <ActionTile
             icon={Phone}
             label="Calls"
-            value={data.totals.calls}
-            delta={pctChange(data.totals.calls, data.prevTotals.calls)}
+            value={safeData.totals.calls}
+            delta={pctChange(safeData.totals.calls, safeData.prevTotals.calls)}
             tint="bg-amber-50 text-amber-700"
           />
           <ActionTile
             icon={MapPin}
             label="Directions"
-            value={data.totals.directions}
-            delta={pctChange(data.totals.directions, data.prevTotals.directions)}
+            value={safeData.totals.directions}
+            delta={pctChange(safeData.totals.directions, safeData.prevTotals.directions)}
             tint="bg-emerald-50 text-emerald-700"
           />
           <ActionTile
             icon={Globe}
             label="Website"
-            value={data.totals.websiteClicks}
-            delta={pctChange(data.totals.websiteClicks, data.prevTotals.websiteClicks)}
+            value={safeData.totals.websiteClicks}
+            delta={pctChange(safeData.totals.websiteClicks, safeData.prevTotals.websiteClicks)}
             tint="bg-blue-50 text-blue-700"
           />
         </div>
@@ -240,27 +293,27 @@ export default function MobileAnalytics() {
             icon={Calendar}
             tint="bg-amber-100 text-amber-700"
             text="Direction requests"
-            highlight={pctChange(data.totals.directions, data.prevTotals.directions).delta || '—'}
-            tail={data.totals.directions > 0 ? "vs prior period — real customers heading your way." : "no direction requests this period yet."}
+            highlight={pctChange(safeData.totals.directions, safeData.prevTotals.directions).delta || '—'}
+            tail={safeData.totals.directions > 0 ? "vs prior period — real customers heading your way." : "no direction requests this period yet."}
           />
           <InsightItem
             icon={Sparkles}
             tint="bg-emerald-100 text-emerald-700"
             text="Conversion rate"
-            highlight={`${totalReach > 0 ? ((data.totals.directions + data.totals.calls) / totalReach * 100).toFixed(1) : '0'}%`}
+            highlight={`${totalReach > 0 ? ((safeData.totals.directions + safeData.totals.calls) / totalReach * 100).toFixed(1) : '0'}%`}
             tail="of views turned into real customer actions."
           />
         </ul>
       </section>
 
       {/* Top queries (if available) */}
-      {data.topQueries.length > 0 && (
+      {safeData.topQueries.length > 0 && (
         <section className="px-4 py-5 bg-bg-2 border-t border-ink-6">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3 mb-3">
             Top searches finding you
           </p>
           <ul className="bg-white rounded-2xl border border-ink-6 divide-y divide-ink-7 overflow-hidden">
-            {data.topQueries.slice(0, 5).map((q, i) => (
+            {safeData.topQueries.slice(0, 5).map((q, i) => (
               <li key={i} className="flex items-center justify-between px-4 py-3">
                 <span className="text-[13.5px] text-ink truncate flex-1">{q.query}</span>
                 <span className="text-[12.5px] font-semibold text-ink-2 tabular-nums ml-3">
