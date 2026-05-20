@@ -19,7 +19,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   Search, ChevronRight, Settings,
-  Target, BarChart3, Inbox, MessageSquare, Calendar,
+  BarChart3, MessageSquare, Calendar,
   MapPin, Star, Building2, Sparkles, Globe, Mail,
   ShoppingBag, Users, Newspaper, Palette, Link2,
   FileText, CreditCard, HelpCircle, X,
@@ -38,55 +38,52 @@ interface NavItem {
 
 interface NavGroup {
   label: string
+  /* 'grid' = visual boxes (marketing channels). 'list' = dense rows
+     (everything else). */
+  layout: 'grid' | 'list'
   items: NavItem[]
 }
 
+/* Note: Today + Inbox are intentionally omitted — they live in the
+   bottom tab bar, so repeating them here is redundant. Analytics is
+   also a tab; the menu keeps Audit (score + what-to-fix), which is
+   the actionable companion to the raw Analytics metrics. */
 const SECTIONS: NavGroup[] = [
   {
-    label: 'Every day',
+    label: 'Your marketing',
+    layout: 'grid',
     items: [
-      { label: 'Today',    href: '/dashboard',          icon: Target,        color: 'bg-blue-500' },
-      { label: 'Audit',    href: '/dashboard/audit',    icon: BarChart3,     color: 'bg-purple-500', keywords: 'score health performance' },
-      { label: 'Inbox',    href: '/dashboard/inbox',    icon: Inbox,         color: 'bg-orange-500', keywords: 'approvals tasks notifications' },
-      { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, color: 'bg-sky-500', keywords: 'chat strategist team' },
-      { label: 'Calendar', href: '/dashboard/calendar', icon: Calendar,      color: 'bg-emerald-500', keywords: 'schedule content posts' },
+      { label: 'Google & Maps', href: '/dashboard/local-seo',  icon: MapPin,   color: 'bg-red-500', keywords: 'local seo search maps gbp google business listing reviews' },
+      { label: 'Social media',  href: '/dashboard/social',     icon: Sparkles, color: 'bg-fuchsia-500', keywords: 'instagram facebook tiktok posts reels' },
+      { label: 'Website',       href: '/dashboard/website',    icon: Globe,    color: 'bg-teal-500', keywords: 'site traffic pages forms' },
+      { label: 'Reviews',       href: '/dashboard/local-seo/reviews', icon: Star, color: 'bg-amber-500', keywords: 'ratings reputation respond' },
+      { label: 'Email & SMS',   href: '/dashboard/email-sms',  icon: Mail,     color: 'bg-indigo-500', keywords: 'campaigns newsletter list texts' },
+      { label: 'Calendar',      href: '/dashboard/calendar',   icon: Calendar, color: 'bg-emerald-500', keywords: 'schedule content posts' },
     ],
   },
   {
-    label: 'Get found',
+    label: 'Grow & improve',
+    layout: 'list',
     items: [
-      { label: 'Google & Maps', href: '/dashboard/local-seo',         icon: MapPin,    color: 'bg-red-500', keywords: 'local seo search maps gbp google business' },
-      { label: 'Reviews',       href: '/dashboard/local-seo/reviews', icon: Star,      color: 'bg-amber-500', keywords: 'ratings reputation respond' },
-      { label: 'Your listing',  href: '/dashboard/local-seo/listing', icon: Building2, color: 'bg-blue-500', keywords: 'gbp hours photos info profile' },
-    ],
-  },
-  {
-    label: 'Look engaged',
-    items: [
-      { label: 'Social media', href: '/dashboard/social',    icon: Sparkles, color: 'bg-fuchsia-500', keywords: 'instagram facebook tiktok posts' },
-      { label: 'Website',      href: '/dashboard/website',   icon: Globe,    color: 'bg-teal-500', keywords: 'site traffic pages forms' },
-      { label: 'Email & SMS',  href: '/dashboard/email-sms', icon: Mail,     color: 'bg-indigo-500', keywords: 'campaigns newsletter list texts' },
-    ],
-  },
-  {
-    label: 'Grow with help',
-    items: [
+      { label: 'Audit',        href: '/dashboard/audit',       icon: BarChart3,   color: 'bg-purple-500', keywords: 'score health performance what to fix recommendations' },
       { label: 'Marketplace',  href: '/dashboard/marketplace', icon: ShoppingBag, color: 'bg-green-600', keywords: 'photographers designers agencies vendors freelancers hire' },
       { label: 'Your team',    href: '/dashboard/team',        icon: Users,       color: 'bg-violet-500', keywords: 'strategists assigned' },
+      { label: 'Messages',     href: '/dashboard/messages',    icon: MessageSquare, color: 'bg-sky-500', keywords: 'chat strategist talk human' },
       { label: 'Weekly briefs', href: '/dashboard/briefs',     icon: Newspaper,   color: 'bg-slate-500', keywords: 'strategy memo recap report' },
     ],
   },
   {
     label: 'Your business',
+    layout: 'list',
     items: [
-      { label: 'Restaurant info',  href: '/dashboard/restaurant',         icon: Building2, color: 'bg-stone-500', keywords: 'cuisine hours location details' },
-      { label: 'Brand & assets',   href: '/dashboard/assets',             icon: Palette,   color: 'bg-pink-500', keywords: 'logo photos style guide guidelines' },
-      { label: 'Connections',      href: '/dashboard/connected-accounts', icon: Link2,     color: 'bg-cyan-500', keywords: 'integrations social google connect accounts' },
-      { label: 'Business profile', href: '/dashboard/profile',            icon: Building2, color: 'bg-slate-500', keywords: 'story reservations' },
+      { label: 'Restaurant info', href: '/dashboard/restaurant',         icon: Building2, color: 'bg-stone-500', keywords: 'cuisine hours location details name' },
+      { label: 'Brand & assets',  href: '/dashboard/assets',             icon: Palette,   color: 'bg-pink-500', keywords: 'logo photos style guide guidelines' },
+      { label: 'Connections',     href: '/dashboard/connected-accounts', icon: Link2,     color: 'bg-cyan-500', keywords: 'integrations social google connect accounts' },
     ],
   },
   {
     label: 'Account',
+    layout: 'list',
     items: [
       { label: 'Services',   href: '/dashboard/services',   icon: ShoppingBag, color: 'bg-emerald-600', keywords: 'subscriptions plans packages' },
       { label: 'Billing',    href: '/dashboard/billing',    icon: CreditCard,  color: 'bg-green-600', keywords: 'invoices payment card' },
@@ -196,7 +193,9 @@ export default function MenuView({ restaurantName, userName, userEmail, userInit
                 {section.label}
               </p>
               <div className="px-4">
-                <Group items={section.items} />
+                {section.layout === 'grid'
+                  ? <BoxGrid items={section.items} />
+                  : <Group items={section.items} />}
               </div>
             </section>
           ))}
@@ -209,6 +208,31 @@ export default function MenuView({ restaurantName, userName, userEmail, userInit
       </div>
 
       <p className="text-center text-[11px] text-ink-4 pb-6">Apnosh · v0.1</p>
+    </div>
+  )
+}
+
+/* A 3-column grid of visual boxes — for the marketing channels owners
+   reach for most. Each box: colored icon square + label, tappable. */
+function BoxGrid({ items }: { items: NavItem[] }) {
+  return (
+    <div className="grid grid-cols-3 gap-2.5">
+      {items.map(item => {
+        const Icon = item.icon
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            prefetch={false}
+            className="bg-white rounded-2xl border border-ink-6 p-3 flex flex-col items-center text-center gap-2 min-h-[92px] justify-center active:bg-ink-7 transition-colors"
+          >
+            <span className={`inline-flex items-center justify-center w-11 h-11 rounded-2xl flex-shrink-0 text-white ${item.color}`}>
+              <Icon className="w-[22px] h-[22px]" />
+            </span>
+            <span className="text-[12px] font-semibold text-ink leading-tight">{item.label}</span>
+          </Link>
+        )
+      })}
     </div>
   )
 }
