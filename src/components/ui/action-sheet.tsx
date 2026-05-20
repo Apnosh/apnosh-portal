@@ -15,8 +15,8 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  X, Sparkles, MessageCircle, Send, Camera, Image as ImageIcon,
-  ArrowRight, Star, Calendar,
+  X, Sparkles, MessageCircle, Camera, Clock, Tag,
+  ArrowRight, ClipboardList,
 } from 'lucide-react'
 
 interface ActionSheetProps {
@@ -32,6 +32,11 @@ interface SheetAction {
   description: string
   href: string
   tint: string
+}
+
+interface SheetGroup {
+  label: string
+  actions: SheetAction[]
 }
 
 export default function ActionSheet({ open, onClose, strategistId }: ActionSheetProps) {
@@ -55,59 +60,76 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
 
   if (!open) return null
 
-  /* Actions deep-link via URL params where the target component
-     already has a "open me" trigger:
-       ?chat=open    → AgentChat slides in (handled in agent-chat.tsx)
-       ?request=open → QuickRequest opens (handled in quick-request.tsx)
-     For the rest we navigate to a real page. */
-  const actions: SheetAction[] = [
+  /* Quick actions are grouped by intent:
+       CREATE  — the impulse moments an owner acts on instantly. These
+                 route through the AI orchestrator (?ask=) so the agent
+                 handles captioning, special graphics, and the
+                 multi-platform hours broadcast we built.
+       GET HELP — reach a human or the assistant, or queue a bigger ask.
+
+     Deep-link conventions:
+       ?ask=<text>   → AgentChat opens with the text prefilled
+       ?chat=open    → AgentChat opens blank
+       ?request=open → QuickRequest opens
+     Plain paths navigate to a real page. */
+  const groups: SheetGroup[] = [
     {
-      key: 'ai',
-      icon: Sparkles,
-      label: 'Ask Apnosh AI',
-      description: 'Chat with your AI strategist',
-      href: `${pathname}?chat=open`,
-      tint: 'bg-brand-tint text-brand-dark',
+      label: 'Create',
+      actions: [
+        {
+          key: 'photo',
+          icon: Camera,
+          label: 'Share a photo',
+          description: 'Snap a dish — we\'ll write the caption',
+          href: `${pathname}?ask=${encodeURIComponent('I want to share a new photo')}`,
+          tint: 'bg-emerald-50 text-emerald-700',
+        },
+        {
+          key: 'special',
+          icon: Tag,
+          label: 'Post a special',
+          description: 'Promote tonight\'s deal or event',
+          href: `${pathname}?ask=${encodeURIComponent('Help me post a special or deal')}`,
+          tint: 'bg-amber-50 text-amber-700',
+        },
+        {
+          key: 'hours',
+          icon: Clock,
+          label: 'Update your hours',
+          description: 'Holiday or special hours, synced everywhere',
+          href: `${pathname}?ask=${encodeURIComponent('I need to update my hours')}`,
+          tint: 'bg-rose-50 text-rose-700',
+        },
+      ],
     },
     {
-      key: 'request',
-      icon: Send,
-      label: 'Request content',
-      description: 'Posts, videos, designs',
-      href: `${pathname}?request=open`,
-      tint: 'bg-purple-50 text-purple-700',
-    },
-    {
-      key: 'message',
-      icon: MessageCircle,
-      label: 'Message your strategist',
-      description: 'Talk to a real human',
-      href: strategistId ? `/dashboard/messages?to=${strategistId}` : '/dashboard/messages',
-      tint: 'bg-blue-50 text-blue-700',
-    },
-    {
-      key: 'post',
-      icon: ImageIcon,
-      label: 'Make a post',
-      description: 'Schedule a social or GBP post',
-      href: '/dashboard/social/calendar?action=new',
-      tint: 'bg-amber-50 text-amber-700',
-    },
-    {
-      key: 'photo',
-      icon: Camera,
-      label: 'Upload photos',
-      description: 'Add to your library',
-      href: '/dashboard/assets?upload=1',
-      tint: 'bg-emerald-50 text-emerald-700',
-    },
-    {
-      key: 'review',
-      icon: Star,
-      label: 'Respond to reviews',
-      description: 'AI drafts ready for approval',
-      href: '/dashboard/local-seo/reviews',
-      tint: 'bg-rose-50 text-rose-700',
+      label: 'Get help',
+      actions: [
+        {
+          key: 'ai',
+          icon: Sparkles,
+          label: 'Ask Apnosh AI',
+          description: 'Ideas, answers, anything',
+          href: `${pathname}?chat=open`,
+          tint: 'bg-brand-tint text-brand-dark',
+        },
+        {
+          key: 'message',
+          icon: MessageCircle,
+          label: 'Message your team',
+          description: 'Talk to a real human',
+          href: strategistId ? `/dashboard/messages?to=${strategistId}` : '/dashboard/messages',
+          tint: 'bg-blue-50 text-blue-700',
+        },
+        {
+          key: 'request',
+          icon: ClipboardList,
+          label: 'Request content',
+          description: 'Have us make something for you',
+          href: `${pathname}?request=open`,
+          tint: 'bg-purple-50 text-purple-700',
+        },
+      ],
     },
   ]
 
@@ -145,41 +167,38 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
           </button>
         </div>
 
-        {/* Action list */}
-        <ul className="px-3 py-2 overflow-y-auto touch-scroll">
-          {actions.map(a => {
-            const Icon = a.icon
-            return (
-              <li key={a.key}>
-                <Link
-                  href={a.href}
-                  onClick={onClose}
-                  className="flex items-center gap-3 px-3 py-3 rounded-2xl active:bg-ink-7 transition-colors min-h-[64px]"
-                >
-                  <span className={`inline-flex items-center justify-center w-11 h-11 rounded-2xl flex-shrink-0 ${a.tint}`}>
-                    <Icon className="w-5 h-5" />
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[15px] font-semibold text-ink leading-tight">{a.label}</p>
-                    <p className="text-[12.5px] text-ink-3 mt-0.5">{a.description}</p>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-ink-4 flex-shrink-0" />
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-
-        {/* Bottom calendar shortcut */}
-        <div className="px-5 pb-4 pt-2 border-t border-ink-7">
-          <Link
-            href="/dashboard/calendar"
-            onClick={onClose}
-            className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-3 active:text-ink"
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            Open content calendar
-          </Link>
+        {/* Grouped actions */}
+        <div className="px-3 pb-3 overflow-y-auto touch-scroll">
+          {groups.map(group => (
+            <div key={group.label} className="mb-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-3 px-3 pt-3 pb-1.5">
+                {group.label}
+              </p>
+              <ul>
+                {group.actions.map(a => {
+                  const Icon = a.icon
+                  return (
+                    <li key={a.key}>
+                      <Link
+                        href={a.href}
+                        onClick={onClose}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-2xl active:bg-ink-7 transition-colors min-h-[60px]"
+                      >
+                        <span className={`inline-flex items-center justify-center w-11 h-11 rounded-2xl flex-shrink-0 ${a.tint}`}>
+                          <Icon className="w-5 h-5" />
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[15px] font-semibold text-ink leading-tight">{a.label}</p>
+                          <p className="text-[12.5px] text-ink-3 mt-0.5">{a.description}</p>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-ink-4 flex-shrink-0" />
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
         </div>
       </div>
     </>
