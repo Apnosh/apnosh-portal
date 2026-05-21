@@ -22,7 +22,7 @@
     --bg:#ffffff; --surface:#ffffff;
     --brand:#4abd98; --brand-d:#2e9a78; --brand-g:rgba(74,189,152,0.15); --brand-t:#eaf7f3;
     --drop:#c2453d; --hairline-2:#ececf0;
-    --chart-line:#2e9a78; --chart-fill:rgba(74,189,152,0.26);
+    --chart-line:#2e9a78; --chart-fill:rgba(74,189,152,0.32);
     --spot-bg:none;
     --num-font:var(--font-display); --num-weight:600; --num-size:98px; --num-spacing:-0.02em;
     --pill-active-bg:var(--brand-g); --pill-active-fg:var(--brand-d); --pill-fg:var(--ink-3);
@@ -54,6 +54,7 @@
   .frame[data-theme="clean"] .screen { background:linear-gradient(180deg, #f0faf6 0%, #ffffff 26%); }
   .spot { background:var(--spot-bg); }
   .t-eyebrow { font-family:var(--font-body); font-size:11.5px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--brand-d); margin:0; }
+  .eb-pill { display:inline-block; background:var(--brand-g); padding:5px 12px; border-radius:99px; }
   .t-body-strong { font-size:16px; font-weight:600; color:var(--ink); margin:0; }
   .t-small { font-size:13px; }
   .hero-num { font-family:var(--num-font); font-weight:var(--num-weight); font-size:var(--num-size); letter-spacing:var(--num-spacing); line-height:.92; color:var(--ink); margin:16px 0 0; font-variant-numeric:tabular-nums; }
@@ -180,7 +181,7 @@ function Home({ tweaks, data, onTabClick, onOpen }) {
 }
 
 function Section({ eyebrow, action, children }) {
-  return (<section className="sx"><div className="sx-head"><p className="t-eyebrow">{eyebrow}</p>{action && (<button onClick={action.onClick} className="btn-quiet">{action.label} <I.ChevR size={12} stroke={2.2} /></button>)}</div>{children}</section>);
+  return (<section className="sx"><div className="sx-head"><p className="t-eyebrow eb-pill">{eyebrow}</p>{action && (<button onClick={action.onClick} className="btn-quiet">{action.label} <I.ChevR size={12} stroke={2.2} /></button>)}</div>{children}</section>);
 }
 
 function SlimHeader({ restaurant, hasNotifications, onBell }) {
@@ -282,7 +283,7 @@ function SourceBar({ sources }) {
       {sources.map((s)=>(
         <div key={s.key} style={{ display:"flex", flexDirection:"column", gap:4, minWidth:0 }}>
           <span style={{ fontSize:11, fontWeight:500, color:"var(--ink-3)", letterSpacing:"0.02em", textTransform:"uppercase" }}>{s.label}</span>
-          <span className="tabular" style={{ fontFamily:"var(--font-body)", fontSize:20, fontWeight:600, color:"var(--ink)", letterSpacing:"-0.02em", lineHeight:1 }}>{typeof s.value==="number"?s.value.toLocaleString():s.value}</span>
+          <span className="tabular" style={{ fontFamily:"var(--font-display)", fontSize:21, fontWeight:600, color:"var(--ink)", letterSpacing:"-0.01em", lineHeight:1 }}>{typeof s.value==="number"?s.value.toLocaleString():s.value}</span>
         </div>
       ))}
     </div>
