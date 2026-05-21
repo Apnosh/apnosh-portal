@@ -178,6 +178,8 @@
   .chan-n { display:block; font-size:15px; font-weight:600; color:var(--ink); }
   .chan-s { display:block; font-size:11.5px; color:var(--ink-4); margin-top:1px; }
   .chan-spark { flex:0 0 58px; height:30px; }
+  .chan-connect { flex:0 0 auto; font-size:13px; font-weight:600; color:var(--brand-d); background:var(--brand-t); padding:8px 16px; border-radius:9999px; white-space:nowrap; }
+  .chan-off .chan-s { color:var(--ink-4); }
   .chan-r { display:flex; flex-direction:column; align-items:flex-end; min-width:62px; }
   .chan-v { font-size:16px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
   .chan-d { font-size:12px; font-weight:600; margin-top:1px; }
@@ -477,10 +479,13 @@
   var CHANNELS=[
     ['Local presence','Profile views','1,840','+12%','up',[40,44,42,50,55,52,60,66],'https://portal.apnosh.com/dashboard/local-seo'],
     ['Social media','Reach','1,720','+22%','up',[20,26,24,30,42,38,52,60],'https://portal.apnosh.com/dashboard/social'],
-    ['Website','Visitors','412','+5%','up',[30,28,33,31,35,34,37,39],'https://portal.apnosh.com/dashboard/website'],
+    ['Website','Visitors','412','+5%','up',[30,28,33,31,35,34,37,39],'https://portal.apnosh.com/dashboard/website',false],
     ['Reviews','Avg rating','4.7★','+3 new','up',[44,45,44,46,45,47,46,47],'https://portal.apnosh.com/dashboard/local-seo/reviews']
   ];
-  $('channels').innerHTML=CHANNELS.map(function(c){ return '<a class="chan" href="'+c[6]+'"><div class="chan-l"><span class="chan-n">'+c[0]+'</span><span class="chan-s">'+c[1]+'</span></div><div class="chan-spark">'+miniSpark(c[5],c[4])+'</div><div class="chan-r"><span class="chan-v">'+c[2]+'</span><span class="chan-d '+c[4]+'">'+c[3]+'</span></div>'+chanChev+'</a>'; }).join('');
+  $('channels').innerHTML=CHANNELS.map(function(c){
+    if(c[7]===false){ return '<a class="chan chan-off" href="'+c[6]+'"><div class="chan-l"><span class="chan-n">'+c[0]+'</span><span class="chan-s">Not connected</span></div><span class="chan-connect">Connect</span></a>'; }
+    return '<a class="chan" href="'+c[6]+'"><div class="chan-l"><span class="chan-n">'+c[0]+'</span><span class="chan-s">'+c[1]+'</span></div><div class="chan-spark">'+miniSpark(c[5],c[4])+'</div><div class="chan-r"><span class="chan-v">'+c[2]+'</span><span class="chan-d '+c[4]+'">'+c[3]+'</span></div>'+chanChev+'</a>';
+  }).join('');
 
   var PLAN=[
     ['In 4 days','Memorial Day','Your busiest Monday. Launch a promo to capture it.','Plan a promo','gift'],
