@@ -170,6 +170,19 @@
   .plan-hint { font-size:13px; color:var(--ink-3); margin:3px 0 0; line-height:1.4; }
   .plan-cta { font-size:13px; font-weight:600; color:var(--brand-d); margin-top:10px; }
 
+  /* This week — weekly recap card */
+  .recap { background:var(--surface); border:1px solid var(--hairline-2); border-radius:16px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
+  .recap-body { display:flex; align-items:flex-start; gap:12px; }
+  .recap-ic { flex:0 0 auto; width:36px; height:36px; border-radius:10px; background:var(--brand-g); color:var(--brand-d); display:flex; align-items:center; justify-content:center; }
+  .recap-ic svg { width:19px; height:19px; }
+  .recap-txt { min-width:0; }
+  .recap-line { margin:0; font-size:15px; font-weight:500; color:var(--ink); line-height:1.4; }
+  .recap-line b { font-weight:700; } .recap-line .hl { color:var(--brand-d); }
+  .recap-break { margin:5px 0 0; font-size:13px; color:var(--ink-3); line-height:1.4; }
+  .recap-cta { display:flex; align-items:center; gap:3px; width:100%; margin-top:13px; padding-top:13px; border:0; border-top:1px solid var(--hairline-2); background:none; font-family:inherit; font-size:13.5px; font-weight:600; color:var(--brand-d); cursor:pointer; }
+  .recap-cta svg { width:14px; height:14px; }
+  .recap-cta:active { opacity:.5; }
+
   /* Your channels — Robinhood-style watchlist rows */
   .chan { display:flex; align-items:center; gap:10px; width:100%; background:none; border:0; border-top:1px solid var(--hairline-2); padding:14px 0; text-align:left; cursor:pointer; font-family:inherit; text-decoration:none; color:inherit; }
   #channels .chan:first-child { border-top:0; }
@@ -282,7 +295,7 @@
 
         <section class="sx">
           <div class="sx-head"><p class="t-eyebrow">This week</p></div>
-          <ul class="list" id="week"></ul>
+          <div id="week"></div>
         </section>
       </div>
 
@@ -469,10 +482,23 @@
     $('needs').innerHTML=h;
   }
   renderNeeds(NEEDS);
-  $('week').innerHTML=[
-    '<li><button class="row">'+rowIc('check')+'<p class="rowt"><b>7</b> <span class="muted">shipped</span></p>'+chevR+'</button></li>',
-    '<li><button class="row">'+rowIc('user')+'<p class="rowt"><span style="font-weight:600">Maria</span> <span class="muted">your strategist</span></p>'+chevR+'</button></li>'
-  ].join('');
+  var WEEK={ shipped:7, items:'3 posts · 2 review replies · 2 profile updates', strategist:'Maria' };
+  function renderWeek(w){
+    var paid=!!w.strategist, chev='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+    var lead = paid ? '<span class="avatar">'+w.strategist[0]+'</span>' : '<span class="recap-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+ICONS.check+'</svg></span>';
+    var line, brk;
+    if(w.shipped>0){
+      var n='<b class="hl">'+w.shipped+' update'+(w.shipped===1?'':'s')+'</b>';
+      line = paid ? '<b>'+w.strategist+'</b> shipped '+n+' for you this week' : 'You shipped '+n+' this week';
+      brk = '<p class="recap-break">'+w.items+'</p>';
+    } else {
+      line = paid ? '<b>'+w.strategist+'</b> is working on this week’s updates' : 'Your week is just getting started';
+      brk = '<p class="recap-break">We’ll recap what gets done right here.</p>';
+    }
+    var cta = paid ? 'Message '+w.strategist : 'See your activity';
+    $('week').innerHTML='<div class="recap"><div class="recap-body">'+lead+'<div class="recap-txt"><p class="recap-line">'+line+'</p>'+brk+'</div></div><button class="recap-cta">'+cta+chev+'</button></div>';
+  }
+  renderWeek(WEEK);
 
   function miniSpark(vals,dir){ var w=58,h=30,min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),rg=Math.max(max-min,0.0001); var pts=vals.map(function(v,i){return {x:(i*w)/(vals.length-1),y:(h-3)-((v-min)/rg)*(h-6)};}); var d=pts.map(function(p,i){return (i?'L':'M')+p.x.toFixed(1)+' '+p.y.toFixed(1);}).join(' '); var area=d+' L '+w+' '+h+' L 0 '+h+' Z'; var col=dir==='down'?'var(--drop)':'var(--brand)'; var fc=dir==='down'?'rgba(194,69,61,0.12)':'rgba(74,189,152,0.14)'; return '<svg width="58" height="30" viewBox="0 0 58 30" fill="none" preserveAspectRatio="none"><path d="'+area+'" fill="'+fc+'"/><path d="'+d+'" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>'; }
   var chanChev='<svg class="chan-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
