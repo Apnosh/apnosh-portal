@@ -36,13 +36,23 @@
   .frame { max-width:402px; margin:0 auto; background:var(--bg); min-height:100vh; }
   @media (min-width:440px) { body { padding:0 0 28px; } .stage { padding:18px 0 28px; } .frame { border-radius:34px; overflow:hidden; box-shadow:0 28px 80px rgba(0,0,0,.18); min-height:auto; } }
 
-  .screen { background:var(--bg); padding-bottom:30px; color:var(--ink); }
+  .screen { background:var(--bg); padding-bottom:92px; color:var(--ink); }
   .frame[data-theme="clean"] .screen { background:linear-gradient(180deg,#f0faf6 0%,#ffffff 26%); }
 
   header.app { display:flex; align-items:center; justify-content:space-between; padding:16px 22px 4px; gap:12px; }
   .rname { font-family:var(--font-display); font-size:18px; font-weight:400; letter-spacing:-0.01em; color:var(--ink); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .bell { width:40px; height:40px; border-radius:9999px; color:var(--ink-2); display:inline-flex; align-items:center; justify-content:center; position:relative; flex-shrink:0; margin-right:-8px; background:none; border:0; }
   .bell .dot { position:absolute; top:7px; right:8px; width:8px; height:8px; border-radius:9999px; background:var(--brand); }
+  .idwrap { display:flex; align-items:center; gap:10px; flex:1; min-width:0; }
+  .avatar { width:34px; height:34px; border-radius:9999px; background:var(--brand-t); color:var(--brand-d); font-family:var(--font-display); font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+
+  /* Bottom tab bar */
+  .tabbar { position:fixed; left:50%; bottom:0; transform:translateX(-50%); width:100%; max-width:402px; height:62px; padding-bottom:env(safe-area-inset-bottom); background:rgba(255,255,255,0.94); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border-top:1px solid var(--hairline-2); display:flex; align-items:center; justify-content:space-around; z-index:60; }
+  .tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:0; color:var(--ink-4); font-size:10px; font-weight:600; cursor:pointer; font-family:inherit; padding:0; }
+  .tab.on { color:var(--ink); }
+  .tab svg { width:22px; height:22px; }
+  .tab-fab { flex:0 0 auto; width:52px; height:52px; border-radius:9999px; background:var(--brand); color:#fff; display:flex; align-items:center; justify-content:center; border:0; cursor:pointer; box-shadow:0 10px 22px rgba(74,189,152,0.45); margin-top:-20px; }
+  .tab-fab svg { width:26px; height:26px; }
 
   .spot { position:relative; padding:20px 22px 22px; }
   .t-eyebrow { font-family:var(--font-body); font-size:11.5px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--brand-d); margin:0; }
@@ -130,7 +140,7 @@
     <div class="frame" data-theme="clean">
       <div class="screen">
         <header class="app">
-          <p class="rname" id="rname">Yellow Bee Market</p>
+          <div class="idwrap"><span class="avatar">YB</span><p class="rname" id="rname">Yellow Bee Market</p></div>
           <button class="bell" aria-label="Inbox">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
             <span class="dot"></span>
@@ -190,6 +200,14 @@
           <ul class="list" id="week"></ul>
         </section>
       </div>
+
+      <nav class="tabbar">
+        <button class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 4l9 6.5"/><path d="M5 9.5V20h14V9.5"/></svg><span>Home</span></button>
+        <button class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-5l-2 3h-6l-2-3H2"/><path d="M5.5 6h13l3.5 6v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-6z"/></svg><span>Inbox</span></button>
+        <button class="tab-fab" aria-label="Create"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v17h17"/><path d="m7 14 3-4 3 3 4-6"/></svg><span>Insights</span></button>
+        <button class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Menu</span></button>
+      </nav>
     </div>
   </div>
 </div>
