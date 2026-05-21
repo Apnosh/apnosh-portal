@@ -144,47 +144,61 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
   const safe = async <T,>(p: PromiseLike<{ data: T[] | null }>): Promise<T[]> => {
     try { const r = await p; return r.data ?? [] } catch { return [] }
   }
-  const [gbp, social, web, reviews] = await Promise.all([
+  const [gbp, social, web, reviews, localRevs, gbpConn, socialConn, clientRow] = await Promise.all([
     safe(admin.from('gbp_metrics').select('date, search_views, photo_views').eq('client_id', clientId).gte('date', bound)),
     safe(admin.from('social_metrics').select('date, reach').eq('client_id', clientId).gte('date', bound)),
     safe(admin.from('website_metrics').select('date, visitors').eq('client_id', clientId).gte('date', bound)),
     safe(admin.from('reviews').select('rating, posted_at').eq('client_id', clientId)),
+    safe(admin.from('local_reviews').select('rating, created_at_platform').eq('client_id', clientId)),
+    safe(admin.from('gbp_connections').select('id').eq('client_id', clientId)),
+    safe(admin.from('social_connections').select('sync_status').eq('client_id', clientId)),
+    safe(admin.from('clients').select('has_apnosh_website').eq('id', clientId)),
   ])
+
+  /* Connected = a real connection record exists (not "has recent data"),
+     so a freshly-linked channel still reads as connected before data lands. */
+  const gbpConnected = (gbpConn as unknown[]).length > 0
+  const socialConnected = (socialConn as { sync_status?: string }[]).some(c => c.sync_status !== 'disconnected')
+  const websiteConnected = ((clientRow as { has_apnosh_website?: boolean }[])[0]?.has_apnosh_website) === true
 
   const out: Channel[] = []
 
-  // Local presence — profile views
+  // Local presence — profile views (Google Business Profile)
   {
     const rows = (gbp as Record<string, unknown>[]).map(r => ({ date: String(r.date), v: num(r.search_views) + num(r.photo_views) }))
     const st = seriesStats(rows, today, 3)
     const d = pctDelta(st.last7, st.prev7)
-    out.push({ name: 'Local presence', sub: 'Profile views', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: st.hasData, href: '/dashboard/local-seo' })
+    out.push({ name: 'Local presence', sub: 'Profile views', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: gbpConnected, href: '/dashboard/local-seo' })
   }
   // Social — reach
   {
     const rows = (social as Record<string, unknown>[]).map(r => ({ date: String(r.date), v: num(r.reach) }))
     const st = seriesStats(rows, today, 1)
     const d = pctDelta(st.last7, st.prev7)
-    out.push({ name: 'Social media', sub: 'Reach', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: st.hasData, href: '/dashboard/social' })
+    out.push({ name: 'Social media', sub: 'Reach', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: socialConnected, href: '/dashboard/social' })
   }
   // Website — visitors
   {
     const rows = (web as Record<string, unknown>[]).map(r => ({ date: String(r.date), v: num(r.visitors) }))
     const st = seriesStats(rows, today, 1)
     const d = pctDelta(st.last7, st.prev7)
-    out.push({ name: 'Website', sub: 'Visitors', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: st.hasData, href: '/dashboard/website' })
+    // Website analytics are script-based (no OAuth record), so a tracked
+    // site (data present) counts as connected too, not just an Apnosh build.
+    out.push({ name: 'Website', sub: 'Visitors', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: websiteConnected || st.hasData, href: '/dashboard/website' })
   }
-  // Reviews — avg rating + new this week
+  // Reviews — avg rating + new this week (reviews + GBP local_reviews)
   {
-    const revs = reviews as { rating?: number | null; posted_at?: string | null }[]
-    const connected = revs.length > 0
-    const avg = connected ? revs.reduce((s, r) => s + num(r.rating), 0) / revs.length : 0
+    const revs: { rating: number; date: string | null }[] = [
+      ...(reviews as { rating?: number | null; posted_at?: string | null }[]).map(r => ({ rating: num(r.rating), date: r.posted_at ? String(r.posted_at) : null })),
+      ...(localRevs as { rating?: number | null; created_at_platform?: string | null }[]).map(r => ({ rating: num(r.rating), date: r.created_at_platform ? String(r.created_at_platform) : null })),
+    ]
+    const hasRev = revs.length > 0
+    const avg = hasRev ? revs.reduce((s, r) => s + r.rating, 0) / revs.length : 0
     const weekAgo = today.getTime() - 7 * DAY
-    const newCount = revs.filter(r => r.posted_at && new Date(r.posted_at).getTime() >= weekAgo).length
-    // sparkline: rolling weekly review counts (volume)
-    const rows = revs.filter(r => r.posted_at).map(r => ({ date: String(r.posted_at).slice(0, 10), v: 1 }))
+    const newCount = revs.filter(r => r.date && new Date(r.date).getTime() >= weekAgo).length
+    const rows = revs.filter(r => r.date).map(r => ({ date: String(r.date).slice(0, 10), v: 1 }))
     const st = seriesStats(rows, today)
-    out.push({ name: 'Reviews', sub: 'Avg rating', value: connected ? avg.toFixed(1) + '★' : '—', delta: newCount > 0 ? `+${newCount} new` : '—', dir: 'up', spark: st.spark, connected, href: '/dashboard/local-seo/reviews' })
+    out.push({ name: 'Reviews', sub: 'Avg rating', value: hasRev ? avg.toFixed(1) + '★' : '—', delta: newCount > 0 ? `+${newCount} new` : '—', dir: 'up', spark: st.spark, connected: gbpConnected, href: '/dashboard/local-seo/reviews' })
   }
 
   return out

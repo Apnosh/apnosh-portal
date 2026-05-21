@@ -212,7 +212,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
   const today = startOfDay(new Date())
   const bound = ymd(new Date(today.getTime() - BOUND_DAYS * DAY))
 
-  const [gbp, social, reviews] = await Promise.all([
+  const [gbp, social, reviews, localReviews] = await Promise.all([
     admin.from('gbp_metrics')
       .select('date, directions, calls, website_clicks, bookings')
       .eq('client_id', clientId).gte('date', bound).order('date', { ascending: true }),
@@ -222,6 +222,9 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     admin.from('reviews')
       .select('rating, response_text, posted_at')
       .eq('client_id', clientId).gte('posted_at', bound + 'T00:00:00'),
+    admin.from('local_reviews')
+      .select('rating, reply_text, created_at_platform')
+      .eq('client_id', clientId).gte('created_at_platform', bound + 'T00:00:00'),
   ])
 
   /* ── customers ── */
@@ -276,6 +279,16 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     repCount.set(d, (repCount.get(d) ?? 0) + 1)
     repRating.set(d, (repRating.get(d) ?? 0) + rating)
     if (r.response_text) repReplied.set(d, (repReplied.get(d) ?? 0) + 1)
+    if (rating >= 5) repFive.set(d, (repFive.get(d) ?? 0) + 1)
+  }
+  /* Merge GBP reviews (local_reviews) into the same daily maps. */
+  for (const r of (localReviews.data ?? []) as Record<string, unknown>[]) {
+    if (!r.created_at_platform) continue
+    const d = String(r.created_at_platform).slice(0, 10)
+    const rating = num(r.rating)
+    repCount.set(d, (repCount.get(d) ?? 0) + 1)
+    repRating.set(d, (repRating.get(d) ?? 0) + rating)
+    if (r.reply_text) repReplied.set(d, (repReplied.get(d) ?? 0) + 1)
     if (rating >= 5) repFive.set(d, (repFive.get(d) ?? 0) + 1)
   }
   const reputation = buildMetric({
