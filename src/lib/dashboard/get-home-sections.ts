@@ -79,15 +79,16 @@ async function loadNeeds(clientId: string): Promise<NeedItem[]> {
   } catch (e) { console.error('[home-sections] needs', e); return [] }
 }
 
-/* ── This week recap (events ledger) ───────────────────────── */
-function eventCategory(type: string, summary: string): string | null {
-  const s = (type + ' ' + summary).toLowerCase()
-  if (/post|caption|content|social|instagram|reel/.test(s)) return 'posts'
-  if (/review/.test(s)) return 'review replies'
-  if (/profile|gbp|listing|hours|business info/.test(s)) return 'profile updates'
-  if (/site|website|page|seo/.test(s)) return 'website updates'
-  if (/photo|image|shoot/.test(s)) return 'photos'
-  return null
+/* ── This week recap (events ledger) ───────────────────────────
+   Maps the real event_type vocabulary to "work shipped for you"
+   buckets. Only deliverable events count — requests, suggestions,
+   billing, dismissals and team/admin actions are excluded. */
+const SHIPPED_EVENTS: Record<string, string> = {
+  'draft.published_to_platforms': 'posts',
+  'review.replied': 'review replies',
+  'engage.replied': 'message replies',
+  'shoot.completed': 'photo shoots',
+  'draft.outcome_attached': 'results added',
 }
 
 async function loadWeek(clientId: string): Promise<WeekRecap> {
@@ -109,17 +110,17 @@ async function loadWeek(clientId: string): Promise<WeekRecap> {
       .limit(200)
     const buckets = new Map<string, number>()
     let shipped = 0
-    for (const e of (data ?? []) as { event_type?: string; summary?: string; actor_role?: string }[]) {
-      // Work shipped FOR the client = anything not done by the client themselves.
+    for (const e of (data ?? []) as { event_type?: string; actor_role?: string }[]) {
+      // Work shipped FOR the client — exclude anything they did themselves.
       if (e.actor_role === 'client' || e.actor_role === 'owner') continue
-      const cat = eventCategory(e.event_type ?? '', e.summary ?? '')
+      const cat = SHIPPED_EVENTS[e.event_type ?? '']
       if (!cat) continue
       buckets.set(cat, (buckets.get(cat) ?? 0) + 1)
       shipped++
     }
     const items = [...buckets.entries()]
       .sort((a, b) => b[1] - a[1]).slice(0, 3)
-      .map(([cat, n]) => `${n} ${cat.replace(/s$/, n === 1 ? '' : 's')}`).join(' · ')
+      .map(([cat, n]) => `${n} ${cat}`).join(' · ')
     return { shipped, items: items || 'Updates across your channels', strategist }
   } catch (e) { console.error('[home-sections] week', e); return { shipped: 0, items: '', strategist } }
 }
