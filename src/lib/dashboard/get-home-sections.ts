@@ -35,7 +35,7 @@ function pctDelta(cur: number, prev: number): { delta: string; dir: 'up' | 'down
 
 /* Build a daily map and derive: last-7 sum, prior-7 sum, and 8 weekly
    points for the sparkline. */
-function seriesStats(rows: { date: string; v: number }[], today: Date) {
+function seriesStats(rows: { date: string; v: number }[], today: Date, settleDays = 0) {
   const byDate = new Map<string, number>()
   let maxK: string | null = null
   for (const r of rows) {
@@ -43,9 +43,12 @@ function seriesStats(rows: { date: string; v: number }[], today: Date) {
     byDate.set(k, (byDate.get(k) ?? 0) + r.v)
     if (maxK === null || k > maxK) maxK = k
   }
-  /* Anchor windows on the latest synced day, not today, so a source lag
-     (e.g. Google's 1-2 day delay) doesn't read recent days as zero. */
-  const anchor = maxK ? new Date(maxK + 'T00:00:00') : today
+  /* Anchor windows on the reliable frontier — min(latest synced day,
+     today − settle) — so a source's lag AND its partial recent days
+     (Google backfills the last ~3) never read as a real drop. */
+  const cutoff = ymd(new Date(today.getTime() - settleDays * DAY))
+  const anchorKey = maxK ? (maxK < cutoff ? maxK : cutoff) : cutoff
+  const anchor = new Date(anchorKey + 'T00:00:00')
   const dayAt = (offset: number) => byDate.get(ymd(new Date(anchor.getTime() - offset * DAY))) ?? 0
   const window = (n: number, off = 0) => { let s = 0; for (let i = 0; i < n; i++) s += dayAt(i + off); return s }
   const last7 = window(7), prev7 = window(7, 7)
@@ -153,21 +156,21 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
   // Local presence — profile views
   {
     const rows = (gbp as Record<string, unknown>[]).map(r => ({ date: String(r.date), v: num(r.search_views) + num(r.photo_views) }))
-    const st = seriesStats(rows, today)
+    const st = seriesStats(rows, today, 3)
     const d = pctDelta(st.last7, st.prev7)
     out.push({ name: 'Local presence', sub: 'Profile views', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: st.hasData, href: '/dashboard/local-seo' })
   }
   // Social — reach
   {
     const rows = (social as Record<string, unknown>[]).map(r => ({ date: String(r.date), v: num(r.reach) }))
-    const st = seriesStats(rows, today)
+    const st = seriesStats(rows, today, 1)
     const d = pctDelta(st.last7, st.prev7)
     out.push({ name: 'Social media', sub: 'Reach', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: st.hasData, href: '/dashboard/social' })
   }
   // Website — visitors
   {
     const rows = (web as Record<string, unknown>[]).map(r => ({ date: String(r.date), v: num(r.visitors) }))
-    const st = seriesStats(rows, today)
+    const st = seriesStats(rows, today, 1)
     const d = pctDelta(st.last7, st.prev7)
     out.push({ name: 'Website', sub: 'Visitors', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: st.hasData, href: '/dashboard/website' })
   }

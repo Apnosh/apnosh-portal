@@ -242,6 +242,19 @@ export function MobileHomeHero({ metrics }: { metrics: HomeMetric[] }) {
     return out
   })() : []
 
+  // Reliable-data signals (source lag): does the current period have any
+  // settled data, and what's the latest day we trust?
+  const hasReliable = vm ? vm.vals.some(v => v != null) : false
+  const dataThrough = (() => {
+    if (!vm || !vm.isCur || vm.sub !== 'day') return null
+    let li = -1
+    vm.vals.forEach((v, i) => { if (v != null) li = i })
+    if (li < 0) return null
+    const last = new Date(vm.instStart.getTime() + li * MS)
+    const t0 = new Date(); t0.setHours(0, 0, 0, 0)
+    return last.getTime() < t0.getTime() ? fmtD(last) : null
+  })()
+
   return (
     <div className="m-home">
       <section className="spot">
@@ -275,20 +288,22 @@ export function MobileHomeHero({ metrics }: { metrics: HomeMetric[] }) {
             <p className="subnote">{subnote}</p>
             <div className="hero-row">
               <div className="hero-l">
-                <p className="hero-num">{display}</p>
+                <p className="hero-num">{sel == null && !hasReliable ? '—' : display}</p>
                 <p className="rangecap">{vm.cap}</p>
               </div>
-              <div className="hero-r">
-                <p className="avg-l">Avg / {vm.sub === 'month' ? 'mo' : 'day'}</p>
-                <p className="avg-v">{fmtAvg(vm.avg)}</p>
-                {vm.avgPct == null ? null : vm.avgPct === 0 ? (
-                  <p className="avg-t flat"><span>No change</span></p>
-                ) : (
-                  <p className={`avg-t ${vm.avgDir}`}>
-                    <Icon name={vm.avgDir === 'up' ? 'arrowUp' : 'arrowDown'} sw={2.4} /><span>{vm.avgPct}%</span>
-                  </p>
-                )}
-              </div>
+              {hasReliable && (
+                <div className="hero-r">
+                  <p className="avg-l">Avg / {vm.sub === 'month' ? 'mo' : 'day'}</p>
+                  <p className="avg-v">{fmtAvg(vm.avg)}</p>
+                  {vm.avgPct == null ? null : vm.avgPct === 0 ? (
+                    <p className="avg-t flat"><span>No change</span></p>
+                  ) : (
+                    <p className={`avg-t ${vm.avgDir}`}>
+                      <Icon name={vm.avgDir === 'up' ? 'arrowUp' : 'arrowDown'} sw={2.4} /><span>{vm.avgPct}%</span>
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="chartwrap">
@@ -297,7 +312,7 @@ export function MobileHomeHero({ metrics }: { metrics: HomeMetric[] }) {
                   {vm.vals.map((v, i) => {
                     if (v == null) return <div key={i} className="bar blank" style={{ height: '6%' }} />
                     const h = Math.max(3, (v / barMax) * 100)
-                    const cls = 'bar' + (i === vm.todayIdx ? ' last' : '') + (i === sel ? ' hi' : '')
+                    const cls = 'bar' + (i === sel ? ' hi' : '')
                     return <div key={i} className={cls} style={{ height: `${h.toFixed(1)}%`, animationDelay: `${(i * 0.03).toFixed(2)}s` }}
                       onClick={() => tapBar(i)} />
                   })}
@@ -313,10 +328,12 @@ export function MobileHomeHero({ metrics }: { metrics: HomeMetric[] }) {
               ) : vm.dayLabels ? (
                 <div className="xrow">
                   {vm.dayLabels.map((d, i) => (
-                    <span key={i} className="xl">{i === vm.todayIdx ? <b>{d}</b> : d}</span>
+                    <span key={i} className="xl">{d}</span>
                   ))}
                 </div>
               ) : null}
+
+              {dataThrough && <p className="datacap">Data through {dataThrough}</p>}
 
               <div className="tiles">
                 {vm.breakdown.map((t, i) => (

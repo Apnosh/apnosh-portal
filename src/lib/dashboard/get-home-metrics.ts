@@ -183,6 +183,19 @@ function latestOf(maps: Maps): Date | null {
   return max ? startOfDay(new Date(max + 'T00:00:00')) : null
 }
 
+/* Reliable data frontier = the most recent day we trust. Two effects:
+   the source's reporting lag (rows simply not arrived yet) AND its
+   settling window (recent rows exist but are still partial and backfill
+   — Google Business Profile notably under-reports the last ~3 days).
+   So we trust up to min(latest row, today − settleDays). */
+function frontierFor(maps: Maps, today: Date, settleDays: number): Date {
+  const cutoff = startOfDay(new Date(today.getTime() - settleDays * DAY))
+  const lr = latestOf(maps)
+  if (!lr) return cutoff
+  return lr.getTime() < cutoff.getTime() ? lr : cutoff
+}
+const SETTLE = { gbp: 3, social: 1, web: 1 }
+
 const EMPTY: HomeMetrics = { metrics: [] }
 
 export async function getHomeMetrics(clientId: string): Promise<HomeMetrics> {
@@ -231,7 +244,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
       { label: 'Site clicks', icon: 'cursor', map: cClick },
       { label: 'Bookings', icon: 'calendar', map: cBook },
     ],
-  }, today, earliestOf(cMain), latestOf(cMain) ?? today)
+  }, today, earliestOf(cMain), frontierFor(cMain, today, SETTLE.gbp))
 
   /* ── reach ── */
   const rMain: Maps = new Map(), rEng: Maps = new Map(), rPost: Maps = new Map(), rFol: Maps = new Map(), rVis: Maps = new Map()
@@ -252,7 +265,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
       { label: 'Followers', icon: 'user', map: rFol },
       { label: 'Profile visits', icon: 'eye', map: rVis },
     ],
-  }, today, earliestOf(rMain), latestOf(rMain) ?? today)
+  }, today, earliestOf(rMain), frontierFor(rMain, today, SETTLE.social))
 
   /* ── reputation ── */
   const repCount: Maps = new Map(), repRating: Maps = new Map(), repReplied: Maps = new Map(), repFive: Maps = new Map()
