@@ -156,7 +156,16 @@
   .plan-scroll { display:flex; gap:12px; overflow-x:auto; padding:2px 22px 8px; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
   .plan-scroll::-webkit-scrollbar { display:none; }
   .plan-card { scroll-snap-align:start; flex:0 0 75%; background:var(--surface); border:1px solid var(--hairline-2); border-radius:16px; padding:15px 16px 14px; box-shadow:0 2px 8px rgba(0,0,0,0.05); display:flex; flex-direction:column; }
+  .plan-top { display:flex; align-items:center; gap:5px; }
+  .plan-ic { display:inline-flex; color:var(--brand-d); }
+  .plan-ic svg { width:14px; height:14px; }
   .plan-when { font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--brand-d); }
+  .planempty { flex:1; min-width:0; display:flex; align-items:center; gap:13px; background:var(--brand-g); border:0; border-radius:16px; padding:15px 16px; text-align:left; font-family:inherit; cursor:pointer; }
+  .planempty:active { opacity:.6; }
+  .pe-ic { flex:0 0 auto; width:36px; height:36px; border-radius:9999px; background:var(--brand); color:#fff; display:flex; align-items:center; justify-content:center; }
+  .pe-ic svg { width:19px; height:19px; }
+  .pe-t { margin:0; font-size:15px; font-weight:600; color:var(--ink); }
+  .pe-s { margin:2px 0 0; font-size:12.5px; color:var(--ink-3); }
   .plan-title { font-family:var(--font-display); font-size:17px; font-weight:600; color:var(--ink); margin:3px 0 0; letter-spacing:-0.01em; }
   .plan-hint { font-size:13px; color:var(--ink-3); margin:3px 0 0; line-height:1.4; }
   .plan-cta { font-size:13px; font-weight:600; color:var(--brand-d); margin-top:10px; }
@@ -260,7 +269,7 @@
         </section>
 
         <section class="plan">
-          <div class="plan-head"><p class="t-eyebrow">Plan ahead</p><button class="btn-quiet">Calendar <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>
+          <div class="plan-head"><p class="t-eyebrow">Plan</p><button class="btn-quiet">Calendar <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>
           <div class="plan-scroll" id="plan"></div>
         </section>
 
@@ -346,7 +355,10 @@
     image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
     user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
     check:'<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>',
-    clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>'
+    clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    gift:'<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8M16.5 8a2.5 2.5 0 0 0 0-5C13 3 12 8 12 8"/>',
+    trenddown:'<path d="M22 17 13.5 8.5l-5 5L2 7"/><path d="M16 17h6v-6"/>',
+    calplus:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v4M10 16h4"/>'
   };
   var TILES={ actions:[['58','Directions','pin'],['41','Calls','phone'],['28','Site clicks','cursor'],['0','Bookings','calendar'],['Sun','Best day']], reputation:[['3','New reviews','message'],['4.7★','Rating','star'],['100%','Replied','reply'],['2','5-star','star'],['1d','Avg reply']], reach:[['8.4k','Reach','eye'],['1.2k','Engaged','heart'],['12','Posts','image'],['+34','Followers','user'],['Wed','Top day']] };
   function prevWord(c){return {week:'last week',month:'last month','3m':'last quarter',year:'last year',all:''}[c]||'';}
@@ -471,12 +483,19 @@
   $('channels').innerHTML=CHANNELS.map(function(c){ return '<a class="chan" href="'+c[6]+'"><div class="chan-l"><span class="chan-n">'+c[0]+'</span><span class="chan-s">'+c[1]+'</span></div><div class="chan-spark">'+miniSpark(c[5],c[4])+'</div><div class="chan-r"><span class="chan-v">'+c[2]+'</span><span class="chan-d '+c[4]+'">'+c[3]+'</span></div>'+chanChev+'</a>'; }).join('');
 
   var PLAN=[
-    ['In 4 days','Memorial Day','Big sales day. Plan a promo.','Plan it'],
-    ['In 3 weeks',"Father's Day",'Book a family special early.','Plan it'],
-    ['Tuesday','Slow lunch ahead','Try a midday deal.','Plan it'],
-    ['This week','3 posts scheduled','Review the lineup.','Review']
+    ['In 4 days','Memorial Day','Your busiest Monday. Launch a promo to capture it.','Plan a promo','gift'],
+    ['In 3 weeks',"Father's Day",'Families book early — add a special now.','Add a special','calendar'],
+    ['Next Tuesday','Slow lunch expected','Quiet midday ahead. A deal can fill seats.','Create a deal','trenddown'],
+    ['This week','Friday post slot open','2 of 3 posts scheduled — one gap left.','Schedule it','image']
   ];
-  $('plan').innerHTML=PLAN.map(function(p){return '<div class="plan-card"><span class="plan-when">'+p[0]+'</span><p class="plan-title">'+p[1]+'</p><p class="plan-hint">'+p[2]+'</p><span class="plan-cta">'+p[3]+' ›</span></div>';}).join('');
+  function renderPlan(list){
+    if(!list.length){
+      $('plan').innerHTML='<button class="planempty"><span class="pe-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+ICONS.calplus+'</svg></span><div><p class="pe-t">Plan your next move</p><p class="pe-s">Get ahead of holidays and slow days</p></div></button>';
+      return;
+    }
+    $('plan').innerHTML=list.map(function(p){return '<div class="plan-card"><div class="plan-top"><span class="plan-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+ICONS[p[4]]+'</svg></span><span class="plan-when">'+p[0]+'</span></div><p class="plan-title">'+p[1]+'</p><p class="plan-hint">'+p[2]+'</p><span class="plan-cta">'+p[3]+' ›</span></div>';}).join('');
+  }
+  renderPlan(PLAN);
 
   setRange('week');
 })();
