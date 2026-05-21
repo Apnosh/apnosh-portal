@@ -265,21 +265,34 @@
 <script>
 (function(){
   var chevR = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
-  function wave(base,n,amp,drift){var a=[];for(var i=0;i<n;i++){a.push(Math.max(0,Math.round(base+Math.sin(i/1.7)*amp+(i/n)*drift+(Math.random()*amp*0.4))));}return a;}
-  function rN(total,n,delta,dir,x0,x1){return {total:total,delta:delta,dir:dir,x:[x0,x1],points:wave(total/n*0.8,n,total/n*0.45,total/n*0.5)};}
-  function rR(total,n,delta,ctx,dir,x0,x1){var pts=[];for(var i=0;i<n;i++){pts.push(Math.max(0,Math.round(1+Math.sin(i*0.9)*1.1)));}return {total:total,delta:delta,ctx:ctx,dir:dir,x:[x0,x1],points:pts};}
-  var WK=(function(){var L=['SUN','MON','TUE','WED','THU','FRI','SAT'],o=[],t=new Date();for(var i=6;i>=0;i--){o.push(L[new Date(t.getTime()-i*864e5).getDay()]);}return o;})();
+  /* ── Calendar data model ──────────────────────────────────────────
+     One honest daily series per metric, aggregated into calendar
+     instances so every range works like Week: bars fill the current
+     period (future sub-periods blank), and the mini graph steps through
+     period instances you can tap to load. */
+  var MS=864e5;
+  function startOfDay(d){var x=new Date(d);x.setHours(0,0,0,0);return x;}
+  var TODAY=startOfDay(new Date());
+  var SERIES_START=new Date(TODAY.getFullYear()-5,0,1);
+  var NDAYS=Math.round((TODAY-SERIES_START)/MS)+1;
+  function di(d){ return Math.round((startOfDay(d)-SERIES_START)/MS); }
   function fmtD(d){ return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
-  function rangeCaption(rk){ var t=new Date(),end=fmtD(t); if(rk==='week') return 'Last 7 days · '+fmtD(new Date(t-6*864e5))+' – '+end; if(rk==='month') return 'Last 30 days · '+fmtD(new Date(t-29*864e5))+' – '+end; if(rk==='3m') return 'Last 3 months · '+fmtD(new Date(t-89*864e5))+' – '+end; if(rk==='year') return 'Last 12 months · '+(t.getFullYear()-1)+'–'+t.getFullYear(); return 'All time'; }
+  function genDaily(baseAvg,growth){var a=[];for(var i=0;i<NDAYS;i++){var t=i/NDAYS;var dow=new Date(SERIES_START.getTime()+i*MS).getDay();var wk=(dow===5||dow===6)?1.28:(dow===0?0.82:1);var season=1+0.16*Math.sin(i/30);var grow=1+growth*t;var noise=0.78+Math.random()*0.44;a.push(Math.max(0,Math.round(baseAvg*wk*season*grow*noise)));}return a;}
+  function genRating(){var a=[];for(var i=0;i<NDAYS;i++){a.push(4.45+Math.sin(i/45)*0.22+Math.random()*0.22);}return a;}
+  function mkWeek(daily,rArr){var insts=[],N=8,dow=TODAY.getDay(),thisSun=new Date(TODAY.getTime()-dow*MS);for(var w=N-1;w>=0;w--){var sun=new Date(thisSun.getTime()-w*7*MS),vals=[],rs=0,rn=0,tot=0;for(var d=0;d<7;d++){var day=new Date(sun.getTime()+d*MS);if(day>TODAY){vals.push(null);}else{var v=daily[di(day)]||0;vals.push(v);tot+=v;if(rArr){rs+=rArr[di(day)];rn++;}}}insts.push({vals:vals,start:sun,sub:'day',total:tot,rating:rn?Math.round(rs/rn*10)/10:null});}return insts;}
+  function mkMonth(daily,rArr){var insts=[],N=12;for(var k=N-1;k>=0;k--){var first=new Date(TODAY.getFullYear(),TODAY.getMonth()-k,1),dim=new Date(first.getFullYear(),first.getMonth()+1,0).getDate(),vals=[],rs=0,rn=0,tot=0;for(var d=0;d<dim;d++){var day=new Date(first.getFullYear(),first.getMonth(),d+1);if(day>TODAY){vals.push(null);}else{var v=daily[di(day)]||0;vals.push(v);tot+=v;if(rArr){rs+=rArr[di(day)];rn++;}}}insts.push({vals:vals,start:first,sub:'day',total:tot,rating:rn?Math.round(rs/rn*10)/10:null});}return insts;}
+  function mkQuarter(daily,rArr){var insts=[],N=8,curQ=Math.floor(TODAY.getMonth()/3),base=TODAY.getFullYear()*4+curQ;for(var k=N-1;k>=0;k--){var qi=base-k,qy=Math.floor(qi/4),qq=qi%4,qStart=new Date(qy,qq*3,1),qEnd=new Date(qy,qq*3+3,1),nb=Math.ceil((qEnd-qStart)/(7*MS)),vals=[],rs=0,rn=0,tot=0;for(var b=0;b<nb;b++){var bStart=new Date(qStart.getTime()+b*7*MS);if(bStart>TODAY){vals.push(null);continue;}var bs=0,has=false;for(var d=0;d<7;d++){var day=new Date(bStart.getTime()+d*MS);if(day>=qEnd||day>TODAY)break;bs+=daily[di(day)]||0;has=true;if(rArr){rs+=rArr[di(day)];rn++;}}vals.push(has?bs:null);if(has)tot+=bs;}insts.push({vals:vals,start:qStart,sub:'week',total:tot,rating:rn?Math.round(rs/rn*10)/10:null});}return insts;}
+  function mkYear(daily,rArr){var insts=[],N=5;for(var k=N-1;k>=0;k--){var y=TODAY.getFullYear()-k,vals=[],rs=0,rn=0,tot=0;for(var mo=0;mo<12;mo++){var first=new Date(y,mo,1);if(first>TODAY){vals.push(null);continue;}var dim=new Date(y,mo+1,0).getDate(),ms2=0,has=false;for(var d=0;d<dim;d++){var day=new Date(y,mo,d+1);if(day>TODAY)break;ms2+=daily[di(day)]||0;has=true;if(rArr){rs+=rArr[di(day)];rn++;}}vals.push(has?ms2:null);if(has)tot+=ms2;}insts.push({vals:vals,start:new Date(y,0,1),sub:'month',total:tot,rating:rn?Math.round(rs/rn*10)/10:null});}return insts;}
+  function mkAll(daily,rArr){var y0=SERIES_START.getFullYear(),y1=TODAY.getFullYear(),vals=[],rs=0,rn=0,tot=0;for(var y=y0;y<=y1;y++){var ys=0,has=false;for(var mo=0;mo<12;mo++){var first=new Date(y,mo,1);if(first>TODAY)break;var dim=new Date(y,mo+1,0).getDate();for(var d=0;d<dim;d++){var day=new Date(y,mo,d+1);if(day>TODAY)break;ys+=daily[di(day)]||0;has=true;if(rArr){rs+=rArr[di(day)];rn++;}}}vals.push(has?ys:null);if(has)tot+=ys;}return [{vals:vals,start:new Date(y0,0,1),sub:'year',total:tot,rating:rn?Math.round(rs/rn*10)/10:null}];}
+  function buildInst(daily,rArr){return {week:mkWeek(daily,rArr),month:mkMonth(daily,rArr),'3m':mkQuarter(daily,rArr),year:mkYear(daily,rArr),all:mkAll(daily,rArr)};}
   var METRICS={
-    actions:{label:'Customer actions',sub:'Calls, directions & website clicks',fmt:'num',ranges:{week:rN(127,7,'23','up','May 6','Today'),month:rN(512,5,'8%','up','Apr 20','Today'),'3m':rN(1480,12,'19%','up','Feb','May'),year:rN(6120,12,'34%','up','2025','2026'),all:rN(9400,12,null,'up','Start','Now')}},
-    reputation:{label:'Reputation',sub:'Average rating · reviews received',fmt:'rate',ranges:{week:rR(4.7,7,'3','new this week','up','May 6','Today'),month:rR(4.7,5,'11','new this month','up','Apr','May'),'3m':rR(4.6,12,'34','new this quarter','up','Feb','May'),year:rR(4.6,12,'120','new this year','up','2025','2026'),all:rR(4.6,12,null,'all time','up','Start','Now')}},
-    reach:{label:'Reach',sub:'People who saw your content',fmt:'num',ranges:{week:rN(8400,7,'18%','up','May 6','Today'),month:rN(31000,5,'12%','up','Apr 20','Today'),'3m':rN(88000,12,'24%','up','Feb','May'),year:rN(360000,12,'40%','up','2025','2026'),all:rN(540000,12,null,'up','Start','Now')}}
+    actions:{label:'Customer actions',sub:'Calls, directions & website clicks',fmt:'num',inst:buildInst(genDaily(17,0.9),null)},
+    reputation:{label:'Reputation',sub:'Average rating · reviews received',fmt:'rate',inst:buildInst(genDaily(0.7,0.6),genRating())},
+    reach:{label:'Reach',sub:'People who saw your content',fmt:'num',inst:buildInst(genDaily(1180,1.1),null)}
   };
   var ORDER=['week','month','3m','year','all'];
   var metric='actions';
   function M(){return METRICS[metric];}
-  function CR(){return M().ranges[cur]||M().ranges.week;}
   var UP='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
   var DOWN='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>';
   var NEEDS=[['Reply to a 3-star review','2 min'],["Approve Friday's Instagram post",'30 sec'],['Set Memorial Day hours','1 min']];
@@ -295,37 +308,48 @@
   function animateNum(target,fmt){ var el=$('num'); var start=parseFloat((el.textContent||'0').replace(/[^0-9.]/g,''))||0; if(numTimer)cancelAnimationFrame(numTimer); var t0=null,dur=700; function fv(v){ return fmt==='rate'? v.toFixed(1)+'★' : Math.round(v).toLocaleString(); } function step(ts){ if(!t0)t0=ts; var p=Math.min(1,(ts-t0)/dur); var e=1-Math.pow(1-p,3); el.textContent=fv(start+(target-start)*e); if(p<1)numTimer=requestAnimationFrame(step); } numTimer=requestAnimationFrame(step); }
   function drawLine(){ var el=$('line'),a=$('area'); try{ var len=el.getTotalLength(); el.style.transition='none'; el.style.strokeDasharray=len; el.style.strokeDashoffset=len; el.getBoundingClientRect(); el.style.transition='stroke-dashoffset .9s var(--ease-out)'; el.style.strokeDashoffset='0'; a.style.transition='none'; a.style.opacity='0'; a.getBoundingClientRect(); a.style.transition='opacity .8s ease'; a.style.opacity='1'; }catch(e){} }
 
-  var todayDOW=new Date().getDay();
-  function sumNN(a){var s=0;for(var i=0;i<a.length;i++)if(a[i]!=null)s+=a[i];return s;}
-  function genWeeksNum(base){var ws=[],count=8;for(var i=0;i<count;i++){var weeksAgo=count-1-i,curw=(weeksAgo===0),days=[];for(var d=0;d<7;d++){if(curw&&d>todayDOW)days.push(null);else days.push(Math.max(1,Math.round(base/7+Math.sin((i*7+d)*0.5)*(base/16)+Math.random()*(base/12))));}ws.push({days:days,weeksAgo:weeksAgo});}return ws;}
-  function genWeeksRate(){var ws=[],count=8;for(var i=0;i<count;i++){var weeksAgo=count-1-i,curw=(weeksAgo===0),days=[];for(var d=0;d<7;d++){if(curw&&d>todayDOW)days.push(null);else days.push(Math.max(0,Math.round(Math.random()*1.6)));}ws.push({days:days,weeksAgo:weeksAgo,rating:Math.round((4.5+Math.sin(i)*0.18+0.1)*10)/10});}return ws;}
-  METRICS.actions.weeks=genWeeksNum(127); METRICS.reach.weeks=genWeeksNum(8400); METRICS.reputation.weeks=genWeeksRate();
-  var weekIdx=7, selBar=null, pressing=false;
+  var instIdx=null, selBar=null, pressing=false;
   var DOWL=['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  var MONI=['J','F','M','A','M','J','J','A','S','O','N','D'];
   var TILES={ actions:[['58','Directions'],['41','Calls'],['28','Site clicks'],['0','Bookings'],['Sun','Best day']], reputation:[['3','New reviews'],['4.7★','Rating'],['100%','Replied'],['2','5-star'],['1d','Avg reply']], reach:[['8.4k','Reach'],['1.2k','Engaged'],['12','Posts'],['+34','Followers'],['Wed','Top day']] };
-  function wkRange(weeksAgo){var t=new Date();var sun=new Date(t.getTime()-(todayDOW+7*weeksAgo)*864e5);var sat=new Date(sun.getTime()+6*864e5);return fmtD(sun)+' – '+fmtD(sat);}
-  function wkStart(weeksAgo){var t=new Date();var sun=new Date(t.getTime()-(todayDOW+7*weeksAgo)*864e5);return fmtD(sun);}
-  function selDateLabel(){var weeks=M().weeks,wk=weeks[weekIdx];var t=new Date();var sun=new Date(t.getTime()-(todayDOW+7*wk.weeksAgo)*864e5);var dt=new Date(sun.getTime()+selBar*864e5);return dt.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});}
+  function prevWord(c){return {week:'last week',month:'last month','3m':'last quarter',year:'last year',all:''}[c]||'';}
+  function selSubLabel(V){var s=V.instStart,i=selBar;if(V.sub==='day'){var d=new Date(s.getTime()+i*MS);return d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});}if(V.sub==='week'){var d2=new Date(s.getTime()+i*7*MS);return 'Week of '+d2.toLocaleDateString('en-US',{month:'short',day:'numeric'});}if(V.sub==='month'){var d3=new Date(s.getFullYear(),i,1);return d3.toLocaleDateString('en-US',{month:'long',year:'numeric'});}return ''+(s.getFullYear()+i);}
+  function shortSub(sub,s,i){if(sub==='day'){return new Date(s.getTime()+i*MS).toLocaleDateString('en-US',{weekday:'short'});}if(sub==='week'){return fmtD(new Date(s.getTime()+i*7*MS));}if(sub==='month'){return new Date(s.getFullYear(),i,1).toLocaleDateString('en-US',{month:'short'});}return ''+(s.getFullYear()+i);}
+  function capFor(c,inst,isCur,ago){var s=inst.start;if(c==='week'){var sat=new Date(s.getTime()+6*MS);return (isCur?'This week · ':(ago===1?'Last week · ':''))+fmtD(s)+' – '+fmtD(sat);}if(c==='month'){var end=new Date(s.getFullYear(),s.getMonth()+1,0);return (isCur?'This month · ':(ago===1?'Last month · ':s.toLocaleDateString('en-US',{month:'long',year:'numeric'})+' · '))+fmtD(s)+' – '+end.getDate();}if(c==='3m'){var em=new Date(s.getFullYear(),s.getMonth()+2,1);return (isCur?'This quarter · ':(ago===1?'Last quarter · ':'Q'+(Math.floor(s.getMonth()/3)+1)+' '+s.getFullYear()+' · '))+s.toLocaleDateString('en-US',{month:'short'})+' – '+em.toLocaleDateString('en-US',{month:'short'});}if(c==='year'){return (isCur?'This year · ':(ago===1?'Last year · ':s.getFullYear()+' · '))+'Jan – '+(isCur?TODAY.toLocaleDateString('en-US',{month:'short'}):'Dec');}return 'All time · '+SERIES_START.getFullYear()+' – '+TODAY.getFullYear();}
   function viewModel(){
-    var m=M();
-    if(cur==='week'){
-      var weeks=m.weeks; if(weekIdx>weeks.length-1)weekIdx=weeks.length-1; if(weekIdx<0)weekIdx=0; var wk=weeks[weekIdx];
-      var isCur=(weekIdx===weeks.length-1), elapsed=isCur?(todayDOW+1):7;
-      var headline,delta=null,dir='up',ctx='',cmpPerDay=null;
-      if(m.fmt==='rate'){ headline=wk.rating; if(weekIdx>0){var pr=weeks[weekIdx-1].rating;var dd=Math.round((headline-pr)*10)/10;delta=(dd>=0?'+':'')+dd;dir=dd>=0?'up':'down';ctx='vs last week';} }
-      else { headline=sumNN(wk.days); if(weekIdx>0){var pb=isCur?sumNN(weeks[weekIdx-1].days.slice(0,elapsed)):sumNN(weeks[weekIdx-1].days);var diff=headline-pb;delta=Math.abs(diff).toLocaleString();dir=diff>=0?'up':'down';cmpPerDay=pb/elapsed;} }
-      var miniVals=weeks.map(function(w){return sumNN(w.days);});
-      return {mode:'week',vals:wk.days,fmt:m.fmt,todayIdx:(isCur?todayDOW:-1),headline:headline,delta:delta,dir:dir,ctx:ctx,cmpPerDay:cmpPerDay,miniVals:miniVals,miniSel:weekIdx,cap:(wk.weeksAgo===0?'This week · ':(wk.weeksAgo===1?'Last week · ':''))+wkRange(wk.weeksAgo),dayLabels:DOWL};
+    var m=M(), insts=m.inst[cur];
+    var idx=(instIdx==null||instIdx>insts.length-1||instIdx<0)?insts.length-1:instIdx;
+    var inst=insts[idx], isCur=(idx===insts.length-1), ago=insts.length-1-idx, vals=inst.vals;
+    var elapsed=0,lastIdx=-1,i; for(i=0;i<vals.length;i++){ if(vals[i]!=null){elapsed++;lastIdx=i;} }
+    var fmt=m.fmt, headline,delta=null,dir='up',ctx='',cmpPerDay=null;
+    if(fmt==='rate'){
+      headline=inst.rating!=null?inst.rating:0;
+      if(idx>0 && insts[idx-1].rating!=null){ var dd=Math.round((headline-insts[idx-1].rating)*10)/10; delta=(dd>=0?'+':'')+dd; dir=dd>=0?'up':'down'; ctx='vs '+prevWord(cur); }
+    } else {
+      headline=inst.total;
+      if(idx>0){ var prev=insts[idx-1].vals,pe=0,cnt=0; for(var j=0;j<prev.length&&cnt<elapsed;j++){ if(prev[j]!=null){pe+=prev[j];cnt++;} } var diff=headline-pe; delta=Math.abs(Math.round(diff)).toLocaleString(); dir=diff>=0?'up':'down'; cmpPerDay=elapsed?pe/elapsed:null; }
     }
-    var r=CR();
-    var prevT=r.delta?((r.delta.indexOf('%')>=0)?r.total/(1+parseFloat(r.delta)/100):r.total-parseFloat(r.delta)):null;
-    return {mode:'range',vals:r.points,fmt:m.fmt,todayIdx:r.points.length-1,headline:r.total,delta:r.delta,dir:r.dir,ctx:(m.fmt==='rate'?(r.ctx||''):''),cmpPerDay:(m.fmt!=='rate'&&prevT!=null?prevT/r.points.length:null),miniVals:r.points,miniSel:-1,cap:rangeCaption(cur),dayLabels:null};
+    var miniVals = cur==='all' ? vals.filter(function(v){return v!=null;}) : insts.map(function(w){return w.total;});
+    var miniSel = cur==='all' ? miniVals.length-1 : idx;
+    var dayLabels=null,xends=null,y;
+    if(cur==='week') dayLabels=DOWL;
+    else if(cur==='year') dayLabels=MONI;
+    else if(cur==='all'){ dayLabels=[]; for(y=SERIES_START.getFullYear();y<=TODAY.getFullYear();y++) dayLabels.push("'"+(''+y).slice(2)); }
+    else if(cur==='month'){ var em=new Date(inst.start.getFullYear(),inst.start.getMonth()+1,0); xends=[fmtD(inst.start), fmtD(em)]; }
+    else if(cur==='3m'){ var qe=new Date(inst.start.getFullYear(),inst.start.getMonth()+3,0); xends=[fmtD(inst.start), fmtD(qe)]; }
+    var miniEnds;
+    if(cur==='week') miniEnds=[fmtD(insts[0].start),'This week'];
+    else if(cur==='month') miniEnds=[insts[0].start.toLocaleDateString('en-US',{month:'short',year:'2-digit'}),'This month'];
+    else if(cur==='3m') miniEnds=['Q'+(Math.floor(insts[0].start.getMonth()/3)+1)+" '"+(''+insts[0].start.getFullYear()).slice(2),'This quarter'];
+    else if(cur==='year') miniEnds=[''+insts[0].start.getFullYear(),'This year'];
+    else miniEnds=[''+SERIES_START.getFullYear(),''+TODAY.getFullYear()];
+    return {mode:'cal',vals:vals,fmt:fmt,barFmt:(fmt==='rate'?'num':fmt),sub:inst.sub,instStart:inst.start,todayIdx:(isCur?lastIdx:-1),headline:headline,delta:delta,dir:dir,ctx:ctx,cmpPerDay:cmpPerDay,miniVals:miniVals,miniSel:miniSel,cap:capFor(cur,inst,isCur,ago),dayLabels:dayLabels,xends:xends,miniEnds:miniEnds};
   }
-  function buildLabels(V){ var el=$('xrow'); if(V.dayLabels){ el.innerHTML=V.dayLabels.map(function(d,i){ return (i===V.todayIdx)? '<span class="xl"><b>'+d+'</b></span>' : '<span class="xl">'+d+'</span>'; }).join(''); } else { var r=CR(); el.innerHTML='<span>'+r.x[0]+'</span><span>'+r.x[1]+'</span>'; } }
+  function buildLabels(V){ var el=$('xrow'); if(V.dayLabels && V.dayLabels.length===V.vals.length){ el.innerHTML=V.dayLabels.map(function(d,i){ return (i===V.todayIdx)? '<span class="xl"><b>'+d+'</b></span>' : '<span class="xl">'+d+'</span>'; }).join(''); } else { var e=V.xends||['','']; el.innerHTML='<span>'+e[0]+'</span><span>'+e[1]+'</span>'; } }
   function renderMini(V){ var vals=V.miniVals, n=vals.length; var min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),rg=Math.max(max-min,0.0001); var Wm=100,Hm=40,pd=5; var pts=vals.map(function(v,i){return {x:n===1?Wm/2:(i*Wm)/(n-1), y:pd+(Hm-2*pd)-((v-min)/rg)*(Hm-2*pd)};}); var d=smooth(pts); $('mline').setAttribute('d',d); $('marea').setAttribute('d',d+' L '+Wm+' '+Hm+' L 0 '+Hm+' Z'); var avg=0,k; for(k=0;k<n;k++)avg+=vals[k]; avg/=n; var by=(pd+(Hm-2*pd)-((avg-min)/rg)*(Hm-2*pd)); $('mbase').setAttribute('d','M0 '+by.toFixed(1)+' L100 '+by.toFixed(1)); var sel=V.miniSel>=0?V.miniSel:n-1; var dh=''; for(var i=0;i<n;i++){ dh+='<button class="mdot'+(i===sel?' last':'')+'" data-i="'+i+'" style="left:'+pts[i].x.toFixed(1)+'%;top:'+((pts[i].y/Hm)*100).toFixed(1)+'%"></button>'; } $('mdots').innerHTML=dh; var tip=$('minitip'); if(tip)tip.hidden=true; }
   function showMiniTip(i){ var V=viewModel(),dots=$('mdots').children; if(i<0||i>=dots.length)return; for(var k=0;k<dots.length;k++) dots[k].classList.toggle('hi',k===i); var tip=$('minitip'); tip.hidden=false; tip.textContent=V.miniVals[i].toLocaleString(); var el=dots[i],mr=$('mini').getBoundingClientRect(),br=el.getBoundingClientRect(); tip.style.left=(br.left-mr.left+br.width/2)+'px'; tip.style.top=Math.max(-2,(br.top-mr.top)-22)+'px'; }
-  function renderDelta(V, sel){ var d=$('delta'); if(sel!=null){ d.className='delta'; d.innerHTML='<span class="ctx" style="color:var(--ink-2);font-weight:600">'+(V.mode==='week'? selDateLabel() : 'Selected')+'</span>'; d.style.visibility='visible'; return; } if(V.delta){ d.className='delta '+(V.dir==='up'?'up':'down'); var arrow=V.dir==='up'?UP:DOWN; if(V.fmt==='rate'){ d.innerHTML=arrow+'<b>'+V.delta+'</b> <span class="ctx">'+(V.ctx||'')+'</span>'; } else { var per=V.mode==='week'?'last week':(PERIOD[cur]||''); var word=V.dir==='up'?'more than':'fewer than'; d.innerHTML=arrow+'<b>'+V.delta+'</b>'+(per?' <span class="ctx">'+word+' '+per+'</span>':''); } d.style.visibility='visible'; } else { d.style.visibility='hidden'; } }
-  function selectUpdate(){ var V=viewModel(); var rects=$('bars').children; var sel=(selBar!=null&&selBar<V.vals.length&&V.vals[selBar]!=null)?selBar:null; for(var k=0;k<rects.length;k++) rects[k].classList.toggle('hi', k===sel); animateNum(sel!=null?V.vals[sel]:V.headline, V.fmt); renderDelta(V, sel); }
+  function renderDelta(V, sel){ var d=$('delta'); if(sel!=null){ d.className='delta'; d.innerHTML='<span class="ctx" style="color:var(--ink-2);font-weight:600">'+selSubLabel(V)+'</span>'; d.style.visibility='visible'; return; } if(V.delta){ d.className='delta '+(V.dir==='up'?'up':'down'); var arrow=V.dir==='up'?UP:DOWN; if(V.fmt==='rate'){ d.innerHTML=arrow+'<b>'+V.delta+'</b> <span class="ctx">'+(V.ctx||'')+'</span>'; } else { var per=prevWord(cur); var word=V.dir==='up'?'more than':'fewer than'; d.innerHTML=arrow+'<b>'+V.delta+'</b>'+(per?' <span class="ctx">'+word+' '+per+'</span>':''); } d.style.visibility='visible'; } else { d.style.visibility='hidden'; } }
+  function selectUpdate(){ var V=viewModel(); var rects=$('bars').children; var sel=(selBar!=null&&selBar<V.vals.length&&V.vals[selBar]!=null)?selBar:null; for(var k=0;k<rects.length;k++) rects[k].classList.toggle('hi', k===sel); animateNum(sel!=null?V.vals[sel]:V.headline, sel!=null?V.barFmt:V.fmt); renderDelta(V, sel); }
   function render(skipAnim){
     var V=viewModel(), vals=V.vals, n=vals.length;
     var sel=(selBar!=null && selBar<n && vals[selBar]!=null)? selBar : null;
@@ -337,17 +361,21 @@
     var cmp=$('cmp'); if(V.cmpPerDay!=null){ cmp.hidden=false; cmp.style.top=(100-(V.cmpPerDay/max)*100).toFixed(1)+'%'; } else { cmp.hidden=true; }
     buildLabels(V);
     $('rangecap').textContent=V.cap;
-    $('tiles').innerHTML=TILES[metric].map(function(t){return '<div class="tile"><div class="tv">'+t[0]+'</div><div class="tl">'+t[1]+'</div></div>';}).join('');
+    var bi=-1,bv=-1; for(i=0;i<n;i++){ if(vals[i]!=null&&vals[i]>bv){bv=vals[i];bi=i;} }
+    var bestL={day:'Best day',week:'Best week',month:'Best month',year:'Best year'}[V.sub]||'Best';
+    var bestV= bi>=0? shortSub(V.sub,V.instStart,bi):'–';
+    var tiles=TILES[metric].slice(); tiles[tiles.length-1]=[bestV,bestL];
+    $('tiles').innerHTML=tiles.map(function(t){return '<div class="tile"><div class="tv">'+t[0]+'</div><div class="tl">'+t[1]+'</div></div>';}).join('');
     renderMini(V);
-    $('minilabels').innerHTML = V.mode==='week' ? '<span>'+wkStart(M().weeks[0].weeksAgo)+'</span><span>This week</span>' : '<span>'+CR().x[0]+'</span><span>'+CR().x[1]+'</span>';
+    $('minicap').textContent={week:'Weekly trend · tap a point',month:'Monthly trend · tap a point','3m':'Quarterly trend · tap a point',year:'Yearly trend · tap a point',all:'Yearly totals'}[cur];
+    $('minilabels').innerHTML='<span>'+V.miniEnds[0]+'</span><span>'+V.miniEnds[1]+'</span>';
     var m=M(); $('mlabel').textContent=m.label; $('subnote').textContent=m.sub;
     var headlineVal = sel!=null? vals[sel] : V.headline;
-    if(!scrubbing) animateNum(headlineVal, V.fmt);
+    if(!scrubbing) animateNum(headlineVal, sel!=null?V.barFmt:V.fmt);
     renderDelta(V, sel);
   }
 
-  function setRange(rk){ cur=rk; scrubbing=false; selBar=null; var tip=$('bartip'); if(tip)tip.hidden=true;
-    if(rk==='week') weekIdx=M().weeks.length-1;
+  function setRange(rk){ cur=rk; scrubbing=false; selBar=null; instIdx=null; var tip=$('bartip'); if(tip)tip.hidden=true;
     var idx=ORDER.indexOf(rk); $('segind').style.transform='translateX('+(idx*100)+'%)';
     var btns=document.querySelectorAll('.seg-btn'); for(var i=0;i<btns.length;i++){ btns[i].classList.toggle('on', btns[i].getAttribute('data-r')===rk); }
     render();
@@ -360,7 +388,7 @@
   box.addEventListener('pointermove',function(e){ if(!pressing)return; var i=barIdx(e); var V=viewModel(); if(V.vals[i]!=null && i!==selBar){ selBar=i; selectUpdate(); } });
   box.addEventListener('pointerup',function(){ pressing=false; });
   box.addEventListener('pointercancel',function(){ pressing=false; });
-  $('mdots').addEventListener('click',function(e){ var b=e.target.closest('.mdot'); if(!b)return; var i=+b.getAttribute('data-i'); if(cur==='week'){ weekIdx=i; selBar=null; $('num').textContent='0'; render(); } else { showMiniTip(i); } });
+  $('mdots').addEventListener('click',function(e){ var b=e.target.closest('.mdot'); if(!b)return; var i=+b.getAttribute('data-i'); if(cur==='all'){ showMiniTip(i); return; } instIdx=i; selBar=null; $('num').textContent='0'; render(); });
 
   // range pills
   document.querySelectorAll('.seg-btn').forEach(function(b){ b.addEventListener('click',function(){ setRange(b.getAttribute('data-r')); }); });
