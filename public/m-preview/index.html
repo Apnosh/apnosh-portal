@@ -141,6 +141,14 @@
   .rowt { flex:1; min-width:0; font-size:16px; font-weight:600; color:var(--ink); margin:0; }
   .rowt .muted { color:var(--ink-3); font-weight:400; }
   .chip { font-size:12px; color:var(--brand-d); background:var(--brand-t); padding:4px 10px; border-radius:9999px; font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; flex-shrink:0; }
+  .morebtn { display:flex; align-items:center; gap:3px; width:100%; background:none; border:0; border-top:1px solid var(--hairline-2); padding:14px 0 2px; font-family:inherit; font-size:13.5px; font-weight:600; color:var(--brand-d); cursor:pointer; }
+  .morebtn svg { width:14px; height:14px; }
+  .morebtn:active { opacity:.5; }
+  .allclear { display:flex; align-items:center; gap:13px; background:var(--brand-g); border-radius:14px; padding:15px 16px; margin-top:2px; }
+  .ac-ic { flex:0 0 auto; width:36px; height:36px; border-radius:9999px; background:var(--brand); color:#fff; display:flex; align-items:center; justify-content:center; }
+  .ac-ic svg { width:19px; height:19px; }
+  .ac-t { margin:0; font-size:15px; font-weight:600; color:var(--ink); }
+  .ac-s { margin:2px 0 0; font-size:12.5px; color:var(--ink-3); }
 
   /* Plan ahead — horizontal cards under the graph */
   .plan { padding-top:24px; }
@@ -247,8 +255,8 @@
         </section>
 
         <section class="sx">
-          <div class="sx-head"><p class="t-eyebrow">Needs you · 3</p><button class="btn-quiet">Inbox <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>
-          <ul class="list" id="needs"></ul>
+          <div class="sx-head"><p class="t-eyebrow" id="needscap">Needs you</p><button class="btn-quiet" id="needslink">Inbox <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>
+          <div id="needs"></div>
         </section>
 
         <section class="plan">
@@ -434,7 +442,19 @@
 
   // static lists
   function rowIc(key){ return '<span class="row-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+ICONS[key]+'</svg></span>'; }
-  $('needs').innerHTML=NEEDS.map(function(n){return '<li><button class="row">'+rowIc(n[2])+'<p class="rowt">'+n[0]+'</p><span class="chip">'+n[1]+'</span>'+chevR+'</button></li>';}).join('');
+  function renderNeeds(list){
+    $('needscap').textContent = list.length ? 'Needs you · '+list.length : 'Needs you';
+    $('needslink').style.display = list.length ? '' : 'none';
+    if(!list.length){
+      $('needs').innerHTML='<div class="allclear"><span class="ac-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></span><div><p class="ac-t">You’re all caught up</p><p class="ac-s">Nothing needs your attention right now</p></div></div>';
+      return;
+    }
+    var shown=list.slice(0,3);
+    var h='<ul class="list">'+shown.map(function(n){return '<li><button class="row">'+rowIc(n[2])+'<p class="rowt">'+n[0]+'</p><span class="chip">'+n[1]+'</span>'+chevR+'</button></li>';}).join('')+'</ul>';
+    if(list.length>3){ h+='<button class="morebtn">View all '+list.length+'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>'; }
+    $('needs').innerHTML=h;
+  }
+  renderNeeds(NEEDS);
   $('week').innerHTML=[
     '<li><button class="row">'+rowIc('check')+'<p class="rowt"><b>7</b> <span class="muted">shipped</span></p>'+chevR+'</button></li>',
     '<li><button class="row">'+rowIc('user')+'<p class="rowt"><span style="font-weight:600">Maria</span> <span class="muted">your strategist</span></p>'+chevR+'</button></li>'
