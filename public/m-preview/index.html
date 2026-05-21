@@ -171,15 +171,16 @@
   .plan-cta { font-size:13px; font-weight:600; color:var(--brand-d); margin-top:10px; }
 
   /* This week — weekly recap card */
-  .recap { background:var(--surface); border:1px solid var(--hairline-2); border-radius:16px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
+  .recap { background:var(--brand-t); border:1px solid rgba(74,189,152,0.16); border-radius:16px; padding:16px; }
   .recap-body { display:flex; align-items:flex-start; gap:12px; }
-  .recap-ic { flex:0 0 auto; width:36px; height:36px; border-radius:10px; background:var(--brand-g); color:var(--brand-d); display:flex; align-items:center; justify-content:center; }
+  .recap .avatar { background:var(--brand); color:#fff; }
+  .recap-ic { flex:0 0 auto; width:36px; height:36px; border-radius:10px; background:var(--brand); color:#fff; display:flex; align-items:center; justify-content:center; }
   .recap-ic svg { width:19px; height:19px; }
   .recap-txt { min-width:0; }
   .recap-line { margin:0; font-size:15px; font-weight:500; color:var(--ink); line-height:1.4; }
   .recap-line b { font-weight:700; } .recap-line .hl { color:var(--brand-d); }
   .recap-break { margin:5px 0 0; font-size:13px; color:var(--ink-3); line-height:1.4; }
-  .recap-cta { display:flex; align-items:center; gap:3px; width:100%; margin-top:13px; padding-top:13px; border:0; border-top:1px solid var(--hairline-2); background:none; font-family:inherit; font-size:13.5px; font-weight:600; color:var(--brand-d); cursor:pointer; }
+  .recap-cta { display:flex; align-items:center; gap:3px; width:100%; margin-top:13px; padding-top:13px; border:0; border-top:1px solid rgba(74,189,152,0.18); background:none; font-family:inherit; font-size:13.5px; font-weight:600; color:var(--brand-d); cursor:pointer; }
   .recap-cta svg { width:14px; height:14px; }
   .recap-cta:active { opacity:.5; }
 
@@ -283,9 +284,9 @@
           <div id="needs"></div>
         </section>
 
-        <section class="plan">
-          <div class="plan-head"><p class="t-eyebrow">Plan</p><button class="btn-quiet">Calendar <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>
-          <div class="plan-scroll" id="plan"></div>
+        <section class="sx">
+          <div class="sx-head"><p class="t-eyebrow">This week</p></div>
+          <div id="week"></div>
         </section>
 
         <section class="sx">
@@ -293,9 +294,9 @@
           <div id="channels"></div>
         </section>
 
-        <section class="sx">
-          <div class="sx-head"><p class="t-eyebrow">This week</p></div>
-          <div id="week"></div>
+        <section class="plan">
+          <div class="plan-head"><p class="t-eyebrow">Plan</p><button class="btn-quiet">Calendar <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>
+          <div class="plan-scroll" id="plan"></div>
         </section>
       </div>
 
