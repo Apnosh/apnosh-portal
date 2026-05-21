@@ -28,6 +28,8 @@ import AdminClientPicker from '@/components/admin/admin-client-picker'
 import FinishProfileBanner from '@/components/dashboard/finish-profile-banner'
 import GettingStarted from '@/components/dashboard/getting-started'
 import MobileHome from './mobile-home'
+import type { HomeMetrics } from '@/lib/dashboard/get-home-metrics'
+import type { HomeSectionsData } from '@/lib/dashboard/get-home-sections'
 import {
   Sparkles, MessageSquare, Image as ImgIcon, Video, Megaphone, Brush, Plus,
   Plug, Loader2, Users as UsersIcon, Clock, Check,
@@ -108,6 +110,8 @@ interface DashboardLoad {
   comingUp: ComingUpItem[]
   setup: { shapeSet: boolean; goalsSet: boolean; anyChannelConnected: boolean }
   counts: { unansweredReviews: number; pendingApprovals: number }
+  homeMetrics: HomeMetrics | null
+  homeSections: HomeSectionsData | null
 }
 
 // ─── Page ────────────────────────────────────────────────────────────
@@ -186,19 +190,8 @@ export default function DashboardPage() {
       <>
         <div className="lg:hidden -m-4">
           <MobileHome
-            displayName={client?.name ?? 'there'}
-            agenda={data?.agenda ?? []}
-            pulse={data?.pulse ?? {
-              customers: { label: 'Customers', state: 'no-data' },
-              reputation: { label: 'Reputation', state: 'no-data' },
-              reach: { label: 'Reach', state: 'no-data' },
-            }}
-            metricHistory={data?.metricHistory ?? null}
-            weekly={data?.weekly ?? { items: [] }}
-            strategist={strategist}
-            comingUp={data?.comingUp ?? []}
-            state={state}
-            totalNeeds={totalNeeds}
+            homeMetrics={data?.homeMetrics ?? null}
+            homeSections={data?.homeSections ?? null}
           />
         </div>
         <div className="hidden lg:block">
@@ -207,8 +200,6 @@ export default function DashboardPage() {
       </>
     )
   }
-
-  const displayNameForMobile = client?.name ?? 'there'
 
   return (
     <div className="relative">
@@ -222,19 +213,8 @@ export default function DashboardPage() {
           → coming up. Desktop keeps the existing rich layout below. */}
       <div className="lg:hidden -m-4">
         <MobileHome
-          displayName={displayNameForMobile}
-          agenda={data?.agenda ?? []}
-          pulse={data?.pulse ?? {
-            customers: { label: 'Customers', state: 'no-data' },
-            reputation: { label: 'Reputation', state: 'no-data' },
-            reach: { label: 'Reach', state: 'no-data' },
-          }}
-          metricHistory={data?.metricHistory ?? null}
-          weekly={data?.weekly ?? { items: [] }}
-          strategist={strategist}
-          comingUp={data?.comingUp ?? []}
-          state={state}
-          totalNeeds={totalNeeds}
+          homeMetrics={data?.homeMetrics ?? null}
+          homeSections={data?.homeSections ?? null}
         />
       </div>
 
