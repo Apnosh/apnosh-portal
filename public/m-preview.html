@@ -100,8 +100,10 @@
   .tile:first-child { padding-left:0; border-left:0; }
   .tile .tv { font-family:var(--font-display); font-size:20px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; line-height:1.15; letter-spacing:-0.01em; }
   .tile .tl { font-size:11px; color:var(--ink-3); margin-top:3px; font-weight:500; }
-  .minicap { margin:18px 0 6px; font-size:11px; font-weight:600; letter-spacing:.03em; text-transform:uppercase; color:var(--ink-4); }
-  .minilabels { display:flex; justify-content:space-between; margin-top:6px; font-size:10px; font-weight:600; color:var(--ink-4); }
+  .mticks { position:relative; height:13px; margin:18px 0 7px; }
+  .mtick { position:absolute; top:0; transform:translateX(-50%); font-size:10px; font-weight:600; letter-spacing:.01em; color:var(--ink-4); white-space:nowrap; }
+  .mtick.first { transform:none; left:0 !important; }
+  .mtick.last { transform:none; left:auto !important; right:0; color:var(--ink-3); }
   .mini { position:relative; height:44px; margin-top:0; }
   .mini-svg { width:100%; height:100%; display:block; }
   .mdots { position:absolute; inset:0; }
@@ -208,7 +210,7 @@
             </div>
             <div class="xrow" id="xrow"></div>
             <div class="tiles" id="tiles"></div>
-            <p class="minicap" id="minicap">Weekly trend · tap a point</p>
+            <div class="mticks" id="mticks"></div>
             <div class="mini" id="mini">
               <svg class="mini-svg" viewBox="0 0 100 40" preserveAspectRatio="none">
                 <path id="marea" fill="var(--chart-fill)"></path>
@@ -218,7 +220,6 @@
               <div class="mdots" id="mdots"></div>
               <div class="minitip" id="minitip" hidden></div>
             </div>
-            <div class="minilabels" id="minilabels"></div>
           </div>
 
           <div class="seg" id="seg">
@@ -341,6 +342,8 @@
   }
   function buildLabels(V){ var el=$('xrow'); if(V.dayLabels && V.dayLabels.length===V.vals.length){ el.innerHTML=V.dayLabels.map(function(d,i){ return (i===V.todayIdx)? '<span class="xl"><b>'+d+'</b></span>' : '<span class="xl">'+d+'</span>'; }).join(''); } else { var e=V.xends||['','']; el.innerHTML='<span>'+e[0]+'</span><span>'+e[1]+'</span>'; } }
   function renderMini(V){ var vals=V.miniVals, n=vals.length; var min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),rg=Math.max(max-min,0.0001); var Wm=100,Hm=40,pd=5; var pts=vals.map(function(v,i){return {x:n===1?Wm/2:(i*Wm)/(n-1), y:pd+(Hm-2*pd)-((v-min)/rg)*(Hm-2*pd)};}); var d=smooth(pts); $('mline').setAttribute('d',d); $('marea').setAttribute('d',d+' L '+Wm+' '+Hm+' L 0 '+Hm+' Z'); var avg=0,k; for(k=0;k<n;k++)avg+=vals[k]; avg/=n; var by=(pd+(Hm-2*pd)-((avg-min)/rg)*(Hm-2*pd)); $('mbase').setAttribute('d','M0 '+by.toFixed(1)+' L100 '+by.toFixed(1)); var sel=V.miniSel>=0?V.miniSel:n-1; var dh=''; for(var i=0;i<n;i++){ dh+='<button class="mdot'+(i===sel?' last':'')+'" data-i="'+i+'" style="left:'+pts[i].x.toFixed(1)+'%;top:'+((pts[i].y/Hm)*100).toFixed(1)+'%"></button>'; } $('mdots').innerHTML=dh; var tip=$('minitip'); if(tip)tip.hidden=true; }
+  function tickLabel(c, inst, idx){ var s=inst.start; if(c==='week') return fmtD(s); if(c==='month'){ var l=s.toLocaleDateString('en-US',{month:'short'}); if(s.getMonth()===0||idx===0) l+=" '"+(''+s.getFullYear()).slice(2); return l; } return ''+s.getFullYear(); }
+  function renderMticks(V){ var insts=M().inst[cur], n=insts.length; var c=(n<=6?n:4); var idxs=[]; for(var k=0;k<c;k++){ var ii=Math.round(k*(n-1)/(c-1)); if(idxs.indexOf(ii)<0) idxs.push(ii); } var h=''; for(var j=0;j<idxs.length;j++){ var i=idxs[j], x=(n===1?50:(i*100)/(n-1)); var cls='mtick'+(i===0?' first':'')+(i===n-1?' last':''); h+='<span class="'+cls+'" style="left:'+x.toFixed(1)+'%">'+tickLabel(cur,insts[i],i)+'</span>'; } $('mticks').innerHTML=h; }
   function showMiniTip(i){ var V=viewModel(),dots=$('mdots').children; if(i<0||i>=dots.length)return; for(var k=0;k<dots.length;k++) dots[k].classList.toggle('hi',k===i); var tip=$('minitip'); tip.hidden=false; tip.textContent=V.miniVals[i].toLocaleString(); var el=dots[i],mr=$('mini').getBoundingClientRect(),br=el.getBoundingClientRect(); tip.style.left=(br.left-mr.left+br.width/2)+'px'; tip.style.top=Math.max(-2,(br.top-mr.top)-22)+'px'; }
   function renderDelta(V, sel){ var d=$('delta'); if(sel!=null){ d.className='delta'; d.innerHTML='<span class="ctx" style="color:var(--ink-2);font-weight:600">'+selSubLabel(V)+'</span>'; d.style.visibility='visible'; return; } if(V.delta){ d.className='delta '+(V.dir==='up'?'up':'down'); var arrow=V.dir==='up'?UP:DOWN; if(V.fmt==='rate'){ d.innerHTML=arrow+'<b>'+V.delta+'</b> <span class="ctx">'+(V.ctx||'')+'</span>'; } else { var per=prevWord(cur); var word=V.dir==='up'?'more than':'fewer than'; d.innerHTML=arrow+'<b>'+V.delta+'</b>'+(per?' <span class="ctx">'+word+' '+per+'</span>':''); } d.style.visibility='visible'; } else { d.style.visibility='hidden'; } }
   function selectUpdate(){ var V=viewModel(); var rects=$('bars').children; var sel=(selBar!=null&&selBar<V.vals.length&&V.vals[selBar]!=null)?selBar:null; for(var k=0;k<rects.length;k++) rects[k].classList.toggle('hi', k===sel); animateNum(sel!=null?V.vals[sel]:V.headline, sel!=null?V.barFmt:V.fmt); renderDelta(V, sel); }
@@ -361,8 +364,7 @@
     var tiles=TILES[metric].slice(); tiles[tiles.length-1]=[bestV,bestL];
     $('tiles').innerHTML=tiles.map(function(t){return '<div class="tile"><div class="tv">'+t[0]+'</div><div class="tl">'+t[1]+'</div></div>';}).join('');
     renderMini(V);
-    $('minicap').textContent={week:'Past 8 weeks',month:'Past 12 months',year:'Past 5 years'}[cur];
-    $('minilabels').innerHTML='<span>'+V.miniEnds[0]+'</span><span>'+V.miniEnds[1]+'</span>';
+    renderMticks(V);
     var m=M(); $('mlabel').textContent=m.label; $('subnote').textContent=m.sub;
     var headlineVal = sel!=null? vals[sel] : V.headline;
     if(!scrubbing) animateNum(headlineVal, sel!=null?V.barFmt:V.fmt);
