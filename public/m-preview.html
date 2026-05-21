@@ -92,11 +92,12 @@
   .xrow { display:flex; justify-content:space-between; margin-top:8px; font-size:10px; font-weight:600; letter-spacing:.03em; color:var(--ink-4); white-space:nowrap; }
   .xrow .xl { flex:1; text-align:center; }
   .xrow .xl b { background:var(--ink); color:#fff; border-radius:7px; padding:2px 7px; font-weight:700; }
-  .tiles { display:flex; gap:8px; overflow-x:auto; margin-top:18px; padding-bottom:2px; scrollbar-width:none; }
+  .tiles { display:flex; gap:0; overflow-x:auto; margin-top:20px; padding-bottom:2px; scrollbar-width:none; }
   .tiles::-webkit-scrollbar { display:none; }
-  .tile { flex:0 0 auto; min-width:76px; background:#f1f1f4; border-radius:14px; padding:10px 13px; }
-  .tile .tv { font-size:18px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; line-height:1.1; }
-  .tile .tl { font-size:11px; color:var(--ink-3); margin-top:2px; }
+  .tile { flex:0 0 auto; padding:0 18px; border-left:1px solid var(--hairline-2); }
+  .tile:first-child { padding-left:0; border-left:0; }
+  .tile .tv { font-family:var(--font-display); font-size:20px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; line-height:1.15; letter-spacing:-0.01em; }
+  .tile .tl { font-size:11px; color:var(--ink-3); margin-top:3px; font-weight:500; }
   .minicap { margin:18px 0 6px; font-size:11px; font-weight:600; letter-spacing:.03em; text-transform:uppercase; color:var(--ink-4); }
   .minilabels { display:flex; justify-content:space-between; margin-top:6px; font-size:10px; font-weight:600; color:var(--ink-4); }
   .mini { position:relative; height:44px; margin-top:0; }
@@ -323,6 +324,8 @@
   function buildLabels(V){ var el=$('xrow'); if(V.dayLabels){ el.innerHTML=V.dayLabels.map(function(d,i){ return (i===V.todayIdx)? '<span class="xl"><b>'+d+'</b></span>' : '<span class="xl">'+d+'</span>'; }).join(''); } else { var r=CR(); el.innerHTML='<span>'+r.x[0]+'</span><span>'+r.x[1]+'</span>'; } }
   function renderMini(V){ var vals=V.miniVals, n=vals.length; var min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),rg=Math.max(max-min,0.0001); var Wm=100,Hm=40,pd=5; var pts=vals.map(function(v,i){return {x:n===1?Wm/2:(i*Wm)/(n-1), y:pd+(Hm-2*pd)-((v-min)/rg)*(Hm-2*pd)};}); var d=smooth(pts); $('mline').setAttribute('d',d); $('marea').setAttribute('d',d+' L '+Wm+' '+Hm+' L 0 '+Hm+' Z'); var avg=0,k; for(k=0;k<n;k++)avg+=vals[k]; avg/=n; var by=(pd+(Hm-2*pd)-((avg-min)/rg)*(Hm-2*pd)); $('mbase').setAttribute('d','M0 '+by.toFixed(1)+' L100 '+by.toFixed(1)); var sel=V.miniSel>=0?V.miniSel:n-1; var dh=''; for(var i=0;i<n;i++){ dh+='<button class="mdot'+(i===sel?' last':'')+'" data-i="'+i+'" style="left:'+pts[i].x.toFixed(1)+'%;top:'+((pts[i].y/Hm)*100).toFixed(1)+'%"></button>'; } $('mdots').innerHTML=dh; var tip=$('minitip'); if(tip)tip.hidden=true; }
   function showMiniTip(i){ var V=viewModel(),dots=$('mdots').children; if(i<0||i>=dots.length)return; for(var k=0;k<dots.length;k++) dots[k].classList.toggle('hi',k===i); var tip=$('minitip'); tip.hidden=false; tip.textContent=V.miniVals[i].toLocaleString(); var el=dots[i],mr=$('mini').getBoundingClientRect(),br=el.getBoundingClientRect(); tip.style.left=(br.left-mr.left+br.width/2)+'px'; tip.style.top=Math.max(-2,(br.top-mr.top)-22)+'px'; }
+  function renderDelta(V, sel){ var d=$('delta'); if(sel!=null){ d.className='delta'; d.innerHTML='<span class="ctx" style="color:var(--ink-2);font-weight:600">'+(V.mode==='week'? selDateLabel() : 'Selected')+'</span>'; d.style.visibility='visible'; return; } if(V.delta){ d.className='delta '+(V.dir==='up'?'up':'down'); var arrow=V.dir==='up'?UP:DOWN; if(V.fmt==='rate'){ d.innerHTML=arrow+'<b>'+V.delta+'</b> <span class="ctx">'+(V.ctx||'')+'</span>'; } else { var per=V.mode==='week'?'last week':(PERIOD[cur]||''); var word=V.dir==='up'?'more than':'fewer than'; d.innerHTML=arrow+'<b>'+V.delta+'</b>'+(per?' <span class="ctx">'+word+' '+per+'</span>':''); } d.style.visibility='visible'; } else { d.style.visibility='hidden'; } }
+  function selectUpdate(){ var V=viewModel(); var rects=$('bars').children; var sel=(selBar!=null&&selBar<V.vals.length&&V.vals[selBar]!=null)?selBar:null; for(var k=0;k<rects.length;k++) rects[k].classList.toggle('hi', k===sel); animateNum(sel!=null?V.vals[sel]:V.headline, V.fmt); renderDelta(V, sel); }
   function render(skipAnim){
     var V=viewModel(), vals=V.vals, n=vals.length;
     var sel=(selBar!=null && selBar<n && vals[selBar]!=null)? selBar : null;
@@ -340,13 +343,7 @@
     var m=M(); $('mlabel').textContent=m.label; $('subnote').textContent=m.sub;
     var headlineVal = sel!=null? vals[sel] : V.headline;
     if(!scrubbing) animateNum(headlineVal, V.fmt);
-    var d=$('delta');
-    if(sel!=null){ d.className='delta'; d.innerHTML='<span class="ctx" style="color:var(--ink-2);font-weight:600">'+(V.mode==='week'? selDateLabel() : 'Selected')+'</span>'; d.style.visibility='visible'; }
-    else if(V.delta){ d.className='delta '+(V.dir==='up'?'up':'down'); var arrow=V.dir==='up'?UP:DOWN;
-      if(V.fmt==='rate'){ d.innerHTML=arrow+'<b>'+V.delta+'</b> <span class="ctx">'+(V.ctx||'')+'</span>'; }
-      else { var per=V.mode==='week'?'last week':(PERIOD[cur]||''); var word=V.dir==='up'?'more than':'fewer than'; d.innerHTML=arrow+'<b>'+V.delta+'</b>'+(per?' <span class="ctx">'+word+' '+per+'</span>':''); }
-      d.style.visibility='visible'; }
-    else { d.style.visibility='hidden'; }
+    renderDelta(V, sel);
   }
 
   function setRange(rk){ cur=rk; scrubbing=false; selBar=null; var tip=$('bartip'); if(tip)tip.hidden=true;
@@ -359,8 +356,8 @@
   // bar selection (tap a bar -> top number shows that day; tap again to clear)
   var box=$('chartbox');
   function barIdx(e){ var bars=$('bars'); var rect=bars.getBoundingClientRect(); var cx=(e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0)); var t=Math.max(0,Math.min(0.999,(cx-rect.left)/rect.width)); return Math.floor(t*bars.children.length); }
-  box.addEventListener('pointerdown',function(e){ e.preventDefault(); try{box.setPointerCapture(e.pointerId);}catch(_){} pressing=true; var i=barIdx(e); var V=viewModel(); if(V.vals[i]==null)return; selBar=(selBar===i?null:i); render(true); });
-  box.addEventListener('pointermove',function(e){ if(!pressing)return; var i=barIdx(e); var V=viewModel(); if(V.vals[i]!=null && i!==selBar){ selBar=i; render(true); } });
+  box.addEventListener('pointerdown',function(e){ e.preventDefault(); try{box.setPointerCapture(e.pointerId);}catch(_){} pressing=true; var i=barIdx(e); var V=viewModel(); if(V.vals[i]==null)return; selBar=(selBar===i?null:i); selectUpdate(); });
+  box.addEventListener('pointermove',function(e){ if(!pressing)return; var i=barIdx(e); var V=viewModel(); if(V.vals[i]!=null && i!==selBar){ selBar=i; selectUpdate(); } });
   box.addEventListener('pointerup',function(){ pressing=false; });
   box.addEventListener('pointercancel',function(){ pressing=false; });
   $('mdots').addEventListener('click',function(e){ var b=e.target.closest('.mdot'); if(!b)return; var i=+b.getAttribute('data-i'); if(cur==='week'){ weekIdx=i; selBar=null; $('num').textContent='0'; render(); } else { showMiniTip(i); } });
