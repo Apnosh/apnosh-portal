@@ -1,5 +1,5 @@
 /**
- * POST /api/admin/clients/[id]/plan
+ * POST /api/admin/clients/[clientId]/plan
  *
  * Admin-only. Updates a client's tier, monthly_rate, and allotments.
  * Body: { tier, monthlyRate, allotments: { [key]: number } }
@@ -28,9 +28,9 @@ interface Body {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ clientId: string }> },
 ) {
-  const { id } = await params
+  const { clientId } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return new NextResponse('Unauthorized', { status: 401 })
@@ -75,17 +75,17 @@ export async function POST(
   const { error } = await admin
     .from('clients')
     .update(update)
-    .eq('id', id)
+    .eq('id', clientId)
 
   if (error) {
     return new NextResponse(`Could not update: ${error.message}`, { status: 500 })
   }
 
   await admin.from('events').insert({
-    client_id: id,
+    client_id: clientId,
     event_type: 'plan.updated',
     subject_type: 'client',
-    subject_id: id,
+    subject_id: clientId,
     actor_id: user.id,
     actor_role: 'admin',
     summary: `Plan updated to ${body.tier ?? 'unchanged'}${body.monthlyRate != null ? ` · $${body.monthlyRate}/mo` : ''}`,
