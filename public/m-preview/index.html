@@ -76,21 +76,16 @@
   .delta .ctx { color:var(--ink-2); font-weight:500; font-size:13.5px; margin-left:2px; }
   .subnote { margin:7px 0 0; font-size:13px; color:var(--ink-3); }
   .chartwrap { margin-top:6px; }
-  .caprow { display:flex; align-items:center; justify-content:space-between; margin:0 0 10px; }
-  .rangecap { margin:0; font-size:11.5px; font-weight:600; color:var(--ink-3); }
-  .live-ind { display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--brand-d); }
-  .live-ind[hidden] { display:none; }
-  .live-dot { width:6px; height:6px; border-radius:9999px; background:var(--brand); animation:livePulse 2s ease-in-out infinite; }
-  @keyframes livePulse { 0% { box-shadow:0 0 0 0 rgba(74,189,152,0.5); } 70%,100% { box-shadow:0 0 0 6px rgba(74,189,152,0); } }
+  .rangecap { margin:0 0 10px; font-size:11.5px; font-weight:600; color:var(--ink-3); }
   .chartbox { width:100%; height:100px; position:relative; touch-action:none; cursor:pointer; user-select:none; }
   .bars { display:flex; align-items:flex-end; gap:5px; height:100%; }
   .bar { flex:1; min-width:2px; background:rgba(74,189,152,0.24); border-radius:5px 5px 0 0; transform-origin:bottom; transition:background .18s ease; }
   .bar.last { background:var(--brand); } .bar.hi { background:var(--brand); }
   .bar.blank { background:rgba(74,189,152,0.08); }
   .bars.anim .bar { animation:barUp .5s var(--ease-out) both; }
-  .bars.anim .bar.last { animation:barUp .5s var(--ease-out) both, liveBar 2.6s ease-in-out 0.7s infinite; }
+  .bars.anim .bar.last { animation:barUp .5s var(--ease-out) both, liveBar 3.4s ease-in-out 0.7s infinite; }
   @keyframes barUp { from { transform:scaleY(0); } to { transform:scaleY(1); } }
-  @keyframes liveBar { 0%,100% { opacity:1; } 50% { opacity:.62; } }
+  @keyframes liveBar { 0%,100% { opacity:1; } 50% { opacity:.85; } }
   .cmp { position:absolute; left:0; right:0; border-top:1.5px dashed var(--ink-5); pointer-events:none; z-index:2; }
   .cmp[hidden] { display:none; }
   .cmp-l { position:absolute; right:0; top:-8px; font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-4); background:var(--bg); padding:0 4px; }
@@ -165,7 +160,7 @@
   @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
   .screen > * { animation:fadeUp .5s var(--ease-out) both; }
   .screen > *:nth-child(2){ animation-delay:.05s; } .screen > *:nth-child(3){ animation-delay:.11s; } .screen > *:nth-child(4){ animation-delay:.17s; }
-  @media (prefers-reduced-motion:reduce){ .screen > *, .bars.anim .bar, .bars.anim .bar.last, .live-dot { animation:none !important; } }
+  @media (prefers-reduced-motion:reduce){ .screen > *, .bars.anim .bar, .bars.anim .bar.last { animation:none !important; } }
 
   /* Editorial theme */
   .frame[data-theme="editorial"] {
@@ -205,10 +200,7 @@
           <p class="subnote" id="subnote">Calls, directions &amp; website clicks</p>
           <p class="delta up" id="delta"></p>
           <div class="chartwrap">
-            <div class="caprow">
-              <p class="rangecap" id="rangecap"></p>
-              <span class="live-ind" id="liveind"><span class="live-dot"></span>Live</span>
-            </div>
+            <p class="rangecap" id="rangecap"></p>
             <div class="chartbox" id="chartbox">
               <div class="cmp" id="cmp" hidden><span class="cmp-l">vs prev</span></div>
               <div class="bars" id="bars"></div>
@@ -363,7 +355,6 @@
     var cmp=$('cmp'); if(V.cmpPerDay!=null){ cmp.hidden=false; cmp.style.top=(100-(V.cmpPerDay/max)*100).toFixed(1)+'%'; } else { cmp.hidden=true; }
     buildLabels(V);
     $('rangecap').textContent=V.cap;
-    $('liveind').hidden=!V.isCur;
     var bi=-1,bv=-1; for(i=0;i<n;i++){ if(vals[i]!=null&&vals[i]>bv){bv=vals[i];bi=i;} }
     var bestL={day:'Best day',week:'Best week',month:'Best month',year:'Best year'}[V.sub]||'Best';
     var bestV= bi>=0? shortSub(V.sub,V.instStart,bi):'–';
