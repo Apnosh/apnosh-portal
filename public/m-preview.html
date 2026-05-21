@@ -50,10 +50,11 @@
   .hero-num { font-family:var(--num-font); font-weight:var(--num-weight); font-size:var(--num-size); letter-spacing:var(--num-spacing); line-height:.92; color:var(--ink); margin:16px 0 0; font-variant-numeric:tabular-nums; }
   .delta { display:inline-flex; align-items:center; gap:5px; margin-top:14px; min-height:22px; font-weight:600; font-size:16px; }
   .delta.up { color:var(--brand-d); } .delta.down { color:var(--drop); }
-  .delta .ctx { color:var(--ink-3); font-weight:400; font-size:13px; margin-left:1px; }
+  .delta b { font-weight:700; }
+  .delta .ctx { color:var(--ink-2); font-weight:500; font-size:13.5px; margin-left:2px; }
   .subnote { margin:8px 0 0; font-size:12px; color:var(--ink-4); }
   .chartwrap { margin-top:18px; margin-left:-22px; margin-right:-22px; }
-  .chartbox { width:100%; height:150px; position:relative; touch-action:none; cursor:ew-resize; user-select:none; }
+  .chartbox { width:100%; height:120px; position:relative; touch-action:none; cursor:ew-resize; user-select:none; }
   .xrow { display:flex; justify-content:space-between; margin-top:6px; padding:0 22px; font-size:10.5px; color:var(--ink-4); white-space:nowrap; font-variant-numeric:tabular-nums; }
 
   .seg { position:relative; display:grid; grid-template-columns:repeat(5,1fr); margin-top:20px; background:#f1f1f4; border-radius:9999px; padding:3px; }
@@ -129,7 +130,7 @@
           <p class="subnote">Calls, directions &amp; website clicks</p>
           <div class="chartwrap">
             <div class="chartbox" id="chartbox">
-              <svg id="svg" viewBox="0 0 402 150" width="100%" height="150" preserveAspectRatio="none" aria-hidden="true" style="display:block">
+              <svg id="svg" viewBox="0 0 402 120" width="100%" height="120" preserveAspectRatio="none" aria-hidden="true" style="display:block">
                 <defs>
                   <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--chart-fill)"/><stop offset="100%" stop-color="transparent"/></linearGradient>
                   <linearGradient id="strk" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="var(--chart-line)" stop-opacity="0.5"/><stop offset="100%" stop-color="var(--chart-line)" stop-opacity="1"/></linearGradient>
@@ -157,7 +158,7 @@
         </section>
 
         <section class="plan">
-          <div class="plan-head"><p class="t-eyebrow eb-pill">Plan ahead</p><button class="btn-quiet">Calendar <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>
+          <div class="plan-head"><p class="t-eyebrow">Plan ahead</p><button class="btn-quiet">Calendar <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>
           <div class="plan-scroll" id="plan"></div>
         </section>
 
@@ -167,7 +168,7 @@
         </section>
 
         <section class="sx">
-          <div class="sx-head"><p class="t-eyebrow eb-pill">This week</p></div>
+          <div class="sx-head"><p class="t-eyebrow">This week</p></div>
           <ul class="list" id="week"></ul>
         </section>
       </div>
@@ -185,13 +186,13 @@
   var ORDER=['week','month','3m','year','all'];
   var NEEDS=[['Reply to a 3-star review','2 min'],["Approve Friday's Instagram post",'30 sec'],['Set Memorial Day hours','1 min']];
 
-  var W=402,H=150,padT=12,padB=8,innerH=H-padT-padB;
+  var W=402,H=120,padT=10,padB=8,innerH=H-padT-padB;
   var cur='week', scrubbing=false;
 
   function smooth(pts){ if(!pts.length)return''; if(pts.length===1)return'M '+pts[0].x+' '+pts[0].y; var t=0.18,d='M '+pts[0].x.toFixed(2)+' '+pts[0].y.toFixed(2); for(var i=0;i<pts.length-1;i++){var p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||p2;var c1x=p1.x+(p2.x-p0.x)*t,c1y=p1.y+(p2.y-p0.y)*t,c2x=p2.x-(p3.x-p1.x)*t,c2y=p2.y-(p3.y-p1.y)*t; d+=' C '+c1x.toFixed(2)+' '+c1y.toFixed(2)+', '+c2x.toFixed(2)+' '+c2y.toFixed(2)+', '+p2.x.toFixed(2)+' '+p2.y.toFixed(2);} return d; }
   function coords(vals){ var min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),yr=Math.max(max-min,0.0001); var n=vals.length; return vals.map(function(v,i){var x=n===1?W/2:(i*W)/(n-1); var y=padT+innerH-((v-min)/yr)*innerH; return {x:x,y:y};}); }
   function $(id){return document.getElementById(id);}
-  var SUFFIX={week:'vs last week',month:'vs last month','3m':'vs prior 3 months',year:'vs last year',all:''};
+  var PERIOD={week:'last week',month:'last month','3m':'the prior 3 months',year:'last year',all:''};
   var numTimer=null;
   function animateNum(target){ var el=$('num'); var start=parseInt((el.textContent||'0').replace(/[^0-9]/g,''),10)||0; if(numTimer)cancelAnimationFrame(numTimer); var t0=null,dur=700; function step(ts){ if(!t0)t0=ts; var p=Math.min(1,(ts-t0)/dur); var e=1-Math.pow(1-p,3); el.textContent=Math.round(start+(target-start)*e).toLocaleString(); if(p<1)numTimer=requestAnimationFrame(step); } numTimer=requestAnimationFrame(step); }
   function drawLine(){ var el=$('line'),a=$('area'); try{ var len=el.getTotalLength(); el.style.transition='none'; el.style.strokeDasharray=len; el.style.strokeDashoffset=len; el.getBoundingClientRect(); el.style.transition='stroke-dashoffset .9s var(--ease-out)'; el.style.strokeDashoffset='0'; a.style.transition='none'; a.style.opacity='0'; a.getBoundingClientRect(); a.style.transition='opacity .8s ease'; a.style.opacity='1'; }catch(e){} }
@@ -205,7 +206,7 @@
     $('dot').setAttribute('cx',last.x); $('dot').setAttribute('cy',last.y);
     if(!scrubbing){ drawLine(); animateNum(r.total); }
     var d=$('delta');
-    if(r.delta){ d.className='delta '+(r.dir==='up'?'up':'down'); var arrow=r.dir==='up'?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>':'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>'; var suf=SUFFIX[cur]||''; d.innerHTML=arrow+'<span>'+r.delta+'</span>'+(suf?' <span class="ctx">'+suf+'</span>':''); d.style.visibility='visible'; }
+    if(r.delta){ d.className='delta '+(r.dir==='up'?'up':'down'); var arrow=r.dir==='up'?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>':'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>'; var mag=r.delta?r.delta.replace(/^[+\-]/,''):''; var per=PERIOD[cur]||''; var word=r.dir==='up'?'more than':'fewer than'; d.innerHTML=arrow+'<b>'+mag+'</b>'+(per?' <span class="ctx">'+word+' '+per+'</span>':''); d.style.visibility='visible'; }
     else { d.style.visibility='hidden'; }
     $('x0').textContent=r.x[0]; $('x1').textContent=r.x[1];
     $('sources').innerHTML=r.sources.map(function(s){return '<div class="src"><span class="l">'+s[0]+'</span><span class="v">'+s[1].toLocaleString()+'</span></div>';}).join('');
