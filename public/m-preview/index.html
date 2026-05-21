@@ -89,6 +89,19 @@
   .plan-hint { font-size:13px; color:var(--ink-3); margin:3px 0 0; line-height:1.4; }
   .plan-cta { font-size:13px; font-weight:600; color:var(--brand-d); margin-top:10px; }
 
+  /* Your channels — Robinhood-style watchlist rows */
+  .chan { display:flex; align-items:center; gap:12px; width:100%; background:none; border:0; border-top:1px solid var(--hairline-2); padding:13px 0; text-align:left; cursor:pointer; font-family:inherit; }
+  #channels .chan:first-child { border-top:0; }
+  .chan:active { opacity:.5; }
+  .chan-l { flex:1; min-width:0; }
+  .chan-n { display:block; font-size:15px; font-weight:600; color:var(--ink); }
+  .chan-s { display:block; font-size:11.5px; color:var(--ink-4); margin-top:1px; }
+  .chan-spark { flex:0 0 64px; height:30px; }
+  .chan-r { display:flex; flex-direction:column; align-items:flex-end; }
+  .chan-v { font-size:16px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .chan-d { font-size:12px; font-weight:600; margin-top:1px; }
+  .chan-d.up { color:var(--brand-d); } .chan-d.down { color:var(--drop); }
+
   @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
   .screen > * { animation:fadeUp .5s var(--ease-out) both; }
   .screen > *:nth-child(2){ animation-delay:.05s; } .screen > *:nth-child(3){ animation-delay:.11s; } .screen > *:nth-child(4){ animation-delay:.17s; }
@@ -154,7 +167,11 @@
             <button class="seg-btn" data-r="all">All</button>
           </div>
 
-          <div class="srcwrap"><div class="srcrow" id="sources"></div></div>
+        </section>
+
+        <section class="sx">
+          <div class="sx-head"><p class="t-eyebrow">Your channels</p><button class="btn-quiet">Analytics <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>
+          <div id="channels"></div>
         </section>
 
         <section class="plan">
@@ -209,7 +226,6 @@
     if(r.delta){ d.className='delta '+(r.dir==='up'?'up':'down'); var arrow=r.dir==='up'?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>':'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>'; var mag=r.delta?r.delta.replace(/^[+\-]/,''):''; var per=PERIOD[cur]||''; var word=r.dir==='up'?'more than':'fewer than'; d.innerHTML=arrow+'<b>'+mag+'</b>'+(per?' <span class="ctx">'+word+' '+per+'</span>':''); d.style.visibility='visible'; }
     else { d.style.visibility='hidden'; }
     $('x0').textContent=r.x[0]; $('x1').textContent=r.x[1];
-    $('sources').innerHTML=r.sources.map(function(s){return '<div class="src"><span class="l">'+s[0]+'</span><span class="v">'+s[1].toLocaleString()+'</span></div>';}).join('');
   }
 
   function setRange(rk){ cur=rk; scrubbing=false; $('scrub').style.display='none'; $('dot').style.display=''; $('halo').style.display='';
@@ -239,6 +255,15 @@
     '<li><button class="row"><p class="rowt"><b>7</b> <span class="muted">shipped</span></p>'+chevR+'</button></li>',
     '<li><button class="row"><p class="rowt"><span style="font-weight:600">Maria</span> <span class="muted">your strategist</span></p>'+chevR+'</button></li>'
   ].join('');
+
+  function miniSpark(vals,dir){ var w=64,h=30,min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),rg=Math.max(max-min,0.0001); var d=vals.map(function(v,i){var x=(i*w)/(vals.length-1); var y=(h-3)-((v-min)/rg)*(h-6); return (i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);}).join(' '); var col=dir==='down'?'var(--drop)':'var(--brand)'; return '<svg width="64" height="30" viewBox="0 0 64 30" fill="none" preserveAspectRatio="none"><path d="'+d+'" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>'; }
+  var CHANNELS=[
+    ['Local presence','Profile views','1,840','+12%','up',[40,44,42,50,55,52,60,66]],
+    ['Social media','Reach','1,720','+22%','up',[20,26,24,30,42,38,52,60]],
+    ['Website','Visitors','412','+5%','up',[30,28,33,31,35,34,37,39]],
+    ['Reviews','Avg rating','4.7★','+3 new','up',[44,45,44,46,45,47,46,47]]
+  ];
+  $('channels').innerHTML=CHANNELS.map(function(c){ return '<button class="chan"><div class="chan-l"><span class="chan-n">'+c[0]+'</span><span class="chan-s">'+c[1]+'</span></div><div class="chan-spark">'+miniSpark(c[5],c[4])+'</div><div class="chan-r"><span class="chan-v">'+c[2]+'</span><span class="chan-d '+c[4]+'">'+c[3]+'</span></div></button>'; }).join('');
 
   var PLAN=[
     ['In 4 days','Memorial Day','Big sales day. Plan a promo.','Plan it'],
