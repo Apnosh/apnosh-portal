@@ -1,0 +1,102 @@
+/* Mobile inbox — restyled to match the approved home aesthetic.
+   Everything is scoped under .m-inbox (native CSS nesting) so the
+   semantic class names can't collide with the rest of the portal.
+   Tokens mirror m-home.css: airy, mostly cardless, restrained green
+   accent, Cal Sans for the display title. */
+
+@keyframes mi-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.m-inbox {
+  --font-display: 'Cal Sans', 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --ink: #1d1d1f; --ink-2: #424245; --ink-3: #6e6e73; --ink-4: #aeaeb2;
+  --bg: #ffffff; --surface: #ffffff;
+  --brand: #4abd98; --brand-d: #2e9a78; --brand-g: rgba(74,189,152,0.15); --brand-t: #eaf7f3;
+  --drop: #c2453d; --amber: #b7791f; --hairline: #ececf0; --hairline-2: #f0f0f5;
+  --ease-out: cubic-bezier(.16,1,.3,1);
+
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  color: var(--ink);
+  background: var(--bg);
+  max-width: 440px;
+  margin: 0 auto;
+
+  & a { text-decoration: none; color: inherit; }
+
+  /* ---- Header ---- */
+  & .ib-head { position: sticky; top: 56px; z-index: 20; background: var(--bg); padding: 14px 22px 0; }
+  & .ib-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  & .ib-title { font-family: var(--font-display); font-weight: 600; font-size: 30px; letter-spacing: -0.02em; line-height: 1; color: var(--ink); margin: 0; }
+  & .ib-acts { display: flex; align-items: center; gap: 2px; }
+  & .ib-iconbtn { width: 38px; height: 38px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0; color: var(--ink-2); cursor: pointer; }
+  & .ib-iconbtn:active { background: var(--hairline-2); }
+  & .ib-iconbtn svg { width: 20px; height: 20px; }
+
+  /* ---- Inline search ---- */
+  & .ib-search { margin-top: 12px; position: relative; }
+  & .ib-search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--ink-4); }
+  & .ib-search input { width: 100%; height: 40px; border-radius: 9999px; border: 0; background: var(--hairline-2); padding: 0 16px 0 38px; font-family: inherit; font-size: 14.5px; color: var(--ink); outline: none; }
+  & .ib-search input::placeholder { color: var(--ink-4); }
+
+  /* ---- Primary tabs ---- */
+  & .ib-tabs { display: flex; gap: 22px; margin-top: 14px; border-bottom: 1px solid var(--hairline); overflow-x: auto; scrollbar-width: none; }
+  & .ib-tabs::-webkit-scrollbar { display: none; }
+  & .ib-tab { display: inline-flex; align-items: center; gap: 6px; padding: 0 0 11px; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; font-family: inherit; font-size: 15px; font-weight: 600; color: var(--ink-3); cursor: pointer; white-space: nowrap; flex: 0 0 auto; }
+  & .ib-tab.on { color: var(--ink); border-bottom-color: var(--ink); }
+  & .ib-tab-n { font-size: 11px; font-weight: 700; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; background: var(--hairline-2); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  & .ib-tab.on .ib-tab-n { background: var(--brand-t); color: var(--brand-d); }
+
+  /* ---- Filter chips ---- */
+  & .ib-filters { display: flex; align-items: center; gap: 8px; padding: 12px 22px 4px; overflow-x: auto; scrollbar-width: none; }
+  & .ib-filters::-webkit-scrollbar { display: none; }
+  & .ib-fchip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 13px; border-radius: 9999px; border: 1px solid var(--hairline); background: var(--bg); font-family: inherit; font-size: 13px; font-weight: 600; color: var(--ink-2); cursor: pointer; white-space: nowrap; flex: 0 0 auto; transition: background .15s ease, border-color .15s ease, color .15s ease; }
+  & .ib-fchip.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+  & .ib-fchip:active { opacity: .7; }
+  & .ib-fclear { background: none; border: 0; font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--brand-d); cursor: pointer; white-space: nowrap; flex: 0 0 auto; padding: 0 4px; }
+  & .ib-fdiv { width: 1px; height: 18px; background: var(--hairline); flex: 0 0 auto; }
+
+  /* ---- List ---- */
+  & .ib-list { list-style: none; margin: 0; padding: 0 22px; }
+  & .ib-row { display: flex; align-items: flex-start; gap: 12px; padding: 14px 0; border-top: 1px solid var(--hairline-2); cursor: pointer; }
+  & .ib-list li:first-child .ib-row { border-top: 0; }
+  & .ib-row:active { opacity: .55; }
+
+  & .ib-ava { position: relative; flex: 0 0 auto; width: 40px; height: 40px; }
+  & .ib-ic { width: 40px; height: 40px; border-radius: 11px; background: var(--brand-g); color: var(--brand-d); display: flex; align-items: center; justify-content: center; }
+  & .ib-ic svg { width: 19px; height: 19px; }
+  & .ib-ic.k-review { background: rgba(183,121,31,0.12); color: var(--amber); }
+  & .ib-ic.k-connection { background: rgba(194,69,61,0.1); color: var(--drop); }
+  & .ib-photo { width: 40px; height: 40px; border-radius: 9999px; object-fit: cover; }
+  & .ib-src { position: absolute; bottom: -2px; right: -2px; font-size: 8.5px; font-weight: 800; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; background: var(--ink-2); color: #fff; box-shadow: 0 0 0 2px var(--bg); letter-spacing: -0.02em; }
+
+  & .ib-main { flex: 1; min-width: 0; }
+  & .ib-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  & .ib-name { font-size: 15px; font-weight: 600; color: var(--ink-2); margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  & .ib-row.unread .ib-name { font-weight: 700; color: var(--ink); }
+  & .ib-time { font-size: 11.5px; color: var(--ink-4); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+  & .ib-prev { margin: 2px 0 0; font-size: 13.5px; line-height: 1.4; color: var(--ink-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  & .ib-row.unread .ib-prev { color: var(--ink-2); }
+  & .ib-prev .ib-rating { color: var(--amber); font-weight: 700; margin-right: 4px; }
+  & .ib-tagrow { display: flex; align-items: center; gap: 7px; margin-top: 6px; }
+  & .ib-tag { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--drop); background: rgba(194,69,61,0.1); padding: 2px 7px; border-radius: 6px; }
+  & .ib-status { font-size: 11.5px; color: var(--ink-4); font-weight: 500; }
+
+  & .ib-end { flex: 0 0 auto; align-self: center; display: flex; align-items: center; }
+  & .ib-dot { width: 9px; height: 9px; border-radius: 9999px; background: var(--brand); }
+  & .ib-chev { width: 15px; height: 15px; color: var(--ink-4); }
+
+  /* ---- Empty state ---- */
+  & .ib-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 64px 28px; animation: mi-fade .35s var(--ease-out) both; }
+  & .ib-empty-ic { width: 52px; height: 52px; border-radius: 9999px; background: var(--brand-g); color: var(--brand-d); display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+  & .ib-empty-ic svg { width: 24px; height: 24px; }
+  & .ib-empty-t { margin: 0; font-size: 17px; font-weight: 600; color: var(--ink); }
+  & .ib-empty-s { margin: 5px 0 0; font-size: 13.5px; color: var(--ink-3); max-width: 240px; line-height: 1.45; }
+
+  /* ---- Menu ---- */
+  & .ib-menu { position: absolute; right: 0; top: 100%; margin-top: 4px; z-index: 40; background: var(--surface); border: 1px solid var(--hairline); border-radius: 14px; box-shadow: 0 14px 34px rgba(0,0,0,0.12); padding: 6px; min-width: 200px; }
+  & .ib-menu button { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: 0; padding: 11px 12px; border-radius: 9px; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--ink-2); cursor: pointer; text-align: left; }
+  & .ib-menu button:active { background: var(--brand-t); color: var(--brand-d); }
+  & .ib-menu button svg { width: 16px; height: 16px; }
+  & .ib-backdrop { position: fixed; inset: 0; z-index: 30; background: none; border: 0; cursor: default; }
+}

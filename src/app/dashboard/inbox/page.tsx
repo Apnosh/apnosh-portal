@@ -39,5 +39,9 @@ export default async function InboxPage({ searchParams }: PageProps) {
   }
 
   const items = await getInbox(clientId, user.id)
-  return <InboxView items={items} initialFilter={filter ?? 'all'} />
+  return (
+    <div className="-m-4 lg:-m-6">
+      <InboxView items={items} initialFilter={filter ?? 'all'} />
+    </div>
+  )
 }
