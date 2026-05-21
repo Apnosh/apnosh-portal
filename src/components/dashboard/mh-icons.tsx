@@ -24,9 +24,9 @@ export const MH_ICONS: Record<string, string> = {
   chevRight: '<path d="m9 18 6-6-6-6"/>',
 }
 
-export function MhIcon({ name, className, sw = 1.8 }: { name: string; className?: string; sw?: number }) {
+export function MhIcon({ name, className, sw = 1.8, size = 16 }: { name: string; className?: string; sw?: number; size?: number }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}
       strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: MH_ICONS[name] ?? '' }} />
   )
 }

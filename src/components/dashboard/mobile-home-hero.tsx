@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import type { HomeMetric, HomeInstance } from '@/lib/dashboard/get-home-metrics'
 
 type Range = 'week' | 'month' | 'year'
@@ -40,9 +41,9 @@ const ICONS: Record<string, string> = {
   arrowDown: '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
 }
 
-function Icon({ name, className, sw = 1.9 }: { name: string; className?: string; sw?: number }) {
+function Icon({ name, className, sw = 1.9, size = 16 }: { name: string; className?: string; sw?: number; size?: number }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw}
       strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: ICONS[name] ?? '' }} />
   )
 }
@@ -244,9 +245,9 @@ export function MobileHomeHero({ metrics }: { metrics: HomeMetric[] }) {
   return (
     <div className="m-home">
       <section className="spot">
-        <button className="bell" aria-label="Notifications" type="button">
-          <Icon name="bell" sw={1.8} /><span className="dot" />
-        </button>
+        <Link className="bell" aria-label="Notifications" href="/dashboard/notifications">
+          <Icon name="bell" sw={1.8} size={20} /><span className="dot" />
+        </Link>
 
         <div className="metricsel">
           <button className="metric-btn" type="button" aria-expanded={menuOpen}
@@ -273,7 +274,10 @@ export function MobileHomeHero({ metrics }: { metrics: HomeMetric[] }) {
           <>
             <p className="subnote">{subnote}</p>
             <div className="hero-row">
-              <div className="hero-l"><p className="hero-num">{display}</p></div>
+              <div className="hero-l">
+                <p className="hero-num">{display}</p>
+                <p className="rangecap">{vm.cap}</p>
+              </div>
               <div className="hero-r">
                 <p className="avg-l">Avg / {vm.sub === 'month' ? 'mo' : 'day'}</p>
                 <p className="avg-v">{fmtAvg(vm.avg)}</p>
@@ -288,7 +292,6 @@ export function MobileHomeHero({ metrics }: { metrics: HomeMetric[] }) {
             </div>
 
             <div className="chartwrap">
-              <p className="rangecap">{vm.cap}</p>
               <div className="chartbox">
                 <div className={`bars anim`} key={`${metricKey}-${cur}-${vm.idx}`}>
                   {vm.vals.map((v, i) => {
