@@ -23,7 +23,7 @@
     --brand:#4abd98; --brand-d:#2e9a78; --brand-g:rgba(74,189,152,0.12);
     --drop:#c2453d; --hairline-2:#ececf0;
     --chart-line:#2e9a78; --chart-fill:rgba(74,189,152,0.26);
-    --spot-bg:linear-gradient(180deg, rgba(74,189,152,0.10), rgba(74,189,152,0) 55%);
+    --spot-bg:none;
     --num-font:var(--font-body); --num-weight:700; --num-size:96px; --num-spacing:-0.05em;
     --pill-active-bg:var(--brand-g); --pill-active-fg:var(--brand-d); --pill-fg:var(--ink-3);
   }
@@ -70,6 +70,23 @@
   .tabular { font-variant-numeric:tabular-nums; }
   .range-pill { color:var(--pill-fg); }
   .range-pill.on { background:var(--pill-active-bg); color:var(--pill-active-fg); }
+
+  /* Modern: animated iOS-style segmented control (neutral, no green) */
+  .seg { position:relative; display:grid; grid-template-columns:repeat(5,1fr); margin-top:20px; background:var(--seg-track,#f1f1f4); border-radius:9999px; padding:3px; }
+  .seg-ind { position:absolute; top:3px; bottom:3px; left:3px; width:calc((100% - 6px)/5); border-radius:9999px; background:var(--seg-knob,#fff); box-shadow:0 1px 4px rgba(0,0,0,.10); transition:transform .30s var(--ease-out); }
+  .seg-btn { position:relative; z-index:1; height:30px; border:0; background:none; font-family:inherit; font-size:12.5px; font-weight:600; color:var(--ink-3); cursor:pointer; transition:color .2s ease; }
+  .seg-btn[data-on="true"] { color:var(--ink); }
+
+  /* Modern: neutral time chip */
+  .chip { font-size:12px; color:var(--ink-2); background:var(--chip-bg,#f1f1f4); padding:4px 10px; border-radius:9999px; font-variant-numeric:tabular-nums; font-weight:500; white-space:nowrap; }
+
+  /* Modern: subtle staggered entrance */
+  @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+  .screen > * { animation:fadeUp .5s var(--ease-out) both; }
+  .screen > *:nth-child(2) { animation-delay:.05s; }
+  .screen > *:nth-child(3) { animation-delay:.11s; }
+  .screen > *:nth-child(4) { animation-delay:.17s; }
+  @media (prefers-reduced-motion: reduce) { .screen > * { animation:none; } }
 
   /* ───────── EDITORIAL ───────── */
   .frame[data-theme="editorial"] {
@@ -129,7 +146,7 @@ function Home({ tweaks, data, onTabClick, onOpen }) {
             <li key={item.id}>
               <button onClick={()=>onOpen(item.href,item)} className="row">
                 <p className="t-body-strong" style={{flex:1,minWidth:0,fontSize:16}}>{item.title}</p>
-                <span className="pill" style={{flexShrink:0}}>{item.time}</span>
+                <span className="chip" style={{flexShrink:0}}>{item.time}</span>
                 <I.ChevR size={13} color="var(--ink-4)" stroke={1.8} />
               </button>
             </li>
@@ -217,6 +234,8 @@ function TrendChart({ points, deltaDir, scrubIdx, onScrub }) {
   const coords=points.map((p,i)=>({x:toX(i),y:toY(p.value)})); const pathD=smoothPath(coords); const areaD=pathD+` L ${W} ${padT+innerH} L 0 ${padT+innerH} Z`;
   const lineColor = deltaDir==="down" ? "var(--drop)" : "var(--chart-line)";
   const gid = "g"+Math.random().toString(36).slice(2,7);
+  const sgid = "s"+Math.random().toString(36).slice(2,7);
+  const strokeRef = deltaDir==="down" ? "var(--drop)" : `url(#${sgid})`;
   function pointerToIdx(e){ const rect=ref.current.getBoundingClientRect(); const cx=e.clientX ?? (e.touches&&e.touches[0]?.clientX) ?? 0; const x=cx-rect.left; const t=Math.max(0,Math.min(1,x/rect.width)); return Math.round(t*(points.length-1)); }
   function down(e){ e.preventDefault(); try{ref.current.setPointerCapture(e.pointerId);}catch(_){} const idx=pointerToIdx(e); lastIdx.current=idx; onScrub(idx); }
   function move(e){ if(lastIdx.current===-1)return; const idx=pointerToIdx(e); if(idx!==lastIdx.current){lastIdx.current=idx; onScrub(idx);} }
@@ -225,10 +244,16 @@ function TrendChart({ points, deltaDir, scrubIdx, onScrub }) {
   return (
     <div ref={ref} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} style={{ width:"100%", height:H, position:"relative", touchAction:"none", cursor:"ew-resize", userSelect:"none" }}>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" aria-hidden style={{ display:"block" }}>
-        <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--chart-fill)" /><stop offset="100%" stopColor="transparent" /></linearGradient></defs>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--chart-fill)" /><stop offset="100%" stopColor="transparent" /></linearGradient>
+          <linearGradient id={sgid} x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="var(--chart-line)" stopOpacity="0.5" /><stop offset="100%" stopColor="var(--chart-line)" stopOpacity="1" /></linearGradient>
+        </defs>
         <path d={areaD} fill={`url(#${gid})`} />
-        <path d={pathD} fill="none" stroke={lineColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        {scrubIdx==null && (<circle cx={toX(points.length-1)} cy={toY(points[points.length-1].value)} r="4" fill="var(--surface)" stroke={lineColor} strokeWidth="2.2" />)}
+        <path d={pathD} fill="none" stroke={strokeRef} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        {scrubIdx==null && (<g>
+          <circle cx={toX(points.length-1)} cy={toY(points[points.length-1].value)} r="9" fill="var(--chart-line)" opacity="0.14" />
+          <circle cx={toX(points.length-1)} cy={toY(points[points.length-1].value)} r="4" fill="var(--surface)" stroke="var(--chart-line)" strokeWidth="2.4" />
+        </g>)}
         {scrubIdx!=null && (<g><line x1={sx} x2={sx} y1={padT} y2={padT+innerH} stroke="var(--ink-4)" strokeWidth="1" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" /><circle cx={sx} cy={sy} r="5.5" fill="var(--surface)" stroke={lineColor} strokeWidth="2.4" /></g>)}
       </svg>
     </div>
@@ -237,11 +262,13 @@ function TrendChart({ points, deltaDir, scrubIdx, onScrub }) {
 
 function RangePills({ value, onChange }) {
   const opts=[{value:"week",label:"Week"},{value:"month",label:"Month"},{value:"3m",label:"3M"},{value:"year",label:"Year"},{value:"all",label:"All"}];
+  const idx=Math.max(0,opts.findIndex(o=>o.value===value));
   return (
-    <div style={{ display:"flex", justifyContent:"space-between", marginTop:16, gap:4 }}>
-      {opts.map((o)=>{ const active=o.value===value; return (
-        <button key={o.value} onClick={()=>onChange(o.value)} className={`range-pill${active?" on":""}`} style={{ flex:1, height:32, borderRadius:9999, border:0, cursor:"pointer", fontSize:12.5, fontWeight:600, whiteSpace:"nowrap", background:active?"var(--pill-active-bg)":"transparent" }}>{o.label}</button>
-      ); })}
+    <div className="seg">
+      <div className="seg-ind" style={{ transform:`translateX(${idx*100}%)` }} />
+      {opts.map((o)=>(
+        <button key={o.value} className="seg-btn" data-on={o.value===value} onClick={()=>onChange(o.value)}>{o.label}</button>
+      ))}
     </div>
   );
 }
