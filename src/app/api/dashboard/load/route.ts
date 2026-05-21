@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPulseData } from '@/lib/dashboard/get-pulse-data'
 import { getMetricHistory } from '@/lib/dashboard/get-metric-history'
+import { getHomeMetrics } from '@/lib/dashboard/get-home-metrics'
 import { getWeeklyActivity } from '@/lib/dashboard/get-weekly-activity'
 import { getAgenda } from '@/lib/dashboard/get-agenda'
 import { getMarketingCalendar, daysUntil } from '@/lib/dashboard/marketing-calendar'
@@ -51,9 +52,10 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
   // Parallel: fire every query at once.
-  const [pulse, metricHistory, weekly, agenda, services, goalCards, strategist, playbooks, todayHero, recentReviews, sinceLastChecked, primaryStrategist, inboxThreads, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
+  const [pulse, metricHistory, homeMetrics, weekly, agenda, services, goalCards, strategist, playbooks, todayHero, recentReviews, sinceLastChecked, primaryStrategist, inboxThreads, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
     getPulseData(clientId),
     getMetricHistory(clientId),
+    getHomeMetrics(clientId),
     getWeeklyActivity(clientId),
     getAgenda(clientId),
     getCurrentCycleSummary(clientId),
@@ -147,6 +149,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     pulse,
     metricHistory,
+    homeMetrics,
     weekly,
     agenda,
     services,
