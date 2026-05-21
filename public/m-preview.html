@@ -109,8 +109,8 @@
   .minitip { position:absolute; transform:translateX(-50%); background:var(--ink); color:#fff; font-size:11px; font-weight:600; padding:3px 8px; border-radius:7px; white-space:nowrap; pointer-events:none; z-index:6; }
   .minitip[hidden] { display:none; }
 
-  .seg { position:relative; display:grid; grid-template-columns:repeat(5,1fr); margin-top:20px; background:#f1f1f4; border-radius:9999px; padding:3px; }
-  .seg-ind { position:absolute; top:3px; bottom:3px; left:3px; width:calc((100% - 6px)/5); border-radius:9999px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.10); transition:transform .30s var(--ease-out); }
+  .seg { position:relative; display:grid; grid-template-columns:repeat(3,1fr); margin-top:20px; background:#f1f1f4; border-radius:9999px; padding:3px; }
+  .seg-ind { position:absolute; top:3px; bottom:3px; left:3px; width:calc((100% - 6px)/3); border-radius:9999px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.10); transition:transform .30s var(--ease-out); }
   .seg-btn { position:relative; z-index:1; height:30px; border:0; background:none; font-family:inherit; font-size:12.5px; font-weight:600; color:var(--ink-3); cursor:pointer; transition:color .2s ease; }
   .seg-btn.on { color:var(--brand-d); }
 
@@ -223,9 +223,7 @@
             <div class="seg-ind" id="segind"></div>
             <button class="seg-btn on" data-r="week">Week</button>
             <button class="seg-btn" data-r="month">Month</button>
-            <button class="seg-btn" data-r="3m">3M</button>
             <button class="seg-btn" data-r="year">Year</button>
-            <button class="seg-btn" data-r="all">All</button>
           </div>
 
         </section>
@@ -281,16 +279,14 @@
   function genRating(){var a=[];for(var i=0;i<NDAYS;i++){a.push(4.45+Math.sin(i/45)*0.22+Math.random()*0.22);}return a;}
   function mkWeek(daily,rArr){var insts=[],N=8,dow=TODAY.getDay(),thisSun=new Date(TODAY.getTime()-dow*MS);for(var w=N-1;w>=0;w--){var sun=new Date(thisSun.getTime()-w*7*MS),vals=[],rs=0,rn=0,tot=0;for(var d=0;d<7;d++){var day=new Date(sun.getTime()+d*MS);if(day>TODAY){vals.push(null);}else{var v=daily[di(day)]||0;vals.push(v);tot+=v;if(rArr){rs+=rArr[di(day)];rn++;}}}insts.push({vals:vals,start:sun,sub:'day',total:tot,rating:rn?Math.round(rs/rn*10)/10:null});}return insts;}
   function mkMonth(daily,rArr){var insts=[],N=12;for(var k=N-1;k>=0;k--){var first=new Date(TODAY.getFullYear(),TODAY.getMonth()-k,1),dim=new Date(first.getFullYear(),first.getMonth()+1,0).getDate(),vals=[],rs=0,rn=0,tot=0;for(var d=0;d<dim;d++){var day=new Date(first.getFullYear(),first.getMonth(),d+1);if(day>TODAY){vals.push(null);}else{var v=daily[di(day)]||0;vals.push(v);tot+=v;if(rArr){rs+=rArr[di(day)];rn++;}}}insts.push({vals:vals,start:first,sub:'day',total:tot,rating:rn?Math.round(rs/rn*10)/10:null});}return insts;}
-  function mkQuarter(daily,rArr){var insts=[],N=8,curQ=Math.floor(TODAY.getMonth()/3),base=TODAY.getFullYear()*4+curQ;for(var k=N-1;k>=0;k--){var qi=base-k,qy=Math.floor(qi/4),qq=qi%4,qStart=new Date(qy,qq*3,1),qEnd=new Date(qy,qq*3+3,1),nb=Math.ceil((qEnd-qStart)/(7*MS)),vals=[],rs=0,rn=0,tot=0;for(var b=0;b<nb;b++){var bStart=new Date(qStart.getTime()+b*7*MS);if(bStart>TODAY){vals.push(null);continue;}var bs=0,has=false;for(var d=0;d<7;d++){var day=new Date(bStart.getTime()+d*MS);if(day>=qEnd||day>TODAY)break;bs+=daily[di(day)]||0;has=true;if(rArr){rs+=rArr[di(day)];rn++;}}vals.push(has?bs:null);if(has)tot+=bs;}insts.push({vals:vals,start:qStart,sub:'week',total:tot,rating:rn?Math.round(rs/rn*10)/10:null});}return insts;}
   function mkYear(daily,rArr){var insts=[],N=5;for(var k=N-1;k>=0;k--){var y=TODAY.getFullYear()-k,vals=[],rs=0,rn=0,tot=0;for(var mo=0;mo<12;mo++){var first=new Date(y,mo,1);if(first>TODAY){vals.push(null);continue;}var dim=new Date(y,mo+1,0).getDate(),ms2=0,has=false;for(var d=0;d<dim;d++){var day=new Date(y,mo,d+1);if(day>TODAY)break;ms2+=daily[di(day)]||0;has=true;if(rArr){rs+=rArr[di(day)];rn++;}}vals.push(has?ms2:null);if(has)tot+=ms2;}insts.push({vals:vals,start:new Date(y,0,1),sub:'month',total:tot,rating:rn?Math.round(rs/rn*10)/10:null});}return insts;}
-  function mkAll(daily,rArr){var y0=SERIES_START.getFullYear(),y1=TODAY.getFullYear(),vals=[],rs=0,rn=0,tot=0;for(var y=y0;y<=y1;y++){var ys=0,has=false;for(var mo=0;mo<12;mo++){var first=new Date(y,mo,1);if(first>TODAY)break;var dim=new Date(y,mo+1,0).getDate();for(var d=0;d<dim;d++){var day=new Date(y,mo,d+1);if(day>TODAY)break;ys+=daily[di(day)]||0;has=true;if(rArr){rs+=rArr[di(day)];rn++;}}}vals.push(has?ys:null);if(has)tot+=ys;}return [{vals:vals,start:new Date(y0,0,1),sub:'year',total:tot,rating:rn?Math.round(rs/rn*10)/10:null}];}
-  function buildInst(daily,rArr){return {week:mkWeek(daily,rArr),month:mkMonth(daily,rArr),'3m':mkQuarter(daily,rArr),year:mkYear(daily,rArr),all:mkAll(daily,rArr)};}
+  function buildInst(daily,rArr){return {week:mkWeek(daily,rArr),month:mkMonth(daily,rArr),year:mkYear(daily,rArr)};}
   var METRICS={
     actions:{label:'Customer actions',sub:'Calls, directions & website clicks',fmt:'num',inst:buildInst(genDaily(17,0.9),null)},
     reputation:{label:'Reputation',sub:'Average rating · reviews received',fmt:'rate',inst:buildInst(genDaily(0.7,0.6),genRating())},
     reach:{label:'Reach',sub:'People who saw your content',fmt:'num',inst:buildInst(genDaily(1180,1.1),null)}
   };
-  var ORDER=['week','month','3m','year','all'];
+  var ORDER=['week','month','year'];
   var metric='actions';
   function M(){return METRICS[metric];}
   var UP='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
@@ -315,7 +311,7 @@
   function prevWord(c){return {week:'last week',month:'last month','3m':'last quarter',year:'last year',all:''}[c]||'';}
   function selSubLabel(V){var s=V.instStart,i=selBar;if(V.sub==='day'){var d=new Date(s.getTime()+i*MS);return d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});}if(V.sub==='week'){var d2=new Date(s.getTime()+i*7*MS);return 'Week of '+d2.toLocaleDateString('en-US',{month:'short',day:'numeric'});}if(V.sub==='month'){var d3=new Date(s.getFullYear(),i,1);return d3.toLocaleDateString('en-US',{month:'long',year:'numeric'});}return ''+(s.getFullYear()+i);}
   function shortSub(sub,s,i){if(sub==='day'){return new Date(s.getTime()+i*MS).toLocaleDateString('en-US',{weekday:'short'});}if(sub==='week'){return fmtD(new Date(s.getTime()+i*7*MS));}if(sub==='month'){return new Date(s.getFullYear(),i,1).toLocaleDateString('en-US',{month:'short'});}return ''+(s.getFullYear()+i);}
-  function capFor(c,inst,isCur,ago){var s=inst.start;if(c==='week'){var sat=new Date(s.getTime()+6*MS);return (isCur?'This week · ':(ago===1?'Last week · ':''))+fmtD(s)+' – '+fmtD(sat);}if(c==='month'){var end=new Date(s.getFullYear(),s.getMonth()+1,0);return (isCur?'This month · ':(ago===1?'Last month · ':s.toLocaleDateString('en-US',{month:'long',year:'numeric'})+' · '))+fmtD(s)+' – '+end.getDate();}if(c==='3m'){var em=new Date(s.getFullYear(),s.getMonth()+2,1);return (isCur?'This quarter · ':(ago===1?'Last quarter · ':'Q'+(Math.floor(s.getMonth()/3)+1)+' '+s.getFullYear()+' · '))+s.toLocaleDateString('en-US',{month:'short'})+' – '+em.toLocaleDateString('en-US',{month:'short'});}if(c==='year'){return (isCur?'This year · ':(ago===1?'Last year · ':s.getFullYear()+' · '))+'Jan – '+(isCur?TODAY.toLocaleDateString('en-US',{month:'short'}):'Dec');}return 'All time · '+SERIES_START.getFullYear()+' – '+TODAY.getFullYear();}
+  function capFor(c,inst,isCur,ago){var s=inst.start;if(c==='week'){var sat=new Date(s.getTime()+6*MS);return (isCur?'This week · ':(ago===1?'Last week · ':''))+fmtD(s)+' – '+fmtD(sat);}if(c==='month'){var end=new Date(s.getFullYear(),s.getMonth()+1,0);return (isCur?'This month · ':(ago===1?'Last month · ':s.toLocaleDateString('en-US',{month:'long',year:'numeric'})+' · '))+fmtD(s)+' – '+end.getDate();}return (isCur?'This year · ':(ago===1?'Last year · ':s.getFullYear()+' · '))+'Jan – '+(isCur?TODAY.toLocaleDateString('en-US',{month:'short'}):'Dec');}
   function viewModel(){
     var m=M(), insts=m.inst[cur];
     var idx=(instIdx==null||instIdx>insts.length-1||instIdx<0)?insts.length-1:instIdx;
@@ -329,20 +325,16 @@
       headline=inst.total;
       if(idx>0){ var prev=insts[idx-1].vals,pe=0,cnt=0; for(var j=0;j<prev.length&&cnt<elapsed;j++){ if(prev[j]!=null){pe+=prev[j];cnt++;} } var diff=headline-pe; delta=Math.abs(Math.round(diff)).toLocaleString(); dir=diff>=0?'up':'down'; cmpPerDay=elapsed?pe/elapsed:null; }
     }
-    var miniVals = cur==='all' ? vals.filter(function(v){return v!=null;}) : insts.map(function(w){return w.total;});
-    var miniSel = cur==='all' ? miniVals.length-1 : idx;
-    var dayLabels=null,xends=null,y;
+    var miniVals = insts.map(function(w){return w.total;});
+    var miniSel = idx;
+    var dayLabels=null,xends=null;
     if(cur==='week') dayLabels=DOWL;
     else if(cur==='year') dayLabels=MONI;
-    else if(cur==='all'){ dayLabels=[]; for(y=SERIES_START.getFullYear();y<=TODAY.getFullYear();y++) dayLabels.push("'"+(''+y).slice(2)); }
-    else if(cur==='month'){ var em=new Date(inst.start.getFullYear(),inst.start.getMonth()+1,0); xends=[fmtD(inst.start), fmtD(em)]; }
-    else if(cur==='3m'){ var qe=new Date(inst.start.getFullYear(),inst.start.getMonth()+3,0); xends=[fmtD(inst.start), fmtD(qe)]; }
+    else { var em=new Date(inst.start.getFullYear(),inst.start.getMonth()+1,0); xends=[fmtD(inst.start), fmtD(em)]; }
     var miniEnds;
     if(cur==='week') miniEnds=[fmtD(insts[0].start),'This week'];
     else if(cur==='month') miniEnds=[insts[0].start.toLocaleDateString('en-US',{month:'short',year:'2-digit'}),'This month'];
-    else if(cur==='3m') miniEnds=['Q'+(Math.floor(insts[0].start.getMonth()/3)+1)+" '"+(''+insts[0].start.getFullYear()).slice(2),'This quarter'];
-    else if(cur==='year') miniEnds=[''+insts[0].start.getFullYear(),'This year'];
-    else miniEnds=[''+SERIES_START.getFullYear(),''+TODAY.getFullYear()];
+    else miniEnds=[''+insts[0].start.getFullYear(),'This year'];
     return {mode:'cal',vals:vals,fmt:fmt,barFmt:(fmt==='rate'?'num':fmt),sub:inst.sub,instStart:inst.start,todayIdx:(isCur?lastIdx:-1),headline:headline,delta:delta,dir:dir,ctx:ctx,cmpPerDay:cmpPerDay,miniVals:miniVals,miniSel:miniSel,cap:capFor(cur,inst,isCur,ago),dayLabels:dayLabels,xends:xends,miniEnds:miniEnds};
   }
   function buildLabels(V){ var el=$('xrow'); if(V.dayLabels && V.dayLabels.length===V.vals.length){ el.innerHTML=V.dayLabels.map(function(d,i){ return (i===V.todayIdx)? '<span class="xl"><b>'+d+'</b></span>' : '<span class="xl">'+d+'</span>'; }).join(''); } else { var e=V.xends||['','']; el.innerHTML='<span>'+e[0]+'</span><span>'+e[1]+'</span>'; } }
@@ -367,7 +359,7 @@
     var tiles=TILES[metric].slice(); tiles[tiles.length-1]=[bestV,bestL];
     $('tiles').innerHTML=tiles.map(function(t){return '<div class="tile"><div class="tv">'+t[0]+'</div><div class="tl">'+t[1]+'</div></div>';}).join('');
     renderMini(V);
-    $('minicap').textContent={week:'Weekly trend · tap a point',month:'Monthly trend · tap a point','3m':'Quarterly trend · tap a point',year:'Yearly trend · tap a point',all:'Yearly totals'}[cur];
+    $('minicap').textContent={week:'Weekly trend · tap a point',month:'Monthly trend · tap a point',year:'Yearly trend · tap a point'}[cur];
     $('minilabels').innerHTML='<span>'+V.miniEnds[0]+'</span><span>'+V.miniEnds[1]+'</span>';
     var m=M(); $('mlabel').textContent=m.label; $('subnote').textContent=m.sub;
     var headlineVal = sel!=null? vals[sel] : V.headline;
@@ -388,7 +380,7 @@
   box.addEventListener('pointermove',function(e){ if(!pressing)return; var i=barIdx(e); var V=viewModel(); if(V.vals[i]!=null && i!==selBar){ selBar=i; selectUpdate(); } });
   box.addEventListener('pointerup',function(){ pressing=false; });
   box.addEventListener('pointercancel',function(){ pressing=false; });
-  $('mdots').addEventListener('click',function(e){ var b=e.target.closest('.mdot'); if(!b)return; var i=+b.getAttribute('data-i'); if(cur==='all'){ showMiniTip(i); return; } instIdx=i; selBar=null; $('num').textContent='0'; render(); });
+  $('mdots').addEventListener('click',function(e){ var b=e.target.closest('.mdot'); if(!b)return; var i=+b.getAttribute('data-i'); instIdx=i; selBar=null; $('num').textContent='0'; render(); });
 
   // range pills
   document.querySelectorAll('.seg-btn').forEach(function(b){ b.addEventListener('click',function(){ setRange(b.getAttribute('data-r')); }); });
