@@ -2,6 +2,7 @@
    exactly like getHomeMetrics(). Lets us verify the React port visually
    without auth. Not linked anywhere; safe to delete. */
 
+import { notFound } from 'next/navigation'
 import '../m-home.css'
 import { MobileHomeHero } from '@/components/dashboard/mobile-home-hero'
 import { MobileHomeSections, type HomeSectionsData } from '@/components/dashboard/mobile-home-sections'
@@ -102,6 +103,8 @@ const MOCK_SECTIONS: HomeSectionsData = {
 }
 
 export default function MHomeDevPage() {
+  // Dev-only preview — never reachable in production.
+  if (process.env.NODE_ENV === 'production') notFound()
   return (
     <div style={{ background: '#fff', minHeight: '100vh', paddingBottom: 40 }}>
       <MobileHomeHero metrics={MOCK} />
