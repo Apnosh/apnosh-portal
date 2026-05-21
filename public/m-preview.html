@@ -101,8 +101,9 @@
   .xrow.xabs .xl.first { transform:none; left:0 !important; }
   .xrow.xabs .xl.last { transform:none; left:auto !important; right:0; }
   .tiles { display:flex; gap:7px; margin-top:20px; }
-  .tile { flex:1; min-width:0; background:var(--surface); border:1px solid var(--hairline-2); border-radius:16px; padding:12px 9px; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
-  .tile .tic { width:16px; height:16px; color:var(--brand-d); display:block; margin-bottom:9px; }
+  .tile { flex:1; min-width:0; background:var(--surface); border:1px solid var(--hairline-2); border-radius:15px; padding:11px 10px; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
+  .tile .trow { display:flex; align-items:center; gap:5px; }
+  .tile .tic { width:15px; height:15px; color:var(--brand-d); flex:0 0 auto; }
   .tile .tv { font-family:var(--font-display); font-size:19px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; line-height:1.05; letter-spacing:-0.01em; }
   .tile .tl { font-size:10.5px; color:var(--ink-3); margin-top:4px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .mticks { position:relative; height:13px; margin:18px 0 7px; }
@@ -389,7 +390,7 @@
     bars.innerHTML=html; if(!skipAnim){ bars.classList.remove('anim'); void bars.offsetWidth; bars.classList.add('anim'); }
     buildLabels(V);
     $('rangecap').textContent=V.cap;
-    $('tiles').innerHTML=TILES[metric].slice(0,4).map(function(t){return '<div class="tile">'+(t[2]?'<svg class="tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+ICONS[t[2]]+'</svg>':'')+'<div class="tv">'+t[0]+'</div><div class="tl">'+t[1]+'</div></div>';}).join('');
+    $('tiles').innerHTML=TILES[metric].slice(0,4).map(function(t){return '<div class="tile"><div class="trow">'+(t[2]?'<svg class="tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+ICONS[t[2]]+'</svg>':'')+'<span class="tv">'+t[0]+'</span></div><div class="tl">'+t[1]+'</div></div>';}).join('');
     renderMini(V);
     renderMticks(V);
     var m=M(); $('mlabel').textContent=m.label;
