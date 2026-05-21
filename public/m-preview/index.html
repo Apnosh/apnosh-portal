@@ -61,6 +61,14 @@
   .t-eyebrow { font-family:var(--font-body); font-size:11.5px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--brand-d); margin:0; }
   .eb-pill { display:inline-block; background:var(--brand-g); padding:5px 12px; border-radius:99px; }
   .hero-num { font-family:var(--num-font); font-weight:var(--num-weight); font-size:var(--num-size); letter-spacing:var(--num-spacing); line-height:.92; color:var(--ink); margin:16px 0 0; font-variant-numeric:tabular-nums; }
+  .metricsel { position:relative; display:inline-block; }
+  .metric-btn { display:inline-flex; align-items:center; gap:5px; background:none; border:0; padding:0; cursor:pointer; font-family:inherit; }
+  .mchev { width:13px; height:13px; color:var(--brand-d); transition:transform .2s ease; }
+  .metric-btn[aria-expanded="true"] .mchev { transform:rotate(180deg); }
+  .metric-menu { position:absolute; top:26px; left:0; z-index:30; background:var(--surface); border:1px solid var(--hairline-2); border-radius:14px; box-shadow:0 14px 34px rgba(0,0,0,0.12); padding:6px; min-width:210px; }
+  .metric-menu[hidden] { display:none; }
+  .metric-menu button { display:block; width:100%; background:none; border:0; padding:11px 12px; border-radius:9px; font-family:inherit; font-size:14.5px; font-weight:500; color:var(--ink); cursor:pointer; text-align:left; }
+  .metric-menu button.on, .metric-menu button:active { background:var(--brand-t); color:var(--brand-d); }
   .delta { display:inline-flex; align-items:center; gap:5px; margin-top:14px; min-height:22px; font-weight:600; font-size:16px; }
   .delta.up { color:var(--brand-d); } .delta.down { color:var(--drop); }
   .delta b { font-weight:700; }
@@ -151,10 +159,17 @@
         </header>
 
         <section class="spot">
-          <p class="t-eyebrow">Customer actions</p>
+          <div class="metricsel">
+            <button class="metric-btn" id="mbtn"><span class="t-eyebrow" id="mlabel">Customer actions</span><svg class="mchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+            <div class="metric-menu" id="mmenu" hidden>
+              <button data-m="actions" class="on">Customer actions</button>
+              <button data-m="reputation">Reputation</button>
+              <button data-m="reach">Reach</button>
+            </div>
+          </div>
           <p class="hero-num" id="num">0</p>
           <p class="delta up" id="delta"></p>
-          <p class="subnote">Calls, directions &amp; website clicks</p>
+          <p class="subnote" id="subnote">Calls, directions &amp; website clicks</p>
           <div class="chartwrap">
             <div class="chartbox" id="chartbox">
               <svg id="svg" viewBox="0 0 402 120" width="100%" height="120" preserveAspectRatio="none" aria-hidden="true" style="display:block">
@@ -219,10 +234,19 @@
 (function(){
   var chevR = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
   function wave(base,n,amp,drift){var a=[];for(var i=0;i<n;i++){a.push(Math.max(0,Math.round(base+Math.sin(i/1.7)*amp+(i/n)*drift+(Math.random()*amp*0.4))));}return a;}
-  var SOURCES=[['Google',89],['Maps',27],['Site',11]];
-  function range(total,n,delta,dir,x0,x1){return {total:total,delta:delta,dir:dir,x:[x0,x1],points:wave(total/n*0.85,n,total/n*0.5,total/n*0.4),sources:SOURCES};}
-  var RANGES={ week:range(127,14,'+23','up','May 6','Today'), month:range(512,30,'+8%','up','Apr 20','Today'), '3m':range(1480,13,'+19%','up','Feb','May'), year:range(6120,12,'+34%','up','2025','2026'), all:range(9400,18,null,'up','Start','Now') };
+  function rN(total,n,delta,dir,x0,x1){return {total:total,delta:delta,dir:dir,x:[x0,x1],points:wave(total/n*0.85,n,total/n*0.5,total/n*0.4)};}
+  function rR(total,n,delta,ctx,dir,x0,x1){var pts=[];for(var i=0;i<n;i++){pts.push(Math.round((4.55+Math.sin(i/1.6)*0.22+(i/n)*0.16)*10)/10);}return {total:total,delta:delta,ctx:ctx,dir:dir,x:[x0,x1],points:pts};}
+  var METRICS={
+    actions:{label:'Customer actions',sub:'Calls, directions & website clicks',fmt:'num',ranges:{week:rN(127,14,'23','up','May 6','Today'),month:rN(512,30,'8%','up','Apr 20','Today'),'3m':rN(1480,13,'19%','up','Feb','May'),year:rN(6120,12,'34%','up','2025','2026'),all:rN(9400,18,null,'up','Start','Now')}},
+    reputation:{label:'Reputation',sub:'Average rating across your reviews',fmt:'rate',ranges:{week:rR(4.7,8,'3','new this week','up','May 6','Today'),month:rR(4.7,12,'11','new this month','up','Apr','May'),'3m':rR(4.6,12,'34','new this quarter','up','Feb','May'),year:rR(4.6,12,'120','new this year','up','2025','2026'),all:rR(4.6,14,null,'all time','up','Start','Now')}},
+    reach:{label:'Reach',sub:'People who saw your content',fmt:'num',ranges:{week:rN(8400,14,'18%','up','May 6','Today'),month:rN(31000,30,'12%','up','Apr 20','Today'),'3m':rN(88000,13,'24%','up','Feb','May'),year:rN(360000,12,'40%','up','2025','2026'),all:rN(540000,18,null,'up','Start','Now')}}
+  };
   var ORDER=['week','month','3m','year','all'];
+  var metric='actions';
+  function M(){return METRICS[metric];}
+  function CR(){return M().ranges[cur]||M().ranges.week;}
+  var UP='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
+  var DOWN='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>';
   var NEEDS=[['Reply to a 3-star review','2 min'],["Approve Friday's Instagram post",'30 sec'],['Set Memorial Day hours','1 min']];
 
   var W=402,H=120,padT=10,padB=8,innerH=H-padT-padB;
@@ -233,19 +257,23 @@
   function $(id){return document.getElementById(id);}
   var PERIOD={week:'last week',month:'last month','3m':'the prior 3 months',year:'last year',all:''};
   var numTimer=null;
-  function animateNum(target){ var el=$('num'); var start=parseInt((el.textContent||'0').replace(/[^0-9]/g,''),10)||0; if(numTimer)cancelAnimationFrame(numTimer); var t0=null,dur=700; function step(ts){ if(!t0)t0=ts; var p=Math.min(1,(ts-t0)/dur); var e=1-Math.pow(1-p,3); el.textContent=Math.round(start+(target-start)*e).toLocaleString(); if(p<1)numTimer=requestAnimationFrame(step); } numTimer=requestAnimationFrame(step); }
+  function animateNum(target,fmt){ var el=$('num'); var start=parseFloat((el.textContent||'0').replace(/[^0-9.]/g,''))||0; if(numTimer)cancelAnimationFrame(numTimer); var t0=null,dur=700; function fv(v){ return fmt==='rate'? v.toFixed(1)+'★' : Math.round(v).toLocaleString(); } function step(ts){ if(!t0)t0=ts; var p=Math.min(1,(ts-t0)/dur); var e=1-Math.pow(1-p,3); el.textContent=fv(start+(target-start)*e); if(p<1)numTimer=requestAnimationFrame(step); } numTimer=requestAnimationFrame(step); }
   function drawLine(){ var el=$('line'),a=$('area'); try{ var len=el.getTotalLength(); el.style.transition='none'; el.style.strokeDasharray=len; el.style.strokeDashoffset=len; el.getBoundingClientRect(); el.style.transition='stroke-dashoffset .9s var(--ease-out)'; el.style.strokeDashoffset='0'; a.style.transition='none'; a.style.opacity='0'; a.getBoundingClientRect(); a.style.transition='opacity .8s ease'; a.style.opacity='1'; }catch(e){} }
 
   function render(){
-    var r=RANGES[cur], pts=coords(r.points);
+    var m=M(), r=CR(), pts=coords(r.points);
     var line=smooth(pts), area=line+' L '+W+' '+(padT+innerH)+' L 0 '+(padT+innerH)+' Z';
     $('line').setAttribute('d',line); $('area').setAttribute('d',area);
     var last=pts[pts.length-1];
     $('halo').setAttribute('cx',last.x); $('halo').setAttribute('cy',last.y);
     $('dot').setAttribute('cx',last.x); $('dot').setAttribute('cy',last.y);
-    if(!scrubbing){ drawLine(); animateNum(r.total); }
+    $('mlabel').textContent=m.label; $('subnote').textContent=m.sub;
+    if(!scrubbing){ drawLine(); animateNum(r.total,m.fmt); }
     var d=$('delta');
-    if(r.delta){ d.className='delta '+(r.dir==='up'?'up':'down'); var arrow=r.dir==='up'?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>':'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>'; var mag=r.delta?r.delta.replace(/^[+\-]/,''):''; var per=PERIOD[cur]||''; var word=r.dir==='up'?'more than':'fewer than'; d.innerHTML=arrow+'<b>'+mag+'</b>'+(per?' <span class="ctx">'+word+' '+per+'</span>':''); d.style.visibility='visible'; }
+    if(r.delta){ d.className='delta '+(r.dir==='up'?'up':'down'); var arrow=r.dir==='up'?UP:DOWN;
+      if(m.fmt==='rate'){ d.innerHTML=arrow+'<b>'+r.delta+'</b> <span class="ctx">'+(r.ctx||'')+'</span>'; }
+      else { var per=PERIOD[cur]||''; var word=r.dir==='up'?'more than':'fewer than'; d.innerHTML=arrow+'<b>'+r.delta+'</b>'+(per?' <span class="ctx">'+word+' '+per+'</span>':''); }
+      d.style.visibility='visible'; }
     else { d.style.visibility='hidden'; }
     $('x0').textContent=r.x[0]; $('x1').textContent=r.x[1];
   }
@@ -258,8 +286,8 @@
 
   // scrub
   var box=$('chartbox');
-  function idxFromEvent(e){ var rect=box.getBoundingClientRect(); var cx=(e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0)); var x=cx-rect.left; var t=Math.max(0,Math.min(1,x/rect.width)); return Math.round(t*(RANGES[cur].points.length-1)); }
-  function scrubTo(i){ var r=RANGES[cur],pts=coords(r.points); i=Math.max(0,Math.min(pts.length-1,i)); scrubbing=true; $('num').textContent=r.points[i].toLocaleString(); $('delta').style.visibility='hidden';
+  function idxFromEvent(e){ var rect=box.getBoundingClientRect(); var cx=(e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0)); var x=cx-rect.left; var t=Math.max(0,Math.min(1,x/rect.width)); return Math.round(t*(CR().points.length-1)); }
+  function scrubTo(i){ var m=M(), r=CR(),pts=coords(r.points); i=Math.max(0,Math.min(pts.length-1,i)); scrubbing=true; $('num').textContent=(m.fmt==='rate'? r.points[i].toFixed(1)+'★' : r.points[i].toLocaleString()); $('delta').style.visibility='hidden';
     $('dot').style.display='none'; $('halo').style.display='none'; var g=$('scrub'); g.style.display=''; $('sline').setAttribute('x1',pts[i].x); $('sline').setAttribute('x2',pts[i].x); $('sline').setAttribute('y1',padT); $('sline').setAttribute('y2',padT+innerH); $('sdot').setAttribute('cx',pts[i].x); $('sdot').setAttribute('cy',pts[i].y); }
   function endScrub(){ scrubbing=false; $('scrub').style.display='none'; $('dot').style.display=''; $('halo').style.display=''; render(); }
   box.addEventListener('pointerdown',function(e){ e.preventDefault(); try{box.setPointerCapture(e.pointerId);}catch(_){} scrubTo(idxFromEvent(e)); });
@@ -270,6 +298,12 @@
   document.querySelectorAll('.seg-btn').forEach(function(b){ b.addEventListener('click',function(){ setRange(b.getAttribute('data-r')); }); });
   // theme switch
   document.querySelectorAll('[data-theme-btn]').forEach(function(b){ b.addEventListener('click',function(){ document.querySelector('.frame').setAttribute('data-theme', b.getAttribute('data-theme-btn')); document.querySelectorAll('[data-theme-btn]').forEach(function(x){x.classList.toggle('on',x===b);}); }); });
+
+  // metric switcher
+  var mbtn=$('mbtn'), mmenu=$('mmenu');
+  mbtn.addEventListener('click',function(e){ e.stopPropagation(); if(mmenu.hasAttribute('hidden')){ mmenu.removeAttribute('hidden'); mbtn.setAttribute('aria-expanded','true'); } else { mmenu.setAttribute('hidden',''); mbtn.removeAttribute('aria-expanded'); } });
+  document.addEventListener('click',function(){ if(!mmenu.hasAttribute('hidden')){ mmenu.setAttribute('hidden',''); mbtn.removeAttribute('aria-expanded'); } });
+  mmenu.querySelectorAll('button').forEach(function(b){ b.addEventListener('click',function(e){ e.stopPropagation(); metric=b.getAttribute('data-m'); mmenu.querySelectorAll('button').forEach(function(x){x.classList.toggle('on',x===b);}); mmenu.setAttribute('hidden',''); mbtn.removeAttribute('aria-expanded'); $('num').textContent='0'; setRange('week'); }); });
 
   // static lists
   $('needs').innerHTML=NEEDS.map(function(n){return '<li><button class="row"><p class="rowt">'+n[0]+'</p><span class="chip">'+n[1]+'</span>'+chevR+'</button></li>';}).join('');
