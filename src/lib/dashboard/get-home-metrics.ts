@@ -85,7 +85,7 @@ interface BuildCfg {
   mainMap: Maps          // value per day (counts per day for reputation)
 }
 
-function buildMetric(cfg: BuildCfg, today: Date, earliest: Date | null): HomeMetric {
+function buildMetric(cfg: BuildCfg, today: Date, earliest: Date | null, frontier: Date): HomeMetric {
   const base: HomeMetric = {
     key: cfg.key, label: cfg.label, sub: cfg.sub, fmt: cfg.fmt,
     hasData: !!earliest, week: [], month: [], year: [],
@@ -94,7 +94,10 @@ function buildMetric(cfg: BuildCfg, today: Date, earliest: Date | null): HomeMet
   const earliestDay = startOfDay(earliest)
 
   const dayVal = (d: Date): number => cfg.mainMap.get(ymd(d)) ?? 0
-  const inWindow = (d: Date): boolean => d <= today && d >= earliestDay
+  /* Data frontier, not the calendar date, bounds the "available" window:
+     days after the latest synced day are pending (null/blank), not zero —
+     so a 1-2 day source lag (e.g. Google) never reads as a real drop. */
+  const inWindow = (d: Date): boolean => d >= earliestDay && d <= frontier
 
   const makeInst = (vals: (number | null)[], start: string, sub: HomeSub, inDays: Date[]): HomeInstance => {
     const total = vals.reduce<number>((s, v) => s + (v ?? 0), 0)
@@ -174,6 +177,12 @@ function earliestOf(maps: Maps): Date | null {
   return min ? startOfDay(new Date(min + 'T00:00:00')) : null
 }
 
+function latestOf(maps: Maps): Date | null {
+  let max: string | null = null
+  for (const k of maps.keys()) { if (max === null || k > max) max = k }
+  return max ? startOfDay(new Date(max + 'T00:00:00')) : null
+}
+
 const EMPTY: HomeMetrics = { metrics: [] }
 
 export async function getHomeMetrics(clientId: string): Promise<HomeMetrics> {
@@ -222,7 +231,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
       { label: 'Site clicks', icon: 'cursor', map: cClick },
       { label: 'Bookings', icon: 'calendar', map: cBook },
     ],
-  }, today, earliestOf(cMain))
+  }, today, earliestOf(cMain), latestOf(cMain) ?? today)
 
   /* ── reach ── */
   const rMain: Maps = new Map(), rEng: Maps = new Map(), rPost: Maps = new Map(), rFol: Maps = new Map(), rVis: Maps = new Map()
@@ -243,7 +252,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
       { label: 'Followers', icon: 'user', map: rFol },
       { label: 'Profile visits', icon: 'eye', map: rVis },
     ],
-  }, today, earliestOf(rMain))
+  }, today, earliestOf(rMain), latestOf(rMain) ?? today)
 
   /* ── reputation ── */
   const repCount: Maps = new Map(), repRating: Maps = new Map(), repReplied: Maps = new Map(), repFive: Maps = new Map()
@@ -260,7 +269,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     key: 'reputation', label: 'Reputation', sub: 'Average rating · reviews received', fmt: 'rate',
     mainMap: repCount,
     rate: { count: repCount, ratingSum: repRating, replied: repReplied, five: repFive },
-  }, today, earliestOf(repCount))
+  }, today, earliestOf(repCount), today)
 
   return { metrics: [customers, reputation, reach] }
 }

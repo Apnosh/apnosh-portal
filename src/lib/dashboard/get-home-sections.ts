@@ -37,8 +37,16 @@ function pctDelta(cur: number, prev: number): { delta: string; dir: 'up' | 'down
    points for the sparkline. */
 function seriesStats(rows: { date: string; v: number }[], today: Date) {
   const byDate = new Map<string, number>()
-  for (const r of rows) byDate.set(r.date.slice(0, 10), (byDate.get(r.date.slice(0, 10)) ?? 0) + r.v)
-  const dayAt = (offset: number) => byDate.get(ymd(new Date(today.getTime() - offset * DAY))) ?? 0
+  let maxK: string | null = null
+  for (const r of rows) {
+    const k = r.date.slice(0, 10)
+    byDate.set(k, (byDate.get(k) ?? 0) + r.v)
+    if (maxK === null || k > maxK) maxK = k
+  }
+  /* Anchor windows on the latest synced day, not today, so a source lag
+     (e.g. Google's 1-2 day delay) doesn't read recent days as zero. */
+  const anchor = maxK ? new Date(maxK + 'T00:00:00') : today
+  const dayAt = (offset: number) => byDate.get(ymd(new Date(anchor.getTime() - offset * DAY))) ?? 0
   const window = (n: number, off = 0) => { let s = 0; for (let i = 0; i < n; i++) s += dayAt(i + off); return s }
   const last7 = window(7), prev7 = window(7, 7)
   const spark: number[] = []
@@ -218,7 +226,7 @@ async function loadPlan(clientId: string): Promise<PlanItem[]> {
       const avgByDow = dow.map((s, i) => (dowN[i] ? s / dowN[i] : Infinity))
       let lo = 0; for (let i = 1; i < 7; i++) if (avgByDow[i] < avgByDow[lo]) lo = i
       const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-      out.push({ when: `Next ${names[lo]}`, title: `Slow ${names[lo].toLowerCase()} expected`, hint: 'Your quietest day historically. A deal can fill seats.', cta: 'Create a deal', icon: 'trenddown' })
+      out.push({ when: `Next ${names[lo]}`, title: `Slow ${names[lo]} expected`, hint: 'Your quietest day historically. A deal can fill seats.', cta: 'Create a deal', icon: 'trenddown' })
     }
   } catch (e) { console.error('[home-sections] plan/slow', e) }
 
