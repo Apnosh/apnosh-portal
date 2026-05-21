@@ -21,7 +21,7 @@
     --bg:#ffffff; --surface:#ffffff;
     --brand:#4abd98; --brand-d:#2e9a78; --brand-g:rgba(74,189,152,0.15); --brand-t:#eaf7f3;
     --drop:#c2453d; --hairline-2:#ececf0;
-    --chart-line:#2e9a78; --chart-fill:rgba(74,189,152,0.32);
+    --chart-line:#2e9a78; --chart-fill:rgba(74,189,152,0.10);
     --num-font:var(--font-display); --num-weight:600; --num-size:58px; --num-spacing:-0.02em;
     --ease-out:cubic-bezier(.16,1,.3,1);
   }
@@ -79,9 +79,9 @@
   .rangecap { margin:0 0 10px; font-size:11.5px; font-weight:600; color:var(--ink-3); }
   .chartbox { width:100%; height:100px; position:relative; touch-action:none; cursor:pointer; user-select:none; }
   .bars { display:flex; align-items:flex-end; gap:5px; height:100%; }
-  .bar { flex:1; min-width:2px; background:var(--brand); border-radius:5px 5px 0 0; opacity:.32; transform-origin:bottom; transition:opacity .18s ease; }
-  .bar.last { opacity:.9; } .bar.hi { opacity:1; }
-  .bar.blank { background:rgba(0,0,0,0.05); opacity:1; }
+  .bar { flex:1; min-width:2px; background:rgba(60,60,67,0.11); border-radius:5px 5px 0 0; transform-origin:bottom; transition:background .18s ease; }
+  .bar.last { background:var(--brand); } .bar.hi { background:var(--brand); }
+  .bar.blank { background:rgba(60,60,67,0.05); }
   .bars.anim .bar { animation:barUp .5s var(--ease-out) both; }
   @keyframes barUp { from { transform:scaleY(0); } to { transform:scaleY(1); } }
   .cmp { position:absolute; left:0; right:0; border-top:1.5px dashed var(--ink-5); pointer-events:none; z-index:2; }
@@ -165,7 +165,7 @@
     --ink:#1c1813; --ink-2:#4a4338; --ink-3:#857b6c; --ink-4:#b6ab98;
     --bg:#f7f3ec; --surface:#fffdf8; --hairline-2:#e5ddcf;
     --brand:#2f7d5e; --brand-d:#2f7d5e; --brand-g:rgba(47,125,94,0.12); --brand-t:#e9f0e9;
-    --chart-line:#2f7d5e; --chart-fill:rgba(47,125,94,0.18);
+    --chart-line:#2f7d5e; --chart-fill:rgba(47,125,94,0.10);
     --num-font:var(--font-serif); --num-weight:600; --num-size:104px; --num-spacing:-0.02em;
   }
   body:has(.frame[data-theme="editorial"]) { background:#cfc7b6; }
@@ -338,7 +338,7 @@
     return {mode:'cal',vals:vals,fmt:fmt,barFmt:(fmt==='rate'?'num':fmt),sub:inst.sub,instStart:inst.start,todayIdx:(isCur?lastIdx:-1),headline:headline,delta:delta,dir:dir,ctx:ctx,cmpPerDay:cmpPerDay,miniVals:miniVals,miniSel:miniSel,cap:capFor(cur,inst,isCur,ago),dayLabels:dayLabels,xends:xends,miniEnds:miniEnds};
   }
   function buildLabels(V){ var el=$('xrow'); if(V.dayLabels && V.dayLabels.length===V.vals.length){ el.innerHTML=V.dayLabels.map(function(d,i){ return (i===V.todayIdx)? '<span class="xl"><b>'+d+'</b></span>' : '<span class="xl">'+d+'</span>'; }).join(''); } else { var e=V.xends||['','']; el.innerHTML='<span>'+e[0]+'</span><span>'+e[1]+'</span>'; } }
-  function renderMini(V){ var vals=V.miniVals, n=vals.length; var min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),rg=Math.max(max-min,0.0001); var Wm=100,Hm=40,pd=5; var pts=vals.map(function(v,i){return {x:n===1?Wm/2:(i*Wm)/(n-1), y:pd+(Hm-2*pd)-((v-min)/rg)*(Hm-2*pd)};}); var d=smooth(pts); var ml=$('mline'); ml.setAttribute('d',d); $('marea').setAttribute('d',d+' L '+Wm+' '+Hm+' L 0 '+Hm+' Z'); if(!window.matchMedia||!window.matchMedia('(prefers-reduced-motion:reduce)').matches){ try{ var len=ml.getTotalLength(); ml.style.transition='none'; ml.style.strokeDasharray=len; ml.style.strokeDashoffset=len; ml.getBoundingClientRect(); ml.style.transition='stroke-dashoffset .9s var(--ease-out)'; ml.style.strokeDashoffset='0'; }catch(e){} } var avg=0,k; for(k=0;k<n;k++)avg+=vals[k]; avg/=n; var by=(pd+(Hm-2*pd)-((avg-min)/rg)*(Hm-2*pd)); $('mbase').setAttribute('d','M0 '+by.toFixed(1)+' L100 '+by.toFixed(1)); var sel=V.miniSel>=0?V.miniSel:n-1; var dh=''; for(var i=0;i<n;i++){ dh+='<button class="mdot'+(i===sel?' last':'')+'" data-i="'+i+'" style="left:'+pts[i].x.toFixed(1)+'%;top:'+((pts[i].y/Hm)*100).toFixed(1)+'%"></button>'; } $('mdots').innerHTML=dh; var tip=$('minitip'); if(tip)tip.hidden=true; }
+  function renderMini(V){ var vals=V.miniVals, n=vals.length; var min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),rg=Math.max(max-min,0.0001); var Wm=100,Hm=40,pd=5; var pts=vals.map(function(v,i){return {x:n===1?Wm/2:(i*Wm)/(n-1), y:pd+(Hm-2*pd)-((v-min)/rg)*(Hm-2*pd)};}); var d=smooth(pts); $('mline').setAttribute('d',d); $('marea').setAttribute('d',d+' L '+Wm+' '+Hm+' L 0 '+Hm+' Z'); var avg=0,k; for(k=0;k<n;k++)avg+=vals[k]; avg/=n; var by=(pd+(Hm-2*pd)-((avg-min)/rg)*(Hm-2*pd)); $('mbase').setAttribute('d','M0 '+by.toFixed(1)+' L100 '+by.toFixed(1)); var sel=V.miniSel>=0?V.miniSel:n-1; var dh=''; for(var i=0;i<n;i++){ dh+='<button class="mdot'+(i===sel?' last':'')+'" data-i="'+i+'" style="left:'+pts[i].x.toFixed(1)+'%;top:'+((pts[i].y/Hm)*100).toFixed(1)+'%"></button>'; } $('mdots').innerHTML=dh; var tip=$('minitip'); if(tip)tip.hidden=true; }
   function showMiniTip(i){ var V=viewModel(),dots=$('mdots').children; if(i<0||i>=dots.length)return; for(var k=0;k<dots.length;k++) dots[k].classList.toggle('hi',k===i); var tip=$('minitip'); tip.hidden=false; tip.textContent=V.miniVals[i].toLocaleString(); var el=dots[i],mr=$('mini').getBoundingClientRect(),br=el.getBoundingClientRect(); tip.style.left=(br.left-mr.left+br.width/2)+'px'; tip.style.top=Math.max(-2,(br.top-mr.top)-22)+'px'; }
   function renderDelta(V, sel){ var d=$('delta'); if(sel!=null){ d.className='delta'; d.innerHTML='<span class="ctx" style="color:var(--ink-2);font-weight:600">'+selSubLabel(V)+'</span>'; d.style.visibility='visible'; return; } if(V.delta){ d.className='delta '+(V.dir==='up'?'up':'down'); var arrow=V.dir==='up'?UP:DOWN; if(V.fmt==='rate'){ d.innerHTML=arrow+'<b>'+V.delta+'</b> <span class="ctx">'+(V.ctx||'')+'</span>'; } else { var per=prevWord(cur); var word=V.dir==='up'?'more than':'fewer than'; d.innerHTML=arrow+'<b>'+V.delta+'</b>'+(per?' <span class="ctx">'+word+' '+per+'</span>':''); } d.style.visibility='visible'; } else { d.style.visibility='hidden'; } }
   function selectUpdate(){ var V=viewModel(); var rects=$('bars').children; var sel=(selBar!=null&&selBar<V.vals.length&&V.vals[selBar]!=null)?selBar:null; for(var k=0;k<rects.length;k++) rects[k].classList.toggle('hi', k===sel); animateNum(sel!=null?V.vals[sel]:V.headline, sel!=null?V.barFmt:V.fmt); renderDelta(V, sel); }
