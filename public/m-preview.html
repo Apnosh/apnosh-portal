@@ -77,6 +77,17 @@
   .rowt .muted { color:var(--ink-3); font-weight:400; }
   .chip { font-size:12px; color:var(--brand-d); background:var(--brand-t); padding:4px 10px; border-radius:9999px; font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; flex-shrink:0; }
 
+  /* Plan ahead — horizontal cards under the graph */
+  .plan { padding-top:24px; }
+  .plan-head { display:flex; align-items:center; justify-content:space-between; padding:0 22px; margin-bottom:10px; }
+  .plan-scroll { display:flex; gap:12px; overflow-x:auto; padding:2px 22px 8px; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .plan-scroll::-webkit-scrollbar { display:none; }
+  .plan-card { scroll-snap-align:start; flex:0 0 75%; background:var(--surface); border:1px solid var(--hairline-2); border-radius:18px; padding:15px 16px 14px; box-shadow:0 6px 22px rgba(0,0,0,0.04); display:flex; flex-direction:column; }
+  .plan-when { font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--brand-d); }
+  .plan-title { font-family:var(--font-display); font-size:17px; font-weight:600; color:var(--ink); margin:3px 0 0; letter-spacing:-0.01em; }
+  .plan-hint { font-size:13px; color:var(--ink-3); margin:3px 0 0; line-height:1.4; }
+  .plan-cta { font-size:13px; font-weight:600; color:var(--brand-d); margin-top:10px; }
+
   @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
   .screen > * { animation:fadeUp .5s var(--ease-out) both; }
   .screen > *:nth-child(2){ animation-delay:.05s; } .screen > *:nth-child(3){ animation-delay:.11s; } .screen > *:nth-child(4){ animation-delay:.17s; }
@@ -143,6 +154,11 @@
           </div>
 
           <div class="srcwrap"><div class="srcrow" id="sources"></div></div>
+        </section>
+
+        <section class="plan">
+          <div class="plan-head"><p class="t-eyebrow eb-pill">Plan ahead</p><button class="btn-quiet">Calendar <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button></div>
+          <div class="plan-scroll" id="plan"></div>
         </section>
 
         <section class="sx">
@@ -220,9 +236,16 @@
   $('needs').innerHTML=NEEDS.map(function(n){return '<li><button class="row"><p class="rowt">'+n[0]+'</p><span class="chip">'+n[1]+'</span>'+chevR+'</button></li>';}).join('');
   $('week').innerHTML=[
     '<li><button class="row"><p class="rowt"><b>7</b> <span class="muted">shipped</span></p>'+chevR+'</button></li>',
-    '<li><button class="row"><p class="rowt"><b>3</b> <span class="muted">coming up</span></p>'+chevR+'</button></li>',
     '<li><button class="row"><p class="rowt"><span style="font-weight:600">Maria</span> <span class="muted">your strategist</span></p>'+chevR+'</button></li>'
   ].join('');
+
+  var PLAN=[
+    ['In 4 days','Memorial Day','Big sales day. Plan a promo.','Plan it'],
+    ['In 3 weeks',"Father's Day",'Book a family special early.','Plan it'],
+    ['Tuesday','Slow lunch ahead','Try a midday deal.','Plan it'],
+    ['This week','3 posts scheduled','Review the lineup.','Review']
+  ];
+  $('plan').innerHTML=PLAN.map(function(p){return '<div class="plan-card"><span class="plan-when">'+p[0]+'</span><p class="plan-title">'+p[1]+'</p><p class="plan-hint">'+p[2]+'</p><span class="plan-cta">'+p[3]+' ›</span></div>';}).join('');
 
   setRange('week');
 })();
