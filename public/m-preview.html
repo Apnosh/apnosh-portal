@@ -92,7 +92,14 @@
   .xrow { display:flex; justify-content:space-between; margin-top:8px; font-size:10px; font-weight:600; letter-spacing:.03em; color:var(--ink-4); white-space:nowrap; }
   .xrow .xl { flex:1; text-align:center; }
   .xrow .xl b { background:var(--ink); color:#fff; border-radius:7px; padding:2px 7px; font-weight:700; }
-  .mini { position:relative; height:44px; margin-top:14px; }
+  .tiles { display:flex; gap:8px; overflow-x:auto; margin-top:18px; padding-bottom:2px; scrollbar-width:none; }
+  .tiles::-webkit-scrollbar { display:none; }
+  .tile { flex:0 0 auto; min-width:76px; background:#f1f1f4; border-radius:14px; padding:10px 13px; }
+  .tile .tv { font-size:18px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; line-height:1.1; }
+  .tile .tl { font-size:11px; color:var(--ink-3); margin-top:2px; }
+  .minicap { margin:18px 0 6px; font-size:11px; font-weight:600; letter-spacing:.03em; text-transform:uppercase; color:var(--ink-4); }
+  .minilabels { display:flex; justify-content:space-between; margin-top:6px; font-size:10px; font-weight:600; color:var(--ink-4); }
+  .mini { position:relative; height:44px; margin-top:0; }
   .mini-svg { width:100%; height:100%; display:block; }
   .mdots { position:absolute; inset:0; }
   .mdot { position:absolute; width:7px; height:7px; border-radius:50%; background:var(--chart-line); transform:translate(-50%,-50%); border:0; padding:0; cursor:pointer; }
@@ -197,6 +204,8 @@
               <div class="bartip" id="bartip" hidden></div>
             </div>
             <div class="xrow" id="xrow"></div>
+            <div class="tiles" id="tiles"></div>
+            <p class="minicap" id="minicap">Weekly trend · tap a point</p>
             <div class="mini" id="mini">
               <svg class="mini-svg" viewBox="0 0 100 40" preserveAspectRatio="none">
                 <path id="marea" fill="var(--chart-fill)"></path>
@@ -206,6 +215,7 @@
               <div class="mdots" id="mdots"></div>
               <div class="minitip" id="minitip" hidden></div>
             </div>
+            <div class="minilabels" id="minilabels"></div>
           </div>
 
           <div class="seg" id="seg">
@@ -289,9 +299,12 @@
   function genWeeksNum(base){var ws=[],count=8;for(var i=0;i<count;i++){var weeksAgo=count-1-i,curw=(weeksAgo===0),days=[];for(var d=0;d<7;d++){if(curw&&d>todayDOW)days.push(null);else days.push(Math.max(1,Math.round(base/7+Math.sin((i*7+d)*0.5)*(base/16)+Math.random()*(base/12))));}ws.push({days:days,weeksAgo:weeksAgo});}return ws;}
   function genWeeksRate(){var ws=[],count=8;for(var i=0;i<count;i++){var weeksAgo=count-1-i,curw=(weeksAgo===0),days=[];for(var d=0;d<7;d++){if(curw&&d>todayDOW)days.push(null);else days.push(Math.max(0,Math.round(Math.random()*1.6)));}ws.push({days:days,weeksAgo:weeksAgo,rating:Math.round((4.5+Math.sin(i)*0.18+0.1)*10)/10});}return ws;}
   METRICS.actions.weeks=genWeeksNum(127); METRICS.reach.weeks=genWeeksNum(8400); METRICS.reputation.weeks=genWeeksRate();
-  var weekIdx=7;
+  var weekIdx=7, selBar=null, pressing=false;
   var DOWL=['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  var TILES={ actions:[['58','Directions'],['41','Calls'],['28','Site clicks'],['0','Bookings'],['Sun','Best day']], reputation:[['3','New reviews'],['4.7★','Rating'],['100%','Replied'],['2','5-star'],['1d','Avg reply']], reach:[['8.4k','Reach'],['1.2k','Engaged'],['12','Posts'],['+34','Followers'],['Wed','Top day']] };
   function wkRange(weeksAgo){var t=new Date();var sun=new Date(t.getTime()-(todayDOW+7*weeksAgo)*864e5);var sat=new Date(sun.getTime()+6*864e5);return fmtD(sun)+' – '+fmtD(sat);}
+  function wkStart(weeksAgo){var t=new Date();var sun=new Date(t.getTime()-(todayDOW+7*weeksAgo)*864e5);return fmtD(sun);}
+  function selDateLabel(){var weeks=M().weeks,wk=weeks[weekIdx];var t=new Date();var sun=new Date(t.getTime()-(todayDOW+7*wk.weeksAgo)*864e5);var dt=new Date(sun.getTime()+selBar*864e5);return dt.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});}
   function viewModel(){
     var m=M();
     if(cur==='week'){
@@ -310,43 +323,47 @@
   function buildLabels(V){ var el=$('xrow'); if(V.dayLabels){ el.innerHTML=V.dayLabels.map(function(d,i){ return (i===V.todayIdx)? '<span class="xl"><b>'+d+'</b></span>' : '<span class="xl">'+d+'</span>'; }).join(''); } else { var r=CR(); el.innerHTML='<span>'+r.x[0]+'</span><span>'+r.x[1]+'</span>'; } }
   function renderMini(V){ var vals=V.miniVals, n=vals.length; var min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),rg=Math.max(max-min,0.0001); var Wm=100,Hm=40,pd=5; var pts=vals.map(function(v,i){return {x:n===1?Wm/2:(i*Wm)/(n-1), y:pd+(Hm-2*pd)-((v-min)/rg)*(Hm-2*pd)};}); var d=smooth(pts); $('mline').setAttribute('d',d); $('marea').setAttribute('d',d+' L '+Wm+' '+Hm+' L 0 '+Hm+' Z'); var avg=0,k; for(k=0;k<n;k++)avg+=vals[k]; avg/=n; var by=(pd+(Hm-2*pd)-((avg-min)/rg)*(Hm-2*pd)); $('mbase').setAttribute('d','M0 '+by.toFixed(1)+' L100 '+by.toFixed(1)); var sel=V.miniSel>=0?V.miniSel:n-1; var dh=''; for(var i=0;i<n;i++){ dh+='<button class="mdot'+(i===sel?' last':'')+'" data-i="'+i+'" style="left:'+pts[i].x.toFixed(1)+'%;top:'+((pts[i].y/Hm)*100).toFixed(1)+'%"></button>'; } $('mdots').innerHTML=dh; var tip=$('minitip'); if(tip)tip.hidden=true; }
   function showMiniTip(i){ var V=viewModel(),dots=$('mdots').children; if(i<0||i>=dots.length)return; for(var k=0;k<dots.length;k++) dots[k].classList.toggle('hi',k===i); var tip=$('minitip'); tip.hidden=false; tip.textContent=V.miniVals[i].toLocaleString(); var el=dots[i],mr=$('mini').getBoundingClientRect(),br=el.getBoundingClientRect(); tip.style.left=(br.left-mr.left+br.width/2)+'px'; tip.style.top=Math.max(-2,(br.top-mr.top)-22)+'px'; }
-  function render(){
+  function render(skipAnim){
     var V=viewModel(), vals=V.vals, n=vals.length;
+    var sel=(selBar!=null && selBar<n && vals[selBar]!=null)? selBar : null;
     var nonnull=vals.filter(function(v){return v!=null;}); if(!nonnull.length)nonnull=[1];
     var max=Math.max.apply(null, V.cmpPerDay!=null? nonnull.concat([V.cmpPerDay]) : nonnull); if(!(max>0))max=1;
     var bars=$('bars'), html='';
-    for(var i=0;i<n;i++){ var v=vals[i]; if(v==null){ html+='<div class="bar blank" data-i="'+i+'" style="height:6%"></div>'; } else { var h=Math.max(3,(v/max)*100); html+='<div class="bar'+(i===V.todayIdx?' last':'')+'" data-i="'+i+'" style="height:'+h.toFixed(1)+'%;animation-delay:'+(i*0.03).toFixed(2)+'s"></div>'; } }
-    bars.innerHTML=html; bars.classList.remove('anim'); void bars.offsetWidth; bars.classList.add('anim');
+    for(var i=0;i<n;i++){ var v=vals[i]; if(v==null){ html+='<div class="bar blank" data-i="'+i+'" style="height:6%"></div>'; } else { var h=Math.max(3,(v/max)*100); html+='<div class="bar'+(i===V.todayIdx?' last':'')+(i===sel?' hi':'')+'" data-i="'+i+'" style="height:'+h.toFixed(1)+'%;animation-delay:'+(i*0.03).toFixed(2)+'s"></div>'; } }
+    bars.innerHTML=html; if(!skipAnim){ bars.classList.remove('anim'); void bars.offsetWidth; bars.classList.add('anim'); }
     var cmp=$('cmp'); if(V.cmpPerDay!=null){ cmp.hidden=false; cmp.style.top=(100-(V.cmpPerDay/max)*100).toFixed(1)+'%'; } else { cmp.hidden=true; }
     buildLabels(V);
     $('rangecap').textContent=V.cap;
+    $('tiles').innerHTML=TILES[metric].map(function(t){return '<div class="tile"><div class="tv">'+t[0]+'</div><div class="tl">'+t[1]+'</div></div>';}).join('');
     renderMini(V);
+    $('minilabels').innerHTML = V.mode==='week' ? '<span>'+wkStart(M().weeks[0].weeksAgo)+'</span><span>This week</span>' : '<span>'+CR().x[0]+'</span><span>'+CR().x[1]+'</span>';
     var m=M(); $('mlabel').textContent=m.label; $('subnote').textContent=m.sub;
-    if(!scrubbing) animateNum(V.headline, V.fmt);
+    var headlineVal = sel!=null? vals[sel] : V.headline;
+    if(!scrubbing) animateNum(headlineVal, V.fmt);
     var d=$('delta');
-    if(V.delta){ d.className='delta '+(V.dir==='up'?'up':'down'); var arrow=V.dir==='up'?UP:DOWN;
+    if(sel!=null){ d.className='delta'; d.innerHTML='<span class="ctx" style="color:var(--ink-2);font-weight:600">'+(V.mode==='week'? selDateLabel() : 'Selected')+'</span>'; d.style.visibility='visible'; }
+    else if(V.delta){ d.className='delta '+(V.dir==='up'?'up':'down'); var arrow=V.dir==='up'?UP:DOWN;
       if(V.fmt==='rate'){ d.innerHTML=arrow+'<b>'+V.delta+'</b> <span class="ctx">'+(V.ctx||'')+'</span>'; }
       else { var per=V.mode==='week'?'last week':(PERIOD[cur]||''); var word=V.dir==='up'?'more than':'fewer than'; d.innerHTML=arrow+'<b>'+V.delta+'</b>'+(per?' <span class="ctx">'+word+' '+per+'</span>':''); }
       d.style.visibility='visible'; }
     else { d.style.visibility='hidden'; }
   }
 
-  function setRange(rk){ cur=rk; scrubbing=false; var tip=$('bartip'); if(tip)tip.hidden=true;
+  function setRange(rk){ cur=rk; scrubbing=false; selBar=null; var tip=$('bartip'); if(tip)tip.hidden=true;
     if(rk==='week') weekIdx=M().weeks.length-1;
     var idx=ORDER.indexOf(rk); $('segind').style.transform='translateX('+(idx*100)+'%)';
     var btns=document.querySelectorAll('.seg-btn'); for(var i=0;i<btns.length;i++){ btns[i].classList.toggle('on', btns[i].getAttribute('data-r')===rk); }
     render();
   }
 
-  // bar scrub
+  // bar selection (tap a bar -> top number shows that day; tap again to clear)
   var box=$('chartbox');
   function barIdx(e){ var bars=$('bars'); var rect=bars.getBoundingClientRect(); var cx=(e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0)); var t=Math.max(0,Math.min(0.999,(cx-rect.left)/rect.width)); return Math.floor(t*bars.children.length); }
-  function scrubBar(i){ var V=viewModel(),rects=$('bars').children; if(!rects.length)return; i=Math.max(0,Math.min(rects.length-1,i)); var v=V.vals[i]; if(v==null)return; scrubbing=true; for(var k=0;k<rects.length;k++) rects[k].classList.toggle('hi',k===i); var vs=(V.fmt==='rate')?(v+' review'+(v===1?'':'s')):v.toLocaleString(); var lab=(V.dayLabels?V.dayLabels[i]+' · ':'')+vs; var tip=$('bartip'); tip.hidden=false; tip.textContent=lab; var br=rects[i].getBoundingClientRect(),cr=$('chartbox').getBoundingClientRect(); tip.style.left=(br.left-cr.left+br.width/2)+'px'; tip.style.top=Math.max(2,(br.top-cr.top)-26)+'px'; if(V.fmt!=='rate'){ $('num').textContent=v.toLocaleString(); $('delta').style.visibility='hidden'; } }
-  function endScrub(){ if(!scrubbing)return; scrubbing=false; var tip=$('bartip'); if(tip)tip.hidden=true; var rects=$('bars').children; for(var k=0;k<rects.length;k++) rects[k].classList.remove('hi'); var V=viewModel(); if(V.fmt!=='rate') animateNum(V.headline,V.fmt); $('delta').style.visibility='visible'; }
-  box.addEventListener('pointerdown',function(e){ e.preventDefault(); try{box.setPointerCapture(e.pointerId);}catch(_){} scrubBar(barIdx(e)); });
-  box.addEventListener('pointermove',function(e){ if(scrubbing) scrubBar(barIdx(e)); });
-  box.addEventListener('pointerup',endScrub); box.addEventListener('pointercancel',endScrub);
-  $('mdots').addEventListener('click',function(e){ var b=e.target.closest('.mdot'); if(!b)return; var i=+b.getAttribute('data-i'); if(cur==='week'){ weekIdx=i; $('num').textContent='0'; render(); } else { showMiniTip(i); } });
+  box.addEventListener('pointerdown',function(e){ e.preventDefault(); try{box.setPointerCapture(e.pointerId);}catch(_){} pressing=true; var i=barIdx(e); var V=viewModel(); if(V.vals[i]==null)return; selBar=(selBar===i?null:i); render(true); });
+  box.addEventListener('pointermove',function(e){ if(!pressing)return; var i=barIdx(e); var V=viewModel(); if(V.vals[i]!=null && i!==selBar){ selBar=i; render(true); } });
+  box.addEventListener('pointerup',function(){ pressing=false; });
+  box.addEventListener('pointercancel',function(){ pressing=false; });
+  $('mdots').addEventListener('click',function(e){ var b=e.target.closest('.mdot'); if(!b)return; var i=+b.getAttribute('data-i'); if(cur==='week'){ weekIdx=i; selBar=null; $('num').textContent='0'; render(); } else { showMiniTip(i); } });
 
   // range pills
   document.querySelectorAll('.seg-btn').forEach(function(b){ b.addEventListener('click',function(){ setRange(b.getAttribute('data-r')); }); });
