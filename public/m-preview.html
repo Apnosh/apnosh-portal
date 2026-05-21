@@ -70,10 +70,11 @@
   .metric-menu[hidden] { display:none; }
   .metric-menu button { display:block; width:100%; background:none; border:0; padding:11px 12px; border-radius:9px; font-family:inherit; font-size:14.5px; font-weight:500; color:var(--ink); cursor:pointer; text-align:left; }
   .metric-menu button.on, .metric-menu button:active { background:var(--brand-t); color:var(--brand-d); }
-  .delta { display:inline-flex; align-items:center; gap:5px; margin-top:12px; min-height:22px; font-weight:600; font-size:16px; }
-  .delta.up { color:var(--brand-d); } .delta.down { color:var(--drop); }
-  .delta b { font-weight:700; }
-  .delta .ctx { color:var(--ink-2); font-weight:500; font-size:13.5px; margin-left:2px; }
+  .hero-row { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; }
+  .hero-l { min-width:0; }
+  .hero-r { flex:0 0 auto; text-align:right; padding-bottom:5px; }
+  .avg-l { margin:0; font-size:10.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-4); }
+  .avg-v { margin:4px 0 0; font-family:var(--font-display); font-size:24px; font-weight:600; color:var(--ink-2); letter-spacing:-0.01em; line-height:1; font-variant-numeric:tabular-nums; }
   .subnote { margin:7px 0 0; font-size:13px; color:var(--ink-3); }
   .chartwrap { margin-top:6px; }
   .rangecap { margin:0 0 10px; font-size:11.5px; font-weight:600; color:var(--ink-3); }
@@ -86,9 +87,8 @@
   .bars.anim .bar.last { animation:barUp .5s var(--ease-out) both, liveBar 3.4s ease-in-out 0.7s infinite; }
   @keyframes barUp { from { transform:scaleY(0); } to { transform:scaleY(1); } }
   @keyframes liveBar { 0%,100% { opacity:1; } 50% { opacity:.85; } }
-  .cmp { position:absolute; left:0; right:0; border-top:1.5px dashed var(--ink-5); pointer-events:none; z-index:2; }
+  .cmp { position:absolute; left:0; right:0; border-top:1.5px dashed var(--ink-4); pointer-events:none; z-index:2; }
   .cmp[hidden] { display:none; }
-  .cmp-l { position:absolute; right:0; top:-8px; font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-4); background:var(--bg); padding:0 4px; }
   .bartip { position:absolute; transform:translateX(-50%); background:var(--ink); color:#fff; font-size:11px; font-weight:600; padding:4px 9px; border-radius:8px; white-space:nowrap; pointer-events:none; z-index:6; }
   .bartip[hidden] { display:none; }
   .xrow { display:flex; justify-content:space-between; margin-top:8px; font-size:10px; font-weight:600; letter-spacing:.03em; color:var(--ink-4); white-space:nowrap; }
@@ -198,13 +198,20 @@
               <button data-m="reach">Reach</button>
             </div>
           </div>
-          <p class="hero-num" id="num">0</p>
-          <p class="subnote" id="subnote">Calls, directions &amp; website clicks</p>
-          <p class="delta up" id="delta"></p>
+          <div class="hero-row">
+            <div class="hero-l">
+              <p class="hero-num" id="num">0</p>
+              <p class="subnote" id="subnote">Calls, directions &amp; website clicks</p>
+            </div>
+            <div class="hero-r">
+              <p class="avg-l" id="avglabel">Avg / day</p>
+              <p class="avg-v" id="avgval">0</p>
+            </div>
+          </div>
           <div class="chartwrap">
             <p class="rangecap" id="rangecap"></p>
             <div class="chartbox" id="chartbox">
-              <div class="cmp" id="cmp" hidden><span class="cmp-l">vs prev</span></div>
+              <div class="cmp" id="cmp" hidden></div>
               <div class="bars" id="bars"></div>
               <div class="bartip" id="bartip" hidden></div>
             </div>
@@ -345,17 +352,18 @@
   function tickLabel(c, inst, idx){ var s=inst.start; if(c==='week') return fmtD(s); if(c==='month'){ var l=s.toLocaleDateString('en-US',{month:'short'}); if(s.getMonth()===0||idx===0) l+=" '"+(''+s.getFullYear()).slice(2); return l; } return ''+s.getFullYear(); }
   function renderMticks(V){ var insts=M().inst[cur], n=insts.length; var c=(n<=6?n:4); var h=''; for(var k=0;k<c;k++){ var x=(c===1?50:(k*100)/(c-1)); var i=Math.round(k*(n-1)/(c-1)); var cls='mtick'+(k===0?' first':'')+(k===c-1?' last':''); h+='<span class="'+cls+'" style="left:'+x.toFixed(1)+'%">'+tickLabel(cur,insts[i],i)+'</span>'; } $('mticks').innerHTML=h; }
   function showMiniTip(i){ var V=viewModel(),dots=$('mdots').children; if(i<0||i>=dots.length)return; for(var k=0;k<dots.length;k++) dots[k].classList.toggle('hi',k===i); var tip=$('minitip'); tip.hidden=false; tip.textContent=V.miniVals[i].toLocaleString(); var el=dots[i],mr=$('mini').getBoundingClientRect(),br=el.getBoundingClientRect(); tip.style.left=(br.left-mr.left+br.width/2)+'px'; tip.style.top=Math.max(-2,(br.top-mr.top)-22)+'px'; }
-  function renderDelta(V, sel){ var d=$('delta'); if(sel!=null){ d.className='delta'; d.innerHTML='<span class="ctx" style="color:var(--ink-2);font-weight:600">'+selSubLabel(V)+'</span>'; d.style.visibility='visible'; return; } if(V.delta){ d.className='delta '+(V.dir==='up'?'up':'down'); var arrow=V.dir==='up'?UP:DOWN; if(V.fmt==='rate'){ d.innerHTML=arrow+'<b>'+V.delta+'</b> <span class="ctx">'+(V.ctx||'')+'</span>'; } else { var per=prevWord(cur); var word=V.dir==='up'?'more than':'fewer than'; d.innerHTML=arrow+'<b>'+V.delta+'</b>'+(per?' <span class="ctx">'+word+' '+per+'</span>':''); } d.style.visibility='visible'; } else { d.style.visibility='hidden'; } }
-  function selectUpdate(){ var V=viewModel(); var rects=$('bars').children; var sel=(selBar!=null&&selBar<V.vals.length&&V.vals[selBar]!=null)?selBar:null; for(var k=0;k<rects.length;k++) rects[k].classList.toggle('hi', k===sel); animateNum(sel!=null?V.vals[sel]:V.headline, sel!=null?V.barFmt:V.fmt); renderDelta(V, sel); }
+  function fmtAvg(a){ return a<10 ? a.toFixed(1) : Math.round(a).toLocaleString(); }
+  function selectUpdate(){ var V=viewModel(); var rects=$('bars').children; var sel=(selBar!=null&&selBar<V.vals.length&&V.vals[selBar]!=null)?selBar:null; for(var k=0;k<rects.length;k++) rects[k].classList.toggle('hi', k===sel); animateNum(sel!=null?V.vals[sel]:V.headline, sel!=null?V.barFmt:V.fmt); $('subnote').textContent = sel!=null? selSubLabel(V) : M().sub; }
   function render(skipAnim){
     var V=viewModel(), vals=V.vals, n=vals.length;
     var sel=(selBar!=null && selBar<n && vals[selBar]!=null)? selBar : null;
     var nonnull=vals.filter(function(v){return v!=null;}); if(!nonnull.length)nonnull=[1];
-    var max=Math.max.apply(null, V.cmpPerDay!=null? nonnull.concat([V.cmpPerDay]) : nonnull); if(!(max>0))max=1;
+    var max=Math.max.apply(null, nonnull); if(!(max>0))max=1;
+    var avg=nonnull.reduce(function(a,b){return a+b;},0)/nonnull.length;
     var bars=$('bars'), html='';
     for(var i=0;i<n;i++){ var v=vals[i]; if(v==null){ html+='<div class="bar blank" data-i="'+i+'" style="height:6%"></div>'; } else { var h=Math.max(3,(v/max)*100); html+='<div class="bar'+(i===V.todayIdx?' last':'')+(i===sel?' hi':'')+'" data-i="'+i+'" style="height:'+h.toFixed(1)+'%;animation-delay:'+(i*0.03).toFixed(2)+'s"></div>'; } }
     bars.innerHTML=html; if(!skipAnim){ bars.classList.remove('anim'); void bars.offsetWidth; bars.classList.add('anim'); }
-    var cmp=$('cmp'); if(V.cmpPerDay!=null){ cmp.hidden=false; cmp.style.top=(100-(V.cmpPerDay/max)*100).toFixed(1)+'%'; } else { cmp.hidden=true; }
+    var cmp=$('cmp'); cmp.hidden=false; cmp.style.top=(100-(avg/max)*100).toFixed(1)+'%';
     buildLabels(V);
     $('rangecap').textContent=V.cap;
     var bi=-1,bv=-1; for(i=0;i<n;i++){ if(vals[i]!=null&&vals[i]>bv){bv=vals[i];bi=i;} }
@@ -365,10 +373,12 @@
     $('tiles').innerHTML=tiles.map(function(t){return '<div class="tile"><div class="tv">'+t[0]+'</div><div class="tl">'+t[1]+'</div></div>';}).join('');
     renderMini(V);
     renderMticks(V);
-    var m=M(); $('mlabel').textContent=m.label; $('subnote').textContent=m.sub;
+    var m=M(); $('mlabel').textContent=m.label;
+    $('avglabel').textContent='Avg / '+(V.sub==='month'?'mo':'day');
+    $('avgval').textContent=fmtAvg(avg);
+    $('subnote').textContent = sel!=null? selSubLabel(V) : m.sub;
     var headlineVal = sel!=null? vals[sel] : V.headline;
     if(!scrubbing) animateNum(headlineVal, sel!=null?V.barFmt:V.fmt);
-    renderDelta(V, sel);
   }
 
   function setRange(rk){ cur=rk; scrubbing=false; selBar=null; instIdx=null; var tip=$('bartip'); if(tip)tip.hidden=true;
