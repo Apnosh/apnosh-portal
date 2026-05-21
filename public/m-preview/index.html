@@ -70,7 +70,7 @@
   .metric-menu[hidden] { display:none; }
   .metric-menu button { display:block; width:100%; background:none; border:0; padding:11px 12px; border-radius:9px; font-family:inherit; font-size:14.5px; font-weight:500; color:var(--ink); cursor:pointer; text-align:left; }
   .metric-menu button.on, .metric-menu button:active { background:var(--brand-t); color:var(--brand-d); }
-  .hero-row { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .hero-row { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; }
   .hero-l { min-width:0; }
   .hero-r { flex:0 0 auto; text-align:right; }
   .avg-l { margin:0; font-size:10.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-4); }
@@ -80,8 +80,8 @@
   .avg-t.up { color:var(--brand-d); } .avg-t.down { color:var(--drop); } .avg-t.flat { color:var(--ink-4); font-weight:600; }
   .avg-t svg { width:11px; height:11px; }
   .subnote { margin:11px 0 4px; font-size:13px; color:var(--ink-3); }
-  .chartwrap { margin-top:6px; }
-  .rangecap { margin:0 0 10px; font-size:11.5px; font-weight:600; color:var(--ink-3); }
+  .chartwrap { margin-top:14px; }
+  .rangecap { margin:9px 0 0; font-size:11.5px; font-weight:600; color:var(--ink-3); }
   .chartbox { width:100%; height:100px; position:relative; touch-action:none; cursor:pointer; user-select:none; }
   .bars { display:flex; align-items:flex-end; gap:5px; height:100%; }
   .bar { flex:1; min-width:2px; background:rgba(74,189,152,0.24); border-radius:5px 5px 0 0; transform-origin:bottom; transition:background .18s ease; }
@@ -101,7 +101,8 @@
   .xrow.xabs .xl.first { transform:none; left:0 !important; }
   .xrow.xabs .xl.last { transform:none; left:auto !important; right:0; }
   .tiles { display:flex; gap:7px; margin-top:20px; }
-  .tile { flex:1; min-width:0; background:var(--surface); border:1px solid var(--hairline-2); border-radius:16px; padding:13px 9px; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
+  .tile { flex:1; min-width:0; background:var(--surface); border:1px solid var(--hairline-2); border-radius:16px; padding:12px 9px; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
+  .tile .tic { width:16px; height:16px; color:var(--brand-d); display:block; margin-bottom:9px; }
   .tile .tv { font-family:var(--font-display); font-size:19px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; line-height:1.05; letter-spacing:-0.01em; }
   .tile .tl { font-size:10.5px; color:var(--ink-3); margin-top:4px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .mticks { position:relative; height:13px; margin:18px 0 7px; }
@@ -206,6 +207,7 @@
           <div class="hero-row">
             <div class="hero-l">
               <p class="hero-num" id="num">0</p>
+              <p class="rangecap" id="rangecap"></p>
             </div>
             <div class="hero-r">
               <p class="avg-l" id="avglabel">Avg / day</p>
@@ -214,7 +216,6 @@
             </div>
           </div>
           <div class="chartwrap">
-            <p class="rangecap" id="rangecap"></p>
             <div class="chartbox" id="chartbox">
               <div class="bars" id="bars"></div>
               <div class="bartip" id="bartip" hidden></div>
@@ -321,7 +322,20 @@
   var instIdx=null, selBar=null, pressing=false;
   var DOWL=['SUN','MON','TUE','WED','THU','FRI','SAT'];
   var MONI=['J','F','M','A','M','J','J','A','S','O','N','D'];
-  var TILES={ actions:[['58','Directions'],['41','Calls'],['28','Site clicks'],['0','Bookings'],['Sun','Best day']], reputation:[['3','New reviews'],['4.7★','Rating'],['100%','Replied'],['2','5-star'],['1d','Avg reply']], reach:[['8.4k','Reach'],['1.2k','Engaged'],['12','Posts'],['+34','Followers'],['Wed','Top day']] };
+  var ICONS={
+    pin:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+    phone:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.18 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.1 9.9a16 16 0 0 0 6 6l1.27-1.26a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z"/>',
+    cursor:'<path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>',
+    calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    star:'<path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>',
+    message:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    reply:'<path d="M9 17 4 12l5-5"/><path d="M4 12h11a4 4 0 0 1 4 4v2"/>',
+    eye:'<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+    heart:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1.1-1a5.5 5.5 0 1 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>',
+    image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+    user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'
+  };
+  var TILES={ actions:[['58','Directions','pin'],['41','Calls','phone'],['28','Site clicks','cursor'],['0','Bookings','calendar'],['Sun','Best day']], reputation:[['3','New reviews','message'],['4.7★','Rating','star'],['100%','Replied','reply'],['2','5-star','star'],['1d','Avg reply']], reach:[['8.4k','Reach','eye'],['1.2k','Engaged','heart'],['12','Posts','image'],['+34','Followers','user'],['Wed','Top day']] };
   function prevWord(c){return {week:'last week',month:'last month','3m':'last quarter',year:'last year',all:''}[c]||'';}
   function selSubLabel(V){var s=V.instStart,i=selBar;if(V.sub==='day'){var d=new Date(s.getTime()+i*MS);return d.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});}if(V.sub==='week'){var d2=new Date(s.getTime()+i*7*MS);return 'Week of '+d2.toLocaleDateString('en-US',{month:'short',day:'numeric'});}if(V.sub==='month'){var d3=new Date(s.getFullYear(),i,1);return d3.toLocaleDateString('en-US',{month:'long',year:'numeric'});}return ''+(s.getFullYear()+i);}
   function shortSub(sub,s,i){if(sub==='day'){return new Date(s.getTime()+i*MS).toLocaleDateString('en-US',{weekday:'short'});}if(sub==='week'){return fmtD(new Date(s.getTime()+i*7*MS));}if(sub==='month'){return new Date(s.getFullYear(),i,1).toLocaleDateString('en-US',{month:'short'});}return ''+(s.getFullYear()+i);}
@@ -375,7 +389,7 @@
     bars.innerHTML=html; if(!skipAnim){ bars.classList.remove('anim'); void bars.offsetWidth; bars.classList.add('anim'); }
     buildLabels(V);
     $('rangecap').textContent=V.cap;
-    $('tiles').innerHTML=TILES[metric].slice(0,4).map(function(t){return '<div class="tile"><div class="tv">'+t[0]+'</div><div class="tl">'+t[1]+'</div></div>';}).join('');
+    $('tiles').innerHTML=TILES[metric].slice(0,4).map(function(t){return '<div class="tile">'+(t[2]?'<svg class="tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+ICONS[t[2]]+'</svg>':'')+'<div class="tv">'+t[0]+'</div><div class="tl">'+t[1]+'</div></div>';}).join('');
     renderMini(V);
     renderMticks(V);
     var m=M(); $('mlabel').textContent=m.label;
