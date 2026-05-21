@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3000,
       "autoPort": false
+    },
+    {
+      "name": "mobile-preview",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "5099", "--directory", "public/m-preview"],
+      "port": 5099,
+      "autoPort": false
     }
   ]
 }
