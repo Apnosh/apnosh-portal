@@ -20,7 +20,6 @@ export interface HomeSectionsData { needs: NeedItem[]; plan: PlanItem[]; channel
 
 const DAY = 86400000
 const num = (v: unknown) => Number(v ?? 0)
-const sum = (a: number[]) => a.reduce((x, y) => x + y, 0)
 const ymd = (d: Date) => d.toISOString().slice(0, 10)
 
 function fmtCompact(n: number): string {

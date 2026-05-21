@@ -10,8 +10,9 @@
  *   MobileHomeSections — Needs you, This week recap, Your channels,
  *                        Plan (from homeSections)
  *
- * Both are fed by the consolidated /api/dashboard/load payload and each
- * handles its own empty / not-connected / no-data states.
+ * Handles loading (skeleton) and load-failure (error) up top; once data
+ * is present each component renders its own empty / not-connected /
+ * no-data states.
  */
 
 import { MobileHomeHero } from '@/components/dashboard/mobile-home-hero'
@@ -22,6 +23,8 @@ import type { HomeSectionsData } from '@/lib/dashboard/get-home-sections'
 interface Props {
   homeMetrics: HomeMetrics | null
   homeSections: HomeSectionsData | null
+  loading?: boolean
+  failed?: boolean
 }
 
 const EMPTY_SECTIONS: HomeSectionsData = {
@@ -29,7 +32,40 @@ const EMPTY_SECTIONS: HomeSectionsData = {
   week: { shipped: 0, items: '', strategist: null },
 }
 
-export default function MobileHome({ homeMetrics, homeSections }: Props) {
+function Skeleton() {
+  return (
+    <div className="m-home" aria-hidden>
+      <div className="spot">
+        <div className="mh-skel skel-eyebrow" />
+        <div className="mh-skel skel-num" />
+        <div className="mh-skel skel-chart" />
+        <div className="skel-cards">
+          {[0, 1, 2, 3].map(i => <div key={i} className="mh-skel skel-card" />)}
+        </div>
+      </div>
+      <div className="skel-rows">
+        <div className="mh-skel skel-eyebrow" style={{ marginBottom: 0 }} />
+        {[0, 1, 2].map(i => <div key={i} className="mh-skel skel-line" />)}
+      </div>
+    </div>
+  )
+}
+
+function ErrorState() {
+  return (
+    <div className="m-home">
+      <div className="mh-error">
+        <p className="er-t">Couldn&rsquo;t load your dashboard</p>
+        <p className="er-s">Check your connection and try again.</p>
+        <button type="button" onClick={() => { if (typeof window !== 'undefined') window.location.reload() }}>Try again</button>
+      </div>
+    </div>
+  )
+}
+
+export default function MobileHome({ homeMetrics, homeSections, loading, failed }: Props) {
+  if (loading) return <Skeleton />
+  if (failed) return <ErrorState />
   return (
     <>
       <MobileHomeHero metrics={homeMetrics?.metrics ?? []} />

@@ -5,6 +5,7 @@
 
 @keyframes mh-barUp { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 @keyframes mh-liveBar { 0%, 100% { opacity: 1; } 50% { opacity: .85; } }
+@keyframes mh-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 
 .m-home {
   --font-display: 'Cal Sans', 'Inter', system-ui, sans-serif;
@@ -92,6 +93,20 @@
   & .nodata { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 30px 16px; color: var(--ink-4); }
   & .nodata .nd-t { font-size: 14px; font-weight: 600; color: var(--ink-3); }
   & .nodata .nd-s { font-size: 12.5px; }
+
+  /* Loading skeleton + error */
+  & .mh-skel { background: rgba(0,0,0,0.06); border-radius: 10px; animation: mh-pulse 1.4s ease-in-out infinite; }
+  & .skel-eyebrow { width: 140px; height: 12px; margin-bottom: 16px; }
+  & .skel-num { width: 150px; height: 50px; margin-bottom: 18px; }
+  & .skel-chart { width: 100%; height: 100px; margin-bottom: 16px; }
+  & .skel-cards { display: flex; gap: 7px; }
+  & .skel-card { flex: 1; height: 56px; border-radius: 15px; }
+  & .skel-rows { padding: 24px 22px 6px; display: flex; flex-direction: column; gap: 18px; }
+  & .skel-line { height: 16px; }
+  & .mh-error { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 56px 24px; color: var(--ink-3); }
+  & .mh-error .er-t { font-size: 15px; font-weight: 600; color: var(--ink); }
+  & .mh-error .er-s { font-size: 13px; }
+  & .mh-error button { margin-top: 10px; border: 0; background: var(--brand); color: #fff; font-family: inherit; font-weight: 600; font-size: 14px; padding: 9px 18px; border-radius: 9999px; cursor: pointer; }
 
   /* Sections */
   & .sx { padding: 24px 22px 6px; }

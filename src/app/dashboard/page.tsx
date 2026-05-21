@@ -192,6 +192,8 @@ export default function DashboardPage() {
           <MobileHome
             homeMetrics={data?.homeMetrics ?? null}
             homeSections={data?.homeSections ?? null}
+            loading={loading}
+            failed={!loading && !!client?.id && !data}
           />
         </div>
         <div className="hidden lg:block">
@@ -215,6 +217,8 @@ export default function DashboardPage() {
         <MobileHome
           homeMetrics={data?.homeMetrics ?? null}
           homeSections={data?.homeSections ?? null}
+          loading={loading}
+          failed={!loading && !!client?.id && !data}
         />
       </div>
 

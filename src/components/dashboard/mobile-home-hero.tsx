@@ -165,7 +165,6 @@ function useAnimatedNumber(target: number, fmt: 'num' | 'rate') {
     if (raf.current) cancelAnimationFrame(raf.current)
     raf.current = requestAnimationFrame(step)
     return () => { if (raf.current) cancelAnimationFrame(raf.current) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, fmt])
   return display
 }
