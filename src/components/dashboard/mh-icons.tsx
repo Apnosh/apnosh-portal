@@ -32,7 +32,7 @@ export function MhIcon({ name, className, sw = 1.8 }: { name: string; className?
 }
 
 export function MhSpark({ vals, dir }: { vals: number[]; dir: 'up' | 'down' }) {
-  const w = 58, h = 30
+  const w = 50, h = 24
   const min = Math.min(...vals), max = Math.max(...vals), rg = Math.max(max - min, 0.0001)
   const pts = vals.map((v, i) => ({ x: (i * w) / (vals.length - 1), y: (h - 3) - ((v - min) / rg) * (h - 6) }))
   const d = pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ')
