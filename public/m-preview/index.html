@@ -61,7 +61,7 @@
   .spot .bell { position:absolute; top:14px; right:14px; margin:0; z-index:5; }
   .t-eyebrow { font-family:var(--font-body); font-size:11.5px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--brand-d); margin:0; }
   .eb-pill { display:inline-block; background:var(--brand-g); padding:5px 12px; border-radius:99px; }
-  .hero-num { font-family:var(--num-font); font-weight:var(--num-weight); font-size:var(--num-size); letter-spacing:var(--num-spacing); line-height:.92; color:var(--ink); margin:16px 0 0; font-variant-numeric:tabular-nums; }
+  .hero-num { font-family:var(--num-font); font-weight:var(--num-weight); font-size:var(--num-size); letter-spacing:var(--num-spacing); line-height:.92; color:var(--ink); margin:12px 0 0; font-variant-numeric:tabular-nums; }
   .metricsel { position:relative; display:inline-block; }
   .metric-btn { display:inline-flex; align-items:center; gap:5px; background:none; border:0; padding:0; cursor:pointer; font-family:inherit; }
   .mchev { width:13px; height:13px; color:var(--brand-d); transition:transform .2s ease; }
@@ -70,18 +70,18 @@
   .metric-menu[hidden] { display:none; }
   .metric-menu button { display:block; width:100%; background:none; border:0; padding:11px 12px; border-radius:9px; font-family:inherit; font-size:14.5px; font-weight:500; color:var(--ink); cursor:pointer; text-align:left; }
   .metric-menu button.on, .metric-menu button:active { background:var(--brand-t); color:var(--brand-d); }
-  .delta { display:inline-flex; align-items:center; gap:5px; margin-top:14px; min-height:22px; font-weight:600; font-size:16px; }
+  .delta { display:inline-flex; align-items:center; gap:5px; margin-top:12px; min-height:22px; font-weight:600; font-size:16px; }
   .delta.up { color:var(--brand-d); } .delta.down { color:var(--drop); }
   .delta b { font-weight:700; }
   .delta .ctx { color:var(--ink-2); font-weight:500; font-size:13.5px; margin-left:2px; }
-  .subnote { margin:8px 0 0; font-size:12px; color:var(--ink-4); }
-  .chartwrap { margin-top:14px; }
+  .subnote { margin:7px 0 0; font-size:13px; color:var(--ink-3); }
+  .chartwrap { margin-top:6px; }
   .rangecap { margin:0 0 10px; font-size:11.5px; font-weight:600; color:var(--ink-3); }
   .chartbox { width:100%; height:100px; position:relative; touch-action:none; cursor:pointer; user-select:none; }
   .bars { display:flex; align-items:flex-end; gap:5px; height:100%; }
-  .bar { flex:1; min-width:2px; background:rgba(60,60,67,0.11); border-radius:5px 5px 0 0; transform-origin:bottom; transition:background .18s ease; }
+  .bar { flex:1; min-width:2px; background:rgba(74,189,152,0.24); border-radius:5px 5px 0 0; transform-origin:bottom; transition:background .18s ease; }
   .bar.last { background:var(--brand); } .bar.hi { background:var(--brand); }
-  .bar.blank { background:rgba(60,60,67,0.05); }
+  .bar.blank { background:rgba(74,189,152,0.08); }
   .bars.anim .bar { animation:barUp .5s var(--ease-out) both; }
   @keyframes barUp { from { transform:scaleY(0); } to { transform:scaleY(1); } }
   .cmp { position:absolute; left:0; right:0; border-top:1.5px dashed var(--ink-5); pointer-events:none; z-index:2; }
@@ -195,8 +195,8 @@
             </div>
           </div>
           <p class="hero-num" id="num">0</p>
-          <p class="delta up" id="delta"></p>
           <p class="subnote" id="subnote">Calls, directions &amp; website clicks</p>
+          <p class="delta up" id="delta"></p>
           <div class="chartwrap">
             <p class="rangecap" id="rangecap"></p>
             <div class="chartbox" id="chartbox">
