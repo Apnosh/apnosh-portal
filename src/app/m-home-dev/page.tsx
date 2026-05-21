@@ -4,6 +4,7 @@
 
 import '../m-home.css'
 import { MobileHomeHero } from '@/components/dashboard/mobile-home-hero'
+import { MobileHomeSections, type HomeSectionsData } from '@/components/dashboard/mobile-home-sections'
 import type { HomeMetric, HomeInstance, HomeBreakdownItem } from '@/lib/dashboard/get-home-metrics'
 
 export const dynamic = 'force-static'
@@ -79,10 +80,32 @@ const MOCK: HomeMetric[] = [
   numMetric('reach', 'Reach', 'People who saw your content', 1200, [['Engaged', 'heart'], ['Posts', 'image'], ['Followers', 'user'], ['Profile visits', 'eye']]),
 ]
 
+const MOCK_SECTIONS: HomeSectionsData = {
+  needs: [
+    { title: 'Reply to a 3-star review', time: '2 min', icon: 'reply' },
+    { title: "Approve Friday's Instagram post", time: '30 sec', icon: 'image' },
+    { title: 'Set Memorial Day hours', time: '1 min', icon: 'clock' },
+  ],
+  week: { shipped: 7, items: '3 posts · 2 review replies · 2 profile updates', strategist: 'Maria' },
+  channels: [
+    { name: 'Local presence', sub: 'Profile views', value: '1,840', delta: '+12%', dir: 'up', spark: [40, 44, 42, 50, 55, 52, 60, 66], connected: true },
+    { name: 'Social media', sub: 'Reach', value: '1,720', delta: '+22%', dir: 'up', spark: [20, 26, 24, 30, 42, 38, 52, 60], connected: true },
+    { name: 'Website', sub: 'Visitors', value: '412', delta: '+5%', dir: 'up', spark: [30, 28, 33, 31, 35, 34, 37, 39], connected: false },
+    { name: 'Reviews', sub: 'Avg rating', value: '4.7★', delta: '+3 new', dir: 'up', spark: [44, 45, 44, 46, 45, 47, 46, 47], connected: true },
+  ],
+  plan: [
+    { when: 'In 4 days', title: 'Memorial Day', hint: 'Your busiest Monday. Launch a promo to capture it.', cta: 'Plan a promo', icon: 'gift' },
+    { when: 'In 3 weeks', title: "Father's Day", hint: 'Families book early — add a special now.', cta: 'Add a special', icon: 'calendar' },
+    { when: 'Next Tuesday', title: 'Slow lunch expected', hint: 'Quiet midday ahead. A deal can fill seats.', cta: 'Create a deal', icon: 'trenddown' },
+    { when: 'This week', title: 'Friday post slot open', hint: '2 of 3 posts scheduled — one gap left.', cta: 'Schedule it', icon: 'image' },
+  ],
+}
+
 export default function MHomeDevPage() {
   return (
-    <div style={{ background: '#fff', minHeight: '100vh' }}>
+    <div style={{ background: '#fff', minHeight: '100vh', paddingBottom: 40 }}>
       <MobileHomeHero metrics={MOCK} />
+      <MobileHomeSections data={MOCK_SECTIONS} />
     </div>
   )
 }
