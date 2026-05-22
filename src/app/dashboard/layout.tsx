@@ -642,7 +642,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main */}
-      <div className="flex-1 lg:ml-[260px]">
+      <div className="flex-1 min-w-0 lg:ml-[260px]">
         {/* Top bar — mobile shows just hamburger + workspace label + bell.
             Desktop keeps the full chrome (workspace switcher + location
             selector + messages icon + notifications) since space allows it. */}

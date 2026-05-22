@@ -84,7 +84,7 @@
   /* opportunities */
   & .mi { display: flex; gap: 11px; overflow-x: auto; padding: 2px 16px 6px; scroll-snap-type: x mandatory; scrollbar-width: none; }
   & .mi::-webkit-scrollbar { display: none; }
-  & .mi-card { flex: 0 0 76%; scroll-snap-align: start; background: var(--card); border-radius: 18px; box-shadow: var(--sh); padding: 14px; display: flex; flex-direction: column; cursor: pointer; text-align: left; border: 0; }
+  & .mi-card { flex: 0 0 auto; width: min(78vw, 320px); scroll-snap-align: start; background: var(--card); border-radius: 18px; box-shadow: var(--sh); padding: 14px; display: flex; flex-direction: column; cursor: pointer; text-align: left; border: 0; }
   & .mi-top { display: flex; align-items: center; gap: 10px; }
   & .mi-ic { width: 38px; height: 38px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; background: var(--brand-t); color: var(--brand-d); }
   & .mi-ic svg { width: 18px; height: 18px; }
