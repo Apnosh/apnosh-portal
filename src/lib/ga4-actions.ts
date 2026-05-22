@@ -2,13 +2,27 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { listGA4Properties, type GA4Property } from '@/lib/google'
+import { serviceAccountEnabled, getServiceAccountToken, GA_SCOPE } from '@/lib/google-service-account'
 
 /**
- * Fetch GA4 properties for a client using the stored access token.
+ * Fetch GA4 properties for a client. When the service account is
+ * configured we list the properties IT has been granted (no user OAuth);
+ * otherwise we fall back to the stored pending OAuth access token.
  */
 export async function fetchGA4PropertiesForClient(
   clientId: string
 ): Promise<{ success: true; properties: GA4Property[] } | { success: false; error: string }> {
+  if (serviceAccountEnabled()) {
+    const token = await getServiceAccountToken(GA_SCOPE)
+    if (!token) return { success: false, error: 'Service account is not configured correctly.' }
+    try {
+      const properties = await listGA4Properties(token)
+      return { success: true, properties }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to list properties' }
+    }
+  }
+
   const supabase = createAdminClient()
 
   const { data: conn } = await supabase
@@ -39,6 +53,57 @@ export async function finalizeGA4Connection(
   property: GA4Property
 ): Promise<{ success: true } | { success: false; error: string }> {
   const supabase = createAdminClient()
+
+  /* Service-account path: store the property mapping, no per-user tokens. */
+  if (serviceAccountEnabled()) {
+    await supabase
+      .from('channel_connections')
+      .delete()
+      .eq('client_id', clientId)
+      .eq('channel', 'google_analytics')
+      .eq('platform_account_id', property.propertyId)
+
+    const { error: insertErr } = await supabase
+      .from('channel_connections')
+      .insert({
+        client_id: clientId,
+        channel: 'google_analytics',
+        connection_type: 'built_in',
+        platform_account_id: property.propertyId,
+        platform_account_name: property.propertyName,
+        access_token: null,
+        refresh_token: null,
+        token_expires_at: null,
+        scopes: ['https://www.googleapis.com/auth/analytics.readonly'],
+        status: 'active',
+        connected_by: null,
+        connected_at: new Date().toISOString(),
+        metadata: {
+          property_id: property.propertyId,
+          property_name: property.propertyName,
+          account_name: property.accountName,
+          time_zone: property.timeZone,
+          currency_code: property.currencyCode,
+          auth: 'service_account',
+        },
+      })
+    if (insertErr) return { success: false, error: insertErr.message }
+
+    await supabase
+      .from('channel_connections')
+      .delete()
+      .eq('client_id', clientId)
+      .eq('channel', 'google_analytics')
+      .eq('platform_account_id', 'pending')
+
+    try {
+      const { syncGoogleAnalyticsForClient } = await import('@/lib/web-analytics-sync')
+      await syncGoogleAnalyticsForClient(clientId, 90)
+    } catch (err) {
+      console.error('[finalizeGA4Connection SA] auto-backfill failed:', (err as Error).message)
+    }
+    return { success: true }
+  }
 
   // Move the pending row to the actual property
   const { data: pending } = await supabase

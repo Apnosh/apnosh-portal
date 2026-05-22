@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getGoogleOAuthUrl } from '@/lib/google'
+import { serviceAccountEnabled } from '@/lib/google-service-account'
 
 /**
  * GET /api/auth/google?clientId=xxx[&returnTo=url][&popup=1]
@@ -22,6 +23,15 @@ export async function GET(request: NextRequest) {
 
   const returnTo = request.nextUrl.searchParams.get('returnTo') || ''
   const popup = request.nextUrl.searchParams.get('popup') === '1'
+
+  /* Service-account mode: no OAuth. Jump straight to the GA4 property
+     picker, which lists the properties the service account can read. */
+  if (serviceAccountEnabled()) {
+    const picker = new URL('/dashboard/connect-accounts/google-property', request.nextUrl.origin)
+    picker.searchParams.set('clientId', clientId)
+    if (returnTo) picker.searchParams.set('returnTo', returnTo)
+    return NextResponse.redirect(picker)
+  }
 
   const state = Buffer.from(JSON.stringify({
     clientId,
