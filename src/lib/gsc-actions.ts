@@ -2,13 +2,27 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { listGSCSites, type GSCSite } from '@/lib/google'
+import { serviceAccountEnabled, getServiceAccountToken, GSC_SCOPE } from '@/lib/google-service-account'
 
 /**
- * Fetch GSC sites for a client using the stored pending access token.
+ * Fetch GSC sites for a client. When the service account is configured we
+ * list the properties IT has been granted (no user OAuth); otherwise we
+ * fall back to the stored pending OAuth access token.
  */
 export async function fetchGSCSitesForClient(
   clientId: string
 ): Promise<{ success: true; sites: GSCSite[] } | { success: false; error: string }> {
+  if (serviceAccountEnabled()) {
+    const token = await getServiceAccountToken(GSC_SCOPE)
+    if (!token) return { success: false, error: 'Service account is not configured correctly.' }
+    try {
+      const sites = await listGSCSites(token)
+      return { success: true, sites }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to list sites' }
+    }
+  }
+
   const supabase = createAdminClient()
 
   const { data: conn } = await supabase
@@ -39,6 +53,53 @@ export async function finalizeGSCConnection(
   site: GSCSite
 ): Promise<{ success: true } | { success: false; error: string }> {
   const supabase = createAdminClient()
+
+  /* Service-account path: no per-user tokens. Store the property mapping
+     and let the durable service account read it forever. */
+  if (serviceAccountEnabled()) {
+    await supabase
+      .from('channel_connections')
+      .delete()
+      .eq('client_id', clientId)
+      .eq('channel', 'google_search_console')
+      .eq('platform_account_id', site.siteUrl)
+
+    const { error: insertErr } = await supabase
+      .from('channel_connections')
+      .insert({
+        client_id: clientId,
+        channel: 'google_search_console',
+        connection_type: 'built_in',
+        platform_account_id: site.siteUrl,
+        platform_account_name: site.siteUrl,
+        platform_url: site.siteUrl.startsWith('sc-domain:') ? `https://${site.siteUrl.slice(10)}` : site.siteUrl,
+        access_token: null,
+        refresh_token: null,
+        token_expires_at: null,
+        scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+        status: 'active',
+        connected_by: null,
+        connected_at: new Date().toISOString(),
+        metadata: { site_url: site.siteUrl, permission_level: site.permissionLevel, auth: 'service_account' },
+      })
+    if (insertErr) return { success: false, error: insertErr.message }
+
+    // Clear any leftover OAuth placeholder for this client.
+    await supabase
+      .from('channel_connections')
+      .delete()
+      .eq('client_id', clientId)
+      .eq('channel', 'google_search_console')
+      .eq('platform_account_id', 'pending')
+
+    try {
+      const { syncSearchConsoleForClient } = await import('@/lib/web-analytics-sync')
+      await syncSearchConsoleForClient(clientId, 90)
+    } catch (err) {
+      console.error('[finalizeGSCConnection SA] auto-backfill failed:', (err as Error).message)
+    }
+    return { success: true }
+  }
 
   const { data: pending } = await supabase
     .from('channel_connections')

@@ -19,6 +19,7 @@ import {
   type GA4DailyMetrics,
   type GSCDailyMetrics,
 } from '@/lib/google'
+import { serviceAccountEnabled, getServiceAccountToken, GSC_SCOPE, GA_SCOPE } from '@/lib/google-service-account'
 
 type Channel = 'google_analytics' | 'google_search_console'
 
@@ -45,6 +46,13 @@ const REFRESH_BUFFER_MS = 60_000
 /* Returns a fresh access token, refreshing if the stored one is
    within the buffer of expiry. Updates the DB row on rotation. */
 async function ensureToken(conn: ConnRow): Promise<string | null> {
+  /* Prefer the service account when configured: it never expires and
+     needs no reconnect. Falls back to the stored OAuth token otherwise. */
+  if (serviceAccountEnabled()) {
+    const scope = conn.channel === 'google_search_console' ? GSC_SCOPE : GA_SCOPE
+    const saToken = await getServiceAccountToken(scope)
+    if (saToken) return saToken
+  }
   if (!conn.access_token) return null
   const expiresAt = conn.token_expires_at ? new Date(conn.token_expires_at).getTime() : 0
   if (expiresAt - Date.now() > REFRESH_BUFFER_MS) return conn.access_token

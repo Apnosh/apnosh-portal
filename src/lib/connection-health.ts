@@ -20,6 +20,7 @@
 
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { listGSCSites, listGA4Properties, listGBPAccounts, refreshGoogleToken } from './google'
+import { serviceAccountEnabled, getServiceAccountToken, getServiceAccountEmail, GSC_SCOPE, GA_SCOPE } from './google-service-account'
 
 interface Connection {
   id: string
@@ -109,10 +110,19 @@ async function probeOne(
   admin: any,
   conn: Connection,
 ): Promise<ProbeResult> {
-  /* Refresh the token if needed (within 5 min of expiry). */
-  const expiresAt = conn.token_expires_at ? new Date(conn.token_expires_at) : null
   let accessToken = conn.access_token
-  if (!expiresAt || expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
+
+  /* Service-account path for Search Console + GA4: no refresh, no expiry,
+     no reconnect. (GBP still uses OAuth — service accounts aren't supported
+     there.) */
+  if (serviceAccountEnabled() && (conn.channel === 'google_search_console' || conn.channel === 'google_analytics')) {
+    const saToken = await getServiceAccountToken(conn.channel === 'google_search_console' ? GSC_SCOPE : GA_SCOPE)
+    if (!saToken) {
+      return { newState: 'error', errorMessage: 'service_account_unavailable: GOOGLE_SERVICE_ACCOUNT_JSON is missing or invalid.' }
+    }
+    accessToken = saToken
+  } else if (!conn.token_expires_at || new Date(conn.token_expires_at).getTime() - Date.now() < 5 * 60 * 1000) {
+    /* Refresh the OAuth token if needed (within 5 min of expiry). */
     if (!conn.refresh_token) {
       return { newState: 'error', errorMessage: 'token_expired: no refresh token on file. Reconnect required.' }
     }
@@ -152,7 +162,9 @@ async function probeOne(
       if (stillThere) return { newState: 'active' }
       return {
         newState: 'error',
-        errorMessage: `permission_denied: connected Google account no longer has access to ${conn.platform_url ?? conn.platform_account_id} in Search Console. The owner needs to reconnect with an account that's a verified property user.`,
+        errorMessage: serviceAccountEnabled()
+          ? `permission_denied: ${getServiceAccountEmail()} is not a user on ${conn.platform_url ?? conn.platform_account_id} yet. In Search Console → Settings → Users and permissions, add that email as a Full user. It will then sync automatically, no reconnect needed.`
+          : `permission_denied: connected Google account no longer has access to ${conn.platform_url ?? conn.platform_account_id} in Search Console. The owner needs to reconnect with an account that's a verified property user.`,
       }
     } catch (err) {
       return classifyProbeError(err as Error, conn)
@@ -166,7 +178,9 @@ async function probeOne(
       if (stillThere) return { newState: 'active' }
       return {
         newState: 'error',
-        errorMessage: `permission_denied: connected Google account no longer has access to GA4 property ${conn.platform_account_id}. Reconnect with an account that has property access.`,
+        errorMessage: serviceAccountEnabled()
+          ? `permission_denied: add ${getServiceAccountEmail()} as a Viewer on GA4 property ${conn.platform_account_id} (Admin → Property access management). It will then sync automatically, no reconnect needed.`
+          : `permission_denied: connected Google account no longer has access to GA4 property ${conn.platform_account_id}. Reconnect with an account that has property access.`,
       }
     } catch (err) {
       return classifyProbeError(err as Error, conn)
