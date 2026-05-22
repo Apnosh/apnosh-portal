@@ -1,192 +1,67 @@
-'use client'
+/**
+ * /dashboard/analytics — the collaborative Plan calendar.
+ *
+ * Repurposed from the old GBP analytics view (now at /dashboard/insights)
+ * into an owner-facing marketing planner. It shows a unified, viewer-
+ * centric feed: the viewer's own plans, shoots they're on, and Apnosh's
+ * scheduled content, merged across every restaurant they have a stake in.
+ * /dashboard/calendar redirects here so there's a single source of truth.
+ *
+ * A photoshoot shows up for both the photographer and the owner; notes
+ * can stay private or be sent to a strategist. See get-plan-feed.ts.
+ */
 
-import { useState, useMemo, useCallback } from 'react'
-import { BarChart3 } from 'lucide-react'
-import { useBusiness } from '@/lib/supabase/hooks'
-import { useClientGBPData } from '@/hooks/useGBPData'
-import { fetchAiAnalysis } from '@/lib/ai-analysis'
-import MobileAnalytics from './mobile-analytics'
-import {
-  GBPMetricCard, METRIC_CARD_CONFIGS, METRIC_ICONS,
-  GBPChart, DEFAULT_METRICS, VIEWS_METRICS,
-  PeriodSelector, AiAnalysisPanel,
-} from '@/components/analytics'
-import type { Period } from '@/components/analytics'
-import type { GBPMonthlyData, AiAnalysis } from '@/types/database'
+import { redirect } from 'next/navigation'
+import { resolveCurrentClient } from '@/lib/auth/resolve-client'
+import { getPlanFeed, getAssignablePeople } from '@/lib/dashboard/get-plan-feed'
+import { getHomeSections } from '@/lib/dashboard/get-home-sections'
+import PlanView from './plan-view'
 
-function periodToMonths(p: Period): number | undefined {
-  if (p === '1') return 1
-  if (p === '3') return 3
-  if (p === '6') return 6
-  return undefined
+export const dynamic = 'force-dynamic'
+
+interface PageProps {
+  searchParams: Promise<{ clientId?: string }>
 }
 
-function getLatestRow(data: GBPMonthlyData[]): GBPMonthlyData | null {
-  if (!data.length) return null
-  return [...data].sort((a, b) => b.year === a.year ? b.month - a.month : b.year - a.year)[0]
-}
+export default async function PlanPage({ searchParams }: PageProps) {
+  const { clientId: clientIdParam } = await searchParams
+  const { user, isAdmin, clientId } = await resolveCurrentClient(clientIdParam ?? null)
+  if (!user) redirect('/login')
 
-function getPreviousRow(data: GBPMonthlyData[], latest: GBPMonthlyData): GBPMonthlyData | null {
-  const prevMonth = latest.month === 1 ? 12 : latest.month - 1
-  const prevYear = latest.month === 1 ? latest.year - 1 : latest.year
-  return data.find(d => d.month === prevMonth && d.year === prevYear) || null
-}
+  // Scope: an explicit target, else the viewer's own resolved client, else
+  // unscoped (agency / multi-restaurant users see everything + a switcher).
+  const scope = clientIdParam ?? clientId ?? undefined
+  const feed = await getPlanFeed(user.id, scope ? { clientId: scope } : undefined)
 
-function getYearAgoRow(data: GBPMonthlyData[], latest: GBPMonthlyData): GBPMonthlyData | null {
-  return data.find(d => d.month === latest.month && d.year === latest.year - 1) || null
-}
+  // The active restaurant for "create" + suggestions + the people picker.
+  const activeClientId = scope ?? feed.clients[0]?.id ?? null
 
-export default function ClientAnalyticsPage() {
-  const [period, setPeriod] = useState<Period>('6')
-  const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis | null>(null)
-  const [aiLoading, setAiLoading] = useState(false)
-  const months = periodToMonths(period)
-
-  const { data: business, loading: bizLoading } = useBusiness()
-  const businessId = business?.id || ''
-  const { data, loading: dataLoading } = useClientGBPData(businessId, months)
-
-  const loading = bizLoading || dataLoading
-
-  const latest = useMemo(() => getLatestRow(data), [data])
-  const previous = useMemo(() => latest ? getPreviousRow(data, latest) : null, [data, latest])
-  const yearAgo = useMemo(() => latest ? getYearAgoRow(data, latest) : null, [data, latest])
-
-  const sortedAsc = useMemo(() =>
-    [...data].sort((a, b) => a.year === b.year ? a.month - b.month : a.year - b.year),
-    [data]
-  )
-
-  const runAiAnalysis = useCallback(async () => {
-    if (sortedAsc.length < 2 || !business?.name) return
-    setAiLoading(true)
-    try {
-      const result = await fetchAiAnalysis({
-        businessId,
-        businessName: business.name,
-        agencyName: 'Apnosh',
-        period,
-        sortedAsc,
-      })
-      setAiAnalysis(result)
-    } catch (e) {
-      console.error('AI analysis error:', e)
-    } finally {
-      setAiLoading(false)
-    }
-  }, [businessId, business?.name, period, sortedAsc])
-
-  const visibleMetrics = useMemo(() => {
-    if (!latest) return []
-    return METRIC_CARD_CONFIGS.filter(cfg => cfg.compute(latest) > 0)
-  }, [latest])
-
-  /* IMPORTANT: the loading + empty-state early returns below are
-     DESKTOP-ONLY (hidden lg:block). The desktop view reads
-     gbp_monthly_data (legacy CSV path); the mobile view reads
-     gbp_metrics (connected-sync path) via its own useClient +
-     getGbpAnalytics, with its own loading + empty handling. We must
-     always render <MobileAnalytics /> so a desktop-data gap never
-     blanks the phone experience. */
-  if (loading) {
+  if (!activeClientId && feed.items.length === 0) {
     return (
-      <>
-        <div className="lg:hidden">
-          <MobileAnalytics />
-        </div>
-        <div className="hidden lg:block max-w-6xl mx-auto space-y-4">
-          <div className="h-8 w-48 bg-ink-6 rounded animate-pulse" />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-ink-6 rounded-xl animate-pulse" />)}
-          </div>
-          <div className="grid lg:grid-cols-2 gap-4">
-            {[1, 2].map(i => <div key={i} className="h-80 bg-ink-6 rounded-xl animate-pulse" />)}
-          </div>
-        </div>
-      </>
+      <div className="max-w-2xl mx-auto px-4 py-12 text-center text-ink-3">
+        {isAdmin
+          ? 'Add ?clientId=<id> to the URL to plan for a specific client.'
+          : 'Sign in as a client to start planning.'}
+      </div>
     )
   }
 
-  if (!data.length) {
-    return (
-      <>
-        <div className="lg:hidden">
-          <MobileAnalytics />
-        </div>
-        <div className="hidden lg:block max-w-6xl mx-auto space-y-6">
-          <div>
-            <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Analytics</h1>
-            <p className="text-ink-3 text-sm mt-1">Your Google Business Profile performance.</p>
-          </div>
-          <div className="rounded-2xl bg-white/55 backdrop-blur-xl border border-white/70 p-12 text-center">
-            <BarChart3 className="w-10 h-10 text-ink-4 mx-auto mb-3" />
-            <h2 className="text-lg font-[family-name:var(--font-display)] text-ink mb-1">No data yet</h2>
-            <p className="text-ink-3 text-sm max-w-md mx-auto">
-              Your analytics dashboard will show up here once we start tracking your Google Business Profile performance.
-            </p>
-          </div>
-        </div>
-      </>
-    )
-  }
+  const [people, sections] = await Promise.all([
+    activeClientId ? getAssignablePeople(activeClientId) : Promise.resolve([]),
+    activeClientId
+      ? getHomeSections(activeClientId).then(s => s.plan).catch(() => [])
+      : Promise.resolve([]),
+  ])
 
   return (
-    <>
-      {/* ─── MOBILE ANALYTICS ─────────────────────────────────────
-          Visually-rich operator dashboard for phone. Same data
-          source as the desktop view, presented as a hero metric +
-          channel breakdown + action tiles + reviews + social +
-          AI insights. Built mobile-first; desktop falls through to
-          the original chart-heavy layout below. */}
-      <div className="lg:hidden">
-        <MobileAnalytics />
-      </div>
-
-      <div className="hidden lg:block max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Analytics</h1>
-          <p className="text-ink-3 text-sm mt-1">Your Google Business Profile performance.</p>
-        </div>
-        <PeriodSelector value={period} onChange={setPeriod} />
-      </div>
-
-      {/* Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {visibleMetrics.map(cfg => {
-          const Icon = METRIC_ICONS[cfg.key] || METRIC_ICONS.total_interactions
-          return (
-            <GBPMetricCard
-              key={cfg.key}
-              label={cfg.label}
-              note={cfg.note}
-              icon={Icon}
-              value={latest ? cfg.compute(latest) : 0}
-              previousValue={previous ? cfg.compute(previous) : null}
-              yearAgoValue={yearAgo ? cfg.compute(yearAgo) : null}
-            />
-          )
-        })}
-      </div>
-
-      {/* Charts */}
-      <div className="grid lg:grid-cols-2 gap-4">
-        <GBPChart data={data} metrics={DEFAULT_METRICS} title="Interactions" />
-        <GBPChart data={data} metrics={VIEWS_METRICS} title="Profile Views" />
-      </div>
-
-      {/* AI Analysis */}
-      {!aiAnalysis && !aiLoading && sortedAsc.length >= 2 && (
-        <button
-          onClick={runAiAnalysis}
-          className="px-4 py-2 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition-colors"
-        >
-          Generate AI Analysis
-        </button>
-      )}
-      <AiAnalysisPanel analysis={aiAnalysis} loading={aiLoading} onRefresh={runAiAnalysis} />
-      </div>
-    </>
+    <div className="-m-4 lg:-m-6">
+      <PlanView
+        feed={feed}
+        opportunities={sections}
+        people={people}
+        activeClientId={activeClientId}
+        isAdmin={isAdmin}
+      />
+    </div>
   )
 }

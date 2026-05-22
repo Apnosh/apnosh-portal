@@ -4,7 +4,7 @@
  * Mobile bottom tab bar — 5 items with an elevated center action.
  *
  * Layout (client / restaurant owner):
- *   [Home]  [Inbox]   (+)   [Analytics]  [Menu]
+ *   [Home]  [Inbox]   (+)   [Plan]  [Menu]
  *
  * The center "+" is a FAB-style action button that opens a bottom
  * sheet of quick actions (Ask AI, Request content, Message strategist,
@@ -13,7 +13,7 @@
  * The rightmost "Menu" tab opens the existing sidebar drawer (the
  * full nav with 36+ surfaces). It does NOT navigate either.
  *
- * Home / Inbox / Analytics are real route destinations.
+ * Home / Inbox / Plan are real route destinations.
  *
  * Admin path keeps a simpler 5-item navigation bar (no FAB).
  */
@@ -21,7 +21,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Home, Inbox, Plus, BarChart3, LayoutGrid,
+  Home, Inbox, Plus, CalendarDays, LayoutGrid,
   LayoutDashboard, Users, Kanban, CreditCard, FileBarChart,
 } from 'lucide-react'
 
@@ -46,7 +46,7 @@ const clientTabs: Tab[] = [
   { kind: 'nav',    label: 'Home',      href: '/dashboard',           icon: Home,       match: 'exact' },
   { kind: 'nav',    label: 'Inbox',     href: '/dashboard/inbox',     icon: Inbox,      match: 'prefix' },
   { kind: 'action', label: 'Quick',     icon: Plus, action: 'plus' },
-  { kind: 'nav',    label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3,  match: 'prefix' },
+  { kind: 'nav',    label: 'Plan',      href: '/dashboard/analytics', icon: CalendarDays, match: 'prefix' },
   /* Menu now points at a real /dashboard/menu page (grouped nav cards)
      instead of opening the slide-in drawer. The drawer remains for
      desktop (sidebar is always visible there). */

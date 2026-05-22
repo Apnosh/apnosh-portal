@@ -3,6 +3,7 @@ import { Inter, Playfair_Display, DM_Sans } from 'next/font/google'
 import './globals.css'
 import './m-home.css'
 import './m-inbox.css'
+import './m-plan.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 const playfair = Playfair_Display({ subsets: ['latin'], variable: '--font-playfair', display: 'swap' })

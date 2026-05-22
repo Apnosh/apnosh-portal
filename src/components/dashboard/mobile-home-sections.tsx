@@ -24,8 +24,8 @@ export interface HomeSectionsData { needs: NeedItem[]; plan: PlanItem[]; channel
 
 const R = {
   inbox: '/dashboard/inbox',
-  calendar: '/dashboard/calendar',
-  analytics: '/dashboard/analytics',
+  planner: '/dashboard/analytics',   // the Plan calendar
+  insights: '/dashboard/insights',   // GBP performance metrics
   messages: '/dashboard/messages',
 }
 
@@ -86,7 +86,7 @@ function WeekSection({ week }: { week: WeekRecap }) {
           {lead}
           <div className="recap-txt"><p className="recap-line">{line}</p>{brk}</div>
         </div>
-        <Link className="recap-cta" href={paid ? R.messages : R.analytics}>{cta}<MhIcon name="chevRight" sw={2.2} size={14} /></Link>
+        <Link className="recap-cta" href={paid ? R.messages : R.insights}>{cta}<MhIcon name="chevRight" sw={2.2} size={14} /></Link>
       </div>
     </section>
   )
@@ -96,18 +96,18 @@ function ChannelsSection({ channels }: { channels: Channel[] }) {
   if (!channels.length) return null
   return (
     <section className="sx">
-      <div className="sx-head"><p className="t-eyebrow">Your channels</p><Link className="btn-quiet" href={R.analytics}>Analytics <MhIcon name="chevRight" sw={2.2} size={14} /></Link></div>
+      <div className="sx-head"><p className="t-eyebrow">Your channels</p><Link className="btn-quiet" href={R.insights}>Insights <MhIcon name="chevRight" sw={2.2} size={14} /></Link></div>
       <div className="channels">
         {channels.map((c, i) => (
           c.connected ? (
-            <Link key={i} className="chan" href={c.href ?? R.analytics}>
+            <Link key={i} className="chan" href={c.href ?? R.insights}>
               <div className="chan-l"><span className="chan-n">{c.name}</span><span className="chan-s">{c.sub}</span></div>
               <div className="chan-spark"><MhSpark vals={c.spark} dir={c.dir} /></div>
               <div className="chan-r"><span className="chan-v">{c.value}</span><span className={`chan-d ${c.dir}`}>{c.delta}</span></div>
               <MhIcon name="chevRight" className="chan-chev" sw={1.8} size={16} />
             </Link>
           ) : (
-            <Link key={i} className="chan chan-off" href={c.href ?? R.analytics}>
+            <Link key={i} className="chan chan-off" href={c.href ?? R.insights}>
               <div className="chan-l"><span className="chan-n">{c.name}</span><span className="chan-s">Not connected</span></div>
               <span className="chan-connect">Connect</span>
             </Link>
@@ -121,10 +121,10 @@ function ChannelsSection({ channels }: { channels: Channel[] }) {
 function PlanSection({ plan }: { plan: PlanItem[] }) {
   return (
     <section className="plan">
-      <div className="plan-head"><p className="t-eyebrow">Plan</p><Link className="btn-quiet" href={R.calendar}>Calendar <MhIcon name="chevRight" sw={2.2} size={14} /></Link></div>
+      <div className="plan-head"><p className="t-eyebrow">Plan</p><Link className="btn-quiet" href={R.planner}>Open <MhIcon name="chevRight" sw={2.2} size={14} /></Link></div>
       {plan.length === 0 ? (
         <div className="plan-scroll">
-          <Link className="planempty" href={R.calendar}>
+          <Link className="planempty" href={R.planner}>
             <span className="pe-ic"><MhIcon name="calplus" sw={2} size={19} /></span>
             <div><p className="pe-t">Plan your next move</p><p className="pe-s">Get ahead of holidays and slow days</p></div>
           </Link>
@@ -132,7 +132,7 @@ function PlanSection({ plan }: { plan: PlanItem[] }) {
       ) : (
         <div className="plan-scroll">
           {plan.map((p, i) => (
-            <Link key={i} className="plan-card" href={p.href ?? R.calendar}>
+            <Link key={i} className="plan-card" href={p.href ?? R.planner}>
               <div className="plan-top"><span className="plan-ic"><MhIcon name={p.icon} sw={1.9} size={14} /></span><span className="plan-when">{p.when}</span></div>
               <p className="plan-title">{p.title}</p>
               <p className="plan-hint">{p.hint}</p>

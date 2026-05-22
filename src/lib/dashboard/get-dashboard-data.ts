@@ -80,7 +80,7 @@ export async function getDashboardData(
     actionItems.push({
       icon: 'alert',
       title: `Foot traffic dropped ${Math.abs(ftPct)}% in the last 30 days`,
-      href: '/dashboard/analytics',
+      href: '/dashboard/insights',
     })
   }
   // AM note as action item if exists
