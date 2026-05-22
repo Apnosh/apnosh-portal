@@ -28,6 +28,11 @@
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   padding-bottom: 48px;
+  /* Contain the horizontal "Worth planning" scroller so it can't blow out
+     the width inside the dashboard's flex layout (which would squish the
+     whole page on mobile). clip (not hidden) keeps the sticky header. */
+  min-width: 0;
+  overflow-x: clip;
 
   & * { box-sizing: border-box; }
   & :focus-visible { outline: 2px solid var(--brand-d); outline-offset: 2px; border-radius: 10px; }
