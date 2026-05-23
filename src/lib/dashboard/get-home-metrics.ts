@@ -208,9 +208,11 @@ function frontierFor(maps: Maps, today: Date, settleDays: number): Date {
   if (!lr) return cutoff
   return lr.getTime() < cutoff.getTime() ? lr : cutoff
 }
-/* GBP performance data under-reports for several days before it settles,
-   so we hold the frontier a full 5 days back. social/web settle fast. */
-const SETTLE = { gbp: 5, social: 1, web: 1 }
+/* The last-non-zero anchor (above) already drops trailing days that
+   haven't reported yet, so this floor only needs to be small. Keeping it
+   at GBP's typical 1-2 day reporting lag means we include every day that
+   has real data and never invent zeros. */
+const SETTLE = { gbp: 2, social: 1, web: 1 }
 
 const EMPTY: HomeMetrics = { metrics: [] }
 
