@@ -183,18 +183,34 @@ function latestOf(maps: Maps): Date | null {
   return max ? startOfDay(new Date(max + 'T00:00:00')) : null
 }
 
+/* The latest day that actually has a value > 0. Trailing zero/empty days
+   are the source's reporting lag (rows arrive late or backfill to 0), so
+   we never let them anchor the frontier and drag the average down. */
+function latestNonZeroOf(maps: Maps): Date | null {
+  let max: string | null = null
+  for (const [k, v] of maps.entries()) { if (v > 0 && (max === null || k > max)) max = k }
+  return max ? startOfDay(new Date(max + 'T00:00:00')) : null
+}
+
 /* Reliable data frontier = the most recent day we trust. Two effects:
-   the source's reporting lag (rows simply not arrived yet) AND its
-   settling window (recent rows exist but are still partial and backfill
-   — Google Business Profile notably under-reports the last ~3 days).
-   So we trust up to min(latest row, today − settleDays). */
+   the source's reporting lag (rows simply not arrived yet, or arrive as
+   zeros and backfill later) AND its settling window (recent rows exist
+   but are still partial — Google Business Profile notably under-reports
+   the last several days).
+
+   We anchor on the last day with real data (latestNonZeroOf), never on
+   trailing zero days, so the lag can vary day to day without ever
+   dragging the average to 0. The settleDays floor then drops the most
+   recent few days even if they carry partial data. */
 function frontierFor(maps: Maps, today: Date, settleDays: number): Date {
   const cutoff = startOfDay(new Date(today.getTime() - settleDays * DAY))
-  const lr = latestOf(maps)
+  const lr = latestNonZeroOf(maps) ?? latestOf(maps)
   if (!lr) return cutoff
   return lr.getTime() < cutoff.getTime() ? lr : cutoff
 }
-const SETTLE = { gbp: 3, social: 1, web: 1 }
+/* GBP performance data under-reports for several days before it settles,
+   so we hold the frontier a full 5 days back. social/web settle fast. */
+const SETTLE = { gbp: 5, social: 1, web: 1 }
 
 const EMPTY: HomeMetrics = { metrics: [] }
 
