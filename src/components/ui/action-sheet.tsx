@@ -13,7 +13,7 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import {
   X, Sparkles, MessageCircle, Building2, Wand2, ArrowRight, Megaphone,
 } from 'lucide-react'
@@ -35,6 +35,15 @@ interface SheetAction {
 
 export default function ActionSheet({ open, onClose, strategistId }: ActionSheetProps) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  /* Build a deep-link to the current page that PRESERVES existing query
+     params (e.g. ?clientId for admins) and adds the action param. */
+  const linkWith = (key: string, value: string) => {
+    const params = new URLSearchParams(searchParams?.toString() ?? '')
+    params.set(key, value)
+    return `${pathname}?${params.toString()}`
+  }
 
   /* Lock body scroll while sheet is open. */
   useEffect(() => {
@@ -67,7 +76,7 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
       icon: Wand2,
       label: 'Create content',
       description: 'Posts, graphics, and photos',
-      href: `${pathname}?request=open`,
+      href: linkWith('request', 'open'),
       tint: 'bg-purple-50 text-purple-700',
     },
     {
@@ -75,7 +84,7 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
       icon: Megaphone,
       label: 'Run a promotion',
       description: 'Deals, events, and limited-time offers',
-      href: `${pathname}?ask=${encodeURIComponent('Help me run a promotion or special offer')}`,
+      href: linkWith('ask', 'Help me run a promotion or special offer'),
       tint: 'bg-amber-50 text-amber-700',
     },
     {
@@ -91,7 +100,7 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
       icon: Sparkles,
       label: 'Ask Apnosh AI',
       description: 'Questions, ideas, instant help',
-      href: `${pathname}?chat=open`,
+      href: linkWith('chat', 'open'),
       tint: 'bg-brand-tint text-brand-dark',
     },
     {
