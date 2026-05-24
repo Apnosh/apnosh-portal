@@ -60,13 +60,16 @@ async function ensureToken(conn: ConnRow): Promise<string | null> {
   try {
     const refreshed = await refreshGoogleToken(conn.refresh_token)
     const admin = createAdminClient()
-    await admin
-      .from('channel_connections')
-      .update({
-        access_token: refreshed.access_token,
-        token_expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
-      })
-      .eq('id', conn.id)
+    const update: Record<string, unknown> = {
+      access_token: refreshed.access_token,
+      token_expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
+    }
+    /* Google sometimes rotates the refresh token on refresh. If we keep
+       using the old one it eventually gets revoked and the connection
+       breaks with "Unauthorized" — persist the rotated value. */
+    const rotated = (refreshed as { refresh_token?: string }).refresh_token
+    if (rotated && rotated !== conn.refresh_token) update.refresh_token = rotated
+    await admin.from('channel_connections').update(update).eq('id', conn.id)
     return refreshed.access_token
   } catch {
     return null
