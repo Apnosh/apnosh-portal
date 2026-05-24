@@ -3,14 +3,17 @@
 /**
  * Request content — outcome-first, guided.
  *
- * Step 1: the owner picks what they want in plain language (promote a
- * special, announce an event, book a shoot, run an ad, etc.).
- * Step 2: a short, contextual brief + optional photo + when.
+ * Step 1: the owner picks what they want in plain language.
+ * Step 2: a brief tailored to that outcome.
  *
- * Submits for real via submitContentRequest() (writes to content_queue,
- * AI-expands the brief). Each outcome maps to an allowed service_area
- * plus a template_type so the team can triage; the finer kind (shoot,
- * ad, print, google/website) rides along in template_type + detail.
+ * "Promote a special" gets a tailored Step 2: a structured run window
+ * (one day / range / recurring weekday / ongoing) that is distinct from
+ * the content deadline, a goal, an optional reservations/order link, and
+ * a one-submit "add to my calendar" that also creates the promo in the
+ * planner. Everything submits for real via submitContentRequest()
+ * (content_queue + AI brief expansion); the calendar add uses createPlan.
+ *
+ * Other outcomes keep a generic brief for now and are tailored one by one.
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react'
@@ -21,6 +24,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { submitContentRequest } from '@/lib/request-actions'
+import { createPlan } from '@/app/dashboard/analytics/plan-actions'
 
 type Platform = 'instagram' | 'facebook' | 'tiktok' | 'email'
 
@@ -37,7 +41,7 @@ interface Outcome {
 }
 
 const OUTCOMES: Outcome[] = [
-  { key: 'promo', label: 'Promote a special', hint: 'Deal or new dish', icon: Megaphone, tint: 'bg-emerald-50 text-emerald-700', area: 'social', tmpl: 'promotion', platforms: true, ask: "What's the special or new dish, and when does it run?" },
+  { key: 'promo', label: 'Promote a special', hint: 'A deal, new dish, or featured item', icon: Megaphone, tint: 'bg-emerald-50 text-emerald-700', area: 'social', tmpl: 'promotion', platforms: true, ask: "What's the special? Name the dish or offer (and a price, if there is one)." },
   { key: 'event', label: 'Announce an event', hint: 'Live music, trivia, holiday', icon: CalendarDays, tint: 'bg-blue-50 text-blue-700', area: 'social', tmpl: 'event', platforms: true, ask: "What's the event, and when is it?" },
   { key: 'photos', label: 'Post our photos', hint: 'Photos or video we took', icon: Camera, tint: 'bg-violet-50 text-violet-700', area: 'social', tmpl: 'photo', platforms: true, ask: 'What are these of? Add the photo or video below.' },
   { key: 'ad', label: 'Run an ad', hint: 'Boost a post, paid reach', icon: TrendingUp, tint: 'bg-amber-50 text-amber-700', area: 'social', tmpl: 'ad', platforms: true, ask: 'What do you want to promote, and your goal (orders, reach)?' },
@@ -60,6 +64,27 @@ const WHEN: { v: string; label: string }[] = [
   { v: 'next_week', label: 'Next week' },
   { v: 'specific', label: 'Pick a date' },
 ]
+const RUN_TYPES: { v: string; label: string }[] = [
+  { v: 'one_day', label: 'One day' },
+  { v: 'range', label: 'Date range' },
+  { v: 'recurring', label: 'Recurring' },
+  { v: 'ongoing', label: 'Ongoing' },
+]
+const GOALS: { v: string; label: string }[] = [
+  { v: 'launch', label: 'Launch something new' },
+  { v: 'slow', label: 'Fill a slow time' },
+  { v: 'holiday', label: 'Holiday or event' },
+  { v: 'visibility', label: 'Stay visible' },
+]
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+const pad = (n: number) => String(n).padStart(2, '0')
+const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+function nextWeekday(dow: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + ((dow - d.getDay() + 7) % 7))
+  return ymd(d)
+}
 
 export default function QuickRequest() {
   const supabase = useMemo(() => createClient(), [])
@@ -79,6 +104,15 @@ export default function QuickRequest() {
   const [requestId, setRequestId] = useState('')
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Promote-a-special tailored fields
+  const [runType, setRunType] = useState('')
+  const [runStart, setRunStart] = useState('')
+  const [runEnd, setRunEnd] = useState('')
+  const [recurDay, setRecurDay] = useState<number | null>(null)
+  const [goal, setGoal] = useState('')
+  const [link, setLink] = useState('')
+  const [addToCalendar, setAddToCalendar] = useState(true)
 
   useEffect(() => { const t = setTimeout(() => setShowPulse(false), 4000); return () => clearTimeout(t) }, [])
 
@@ -111,6 +145,7 @@ export default function QuickRequest() {
   function reset() {
     setStep(1); setOutcome(null); setDescription(''); setSelectedPlatforms([])
     setUrgency(''); setSpecificDate(''); setPhoto(null); setError(''); setSubmitted(false)
+    setRunType(''); setRunStart(''); setRunEnd(''); setRecurDay(null); setGoal(''); setLink(''); setAddToCalendar(true)
   }
   function pick(o: Outcome) { setOutcome(o); setStep(2); setError('') }
   function togglePlatform(p: Platform) {
@@ -131,22 +166,57 @@ export default function QuickRequest() {
     } finally { setUploading(false) }
   }
 
+  /* Run window helpers (promo). */
+  function runStartDate(): string | null {
+    if (runType === 'one_day' || runType === 'range') return runStart || null
+    if (runType === 'recurring') return recurDay != null ? nextWeekday(recurDay) : null
+    if (runType === 'ongoing') return ymd(new Date())
+    return null
+  }
+  function runSummary(): string {
+    if (runType === 'one_day' && runStart) return `one day, ${runStart}`
+    if (runType === 'range' && runStart) return `${runStart}${runEnd ? ` to ${runEnd}` : ''}`
+    if (runType === 'recurring' && recurDay != null) return `every ${WEEKDAYS[recurDay]}`
+    if (runType === 'ongoing') return 'ongoing'
+    return ''
+  }
+
+  const isPromo = outcome?.key === 'promo'
   const canSubmit = !!outcome && description.trim().length > 5 && !uploading
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!canSubmit || submitting || !outcome) return
     setSubmitting(true); setError('')
+
+    // Promo: optionally schedule it in the planner too.
+    if (isPromo && addToCalendar) {
+      const start = runStartDate()
+      if (start) {
+        const title = description.trim().split('\n')[0].slice(0, 60) || 'Special'
+        await createPlan({
+          title, kind: 'promotion', notes: description.trim(),
+          startDate: start, endDate: runType === 'range' ? (runEnd || null) : null,
+          allDay: true, status: 'planned',
+        }).catch(() => { /* non-fatal: still submit the content request */ })
+      }
+    }
+
+    const extras = isPromo
+      ? [runSummary() && `Runs: ${runSummary()}`, goal && `Goal: ${GOALS.find(g => g.v === goal)?.label}`, link && `Link: ${link}`].filter(Boolean).join('\n')
+      : ''
+    const fullDescription = extras ? `${description.trim()}\n\n${extras}` : description.trim()
+
     const res = await submitContentRequest({
       mode: 'quick',
-      description: description.trim(),
+      description: fullDescription,
       serviceArea: outcome.area,
       templateType: outcome.tmpl,
       photoUrl: photo?.url,
-      urgency: urgency || undefined,
-      deadline: urgency === 'specific' && specificDate ? specificDate : undefined,
+      urgency: isPromo ? undefined : (urgency || undefined),
+      deadline: isPromo ? (runStartDate() || undefined) : (urgency === 'specific' && specificDate ? specificDate : undefined),
       platforms: outcome.platforms ? selectedPlatforms : undefined,
-      detail: { outcome: outcome.key, platforms: selectedPlatforms },
+      detail: { outcome: outcome.key, platforms: selectedPlatforms, runType, runStart, runEnd, recurDay, goal, link },
     })
     setSubmitting(false)
     if (!res.success) { setError(res.error || 'Could not submit. Please try again.'); return }
@@ -160,7 +230,6 @@ export default function QuickRequest() {
 
   return (
     <>
-      {/* Desktop floating button (mobile uses the tab bar "+") */}
       <div className="hidden lg:flex fixed bottom-6 right-6 z-50 group">
         <span className="absolute bottom-full right-0 mb-2 px-2.5 py-1 rounded-lg bg-ink text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">Request content</span>
         {showPulse && <span className="absolute inset-0 rounded-full bg-brand-dark/30 animate-ping" />}
@@ -174,19 +243,14 @@ export default function QuickRequest() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-[fadeIn_150ms_ease]" onClick={() => { if (!submitting) setOpen(false) }} />
 
           <div className="relative w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto animate-[slideUp_200ms_ease]">
-            {/* Header */}
             <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-ink-6 px-5 py-4 flex items-center gap-2 rounded-t-2xl z-10">
               {step === 2 && !submitted && (
-                <button onClick={() => setStep(1)} className="w-8 h-8 -ml-1.5 rounded-lg hover:bg-bg-2 flex items-center justify-center text-ink-4 hover:text-ink transition-colors" aria-label="Back">
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
+                <button onClick={() => setStep(1)} className="w-8 h-8 -ml-1.5 rounded-lg hover:bg-bg-2 flex items-center justify-center text-ink-4 hover:text-ink transition-colors" aria-label="Back"><ArrowLeft className="w-4 h-4" /></button>
               )}
               <h2 className="font-[family-name:var(--font-display)] text-lg text-ink flex-1">
                 {submitted ? 'Request sent' : step === 1 ? 'What do you need?' : outcome?.label}
               </h2>
-              <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-lg hover:bg-bg-2 flex items-center justify-center text-ink-4 hover:text-ink transition-colors" aria-label="Close">
-                <X className="w-4 h-4" />
-              </button>
+              <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-lg hover:bg-bg-2 flex items-center justify-center text-ink-4 hover:text-ink transition-colors" aria-label="Close"><X className="w-4 h-4" /></button>
             </div>
 
             {submitted ? (
@@ -196,15 +260,13 @@ export default function QuickRequest() {
                   <h3 className="font-[family-name:var(--font-display)] text-xl text-ink">Request submitted</h3>
                   {requestId && <p className="text-sm text-ink-3 mt-1">Reference <span className="font-mono font-medium text-ink-2">#{requestId.slice(0, 8)}</span></p>}
                 </div>
-                <p className="text-sm text-ink-3 leading-relaxed">Your team has it and will get started. Track it under your requests.</p>
+                <p className="text-sm text-ink-3 leading-relaxed">Your team has it and will get started.{isPromo && addToCalendar && runStartDate() ? ' It’s on your calendar too.' : ''} Track it under your requests.</p>
                 <a href="/dashboard/social/requests" className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-dark hover:underline">View your requests <ArrowRight className="w-3.5 h-3.5" /></a>
               </div>
             ) : step === 1 ? (
-              /* Step 1: outcome grid */
               <div className="p-4 grid grid-cols-2 gap-2.5">
                 {OUTCOMES.map(o => (
-                  <button key={o.key} type="button" onClick={() => pick(o)}
-                    className="flex flex-col items-start gap-2 p-3.5 rounded-2xl border border-ink-6 bg-white hover:border-ink-5 hover:shadow-sm active:scale-[0.98] transition-all text-left">
+                  <button key={o.key} type="button" onClick={() => pick(o)} className="flex flex-col items-start gap-2 p-3.5 rounded-2xl border border-ink-6 bg-white hover:border-ink-5 hover:shadow-sm active:scale-[0.98] transition-all text-left">
                     <span className={`inline-flex items-center justify-center w-10 h-10 rounded-xl ${o.tint}`}><o.icon className="w-5 h-5" /></span>
                     <span className="text-[14px] font-semibold text-ink leading-tight">{o.label}</span>
                     <span className="text-[11.5px] text-ink-4 leading-tight">{o.hint}</span>
@@ -212,36 +274,74 @@ export default function QuickRequest() {
                 ))}
               </div>
             ) : (
-              /* Step 2: contextual brief */
               <form onSubmit={handleSubmit} className="p-5 space-y-5">
                 {error && <p className="text-[13px] font-medium text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</p>}
 
                 <div>
-                  <label className="block text-sm font-medium text-ink mb-1.5">Tell us about it</label>
-                  <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder={outcome?.ask} rows={3}
-                    className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand resize-none transition-colors" autoFocus />
+                  <label className="block text-sm font-medium text-ink mb-1.5">{isPromo ? "What's the special?" : 'Tell us about it'}</label>
+                  <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder={outcome?.ask} rows={3} autoFocus
+                    className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand resize-none transition-colors" />
                 </div>
+
+                {/* ── Promote a special: tailored fields ── */}
+                {isPromo && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-ink mb-2">When does it run?</label>
+                      <div className="flex flex-wrap gap-2">
+                        {RUN_TYPES.map(r => <button key={r.v} type="button" onClick={() => setRunType(r.v)} className={chip(runType === r.v)}>{r.label}</button>)}
+                      </div>
+                      {runType === 'one_day' && (
+                        <input type="date" value={runStart} onChange={e => setRunStart(e.target.value)} className="mt-2 w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
+                      )}
+                      {runType === 'range' && (
+                        <div className="mt-2 flex gap-2">
+                          <input type="date" value={runStart} onChange={e => setRunStart(e.target.value)} className="flex-1 min-w-0 bg-bg-2 border border-ink-6 rounded-xl px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
+                          <input type="date" value={runEnd} min={runStart} onChange={e => setRunEnd(e.target.value)} className="flex-1 min-w-0 bg-bg-2 border border-ink-6 rounded-xl px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
+                        </div>
+                      )}
+                      {runType === 'recurring' && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {WEEKDAYS.map((d, i) => <button key={d} type="button" onClick={() => setRecurDay(i)} className={chip(recurDay === i)}>{d}</button>)}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-ink mb-2">Goal <span className="text-ink-4 font-normal">(optional)</span></label>
+                      <div className="flex flex-wrap gap-2">
+                        {GOALS.map(g => <button key={g.v} type="button" onClick={() => setGoal(goal === g.v ? '' : g.v)} className={chip(goal === g.v)}>{g.label}</button>)}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-ink mb-1.5">Reservations or order link <span className="text-ink-4 font-normal">(optional)</span></label>
+                      <input type="url" value={link} onChange={e => setLink(e.target.value)} placeholder="https://…" className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
+                    </div>
+                  </>
+                )}
 
                 {outcome?.platforms && (
                   <div>
                     <label className="block text-sm font-medium text-ink mb-2">Which platforms?</label>
                     <div className="flex flex-wrap gap-2">
-                      {PLATFORMS.map(p => (
-                        <button key={p.id} type="button" onClick={() => togglePlatform(p.id)} className={chip(selectedPlatforms.includes(p.id))}><p.icon className="w-3.5 h-3.5" /> {p.label}</button>
-                      ))}
+                      {PLATFORMS.map(p => <button key={p.id} type="button" onClick={() => togglePlatform(p.id)} className={chip(selectedPlatforms.includes(p.id))}><p.icon className="w-3.5 h-3.5" /> {p.label}</button>)}
                     </div>
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-sm font-medium text-ink mb-2">When do you need it?</label>
-                  <div className="flex flex-wrap gap-2">
-                    {WHEN.map(w => <button key={w.v} type="button" onClick={() => setUrgency(w.v)} className={chip(urgency === w.v)}>{w.label}</button>)}
+                {/* Content deadline — only for non-promo (promo uses the run window) */}
+                {!isPromo && (
+                  <div>
+                    <label className="block text-sm font-medium text-ink mb-2">When do you need it?</label>
+                    <div className="flex flex-wrap gap-2">
+                      {WHEN.map(w => <button key={w.v} type="button" onClick={() => setUrgency(w.v)} className={chip(urgency === w.v)}>{w.label}</button>)}
+                    </div>
+                    {urgency === 'specific' && (
+                      <input type="date" value={specificDate} onChange={e => setSpecificDate(e.target.value)} className="mt-2 w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
+                    )}
                   </div>
-                  {urgency === 'specific' && (
-                    <input type="date" value={specificDate} onChange={e => setSpecificDate(e.target.value)} className="mt-2 w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors" />
-                  )}
-                </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-ink mb-1.5">Add a photo {outcome?.key === 'photos' ? '' : '(optional)'}</label>
@@ -259,6 +359,16 @@ export default function QuickRequest() {
                     </button>
                   )}
                 </div>
+
+                {isPromo && (
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <button type="button" role="switch" aria-checked={addToCalendar} onClick={() => setAddToCalendar(v => !v)}
+                      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${addToCalendar ? 'bg-brand' : 'bg-ink-6'}`}>
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${addToCalendar ? 'translate-x-5' : ''}`} />
+                    </button>
+                    <span className="text-sm text-ink-2">Also add this to my calendar</span>
+                  </label>
+                )}
 
                 <button type="submit" disabled={!canSubmit || submitting} className="w-full py-3 rounded-xl bg-brand-dark text-white text-sm font-medium flex items-center justify-center gap-2 hover:bg-brand-dark/90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:pointer-events-none">
                   {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : <>Submit request <ArrowRight className="w-4 h-4" /></>}
