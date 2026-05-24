@@ -9,12 +9,16 @@ interface RequestPayload {
   mode: 'quick' | 'template' | 'detailed'
   description: string
   templateType?: string
+  /** Allowed: 'social' | 'website' | 'local_seo' | 'email_sms'. Defaults social. */
+  serviceArea?: string
   photoUrl?: string
   urgency?: string
   deadline?: string
   platforms?: string[]
   detail?: Record<string, unknown>
 }
+
+const SERVICE_AREAS = new Set(['social', 'website', 'local_seo', 'email_sms'])
 
 export async function submitContentRequest(payload: RequestPayload) {
   const supabase = await createClient()
@@ -46,7 +50,7 @@ export async function submitContentRequest(payload: RequestPayload) {
       request_type: 'client_request',
       submitted_by: 'client',
       submitted_by_user_id: user.id,
-      service_area: 'social',
+      service_area: payload.serviceArea && SERVICE_AREAS.has(payload.serviceArea) ? payload.serviceArea : 'social',
       content_format: payload.templateType || 'general',
       input_text: payload.description,
       input_photo_url: payload.photoUrl || null,
