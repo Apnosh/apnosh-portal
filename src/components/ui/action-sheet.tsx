@@ -15,7 +15,7 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import {
-  X, Sparkles, MessageCircle, Building2, Wand2, ArrowRight, Megaphone,
+  X, Sparkles, MessageCircle, Building2, Wand2, ArrowRight, CalendarDays, Star,
 } from 'lucide-react'
 
 interface ActionSheetProps {
@@ -72,26 +72,34 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
      Plain paths navigate to a real page. */
   const actions: SheetAction[] = [
     {
+      key: 'plan',
+      icon: CalendarDays,
+      label: 'Plan a moment',
+      description: 'Promotions, events, and specials',
+      href: '/dashboard/analytics?plan=new',
+      tint: 'bg-emerald-50 text-emerald-700',
+    },
+    {
       key: 'create',
       icon: Wand2,
-      label: 'Create content',
-      description: 'Posts, graphics, and photos',
+      label: 'Request content',
+      description: 'Posts, photos, video, graphics',
       href: linkWith('request', 'open'),
       tint: 'bg-purple-50 text-purple-700',
     },
     {
-      key: 'promotion',
-      icon: Megaphone,
-      label: 'Run a promotion',
-      description: 'Deals, events, and limited-time offers',
-      href: linkWith('ask', 'Help me run a promotion or special offer'),
+      key: 'reviews',
+      icon: Star,
+      label: 'Reply to reviews',
+      description: 'Respond to recent customer reviews',
+      href: '/dashboard/local-seo/reviews',
       tint: 'bg-amber-50 text-amber-700',
     },
     {
       key: 'business',
       icon: Building2,
-      label: 'Update business info',
-      description: 'Hours, contact, and description',
+      label: 'Update business',
+      description: 'Hours, menu, and info',
       href: '/dashboard/business-info',
       tint: 'bg-blue-50 text-blue-700',
     },
@@ -109,7 +117,7 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
       label: 'Message your strategist',
       description: 'Talk to your human team',
       href: strategistId ? `/dashboard/messages?to=${strategistId}` : '/dashboard/messages',
-      tint: 'bg-emerald-50 text-emerald-700',
+      tint: 'bg-rose-50 text-rose-700',
     },
   ]
 

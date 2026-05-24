@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import type { PlanFeed, PlanFeedItem } from '@/lib/dashboard/get-plan-feed'
 import type { AssignablePerson } from '@/lib/dashboard/get-plan-feed'
 import {
@@ -126,6 +126,19 @@ export default function PlanView({ feed, opportunities, people, activeClientId }
   const [creating, setCreating] = useState<{ date: string; prefill?: Partial<FormState> } | null>(null)
   const showSheet = editing !== null || creating !== null
   const multiClient = feed.clients.length > 1
+
+  /* Deep link from the "+" create menu: /dashboard/analytics?plan=new
+     opens the new-plan sheet straight away, then strips the param. */
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    if (searchParams?.get('plan') === 'new') {
+      setCreating({ date: todayStr })
+      const p = new URLSearchParams(searchParams.toString())
+      p.delete('plan')
+      router.replace(`/dashboard/analytics${p.toString() ? `?${p.toString()}` : ''}`)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   const dayMap = useMemo(() => {
     const m = new Map<string, PlanFeedItem[]>()
