@@ -107,10 +107,21 @@ interface VM {
   breakdown: HomeMetric['week'][number]['breakdown']
 }
 
+/* The most recent period that actually has settled data. Used as the
+   default so the graph never lands on an empty, lagged current week
+   (e.g. early in the week when every day is still beyond the data
+   frontier). The user can still navigate to the current period. */
+function lastWithDataIdx(insts: HomeInstance[]): number {
+  for (let i = insts.length - 1; i >= 0; i--) {
+    if (insts[i].vals.some(v => v != null)) return i
+  }
+  return insts.length - 1
+}
+
 function buildVM(metric: HomeMetric, cur: Range, instIdx: number | null): VM | null {
   const insts = metric[cur]
   if (!insts.length) return null
-  const idx = instIdx == null || instIdx > insts.length - 1 || instIdx < 0 ? insts.length - 1 : instIdx
+  const idx = instIdx == null || instIdx > insts.length - 1 || instIdx < 0 ? lastWithDataIdx(insts) : instIdx
   const inst = insts[idx]
   const isCur = idx === insts.length - 1
   const ago = insts.length - 1 - idx
