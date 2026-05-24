@@ -4,16 +4,16 @@
  * Request content — outcome-first, guided.
  *
  * Step 1: the owner picks what they want in plain language.
- * Step 2: a brief tailored to that outcome.
+ * Step 2: a brief tailored to that outcome (config-driven).
  *
- * "Promote a special" gets a tailored Step 2: a structured run window
- * (one day / range / recurring weekday / ongoing) that is distinct from
- * the content deadline, a goal, an optional reservations/order link, and
- * a one-submit "add to my calendar" that also creates the promo in the
- * planner. Everything submits for real via submitContentRequest()
- * (content_queue + AI brief expansion); the calendar add uses createPlan.
+ * Scheduled outcomes ("Promote a special", "Announce an event") get a
+ * structured run window (one day / range / recurring weekday / ongoing)
+ * separate from the content deadline, optional time + link + goal, and a
+ * one-submit "add to my calendar" that also creates the item in the
+ * planner via createPlan. Everything submits for real via
+ * submitContentRequest() (content_queue + AI brief expansion).
  *
- * Other outcomes keep a generic brief for now and are tailored one by one.
+ * Other outcomes keep the generic brief and are tailored one by one.
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react'
@@ -38,11 +38,18 @@ interface Outcome {
   tmpl: string
   platforms: boolean
   ask: string
+  // tailored Step 2 config
+  scheduled?: boolean          // run window + "add to calendar"
+  ongoing?: boolean            // offer an "Ongoing" run type (promos)
+  timed?: boolean              // offer a start-time (events)
+  goal?: boolean               // offer goal chips (promos)
+  linkLabel?: string           // optional link field
+  planKind?: 'promotion' | 'event'
 }
 
 const OUTCOMES: Outcome[] = [
-  { key: 'promo', label: 'Promote a special', hint: 'A deal, new dish, or featured item', icon: Megaphone, tint: 'bg-emerald-50 text-emerald-700', area: 'social', tmpl: 'promotion', platforms: true, ask: "What's the special? Name the dish or offer (and a price, if there is one)." },
-  { key: 'event', label: 'Announce an event', hint: 'Live music, trivia, holiday', icon: CalendarDays, tint: 'bg-blue-50 text-blue-700', area: 'social', tmpl: 'event', platforms: true, ask: "What's the event, and when is it?" },
+  { key: 'promo', label: 'Promote a special', hint: 'A deal, new dish, or featured item', icon: Megaphone, tint: 'bg-emerald-50 text-emerald-700', area: 'social', tmpl: 'promotion', platforms: true, ask: "What's the special? Name the dish or offer (and a price, if there is one).", scheduled: true, ongoing: true, goal: true, linkLabel: 'Reservations or order link', planKind: 'promotion' },
+  { key: 'event', label: 'Announce an event', hint: 'Live music, trivia, holiday', icon: CalendarDays, tint: 'bg-blue-50 text-blue-700', area: 'social', tmpl: 'event', platforms: true, ask: "What's the event? Include anything guests should know.", scheduled: true, timed: true, linkLabel: 'RSVP or ticket link', planKind: 'event' },
   { key: 'photos', label: 'Post our photos', hint: 'Photos or video we took', icon: Camera, tint: 'bg-violet-50 text-violet-700', area: 'social', tmpl: 'photo', platforms: true, ask: 'What are these of? Add the photo or video below.' },
   { key: 'ad', label: 'Run an ad', hint: 'Boost a post, paid reach', icon: TrendingUp, tint: 'bg-amber-50 text-amber-700', area: 'social', tmpl: 'ad', platforms: true, ask: 'What do you want to promote, and your goal (orders, reach)?' },
   { key: 'email', label: 'Email or text', hint: 'Reach your customers', icon: Mail, tint: 'bg-rose-50 text-rose-700', area: 'email_sms', tmpl: 'email', platforms: false, ask: "What's the message and the offer?" },
@@ -59,32 +66,21 @@ const PLATFORMS: { id: Platform; label: string; icon: typeof Camera }[] = [
   { id: 'email', label: 'Email', icon: Mail },
 ]
 const WHEN: { v: string; label: string }[] = [
-  { v: 'asap', label: 'ASAP' },
-  { v: 'this_week', label: 'This week' },
-  { v: 'next_week', label: 'Next week' },
-  { v: 'specific', label: 'Pick a date' },
+  { v: 'asap', label: 'ASAP' }, { v: 'this_week', label: 'This week' }, { v: 'next_week', label: 'Next week' }, { v: 'specific', label: 'Pick a date' },
 ]
-const RUN_TYPES: { v: string; label: string }[] = [
-  { v: 'one_day', label: 'One day' },
-  { v: 'range', label: 'Date range' },
-  { v: 'recurring', label: 'Recurring' },
-  { v: 'ongoing', label: 'Ongoing' },
+const BASE_RUN: { v: string; label: string }[] = [
+  { v: 'one_day', label: 'One day' }, { v: 'range', label: 'Date range' }, { v: 'recurring', label: 'Recurring' },
 ]
+const ONGOING = { v: 'ongoing', label: 'Ongoing' }
 const GOALS: { v: string; label: string }[] = [
-  { v: 'launch', label: 'Launch something new' },
-  { v: 'slow', label: 'Fill a slow time' },
-  { v: 'holiday', label: 'Holiday or event' },
-  { v: 'visibility', label: 'Stay visible' },
+  { v: 'launch', label: 'Launch something new' }, { v: 'slow', label: 'Fill a slow time' }, { v: 'holiday', label: 'Holiday or event' }, { v: 'visibility', label: 'Stay visible' },
 ]
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-function nextWeekday(dow: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + ((dow - d.getDay() + 7) % 7))
-  return ymd(d)
-}
+function nextWeekday(dow: number): string { const d = new Date(); d.setDate(d.getDate() + ((dow - d.getDay() + 7) % 7)); return ymd(d) }
+function fmtTime(t: string): string { const [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'PM' : 'AM'; const h12 = h % 12 === 0 ? 12 : h % 12; return `${h12}:${pad(m)} ${ap}` }
 
 export default function QuickRequest() {
   const supabase = useMemo(() => createClient(), [])
@@ -105,11 +101,12 @@ export default function QuickRequest() {
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Promote-a-special tailored fields
+  // Scheduled-outcome fields (promo + event)
   const [runType, setRunType] = useState('')
   const [runStart, setRunStart] = useState('')
   const [runEnd, setRunEnd] = useState('')
   const [recurDay, setRecurDay] = useState<number | null>(null)
+  const [startTime, setStartTime] = useState('')
   const [goal, setGoal] = useState('')
   const [link, setLink] = useState('')
   const [addToCalendar, setAddToCalendar] = useState(true)
@@ -145,12 +142,10 @@ export default function QuickRequest() {
   function reset() {
     setStep(1); setOutcome(null); setDescription(''); setSelectedPlatforms([])
     setUrgency(''); setSpecificDate(''); setPhoto(null); setError(''); setSubmitted(false)
-    setRunType(''); setRunStart(''); setRunEnd(''); setRecurDay(null); setGoal(''); setLink(''); setAddToCalendar(true)
+    setRunType(''); setRunStart(''); setRunEnd(''); setRecurDay(null); setStartTime(''); setGoal(''); setLink(''); setAddToCalendar(true)
   }
   function pick(o: Outcome) { setOutcome(o); setStep(2); setError('') }
-  function togglePlatform(p: Platform) {
-    setSelectedPlatforms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])
-  }
+  function togglePlatform(p: Platform) { setSelectedPlatforms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]) }
 
   async function onPickPhoto(file: File) {
     setError(''); setUploading(true)
@@ -166,7 +161,6 @@ export default function QuickRequest() {
     } finally { setUploading(false) }
   }
 
-  /* Run window helpers (promo). */
   function runStartDate(): string | null {
     if (runType === 'one_day' || runType === 'range') return runStart || null
     if (runType === 'recurring') return recurDay != null ? nextWeekday(recurDay) : null
@@ -174,14 +168,16 @@ export default function QuickRequest() {
     return null
   }
   function runSummary(): string {
-    if (runType === 'one_day' && runStart) return `one day, ${runStart}`
+    if (runType === 'one_day' && runStart) return runStart
     if (runType === 'range' && runStart) return `${runStart}${runEnd ? ` to ${runEnd}` : ''}`
     if (runType === 'recurring' && recurDay != null) return `every ${WEEKDAYS[recurDay]}`
     if (runType === 'ongoing') return 'ongoing'
     return ''
   }
 
-  const isPromo = outcome?.key === 'promo'
+  const scheduled = !!outcome?.scheduled
+  const isEvent = outcome?.key === 'event'
+  const runTypes = outcome?.ongoing ? [...BASE_RUN, ONGOING] : BASE_RUN
   const canSubmit = !!outcome && description.trim().length > 5 && !uploading
 
   async function handleSubmit(e: React.FormEvent) {
@@ -189,23 +185,27 @@ export default function QuickRequest() {
     if (!canSubmit || submitting || !outcome) return
     setSubmitting(true); setError('')
 
-    // Promo: optionally schedule it in the planner too.
-    if (isPromo && addToCalendar) {
+    if (scheduled && addToCalendar) {
       const start = runStartDate()
       if (start) {
-        const title = description.trim().split('\n')[0].slice(0, 60) || 'Special'
+        const title = description.trim().split('\n')[0].slice(0, 60) || outcome.label
+        const timed = !!(outcome.timed && startTime)
         await createPlan({
-          title, kind: 'promotion', notes: description.trim(),
+          title, kind: outcome.planKind || 'event', notes: description.trim(),
           startDate: start, endDate: runType === 'range' ? (runEnd || null) : null,
-          allDay: true, status: 'planned',
-        }).catch(() => { /* non-fatal: still submit the content request */ })
+          allDay: !timed, startTime: timed ? startTime : null, status: 'planned',
+        }).catch(() => { /* non-fatal */ })
       }
     }
 
-    const extras = isPromo
-      ? [runSummary() && `Runs: ${runSummary()}`, goal && `Goal: ${GOALS.find(g => g.v === goal)?.label}`, link && `Link: ${link}`].filter(Boolean).join('\n')
-      : ''
-    const fullDescription = extras ? `${description.trim()}\n\n${extras}` : description.trim()
+    const parts: string[] = []
+    if (scheduled) {
+      if (runSummary()) parts.push(`${isEvent ? 'On' : 'Runs'}: ${runSummary()}`)
+      if (outcome.timed && startTime) parts.push(`Time: ${fmtTime(startTime)}`)
+      if (outcome.goal && goal) parts.push(`Goal: ${GOALS.find(g => g.v === goal)?.label}`)
+      if (outcome.linkLabel && link) parts.push(`Link: ${link}`)
+    }
+    const fullDescription = parts.length ? `${description.trim()}\n\n${parts.join('\n')}` : description.trim()
 
     const res = await submitContentRequest({
       mode: 'quick',
@@ -213,10 +213,10 @@ export default function QuickRequest() {
       serviceArea: outcome.area,
       templateType: outcome.tmpl,
       photoUrl: photo?.url,
-      urgency: isPromo ? undefined : (urgency || undefined),
-      deadline: isPromo ? (runStartDate() || undefined) : (urgency === 'specific' && specificDate ? specificDate : undefined),
+      urgency: scheduled ? undefined : (urgency || undefined),
+      deadline: scheduled ? (runStartDate() || undefined) : (urgency === 'specific' && specificDate ? specificDate : undefined),
       platforms: outcome.platforms ? selectedPlatforms : undefined,
-      detail: { outcome: outcome.key, platforms: selectedPlatforms, runType, runStart, runEnd, recurDay, goal, link },
+      detail: { outcome: outcome.key, platforms: selectedPlatforms, runType, runStart, runEnd, recurDay, startTime, goal, link },
     })
     setSubmitting(false)
     if (!res.success) { setError(res.error || 'Could not submit. Please try again.'); return }
@@ -247,9 +247,7 @@ export default function QuickRequest() {
               {step === 2 && !submitted && (
                 <button onClick={() => setStep(1)} className="w-8 h-8 -ml-1.5 rounded-lg hover:bg-bg-2 flex items-center justify-center text-ink-4 hover:text-ink transition-colors" aria-label="Back"><ArrowLeft className="w-4 h-4" /></button>
               )}
-              <h2 className="font-[family-name:var(--font-display)] text-lg text-ink flex-1">
-                {submitted ? 'Request sent' : step === 1 ? 'What do you need?' : outcome?.label}
-              </h2>
+              <h2 className="font-[family-name:var(--font-display)] text-lg text-ink flex-1">{submitted ? 'Request sent' : step === 1 ? 'What do you need?' : outcome?.label}</h2>
               <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-lg hover:bg-bg-2 flex items-center justify-center text-ink-4 hover:text-ink transition-colors" aria-label="Close"><X className="w-4 h-4" /></button>
             </div>
 
@@ -260,7 +258,7 @@ export default function QuickRequest() {
                   <h3 className="font-[family-name:var(--font-display)] text-xl text-ink">Request submitted</h3>
                   {requestId && <p className="text-sm text-ink-3 mt-1">Reference <span className="font-mono font-medium text-ink-2">#{requestId.slice(0, 8)}</span></p>}
                 </div>
-                <p className="text-sm text-ink-3 leading-relaxed">Your team has it and will get started.{isPromo && addToCalendar && runStartDate() ? ' It’s on your calendar too.' : ''} Track it under your requests.</p>
+                <p className="text-sm text-ink-3 leading-relaxed">Your team has it and will get started.{scheduled && addToCalendar && runStartDate() ? ' It’s on your calendar too.' : ''} Track it under your requests.</p>
                 <a href="/dashboard/social/requests" className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-dark hover:underline">View your requests <ArrowRight className="w-3.5 h-3.5" /></a>
               </div>
             ) : step === 1 ? (
@@ -278,22 +276,19 @@ export default function QuickRequest() {
                 {error && <p className="text-[13px] font-medium text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</p>}
 
                 <div>
-                  <label className="block text-sm font-medium text-ink mb-1.5">{isPromo ? "What's the special?" : 'Tell us about it'}</label>
+                  <label className="block text-sm font-medium text-ink mb-1.5">{outcome?.key === 'promo' ? "What's the special?" : isEvent ? "What's the event?" : 'Tell us about it'}</label>
                   <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder={outcome?.ask} rows={3} autoFocus
                     className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand resize-none transition-colors" />
                 </div>
 
-                {/* ── Promote a special: tailored fields ── */}
-                {isPromo && (
+                {scheduled && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-ink mb-2">When does it run?</label>
+                      <label className="block text-sm font-medium text-ink mb-2">{isEvent ? 'When is it?' : 'When does it run?'}</label>
                       <div className="flex flex-wrap gap-2">
-                        {RUN_TYPES.map(r => <button key={r.v} type="button" onClick={() => setRunType(r.v)} className={chip(runType === r.v)}>{r.label}</button>)}
+                        {runTypes.map(r => <button key={r.v} type="button" onClick={() => setRunType(r.v)} className={chip(runType === r.v)}>{r.label}</button>)}
                       </div>
-                      {runType === 'one_day' && (
-                        <input type="date" value={runStart} onChange={e => setRunStart(e.target.value)} className="mt-2 w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
-                      )}
+                      {runType === 'one_day' && <input type="date" value={runStart} onChange={e => setRunStart(e.target.value)} className="mt-2 w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />}
                       {runType === 'range' && (
                         <div className="mt-2 flex gap-2">
                           <input type="date" value={runStart} onChange={e => setRunStart(e.target.value)} className="flex-1 min-w-0 bg-bg-2 border border-ink-6 rounded-xl px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
@@ -301,45 +296,45 @@ export default function QuickRequest() {
                         </div>
                       )}
                       {runType === 'recurring' && (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {WEEKDAYS.map((d, i) => <button key={d} type="button" onClick={() => setRecurDay(i)} className={chip(recurDay === i)}>{d}</button>)}
-                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">{WEEKDAYS.map((d, i) => <button key={d} type="button" onClick={() => setRecurDay(i)} className={chip(recurDay === i)}>{d}</button>)}</div>
                       )}
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-ink mb-2">Goal <span className="text-ink-4 font-normal">(optional)</span></label>
-                      <div className="flex flex-wrap gap-2">
-                        {GOALS.map(g => <button key={g.v} type="button" onClick={() => setGoal(goal === g.v ? '' : g.v)} className={chip(goal === g.v)}>{g.label}</button>)}
+                    {outcome?.timed && runType && runType !== 'ongoing' && (
+                      <div>
+                        <label className="block text-sm font-medium text-ink mb-1.5">Start time <span className="text-ink-4 font-normal">(optional)</span></label>
+                        <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
                       </div>
-                    </div>
+                    )}
 
-                    <div>
-                      <label className="block text-sm font-medium text-ink mb-1.5">Reservations or order link <span className="text-ink-4 font-normal">(optional)</span></label>
-                      <input type="url" value={link} onChange={e => setLink(e.target.value)} placeholder="https://…" className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
-                    </div>
+                    {outcome?.goal && (
+                      <div>
+                        <label className="block text-sm font-medium text-ink mb-2">Goal <span className="text-ink-4 font-normal">(optional)</span></label>
+                        <div className="flex flex-wrap gap-2">{GOALS.map(g => <button key={g.v} type="button" onClick={() => setGoal(goal === g.v ? '' : g.v)} className={chip(goal === g.v)}>{g.label}</button>)}</div>
+                      </div>
+                    )}
+
+                    {outcome?.linkLabel && (
+                      <div>
+                        <label className="block text-sm font-medium text-ink mb-1.5">{outcome.linkLabel} <span className="text-ink-4 font-normal">(optional)</span></label>
+                        <input type="url" value={link} onChange={e => setLink(e.target.value)} placeholder="https://…" className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
+                      </div>
+                    )}
                   </>
                 )}
 
                 {outcome?.platforms && (
                   <div>
                     <label className="block text-sm font-medium text-ink mb-2">Which platforms?</label>
-                    <div className="flex flex-wrap gap-2">
-                      {PLATFORMS.map(p => <button key={p.id} type="button" onClick={() => togglePlatform(p.id)} className={chip(selectedPlatforms.includes(p.id))}><p.icon className="w-3.5 h-3.5" /> {p.label}</button>)}
-                    </div>
+                    <div className="flex flex-wrap gap-2">{PLATFORMS.map(p => <button key={p.id} type="button" onClick={() => togglePlatform(p.id)} className={chip(selectedPlatforms.includes(p.id))}><p.icon className="w-3.5 h-3.5" /> {p.label}</button>)}</div>
                   </div>
                 )}
 
-                {/* Content deadline — only for non-promo (promo uses the run window) */}
-                {!isPromo && (
+                {!scheduled && (
                   <div>
                     <label className="block text-sm font-medium text-ink mb-2">When do you need it?</label>
-                    <div className="flex flex-wrap gap-2">
-                      {WHEN.map(w => <button key={w.v} type="button" onClick={() => setUrgency(w.v)} className={chip(urgency === w.v)}>{w.label}</button>)}
-                    </div>
-                    {urgency === 'specific' && (
-                      <input type="date" value={specificDate} onChange={e => setSpecificDate(e.target.value)} className="mt-2 w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
-                    )}
+                    <div className="flex flex-wrap gap-2">{WHEN.map(w => <button key={w.v} type="button" onClick={() => setUrgency(w.v)} className={chip(urgency === w.v)}>{w.label}</button>)}</div>
+                    {urgency === 'specific' && <input type="date" value={specificDate} onChange={e => setSpecificDate(e.target.value)} className="mt-2 w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />}
                   </div>
                 )}
 
@@ -360,10 +355,9 @@ export default function QuickRequest() {
                   )}
                 </div>
 
-                {isPromo && (
+                {scheduled && (
                   <label className="flex items-center gap-3 cursor-pointer select-none">
-                    <button type="button" role="switch" aria-checked={addToCalendar} onClick={() => setAddToCalendar(v => !v)}
-                      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${addToCalendar ? 'bg-brand' : 'bg-ink-6'}`}>
+                    <button type="button" role="switch" aria-checked={addToCalendar} onClick={() => setAddToCalendar(v => !v)} className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${addToCalendar ? 'bg-brand' : 'bg-ink-6'}`}>
                       <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${addToCalendar ? 'translate-x-5' : ''}`} />
                     </button>
                     <span className="text-sm text-ink-2">Also add this to my calendar</span>
