@@ -277,8 +277,8 @@ export default function QuickRequest() {
 
                 <div>
                   <label className="block text-sm font-medium text-ink mb-1.5">{outcome?.key === 'promo' ? "What's the special?" : isEvent ? "What's the event?" : 'Tell us about it'}</label>
-                  <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder={outcome?.ask} rows={3} autoFocus
-                    className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand resize-none transition-colors" />
+                  <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder={outcome?.ask} rows={3}
+                    className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-base text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand resize-none transition-colors" />
                 </div>
 
                 {scheduled && (
@@ -288,11 +288,11 @@ export default function QuickRequest() {
                       <div className="flex flex-wrap gap-2">
                         {runTypes.map(r => <button key={r.v} type="button" onClick={() => setRunType(r.v)} className={chip(runType === r.v)}>{r.label}</button>)}
                       </div>
-                      {runType === 'one_day' && <input type="date" value={runStart} onChange={e => setRunStart(e.target.value)} className="mt-2 w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />}
+                      {runType === 'one_day' && <input type="date" value={runStart} onChange={e => setRunStart(e.target.value)} className="mt-2 w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-base text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />}
                       {runType === 'range' && (
                         <div className="mt-2 flex gap-2">
-                          <input type="date" value={runStart} onChange={e => setRunStart(e.target.value)} className="flex-1 min-w-0 bg-bg-2 border border-ink-6 rounded-xl px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
-                          <input type="date" value={runEnd} min={runStart} onChange={e => setRunEnd(e.target.value)} className="flex-1 min-w-0 bg-bg-2 border border-ink-6 rounded-xl px-3 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
+                          <input type="date" value={runStart} onChange={e => setRunStart(e.target.value)} className="flex-1 min-w-0 bg-bg-2 border border-ink-6 rounded-xl px-3 py-2.5 text-base text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
+                          <input type="date" value={runEnd} min={runStart} onChange={e => setRunEnd(e.target.value)} className="flex-1 min-w-0 bg-bg-2 border border-ink-6 rounded-xl px-3 py-2.5 text-base text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
                         </div>
                       )}
                       {runType === 'recurring' && (
@@ -303,7 +303,7 @@ export default function QuickRequest() {
                     {outcome?.timed && runType && runType !== 'ongoing' && (
                       <div>
                         <label className="block text-sm font-medium text-ink mb-1.5">Start time <span className="text-ink-4 font-normal">(optional)</span></label>
-                        <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
+                        <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-base text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
                       </div>
                     )}
 
@@ -317,7 +317,7 @@ export default function QuickRequest() {
                     {outcome?.linkLabel && (
                       <div>
                         <label className="block text-sm font-medium text-ink mb-1.5">{outcome.linkLabel} <span className="text-ink-4 font-normal">(optional)</span></label>
-                        <input type="url" value={link} onChange={e => setLink(e.target.value)} placeholder="https://…" className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
+                        <input type="url" value={link} onChange={e => setLink(e.target.value)} placeholder="https://…" className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-base text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
                       </div>
                     )}
                   </>
@@ -334,7 +334,7 @@ export default function QuickRequest() {
                   <div>
                     <label className="block text-sm font-medium text-ink mb-2">When do you need it?</label>
                     <div className="flex flex-wrap gap-2">{WHEN.map(w => <button key={w.v} type="button" onClick={() => setUrgency(w.v)} className={chip(urgency === w.v)}>{w.label}</button>)}</div>
-                    {urgency === 'specific' && <input type="date" value={specificDate} onChange={e => setSpecificDate(e.target.value)} className="mt-2 w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />}
+                    {urgency === 'specific' && <input type="date" value={specificDate} onChange={e => setSpecificDate(e.target.value)} className="mt-2 w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-base text-ink focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />}
                   </div>
                 )}
 
