@@ -19,7 +19,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import {
-  Plus, X, ArrowLeft, ArrowRight, Upload, Loader2, CheckCircle2,
+  Plus, X, ArrowLeft, ArrowRight, ChevronDown, Upload, Loader2, CheckCircle2,
   Camera, Globe, Video, Mail, Megaphone, CalendarDays, TrendingUp, Aperture, Printer, Sparkles,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -110,6 +110,7 @@ export default function QuickRequest() {
   const [goal, setGoal] = useState('')
   const [link, setLink] = useState('')
   const [addToCalendar, setAddToCalendar] = useState(true)
+  const [showMore, setShowMore] = useState(false)
 
   useEffect(() => { const t = setTimeout(() => setShowPulse(false), 4000); return () => clearTimeout(t) }, [])
 
@@ -142,7 +143,7 @@ export default function QuickRequest() {
   function reset() {
     setStep(1); setOutcome(null); setDescription(''); setSelectedPlatforms([])
     setUrgency(''); setSpecificDate(''); setPhoto(null); setError(''); setSubmitted(false)
-    setRunType(''); setRunStart(''); setRunEnd(''); setRecurDay(null); setStartTime(''); setGoal(''); setLink(''); setAddToCalendar(true)
+    setRunType(''); setRunStart(''); setRunEnd(''); setRecurDay(null); setStartTime(''); setGoal(''); setLink(''); setAddToCalendar(true); setShowMore(false)
   }
   function pick(o: Outcome) { setOutcome(o); setStep(2); setError('') }
   function togglePlatform(p: Platform) { setSelectedPlatforms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]) }
@@ -242,8 +243,9 @@ export default function QuickRequest() {
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-[fadeIn_150ms_ease]" onClick={() => { if (!submitting) setOpen(false) }} />
 
-          <div className="relative w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto animate-[slideUp_200ms_ease]">
-            <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-ink-6 px-5 py-4 flex items-center gap-2 rounded-t-2xl z-10">
+          <div className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto animate-[slideUp_200ms_ease]">
+            <div className="sm:hidden flex justify-center pt-2.5 pb-1"><div className="w-9 h-1 rounded-full bg-ink-6" /></div>
+            <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-ink-6 px-5 py-3.5 flex items-center gap-2 z-10">
               {step === 2 && !submitted && (
                 <button onClick={() => setStep(1)} className="w-8 h-8 -ml-1.5 rounded-lg hover:bg-bg-2 flex items-center justify-center text-ink-4 hover:text-ink transition-colors" aria-label="Back"><ArrowLeft className="w-4 h-4" /></button>
               )}
@@ -272,7 +274,7 @@ export default function QuickRequest() {
                 ))}
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="p-5 space-y-5">
+              <form onSubmit={handleSubmit} className="p-5 space-y-4">
                 {error && <p className="text-[13px] font-medium text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</p>}
 
                 <div>
@@ -307,17 +309,27 @@ export default function QuickRequest() {
                       </div>
                     )}
 
-                    {outcome?.goal && (
+                    {(outcome?.goal || outcome?.linkLabel) && (
                       <div>
-                        <label className="block text-sm font-medium text-ink mb-2">Goal <span className="text-ink-4 font-normal">(optional)</span></label>
-                        <div className="flex flex-wrap gap-2">{GOALS.map(g => <button key={g.v} type="button" onClick={() => setGoal(goal === g.v ? '' : g.v)} className={chip(goal === g.v)}>{g.label}</button>)}</div>
-                      </div>
-                    )}
-
-                    {outcome?.linkLabel && (
-                      <div>
-                        <label className="block text-sm font-medium text-ink mb-1.5">{outcome.linkLabel} <span className="text-ink-4 font-normal">(optional)</span></label>
-                        <input type="url" value={link} onChange={e => setLink(e.target.value)} placeholder="https://…" className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-base text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
+                        <button type="button" onClick={() => setShowMore(v => !v)} className="inline-flex items-center gap-1 text-[13px] font-semibold text-brand-dark">
+                          {showMore ? 'Fewer details' : 'More details'} <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMore ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showMore && (
+                          <div className="mt-3 space-y-4">
+                            {outcome?.goal && (
+                              <div>
+                                <label className="block text-sm font-medium text-ink mb-2">Goal</label>
+                                <div className="flex flex-wrap gap-2">{GOALS.map(g => <button key={g.v} type="button" onClick={() => setGoal(goal === g.v ? '' : g.v)} className={chip(goal === g.v)}>{g.label}</button>)}</div>
+                              </div>
+                            )}
+                            {outcome?.linkLabel && (
+                              <div>
+                                <label className="block text-sm font-medium text-ink mb-1.5">{outcome.linkLabel}</label>
+                                <input type="url" value={link} onChange={e => setLink(e.target.value)} placeholder="https://…" className="w-full bg-bg-2 border border-ink-6 rounded-xl px-4 py-2.5 text-base text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand" />
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
