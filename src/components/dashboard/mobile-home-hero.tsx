@@ -102,7 +102,7 @@ function tickLabel(c: Range, inst: HomeInstance, idx: number): string {
 interface VM {
   insts: HomeInstance[]; idx: number; vals: (number | null)[]; fmt: 'num' | 'rate'; barFmt: 'num'
   sub: string; instStart: Date; isCur: boolean; headline: number; avg: number
-  avgPct: number | null; avgDir: 'up' | 'down'; miniVals: number[]; todayIdx: number
+  avgDelta: number | null; avgDir: 'up' | 'down'; miniVals: number[]; todayIdx: number
   cap: string; dayLabels: string[] | null; xmarks: { l: string; x: number }[] | null
   breakdown: HomeMetric['week'][number]['breakdown']
 }
@@ -121,11 +121,14 @@ function buildVM(metric: HomeMetric, cur: Range, instIdx: number | null): VM | n
   const headline = fmt === 'rate' ? inst.rating ?? 0 : inst.total
   const nn = vals.filter((v): v is number => v != null)
   const avg = nn.length ? nn.reduce((a, b) => a + b, 0) / nn.length : 0
-  let avgPct: number | null = null, avgDir: 'up' | 'down' = 'up'
+  /* Trend vs the same-elapsed window of the prior period, shown as an
+     absolute change (a number), not a percentage — a small swing on a
+     low base reads far less dramatically this way. */
+  let avgDelta: number | null = null, avgDir: 'up' | 'down' = 'up'
   if (idx > 0) {
     const pv = insts[idx - 1].vals; let ps = 0, pc = 0
     for (let q = 0; q < pv.length && pc < elapsed; q++) { const x = pv[q]; if (x != null) { ps += x; pc++ } }
-    if (pc > 0) { const pAvg = ps / pc; if (pAvg > 0) { const pd = ((avg - pAvg) / pAvg) * 100; avgDir = pd >= 0 ? 'up' : 'down'; avgPct = Math.abs(Math.round(pd)) } }
+    if (pc > 0) { const pAvg = ps / pc; const d = avg - pAvg; avgDir = d >= 0 ? 'up' : 'down'; avgDelta = Math.abs(d) }
   }
   const instStart = parse(inst.start)
   let dayLabels: string[] | null = null, xmarks: { l: string; x: number }[] | null = null
@@ -142,7 +145,7 @@ function buildVM(metric: HomeMetric, cur: Range, instIdx: number | null): VM | n
   }
   return {
     insts, idx, vals, fmt, barFmt: 'num', sub: inst.sub, instStart, isCur, headline, avg,
-    avgPct, avgDir, miniVals: insts.map(w => w.total), todayIdx: isCur ? lastIdx : -1,
+    avgDelta, avgDir, miniVals: insts.map(w => w.total), todayIdx: isCur ? lastIdx : -1,
     cap: capFor(cur, inst, isCur, ago), dayLabels, xmarks, breakdown: inst.breakdown,
   }
 }
@@ -295,11 +298,11 @@ export function MobileHomeHero({ metrics }: { metrics: HomeMetric[] }) {
                 <div className="hero-r">
                   <p className="avg-l">Avg / {vm.sub === 'month' ? 'mo' : 'day'}</p>
                   <p className="avg-v">{fmtAvg(vm.avg)}</p>
-                  {vm.avgPct == null ? null : vm.avgPct === 0 ? (
-                    <p className="avg-t flat"><span>No change</span></p>
+                  {vm.avgDelta == null || Math.round(vm.avgDelta) === 0 ? (
+                    vm.avgDelta == null ? null : <p className="avg-t flat"><span>No change</span></p>
                   ) : (
                     <p className={`avg-t ${vm.avgDir}`}>
-                      <Icon name={vm.avgDir === 'up' ? 'arrowUp' : 'arrowDown'} sw={2.4} /><span>{vm.avgPct}%</span>
+                      <Icon name={vm.avgDir === 'up' ? 'arrowUp' : 'arrowDown'} sw={2.4} /><span>{Math.round(vm.avgDelta).toLocaleString()}</span>
                     </p>
                   )}
                 </div>
