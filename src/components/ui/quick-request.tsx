@@ -17,6 +17,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react'
+import Link from 'next/link'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import {
   Plus, X, ArrowLeft, ArrowRight, ChevronDown, Upload, Loader2, CheckCircle2,
@@ -233,17 +234,17 @@ export default function QuickRequest() {
     <>
       <div className="hidden lg:flex fixed bottom-6 right-6 z-50 group">
         <span className="absolute bottom-full right-0 mb-2 px-2.5 py-1 rounded-lg bg-ink text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">Request content</span>
-        {showPulse && <span className="absolute inset-0 rounded-full bg-brand-dark/30 animate-ping" />}
-        <button onClick={() => { setOpen(true); setShowPulse(false) }} className="relative w-14 h-14 rounded-full bg-brand-dark text-white flex items-center justify-center shadow-lg hover:scale-110 hover:shadow-xl active:scale-95 transition-all duration-200 cursor-pointer" aria-label="Request content">
+        {showPulse && <span className="absolute inset-0 rounded-full bg-brand-dark/30 animate-ping motion-reduce:hidden" />}
+        <button onClick={() => { setOpen(true); setShowPulse(false) }} className="relative w-14 h-14 rounded-full bg-brand-dark text-white flex items-center justify-center shadow-lg hover:scale-110 hover:shadow-xl active:scale-95 transition-all duration-200 motion-reduce:transition-none motion-reduce:hover:scale-100 cursor-pointer" aria-label="Request content">
           <Plus className="w-6 h-6" strokeWidth={2.5} />
         </button>
       </div>
 
       {open && (
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-[fadeIn_150ms_ease]" onClick={() => { if (!submitting) setOpen(false) }} />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-[fadeIn_150ms_ease] motion-reduce:animate-none" onClick={() => { if (!submitting) setOpen(false) }} />
 
-          <div className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto animate-[slideUp_200ms_ease]">
+          <div className="relative w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto animate-[slideUp_200ms_ease] motion-reduce:animate-none">
             <div className="sm:hidden flex justify-center pt-2.5 pb-1"><div className="w-9 h-1 rounded-full bg-ink-6" /></div>
             <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-ink-6 px-5 py-3.5 flex items-center gap-2 z-10">
               {step === 2 && !submitted && (
@@ -261,12 +262,12 @@ export default function QuickRequest() {
                   {requestId && <p className="text-sm text-ink-3 mt-1">Reference <span className="font-mono font-medium text-ink-2">#{requestId.slice(0, 8)}</span></p>}
                 </div>
                 <p className="text-sm text-ink-3 leading-relaxed">Your team has it and will get started.{scheduled && addToCalendar && runStartDate() ? ' It’s on your calendar too.' : ''} Track it under your requests.</p>
-                <a href="/dashboard/social/requests" className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-dark hover:underline">View your requests <ArrowRight className="w-3.5 h-3.5" /></a>
+                <Link href="/dashboard/social/requests" className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-dark hover:underline">View your requests <ArrowRight className="w-3.5 h-3.5" /></Link>
               </div>
             ) : step === 1 ? (
               <div className="p-4 grid grid-cols-2 gap-2.5">
                 {OUTCOMES.map(o => (
-                  <button key={o.key} type="button" onClick={() => pick(o)} className="flex flex-col items-start gap-2 p-3.5 rounded-2xl border border-ink-6 bg-white hover:border-ink-5 hover:shadow-sm active:scale-[0.98] transition-all text-left">
+                  <button key={o.key} type="button" onClick={() => pick(o)} className="flex flex-col items-start gap-2 p-3.5 rounded-2xl border border-ink-6 bg-white hover:border-ink-5 hover:shadow-sm active:scale-[0.98] motion-reduce:active:scale-100 transition-all motion-reduce:transition-none text-left">
                     <span className={`inline-flex items-center justify-center w-10 h-10 rounded-xl ${o.tint}`}><o.icon className="w-5 h-5" /></span>
                     <span className="text-[14px] font-semibold text-ink leading-tight">{o.label}</span>
                     <span className="text-[11.5px] text-ink-4 leading-tight">{o.hint}</span>
@@ -376,7 +377,7 @@ export default function QuickRequest() {
                   </label>
                 )}
 
-                <button type="submit" disabled={!canSubmit || submitting} className="w-full py-3 rounded-xl bg-brand-dark text-white text-sm font-medium flex items-center justify-center gap-2 hover:bg-brand-dark/90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:pointer-events-none">
+                <button type="submit" disabled={!canSubmit || submitting} className="w-full py-3 rounded-xl bg-brand-dark text-white text-sm font-medium flex items-center justify-center gap-2 hover:bg-brand-dark/90 active:scale-[0.98] motion-reduce:active:scale-100 transition-all motion-reduce:transition-none disabled:opacity-40 disabled:pointer-events-none">
                   {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : <>Submit request <ArrowRight className="w-4 h-4" /></>}
                 </button>
               </form>
