@@ -5,9 +5,10 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
   Search, Plus, MapPin, Globe, X, ChevronRight, Loader2,
-  Building2, Palette, Users, Check, Upload,
+  Building2, Palette, Users, Check, Upload, Trash2, AlertTriangle,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { deleteClient } from '@/lib/client-import-actions'
 import type { Client, ClientBillingStatus } from '@/types/database'
 import GbpStatusBadge from '@/components/admin/gbp-status-badge'
 import { getAllClientGbpStatusesAction } from '@/lib/gbp-onboarding-actions'
@@ -378,6 +379,109 @@ function AddClientModal({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Delete Client Modal (type-to-confirm)                              */
+/* ------------------------------------------------------------------ */
+
+function DeleteClientModal({
+  client,
+  onClose,
+  onDeleted,
+}: {
+  client: ClientCard | null
+  onClose: () => void
+  onDeleted: () => void
+}) {
+  const [confirmText, setConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState('')
+
+  // Fresh state per target is guaranteed by a `key` on the render site,
+  // which remounts this component whenever a different client is selected.
+  if (!client) return null
+
+  const nameMatches = confirmText.trim() === client.name
+
+  async function handleDelete() {
+    if (!client || !nameMatches) return
+    setDeleting(true)
+    setError('')
+    const res = await deleteClient(client.id)
+    if (!res.success) {
+      setError(res.error || 'Failed to delete client')
+      setDeleting(false)
+      return
+    }
+    setDeleting(false)
+    onDeleted()
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl border border-ink-6 shadow-xl w-full max-w-md mx-4 flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-ink-6 flex items-center justify-between">
+          <h2 className="font-[family-name:var(--font-display)] text-lg text-ink flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+            Delete client
+          </h2>
+          <button onClick={onClose} className="text-ink-4 hover:text-ink transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-sm text-ink-2">
+            This permanently deletes <span className="font-semibold text-ink">{client.name}</span> and
+            everything attached to it — content, brand, assets, metrics, reviews,
+            contacts, tasks, and billing records.
+          </p>
+          <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+            <p className="text-xs font-medium text-red-700">
+              This cannot be undone. There is no trash or recovery.
+            </p>
+          </div>
+          <div>
+            <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide mb-1 block">
+              Type the client name to confirm
+            </label>
+            <input
+              type="text"
+              value={confirmText}
+              onChange={e => setConfirmText(e.target.value)}
+              placeholder={client.name}
+              autoFocus
+              className="w-full border border-ink-6 rounded-lg px-3 py-2.5 text-sm text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400"
+            />
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-ink-6 flex items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="text-sm text-ink-3 hover:text-ink transition-colors px-3 py-2"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={!nameMatches || deleting}
+            className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg px-4 py-2 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            Delete permanently
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  Field helpers                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -469,6 +573,7 @@ export default function AdminClientsPage() {
   const [search, setSearch] = useState('')
   const [billingFilter, setBillingFilter] = useState<string>('all')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<ClientCard | null>(null)
 
   const supabase = createClient()
 
@@ -622,10 +727,20 @@ export default function AdminClientsPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(client => (
+            <div key={client.id} className="relative group">
+            {/* Delete button — sits above the card link; hidden until hover */}
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDeleteTarget(client) }}
+              title={`Delete ${client.name}`}
+              aria-label={`Delete ${client.name}`}
+              className="absolute top-2.5 right-2.5 z-10 w-7 h-7 rounded-lg flex items-center justify-center bg-white/80 text-ink-4 opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 transition-all"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
             <Link
-              key={client.id}
               href={`/admin/clients/${client.slug}`}
-              className="bg-white rounded-xl border border-ink-6 p-5 hover:border-brand/30 hover:shadow-sm transition-all group"
+              className="block bg-white rounded-xl border border-ink-6 p-5 hover:border-brand/30 hover:shadow-sm transition-all"
             >
               {/* Top row: Logo/initials + name + tier */}
               <div className="flex items-start gap-3">
@@ -708,6 +823,7 @@ export default function AdminClientsPage() {
                 </div>
               </div>
             </Link>
+            </div>
           ))}
         </div>
       )}
@@ -717,6 +833,14 @@ export default function AdminClientsPage() {
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
         onCreated={fetchClients}
+      />
+
+      {/* Delete Client Modal — keyed so it remounts fresh per target */}
+      <DeleteClientModal
+        key={deleteTarget?.id ?? 'none'}
+        client={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={fetchClients}
       />
 
       {/* Watch ?new=1 in the URL to auto-open the create modal. Wrapped
