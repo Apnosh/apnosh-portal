@@ -16,6 +16,10 @@ export type ClientProfileData = {
   cuisine?: string | null
   cuisine_other?: string | null
   service_styles?: string[] | null
+  price_range?: string | null
+  signature_items?: string[] | null
+  dietary_options?: string[] | null
+  slow_periods?: Record<string, unknown> | null
   full_address?: string | null
   city?: string | null
   state?: string | null
@@ -25,6 +29,7 @@ export type ClientProfileData = {
   website_url?: string | null
   business_phone?: string | null
   customer_types?: string[] | null
+  customer_age_range?: string | null
   why_choose?: string[] | null
   primary_goal?: string | null
   goal_detail?: string | null
@@ -33,6 +38,8 @@ export type ClientProfileData = {
   main_offerings?: string | null
   upcoming_events?: string | null
   tone_tags?: string[] | null
+  avoid_tone_tags?: string[] | null
+  emoji_usage?: string | null
   custom_tone?: string | null
   content_type_tags?: string[] | null
   reference_accounts?: string | null

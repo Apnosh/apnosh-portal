@@ -52,6 +52,11 @@ export default function OnboardingPage() {
         // Restore saved data
         const colors = (biz.brand_colors || {}) as { primary?: string; secondary?: string }
         setData({
+          // Base defaults guarantee every field is present; restored values
+          // below override the ones we persist on the businesses row. Newer
+          // profile-only fields (price, signatures, dietary, rhythm, etc.) keep
+          // their empty defaults until the client edits them.
+          ...INITIAL_DATA,
           role: biz.user_role || '',
           biz_name: biz.name || '',
           website: biz.website_url || '',

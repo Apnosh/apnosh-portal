@@ -139,6 +139,10 @@ export async function completeOnboardingCRM(
     cuisine: data.cuisine as string || null,
     cuisine_other: data.cuisine_other as string || null,
     service_styles: data.service_styles as string[] || [],
+    price_range: data.price_range as string || null,
+    signature_items: (data.signature_items as string[] || []).filter((s) => s.trim().length > 0),
+    dietary_options: data.dietary_options as string[] || [],
+    slow_periods: data.slow_periods as Record<string, unknown> || {},
     full_address: data.full_address as string || null,
     city: data.city as string || null,
     state: data.state as string || null,
@@ -148,6 +152,7 @@ export async function completeOnboardingCRM(
     website_url: data.website as string || null,
     business_phone: data.phone as string || null,
     customer_types: data.customer_types as string[] || [],
+    customer_age_range: data.customer_age_range as string || null,
     why_choose: data.why_choose as string[] || [],
     primary_goal: data.primary_goal as string || null,
     goal_detail: data.goal_detail as string || null,
@@ -156,6 +161,8 @@ export async function completeOnboardingCRM(
     main_offerings: data.main_offerings as string || null,
     upcoming_events: data.upcoming as string || null,
     tone_tags: data.tones as string[] || [],
+    avoid_tone_tags: data.avoid_tones as string[] || [],
+    emoji_usage: data.emoji_usage as string || null,
     custom_tone: data.custom_tone as string || null,
     content_type_tags: data.content_likes as string[] || [],
     reference_accounts: data.ref_accounts as string || null,
@@ -177,6 +184,23 @@ export async function completeOnboardingCRM(
 
   if (profileErr) {
     console.error('[completeOnboardingCRM] Profile upsert failed:', profileErr)
+  }
+
+  // 2b. Route onboarding answers into the AI-readable layer
+  //     (client_knowledge_facts + client_brands). Best-effort: a hiccup
+  //     here must not fail onboarding completion.
+  try {
+    const { syncOnboardingToKnowledge } = await import('@/lib/ai/onboarding-facts')
+    const sync = await syncOnboardingToKnowledge(clientId, userId, data)
+    if (sync.error) {
+      console.error('[completeOnboardingCRM] Knowledge sync error:', sync.error)
+    } else {
+      console.log(
+        `[completeOnboardingCRM] Knowledge sync: ${sync.factsWritten} facts, brand=${sync.brandWritten}`,
+      )
+    }
+  } catch (e) {
+    console.error('[completeOnboardingCRM] Knowledge sync threw:', e)
   }
 
   // 3. Ensure client_users row links auth user to client

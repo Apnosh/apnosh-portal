@@ -6,7 +6,11 @@ import StepBizName from './steps/step-biz-name'
 import StepBizType from './steps/step-biz-type'
 import StepCuisine from './steps/step-cuisine'
 import StepServiceStyle from './steps/step-service-style'
+import StepPrice from './steps/step-price'
+import StepSignature from './steps/step-signature'
+import StepDietary from './steps/step-dietary'
 import StepLocation from './steps/step-location'
+import StepRhythm from './steps/step-rhythm'
 import StepStory from './steps/step-story'
 import StepCustomers from './steps/step-customers'
 import StepWhyYou from './steps/step-why-you'
@@ -65,7 +69,11 @@ export default function StepRenderer(props: Props) {
       case 'biz_type': return <StepBizType data={data} update={update} nav={nav} />
       case 'cuisine': return <StepCuisine data={data} update={update} nav={nav} />
       case 'service_style': return <StepServiceStyle data={data} update={update} nav={nav} />
+      case 'price': return <StepPrice data={data} update={update} nav={nav} />
+      case 'signature': return <StepSignature data={data} update={update} nav={nav} />
+      case 'dietary': return <StepDietary data={data} update={update} nav={nav} />
       case 'location': return <StepLocation data={data} update={update} nav={nav} />
+      case 'rhythm': return <StepRhythm data={data} update={update} nav={nav} />
       case 'story': return <StepStory data={data} update={update} nav={nav} />
       case 'customers': return <StepCustomers data={data} update={update} nav={nav} />
       case 'why_you': return <StepWhyYou data={data} update={update} nav={nav} />

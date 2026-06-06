@@ -36,6 +36,42 @@ export const SERVICE_STYLES = [
   'Food truck / pop-up', 'Catering', 'Bakery / patisserie', 'Other',
 ] as const
 
+// Price point — matches client_profiles.price_range CHECK ('$'..'$$$$')
+export const PRICE_TIERS = [
+  { id: '$', title: '$', desc: 'Budget-friendly · under $15 a head' },
+  { id: '$$', title: '$$', desc: 'Casual · $15–30 a head' },
+  { id: '$$$', title: '$$$', desc: 'Upscale · $30–60 a head' },
+  { id: '$$$$', title: '$$$$', desc: 'Fine dining · $60+ a head' },
+] as const
+
+// Dietary accommodations the kitchen can offer
+export const DIETARY_CHIPS = [
+  'Vegan', 'Vegetarian', 'Gluten-free', 'Halal', 'Kosher',
+  'Nut-free', 'Dairy-free', 'Keto / low-carb', 'Organic / local',
+  'Allergen-friendly',
+] as const
+
+// Customer age range — matches client_profiles.customer_age_range
+export const AGE_RANGES = [
+  'Mostly under 25', 'Mostly 25–34', 'Mostly 35–44',
+  'Mostly 45–54', 'Mostly 55+', 'All ages',
+] as const
+
+// Emoji usage — matches client_profiles.emoji_usage CHECK
+export const EMOJI_LEVELS = [
+  { id: 'heavy', title: 'Lots of emojis', desc: 'Fun and expressive 🎉🔥😋' },
+  { id: 'moderate', title: 'A few here and there', desc: 'Tasteful, not overdone' },
+  { id: 'light', title: 'Rarely', desc: 'Keep it mostly clean' },
+  { id: 'none', title: 'None at all', desc: 'No emojis in our posts' },
+] as const
+
+// Per-day demand levels for the busy/slow rhythm step
+export const RHYTHM_LEVELS = [
+  { id: 'busy', label: 'Busy', color: '#4abd98' },
+  { id: 'steady', label: 'Steady', color: '#e0a93a' },
+  { id: 'slow', label: 'Slow', color: '#d9655a' },
+] as const
+
 export const LOCATION_COUNTS = ['Just 1', '2–3', '4–6', '7+'] as const
 
 export const CUSTOMER_TYPES = [
@@ -108,17 +144,23 @@ export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 // Step IDs in order — food steps are inserted dynamically
 export type StepId =
   | 'role' | 'biz_name' | 'biz_type' | 'cuisine' | 'service_style'
-  | 'location' | 'story' | 'customers' | 'why_you' | 'goal' | 'success'
+  | 'price' | 'signature' | 'dietary'
+  | 'location' | 'rhythm' | 'story' | 'customers' | 'why_you' | 'goal' | 'success'
   | 'promote' | 'voice' | 'content' | 'avoid' | 'approval' | 'connect'
   | 'assets' | 'review'
 
 export function getSteps(bizType: string): StepId[] {
+  const isFood = FOOD_BIZ_TYPES.includes(bizType as typeof FOOD_BIZ_TYPES[number])
   const steps: StepId[] = ['role', 'biz_name', 'biz_type']
-  if (FOOD_BIZ_TYPES.includes(bizType as typeof FOOD_BIZ_TYPES[number])) {
-    steps.push('cuisine', 'service_style')
+  if (isFood) {
+    // Restaurant core: what they serve, how much it costs, signatures, dietary
+    steps.push('cuisine', 'service_style', 'price', 'signature', 'dietary')
   }
+  steps.push('location')
+  // Busy/slow rhythm sits right after hours — it's the same mental model
+  if (isFood) steps.push('rhythm')
   steps.push(
-    'location', 'story', 'customers', 'why_you', 'goal', 'success',
+    'story', 'customers', 'why_you', 'goal', 'success',
     'promote', 'voice', 'content', 'avoid', 'approval', 'connect',
     'assets', 'review',
   )
@@ -136,6 +178,10 @@ export interface OnboardingData {
   cuisine: string
   cuisine_other: string
   service_styles: string[]
+  price_range: string
+  signature_items: string[]
+  dietary_options: string[]
+  slow_periods: Record<string, string>
   full_address: string
   city: string
   state: string
@@ -146,6 +192,7 @@ export interface OnboardingData {
   unique: string
   competitors: string
   customer_types: string[]
+  customer_age_range: string
   why_choose: string[]
   primary_goal: string
   goal_detail: string
@@ -154,6 +201,8 @@ export interface OnboardingData {
   main_offerings: string
   upcoming: string
   tones: string[]
+  avoid_tones: string[]
+  emoji_usage: string
   custom_tone: string
   content_likes: string[]
   ref_accounts: string
@@ -180,6 +229,10 @@ export const INITIAL_DATA: OnboardingData = {
   cuisine: '',
   cuisine_other: '',
   service_styles: [],
+  price_range: '',
+  signature_items: [],
+  dietary_options: [],
+  slow_periods: {},
   full_address: '',
   city: '',
   state: '',
@@ -190,6 +243,7 @@ export const INITIAL_DATA: OnboardingData = {
   unique: '',
   competitors: '',
   customer_types: [],
+  customer_age_range: '',
   why_choose: [],
   primary_goal: '',
   goal_detail: '',
@@ -198,6 +252,8 @@ export const INITIAL_DATA: OnboardingData = {
   main_offerings: '',
   upcoming: '',
   tones: [],
+  avoid_tones: [],
+  emoji_usage: '',
   custom_tone: '',
   content_likes: [],
   ref_accounts: '',
@@ -221,6 +277,8 @@ export function canContinue(stepId: StepId, data: OnboardingData): boolean {
     case 'biz_name': return !!data.biz_name.trim()
     case 'biz_type': return !!(data.biz_type && (data.biz_type !== 'Other' || data.biz_other.trim()))
     case 'cuisine': return !!data.cuisine
+    case 'price': return !!data.price_range
+    case 'signature': return data.signature_items.some((s) => s.trim().length > 0)
     case 'story': return !!data.biz_desc.trim()
     case 'goal': return !!data.primary_goal
     default: return true

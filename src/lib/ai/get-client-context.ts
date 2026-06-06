@@ -136,7 +136,9 @@ export const getClientContext = cache(
         .limit(THEMES_LIMIT),
       supabase
         .from('client_brands')
-        .select('brand_voice, visual_style, colors, version')
+        // Real columns — the old select referenced brand_voice/colors which
+        // never existed, so brand voice silently dropped out of the prompt.
+        .select('voice_notes, brand_md, visual_style, primary_color, secondary_color, accent_color, version')
         .eq('client_id', clientId)
         .maybeSingle(),
       // Principle #7: anonymized signal from similar clients
@@ -180,9 +182,15 @@ export const getClientContext = cache(
     }))
     const brand = brandRes.data
       ? {
-          brandVoice: brandRes.data.brand_voice,
+          // voice_notes is the concise brand voice; fall back to the fuller
+          // brand_md doc so the prompt always gets *some* voice grounding.
+          brandVoice: brandRes.data.voice_notes ?? brandRes.data.brand_md ?? null,
           visualStyle: brandRes.data.visual_style,
-          colors: brandRes.data.colors,
+          colors: [
+            brandRes.data.primary_color,
+            brandRes.data.secondary_color,
+            brandRes.data.accent_color,
+          ].filter(Boolean),
           version: Number(brandRes.data.version ?? 1),
         }
       : null

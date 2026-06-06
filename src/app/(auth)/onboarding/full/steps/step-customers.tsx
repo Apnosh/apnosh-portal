@@ -1,8 +1,8 @@
 'use client'
 
 import { type ReactNode } from 'react'
-import { type OnboardingData, CUSTOMER_TYPES } from '../data'
-import { Question, ChipGroup } from '../ui'
+import { type OnboardingData, CUSTOMER_TYPES, AGE_RANGES } from '../data'
+import { Question, ChipGroup, SingleChipGroup, FieldLabel } from '../ui'
 
 interface Props {
   data: OnboardingData
@@ -24,6 +24,14 @@ export default function StepCustomers({ data, update, nav }: Props) {
       <Question title="Who are your ideal customers?" subtitle="Pick the types you want more of" />
       <div className="mt-4">
         <ChipGroup options={CUSTOMER_TYPES} selected={data.customer_types} onToggle={toggle} />
+        <div className="mt-5">
+          <FieldLabel>Roughly how old are they? (optional)</FieldLabel>
+          <SingleChipGroup
+            options={AGE_RANGES}
+            selected={data.customer_age_range}
+            onSelect={(v) => update('customer_age_range', v === data.customer_age_range ? '' : v)}
+          />
+        </div>
       </div>
       {nav}
     </>
