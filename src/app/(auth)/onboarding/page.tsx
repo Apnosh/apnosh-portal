@@ -276,6 +276,9 @@ export default function OnboardingPage() {
         biz_type: data.restaurant_subtype === 'non_food' ? 'other' : 'restaurant',
         biz_other: '', cuisine: data.cuisine, cuisine_other: '',
         service_styles: data.service_styles,
+        // Price is collected on the quick flow's kitchen step — pass it
+        // through (was silently dropped: server reads price_range).
+        price_range: data.price_tier,
         full_address: data.full_address, city: data.city, state: data.state, zip: data.zip,
         location_count: data.location_count, hours: {},
         biz_desc: '', unique: '', competitors: '',
@@ -283,7 +286,7 @@ export default function OnboardingPage() {
         primary_goal: data.primary_goal, goal_detail: data.goal_detail,
         success_signs: [], timeline: '', main_offerings: '', upcoming: '',
         tones: [], content_likes: [], ref_accounts: '', avoid_list: [],
-        approval_style: '',
+        approval_type: '',
         /* Server expects an object keyed by platform. Convert from
            the string[] we collected in the form. */
         connected: data.connected.reduce((acc, p) => { acc[p] = true; return acc }, {} as Record<string, boolean>),

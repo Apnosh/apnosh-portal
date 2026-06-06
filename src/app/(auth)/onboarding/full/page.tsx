@@ -24,6 +24,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [logoUrl, setLogoUrl] = useState<string>('')
 
   // Derived step info
   const steps = getSteps(data.biz_type)
@@ -66,6 +67,13 @@ export default function OnboardingPage() {
           cuisine: biz.cuisine || '',
           cuisine_other: biz.cuisine_other || '',
           service_styles: biz.service_styles || [],
+          price_range: biz.price_range || '',
+          signature_items: biz.signature_items || [],
+          dietary_options: biz.dietary_options || [],
+          slow_periods: (biz.slow_periods as Record<string, string>) || {},
+          customer_age_range: biz.customer_age_range || '',
+          avoid_tones: biz.avoid_tones || [],
+          emoji_usage: biz.emoji_usage || '',
           full_address: biz.address || '',
           city: biz.city || '',
           state: biz.state || '',
@@ -135,6 +143,15 @@ export default function OnboardingPage() {
       cuisine: data.cuisine,
       cuisine_other: data.cuisine_other,
       service_styles: data.service_styles,
+      // Restaurant fields — mirrored onto businesses (migration 156) so a
+      // half-finished deep flow restores losslessly on resume.
+      price_range: data.price_range,
+      signature_items: data.signature_items,
+      dietary_options: data.dietary_options,
+      slow_periods: data.slow_periods,
+      customer_age_range: data.customer_age_range,
+      avoid_tones: data.avoid_tones,
+      emoji_usage: data.emoji_usage,
       address: data.full_address,
       city: data.city,
       state: data.state,
@@ -226,7 +243,7 @@ export default function OnboardingPage() {
       ref_accounts: data.ref_accounts,
       avoid_list: data.avoid_list,
       connected: data.connected,
-      logo_url: '', // URL set by upload handler if applicable
+      logo_url: logoUrl,
     })
 
     setSaving(false)
@@ -269,7 +286,7 @@ export default function OnboardingPage() {
       ref_accounts: data.ref_accounts,
       avoid_list: data.avoid_list,
       connected: data.connected,
-      logo_url: '',
+      logo_url: logoUrl,
     })
 
     setSaving(false)
@@ -281,6 +298,8 @@ export default function OnboardingPage() {
     if (!businessId) return
     const path = `${businessId}/logo/${file.name}`
     await supabase.storage.from('brand-assets').upload(path, file, { upsert: true })
+    const { data: urlData } = supabase.storage.from('brand-assets').getPublicUrl(path)
+    setLogoUrl(urlData?.publicUrl || '')
     update('logo_name', file.name)
   }
 

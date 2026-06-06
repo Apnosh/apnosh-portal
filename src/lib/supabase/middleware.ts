@@ -153,7 +153,7 @@ export async function updateSession(request: NextRequest) {
 
           if (!biz?.onboarding_completed) {
             const url = request.nextUrl.clone()
-            url.pathname = '/onboarding'
+            url.pathname = '/onboarding/full'
             return NextResponse.redirect(url)
           }
         }
@@ -234,14 +234,14 @@ export async function updateSession(request: NextRequest) {
         // (new signup that hasn't started onboarding yet)
         if (!business) {
           const url = request.nextUrl.clone()
-          url.pathname = '/onboarding'
+          url.pathname = '/onboarding/full'
           return NextResponse.redirect(url)
         }
 
         // If businesses row exists but onboarding not complete, redirect
         if (!business.onboarding_completed) {
           const url = request.nextUrl.clone()
-          url.pathname = '/onboarding'
+          url.pathname = '/onboarding/full'
           return NextResponse.redirect(url)
         }
       }
