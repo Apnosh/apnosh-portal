@@ -74,6 +74,17 @@ export const RHYTHM_LEVELS = [
 
 export const LOCATION_COUNTS = ['Just 1', '2–3', '4–6', '7+'] as const
 
+// Reservations platform — single choice (food only)
+export const RESERVATIONS = [
+  'OpenTable', 'Resy', 'Tock', 'Yelp Reservations',
+  'In-house only', 'No reservations',
+] as const
+
+// Delivery platforms — multi-select (food only)
+export const DELIVERY = [
+  'DoorDash', 'Uber Eats', 'Grubhub', 'Toast', 'Our own', 'No delivery',
+] as const
+
 export const CUSTOMER_TYPES = [
   'Young professionals', 'College students', 'Families with kids', 'Couples',
   'Tourists / visitors', 'Locals & regulars', 'Health-conscious',
@@ -144,7 +155,7 @@ export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 // Step IDs in order — food steps are inserted dynamically
 export type StepId =
   | 'role' | 'biz_name' | 'biz_type' | 'cuisine' | 'service_style'
-  | 'price' | 'signature' | 'dietary'
+  | 'price' | 'signature' | 'dietary' | 'ordering'
   | 'location' | 'rhythm' | 'story' | 'customers' | 'why_you' | 'goal' | 'success'
   | 'promote' | 'voice' | 'content' | 'avoid' | 'approval' | 'connect'
   | 'assets' | 'review'
@@ -154,7 +165,7 @@ export function getSteps(bizType: string): StepId[] {
   const steps: StepId[] = ['role', 'biz_name', 'biz_type']
   if (isFood) {
     // Restaurant core: what they serve, how much it costs, signatures, dietary
-    steps.push('cuisine', 'service_style', 'price', 'signature', 'dietary')
+    steps.push('cuisine', 'service_style', 'price', 'signature', 'dietary', 'ordering')
   }
   steps.push('location')
   // Busy/slow rhythm sits right after hours — it's the same mental model
@@ -181,6 +192,8 @@ export interface OnboardingData {
   price_range: string
   signature_items: string[]
   dietary_options: string[]
+  reservations_platform: string
+  delivery_platforms: string[]
   slow_periods: Record<string, string>
   full_address: string
   city: string
@@ -232,6 +245,8 @@ export const INITIAL_DATA: OnboardingData = {
   price_range: '',
   signature_items: [],
   dietary_options: [],
+  reservations_platform: '',
+  delivery_platforms: [],
   slow_periods: {},
   full_address: '',
   city: '',

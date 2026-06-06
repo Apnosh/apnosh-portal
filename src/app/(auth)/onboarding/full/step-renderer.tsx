@@ -9,6 +9,7 @@ import StepServiceStyle from './steps/step-service-style'
 import StepPrice from './steps/step-price'
 import StepSignature from './steps/step-signature'
 import StepDietary from './steps/step-dietary'
+import StepOrdering from './steps/step-ordering'
 import StepLocation from './steps/step-location'
 import StepRhythm from './steps/step-rhythm'
 import StepStory from './steps/step-story'
@@ -72,6 +73,7 @@ export default function StepRenderer(props: Props) {
       case 'price': return <StepPrice data={data} update={update} nav={nav} />
       case 'signature': return <StepSignature data={data} update={update} nav={nav} />
       case 'dietary': return <StepDietary data={data} update={update} nav={nav} />
+      case 'ordering': return <StepOrdering data={data} update={update} nav={nav} />
       case 'location': return <StepLocation data={data} update={update} nav={nav} />
       case 'rhythm': return <StepRhythm data={data} update={update} nav={nav} />
       case 'story': return <StepStory data={data} update={update} nav={nav} />
@@ -106,8 +108,8 @@ function Nav({ step, valid, saving, canSkip, onNext, onBack, onSkipForNow }: {
   onNext: () => void; onBack: () => void; onSkipForNow: () => void
 }) {
   return (
-    <div className="flex justify-between items-center mt-7 pt-4 border-t" style={{ borderColor: '#f0f0f0' }}>
-      <div className="flex items-center gap-3">
+    <>
+      <div className="flex justify-between items-center mt-7 pt-4 border-t" style={{ borderColor: '#f0f0f0' }}>
         {step > 1 ? (
           <button
             onClick={onBack}
@@ -121,30 +123,35 @@ function Nav({ step, valid, saving, canSkip, onNext, onBack, onSkipForNow }: {
         ) : (
           <div />
         )}
-        {canSkip && (
+        <button
+          onClick={onNext}
+          disabled={!valid || saving}
+          className="text-sm font-semibold px-7 py-2.5 rounded-[10px] text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          style={{ background: '#4abd98' }}
+          onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#2e9a78' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = '#4abd98' }}
+        >
+          {saving ? 'Saving...' : 'Continue'}
+        </button>
+      </div>
+
+      {canSkip && (
+        <div className="text-center mt-4">
           <button
             onClick={onSkipForNow}
             disabled={saving}
-            className="text-xs font-medium px-3 py-2 rounded-[8px] transition-colors"
-            style={{ color: '#777', background: '#f6f6f6' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = '#eee'; e.currentTarget.style.color = '#333' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = '#f6f6f6'; e.currentTarget.style.color = '#777' }}
-            title="You can always finish your profile later from the dashboard."
+            className="text-[13px] font-medium transition-colors disabled:opacity-40"
+            style={{ color: '#2e9a78', background: 'none' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#1f7d61' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#2e9a78' }}
           >
-            Save and explore portal
+            Short on time? Save and finish later →
           </button>
-        )}
-      </div>
-      <button
-        onClick={onNext}
-        disabled={!valid || saving}
-        className="text-sm font-semibold px-7 py-2.5 rounded-[10px] text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-        style={{ background: '#4abd98' }}
-        onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#2e9a78' }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = '#4abd98' }}
-      >
-        {saving ? 'Saving...' : 'Continue'}
-      </button>
-    </div>
+          <p className="text-[11px] mt-1" style={{ color: '#aaa' }}>
+            Your progress is saved. Pick up from your dashboard anytime.
+          </p>
+        </div>
+      )}
+    </>
   )
 }

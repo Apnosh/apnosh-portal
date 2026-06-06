@@ -62,6 +62,12 @@ export function buildOnboardingFacts(data: Record<string, unknown>): DraftFact[]
   const offerings = s(data.main_offerings)
   if (offerings) facts.push({ category: 'specialty', fact: `Main offerings: ${offerings}` })
 
+  // — How people book & order —
+  const reservations = s(data.reservations_platform)
+  if (reservations) facts.push({ category: 'observation', fact: `Reservations: ${reservations}` })
+  const delivery = arr(data.delivery_platforms)
+  if (delivery.length) facts.push({ category: 'observation', fact: `Delivery / ordering: ${delivery.join(', ')}` })
+
   // — Who they are —
   const desc = s(data.biz_desc)
   if (desc) facts.push({ category: 'history', fact: desc, confidence: 'high' })
@@ -94,6 +100,26 @@ export function buildOnboardingFacts(data: Record<string, unknown>): DraftFact[]
   // — Events —
   const upcoming = s(data.upcoming)
   if (upcoming) facts.push({ category: 'event', fact: `Upcoming: ${upcoming}` })
+
+  // — Goals & marketing direction —
+  const goal = s(data.primary_goal)
+  if (goal) facts.push({ category: 'positioning', fact: `Primary marketing goal: ${goal}`, confidence: 'high' })
+  const goalDetail = s(data.goal_detail)
+  if (goalDetail) facts.push({ category: 'observation', fact: `Goal context: ${goalDetail}` })
+  const success = arr(data.success_signs)
+  if (success.length) facts.push({ category: 'observation', fact: `What success looks like to them: ${success.join(', ')}` })
+
+  // — Content direction (what to make more of, who inspires them) —
+  const contentLikes = arr(data.content_likes)
+  if (contentLikes.length) facts.push({ category: 'observation', fact: `Content types they want: ${contentLikes.join(', ')}` })
+  const refs = s(data.ref_accounts)
+  if (refs) facts.push({ category: 'observation', fact: `Accounts/brands they admire: ${refs}` })
+
+  // — Location / local market —
+  const city = s(data.city)
+  const state = s(data.state)
+  const place = [city, state].filter(Boolean).join(', ')
+  if (place) facts.push({ category: 'positioning', fact: `Located in ${place}`, confidence: 'high' })
 
   // — Voice (also written to client_brands, but kept as facts for retrieval) —
   const tones = arr(data.tones)
