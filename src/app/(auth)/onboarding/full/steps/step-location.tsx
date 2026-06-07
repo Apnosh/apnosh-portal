@@ -194,7 +194,7 @@ export default function StepLocation({ data, update, nav }: Props) {
             {DAYS.map((day) => {
               const hr = data.hours[day] || { open: '09:00', close: '17:00', closed: false }
               return (
-                <div key={day} className="flex items-center gap-2">
+                <div key={day} className="flex items-center gap-2 max-sm:gap-1.5">
                   <span className="w-9 text-sm font-medium flex-shrink-0" style={{ color: '#111' }}>
                     {day}
                   </span>
@@ -203,16 +203,16 @@ export default function StepLocation({ data, update, nav }: Props) {
                     value={hr.open}
                     disabled={hr.closed}
                     onChange={(e) => updateHours(day, 'open', e.target.value)}
-                    className="w-[110px] text-sm text-center rounded-[10px] px-2.5 py-2 outline-none disabled:opacity-35"
+                    className="w-[110px] max-sm:w-auto max-sm:flex-1 max-sm:min-w-0 text-sm text-center rounded-[10px] px-2.5 max-sm:px-1.5 py-2 outline-none disabled:opacity-35"
                     style={{ border: '1.5px solid #e0e0e0', fontFamily: 'DM Sans, sans-serif' }}
                   />
-                  <span className="text-[13px]" style={{ color: '#999' }}>to</span>
+                  <span className="text-[13px] flex-shrink-0" style={{ color: '#999' }}>to</span>
                   <input
                     type="time"
                     value={hr.close}
                     disabled={hr.closed}
                     onChange={(e) => updateHours(day, 'close', e.target.value)}
-                    className="w-[110px] text-sm text-center rounded-[10px] px-2.5 py-2 outline-none disabled:opacity-35"
+                    className="w-[110px] max-sm:w-auto max-sm:flex-1 max-sm:min-w-0 text-sm text-center rounded-[10px] px-2.5 max-sm:px-1.5 py-2 outline-none disabled:opacity-35"
                     style={{ border: '1.5px solid #e0e0e0', fontFamily: 'DM Sans, sans-serif' }}
                   />
                   <label
