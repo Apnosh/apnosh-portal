@@ -23,7 +23,7 @@ export default function StepDietary({ data, update, nav }: Props) {
     <>
       <Question
         title="Any dietary options you offer?"
-        subtitle="Optional — pick any that apply"
+        subtitle="Optional. Pick any that apply."
       />
       <div className="mt-4">
         <ChipGroup options={DIETARY_CHIPS} selected={data.dietary_options} onToggle={toggle} />

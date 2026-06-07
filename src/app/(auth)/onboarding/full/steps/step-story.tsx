@@ -13,7 +13,7 @@ interface Props {
 export default function StepStory({ data, update, nav }: Props) {
   return (
     <>
-      <Question title="Tell us about your business" subtitle="A couple sentences — like you'd explain it to a friend" />
+      <Question title="Tell us about your business" subtitle="A couple sentences, like you'd explain it to a friend" />
       <div className="mt-4 space-y-5">
         <TextArea
           value={data.biz_desc}
@@ -25,7 +25,7 @@ export default function StepStory({ data, update, nav }: Props) {
           <TextArea
             value={data.unique}
             onChange={(v) => update('unique', v)}
-            placeholder="Your secret sauce — quality, story, approach... The more we know, the better your content will be."
+            placeholder="Your secret sauce: quality, story, approach... The more we know, the better your content will be."
             rows={3}
           />
         </div>

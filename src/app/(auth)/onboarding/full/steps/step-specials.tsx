@@ -53,7 +53,7 @@ export default function StepSpecials({ data, update, nav }: Props) {
     <>
       <Question
         title="Any recurring specials or deals?"
-        subtitle="Optional — happy hours, taco Tuesdays, brunch combos"
+        subtitle="Optional: happy hours, taco Tuesdays, brunch combos"
       />
       <div className="flex flex-col gap-3 mt-4 mb-1">
         {rows.slice(0, MAX).map((row, idx) => {

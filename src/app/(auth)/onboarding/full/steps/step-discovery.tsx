@@ -87,7 +87,7 @@ export default function StepDiscovery({ data, update, nav }: Props) {
     <>
       <Question
         title="How should people find you?"
-        subtitle="Optional — helps us get you discovered, not just seen"
+        subtitle="Optional. Helps us get you discovered, not just seen."
       />
       <div className="mt-4">
         <FieldLabel>Your hashtags</FieldLabel>

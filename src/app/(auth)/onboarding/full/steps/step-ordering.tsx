@@ -23,7 +23,7 @@ export default function StepOrdering({ data, update, nav }: Props) {
     <>
       <Question
         title="How do people book and order?"
-        subtitle="Optional — helps us point diners the right way"
+        subtitle="Optional. Helps us point diners the right way."
       />
       <div className="mt-4">
         <FieldLabel>Reservations</FieldLabel>

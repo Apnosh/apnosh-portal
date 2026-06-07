@@ -21,7 +21,7 @@ export default function StepWhyYou({ data, update, nav }: Props) {
 
   return (
     <>
-      <Question title="Why do people choose you?" subtitle="Pick your top reasons — up to 5" />
+      <Question title="Why do people choose you?" subtitle="Pick your top reasons, up to 5" />
       <div className="mt-4">
         <ChipGroup options={WHY_CHIPS} selected={data.why_choose} onToggle={toggle} max={5} />
       </div>

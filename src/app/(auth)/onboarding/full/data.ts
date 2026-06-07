@@ -132,13 +132,13 @@ export const AVOID_CHIPS = [
 
 export const APPROVAL_TYPES = [
   { id: 'full', title: 'I want to see everything', desc: 'You approve all content before it goes live' },
-  { id: 'partial', title: 'Just the big stuff', desc: 'You review campaigns and promos — routine posts follow your guidelines' },
-  { id: 'minimal', title: 'I trust the team', desc: 'We post based on your strategy — you get performance updates' },
-  { id: 'rolling', title: "Let's collaborate as we go", desc: 'Content goes in a shared space — you comment when you can' },
+  { id: 'partial', title: 'Just the big stuff', desc: 'You review campaigns and promos. Routine posts follow your guidelines.' },
+  { id: 'minimal', title: 'I trust the team', desc: 'We post based on your strategy. You get performance updates.' },
+  { id: 'rolling', title: "Let's collaborate as we go", desc: 'Content goes in a shared space. You comment when you can.' },
 ] as const
 
 export const FILM_CHIPS = [
-  'Owner', 'Managers', 'Employees', 'Customers (with consent)', 'No one — content only',
+  'Owner', 'Managers', 'Employees', 'Customers (with consent)', 'No one, content only',
 ] as const
 
 export const PLATFORMS = [

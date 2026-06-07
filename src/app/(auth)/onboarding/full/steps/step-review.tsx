@@ -18,9 +18,20 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
   const loc = [data.city, data.state].filter(Boolean).join(', ') || null
   const connectedList = Object.keys(data.connected).filter((k) => data.connected[k])
 
+  const menuList = data.menu_items
+    .filter((m) => m.name.trim())
+    .map((m) => (m.price.trim() ? `${m.name} (${m.price})` : m.name))
+    .join(', ') || null
+  const specialsList = data.specials
+    .filter((s) => s.title.trim())
+    .map((s) => (s.time_window.trim() ? `${s.title} (${s.time_window})` : s.title))
+    .join(', ') || null
+  const hashtagList = data.brand_hashtags.map((h) => `#${h}`).join(' ') || null
+  const keywordList = data.target_keywords.join(', ') || null
+
   return (
     <>
-      <Question title="Looking good — one last look" subtitle="Make sure everything's right, then let's go" />
+      <Question title="Looking good, one last look" subtitle="Make sure everything's right, then let's go" />
       <div className="mt-4 space-y-2">
         <ReviewCard title="You" stepId="role" onEdit={onGoToStep}>
           <Row label="Role" value={roleName} />
@@ -36,6 +47,18 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
           <Row label="Location" value={loc} />
           <Row label="Locations" value={data.location_count || null} />
         </ReviewCard>
+
+        {isFood && (
+          <ReviewCard title="Menu" stepId="menu" onEdit={onGoToStep}>
+            <Row label="Dishes" value={menuList} />
+          </ReviewCard>
+        )}
+
+        {isFood && (
+          <ReviewCard title="Specials" stepId="specials" onEdit={onGoToStep}>
+            <Row label="Recurring" value={specialsList} />
+          </ReviewCard>
+        )}
 
         <ReviewCard title="Story" stepId="story" onEdit={onGoToStep}>
           <Row label="About" value={data.biz_desc || null} />
@@ -64,6 +87,11 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
           <Row label="Custom tone" value={data.custom_tone || null} />
           <Row label="Content" value={data.content_likes.length ? data.content_likes.join(', ') : null} />
           <Row label="Avoid" value={data.avoid_list.length ? data.avoid_list.join(', ') : null} />
+        </ReviewCard>
+
+        <ReviewCard title="Discovery" stepId="discovery" onEdit={onGoToStep}>
+          <Row label="Hashtags" value={hashtagList} />
+          <Row label="Keywords" value={keywordList} />
         </ReviewCard>
 
         <ReviewCard title="Workflow" stepId="approval" onEdit={onGoToStep}>

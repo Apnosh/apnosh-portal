@@ -29,7 +29,7 @@ export default function StepSignature({ data, update, nav }: Props) {
     <>
       <Question
         title="What are you known for?"
-        subtitle="Your signature dishes — the things people come back for"
+        subtitle="Your signature dishes, the things people come back for"
       />
       <div className="flex flex-col gap-2 mt-4 mb-1">
         {rows.slice(0, MAX).map((val, idx) => (

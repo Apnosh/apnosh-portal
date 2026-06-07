@@ -18,7 +18,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
 
   return (
     <>
-      <Question title="Got any brand materials?" subtitle="Logo, photos, colors — whatever you have" />
+      <Question title="Got any brand materials?" subtitle="Logo, photos, colors, whatever you have" />
       <div className="mt-4 space-y-4">
         {/* Logo upload */}
         <button
@@ -58,7 +58,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e0e0e0'; e.currentTarget.style.background = '#f5f5f2' }}
         >
           <div className="text-sm font-medium" style={{ color: '#555' }}>Upload brand photos</div>
-          <div className="text-xs mt-0.5" style={{ color: '#999' }}>Your space, products, team — up to 20</div>
+          <div className="text-xs mt-0.5" style={{ color: '#999' }}>Your space, products, team, up to 20</div>
           <input
             ref={photosRef}
             type="file"
@@ -107,7 +107,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
               placeholder="Secondary color hex"
             />
           </div>
-          <Hint>Don't know your colors? No worries — we'll figure it out.</Hint>
+          <Hint>Don't know your colors? No worries, we'll figure it out.</Hint>
         </div>
 
         {/* Brand drive */}

@@ -15,7 +15,7 @@ export default function StepGoal({ data, update, nav }: Props) {
 
   return (
     <>
-      <Question title="What's your #1 priority right now?" subtitle="Pick one — this shapes your whole strategy" />
+      <Question title="What's your #1 priority right now?" subtitle="Pick one. This shapes your whole strategy." />
       <div className="mt-4">
         <SingleChipGroup
           options={GOAL_CHIPS}

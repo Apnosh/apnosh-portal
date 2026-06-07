@@ -27,7 +27,7 @@ export default function StepRhythm({ data, update, nav }: Props) {
     <>
       <Question
         title="When are you busy vs. slow?"
-        subtitle="Optional — so we push promos exactly when you need them"
+        subtitle="Optional. So we push promos exactly when you need them."
       />
       <div className="flex flex-col gap-1.5 mt-4 mb-1">
         {DAYS.map((day) => (

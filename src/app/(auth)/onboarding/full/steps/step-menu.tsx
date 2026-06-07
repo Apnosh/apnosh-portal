@@ -54,7 +54,7 @@ export default function StepMenu({ data, update, nav }: Props) {
     <>
       <Question
         title="What's on your menu?"
-        subtitle="Optional, but powerful — real dishes make every post specific"
+        subtitle="Optional, but powerful. Real dishes make every post specific."
       />
       <div className="flex flex-col gap-2 mt-4 mb-1">
         <div className="flex gap-2 px-1">
