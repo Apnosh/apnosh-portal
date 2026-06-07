@@ -9,6 +9,7 @@ import {
   INITIAL_DATA,
   getSteps,
   canContinue,
+  getPhaseInfo,
 } from './data'
 import StepRenderer from './step-renderer'
 import { completeOnboardingCRM } from '@/lib/onboarding-actions'
@@ -32,6 +33,7 @@ export default function OnboardingPage() {
   const currentStepId = steps[step - 1] as StepId | undefined
   const pct = Math.round((step / totalSteps) * 100)
   const valid = currentStepId ? canContinue(currentStepId, data) : false
+  const phase = currentStepId ? getPhaseInfo(currentStepId, data.biz_type) : null
 
   // Load existing data on mount
   useEffect(() => {
@@ -355,14 +357,36 @@ export default function OnboardingPage() {
           {/* Progress bar */}
           {!showSuccess && (
             <div className="mb-7">
-              <div className="h-[3px] bg-[#eee] rounded-sm overflow-hidden mb-2">
-                <div
-                  className="h-full bg-[#4abd98] rounded-sm transition-all duration-400"
-                  style={{ width: `${showSuccess ? 100 : pct}%` }}
-                />
-              </div>
+              {/* Phase ticks: one segment per phase, filled up to the current one */}
+              {phase && (
+                <div className="flex gap-1.5 mb-2.5">
+                  {Array.from({ length: phase.phaseCount }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-[3px] flex-1 rounded-sm overflow-hidden bg-[#eee]"
+                    >
+                      <div
+                        className="h-full bg-[#4abd98] rounded-sm transition-all duration-400"
+                        style={{
+                          width:
+                            i + 1 < phase.phaseNumber ? '100%'
+                            : i + 1 > phase.phaseNumber ? '0%'
+                            : `${Math.round((phase.indexInPhase / phase.phaseTotal) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex justify-between items-center">
-                <span className="text-xs" style={{ color: '#999' }} />
+                <span className="text-xs font-medium" style={{ color: '#111' }}>
+                  {phase ? phase.label : ''}
+                  {phase && phase.phaseTotal > 1 && (
+                    <span className="font-normal" style={{ color: '#999' }}>
+                      {' · '}{phase.indexInPhase} of {phase.phaseTotal}
+                    </span>
+                  )}
+                </span>
                 <span className="text-xs font-medium" style={{ color: '#2e9a78' }}>
                   {pct}%
                 </span>

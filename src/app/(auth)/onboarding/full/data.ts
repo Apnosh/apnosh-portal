@@ -154,11 +154,51 @@ export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 
 // Step IDs in order — food steps are inserted dynamically
 export type StepId =
-  | 'role' | 'biz_name' | 'biz_type' | 'cuisine' | 'service_style'
-  | 'price' | 'signature' | 'dietary' | 'ordering' | 'menu' | 'specials'
-  | 'location' | 'rhythm' | 'story' | 'customers' | 'why_you' | 'goal' | 'success'
-  | 'promote' | 'voice' | 'content' | 'discovery' | 'avoid' | 'approval' | 'connect'
+  | 'role' | 'biz_name' | 'biz_type' | 'serve'
+  | 'menu_details' | 'ordering' | 'menu' | 'specials'
+  | 'location' | 'rhythm' | 'story' | 'audience' | 'goals'
+  | 'promote' | 'brand_voice' | 'discovery' | 'approval' | 'connect'
   | 'assets' | 'review'
+
+// Each step belongs to a named phase. The wizard shows the phase label plus
+// the owner's position within it ("Business · 2 of 3") so a long flow reads as
+// a few short chapters instead of one endless list. Steps not present for a
+// given business type (e.g. food-only steps) are simply skipped when counting.
+export const PHASE_ORDER = ['You', 'Business', 'Menu', 'Story', 'Brand', 'Launch'] as const
+export type PhaseLabel = typeof PHASE_ORDER[number]
+
+export const STEP_PHASES: Record<StepId, PhaseLabel> = {
+  role: 'You',
+  biz_name: 'Business', biz_type: 'Business', location: 'Business',
+  serve: 'Menu', menu_details: 'Menu',
+  ordering: 'Menu', menu: 'Menu', specials: 'Menu', rhythm: 'Menu',
+  story: 'Story', audience: 'Story', goals: 'Story', promote: 'Story',
+  brand_voice: 'Brand', discovery: 'Brand',
+  approval: 'Launch', connect: 'Launch', assets: 'Launch', review: 'Launch',
+}
+
+export interface PhaseInfo {
+  label: PhaseLabel
+  indexInPhase: number   // 1-based position within the current phase
+  phaseTotal: number     // steps in the current phase for this biz type
+  phaseNumber: number    // 1-based index of the phase among phases present
+  phaseCount: number     // total phases present for this biz type
+}
+
+/** Resolve the phase label + position for a step, given the active flow. */
+export function getPhaseInfo(stepId: StepId, bizType: string): PhaseInfo {
+  const steps = getSteps(bizType)
+  const label = STEP_PHASES[stepId]
+  const inPhase = steps.filter((s) => STEP_PHASES[s] === label)
+  const presentPhases = PHASE_ORDER.filter((p) => steps.some((s) => STEP_PHASES[s] === p))
+  return {
+    label,
+    indexInPhase: inPhase.indexOf(stepId) + 1,
+    phaseTotal: inPhase.length,
+    phaseNumber: presentPhases.indexOf(label) + 1,
+    phaseCount: presentPhases.length,
+  }
+}
 
 export function getSteps(bizType: string): StepId[] {
   const isFood = FOOD_BIZ_TYPES.includes(bizType as typeof FOOD_BIZ_TYPES[number])
@@ -166,14 +206,14 @@ export function getSteps(bizType: string): StepId[] {
   if (isFood) {
     // Restaurant core: what they serve, how much it costs, signatures, dietary,
     // how people order, the real menu, and any recurring specials.
-    steps.push('cuisine', 'service_style', 'price', 'signature', 'dietary', 'ordering', 'menu', 'specials')
+    steps.push('serve', 'menu_details', 'ordering', 'menu', 'specials')
   }
   steps.push('location')
   // Busy/slow rhythm sits right after hours — it's the same mental model
   if (isFood) steps.push('rhythm')
   steps.push(
-    'story', 'customers', 'why_you', 'goal', 'success',
-    'promote', 'voice', 'content', 'discovery', 'avoid', 'approval', 'connect',
+    'story', 'audience', 'goals',
+    'promote', 'brand_voice', 'discovery', 'approval', 'connect',
     'assets', 'review',
   )
   return steps
@@ -316,11 +356,11 @@ export function canContinue(stepId: StepId, data: OnboardingData): boolean {
     case 'role': return !!data.role
     case 'biz_name': return !!data.biz_name.trim()
     case 'biz_type': return !!(data.biz_type && (data.biz_type !== 'Other' || data.biz_other.trim()))
-    case 'cuisine': return !!data.cuisine
-    case 'price': return !!data.price_range
-    case 'signature': return data.signature_items.some((s) => s.trim().length > 0)
+    case 'serve': return !!data.cuisine && !!data.price_range
+      && (data.cuisine !== 'Other' || !!data.cuisine_other.trim())
+    case 'menu_details': return data.signature_items.some((s) => s.trim().length > 0)
     case 'story': return !!data.biz_desc.trim()
-    case 'goal': return !!data.primary_goal
+    case 'goals': return !!data.primary_goal
     default: return true
   }
 }

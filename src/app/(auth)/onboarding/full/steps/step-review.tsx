@@ -66,12 +66,12 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
           <Row label="Competitors" value={data.competitors || null} />
         </ReviewCard>
 
-        <ReviewCard title="Customers" stepId="customers" onEdit={onGoToStep}>
+        <ReviewCard title="Customers" stepId="audience" onEdit={onGoToStep}>
           <Row label="Types" value={data.customer_types.length ? data.customer_types.join(', ') : null} />
           <Row label="Why you" value={data.why_choose.length ? data.why_choose.join(', ') : null} />
         </ReviewCard>
 
-        <ReviewCard title="Goals" stepId="goal" onEdit={onGoToStep}>
+        <ReviewCard title="Goals" stepId="goals" onEdit={onGoToStep}>
           <Row label="Priority" value={data.primary_goal || null} />
           <Row label="Success" value={data.success_signs.length ? data.success_signs.join(', ') : null} />
           <Row label="Timeline" value={data.timeline || null} />
@@ -82,7 +82,7 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
           <Row label="Coming up" value={data.upcoming || null} />
         </ReviewCard>
 
-        <ReviewCard title="Brand" stepId="voice" onEdit={onGoToStep}>
+        <ReviewCard title="Brand" stepId="brand_voice" onEdit={onGoToStep}>
           <Row label="Tone" value={data.tones.length ? data.tones.join(', ') : null} />
           <Row label="Custom tone" value={data.custom_tone || null} />
           <Row label="Content" value={data.content_likes.length ? data.content_likes.join(', ') : null} />

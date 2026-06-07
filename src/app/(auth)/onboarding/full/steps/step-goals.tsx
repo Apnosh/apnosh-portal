@@ -1,8 +1,8 @@
 'use client'
 
 import { type ReactNode, useState } from 'react'
-import { type OnboardingData, GOAL_CHIPS } from '../data'
-import { Question, SingleChipGroup, Input } from '../ui'
+import { type OnboardingData, GOAL_CHIPS, SUCCESS_CHIPS, TIMELINE_CHIPS } from '../data'
+import { Question, SingleChipGroup, ChipGroup, Input, FieldLabel } from '../ui'
 
 interface Props {
   data: OnboardingData
@@ -10,12 +10,23 @@ interface Props {
   nav: ReactNode
 }
 
-export default function StepGoal({ data, update, nav }: Props) {
+// Combined goals screen: top priority (required) + optional detail + what
+// success looks like + how fast they want it.
+export default function StepGoals({ data, update, nav }: Props) {
   const [showMore, setShowMore] = useState(!!data.goal_detail)
+
+  function toggleSuccess(val: string) {
+    const arr = [...data.success_signs]
+    const idx = arr.indexOf(val)
+    if (idx > -1) arr.splice(idx, 1)
+    else arr.push(val)
+    update('success_signs', arr)
+  }
 
   return (
     <>
-      <Question title="What's your #1 priority right now?" subtitle="Pick one. This shapes your whole strategy." />
+      <Question title="What's your #1 priority right now?" subtitle="This shapes your whole strategy" />
+
       <div className="mt-4">
         <SingleChipGroup
           options={GOAL_CHIPS}
@@ -43,6 +54,20 @@ export default function StepGoal({ data, update, nav }: Props) {
             )}
           </>
         )}
+      </div>
+
+      <div className="mt-6">
+        <FieldLabel>How will you know it&apos;s working?</FieldLabel>
+        <ChipGroup options={SUCCESS_CHIPS} selected={data.success_signs} onToggle={toggleSuccess} />
+      </div>
+
+      <div className="mt-5">
+        <FieldLabel>How fast do you want results?</FieldLabel>
+        <SingleChipGroup
+          options={TIMELINE_CHIPS}
+          selected={data.timeline}
+          onSelect={(v) => update('timeline', v)}
+        />
       </div>
       {nav}
     </>

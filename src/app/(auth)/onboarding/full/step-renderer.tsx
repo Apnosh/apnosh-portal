@@ -4,11 +4,8 @@ import { type OnboardingData, type StepId } from './data'
 import StepRole from './steps/step-role'
 import StepBizName from './steps/step-biz-name'
 import StepBizType from './steps/step-biz-type'
-import StepCuisine from './steps/step-cuisine'
-import StepServiceStyle from './steps/step-service-style'
-import StepPrice from './steps/step-price'
-import StepSignature from './steps/step-signature'
-import StepDietary from './steps/step-dietary'
+import StepServe from './steps/step-serve'
+import StepMenuDetails from './steps/step-menu-details'
 import StepOrdering from './steps/step-ordering'
 import StepMenu from './steps/step-menu'
 import StepSpecials from './steps/step-specials'
@@ -16,14 +13,10 @@ import StepDiscovery from './steps/step-discovery'
 import StepLocation from './steps/step-location'
 import StepRhythm from './steps/step-rhythm'
 import StepStory from './steps/step-story'
-import StepCustomers from './steps/step-customers'
-import StepWhyYou from './steps/step-why-you'
-import StepGoal from './steps/step-goal'
-import StepSuccess from './steps/step-success'
+import StepAudience from './steps/step-audience'
+import StepGoals from './steps/step-goals'
 import StepPromote from './steps/step-promote'
-import StepVoice from './steps/step-voice'
-import StepContent from './steps/step-content'
-import StepAvoid from './steps/step-avoid'
+import StepBrandVoice from './steps/step-brand-voice'
 import StepApproval from './steps/step-approval'
 import StepConnect from './steps/step-connect'
 import StepAssets from './steps/step-assets'
@@ -52,7 +45,7 @@ interface Props {
 }
 
 export default function StepRenderer(props: Props) {
-  const { stepId, data, update, valid, saving, step, totalSteps, onNext, onBack, onGoToStep, onComplete, onSkipForNow, canSkip, onLogoUpload, onPhotosUpload } = props
+  const { stepId, data, update, valid, saving, step, onNext, onBack, onGoToStep, onComplete, onSkipForNow, canSkip, onLogoUpload, onPhotosUpload } = props
 
   const nav = (
     <Nav
@@ -71,28 +64,20 @@ export default function StepRenderer(props: Props) {
       case 'role': return <StepRole data={data} update={update} nav={nav} />
       case 'biz_name': return <StepBizName data={data} update={update} nav={nav} />
       case 'biz_type': return <StepBizType data={data} update={update} nav={nav} />
-      case 'cuisine': return <StepCuisine data={data} update={update} nav={nav} />
-      case 'service_style': return <StepServiceStyle data={data} update={update} nav={nav} />
-      case 'price': return <StepPrice data={data} update={update} nav={nav} />
-      case 'signature': return <StepSignature data={data} update={update} nav={nav} />
-      case 'dietary': return <StepDietary data={data} update={update} nav={nav} />
+      case 'serve': return <StepServe data={data} update={update} nav={nav} />
+      case 'menu_details': return <StepMenuDetails data={data} update={update} nav={nav} />
       case 'ordering': return <StepOrdering data={data} update={update} nav={nav} />
       case 'menu': return <StepMenu data={data} update={update} nav={nav} />
       case 'specials': return <StepSpecials data={data} update={update} nav={nav} />
       case 'location': return <StepLocation data={data} update={update} nav={nav} />
       case 'rhythm': return <StepRhythm data={data} update={update} nav={nav} />
       case 'story': return <StepStory data={data} update={update} nav={nav} />
-      case 'customers': return <StepCustomers data={data} update={update} nav={nav} />
-      case 'why_you': return <StepWhyYou data={data} update={update} nav={nav} />
-      case 'goal': return <StepGoal data={data} update={update} nav={nav} />
-      case 'success': return step <= totalSteps
-        ? <StepSuccess data={data} update={update} nav={nav} />
-        : <StepDone bizName={data.biz_name} />
+      case 'audience': return <StepAudience data={data} update={update} nav={nav} />
+      case 'goals': return <StepGoals data={data} update={update} nav={nav} />
+      case 'success': return <StepDone bizName={data.biz_name} />
       case 'promote': return <StepPromote data={data} update={update} nav={nav} />
-      case 'voice': return <StepVoice data={data} update={update} nav={nav} />
-      case 'content': return <StepContent data={data} update={update} nav={nav} />
+      case 'brand_voice': return <StepBrandVoice data={data} update={update} nav={nav} />
       case 'discovery': return <StepDiscovery data={data} update={update} nav={nav} />
-      case 'avoid': return <StepAvoid data={data} update={update} nav={nav} />
       case 'approval': return <StepApproval data={data} update={update} nav={nav} />
       case 'connect': return <StepConnect data={data} update={update} nav={nav} businessId={props.businessId} />
       case 'assets': return <StepAssets data={data} update={update} nav={nav} onLogoUpload={onLogoUpload} onPhotosUpload={onPhotosUpload} />
