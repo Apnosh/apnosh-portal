@@ -276,6 +276,66 @@ export async function completeOnboardingCRM(
     console.error('[completeOnboardingCRM] specials seed threw:', e)
   }
 
+  // 2d. Seed client_locations for multi-location businesses. The location
+  //     step captures the primary address on `businesses`; any ADDITIONAL
+  //     locations land in data.locations. When the owner listed extras, we
+  //     promote the primary (is_primary=true) plus each extra so downstream
+  //     local-SEO / reviews tooling can work per-location. Idempotent by
+  //     absence, and single-location accounts keep today's behavior (no rows).
+  try {
+    const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+    const locDraft = Array.isArray(data.locations)
+      ? (data.locations as Array<{
+          name?: unknown; full_address?: unknown
+          city?: unknown; state?: unknown; zip?: unknown; place_id?: unknown
+        }>)
+      : []
+    const cleanLocs = locDraft.filter(
+      (l) => l && typeof l.full_address === 'string' && (l.full_address as string).trim() !== '',
+    )
+    if (cleanLocs.length) {
+      const { count } = await supabase
+        .from('client_locations')
+        .select('id', { count: 'exact', head: true })
+        .eq('client_id', clientId)
+      if (!count) {
+        const rows: Array<Record<string, unknown>> = []
+        const primaryAddr = str(data.full_address)
+        if (primaryAddr) {
+          rows.push({
+            client_id: clientId,
+            location_name: str(data.biz_name) || 'Main location',
+            full_address: primaryAddr,
+            city: str(data.city),
+            state: str(data.state),
+            zip: str(data.zip),
+            hours: (data.hours as Record<string, unknown>) || null,
+            is_primary: true,
+          })
+        }
+        for (const l of cleanLocs) {
+          rows.push({
+            client_id: clientId,
+            location_name: str(l.name) || str(l.full_address),
+            full_address: str(l.full_address),
+            city: str(l.city),
+            state: str(l.state),
+            zip: str(l.zip),
+            gbp_place_id: str(l.place_id),
+            is_primary: false,
+          })
+        }
+        if (rows.length) {
+          const { error: locErr } = await supabase.from('client_locations').insert(rows)
+          if (locErr) console.error('[completeOnboardingCRM] locations seed error:', locErr.message)
+          else console.log(`[completeOnboardingCRM] Seeded ${rows.length} client_locations`)
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[completeOnboardingCRM] locations seed threw:', e)
+  }
+
   // 3. Ensure client_users row links auth user to client
   const { data: existingCU } = await supabase
     .from('client_users')

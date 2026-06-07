@@ -235,6 +235,18 @@ export interface SpecialDraft {
   details: string      // what's included / the hook
 }
 
+// An additional location captured during onboarding (beyond the primary
+// address on the location step). Promoted to a client_locations row at
+// completion. The primary address is seeded separately as is_primary.
+export interface LocationDraft {
+  name: string          // a label, e.g. "Capitol Hill" or "Do Si Alki"
+  full_address: string  // free-form or Places-formatted address
+  city: string
+  state: string
+  zip: string
+  place_id: string      // Google place_id when picked, for later GBP linking
+}
+
 // Form data shape
 export interface OnboardingData {
   role: string
@@ -253,6 +265,7 @@ export interface OnboardingData {
   delivery_platforms: string[]
   menu_items: MenuDraftItem[]
   specials: SpecialDraft[]
+  locations: LocationDraft[]
   brand_hashtags: string[]
   target_keywords: string[]
   slow_periods: Record<string, string>
@@ -310,6 +323,7 @@ export const INITIAL_DATA: OnboardingData = {
   delivery_platforms: [],
   menu_items: [],
   specials: [],
+  locations: [],
   brand_hashtags: [],
   target_keywords: [],
   slow_periods: {},

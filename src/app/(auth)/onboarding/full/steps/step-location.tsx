@@ -66,6 +66,24 @@ export default function StepLocation({ data, update, nav }: Props) {
     update('hours', hours)
   }
 
+  // Additional-location repeater (shown when more than one location)
+  const isMulti = !!data.location_count && data.location_count !== 'Just 1'
+
+  function addLocation() {
+    update('locations', [
+      ...data.locations,
+      { name: '', full_address: '', city: '', state: '', zip: '', place_id: '' },
+    ])
+  }
+
+  function updateLocation(i: number, field: 'name' | 'full_address', value: string) {
+    update('locations', data.locations.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)))
+  }
+
+  function removeLocation(i: number) {
+    update('locations', data.locations.filter((_, idx) => idx !== i))
+  }
+
   return (
     <>
       <Question title="Where are you located?" subtitle="Start typing and select your address" />
@@ -116,12 +134,56 @@ export default function StepLocation({ data, update, nav }: Props) {
           />
         </div>
 
-        {data.location_count && data.location_count !== 'Just 1' && (
-          <div
-            className="text-[13px] leading-relaxed rounded-[10px] px-3.5 py-3 mt-3"
-            style={{ background: '#f5f5f2', color: '#555', borderLeft: '3px solid #4abd98' }}
-          >
-            You can add your other locations from the dashboard after setup.
+        {isMulti && (
+          <div className="mt-3 space-y-2">
+            <p className="text-[13px] leading-relaxed" style={{ color: '#555' }}>
+              The address above is your main spot. Add your other locations so
+              each one gets its own listing and reviews.
+            </p>
+
+            {data.locations.map((loc, i) => (
+              <div
+                key={i}
+                className="rounded-[10px] px-3 py-3 space-y-2"
+                style={{ background: '#f5f5f2' }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#999' }}>
+                    Location {i + 2}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeLocation(i)}
+                    className="ml-auto text-xs font-medium"
+                    style={{ color: '#d9655a' }}
+                  >
+                    Remove
+                  </button>
+                </div>
+                <Input
+                  value={loc.name}
+                  onChange={(v) => updateLocation(i, 'name', v)}
+                  placeholder="Name this spot, e.g. Downtown or Alki"
+                />
+                <Input
+                  value={loc.full_address}
+                  onChange={(v) => updateLocation(i, 'full_address', v)}
+                  placeholder="Street address, city, state"
+                />
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={addLocation}
+              className="w-full py-2.5 rounded-[10px] text-[13px] font-semibold transition-colors"
+              style={{ background: '#f0faf6', color: '#2e9a78', border: '1.5px dashed #4abd98' }}
+            >
+              + Add {data.locations.length ? 'another' : 'a'} location
+            </button>
+            <p className="text-[11px]" style={{ color: '#aaa' }}>
+              You can always add or edit locations later from your dashboard.
+            </p>
           </div>
         )}
 

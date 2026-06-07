@@ -28,6 +28,10 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
     .join(', ') || null
   const hashtagList = data.brand_hashtags.map((h) => `#${h}`).join(' ') || null
   const keywordList = data.target_keywords.join(', ') || null
+  const extraLocList = data.locations
+    .filter((l) => l.full_address.trim())
+    .map((l) => (l.name.trim() ? `${l.name} (${l.full_address})` : l.full_address))
+    .join(', ') || null
 
   return (
     <>
@@ -46,6 +50,7 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
           {isFood && <Row label="Style" value={data.service_styles.length ? data.service_styles.join(', ') : null} />}
           <Row label="Location" value={loc} />
           <Row label="Locations" value={data.location_count || null} />
+          {extraLocList && <Row label="Other spots" value={extraLocList} />}
         </ReviewCard>
 
         {isFood && (
