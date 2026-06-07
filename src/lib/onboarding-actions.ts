@@ -2,6 +2,15 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 
+/** Parse a free-form price like "$12.99" or "12" into integer cents, or null. */
+function parsePriceCents(raw: unknown): number | null {
+  if (typeof raw !== 'string') return null
+  const digits = raw.replace(/[^0-9.]/g, '')
+  if (!digits) return null
+  const n = parseFloat(digits)
+  return isNaN(n) ? null : Math.round(n * 100)
+}
+
 /**
  * Ensures a `clients` record exists for the given business, linked via
  * businesses.client_id. Returns the client_id. Used during onboarding
@@ -201,6 +210,70 @@ export async function completeOnboardingCRM(
     }
   } catch (e) {
     console.error('[completeOnboardingCRM] Knowledge sync threw:', e)
+  }
+
+  // 2c. Seed the structured menu + specials from onboarding answers.
+  //     Idempotent by absence: we only seed when the client has none yet,
+  //     so a skip-then-complete pass won't duplicate, and we never clobber
+  //     menu/specials a strategist may have added in between.
+  try {
+    const menuDraft = Array.isArray(data.menu_items)
+      ? (data.menu_items as Array<{ name?: unknown; price?: unknown; category?: unknown }>)
+      : []
+    const cleanMenu = menuDraft.filter(
+      (m) => m && typeof m.name === 'string' && (m.name as string).trim() !== '',
+    )
+    if (cleanMenu.length) {
+      const { count } = await supabase
+        .from('menu_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('client_id', clientId)
+      if (!count) {
+        const rows = cleanMenu.map((m, i) => ({
+          client_id: clientId,
+          category: (typeof m.category === 'string' && m.category.trim()) || 'Menu',
+          name: (m.name as string).trim(),
+          price_cents: parsePriceCents(m.price),
+          display_order: i,
+          last_edited_by: userId,
+        }))
+        const { error: menuErr } = await supabase.from('menu_items').insert(rows)
+        if (menuErr) console.error('[completeOnboardingCRM] menu seed error:', menuErr.message)
+        else console.log(`[completeOnboardingCRM] Seeded ${rows.length} menu_items`)
+      }
+    }
+  } catch (e) {
+    console.error('[completeOnboardingCRM] menu seed threw:', e)
+  }
+
+  try {
+    const specialsDraft = Array.isArray(data.specials)
+      ? (data.specials as Array<{ title?: unknown; time_window?: unknown; details?: unknown }>)
+      : []
+    const cleanSpecials = specialsDraft.filter(
+      (s) => s && typeof s.title === 'string' && (s.title as string).trim() !== '',
+    )
+    if (cleanSpecials.length) {
+      const { count } = await supabase
+        .from('client_specials')
+        .select('id', { count: 'exact', head: true })
+        .eq('client_id', clientId)
+      if (!count) {
+        const rows = cleanSpecials.map((s, i) => ({
+          client_id: clientId,
+          title: (s.title as string).trim(),
+          time_window: typeof s.time_window === 'string' && s.time_window.trim() ? s.time_window.trim() : null,
+          tagline: typeof s.details === 'string' && s.details.trim() ? s.details.trim() : null,
+          display_order: i,
+          last_edited_by: userId,
+        }))
+        const { error: specErr } = await supabase.from('client_specials').insert(rows)
+        if (specErr) console.error('[completeOnboardingCRM] specials seed error:', specErr.message)
+        else console.log(`[completeOnboardingCRM] Seeded ${rows.length} client_specials`)
+      }
+    }
+  } catch (e) {
+    console.error('[completeOnboardingCRM] specials seed threw:', e)
   }
 
   // 3. Ensure client_users row links auth user to client

@@ -10,6 +10,9 @@ import StepPrice from './steps/step-price'
 import StepSignature from './steps/step-signature'
 import StepDietary from './steps/step-dietary'
 import StepOrdering from './steps/step-ordering'
+import StepMenu from './steps/step-menu'
+import StepSpecials from './steps/step-specials'
+import StepDiscovery from './steps/step-discovery'
 import StepLocation from './steps/step-location'
 import StepRhythm from './steps/step-rhythm'
 import StepStory from './steps/step-story'
@@ -74,6 +77,8 @@ export default function StepRenderer(props: Props) {
       case 'signature': return <StepSignature data={data} update={update} nav={nav} />
       case 'dietary': return <StepDietary data={data} update={update} nav={nav} />
       case 'ordering': return <StepOrdering data={data} update={update} nav={nav} />
+      case 'menu': return <StepMenu data={data} update={update} nav={nav} />
+      case 'specials': return <StepSpecials data={data} update={update} nav={nav} />
       case 'location': return <StepLocation data={data} update={update} nav={nav} />
       case 'rhythm': return <StepRhythm data={data} update={update} nav={nav} />
       case 'story': return <StepStory data={data} update={update} nav={nav} />
@@ -86,6 +91,7 @@ export default function StepRenderer(props: Props) {
       case 'promote': return <StepPromote data={data} update={update} nav={nav} />
       case 'voice': return <StepVoice data={data} update={update} nav={nav} />
       case 'content': return <StepContent data={data} update={update} nav={nav} />
+      case 'discovery': return <StepDiscovery data={data} update={update} nav={nav} />
       case 'avoid': return <StepAvoid data={data} update={update} nav={nav} />
       case 'approval': return <StepApproval data={data} update={update} nav={nav} />
       case 'connect': return <StepConnect data={data} update={update} nav={nav} businessId={props.businessId} />

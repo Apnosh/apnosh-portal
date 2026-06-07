@@ -155,27 +155,44 @@ export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 // Step IDs in order — food steps are inserted dynamically
 export type StepId =
   | 'role' | 'biz_name' | 'biz_type' | 'cuisine' | 'service_style'
-  | 'price' | 'signature' | 'dietary' | 'ordering'
+  | 'price' | 'signature' | 'dietary' | 'ordering' | 'menu' | 'specials'
   | 'location' | 'rhythm' | 'story' | 'customers' | 'why_you' | 'goal' | 'success'
-  | 'promote' | 'voice' | 'content' | 'avoid' | 'approval' | 'connect'
+  | 'promote' | 'voice' | 'content' | 'discovery' | 'avoid' | 'approval' | 'connect'
   | 'assets' | 'review'
 
 export function getSteps(bizType: string): StepId[] {
   const isFood = FOOD_BIZ_TYPES.includes(bizType as typeof FOOD_BIZ_TYPES[number])
   const steps: StepId[] = ['role', 'biz_name', 'biz_type']
   if (isFood) {
-    // Restaurant core: what they serve, how much it costs, signatures, dietary
-    steps.push('cuisine', 'service_style', 'price', 'signature', 'dietary', 'ordering')
+    // Restaurant core: what they serve, how much it costs, signatures, dietary,
+    // how people order, the real menu, and any recurring specials.
+    steps.push('cuisine', 'service_style', 'price', 'signature', 'dietary', 'ordering', 'menu', 'specials')
   }
   steps.push('location')
   // Busy/slow rhythm sits right after hours — it's the same mental model
   if (isFood) steps.push('rhythm')
   steps.push(
     'story', 'customers', 'why_you', 'goal', 'success',
-    'promote', 'voice', 'content', 'avoid', 'approval', 'connect',
+    'promote', 'voice', 'content', 'discovery', 'avoid', 'approval', 'connect',
     'assets', 'review',
   )
   return steps
+}
+
+// A single menu row captured during onboarding. Promoted to a
+// menu_items row at completion.
+export interface MenuDraftItem {
+  name: string
+  price: string      // free-form, e.g. "$12.99" or "" when no price
+  category: string   // free-form section, e.g. "Tacos", "Drinks"
+}
+
+// A recurring special captured during onboarding. Promoted to a
+// client_specials row at completion.
+export interface SpecialDraft {
+  title: string        // "Taco Tuesday", "Happy Hour"
+  time_window: string  // "3pm–5pm daily", "Tuesdays"
+  details: string      // what's included / the hook
 }
 
 // Form data shape
@@ -194,6 +211,10 @@ export interface OnboardingData {
   dietary_options: string[]
   reservations_platform: string
   delivery_platforms: string[]
+  menu_items: MenuDraftItem[]
+  specials: SpecialDraft[]
+  brand_hashtags: string[]
+  target_keywords: string[]
   slow_periods: Record<string, string>
   full_address: string
   city: string
@@ -247,6 +268,10 @@ export const INITIAL_DATA: OnboardingData = {
   dietary_options: [],
   reservations_platform: '',
   delivery_platforms: [],
+  menu_items: [],
+  specials: [],
+  brand_hashtags: [],
+  target_keywords: [],
   slow_periods: {},
   full_address: '',
   city: '',

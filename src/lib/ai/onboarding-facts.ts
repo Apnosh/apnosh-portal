@@ -35,6 +35,41 @@ function arr(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim() !== '') : []
 }
 
+/** Turn a 24h "HH:MM" string into a friendly "8am" / "5:30pm". */
+function prettyTime(t: string): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim())
+  if (!m) return t.trim()
+  let h = parseInt(m[1], 10)
+  const min = m[2]
+  const ampm = h >= 12 ? 'pm' : 'am'
+  h = h % 12 || 12
+  return min === '00' ? `${h}${ampm}` : `${h}:${min}${ampm}`
+}
+
+/**
+ * Summarize the hours map into one human line, e.g.
+ * "Open Mon, Tue, Wed, Thu, Fri 8am–5pm; Sat 9am–3pm".
+ * Groups consecutive days that share the same open/close.
+ */
+function summarizeHours(v: unknown): string {
+  if (!v || typeof v !== 'object') return ''
+  const h = v as Record<string, { open?: string; close?: string; closed?: boolean }>
+  const groups: { days: string[]; range: string }[] = []
+  for (const d of DAY_ORDER) {
+    const day = h[d]
+    if (!day || day.closed) continue
+    const open = (day.open || '').trim()
+    const close = (day.close || '').trim()
+    if (!open && !close) continue
+    const range = open && close ? `${prettyTime(open)}–${prettyTime(close)}` : (open ? `from ${prettyTime(open)}` : `until ${prettyTime(close)}`)
+    const last = groups[groups.length - 1]
+    if (last && last.range === range) last.days.push(d)
+    else groups.push({ days: [d], range })
+  }
+  if (!groups.length) return ''
+  return 'Open ' + groups.map((g) => `${g.days.join(', ')} ${g.range}`).join('; ')
+}
+
 /**
  * Build the structured fact list from raw onboarding data.
  * Exported for unit-testing the mapping without a DB.
@@ -67,6 +102,20 @@ export function buildOnboardingFacts(data: Record<string, unknown>): DraftFact[]
   if (reservations) facts.push({ category: 'observation', fact: `Reservations: ${reservations}` })
   const delivery = arr(data.delivery_platforms)
   if (delivery.length) facts.push({ category: 'observation', fact: `Delivery / ordering: ${delivery.join(', ')}` })
+
+  // — Menu highlights (the full menu is also seeded into menu_items;
+  //   we surface a handful here so fact-only generators see real dishes) —
+  const menuRows = (Array.isArray(data.menu_items) ? data.menu_items : [])
+    .map((m) => (m && typeof m === 'object' ? (m as { name?: unknown; price?: unknown; category?: unknown }) : null))
+    .filter((m): m is { name?: unknown; price?: unknown; category?: unknown } =>
+      !!m && typeof m.name === 'string' && (m.name as string).trim() !== '')
+  for (const m of menuRows.slice(0, 8)) {
+    const name = (m.name as string).trim()
+    const price = typeof m.price === 'string' ? m.price.trim() : ''
+    const cat = typeof m.category === 'string' ? m.category.trim() : ''
+    const detail = [cat, price].filter(Boolean).join(' · ')
+    facts.push({ category: 'specialty', fact: detail ? `Menu item: ${name} (${detail})` : `Menu item: ${name}` })
+  }
 
   // — Who they are —
   const desc = s(data.biz_desc)
@@ -115,11 +164,32 @@ export function buildOnboardingFacts(data: Record<string, unknown>): DraftFact[]
   const refs = s(data.ref_accounts)
   if (refs) facts.push({ category: 'observation', fact: `Accounts/brands they admire: ${refs}` })
 
+  // — Discovery: brand hashtags & local SEO keywords —
+  const hashtags = arr(data.brand_hashtags)
+  if (hashtags.length) facts.push({ category: 'positioning', fact: `Brand hashtags: ${hashtags.join(', ')}`, confidence: 'high' })
+  const keywords = arr(data.target_keywords)
+  if (keywords.length) facts.push({ category: 'positioning', fact: `Target search keywords: ${keywords.join(', ')}`, confidence: 'high' })
+
   // — Location / local market —
   const city = s(data.city)
   const state = s(data.state)
   const place = [city, state].filter(Boolean).join(', ')
   if (place) facts.push({ category: 'positioning', fact: `Located in ${place}`, confidence: 'high' })
+  const address = s(data.full_address)
+  if (address) facts.push({ category: 'positioning', fact: `Address / neighborhood: ${address}` })
+
+  // — Operations: hours, who can appear on camera, urgency —
+  const hoursLine = summarizeHours(data.hours)
+  if (hoursLine) facts.push({ category: 'seasonality', fact: hoursLine, confidence: 'high' })
+
+  const canFilm = arr(data.can_film)
+  if (canFilm.length) facts.push({ category: 'observation', fact: `Who can appear in content: ${canFilm.join(', ')}` })
+
+  const canTag = s(data.can_tag)
+  if (canTag) facts.push({ category: 'observation', fact: `Tagging customers in posts: ${canTag}` })
+
+  const timeline = s(data.timeline)
+  if (timeline) facts.push({ category: 'observation', fact: `Marketing timeline / urgency: ${timeline}` })
 
   // — Voice (also written to client_brands, but kept as facts for retrieval) —
   const tones = arr(data.tones)
