@@ -62,7 +62,7 @@ export default function StepRenderer(props: Props) {
   function renderStep() {
     switch (stepId) {
       case 'role': return <StepRole data={data} update={update} nav={nav} />
-      case 'biz_name': return <StepBizName data={data} update={update} nav={nav} />
+      case 'biz_name': return <StepBizName data={data} update={update} nav={nav} onJumpToReview={() => onGoToStep('review')} />
       case 'biz_type': return <StepBizType data={data} update={update} nav={nav} />
       case 'serve': return <StepServe data={data} update={update} nav={nav} />
       case 'menu_details': return <StepMenuDetails data={data} update={update} nav={nav} />

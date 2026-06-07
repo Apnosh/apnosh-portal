@@ -15,6 +15,8 @@ interface Props {
   data: OnboardingData
   update: <K extends keyof OnboardingData>(field: K, value: OnboardingData[K]) => void
   nav: ReactNode
+  /** Fast-forward to the review screen once the AI has filled the profile. */
+  onJumpToReview?: () => void
 }
 
 // Common ways a website describes its food, mapped to a CUISINES chip. Keys
@@ -61,7 +63,7 @@ function summarize(found: string[]): string {
   return found.slice(0, -1).join(', ') + ' and ' + found[found.length - 1]
 }
 
-export default function StepBizName({ data, update, nav }: Props) {
+export default function StepBizName({ data, update, nav, onJumpToReview }: Props) {
   const [lookupOn, setLookupOn] = useState(false)
   const [query, setQuery] = useState(data.biz_name)
   const [candidates, setCandidates] = useState<PlaceCandidate[]>([])
@@ -70,6 +72,9 @@ export default function StepBizName({ data, update, nav }: Props) {
   const [scanning, setScanning] = useState(false)
   const [recap, setRecap] = useState<string>('')
   const [scanNote, setScanNote] = useState<string>('')
+  // True once a lookup or scan has actually populated fields, so we can offer
+  // a shortcut straight to the review screen instead of every step.
+  const [filledSomething, setFilledSomething] = useState(false)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastPicked = useRef<string>('')
 
@@ -125,6 +130,7 @@ export default function StepBizName({ data, update, nav }: Props) {
       update('biz_type', FOOD_BIZ_TYPES[0])
     }
     setRecap(found.length ? `Pulled your ${summarize(found)}.` : 'Found it.')
+    if (found.length) setFilledSomething(true)
     setPulling(false)
 
     // Chain the website scan automatically when we got a site URL.
@@ -159,6 +165,7 @@ export default function StepBizName({ data, update, nav }: Props) {
     if (x.specials.length && !data.specials.length) {
       update('specials', x.specials); got.push(`${x.specials.length} specials`)
     }
+    if (got.length) setFilledSomething(true)
     setScanNote(got.length
       ? `From your site we drafted ${summarize(got)}. Review and tweak anything as you go.`
       : 'Read your site. Nothing new to pull, so we will fill this in together.')
@@ -169,8 +176,10 @@ export default function StepBizName({ data, update, nav }: Props) {
   return (
     <>
       <Question
-        title="What's your business called?"
-        subtitle={lookupOn ? 'Search and we will fill in the rest' : 'The official name'}
+        title="Let's fill this in for you"
+        subtitle={lookupOn
+          ? 'Search your name or paste your site. We do the typing.'
+          : 'Paste your website and we will pull what we can.'}
       />
       <div className="mt-4 space-y-4">
         {/* Name + (when enabled) live search dropdown */}
@@ -264,6 +273,21 @@ export default function StepBizName({ data, update, nav }: Props) {
             type="tel"
           />
         </div>
+
+        {/* Fast-forward: once the AI has filled fields, let the owner jump
+            straight to the review screen instead of tapping every step. */}
+        {filledSomething && onJumpToReview && (
+          <button
+            type="button"
+            onClick={onJumpToReview}
+            className="w-full py-3 rounded-[10px] text-[13px] font-semibold text-white transition-all"
+            style={{ background: '#2e9a78' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#1f7d61' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#2e9a78' }}
+          >
+            See everything we filled and finish faster →
+          </button>
+        )}
       </div>
       {nav}
     </>
