@@ -38,12 +38,15 @@ export default async function QuarterlyReviewPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
+  // Resolve client_id via businesses.owner_id -> client_id (onboarded
+  // owner), falling back to client_users.auth_user_id (magic-link portal
+  // user). profiles.client_id does not exist, so the old query errored.
+  const { data: business } = await supabase
+    .from('businesses')
     .select('client_id')
-    .eq('id', user.id)
+    .eq('owner_id', user.id)
     .maybeSingle()
-  let clientId = profile?.client_id as string | null | undefined
+  let clientId = business?.client_id as string | null | undefined
   if (!clientId) {
     const { data: cu } = await supabase
       .from('client_users')

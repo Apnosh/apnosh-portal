@@ -23,14 +23,17 @@ export default async function GoalsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Resolve client_id via profile or client_users.
-  const { data: profile } = await supabase
-    .from('profiles')
+  // Resolve client_id the same way the rest of the portal does: an
+  // onboarded owner is linked via businesses.owner_id -> client_id; a
+  // magic-link portal user via client_users.auth_user_id. (We do NOT read
+  // profiles.client_id — that column doesn't exist, so the old query here
+  // always errored and made owners fall through to the gate below.)
+  const { data: business } = await supabase
+    .from('businesses')
     .select('client_id')
-    .eq('id', user.id)
+    .eq('owner_id', user.id)
     .maybeSingle()
-
-  let clientId = profile?.client_id as string | null | undefined
+  let clientId = business?.client_id as string | null | undefined
 
   if (!clientId) {
     const { data: cu } = await supabase
