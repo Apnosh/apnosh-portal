@@ -310,6 +310,7 @@ export async function completeOnboardingCRM(
             city: str(data.city),
             state: str(data.state),
             zip: str(data.zip),
+            gbp_place_id: str(data.primary_place_id),
             hours: (data.hours as Record<string, unknown>) || null,
             is_primary: true,
           })
