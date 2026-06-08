@@ -346,7 +346,16 @@ export async function completeOnboardingCRM(
   //     a best guess the owner can adjust on those pages. Idempotent: we never
   //     overwrite a shape a strategist already captured, and never add goals
   //     when the client already has active ones.
+  //
+  //     Restaurant-only: the shape dimensions and goal catalog are tuned for
+  //     food businesses, so seeding a non-restaurant account (e.g. a
+  //     professional-services business dogfooding the platform) would hand it
+  //     nonsensical goals like "more foot traffic". Skip seeding for those —
+  //     they land with shape/goals blank, which is honest, and can set them by
+  //     hand if relevant.
   try {
+    const isFoodBusiness =
+      typeof data.biz_type === 'string' && data.biz_type === 'Restaurant / café / bar'
     const { inferShapeFromOnboarding, defaultGoalsForShape } = await import('@/lib/goals/defaults')
     const { data: clientRow } = await supabase
       .from('clients')
@@ -354,7 +363,7 @@ export async function completeOnboardingCRM(
       .eq('id', clientId)
       .maybeSingle()
 
-    if (!clientRow?.shape_captured_at) {
+    if (isFoodBusiness && !clientRow?.shape_captured_at) {
       const shape = inferShapeFromOnboarding({
         service_styles: (data.service_styles as string[]) || null,
         price_range: (data.price_range as string) || null,
