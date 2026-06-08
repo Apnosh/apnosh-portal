@@ -1,17 +1,25 @@
 'use client'
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { type OnboardingData, DAYS } from '../data'
+import { type OnboardingData, DAYS, FOOD_BIZ_TYPES } from '../data'
 import { Question, Input, FieldLabel, Hint } from '../ui'
+import { matchCuisine } from '../cuisine'
 import { ensureClientForBusiness } from '@/lib/onboarding-actions'
 import { getGBPLocationsForOnboarding, type OnboardingGBPLocation } from '@/lib/gbp-actions'
-import { isLookupEnabled, searchBusinesses, getBusinessPrefill, type PlaceCandidate } from '@/lib/onboarding-lookup'
+import { isLookupEnabled, searchBusinesses, getBusinessPrefill, extractFromWebsite, type PlaceCandidate } from '@/lib/onboarding-lookup'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
   interface Window {
     google?: any
   }
+}
+
+/** A short line listing what the autofill populated, for the recap note. */
+function summarize(found: string[]): string {
+  if (!found.length) return ''
+  if (found.length === 1) return found[0]
+  return found.slice(0, -1).join(', ') + ' and ' + found[found.length - 1]
 }
 
 interface Props {
@@ -68,50 +76,86 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
   }, [query, lookupOn])
 
   // Pick a search result -> pull its details and drop them into the roster.
-  // Single: fills the one address. Multi: the first pick becomes the primary,
-  // every pick after that is appended as another spot.
+  // The first pick fills the primary address (and, when empty, the business
+  // name, type, website, phone, hours) and then reads the site to draft the
+  // story, cuisine, menu, and specials -- one tap fills as much as we can.
+  // Every pick after the first is appended as another spot.
   async function pickResult(c: PlaceCandidate) {
     setQuery('')
     setResults([])
     setPulling(true)
     const p = await getBusinessPrefill(c.placeId)
-    setPulling(false)
     if (!p) {
+      setPulling(false)
       setSearchNote("We couldn't pull that one. You can type it in below.")
       return
     }
     const hasHours = Object.values(p.hours).some((h) => !h.closed)
+    const name = p.name || c.name
 
-    if (!isMulti) {
-      update('full_address', p.full_address)
-      update('city', p.city)
-      update('state', p.state)
-      update('zip', p.zip)
-      if (p.phone) update('phone', p.phone)
-      if (hasHours) update('hours', p.hours)
-      setSearchNote(`Added ${p.name || c.name}.`)
-      return
-    }
+    // A spot is already in place when the primary address is filled.
+    const primaryFilled = isMulti
+      ? data.primary_location_name.trim() || data.full_address.trim()
+      : data.full_address.trim()
 
-    const primaryEmpty = !data.primary_location_name.trim() && !data.full_address.trim()
-    if (primaryEmpty) {
-      update('primary_location_name', p.name || c.name)
-      update('full_address', p.full_address)
-      update('city', p.city)
-      update('state', p.state)
-      update('zip', p.zip)
-      if (p.phone) update('phone', p.phone)
-      if (hasHours) update('hours', p.hours)
-    } else {
+    if (primaryFilled) {
+      // Additional spot -> append to the roster, leave the rest of the
+      // profile alone.
       update('locations', [
         ...data.locations,
         {
-          name: p.name || c.name, full_address: p.full_address,
+          name, full_address: p.full_address,
           city: p.city, state: p.state, zip: p.zip, place_id: c.placeId,
         },
       ])
+      setPulling(false)
+      setSearchNote(`Added ${name}.`)
+      return
     }
-    setSearchNote(`Added ${p.name || c.name}.`)
+
+    // First spot -> fill the address plus any empty profile basics.
+    if (isMulti) update('primary_location_name', name)
+    update('full_address', p.full_address)
+    update('city', p.city)
+    update('state', p.state)
+    update('zip', p.zip)
+    if (p.phone) update('phone', p.phone)
+    if (hasHours) update('hours', p.hours)
+    if (!data.biz_name.trim()) update('biz_name', name)
+    if (p.website && !data.website.trim()) update('website', p.website)
+    if (!data.biz_type && p.is_food) update('biz_type', FOOD_BIZ_TYPES[0])
+
+    const got = ['address', 'hours']
+    if (p.phone) got.push('phone')
+
+    // Read the website to draft the story, cuisine, menu, and specials.
+    const site = (p.website || data.website).trim()
+    if (site) {
+      const x = await extractFromWebsite(site)
+      if (x) {
+        if (x.description && !data.biz_desc) { update('biz_desc', x.description); got.push('a description') }
+        if (x.cuisine && !data.cuisine) {
+          const m = matchCuisine(x.cuisine)
+          if (m.cuisine) {
+            update('cuisine', m.cuisine)
+            if (m.cuisine === 'Other') update('cuisine_other', m.other)
+            got.push('cuisine')
+          }
+        }
+        if (x.signature_items.length && !data.signature_items.some((s) => s.trim())) {
+          update('signature_items', x.signature_items); got.push(`${x.signature_items.length} signature dishes`)
+        }
+        if (x.menu_items.length && !data.menu_items.length) {
+          update('menu_items', x.menu_items); got.push(`${x.menu_items.length} menu items`)
+        }
+        if (x.specials.length && !data.specials.length) {
+          update('specials', x.specials); got.push(`${x.specials.length} specials`)
+        }
+      }
+    }
+
+    setPulling(false)
+    setSearchNote(`Added ${name}. Drafted ${summarize(got)}. Review and tweak anything as you go.`)
   }
 
   // Kick off OAuth: save progress (survives the full-page redirect), make sure
@@ -365,8 +409,8 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
           )}
           <Hint>
             {isMulti
-              ? 'Find each spot to fill it in. The first one becomes your main location.'
-              : 'Find your spot to fill in the address and hours, or just type it below.'}
+              ? 'Find each spot to fill it in. The first one fills your main details and reads your site too.'
+              : 'Find your spot to fill in your address, hours, and details from your site.'}
           </Hint>
         </div>
       )}

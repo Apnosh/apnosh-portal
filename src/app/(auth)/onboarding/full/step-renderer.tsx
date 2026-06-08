@@ -1,5 +1,6 @@
 'use client'
 
+import { type ReactNode } from 'react'
 import { type OnboardingData, type StepId } from './data'
 import StepRole from './steps/step-role'
 import StepBizName from './steps/step-biz-name'
@@ -24,7 +25,8 @@ import StepReview from './steps/step-review'
 import StepDone from './steps/step-done'
 
 interface Props {
-  stepId: StepId | 'success' | undefined
+  /** The steps that make up the current screen, rendered stacked. */
+  screen: StepId[] | 'success' | undefined
   data: OnboardingData
   update: <K extends keyof OnboardingData>(field: K, value: OnboardingData[K]) => void
   valid: boolean
@@ -47,7 +49,7 @@ interface Props {
 }
 
 export default function StepRenderer(props: Props) {
-  const { stepId, data, update, valid, saving, step, onNext, onBack, onGoToStep, onComplete, onSkipForNow, canSkip, onLogoUpload, onPhotosUpload } = props
+  const { screen, data, update, valid, saving, step, onNext, onBack, onGoToStep, onComplete, onSkipForNow, canSkip, onLogoUpload, onPhotosUpload } = props
 
   const nav = (
     <Nav
@@ -61,36 +63,55 @@ export default function StepRenderer(props: Props) {
     />
   )
 
-  function renderStep() {
+  // Render one step. The shared nav is attached only to the last step on a
+  // screen; earlier steps pass nav={null} so a phase reads as stacked sections
+  // under a single Back/Continue bar.
+  function renderStep(stepId: StepId, n: ReactNode) {
     switch (stepId) {
-      case 'role': return <StepRole data={data} update={update} nav={nav} />
-      case 'biz_name': return <StepBizName data={data} update={update} nav={nav} onJumpToReview={() => onGoToStep('review')} />
-      case 'biz_type': return <StepBizType data={data} update={update} nav={nav} />
-      case 'serve': return <StepServe data={data} update={update} nav={nav} />
-      case 'menu_details': return <StepMenuDetails data={data} update={update} nav={nav} />
-      case 'ordering': return <StepOrdering data={data} update={update} nav={nav} />
-      case 'menu': return <StepMenu data={data} update={update} nav={nav} />
-      case 'specials': return <StepSpecials data={data} update={update} nav={nav} />
-      case 'location': return <StepLocation data={data} update={update} nav={nav} businessId={props.businessId} onSaveBeforeRedirect={props.onSaveBeforeRedirect} />
-      case 'rhythm': return <StepRhythm data={data} update={update} nav={nav} />
-      case 'story': return <StepStory data={data} update={update} nav={nav} />
-      case 'audience': return <StepAudience data={data} update={update} nav={nav} />
-      case 'goals': return <StepGoals data={data} update={update} nav={nav} />
-      case 'success': return <StepDone bizName={data.biz_name} />
-      case 'promote': return <StepPromote data={data} update={update} nav={nav} />
-      case 'brand_voice': return <StepBrandVoice data={data} update={update} nav={nav} />
-      case 'discovery': return <StepDiscovery data={data} update={update} nav={nav} />
-      case 'approval': return <StepApproval data={data} update={update} nav={nav} />
-      case 'connect': return <StepConnect data={data} update={update} nav={nav} businessId={props.businessId} />
-      case 'assets': return <StepAssets data={data} update={update} nav={nav} onLogoUpload={onLogoUpload} onPhotosUpload={onPhotosUpload} />
+      case 'role': return <StepRole data={data} update={update} nav={n} />
+      case 'biz_name': return <StepBizName data={data} update={update} nav={n} onJumpToReview={() => onGoToStep('review')} />
+      case 'biz_type': return <StepBizType data={data} update={update} nav={n} />
+      case 'serve': return <StepServe data={data} update={update} nav={n} />
+      case 'menu_details': return <StepMenuDetails data={data} update={update} nav={n} />
+      case 'ordering': return <StepOrdering data={data} update={update} nav={n} />
+      case 'menu': return <StepMenu data={data} update={update} nav={n} />
+      case 'specials': return <StepSpecials data={data} update={update} nav={n} />
+      case 'location': return <StepLocation data={data} update={update} nav={n} businessId={props.businessId} onSaveBeforeRedirect={props.onSaveBeforeRedirect} />
+      case 'rhythm': return <StepRhythm data={data} update={update} nav={n} />
+      case 'story': return <StepStory data={data} update={update} nav={n} />
+      case 'audience': return <StepAudience data={data} update={update} nav={n} />
+      case 'goals': return <StepGoals data={data} update={update} nav={n} />
+      case 'promote': return <StepPromote data={data} update={update} nav={n} />
+      case 'brand_voice': return <StepBrandVoice data={data} update={update} nav={n} />
+      case 'discovery': return <StepDiscovery data={data} update={update} nav={n} />
+      case 'approval': return <StepApproval data={data} update={update} nav={n} />
+      case 'connect': return <StepConnect data={data} update={update} nav={n} businessId={props.businessId} />
+      case 'assets': return <StepAssets data={data} update={update} nav={n} onLogoUpload={onLogoUpload} onPhotosUpload={onPhotosUpload} />
+      // Review owns its own finish button, so it never renders the shared nav.
       case 'review': return <StepReview data={data} update={update} onGoToStep={onGoToStep} onComplete={onComplete} saving={saving} />
-      default: return <StepDone bizName={data.biz_name} />
+      default: return null
     }
   }
 
   return (
     <div className="flex-1 overflow-y-auto px-9 pb-2 max-sm:px-5 min-h-0 custom-scroll">
-      {renderStep()}
+      {screen === 'success' || !screen ? (
+        <StepDone bizName={data.biz_name} />
+      ) : (
+        screen.map((stepId, i) => {
+          const isLast = i === screen.length - 1
+          const withNav = isLast && stepId !== 'review'
+          return (
+            <div
+              key={stepId}
+              className={i > 0 ? 'mt-9 pt-9 border-t' : ''}
+              style={i > 0 ? { borderColor: '#f0f0f0' } : undefined}
+            >
+              {renderStep(stepId, withNav ? nav : null)}
+            </div>
+          )
+        })
+      )}
     </div>
   )
 }

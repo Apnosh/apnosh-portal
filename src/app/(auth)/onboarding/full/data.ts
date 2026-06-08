@@ -200,6 +200,52 @@ export function getPhaseInfo(stepId: StepId, bizType: string): PhaseInfo {
   }
 }
 
+// A "screen" is one scrollable card that groups all the steps of a phase, so
+// owners answer a few related questions at once instead of clicking through one
+// question per page. The recap (review) keeps its own final screen.
+export function getScreens(bizType: string): StepId[][] {
+  const steps = getSteps(bizType)
+  const screens: StepId[][] = []
+  for (const phase of PHASE_ORDER) {
+    const inPhase = steps.filter((s) => STEP_PHASES[s] === phase)
+    if (!inPhase.length) continue
+    if (phase === 'Launch') {
+      const pre = inPhase.filter((s) => s !== 'review')
+      if (pre.length) screens.push(pre)
+      if (inPhase.includes('review')) screens.push(['review'])
+    } else {
+      screens.push(inPhase)
+    }
+  }
+  return screens
+}
+
+/** A screen can advance only when every question on it passes validation. */
+export function canContinueScreen(screen: StepId[], data: OnboardingData): boolean {
+  return screen.every((s) => canContinue(s, data))
+}
+
+/** The phase label shown for a screen (its first step's phase). */
+export function getScreenPhase(screen: StepId[]): PhaseLabel {
+  return STEP_PHASES[screen[0]]
+}
+
+/** Map a saved 1-based step index to the 1-based screen that contains it. */
+export function stepIndexToScreen(bizType: string, stepIndex1: number): number {
+  const steps = getSteps(bizType)
+  const stepId = steps[stepIndex1 - 1]
+  if (!stepId) return 1
+  const idx = getScreens(bizType).findIndex((sc) => sc.includes(stepId))
+  return idx < 0 ? 1 : idx + 1
+}
+
+/** Map a 1-based screen index back to the step index of its first step. */
+export function screenToStepIndex(bizType: string, screen1: number): number {
+  const sc = getScreens(bizType)[screen1 - 1]
+  if (!sc) return 1
+  return getSteps(bizType).indexOf(sc[0]) + 1
+}
+
 export function getSteps(bizType: string): StepId[] {
   const isFood = FOOD_BIZ_TYPES.includes(bizType as typeof FOOD_BIZ_TYPES[number])
   const steps: StepId[] = ['role', 'biz_name', 'biz_type']

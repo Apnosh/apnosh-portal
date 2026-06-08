@@ -7,9 +7,11 @@ import {
   type OnboardingData,
   type StepId,
   INITIAL_DATA,
-  getSteps,
-  canContinue,
-  getPhaseInfo,
+  getScreens,
+  canContinueScreen,
+  getScreenPhase,
+  stepIndexToScreen,
+  screenToStepIndex,
 } from './data'
 import StepRenderer from './step-renderer'
 import { completeOnboardingCRM } from '@/lib/onboarding-actions'
@@ -18,7 +20,7 @@ export default function OnboardingPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [step, setStep] = useState(1)
+  const [screenNo, setScreenNo] = useState(1)
   const [data, setData] = useState<OnboardingData>(INITIAL_DATA)
   const [businessId, setBusinessId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -27,13 +29,14 @@ export default function OnboardingPage() {
   const [showSuccess, setShowSuccess] = useState(false)
   const [logoUrl, setLogoUrl] = useState<string>('')
 
-  // Derived step info
-  const steps = getSteps(data.biz_type)
-  const totalSteps = steps.length
-  const currentStepId = steps[step - 1] as StepId | undefined
-  const pct = Math.round((step / totalSteps) * 100)
-  const valid = currentStepId ? canContinue(currentStepId, data) : false
-  const phase = currentStepId ? getPhaseInfo(currentStepId, data.biz_type) : null
+  // Derived screen info. The wizard groups each phase's questions onto one
+  // scrollable screen, so navigation moves screen-by-screen, not step-by-step.
+  const screens = getScreens(data.biz_type)
+  const totalScreens = screens.length
+  const currentScreen = screens[screenNo - 1]
+  const pct = Math.round((screenNo / totalScreens) * 100)
+  const valid = currentScreen ? canContinueScreen(currentScreen, data) : false
+  const phaseLabel = currentScreen ? getScreenPhase(currentScreen) : null
 
   // Load existing data on mount
   useEffect(() => {
@@ -120,9 +123,10 @@ export default function OnboardingPage() {
           agreed_terms: biz.agreed_terms || false,
         })
 
-        // Resume from saved step
+        // Resume from saved progress. onboarding_step is persisted as a step
+        // index for backward compatibility; map it to the screen that holds it.
         if (biz.onboarding_step && biz.onboarding_step > 1) {
-          setStep(biz.onboarding_step)
+          setScreenNo(stepIndexToScreen(biz.industry || '', biz.onboarding_step))
         }
       }
       setLoading(false)
@@ -136,8 +140,9 @@ export default function OnboardingPage() {
     setData((prev) => ({ ...prev, [field]: value }))
   }, [])
 
-  // Save current data to Supabase
-  async function saveData(nextStep: number) {
+  // Save current data to Supabase. `nextScreen` is a 1-based screen index;
+  // we persist it as a step index so older resume logic stays compatible.
+  async function saveData(nextScreen: number) {
     if (!userId) return
     setSaving(true)
 
@@ -198,7 +203,7 @@ export default function OnboardingPage() {
       current_platforms: connectedPlatforms,
       brand_colors: { primary: data.color1, secondary: data.color2 },
       brand_drive: data.brand_drive,
-      onboarding_step: nextStep,
+      onboarding_step: screenToStepIndex(data.biz_type, nextScreen),
     }
 
     if (businessId) {
@@ -214,24 +219,24 @@ export default function OnboardingPage() {
     setSaving(false)
   }
 
-  // Navigation
+  // Navigation — moves screen by screen.
   async function goNext() {
-    if (!valid && currentStepId) return
-    const nextStep = step + 1
-    await saveData(nextStep)
-    setStep(nextStep)
+    if (!valid && currentScreen) return
+    const next = screenNo + 1
+    await saveData(next)
+    setScreenNo(next)
   }
 
   async function goBack() {
-    if (step > 1) {
-      await saveData(step - 1)
-      setStep(step - 1)
+    if (screenNo > 1) {
+      await saveData(screenNo - 1)
+      setScreenNo(screenNo - 1)
     }
   }
 
   function goToStep(stepId: StepId) {
-    const idx = steps.indexOf(stepId)
-    if (idx > -1) setStep(idx + 1)
+    const idx = screens.findIndex((sc) => sc.includes(stepId))
+    if (idx > -1) setScreenNo(idx + 1)
   }
 
   // Complete onboarding
@@ -244,7 +249,7 @@ export default function OnboardingPage() {
       .from('businesses')
       .update({
         onboarding_completed: true,
-        onboarding_step: totalSteps + 1,
+        onboarding_step: screenToStepIndex(data.biz_type, totalScreens) + 1,
         agreed_terms: true,
         agreed_terms_at: new Date().toISOString(),
       })
@@ -287,7 +292,7 @@ export default function OnboardingPage() {
       .from('businesses')
       .update({
         onboarding_completed: true,        // unlocks portal access
-        onboarding_step: step,             // remember where they left off
+        onboarding_step: screenToStepIndex(data.biz_type, screenNo), // remember where they left off
         onboarding_paused: true,           // dashboard banner uses this
         agreed_terms: true,
         agreed_terms_at: new Date().toISOString(),
@@ -320,7 +325,7 @@ export default function OnboardingPage() {
    */
   async function handleExit() {
     setSaving(true)
-    await saveData(step)            // ensure a draft row exists + persist edits
+    await saveData(screenNo)        // ensure a draft row exists + persist edits
     if (userId) {
       await supabase
         .from('businesses')
@@ -397,35 +402,26 @@ export default function OnboardingPage() {
           {/* Progress bar */}
           {!showSuccess && (
             <div className="mb-7">
-              {/* Phase ticks: one segment per phase, filled up to the current one */}
-              {phase && (
-                <div className="flex gap-1.5 mb-2.5">
-                  {Array.from({ length: phase.phaseCount }).map((_, i) => (
+              {/* One tick per screen, filled up to the current screen */}
+              <div className="flex gap-1.5 mb-2.5">
+                {Array.from({ length: totalScreens }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-[3px] flex-1 rounded-sm overflow-hidden bg-[#eee]"
+                  >
                     <div
-                      key={i}
-                      className="h-[3px] flex-1 rounded-sm overflow-hidden bg-[#eee]"
-                    >
-                      <div
-                        className="h-full bg-[#4abd98] rounded-sm transition-all duration-400"
-                        style={{
-                          width:
-                            i + 1 < phase.phaseNumber ? '100%'
-                            : i + 1 > phase.phaseNumber ? '0%'
-                            : `${Math.round((phase.indexInPhase / phase.phaseTotal) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
+                      className="h-full bg-[#4abd98] rounded-sm transition-all duration-400"
+                      style={{ width: i + 1 <= screenNo ? '100%' : '0%' }}
+                    />
+                  </div>
+                ))}
+              </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs font-medium" style={{ color: '#111' }}>
-                  {phase ? phase.label : ''}
-                  {phase && phase.phaseTotal > 1 && (
-                    <span className="font-normal" style={{ color: '#999' }}>
-                      {' · '}{phase.indexInPhase} of {phase.phaseTotal}
-                    </span>
-                  )}
+                  {phaseLabel || ''}
+                  <span className="font-normal" style={{ color: '#999' }}>
+                    {' · '}Step {screenNo} of {totalScreens}
+                  </span>
                 </span>
                 <span className="text-xs font-medium" style={{ color: '#2e9a78' }}>
                   {pct}%
@@ -437,23 +433,23 @@ export default function OnboardingPage() {
 
         {/* Scrollable content */}
         <StepRenderer
-          stepId={showSuccess ? 'success' : currentStepId}
+          screen={showSuccess ? 'success' : currentScreen}
           data={data}
           update={update}
           valid={valid}
           saving={saving}
-          step={step}
-          totalSteps={totalSteps}
+          step={screenNo}
+          totalSteps={totalScreens}
           onNext={goNext}
           onBack={goBack}
           onGoToStep={goToStep}
           onComplete={handleComplete}
           onSkipForNow={handleSkipForNow}
-          canSkip={!!(data.role && data.biz_name && data.biz_type) && !showSuccess && step < totalSteps}
+          canSkip={!!(data.role && data.biz_name && data.biz_type) && !showSuccess && screenNo < totalScreens}
           onLogoUpload={handleLogoUpload}
           onPhotosUpload={handlePhotosUpload}
           businessId={businessId}
-          onSaveBeforeRedirect={() => saveData(step)}
+          onSaveBeforeRedirect={() => saveData(screenNo)}
         />
       </div>
     </div>
