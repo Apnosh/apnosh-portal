@@ -1,7 +1,7 @@
 'use client'
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { type OnboardingData, DAYS, FOOD_BIZ_TYPES } from '../data'
+import { type OnboardingData, FOOD_BIZ_TYPES } from '../data'
 import { Question, Input, FieldLabel, Hint } from '../ui'
 import { matchCuisine } from '../cuisine'
 import { ensureClientForBusiness } from '@/lib/onboarding-actions'
@@ -110,6 +110,7 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
         {
           name, full_address: p.full_address,
           city: p.city, state: p.state, zip: p.zip, place_id: c.placeId,
+          phone: p.phone || '', hours: hasHours ? p.hours : {},
         },
       ])
       setPulling(false)
@@ -119,6 +120,7 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
 
     // First spot -> fill the address plus any empty profile basics.
     if (isMulti) update('primary_location_name', name)
+    update('primary_place_id', c.placeId)
     update('full_address', p.full_address)
     update('city', p.city)
     update('state', p.state)
@@ -154,6 +156,18 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
         }
         if (x.specials.length && !data.specials.length) {
           update('specials', x.specials); got.push(`${x.specials.length} specials`)
+        }
+        if (x.service_styles.length && !data.service_styles.length) {
+          update('service_styles', x.service_styles); got.push('how you serve')
+        }
+        if (x.dietary_options.length && !data.dietary_options.length) {
+          update('dietary_options', x.dietary_options); got.push('dietary options')
+        }
+        if (x.reservations_platform && !data.reservations_platform) {
+          update('reservations_platform', x.reservations_platform); got.push('reservations')
+        }
+        if (x.delivery_platforms.length && !data.delivery_platforms.length) {
+          update('delivery_platforms', x.delivery_platforms); got.push('delivery')
         }
       }
     }
@@ -251,6 +265,7 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
         ...rest.map((l) => ({
           name: l.title, full_address: l.full_address,
           city: l.city, state: l.state, zip: l.zip, place_id: '',
+          phone: l.phone || '', hours: l.hours || {},
         })),
       ])
     }
@@ -296,17 +311,10 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
     }
   }, [update])
 
-  function updateHours(day: string, field: 'open' | 'close' | 'closed', value: string | boolean) {
-    const hours = { ...data.hours }
-    if (!hours[day]) hours[day] = { open: '09:00', close: '17:00', closed: false }
-    hours[day] = { ...hours[day], [field]: value }
-    update('hours', hours)
-  }
-
   function addLocation() {
     update('locations', [
       ...data.locations,
-      { name: '', full_address: '', city: '', state: '', zip: '', place_id: '' },
+      { name: '', full_address: '', city: '', state: '', zip: '', place_id: '', phone: '', hours: {} },
     ])
   }
 
@@ -564,12 +572,6 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
                 <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#999' }}>
                   Location 1
                 </span>
-                <span
-                  className="text-[10px] font-semibold rounded-full px-2 py-0.5"
-                  style={{ color: '#0f6e56', background: '#e3f5ee' }}
-                >
-                  Main
-                </span>
               </div>
               <Input
                 value={data.primary_location_name}
@@ -626,54 +628,6 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
             </p>
           </div>
         )}
-
-        {/* Business hours */}
-        <div className="mt-5">
-          <FieldLabel>
-            {isMulti ? 'Hours (main location)' : 'Business hours'}
-          </FieldLabel>
-          <div className="flex flex-col gap-2 mt-2">
-            {DAYS.map((day) => {
-              const hr = data.hours[day] || { open: '09:00', close: '17:00', closed: false }
-              return (
-                <div key={day} className="flex items-center gap-2 max-sm:gap-1.5">
-                  <span className="w-9 text-sm font-medium flex-shrink-0" style={{ color: '#111' }}>
-                    {day}
-                  </span>
-                  <input
-                    type="time"
-                    value={hr.open}
-                    disabled={hr.closed}
-                    onChange={(e) => updateHours(day, 'open', e.target.value)}
-                    className="w-[110px] max-sm:w-auto max-sm:flex-1 max-sm:min-w-0 text-sm text-center rounded-[10px] px-2.5 max-sm:px-1.5 py-2 outline-none disabled:opacity-35"
-                    style={{ border: '1.5px solid #e0e0e0', fontFamily: 'DM Sans, sans-serif' }}
-                  />
-                  <span className="text-[13px] flex-shrink-0" style={{ color: '#999' }}>to</span>
-                  <input
-                    type="time"
-                    value={hr.close}
-                    disabled={hr.closed}
-                    onChange={(e) => updateHours(day, 'close', e.target.value)}
-                    className="w-[110px] max-sm:w-auto max-sm:flex-1 max-sm:min-w-0 text-sm text-center rounded-[10px] px-2.5 max-sm:px-1.5 py-2 outline-none disabled:opacity-35"
-                    style={{ border: '1.5px solid #e0e0e0', fontFamily: 'DM Sans, sans-serif' }}
-                  />
-                  <label
-                    className="text-[13px] flex items-center gap-1 cursor-pointer whitespace-nowrap"
-                    style={{ color: '#555' }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={hr.closed}
-                      onChange={(e) => updateHours(day, 'closed', e.target.checked)}
-                      className="accent-[#4abd98]"
-                    />
-                    Closed
-                  </label>
-                </div>
-              )
-            })}
-          </div>
-        </div>
       </div>
       </>
       )}

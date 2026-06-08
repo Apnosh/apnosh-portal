@@ -56,6 +56,18 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
     if (x.specials.length && !data.specials.length) {
       update('specials', x.specials); got.push(`${x.specials.length} specials`)
     }
+    if (x.service_styles.length && !data.service_styles.length) {
+      update('service_styles', x.service_styles); got.push('how you serve')
+    }
+    if (x.dietary_options.length && !data.dietary_options.length) {
+      update('dietary_options', x.dietary_options); got.push('dietary options')
+    }
+    if (x.reservations_platform && !data.reservations_platform) {
+      update('reservations_platform', x.reservations_platform); got.push('reservations')
+    }
+    if (x.delivery_platforms.length && !data.delivery_platforms.length) {
+      update('delivery_platforms', x.delivery_platforms); got.push('delivery')
+    }
     if (got.length) setFilledSomething(true)
     setScanNote(got.length
       ? `From your site we drafted ${summarize(got)}. Review and tweak anything as you go.`

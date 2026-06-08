@@ -53,6 +53,45 @@ export interface WebsiteExtract {
   signature_items: string[]
   menu_items: Array<{ name: string; price: string; category: string }>
   specials: Array<{ title: string; time_window: string; details: string }>
+  // Fact-based profile fields, only filled when the site clearly shows them.
+  // Each is validated against the wizard's allowed values before returning, so
+  // a hallucinated label can never reach onboarding state.
+  service_styles: string[]
+  dietary_options: string[]
+  reservations_platform: string
+  delivery_platforms: string[]
+}
+
+// Allowed values, mirrored from the wizard's data.ts option lists. The model
+// is told to copy these verbatim; we also filter its output to this set so any
+// invented label is dropped rather than written into the form.
+const ALLOWED_SERVICE_STYLES = [
+  'Fast food', 'Quick service / fast casual', 'Casual dining', 'Family style',
+  'Fine dining', 'Café / coffee shop', 'Bar / lounge', 'Buffet / AYCE',
+  'Food truck / pop-up', 'Catering', 'Bakery / patisserie', 'Other',
+]
+const ALLOWED_DIETARY = [
+  'Vegan', 'Vegetarian', 'Gluten-free', 'Halal', 'Kosher',
+  'Nut-free', 'Dairy-free', 'Keto / low-carb', 'Organic / local', 'Allergen-friendly',
+]
+const ALLOWED_RESERVATIONS = [
+  'OpenTable', 'Resy', 'Tock', 'Yelp Reservations', 'In-house only', 'No reservations',
+]
+const ALLOWED_DELIVERY = [
+  'DoorDash', 'Uber Eats', 'Grubhub', 'Toast', 'Our own', 'No delivery',
+]
+
+/** Keep only the model's values that exactly match an allowed option. */
+function keepAllowed(values: unknown, allowed: string[]): string[] {
+  if (!Array.isArray(values)) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const v of values) {
+    if (typeof v !== 'string') continue
+    const match = allowed.find((a) => a.toLowerCase() === v.trim().toLowerCase())
+    if (match && !seen.has(match)) { seen.add(match); out.push(match) }
+  }
+  return out
 }
 
 const DAY_KEYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
@@ -281,13 +320,23 @@ Return ONLY raw JSON (no markdown, no commentary) with exactly this shape:
   "cuisine": "single best-fit cuisine label or empty string",
   "signature_items": ["up to 5 standout dishes or products"],
   "menu_items": [{"name": "", "price": "", "category": ""}],
-  "specials": [{"title": "", "time_window": "", "details": ""}]
+  "specials": [{"title": "", "time_window": "", "details": ""}],
+  "service_styles": [],
+  "dietary_options": [],
+  "reservations_platform": "",
+  "delivery_platforms": []
 }
 
 Rules:
 - menu_items: include real items you can see, with price as written (e.g. "$12") or "" if none. category is a section like "Tacos" or "" if unclear. Cap at 25 items.
 - specials: recurring deals like happy hour or taco Tuesday only. Empty array if none.
 - Keep all copy free of em dashes.
+
+Facts only for the next four fields. Include a value ONLY when the website text clearly supports it. Never guess. Never infer service style from cuisine alone. Copy values VERBATIM from these lists; if nothing fits, leave it empty.
+- service_styles: pick any that clearly apply from: ${ALLOWED_SERVICE_STYLES.join(', ')}
+- dietary_options: pick any clearly advertised from: ${ALLOWED_DIETARY.join(', ')}
+- reservations_platform: pick ONE if a reservation link or name is shown from: ${ALLOWED_RESERVATIONS.join(', ')}. Empty string if none shown.
+- delivery_platforms: pick any whose link or name appears from: ${ALLOWED_DELIVERY.join(', ')}
 
 WEBSITE TEXT:
 ${text}`
@@ -333,6 +382,10 @@ ${text}`
         : [],
       menu_items: cleanMenu,
       specials: cleanSpecials,
+      service_styles: keepAllowed(parsed.service_styles, ALLOWED_SERVICE_STYLES),
+      dietary_options: keepAllowed(parsed.dietary_options, ALLOWED_DIETARY),
+      reservations_platform: keepAllowed([parsed.reservations_platform], ALLOWED_RESERVATIONS)[0] || '',
+      delivery_platforms: keepAllowed(parsed.delivery_platforms, ALLOWED_DELIVERY),
     }
   } catch (e) {
     console.error('[lookup] extractFromWebsite model/parse threw:', e)

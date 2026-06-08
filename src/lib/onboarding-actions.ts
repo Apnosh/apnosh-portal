@@ -288,6 +288,7 @@ export async function completeOnboardingCRM(
       ? (data.locations as Array<{
           name?: unknown; full_address?: unknown
           city?: unknown; state?: unknown; zip?: unknown; place_id?: unknown
+          hours?: unknown
         }>)
       : []
     const cleanLocs = locDraft.filter(
@@ -322,6 +323,7 @@ export async function completeOnboardingCRM(
             state: str(l.state),
             zip: str(l.zip),
             gbp_place_id: str(l.place_id),
+            hours: (l.hours as Record<string, unknown>) || null,
             is_primary: false,
           })
         }

@@ -356,102 +356,199 @@ export default function OnboardingPage() {
     update('photo_count', files.length)
   }
 
-  if (loading) {
-    return (
-      <div className="w-full max-w-[560px]">
-        <div
-          className="bg-white rounded-[14px] border p-9 text-center"
-          style={{ borderColor: '#f0f0f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-        >
-          <div className="animate-pulse text-sm" style={{ color: '#999' }}>Loading...</div>
-        </div>
-      </div>
-    )
-  }
+  // Distinct phase labels in order, each tagged done / current / upcoming, for
+  // the left brand panel's checklist. A phase is done once we have moved past
+  // its last screen, and current while we sit on any of its screens.
+  const phaseSeq = screens.map(getScreenPhase)
+  const distinctPhases: typeof phaseSeq = []
+  for (const p of phaseSeq) if (p && !distinctPhases.includes(p)) distinctPhases.push(p)
+  const currentIndex = showSuccess ? screens.length : screenNo - 1
+  const panelPhases = distinctPhases.map((label) => {
+    const last = phaseSeq.lastIndexOf(label)
+    const first = phaseSeq.indexOf(label)
+    const state: 'done' | 'current' | 'upcoming' =
+      currentIndex > last ? 'done' : currentIndex >= first ? 'current' : 'upcoming'
+    return { label, state }
+  })
 
   return (
-    <div className="w-full max-w-[560px]">
-      <div
-        className="bg-white border flex flex-col overflow-hidden animate-[fadeUp_0.25s_ease]
-                   rounded-[14px] max-sm:rounded-none max-sm:border-none max-sm:shadow-none"
-        style={{
-          borderColor: '#f0f0f0',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-          maxHeight: 'calc(100vh - 140px)',
-        }}
-      >
-        {/* Fixed top: progress + question */}
-        <div className="flex-shrink-0 px-9 pt-9 max-sm:px-5 max-sm:pt-6">
-          {/* Always-available exit. Leaves setup without provisioning;
-              the draft is saved so they can pick up later. */}
-          {!showSuccess && (
-            <div className="flex justify-end -mt-3 mb-2">
-              <button
-                onClick={handleExit}
-                disabled={saving}
-                className="text-[12px] font-medium transition-colors disabled:opacity-40"
-                style={{ color: '#bbb', background: 'none' }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = '#777' }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = '#bbb' }}
-                title="Leave setup. Your progress is saved."
-              >
-                Exit
-              </button>
-            </div>
-          )}
-          {/* Progress bar */}
-          {!showSuccess && (
-            <div className="mb-7">
-              {/* One tick per screen, filled up to the current screen */}
-              <div className="flex gap-1.5 mb-2.5">
-                {Array.from({ length: totalScreens }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-[3px] flex-1 rounded-sm overflow-hidden bg-[#eee]"
-                  >
-                    <div
-                      className="h-full bg-[#4abd98] rounded-sm transition-all duration-400"
-                      style={{ width: i + 1 <= screenNo ? '100%' : '0%' }}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-medium" style={{ color: '#111' }}>
-                  {phaseLabel || ''}
-                  <span className="font-normal" style={{ color: '#999' }}>
-                    {' · '}Step {screenNo} of {totalScreens}
-                  </span>
-                </span>
-                <span className="text-xs font-medium" style={{ color: '#2e9a78' }}>
-                  {pct}%
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
+    <div className="fixed inset-0 flex" style={{ background: '#fafaf8' }}>
+      {/* Left brand + progress panel — desktop only */}
+      <BrandPanel phases={loading ? [] : panelPhases} />
 
-        {/* Scrollable content */}
-        <StepRenderer
-          screen={showSuccess ? 'success' : currentScreen}
-          data={data}
-          update={update}
-          valid={valid}
-          saving={saving}
-          step={screenNo}
-          totalSteps={totalScreens}
-          onNext={goNext}
-          onBack={goBack}
-          onGoToStep={goToStep}
-          onComplete={handleComplete}
-          onSkipForNow={handleSkipForNow}
-          canSkip={!!(data.role && data.biz_name && data.biz_type) && !showSuccess && screenNo < totalScreens}
-          onLogoUpload={handleLogoUpload}
-          onPhotosUpload={handlePhotosUpload}
-          businessId={businessId}
-          onSaveBeforeRedirect={() => saveData(screenNo)}
-        />
+      {/* Right form area */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        {/* Compact brand bar for mobile, where the side panel is hidden */}
+        <header
+          className="md:hidden flex items-center justify-between px-5 py-4 border-b bg-white flex-shrink-0"
+          style={{ borderColor: '#f0f0f0' }}
+        >
+          <span
+            className="text-[20px] font-semibold tracking-tight"
+            style={{ fontFamily: 'Playfair Display, serif', color: '#2e9a78', letterSpacing: '-0.3px' }}
+          >
+            Apnosh
+          </span>
+          <span className="text-xs" style={{ color: '#999' }}>Account setup</span>
+        </header>
+
+        <main className="flex-1 overflow-y-auto flex items-start justify-center px-8 py-10 max-sm:px-4 max-sm:py-6">
+          <div className="w-full max-w-[640px]">
+            {loading ? (
+              <div
+                className="bg-white rounded-[16px] border p-10 text-center"
+                style={{ borderColor: '#ececec', boxShadow: '0 8px 30px rgba(0,0,0,0.06)' }}
+              >
+                <div className="animate-pulse text-sm" style={{ color: '#999' }}>Loading...</div>
+              </div>
+            ) : (
+              <div
+                className="bg-white border flex flex-col overflow-hidden animate-[fadeUp_0.25s_ease]
+                           rounded-[16px] max-sm:rounded-[14px]"
+                style={{
+                  borderColor: '#ececec',
+                  boxShadow: '0 8px 30px rgba(0,0,0,0.06)',
+                }}
+              >
+                {/* Fixed top: progress + question */}
+                <div className="flex-shrink-0 px-9 pt-8 max-sm:px-5 max-sm:pt-6">
+                  {/* Always-available exit. Leaves setup without provisioning;
+                      the draft is saved so they can pick up later. */}
+                  {!showSuccess && (
+                    <div className="flex justify-end -mt-2 mb-2">
+                      <button
+                        onClick={handleExit}
+                        disabled={saving}
+                        className="text-[12px] font-medium transition-colors disabled:opacity-40"
+                        style={{ color: '#bbb', background: 'none' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.color = '#777' }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = '#bbb' }}
+                        title="Leave setup. Your progress is saved."
+                      >
+                        Exit
+                      </button>
+                    </div>
+                  )}
+                  {/* Progress bar */}
+                  {!showSuccess && (
+                    <div className="mb-7">
+                      {/* One tick per screen, filled up to the current screen */}
+                      <div className="flex gap-1.5 mb-2.5">
+                        {Array.from({ length: totalScreens }).map((_, i) => (
+                          <div
+                            key={i}
+                            className="h-[3px] flex-1 rounded-sm overflow-hidden bg-[#eee]"
+                          >
+                            <div
+                              className="h-full bg-[#4abd98] rounded-sm transition-all duration-400"
+                              style={{ width: i + 1 <= screenNo ? '100%' : '0%' }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-medium" style={{ color: '#111' }}>
+                          {phaseLabel || ''}
+                          <span className="font-normal" style={{ color: '#999' }}>
+                            {' · '}Step {screenNo} of {totalScreens}
+                          </span>
+                        </span>
+                        <span className="text-xs font-medium" style={{ color: '#2e9a78' }}>
+                          {pct}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Scrollable content */}
+                <StepRenderer
+                  screen={showSuccess ? 'success' : currentScreen}
+                  data={data}
+                  update={update}
+                  valid={valid}
+                  saving={saving}
+                  step={screenNo}
+                  totalSteps={totalScreens}
+                  onNext={goNext}
+                  onBack={goBack}
+                  onGoToStep={goToStep}
+                  onComplete={handleComplete}
+                  onSkipForNow={handleSkipForNow}
+                  canSkip={!!(data.role && data.biz_name && data.biz_type) && !showSuccess && screenNo < totalScreens}
+                  onLogoUpload={handleLogoUpload}
+                  onPhotosUpload={handlePhotosUpload}
+                  businessId={businessId}
+                  onSaveBeforeRedirect={() => saveData(screenNo)}
+                />
+              </div>
+            )}
+          </div>
+        </main>
       </div>
     </div>
+  )
+}
+
+/**
+ * Desktop-only left rail: Apnosh brand, a short headline, and a phase
+ * checklist that doubles as a progress map. Hidden under md so the form
+ * gets the full width on phones (a compact top bar covers branding there).
+ */
+function BrandPanel({ phases }: { phases: { label: string; state: 'done' | 'current' | 'upcoming' }[] }) {
+  return (
+    <aside
+      className="hidden md:flex flex-col justify-between flex-shrink-0 w-[300px] lg:w-[340px] px-8 py-9 text-white"
+      style={{ background: 'linear-gradient(165deg, #2e9a78 0%, #1f7d61 52%, #0f6e56 100%)' }}
+    >
+      <div>
+        <span
+          className="text-[26px] font-semibold tracking-tight"
+          style={{ fontFamily: 'Playfair Display, serif', letterSpacing: '-0.3px' }}
+        >
+          Apnosh
+        </span>
+        <h2 className="mt-9 text-[21px] font-semibold leading-snug">
+          Let&apos;s set up your<br />marketing engine
+        </h2>
+        <p className="mt-2.5 text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.72)' }}>
+          A few quick steps. Your strategist gets everything they need to start.
+        </p>
+
+        {phases.length > 0 && (
+          <ol className="mt-9 space-y-3.5">
+            {phases.map((ph) => (
+              <li key={ph.label} className="flex items-center gap-3">
+                <span
+                  className="flex items-center justify-center w-[22px] h-[22px] rounded-full text-[11px] font-bold flex-shrink-0 transition-all"
+                  style={
+                    ph.state === 'done'
+                      ? { background: '#fff', color: '#1f7d61' }
+                      : ph.state === 'current'
+                      ? { background: 'rgba(255,255,255,0.22)', boxShadow: '0 0 0 2px rgba(255,255,255,0.55)' }
+                      : { background: 'rgba(255,255,255,0.12)' }
+                  }
+                >
+                  {ph.state === 'done' ? '✓' : ''}
+                </span>
+                <span
+                  className="text-[13.5px]"
+                  style={{
+                    color: ph.state === 'upcoming' ? 'rgba(255,255,255,0.55)' : '#fff',
+                    fontWeight: ph.state === 'current' ? 600 : 500,
+                  }}
+                >
+                  {ph.label}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      <p className="text-[12px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>
+        Your progress saves automatically. Leave and pick up anytime.
+      </p>
+    </aside>
   )
 }

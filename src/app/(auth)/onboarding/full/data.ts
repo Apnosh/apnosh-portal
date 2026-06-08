@@ -156,7 +156,7 @@ export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 export type StepId =
   | 'role' | 'biz_name' | 'biz_type' | 'serve'
   | 'menu_details' | 'ordering' | 'menu' | 'specials'
-  | 'location' | 'rhythm' | 'story' | 'audience' | 'goals'
+  | 'location' | 'location_details' | 'rhythm' | 'story' | 'audience' | 'goals'
   | 'promote' | 'brand_voice' | 'discovery' | 'approval' | 'connect'
   | 'assets' | 'review'
 
@@ -169,7 +169,7 @@ export type PhaseLabel = typeof PHASE_ORDER[number]
 
 export const STEP_PHASES: Record<StepId, PhaseLabel> = {
   role: 'You',
-  biz_name: 'Business', biz_type: 'Business', location: 'Business',
+  biz_name: 'Business', biz_type: 'Business', location: 'Business', location_details: 'Business',
   serve: 'Menu', menu_details: 'Menu',
   ordering: 'Menu', menu: 'Menu', specials: 'Menu', rhythm: 'Menu',
   story: 'Story', audience: 'Story', goals: 'Story', promote: 'Story',
@@ -200,22 +200,29 @@ export function getPhaseInfo(stepId: StepId, bizType: string): PhaseInfo {
   }
 }
 
+// Steps that always get their own screen, even inside a shared phase, because
+// they are a focused review/detail page rather than a quick question.
+const SOLO_SCREENS: StepId[] = ['location_details', 'review']
+
 // A "screen" is one scrollable card that groups all the steps of a phase, so
 // owners answer a few related questions at once instead of clicking through one
-// question per page. The recap (review) keeps its own final screen.
+// question per page. Solo steps (location details, review) keep their own card.
 export function getScreens(bizType: string): StepId[][] {
   const steps = getSteps(bizType)
   const screens: StepId[][] = []
   for (const phase of PHASE_ORDER) {
     const inPhase = steps.filter((s) => STEP_PHASES[s] === phase)
     if (!inPhase.length) continue
-    if (phase === 'Launch') {
-      const pre = inPhase.filter((s) => s !== 'review')
-      if (pre.length) screens.push(pre)
-      if (inPhase.includes('review')) screens.push(['review'])
-    } else {
-      screens.push(inPhase)
+    let group: StepId[] = []
+    for (const s of inPhase) {
+      if (SOLO_SCREENS.includes(s)) {
+        if (group.length) { screens.push(group); group = [] }
+        screens.push([s])
+      } else {
+        group.push(s)
+      }
     }
+    if (group.length) screens.push(group)
   }
   return screens
 }
@@ -254,7 +261,9 @@ export function getSteps(bizType: string): StepId[] {
     // how people order, the real menu, and any recurring specials.
     steps.push('serve', 'menu_details', 'ordering', 'menu', 'specials')
   }
-  steps.push('location')
+  // Locations: list each spot, then a review page pulls + records per-location
+  // details (hours, phone) for each one.
+  steps.push('location', 'location_details')
   // Busy/slow rhythm sits right after hours — it's the same mental model
   if (isFood) steps.push('rhythm')
   steps.push(
@@ -291,6 +300,8 @@ export interface LocationDraft {
   state: string
   zip: string
   place_id: string      // Google place_id when picked, for later GBP linking
+  phone: string         // this location's phone (review page; not persisted to CRM yet)
+  hours: Record<string, { open: string; close: string; closed: boolean }>
 }
 
 // Form data shape
@@ -321,6 +332,7 @@ export interface OnboardingData {
   zip: string
   primary_location_name: string
   location_count: string
+  primary_place_id: string  // Google place_id for the primary address, for auto-pulling hours/phone
   hours: Record<string, { open: string; close: string; closed: boolean }>
   biz_desc: string
   unique: string
@@ -380,6 +392,7 @@ export const INITIAL_DATA: OnboardingData = {
   zip: '',
   primary_location_name: '',
   location_count: '',
+  primary_place_id: '',
   hours: {},
   biz_desc: '',
   unique: '',
