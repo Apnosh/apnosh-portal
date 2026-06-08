@@ -533,6 +533,53 @@ export interface GBPLocation {
   primaryPhone?: string
   websiteUri?: string
   primaryCategory?: string
+  /** Opening hours mapped to the onboarding wizard's shape (Mon..Sun). */
+  hours?: Record<string, { open: string; close: string; closed: boolean }>
+}
+
+// GBP returns opening hours as a flat list of periods keyed by a full
+// day name; the onboarding wizard wants a 7-key map of short day names.
+const GBP_DAY_TO_SHORT: Record<string, string> = {
+  MONDAY: 'Mon', TUESDAY: 'Tue', WEDNESDAY: 'Wed', THURSDAY: 'Thu',
+  FRIDAY: 'Fri', SATURDAY: 'Sat', SUNDAY: 'Sun',
+}
+const GBP_SHORT_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+function gbpFmtTime(t?: { hours?: number; minutes?: number }): string {
+  // proto3 omits zero values, so an absent hours/minutes means midnight.
+  const h = t?.hours ?? 0
+  const m = t?.minutes ?? 0
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+function mapGBPHours(
+  regularHours?: {
+    periods?: Array<{
+      openDay?: string
+      openTime?: { hours?: number; minutes?: number }
+      closeDay?: string
+      closeTime?: { hours?: number; minutes?: number }
+    }>
+  },
+): Record<string, { open: string; close: string; closed: boolean }> | undefined {
+  if (!regularHours?.periods?.length) return undefined
+  const out: Record<string, { open: string; close: string; closed: boolean }> = {}
+  // Default every day closed; periods below flip the days that have hours.
+  for (const short of GBP_SHORT_DAYS) {
+    out[short] = { open: '09:00', close: '17:00', closed: true }
+  }
+  for (const p of regularHours.periods) {
+    const short = p.openDay ? GBP_DAY_TO_SHORT[p.openDay] : undefined
+    if (!short) continue
+    if (out[short].closed) {
+      out[short] = { open: gbpFmtTime(p.openTime), close: gbpFmtTime(p.closeTime), closed: false }
+    } else {
+      // Multi-period day (e.g. lunch + dinner): keep the earliest open and
+      // extend to the latest close so the single-range UI still reads right.
+      out[short].close = gbpFmtTime(p.closeTime)
+    }
+  }
+  return out
 }
 
 export async function listGBPAccounts(accessToken: string): Promise<GBPAccount[]> {
@@ -559,7 +606,7 @@ export async function listGBPLocations(
   accessToken: string,
   accountName: string // "accounts/123456"
 ): Promise<GBPLocation[]> {
-  const readMask = 'name,title,storeCode,phoneNumbers,websiteUri,categories,storefrontAddress'
+  const readMask = 'name,title,storeCode,phoneNumbers,websiteUri,categories,storefrontAddress,regularHours'
   const url = `https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?readMask=${encodeURIComponent(readMask)}&pageSize=100`
 
   const res = await fetch(url, {
@@ -584,6 +631,14 @@ export async function listGBPLocations(
       postalCode?: string
       regionCode?: string
     }
+    regularHours?: {
+      periods?: Array<{
+        openDay?: string
+        openTime?: { hours?: number; minutes?: number }
+        closeDay?: string
+        closeTime?: { hours?: number; minutes?: number }
+      }>
+    }
   }>
 
   return locations.map((l) => ({
@@ -597,6 +652,7 @@ export async function listGBPLocations(
     primaryPhone: l.phoneNumbers?.primaryPhone,
     websiteUri: l.websiteUri,
     primaryCategory: l.categories?.primaryCategory?.displayName,
+    hours: mapGBPHours(l.regularHours),
   }))
 }
 

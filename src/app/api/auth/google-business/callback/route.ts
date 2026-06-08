@@ -21,11 +21,26 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code')
   const stateParam = request.nextUrl.searchParams.get('state')
   const errorParam = request.nextUrl.searchParams.get('error')
+  const APP_URL = process.env.NEXT_PUBLIC_APP_URL
+
+  // Best-effort peek at the origin so even a cancel/early failure can route an
+  // onboarding user back to the wizard rather than dumping them on the dashboard.
+  const peekOrigin = (): string => {
+    if (!stateParam) return ''
+    try {
+      return (JSON.parse(Buffer.from(stateParam, 'base64url').toString())?.origin as string) || ''
+    } catch {
+      return ''
+    }
+  }
 
   if (errorParam || !code || !stateParam) {
     const msg = request.nextUrl.searchParams.get('error_description') || 'Google OAuth was cancelled or failed'
+    if (peekOrigin() === 'onboarding') {
+      return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=cancelled`)
+    }
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent(msg)}`
+      `${APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent(msg)}`
     )
   }
 
@@ -34,6 +49,7 @@ export async function GET(request: NextRequest) {
     userId: string
     returnTo?: string
     popup?: boolean
+    origin?: string
     mode?: 'agency'
   }
   let state: State
@@ -137,18 +153,31 @@ export async function GET(request: NextRequest) {
 
     if (insertErr) {
       console.error('[gbp callback] insert failed:', insertErr)
+      if (state.origin === 'onboarding') {
+        return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=error`)
+      }
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent(insertErr.message)}`
+        `${APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent(insertErr.message)}`
       )
     }
 
+    // Onboarding flow: hand control back to the wizard, which reads the pending
+    // token and offers the owner their locations to import. The pending row is
+    // compatible with the dashboard picker later if they want to fully connect.
+    if (state.origin === 'onboarding') {
+      return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=connected`)
+    }
+
     const locationPickerUrl = `/dashboard/connect-accounts/google-business-location?clientId=${state.clientId}${state.returnTo ? `&returnTo=${encodeURIComponent(state.returnTo)}` : ''}`
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}${locationPickerUrl}`)
+    return NextResponse.redirect(`${APP_URL}${locationPickerUrl}`)
   } catch (err) {
     console.error('[gbp callback]', err)
     const message = err instanceof Error ? err.message : 'Unknown error'
+    if (peekOrigin() === 'onboarding') {
+      return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=error`)
+    }
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent(message)}`
+      `${APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent(message)}`
     )
   }
 }

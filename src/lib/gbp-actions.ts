@@ -47,6 +47,53 @@ export async function fetchGBPLocationsForClient(
   }
 }
 
+/** A GBP location flattened into the onboarding wizard's field shape. */
+export interface OnboardingGBPLocation {
+  title: string
+  full_address: string
+  city: string
+  state: string
+  zip: string
+  phone: string
+  hours?: Record<string, { open: string; close: string; closed: boolean }>
+}
+
+/**
+ * Read the pending GBP token and return every location the owner manages,
+ * already mapped to the onboarding wizard's field shape. Flattened across
+ * accounts since the owner just wants to import their spots, not reason about
+ * which Google account holds them. Read-only: does NOT finalize the connection
+ * or kick off the analytics backfill — onboarding only fills form fields.
+ */
+export async function getGBPLocationsForOnboarding(
+  clientId: string,
+): Promise<{ success: true; data: OnboardingGBPLocation[] } | { success: false; error: string }> {
+  const res = await fetchGBPLocationsForClient(clientId)
+  if (!res.success) return res
+
+  const mapped: OnboardingGBPLocation[] = []
+  for (const group of res.data) {
+    for (const loc of group.locations) {
+      const full_address = [
+        loc.addressLines?.join(', '),
+        loc.locality,
+        loc.regionCode,
+        loc.postalCode,
+      ].filter(Boolean).join(', ')
+      mapped.push({
+        title: loc.title || '',
+        full_address,
+        city: loc.locality || '',
+        state: loc.regionCode || '',
+        zip: loc.postalCode || '',
+        phone: loc.primaryPhone || '',
+        hours: loc.hours,
+      })
+    }
+  }
+  return { success: true, data: mapped }
+}
+
 /**
  * Finalize the GBP connection by picking a location.
  */

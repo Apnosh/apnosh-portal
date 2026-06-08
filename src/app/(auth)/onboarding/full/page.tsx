@@ -417,6 +417,7 @@ export default function OnboardingPage() {
           onLogoUpload={handleLogoUpload}
           onPhotosUpload={handlePhotosUpload}
           businessId={businessId}
+          onSaveBeforeRedirect={() => saveData(step)}
         />
       </div>
     </div>

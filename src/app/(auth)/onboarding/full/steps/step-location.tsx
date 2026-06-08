@@ -1,8 +1,10 @@
 'use client'
 
-import { type ReactNode, useEffect, useRef } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { type OnboardingData, DAYS } from '../data'
 import { Question, Input, FieldLabel } from '../ui'
+import { ensureClientForBusiness } from '@/lib/onboarding-actions'
+import { getGBPLocationsForOnboarding, type OnboardingGBPLocation } from '@/lib/gbp-actions'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
@@ -15,11 +17,120 @@ interface Props {
   data: OnboardingData
   update: <K extends keyof OnboardingData>(field: K, value: OnboardingData[K]) => void
   nav: ReactNode
+  businessId: string | null
+  /** Persist current progress before the OAuth redirect leaves the wizard. */
+  onSaveBeforeRedirect: () => Promise<void>
 }
 
-export default function StepLocation({ data, update, nav }: Props) {
+export default function StepLocation({ data, update, nav, businessId, onSaveBeforeRedirect }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const autocompleteRef = useRef<any>(null)
+
+  // Google Business Profile import state.
+  const [gbpBusy, setGbpBusy] = useState(false)
+  const [gbpNote, setGbpNote] = useState('')
+  const [candidates, setCandidates] = useState<OnboardingGBPLocation[] | null>(null)
+  const [picked, setPicked] = useState<Record<number, boolean>>({})
+  const gbpHandled = useRef(false)
+
+  // Single vs. multi is decided up front on the business-name step.
+  const isMulti = !!data.location_count && data.location_count !== 'Just 1'
+
+  // Kick off OAuth: save progress (survives the full-page redirect), make sure
+  // a client row exists to hang the token on, then bounce to Google.
+  async function connectGoogleBusiness() {
+    if (!businessId || gbpBusy) return
+    setGbpBusy(true)
+    setGbpNote('')
+    try {
+      await onSaveBeforeRedirect()
+      const clientId = await ensureClientForBusiness(businessId)
+      if (!clientId) {
+        setGbpBusy(false)
+        setGbpNote("We couldn't start the Google connection. You can enter your address by hand.")
+        return
+      }
+      window.location.href =
+        `/api/auth/google-business?clientId=${clientId}&origin=onboarding&returnTo=${encodeURIComponent('/onboarding/full')}`
+    } catch {
+      setGbpBusy(false)
+      setGbpNote("Something went wrong starting the Google connection. You can enter your address by hand.")
+    }
+  }
+
+  // On return from Google (?gbp=...), read the pending token and offer the
+  // owner their locations to import. Runs once; waits for businessId to load.
+  useEffect(() => {
+    if (gbpHandled.current) return
+    const params = new URLSearchParams(window.location.search)
+    const gbp = params.get('gbp')
+    if (!gbp) return
+    // Wait for businessId to load before handling the post-OAuth return.
+    if (gbp === 'connected' && !businessId) return
+
+    gbpHandled.current = true
+    window.history.replaceState({}, '', '/onboarding/full')
+
+    // All state updates live inside the async body so none fire synchronously
+    // in the effect (avoids cascading-render lint + churn).
+    ;(async () => {
+      if (gbp === 'cancelled') {
+        setGbpNote('Google sign-in was cancelled. You can enter your address by hand or try again.')
+        return
+      }
+      if (gbp === 'error') {
+        setGbpNote("We couldn't reach Google Business. You can enter your address by hand or try again.")
+        return
+      }
+      // gbp === 'connected'
+      setGbpBusy(true)
+      const clientId = await ensureClientForBusiness(businessId!)
+      if (!clientId) {
+        setGbpBusy(false)
+        setGbpNote("We couldn't load your locations. You can enter them by hand.")
+        return
+      }
+      const res = await getGBPLocationsForOnboarding(clientId)
+      setGbpBusy(false)
+      if (!res.success) {
+        setGbpNote("We couldn't read your locations from Google. You can enter them by hand.")
+        return
+      }
+      if (!res.data.length) {
+        setGbpNote("We didn't find any locations on that Google account. You can enter them by hand.")
+        return
+      }
+      setCandidates(res.data)
+      setPicked(Object.fromEntries(res.data.map((_, i) => [i, true])))
+    })()
+  }, [businessId])
+
+  // Pull the checked GBP locations into the wizard: first becomes the primary
+  // (flat fields), the rest fill the additional-locations roster.
+  function applyImport() {
+    if (!candidates) return
+    const chosen = candidates.filter((_, i) => picked[i])
+    if (!chosen.length) { setCandidates(null); return }
+    const [primary, ...rest] = chosen
+    update('full_address', primary.full_address)
+    update('city', primary.city)
+    update('state', primary.state)
+    update('zip', primary.zip)
+    if (primary.phone) update('phone', primary.phone)
+    if (primary.hours) update('hours', primary.hours)
+    if (isMulti && primary.title) update('primary_location_name', primary.title)
+    if (isMulti && rest.length) {
+      update('locations', [
+        ...data.locations,
+        ...rest.map((l) => ({
+          name: l.title, full_address: l.full_address,
+          city: l.city, state: l.state, zip: l.zip, place_id: '',
+        })),
+      ])
+    }
+    setCandidates(null)
+    setGbpNote(`Imported ${chosen.length} location${chosen.length > 1 ? 's' : ''} from Google.`)
+  }
 
   // Initialize Google Places autocomplete on the primary address field
   useEffect(() => {
@@ -65,9 +176,6 @@ export default function StepLocation({ data, update, nav }: Props) {
     hours[day] = { ...hours[day], [field]: value }
     update('hours', hours)
   }
-
-  // Single vs. multi is decided up front on the business-name step.
-  const isMulti = !!data.location_count && data.location_count !== 'Just 1'
 
   function addLocation() {
     update('locations', [
@@ -132,6 +240,100 @@ export default function StepLocation({ data, update, nav }: Props) {
           ? 'Add each location so every one gets its own listing and reviews.'
           : 'Start typing and select your address'}
       />
+
+      {/* Google Business import: connect once, pull every location's address,
+          hours, and phone instead of typing them by hand. */}
+      {candidates ? (
+        <div className="mt-4 rounded-[10px] px-3.5 py-3.5" style={{ border: '1.5px solid #9fe1cb', background: '#f0faf6' }}>
+          <div className="text-sm font-semibold mb-0.5" style={{ color: '#0f6e56' }}>
+            We found {candidates.length} location{candidates.length > 1 ? 's' : ''} on Google
+          </div>
+          <div className="text-xs mb-3" style={{ color: '#2e9a78' }}>
+            Pick the ones to add. We will fill in the details.
+          </div>
+          <div className="space-y-1.5">
+            {candidates.map((c, i) => (
+              <label
+                key={i}
+                className="flex items-start gap-2.5 cursor-pointer rounded-[8px] px-2.5 py-2 bg-white"
+                style={{ border: '1px solid #e3f5ee' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={!!picked[i]}
+                  onChange={(e) => setPicked((p) => ({ ...p, [i]: e.target.checked }))}
+                  className="mt-0.5 accent-[#4abd98] flex-shrink-0"
+                />
+                <div className="min-w-0">
+                  <div className="text-[13px] font-medium truncate" style={{ color: '#111' }}>
+                    {c.title || c.full_address || 'Location'}
+                  </div>
+                  {c.full_address && (
+                    <div className="text-[11px] truncate" style={{ color: '#999' }}>{c.full_address}</div>
+                  )}
+                </div>
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={applyImport}
+              disabled={Object.values(picked).filter(Boolean).length === 0}
+              className="flex-1 py-2.5 rounded-[10px] text-[13px] font-semibold text-white transition-colors disabled:opacity-50"
+              style={{ background: '#4abd98' }}
+            >
+              Add {Object.values(picked).filter(Boolean).length || ''} location{Object.values(picked).filter(Boolean).length === 1 ? '' : 's'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCandidates(null)}
+              className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold transition-colors"
+              style={{ color: '#999', border: '1.5px solid #e0e0e0' }}
+            >
+              Skip
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          className="mt-4 rounded-[10px] px-3.5 py-3 flex items-center gap-3"
+          style={{ border: '1.5px solid #e0e0e0', background: '#fafafa' }}
+        >
+          <div
+            className="w-[38px] h-[38px] rounded-[9px] flex items-center justify-center text-lg flex-shrink-0"
+            style={{ background: '#4abd981a' }}
+          >
+            🔍
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold" style={{ color: '#111' }}>Connect Google Business</div>
+            <div className="text-xs" style={{ color: '#999' }}>
+              {isMulti
+                ? 'Pull all your spots, hours, and phone in one tap.'
+                : 'Pull your address, hours, and phone automatically.'}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={connectGoogleBusiness}
+            disabled={!businessId || gbpBusy}
+            className="text-xs font-semibold rounded-[20px] px-3.5 py-1.5 whitespace-nowrap text-white transition-colors disabled:opacity-50"
+            style={{ background: '#4abd98' }}
+          >
+            {gbpBusy ? 'Connecting...' : 'Connect'}
+          </button>
+        </div>
+      )}
+
+      {gbpNote && (
+        <div
+          className="mt-2 text-[13px] leading-relaxed rounded-[10px] px-3.5 py-2.5"
+          style={{ background: '#f5f5f2', color: '#555', borderLeft: '3px solid #4abd98' }}
+        >
+          {gbpNote}
+        </div>
+      )}
 
       <div className="mt-4 space-y-3">
         {!isMulti ? (

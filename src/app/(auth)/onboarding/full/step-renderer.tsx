@@ -42,6 +42,8 @@ interface Props {
   onLogoUpload: (file: File) => void
   onPhotosUpload: (files: FileList) => void
   businessId: string | null
+  /** Persist current progress before a full-page OAuth redirect leaves the wizard. */
+  onSaveBeforeRedirect: () => Promise<void>
 }
 
 export default function StepRenderer(props: Props) {
@@ -69,7 +71,7 @@ export default function StepRenderer(props: Props) {
       case 'ordering': return <StepOrdering data={data} update={update} nav={nav} />
       case 'menu': return <StepMenu data={data} update={update} nav={nav} />
       case 'specials': return <StepSpecials data={data} update={update} nav={nav} />
-      case 'location': return <StepLocation data={data} update={update} nav={nav} />
+      case 'location': return <StepLocation data={data} update={update} nav={nav} businessId={props.businessId} onSaveBeforeRedirect={props.onSaveBeforeRedirect} />
       case 'rhythm': return <StepRhythm data={data} update={update} nav={nav} />
       case 'story': return <StepStory data={data} update={update} nav={nav} />
       case 'audience': return <StepAudience data={data} update={update} nav={nav} />

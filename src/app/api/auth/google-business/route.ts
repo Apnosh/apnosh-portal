@@ -22,12 +22,16 @@ export async function GET(request: NextRequest) {
 
   const returnTo = request.nextUrl.searchParams.get('returnTo') || ''
   const popup = request.nextUrl.searchParams.get('popup') === '1'
+  // 'onboarding' tells the callback to return the user to the wizard instead
+  // of the dashboard location picker.
+  const origin = request.nextUrl.searchParams.get('origin') || ''
 
   const state = Buffer.from(JSON.stringify({
     clientId,
     userId: user.id,
     returnTo,
     popup,
+    origin,
     ts: Date.now(),
   })).toString('base64url')
 
