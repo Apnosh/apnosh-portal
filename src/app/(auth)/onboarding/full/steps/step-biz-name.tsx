@@ -1,8 +1,8 @@
 'use client'
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { type OnboardingData, FOOD_BIZ_TYPES, CUISINES, LOCATION_COUNTS } from '../data'
-import { Question, Input, FieldLabel, Hint, SingleChipGroup } from '../ui'
+import { type OnboardingData, FOOD_BIZ_TYPES, CUISINES } from '../data'
+import { Question, Input, FieldLabel, Hint } from '../ui'
 import {
   isLookupEnabled,
   searchBusinesses,
@@ -86,12 +86,12 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
   useEffect(() => {
     if (!lookupOn) return
     const q = query.trim()
-    if (q.length < 3 || q === lastPicked.current) {
-      setCandidates([])
-      return
-    }
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = setTimeout(async () => {
+      if (q.length < 3 || q === lastPicked.current) {
+        setCandidates([])
+        return
+      }
       setSearching(true)
       const results = await searchBusinesses(q)
       setCandidates(results)
@@ -275,15 +275,36 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
         </div>
 
         {/* Single vs. multi up front, so the location step can show one
-            address or a full roster of spots. */}
+            address or a full roster of spots. We keep 'Just 1' as the single
+            sentinel; 'Multiple' flips the location step into roster mode. */}
         <div>
-          <FieldLabel>How many locations?</FieldLabel>
-          <SingleChipGroup
-            options={LOCATION_COUNTS}
-            selected={data.location_count}
-            onSelect={(v) => update('location_count', v)}
-          />
-          <Hint>Just the one, or a few spots? You can change this anytime.</Hint>
+          <FieldLabel>One spot or a few?</FieldLabel>
+          <div className="grid grid-cols-2 gap-2.5">
+            {[
+              { value: 'Just 1', label: 'One location', sub: 'A single spot' },
+              { value: 'Multiple', label: 'Multiple locations', sub: 'Two or more' },
+            ].map((opt) => {
+              const selected = data.location_count === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => update('location_count', opt.value)}
+                  className="text-left rounded-[12px] px-3.5 py-3 transition-all"
+                  style={{
+                    border: selected ? '1.5px solid #4abd98' : '1.5px solid #e0e0e0',
+                    background: selected ? '#f0faf6' : '#fff',
+                  }}
+                >
+                  <div className="text-sm font-semibold" style={{ color: selected ? '#0f6e56' : '#111' }}>
+                    {opt.label}
+                  </div>
+                  <div className="text-xs mt-0.5" style={{ color: '#999' }}>{opt.sub}</div>
+                </button>
+              )
+            })}
+          </div>
+          <Hint>You can change this anytime, and add each spot on the next step.</Hint>
         </div>
 
         {/* Fast-forward: once the AI has filled fields, let the owner jump

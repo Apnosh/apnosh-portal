@@ -2,9 +2,10 @@
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { type OnboardingData, DAYS } from '../data'
-import { Question, Input, FieldLabel } from '../ui'
+import { Question, Input, FieldLabel, Hint } from '../ui'
 import { ensureClientForBusiness } from '@/lib/onboarding-actions'
 import { getGBPLocationsForOnboarding, type OnboardingGBPLocation } from '@/lib/gbp-actions'
+import { isLookupEnabled, searchBusinesses, getBusinessPrefill, type PlaceCandidate } from '@/lib/onboarding-lookup'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
@@ -33,8 +34,85 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
   const [picked, setPicked] = useState<Record<number, boolean>>({})
   const gbpHandled = useRef(false)
 
+  // Search-to-prefill state: type a name, pick a result, we fill the address,
+  // hours, and phone from Google Places. The roster fields stay editable so
+  // typing by hand is always available as a fallback.
+  const [lookupOn, setLookupOn] = useState(false)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<PlaceCandidate[]>([])
+  const [searching, setSearching] = useState(false)
+  const [pulling, setPulling] = useState(false)
+  const [searchNote, setSearchNote] = useState('')
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Single vs. multi is decided up front on the business-name step.
   const isMulti = !!data.location_count && data.location_count !== 'Just 1'
+
+  useEffect(() => {
+    isLookupEnabled().then(setLookupOn)
+  }, [])
+
+  // Debounced business search as the owner types a spot's name.
+  useEffect(() => {
+    if (!lookupOn) return
+    const q = query.trim()
+    if (searchDebounce.current) clearTimeout(searchDebounce.current)
+    searchDebounce.current = setTimeout(async () => {
+      if (q.length < 3) { setResults([]); return }
+      setSearching(true)
+      const r = await searchBusinesses(q)
+      setResults(r)
+      setSearching(false)
+    }, 400)
+    return () => { if (searchDebounce.current) clearTimeout(searchDebounce.current) }
+  }, [query, lookupOn])
+
+  // Pick a search result -> pull its details and drop them into the roster.
+  // Single: fills the one address. Multi: the first pick becomes the primary,
+  // every pick after that is appended as another spot.
+  async function pickResult(c: PlaceCandidate) {
+    setQuery('')
+    setResults([])
+    setPulling(true)
+    const p = await getBusinessPrefill(c.placeId)
+    setPulling(false)
+    if (!p) {
+      setSearchNote("We couldn't pull that one. You can type it in below.")
+      return
+    }
+    const hasHours = Object.values(p.hours).some((h) => !h.closed)
+
+    if (!isMulti) {
+      update('full_address', p.full_address)
+      update('city', p.city)
+      update('state', p.state)
+      update('zip', p.zip)
+      if (p.phone) update('phone', p.phone)
+      if (hasHours) update('hours', p.hours)
+      setSearchNote(`Added ${p.name || c.name}.`)
+      return
+    }
+
+    const primaryEmpty = !data.primary_location_name.trim() && !data.full_address.trim()
+    if (primaryEmpty) {
+      update('primary_location_name', p.name || c.name)
+      update('full_address', p.full_address)
+      update('city', p.city)
+      update('state', p.state)
+      update('zip', p.zip)
+      if (p.phone) update('phone', p.phone)
+      if (hasHours) update('hours', p.hours)
+    } else {
+      update('locations', [
+        ...data.locations,
+        {
+          name: p.name || c.name, full_address: p.full_address,
+          city: p.city, state: p.state, zip: p.zip, place_id: c.placeId,
+        },
+      ])
+    }
+    setSearchNote(`Added ${p.name || c.name}.`)
+  }
 
   // Kick off OAuth: save progress (survives the full-page redirect), make sure
   // a client row exists to hang the token on, then bounce to Google.
@@ -237,9 +315,61 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
       <Question
         title={isMulti ? 'Where are your spots?' : 'Where are you located?'}
         subtitle={isMulti
-          ? 'Add each location so every one gets its own listing and reviews.'
-          : 'Start typing and select your address'}
+          ? 'Search each spot to fill it in, or type them by hand.'
+          : 'Search your spot to fill it in, or type it by hand.'}
       />
+
+      {/* Search-first: find a spot by name and we pull its address, hours,
+          and phone. The roster below stays editable for manual entry. */}
+      {lookupOn && (
+        <div className="mt-4">
+          <FieldLabel>{isMulti ? 'Search for a spot' : 'Search for your spot'}</FieldLabel>
+          <div className="relative">
+            <Input
+              value={query}
+              onChange={setQuery}
+              placeholder="Search by name, e.g. The Golden Spoon"
+            />
+            {(searching || results.length > 0) && (
+              <div
+                className="absolute left-0 right-0 top-full mt-1 z-10 rounded-[10px] overflow-hidden bg-white"
+                style={{ border: '1.5px solid #e0e0e0', boxShadow: '0 6px 20px rgba(0,0,0,0.1)' }}
+              >
+                {searching && (
+                  <div className="px-3.5 py-2.5 text-[13px]" style={{ color: '#999' }}>Searching...</div>
+                )}
+                {results.map((c) => (
+                  <button
+                    key={c.placeId}
+                    type="button"
+                    onClick={() => pickResult(c)}
+                    className="w-full text-left px-3.5 py-2.5 transition-colors"
+                    style={{ borderTop: '1px solid #f0f0f0' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = '#f0faf6' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'white' }}
+                  >
+                    <div className="text-sm font-medium" style={{ color: '#111' }}>{c.name}</div>
+                    <div className="text-xs mt-0.5" style={{ color: '#999' }}>{c.address}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {(pulling || searchNote) && (
+            <div
+              className="mt-2 text-[13px] leading-relaxed rounded-[10px] px-3.5 py-2.5"
+              style={{ background: '#f0faf6', color: '#0f6e56', borderLeft: '3px solid #4abd98' }}
+            >
+              {pulling ? 'Pulling the details...' : `✓ ${searchNote}`}
+            </div>
+          )}
+          <Hint>
+            {isMulti
+              ? 'Find each spot to fill it in. The first one becomes your main location.'
+              : 'Find your spot to fill in the address and hours, or just type it below.'}
+          </Hint>
+        </div>
+      )}
 
       {/* Google Business import: connect once, pull every location's address,
           hours, and phone instead of typing them by hand. */}
