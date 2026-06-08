@@ -204,11 +204,31 @@ export function getPhaseInfo(stepId: StepId, bizType: string): PhaseInfo {
 // they are a focused review/detail page rather than a quick question.
 const SOLO_SCREENS: StepId[] = ['location_details', 'review']
 
+// Service styles that don't imply a fixed dine-in room. When an owner picks
+// ONLY these, the "how people order" and busy/slow "rhythm" questions do not
+// apply, so we drop them. A food truck or caterer should not have to answer
+// dine-in questions.
+const NON_DINE_IN_STYLES = ['Food truck / pop-up', 'Catering']
+// Steps that only make sense for a sit-down or storefront restaurant.
+const DINE_IN_ONLY_STEPS: StepId[] = ['ordering', 'rhythm']
+
+/** True when every chosen service style is mobile/catering (no dine-in room). */
+export function skipsDineInSteps(data: OnboardingData): boolean {
+  const s = data.service_styles
+  return s.length > 0 && s.every((x) => NON_DINE_IN_STYLES.includes(x))
+}
+
 // A "screen" is one scrollable card that groups all the steps of a phase, so
 // owners answer a few related questions at once instead of clicking through one
 // question per page. Solo steps (location details, review) keep their own card.
-export function getScreens(bizType: string): StepId[][] {
-  const steps = getSteps(bizType)
+//
+// Passing `data` lets the flow adapt to answers already given: a food-truck or
+// catering-only owner skips the dine-in questions. Dropping these in-screen
+// steps never removes a whole screen, so screen counts and the saved resume
+// index (keyed on each screen's first step) stay stable either way.
+export function getScreens(bizType: string, data?: OnboardingData): StepId[][] {
+  const dropDineIn = data ? skipsDineInSteps(data) : false
+  const steps = getSteps(bizType).filter((s) => !(dropDineIn && DINE_IN_ONLY_STEPS.includes(s)))
   const screens: StepId[][] = []
   for (const phase of PHASE_ORDER) {
     const inPhase = steps.filter((s) => STEP_PHASES[s] === phase)

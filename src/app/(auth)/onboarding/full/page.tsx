@@ -31,7 +31,7 @@ export default function OnboardingPage() {
 
   // Derived screen info. The wizard groups each phase's questions onto one
   // scrollable screen, so navigation moves screen-by-screen, not step-by-step.
-  const screens = getScreens(data.biz_type)
+  const screens = getScreens(data.biz_type, data)
   const totalScreens = screens.length
   const currentScreen = screens[screenNo - 1]
   const pct = Math.round((screenNo / totalScreens) * 100)
