@@ -1,8 +1,8 @@
 'use client'
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { type OnboardingData, FOOD_BIZ_TYPES, CUISINES } from '../data'
-import { Question, Input, FieldLabel, Hint } from '../ui'
+import { type OnboardingData, FOOD_BIZ_TYPES, CUISINES, LOCATION_COUNTS } from '../data'
+import { Question, Input, FieldLabel, Hint, SingleChipGroup } from '../ui'
 import {
   isLookupEnabled,
   searchBusinesses,
@@ -272,6 +272,18 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
             placeholder="(555) 123-4567"
             type="tel"
           />
+        </div>
+
+        {/* Single vs. multi up front, so the location step can show one
+            address or a full roster of spots. */}
+        <div>
+          <FieldLabel>How many locations?</FieldLabel>
+          <SingleChipGroup
+            options={LOCATION_COUNTS}
+            selected={data.location_count}
+            onSelect={(v) => update('location_count', v)}
+          />
+          <Hint>Just the one, or a few spots? You can change this anytime.</Hint>
         </div>
 
         {/* Fast-forward: once the AI has filled fields, let the owner jump

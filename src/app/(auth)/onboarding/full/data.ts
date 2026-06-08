@@ -273,6 +273,7 @@ export interface OnboardingData {
   city: string
   state: string
   zip: string
+  primary_location_name: string
   location_count: string
   hours: Record<string, { open: string; close: string; closed: boolean }>
   biz_desc: string
@@ -331,6 +332,7 @@ export const INITIAL_DATA: OnboardingData = {
   city: '',
   state: '',
   zip: '',
+  primary_location_name: '',
   location_count: '',
   hours: {},
   biz_desc: '',

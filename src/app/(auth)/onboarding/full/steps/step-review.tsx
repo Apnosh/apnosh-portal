@@ -16,6 +16,9 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
   const roleName = ROLES.find((r) => r.id === data.role)?.title || null
   const approvalName = APPROVAL_TYPES.find((a) => a.id === data.approval_type)?.title || null
   const loc = [data.city, data.state].filter(Boolean).join(', ') || null
+  const mainLoc = data.primary_location_name.trim()
+    ? (loc ? `${data.primary_location_name.trim()} (${loc})` : data.primary_location_name.trim())
+    : loc
   const connectedList = Object.keys(data.connected).filter((k) => data.connected[k])
 
   const menuList = data.menu_items
@@ -48,7 +51,7 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
           <Row label="Type" value={data.biz_type === 'Other' ? data.biz_other : data.biz_type} />
           {isFood && <Row label="Cuisine" value={data.cuisine === 'Other' ? data.cuisine_other : data.cuisine} />}
           {isFood && <Row label="Style" value={data.service_styles.length ? data.service_styles.join(', ') : null} />}
-          <Row label="Location" value={loc} />
+          <Row label="Location" value={mainLoc} />
           <Row label="Locations" value={data.location_count || null} />
           {extraLocList && <Row label="Other spots" value={extraLocList} />}
         </ReviewCard>

@@ -304,7 +304,7 @@ export async function completeOnboardingCRM(
         if (primaryAddr) {
           rows.push({
             client_id: clientId,
-            location_name: str(data.biz_name) || 'Main location',
+            location_name: str(data.primary_location_name) || str(data.biz_name) || 'Main location',
             full_address: primaryAddr,
             city: str(data.city),
             state: str(data.state),

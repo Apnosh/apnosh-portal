@@ -1,8 +1,8 @@
 'use client'
 
 import { type ReactNode, useEffect, useRef } from 'react'
-import { type OnboardingData, LOCATION_COUNTS, DAYS } from '../data'
-import { Question, Input, FieldLabel, SingleChipGroup, Hint } from '../ui'
+import { type OnboardingData, DAYS } from '../data'
+import { Question, Input, FieldLabel } from '../ui'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
@@ -21,7 +21,7 @@ export default function StepLocation({ data, update, nav }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const autocompleteRef = useRef<any>(null)
 
-  // Initialize Google Places autocomplete
+  // Initialize Google Places autocomplete on the primary address field
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_KEY
     if (!apiKey || autocompleteRef.current) return
@@ -66,7 +66,7 @@ export default function StepLocation({ data, update, nav }: Props) {
     update('hours', hours)
   }
 
-  // Additional-location repeater (shown when more than one location)
+  // Single vs. multi is decided up front on the business-name step.
   const isMulti = !!data.location_count && data.location_count !== 'Just 1'
 
   function addLocation() {
@@ -84,63 +84,86 @@ export default function StepLocation({ data, update, nav }: Props) {
     update('locations', data.locations.filter((_, idx) => idx !== i))
   }
 
+  // The primary address field carries the Google Places autocomplete. It is
+  // rendered once — inside the roster's first card when multi, bare when single.
+  const primaryAddressInput = (
+    <input
+      ref={inputRef}
+      type="text"
+      value={data.full_address}
+      onChange={(e) => update('full_address', e.target.value)}
+      placeholder="Start typing your address..."
+      autoComplete="off"
+      className="w-full text-[15px] rounded-[10px] px-3.5 py-3 outline-none transition-all"
+      style={{ border: '1.5px solid #e0e0e0', fontFamily: 'DM Sans, sans-serif' }}
+      onFocus={(e) => {
+        e.currentTarget.style.borderColor = '#4abd98'
+        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(74,189,152,0.1)'
+      }}
+      onBlur={(e) => {
+        e.currentTarget.style.borderColor = '#e0e0e0'
+        e.currentTarget.style.boxShadow = 'none'
+      }}
+    />
+  )
+
+  const cityStateZip = (
+    <div className="grid grid-cols-[5fr_2fr_3fr] gap-3">
+      <div>
+        <FieldLabel>City</FieldLabel>
+        <Input value={data.city} onChange={(v) => update('city', v)} placeholder="City" />
+      </div>
+      <div>
+        <FieldLabel>State</FieldLabel>
+        <Input value={data.state} onChange={(v) => update('state', v)} placeholder="State" />
+      </div>
+      <div>
+        <FieldLabel>Zip</FieldLabel>
+        <Input value={data.zip} onChange={(v) => update('zip', v)} placeholder="Zip" />
+      </div>
+    </div>
+  )
+
   return (
     <>
-      <Question title="Where are you located?" subtitle="Start typing and select your address" />
+      <Question
+        title={isMulti ? 'Where are your spots?' : 'Where are you located?'}
+        subtitle={isMulti
+          ? 'Add each location so every one gets its own listing and reviews.'
+          : 'Start typing and select your address'}
+      />
+
       <div className="mt-4 space-y-3">
-        {/* Address input */}
-        <input
-          ref={inputRef}
-          type="text"
-          value={data.full_address}
-          onChange={(e) => update('full_address', e.target.value)}
-          placeholder="Start typing your address..."
-          autoComplete="off"
-          className="w-full text-[15px] rounded-[10px] px-3.5 py-3 outline-none transition-all"
-          style={{ border: '1.5px solid #e0e0e0', fontFamily: 'DM Sans, sans-serif' }}
-          onFocus={(e) => {
-            e.currentTarget.style.borderColor = '#4abd98'
-            e.currentTarget.style.boxShadow = '0 0 0 3px rgba(74,189,152,0.1)'
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.borderColor = '#e0e0e0'
-            e.currentTarget.style.boxShadow = 'none'
-          }}
-        />
+        {!isMulti ? (
+          <>
+            {primaryAddressInput}
+            {cityStateZip}
+          </>
+        ) : (
+          <div className="space-y-2">
+            {/* Location 1 — the primary, anchored to the main business record */}
+            <div className="rounded-[10px] px-3 py-3 space-y-2" style={{ background: '#f5f5f2' }}>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#999' }}>
+                  Location 1
+                </span>
+                <span
+                  className="text-[10px] font-semibold rounded-full px-2 py-0.5"
+                  style={{ color: '#0f6e56', background: '#e3f5ee' }}
+                >
+                  Main
+                </span>
+              </div>
+              <Input
+                value={data.primary_location_name}
+                onChange={(v) => update('primary_location_name', v)}
+                placeholder="Name this spot, e.g. Downtown"
+              />
+              {primaryAddressInput}
+              {cityStateZip}
+            </div>
 
-        {/* City / State / Zip */}
-        <div className="grid grid-cols-[5fr_2fr_3fr] gap-3">
-          <div>
-            <FieldLabel>City</FieldLabel>
-            <Input value={data.city} onChange={(v) => update('city', v)} placeholder="City" />
-          </div>
-          <div>
-            <FieldLabel>State</FieldLabel>
-            <Input value={data.state} onChange={(v) => update('state', v)} placeholder="State" />
-          </div>
-          <div>
-            <FieldLabel>Zip</FieldLabel>
-            <Input value={data.zip} onChange={(v) => update('zip', v)} placeholder="Zip" />
-          </div>
-        </div>
-
-        {/* Location count */}
-        <div className="mt-5">
-          <FieldLabel>How many locations total?</FieldLabel>
-          <SingleChipGroup
-            options={LOCATION_COUNTS}
-            selected={data.location_count}
-            onSelect={(v) => update('location_count', v)}
-          />
-        </div>
-
-        {isMulti && (
-          <div className="mt-3 space-y-2">
-            <p className="text-[13px] leading-relaxed" style={{ color: '#555' }}>
-              The address above is your main spot. Add your other locations so
-              each one gets its own listing and reviews.
-            </p>
-
+            {/* Location 2…N — the additional spots */}
             {data.locations.map((loc, i) => (
               <div
                 key={i}
@@ -163,7 +186,7 @@ export default function StepLocation({ data, update, nav }: Props) {
                 <Input
                   value={loc.name}
                   onChange={(v) => updateLocation(i, 'name', v)}
-                  placeholder="Name this spot, e.g. Downtown or Alki"
+                  placeholder="Name this spot, e.g. Alki or Bellevue"
                 />
                 <Input
                   value={loc.full_address}
@@ -189,7 +212,9 @@ export default function StepLocation({ data, update, nav }: Props) {
 
         {/* Business hours */}
         <div className="mt-5">
-          <FieldLabel>Business hours</FieldLabel>
+          <FieldLabel>
+            {isMulti ? 'Hours (main location)' : 'Business hours'}
+          </FieldLabel>
           <div className="flex flex-col gap-2 mt-2">
             {DAYS.map((day) => {
               const hr = data.hours[day] || { open: '09:00', close: '17:00', closed: false }
