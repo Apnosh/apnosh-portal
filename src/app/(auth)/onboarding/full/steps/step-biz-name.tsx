@@ -1,15 +1,9 @@
 'use client'
 
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { type OnboardingData, FOOD_BIZ_TYPES, CUISINES } from '../data'
 import { Question, Input, FieldLabel, Hint } from '../ui'
-import {
-  isLookupEnabled,
-  searchBusinesses,
-  getBusinessPrefill,
-  extractFromWebsite,
-  type PlaceCandidate,
-} from '@/lib/onboarding-lookup'
+import { extractFromWebsite } from '@/lib/onboarding-lookup'
 
 interface Props {
   data: OnboardingData
@@ -64,78 +58,11 @@ function summarize(found: string[]): string {
 }
 
 export default function StepBizName({ data, update, nav, onJumpToReview }: Props) {
-  const [lookupOn, setLookupOn] = useState(false)
-  const [query, setQuery] = useState(data.biz_name)
-  const [candidates, setCandidates] = useState<PlaceCandidate[]>([])
-  const [searching, setSearching] = useState(false)
-  const [pulling, setPulling] = useState(false)
   const [scanning, setScanning] = useState(false)
-  const [recap, setRecap] = useState<string>('')
   const [scanNote, setScanNote] = useState<string>('')
-  // True once a lookup or scan has actually populated fields, so we can offer
+  // True once a website scan has actually populated fields, so we can offer
   // a shortcut straight to the review screen instead of every step.
   const [filledSomething, setFilledSomething] = useState(false)
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastPicked = useRef<string>('')
-
-  useEffect(() => {
-    isLookupEnabled().then(setLookupOn)
-  }, [])
-
-  // Debounced business search as the owner types their name.
-  useEffect(() => {
-    if (!lookupOn) return
-    const q = query.trim()
-    if (debounce.current) clearTimeout(debounce.current)
-    debounce.current = setTimeout(async () => {
-      if (q.length < 3 || q === lastPicked.current) {
-        setCandidates([])
-        return
-      }
-      setSearching(true)
-      const results = await searchBusinesses(q)
-      setCandidates(results)
-      setSearching(false)
-    }, 400)
-    return () => { if (debounce.current) clearTimeout(debounce.current) }
-  }, [query, lookupOn])
-
-  async function pick(c: PlaceCandidate) {
-    lastPicked.current = c.name
-    setQuery(c.name)
-    setCandidates([])
-    setPulling(true)
-    setRecap('')
-
-    const p = await getBusinessPrefill(c.placeId)
-    if (!p) { setPulling(false); return }
-
-    const found: string[] = []
-    update('biz_name', p.name || c.name)
-    if (p.website) { update('website', p.website); found.push('website') }
-    if (p.phone) { update('phone', p.phone); found.push('phone') }
-    if (p.full_address) {
-      update('full_address', p.full_address)
-      update('city', p.city)
-      update('state', p.state)
-      update('zip', p.zip)
-      found.push('address')
-    }
-    if (Object.values(p.hours).some((h) => !h.closed)) {
-      update('hours', p.hours)
-      found.push('hours')
-    }
-    if (p.price_range) { update('price_range', p.price_range); found.push('price range') }
-    if (p.is_food && !data.biz_type) {
-      update('biz_type', FOOD_BIZ_TYPES[0])
-    }
-    setRecap(found.length ? `Pulled your ${summarize(found)}.` : 'Found it.')
-    if (found.length) setFilledSomething(true)
-    setPulling(false)
-
-    // Chain the website scan automatically when we got a site URL.
-    if (p.website) await runScan(p.website)
-  }
 
   async function runScan(url: string) {
     const target = (url || data.website).trim()
@@ -176,58 +103,60 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
   return (
     <>
       <Question
-        title="Let's fill this in for you"
-        subtitle={lookupOn
-          ? 'Search your name or paste your site. We do the typing.'
-          : 'Paste your website and we will pull what we can.'}
+        title="Tell us about your business"
+        subtitle="Start with the basics. You will find and add your locations next."
       />
       <div className="mt-4 space-y-4">
-        {/* Name + (when enabled) live search dropdown */}
-        <div className="relative">
+        {/* Business name — the brand, kept separate from any one location's
+            Google listing (those get searched on the next step). */}
+        <div>
+          <FieldLabel>Business name</FieldLabel>
           <Input
-            value={query}
-            onChange={(v) => { setQuery(v); update('biz_name', v) }}
+            value={data.biz_name}
+            onChange={(v) => update('biz_name', v)}
             placeholder="e.g. The Golden Spoon"
             autoFocus
           />
-          {lookupOn && (searching || candidates.length > 0) && (
-            <div
-              className="absolute left-0 right-0 top-full mt-1 z-10 rounded-[10px] overflow-hidden bg-white"
-              style={{ border: '1.5px solid #e0e0e0', boxShadow: '0 6px 20px rgba(0,0,0,0.1)' }}
-            >
-              {searching && (
-                <div className="px-3.5 py-2.5 text-[13px]" style={{ color: '#999' }}>Searching...</div>
-              )}
-              {candidates.map((c) => (
-                <button
-                  key={c.placeId}
-                  type="button"
-                  onClick={() => pick(c)}
-                  className="w-full text-left px-3.5 py-2.5 transition-colors"
-                  style={{ borderTop: '1px solid #f0f0f0' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#f0faf6' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'white' }}
-                >
-                  <div className="text-sm font-medium" style={{ color: '#111' }}>{c.name}</div>
-                  <div className="text-xs mt-0.5" style={{ color: '#999' }}>{c.address}</div>
-                </button>
-              ))}
-            </div>
-          )}
+          <Hint>Your brand name. You will add each location on the next step.</Hint>
         </div>
 
-        {/* Prefill recap */}
-        {(pulling || recap) && (
-          <div
-            className="text-[13px] leading-relaxed rounded-[10px] px-3.5 py-2.5"
-            style={{ background: '#f0faf6', color: '#0f6e56', borderLeft: '3px solid #4abd98' }}
-          >
-            {pulling ? 'Looking you up...' : `✓ ${recap}`}
-          </div>
-        )}
-
+        {/* Single vs. multi up front, so the location step can show one
+            address or a full roster of spots. We keep 'Just 1' as the single
+            sentinel; 'Multiple' flips the location step into roster mode. */}
         <div>
-          <FieldLabel>Website URL</FieldLabel>
+          <FieldLabel>One spot or a few?</FieldLabel>
+          <div className="grid grid-cols-2 gap-2.5">
+            {[
+              { value: 'Just 1', label: 'One location', sub: 'A single spot' },
+              { value: 'Multiple', label: 'Multiple locations', sub: 'Two or more' },
+            ].map((opt) => {
+              const selected = data.location_count === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => update('location_count', opt.value)}
+                  className="text-left rounded-[12px] px-3.5 py-3 transition-all"
+                  style={{
+                    border: selected ? '1.5px solid #4abd98' : '1.5px solid #e0e0e0',
+                    background: selected ? '#f0faf6' : '#fff',
+                  }}
+                >
+                  <div className="text-sm font-semibold" style={{ color: selected ? '#0f6e56' : '#111' }}>
+                    {opt.label}
+                  </div>
+                  <div className="text-xs mt-0.5" style={{ color: '#999' }}>{opt.sub}</div>
+                </button>
+              )
+            })}
+          </div>
+          <Hint>You can change this anytime, and add each spot on the next step.</Hint>
+        </div>
+
+        {/* Website + optional scan — paste a site and we draft the story,
+            menu, and specials so the owner is not typing it from scratch. */}
+        <div>
+          <FieldLabel>Website <span style={{ color: '#aaa', fontWeight: 400 }}>(optional)</span></FieldLabel>
           <div className="flex gap-2">
             <Input
               value={data.website}
@@ -272,39 +201,6 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
             placeholder="(555) 123-4567"
             type="tel"
           />
-        </div>
-
-        {/* Single vs. multi up front, so the location step can show one
-            address or a full roster of spots. We keep 'Just 1' as the single
-            sentinel; 'Multiple' flips the location step into roster mode. */}
-        <div>
-          <FieldLabel>One spot or a few?</FieldLabel>
-          <div className="grid grid-cols-2 gap-2.5">
-            {[
-              { value: 'Just 1', label: 'One location', sub: 'A single spot' },
-              { value: 'Multiple', label: 'Multiple locations', sub: 'Two or more' },
-            ].map((opt) => {
-              const selected = data.location_count === opt.value
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => update('location_count', opt.value)}
-                  className="text-left rounded-[12px] px-3.5 py-3 transition-all"
-                  style={{
-                    border: selected ? '1.5px solid #4abd98' : '1.5px solid #e0e0e0',
-                    background: selected ? '#f0faf6' : '#fff',
-                  }}
-                >
-                  <div className="text-sm font-semibold" style={{ color: selected ? '#0f6e56' : '#111' }}>
-                    {opt.label}
-                  </div>
-                  <div className="text-xs mt-0.5" style={{ color: '#999' }}>{opt.sub}</div>
-                </button>
-              )
-            })}
-          </div>
-          <Hint>You can change this anytime, and add each spot on the next step.</Hint>
         </div>
 
         {/* Fast-forward: once the AI has filled fields, let the owner jump
