@@ -35,7 +35,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
     setScanNote('')
     const x = await extractFromWebsite(target)
     setScanning(false)
-    if (!x) { setScanNote("Could not read that site. No problem, you can fill this in as we go."); return }
+    if (!x) { setScanNote("We could not read that site automatically. Some sites load their menu with code we cannot scan yet. No problem, we will fill this in together as we go."); return }
 
     const got: string[] = []
     if (x.description && !data.biz_desc) { update('biz_desc', x.description); got.push('a description') }

@@ -258,15 +258,33 @@ export async function getBusinessPrefill(placeId: string): Promise<BusinessPrefi
   }
 }
 
+/**
+ * Decode the HTML entities that show up in real menus and business names.
+ * Without this, "Joe&#39;s" reaches the model as a mangled token and comes
+ * back as "Joes". Em/en dashes are folded to a plain hyphen so drafted copy
+ * stays free of em dashes.
+ */
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&(?:apos|#39|#x27);/gi, "'")
+    .replace(/&(?:lsquo|rsquo|#8216|#8217|#x2018|#x2019);/gi, "'")
+    .replace(/&(?:quot|ldquo|rdquo|#8220|#8221|#x201c|#x201d);/gi, '"')
+    .replace(/&(?:mdash|ndash|#8211|#8212|#x2013|#x2014);/gi, '-')
+    .replace(/&#(\d+);/g, (_, n) => { try { return String.fromCodePoint(parseInt(n, 10)) } catch { return ' ' } })
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => { try { return String.fromCodePoint(parseInt(n, 16)) } catch { return ' ' } })
+    .replace(/&[a-z]+;/gi, ' ')
+}
+
 /** Strip a fetched HTML document down to visible-ish text for the model. */
 function htmlToText(html: string): string {
-  return html
+  const stripped = html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
+  return decodeEntities(stripped)
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 18000) // keep the prompt bounded; menus rarely need more
@@ -285,16 +303,8 @@ function normalizeUrl(raw: string): string | null {
   }
 }
 
-/**
- * Fetch a business website and ask Claude to draft onboarding fields from it.
- * Best-effort: returns null if the URL is unusable, the fetch fails, or the
- * model returns nothing parseable. Never throws into the caller.
- */
-export async function extractFromWebsite(url: string): Promise<WebsiteExtract | null> {
-  const target = normalizeUrl(url)
-  if (!target) return null
-
-  let text = ''
+/** Fetch one page, returning its raw HTML and stripped text, or null on error. */
+async function fetchPage(target: string): Promise<{ html: string; text: string } | null> {
   try {
     const res = await fetch(target, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ApnoshOnboarding/1.0)' },
@@ -305,10 +315,56 @@ export async function extractFromWebsite(url: string): Promise<WebsiteExtract | 
       console.error('[lookup] website fetch failed:', res.status, target)
       return null
     }
-    text = htmlToText(await res.text())
+    const html = await res.text()
+    return { html, text: htmlToText(html) }
   } catch (e) {
     console.error('[lookup] website fetch threw:', e)
     return null
+  }
+}
+
+/**
+ * Find a likely "menu" page link in the homepage HTML. Real menus almost
+ * always live on their own page (or a PDF we can't read), so the landing page
+ * alone yields no menu items. Returns an absolute URL or null. Skips PDFs,
+ * mail/tel links, and same-page anchors.
+ */
+function findMenuLink(html: string, base: string): string | null {
+  const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(html))) {
+    const href = m[1]
+    if (href.startsWith('#') || /^(mailto:|tel:)/i.test(href) || /\.pdf(\?|$)/i.test(href)) continue
+    const hay = `${href} ${htmlToText(m[2] || '')}`.toLowerCase()
+    if (!/\bmenu/.test(hay)) continue
+    try { return new URL(href, base).toString() } catch { /* ignore bad href */ }
+  }
+  return null
+}
+
+/**
+ * Fetch a business website and ask Claude to draft onboarding fields from it.
+ * Reads the homepage plus a linked menu page when one exists, so menu items
+ * are actually drafted instead of left blank. Best-effort: returns null if the
+ * URL is unusable, the fetch fails, or the model returns nothing parseable.
+ * Never throws into the caller.
+ */
+export async function extractFromWebsite(url: string): Promise<WebsiteExtract | null> {
+  const target = normalizeUrl(url)
+  if (!target) return null
+
+  const home = await fetchPage(target)
+  if (!home) return null
+  let text = home.text
+
+  // Pull a linked menu page too. Homepages rarely list the full menu, so this
+  // is the difference between drafting real menu items and returning none.
+  const menuUrl = findMenuLink(home.html, target)
+  if (menuUrl && menuUrl !== target) {
+    const menu = await fetchPage(menuUrl)
+    if (menu && menu.text.length > 80) {
+      text = `${text}\n\nMENU PAGE:\n${menu.text}`.slice(0, 18000)
+    }
   }
   if (text.length < 80) return null
 
@@ -363,15 +419,23 @@ ${text}`
             category: typeof m.category === 'string' ? m.category.trim() : '',
           }))
       : []
+    const seenSpecials = new Set<string>()
     const cleanSpecials = Array.isArray(parsed.specials)
       ? parsed.specials
-          .filter((s) => s && typeof s.title === 'string' && s.title.trim())
-          .slice(0, 10)
+          .filter((s) => s && typeof s.title === 'string' && s.title.trim().length >= 3)
           .map((s) => ({
             title: String(s.title).trim(),
             time_window: typeof s.time_window === 'string' ? s.time_window.trim() : '',
             details: typeof s.details === 'string' ? s.details.trim() : '',
           }))
+          // Drop repeats of the same special (case-insensitive title match).
+          .filter((s) => {
+            const key = s.title.toLowerCase()
+            if (seenSpecials.has(key)) return false
+            seenSpecials.add(key)
+            return true
+          })
+          .slice(0, 10)
       : []
 
     return {
