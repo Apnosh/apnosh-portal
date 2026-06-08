@@ -84,39 +84,6 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
           <Hint>Your brand name. You will add each location on the next step.</Hint>
         </div>
 
-        {/* Single vs. multi up front, so the location step can show one
-            address or a full roster of spots. We keep 'Just 1' as the single
-            sentinel; 'Multiple' flips the location step into roster mode. */}
-        <div>
-          <FieldLabel>One spot or a few?</FieldLabel>
-          <div className="grid grid-cols-2 gap-2.5">
-            {[
-              { value: 'Just 1', label: 'One location', sub: 'A single spot' },
-              { value: 'Multiple', label: 'Multiple locations', sub: 'Two or more' },
-            ].map((opt) => {
-              const selected = data.location_count === opt.value
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => update('location_count', opt.value)}
-                  className="text-left rounded-[12px] px-3.5 py-3 transition-all"
-                  style={{
-                    border: selected ? '1.5px solid #4abd98' : '1.5px solid #e0e0e0',
-                    background: selected ? '#f0faf6' : '#fff',
-                  }}
-                >
-                  <div className="text-sm font-semibold" style={{ color: selected ? '#0f6e56' : '#111' }}>
-                    {opt.label}
-                  </div>
-                  <div className="text-xs mt-0.5" style={{ color: '#999' }}>{opt.sub}</div>
-                </button>
-              )
-            })}
-          </div>
-          <Hint>You can change this anytime, and add each spot on the next step.</Hint>
-        </div>
-
         {/* Website + optional scan — paste a site and we draft the story,
             menu, and specials so the owner is not typing it from scratch. */}
         <div>

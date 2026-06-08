@@ -53,8 +53,12 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
   const [searchNote, setSearchNote] = useState('')
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Single vs. multi is decided up front on the business-name step.
-  const isMulti = !!data.location_count && data.location_count !== 'Just 1'
+  // How many spots — chosen at the top of this step. 'Not open yet' is treated
+  // as a single planned location. Everything below the choice stays hidden
+  // until one is picked, so the search lands after the decision.
+  const isMulti = data.location_count === 'Multiple'
+  const isNotOpen = data.location_count === 'Not open yet'
+  const hasChoice = !!data.location_count
 
   useEffect(() => {
     isLookupEnabled().then(setLookupOn)
@@ -358,14 +362,49 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
     <>
       <Question
         title={isMulti ? 'Where are your spots?' : 'Where are you located?'}
-        subtitle={isMulti
+        subtitle={isNotOpen
+          ? 'Add your planned address. Search may not find you yet.'
+          : isMulti
           ? 'Search each spot to fill it in, or type them by hand.'
           : 'Search your spot to fill it in, or type it by hand.'}
       />
 
+      {/* Choice first: how many spots (or not open yet). The search and the
+          rest of the section stay hidden until this is picked. */}
+      <div className="mt-4">
+        <FieldLabel>How many spots?</FieldLabel>
+        <div className="grid grid-cols-3 gap-2.5">
+          {[
+            { value: 'Just 1', label: 'One spot', sub: 'A single location' },
+            { value: 'Multiple', label: 'A few', sub: 'Two or more' },
+            { value: 'Not open yet', label: 'Not open yet', sub: 'Opening soon' },
+          ].map((opt) => {
+            const selected = data.location_count === opt.value
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => update('location_count', opt.value)}
+                className="text-left rounded-[12px] px-3 py-3 transition-all"
+                style={{
+                  border: selected ? '1.5px solid #4abd98' : '1.5px solid #e0e0e0',
+                  background: selected ? '#f0faf6' : '#fff',
+                }}
+              >
+                <div className="text-sm font-semibold" style={{ color: selected ? '#0f6e56' : '#111' }}>
+                  {opt.label}
+                </div>
+                <div className="text-[11px] mt-0.5" style={{ color: '#999' }}>{opt.sub}</div>
+              </button>
+            )
+          })}
+        </div>
+        <Hint>You can change this anytime and edit locations later from your dashboard.</Hint>
+      </div>
+
       {/* Search-first: find a spot by name and we pull its address, hours,
           and phone. The roster below stays editable for manual entry. */}
-      {lookupOn && (
+      {hasChoice && lookupOn && (
         <div className="mt-4">
           <FieldLabel>{isMulti ? 'Search for a spot' : 'Search for your spot'}</FieldLabel>
           <div className="relative">
@@ -415,6 +454,8 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
         </div>
       )}
 
+      {hasChoice && (
+      <>
       {/* Google Business import: connect once, pull every location's address,
           hours, and phone instead of typing them by hand. */}
       {candidates ? (
@@ -634,6 +675,8 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
           </div>
         </div>
       </div>
+      </>
+      )}
       {nav}
     </>
   )
