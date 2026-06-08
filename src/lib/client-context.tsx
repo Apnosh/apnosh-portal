@@ -104,19 +104,10 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle()
       clientId = (business?.client_id as string | null) ?? null
 
-      // Self-heal a stranded onboarding. A skipped or partly-finished
-      // setup can leave a businesses row with no linked client (e.g. the
-      // CRM provisioning step failed). With no client, the dashboard has
-      // nothing to resolve and would spin forever. Provision/link one now
-      // so the portal works. ensureClientForBusiness is idempotent — it
-      // no-ops the moment a client_id already exists.
-      if (!clientId && business?.id) {
-        try {
-          const { ensureClientForBusiness } = await import('@/lib/onboarding-actions')
-          clientId = await ensureClientForBusiness(business.id as string)
-        } catch { /* fall through to the client_users fallback below */ }
-      }
-
+      // Fall back to an existing client_users linkage (magic-link portal
+      // users). This MUST come before any self-provisioning so an invited
+      // user who also happens to have an empty businesses row resolves to
+      // the client they were invited to, not a freshly-created one.
       if (!clientId) {
         const { data: clientUser } = await supabase
           .from('client_users')
@@ -124,6 +115,19 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
           .eq('auth_user_id', user.id)
           .maybeSingle()
         clientId = (clientUser?.client_id as string | null) ?? null
+      }
+
+      // Last resort — self-heal a stranded onboarding. A skipped or
+      // partly-finished setup can leave a businesses row with no linked
+      // client (e.g. the CRM provisioning step failed). With no client the
+      // dashboard has nothing to resolve and would spin forever. Provision
+      // one now so the portal works. ensureClientForBusiness is idempotent
+      // and only runs when no linkage was found above.
+      if (!clientId && business?.id) {
+        try {
+          const { ensureClientForBusiness } = await import('@/lib/onboarding-actions')
+          clientId = await ensureClientForBusiness(business.id as string)
+        } catch { /* leave clientId null — handled below */ }
       }
     }
 
