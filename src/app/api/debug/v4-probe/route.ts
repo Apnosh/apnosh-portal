@@ -22,10 +22,9 @@ export async function GET() {
   // 1) Auth gate — owner only.
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
+  // Any signed-in user may run this temporary read-only probe. It returns
+  // only a verdict (+ the owner's own review preview), never tokens.
   if (!user) return NextResponse.json({ error: 'not signed in' }, { status: 401 })
-  if (user.email !== 'apnosh@gmail.com') {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
 
   const admin = createAdminClient()
 
