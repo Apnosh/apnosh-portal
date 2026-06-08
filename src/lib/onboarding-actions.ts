@@ -339,6 +339,72 @@ export async function completeOnboardingCRM(
     console.error('[completeOnboardingCRM] locations seed threw:', e)
   }
 
+  // 2e. Seed restaurant shape + default goals from onboarding answers so the
+  //     playbook engine has something to match against the moment onboarding
+  //     finishes, instead of leaving /dashboard/restaurant and
+  //     /dashboard/goals blank until the owner fills them in by hand. Both are
+  //     a best guess the owner can adjust on those pages. Idempotent: we never
+  //     overwrite a shape a strategist already captured, and never add goals
+  //     when the client already has active ones.
+  try {
+    const { inferShapeFromOnboarding, defaultGoalsForShape } = await import('@/lib/goals/defaults')
+    const { data: clientRow } = await supabase
+      .from('clients')
+      .select('shape_captured_at')
+      .eq('id', clientId)
+      .maybeSingle()
+
+    if (!clientRow?.shape_captured_at) {
+      const shape = inferShapeFromOnboarding({
+        service_styles: (data.service_styles as string[]) || null,
+        price_range: (data.price_range as string) || null,
+        location_count: (data.location_count as string) || null,
+        locations: (data.locations as unknown[]) || null,
+        customer_types: (data.customer_types as string[]) || null,
+        connected: (data.connected as Record<string, boolean>) || null,
+      })
+
+      const { error: shapeErr } = await supabase
+        .from('clients')
+        .update({
+          shape_footprint: shape.footprint,
+          shape_concept: shape.concept,
+          shape_customer_mix: shape.customerMix,
+          shape_digital_maturity: shape.digitalMaturity,
+          shape_captured_at: new Date().toISOString(),
+          shape_captured_by: null,
+        })
+        .eq('id', clientId)
+      if (shapeErr) console.error('[completeOnboardingCRM] shape seed error:', shapeErr.message)
+      else console.log(`[completeOnboardingCRM] Seeded shape: ${shape.footprint}/${shape.concept}`)
+
+      // Default goals derived from the inferred shape — only when the client
+      // has no active goals yet (so a strategist's picks are never clobbered).
+      const { count } = await supabase
+        .from('client_goals')
+        .select('id', { count: 'exact', head: true })
+        .eq('client_id', clientId)
+        .eq('status', 'active')
+      if (!count) {
+        const slugs = defaultGoalsForShape({ footprint: shape.footprint, concept: shape.concept })
+        const goalRows = slugs.slice(0, 3).map((slug, i) => ({
+          client_id: clientId,
+          goal_slug: slug,
+          priority: i + 1,
+          status: 'active',
+          set_by: null,
+        }))
+        if (goalRows.length) {
+          const { error: goalErr } = await supabase.from('client_goals').insert(goalRows)
+          if (goalErr) console.error('[completeOnboardingCRM] goals seed error:', goalErr.message)
+          else console.log(`[completeOnboardingCRM] Seeded ${goalRows.length} default goals`)
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[completeOnboardingCRM] shape/goals seed threw:', e)
+  }
+
   // 3. Ensure client_users row links auth user to client
   const { data: existingCU } = await supabase
     .from('client_users')
