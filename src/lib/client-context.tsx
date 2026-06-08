@@ -99,10 +99,23 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
       // client_users.auth_user_id (magic-link portal users).
       const { data: business } = await supabase
         .from('businesses')
-        .select('client_id')
+        .select('id, client_id')
         .eq('owner_id', user.id)
         .maybeSingle()
       clientId = (business?.client_id as string | null) ?? null
+
+      // Self-heal a stranded onboarding. A skipped or partly-finished
+      // setup can leave a businesses row with no linked client (e.g. the
+      // CRM provisioning step failed). With no client, the dashboard has
+      // nothing to resolve and would spin forever. Provision/link one now
+      // so the portal works. ensureClientForBusiness is idempotent — it
+      // no-ops the moment a client_id already exists.
+      if (!clientId && business?.id) {
+        try {
+          const { ensureClientForBusiness } = await import('@/lib/onboarding-actions')
+          clientId = await ensureClientForBusiness(business.id as string)
+        } catch { /* fall through to the client_users fallback below */ }
+      }
 
       if (!clientId) {
         const { data: clientUser } = await supabase

@@ -124,7 +124,13 @@ export default function DashboardPage() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (!client?.id) return
+    // Wait until the client context has finished resolving. Until then the
+    // gate below keeps the spinner up.
+    if (clientLoading) return
+    // Context resolved but there's no client (e.g. a skipped or incomplete
+    // profile that never provisioned one). Stop loading so the page renders
+    // the getting-started / finish-profile state instead of spinning forever.
+    if (!client?.id) { setLoading(false); return }
     let cancelled = false
     ;(async () => {
       setLoading(true)
@@ -140,7 +146,7 @@ export default function DashboardPage() {
       }
     })()
     return () => { cancelled = true }
-  }, [client?.id])
+  }, [client?.id, clientLoading])
 
   const fireToast = useCallback((msg: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current)
@@ -188,6 +194,9 @@ export default function DashboardPage() {
   if (showGettingStarted) {
     return (
       <>
+        {/* Finish-your-profile nudge for clients who skipped or paused
+            setup — show it here too, not just on the full dashboard. */}
+        <FinishProfileBanner />
         <div className="lg:hidden -m-4">
           <MobileHome
             homeMetrics={data?.homeMetrics ?? null}
