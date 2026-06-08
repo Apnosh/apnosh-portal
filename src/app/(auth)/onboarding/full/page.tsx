@@ -311,6 +311,25 @@ export default function OnboardingPage() {
     router.push('/dashboard')
   }
 
+  /**
+   * Leave setup without provisioning. Saves the in-progress draft (so
+   * nothing typed is lost) and marks the businesses row onboarding_paused
+   * so middleware lets the owner into the portal mid-setup. Unlike "Save
+   * and finish later", this does NOT run completeOnboardingCRM — no client
+   * records are created. They can resume any time from the dashboard.
+   */
+  async function handleExit() {
+    setSaving(true)
+    await saveData(step)            // ensure a draft row exists + persist edits
+    if (userId) {
+      await supabase
+        .from('businesses')
+        .update({ onboarding_paused: true })
+        .eq('owner_id', userId)
+    }
+    router.push('/dashboard')
+  }
+
   // Logo upload handler
   async function handleLogoUpload(file: File) {
     if (!businessId) return
@@ -358,6 +377,23 @@ export default function OnboardingPage() {
       >
         {/* Fixed top: progress + question */}
         <div className="flex-shrink-0 px-9 pt-9 max-sm:px-5 max-sm:pt-6">
+          {/* Always-available exit. Leaves setup without provisioning;
+              the draft is saved so they can pick up later. */}
+          {!showSuccess && (
+            <div className="flex justify-end -mt-3 mb-2">
+              <button
+                onClick={handleExit}
+                disabled={saving}
+                className="text-[12px] font-medium transition-colors disabled:opacity-40"
+                style={{ color: '#bbb', background: 'none' }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#777' }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#bbb' }}
+                title="Leave setup. Your progress is saved."
+              >
+                Exit
+              </button>
+            </div>
+          )}
           {/* Progress bar */}
           {!showSuccess && (
             <div className="mb-7">

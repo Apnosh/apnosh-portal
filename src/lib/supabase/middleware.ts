@@ -147,11 +147,14 @@ export async function updateSession(request: NextRequest) {
         if (!cp?.onboarding_complete) {
           const { data: biz } = await supabase
             .from('businesses')
-            .select('onboarding_completed')
+            .select('onboarding_completed, onboarding_paused')
             .eq('owner_id', user.id)
             .maybeSingle()
 
-          if (!biz?.onboarding_completed) {
+          // onboarding_paused === the owner clicked "Exit" to leave setup
+          // early. Let them into the portal even though it isn't finished;
+          // the dashboard surfaces a "finish your profile" prompt.
+          if (!biz?.onboarding_completed && !biz?.onboarding_paused) {
             const url = request.nextUrl.clone()
             url.pathname = '/onboarding/full'
             return NextResponse.redirect(url)
@@ -226,7 +229,7 @@ export async function updateSession(request: NextRequest) {
       if (isDashboard && (role === 'client' || role === 'team_member')) {
         const { data: business } = await supabase
           .from('businesses')
-          .select('onboarding_completed')
+          .select('onboarding_completed, onboarding_paused')
           .eq('owner_id', user.id)
           .maybeSingle()
 
@@ -238,8 +241,10 @@ export async function updateSession(request: NextRequest) {
           return NextResponse.redirect(url)
         }
 
-        // If businesses row exists but onboarding not complete, redirect
-        if (!business.onboarding_completed) {
+        // If businesses row exists but onboarding not complete, redirect —
+        // unless the owner explicitly clicked "Exit" (onboarding_paused),
+        // in which case we let them into the portal mid-setup.
+        if (!business.onboarding_completed && !business.onboarding_paused) {
           const url = request.nextUrl.clone()
           url.pathname = '/onboarding/full'
           return NextResponse.redirect(url)
