@@ -150,46 +150,65 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
     const got = ['address', 'hours']
     if (p.phone) got.push('phone')
 
-    // Read the website to draft the story, cuisine, menu, and specials.
+    // Read the website to draft the story, cuisine, menu, specials, and the
+    // later Story/Brand/Discovery steps -- one tap fills as much as we can.
     const site = (p.website || data.website).trim()
-    if (site) {
-      const x = await extractFromWebsite(site)
-      if (x) {
-        if (x.description && !data.biz_desc) { update('biz_desc', x.description); got.push('a description') }
-        if (x.cuisine && !data.cuisine) {
-          const m = matchCuisine(x.cuisine)
-          if (m.cuisine) {
-            update('cuisine', m.cuisine)
-            if (m.cuisine === 'Other') update('cuisine_other', m.other)
-            got.push('cuisine')
-          }
-        }
-        if (x.signature_items.length && !data.signature_items.some((s) => s.trim())) {
-          update('signature_items', x.signature_items); got.push(`${x.signature_items.length} signature dishes`)
-        }
-        if (x.menu_items.length && !data.menu_items.length) {
-          update('menu_items', x.menu_items); got.push(`${x.menu_items.length} menu items`)
-        }
-        if (x.specials.length && !data.specials.length) {
-          update('specials', x.specials); got.push(`${x.specials.length} specials`)
-        }
-        if (x.service_styles.length && !data.service_styles.length) {
-          update('service_styles', x.service_styles); got.push('how you serve')
-        }
-        if (x.dietary_options.length && !data.dietary_options.length) {
-          update('dietary_options', x.dietary_options); got.push('dietary options')
-        }
-        if (x.reservations_platform && !data.reservations_platform) {
-          update('reservations_platform', x.reservations_platform); got.push('reservations')
-        }
-        if (x.delivery_platforms.length && !data.delivery_platforms.length) {
-          update('delivery_platforms', x.delivery_platforms); got.push('delivery')
-        }
-      }
-    }
+    got.push(...await draftFromWebsite(site))
 
     setPulling(false)
     setSearchNote(`Added ${name}. Drafted ${summarize(got)}. Review and tweak anything as you go.`)
+  }
+
+  // Read a business website once and draft every field we safely can from it,
+  // skipping anything the owner has already filled. Shared by the Places-search
+  // path and the Google Business Profile import so both fill the same later
+  // steps (Menu, Story, Brand, Discovery). Returns short labels for the recap.
+  async function draftFromWebsite(site: string): Promise<string[]> {
+    const got: string[] = []
+    const trimmed = site.trim()
+    if (!trimmed) return got
+    const x = await extractFromWebsite(trimmed)
+    if (!x) return got
+
+    if (x.description && !data.biz_desc) { update('biz_desc', x.description); got.push('a description') }
+    if (x.cuisine && !data.cuisine) {
+      const m = matchCuisine(x.cuisine)
+      if (m.cuisine) {
+        update('cuisine', m.cuisine)
+        if (m.cuisine === 'Other') update('cuisine_other', m.other)
+        got.push('cuisine')
+      }
+    }
+    if (x.signature_items.length && !data.signature_items.some((s) => s.trim())) {
+      update('signature_items', x.signature_items); got.push(`${x.signature_items.length} signature dishes`)
+    }
+    if (x.menu_items.length && !data.menu_items.length) {
+      update('menu_items', x.menu_items); got.push(`${x.menu_items.length} menu items`)
+    }
+    if (x.specials.length && !data.specials.length) {
+      update('specials', x.specials); got.push(`${x.specials.length} specials`)
+    }
+    if (x.service_styles.length && !data.service_styles.length) {
+      update('service_styles', x.service_styles); got.push('how you serve')
+    }
+    if (x.dietary_options.length && !data.dietary_options.length) {
+      update('dietary_options', x.dietary_options); got.push('dietary options')
+    }
+    if (x.reservations_platform && !data.reservations_platform) {
+      update('reservations_platform', x.reservations_platform); got.push('reservations')
+    }
+    if (x.delivery_platforms.length && !data.delivery_platforms.length) {
+      update('delivery_platforms', x.delivery_platforms); got.push('delivery')
+    }
+    if (x.unique && !data.unique) { update('unique', x.unique); got.push('what makes you stand out') }
+    if (x.main_offerings && !data.main_offerings) { update('main_offerings', x.main_offerings); got.push('what you offer') }
+    if (x.target_keywords.length && !data.target_keywords.some((s) => s.trim())) {
+      update('target_keywords', x.target_keywords); got.push('search keywords')
+    }
+    if (x.brand_hashtags.length && !data.brand_hashtags.some((s) => s.trim())) {
+      update('brand_hashtags', x.brand_hashtags); got.push('hashtags')
+    }
+    return got
   }
 
   // Kick off OAuth: save progress (survives the full-page redirect), make sure
@@ -266,8 +285,11 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
   }, [businessId])
 
   // Pull the checked GBP locations into the wizard: first becomes the primary
-  // (flat fields), the rest fill the additional-locations roster.
-  function applyImport() {
+  // (flat fields), the rest fill the additional-locations roster. Then read the
+  // primary location's website to draft the later Menu/Story/Brand/Discovery
+  // steps too -- same fill the search path does -- so one connect fills as much
+  // as we safely can.
+  async function applyImport() {
     if (!candidates) return
     const chosen = candidates.filter((_, i) => picked[i])
     if (!chosen.length) { setCandidates(null); return }
@@ -279,6 +301,9 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
     if (primary.phone) update('phone', primary.phone)
     if (primary.hours) update('hours', primary.hours)
     if (isMulti && primary.title) update('primary_location_name', primary.title)
+    if (!data.biz_name.trim() && primary.title) update('biz_name', primary.title)
+    if (primary.website && !data.website.trim()) update('website', primary.website)
+    if (!data.biz_type) update('biz_type', FOOD_BIZ_TYPES[0])
     if (isMulti && rest.length) {
       update('locations', [
         ...data.locations,
@@ -289,8 +314,24 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
         })),
       ])
     }
+
+    const label = `Imported ${chosen.length} location${chosen.length > 1 ? 's' : ''} from Google.`
     setCandidates(null)
-    setGbpNote(`Imported ${chosen.length} location${chosen.length > 1 ? 's' : ''} from Google.`)
+
+    // Read the primary location's website to draft the later steps. Show a
+    // note while it runs so the owner knows the rest is being filled in.
+    const site = (primary.website || data.website).trim()
+    if (!site) {
+      setGbpNote(label)
+      return
+    }
+    setGbpBusy(true)
+    setGbpNote(`${label} Reading your website to fill in the rest...`)
+    const got = await draftFromWebsite(site)
+    setGbpBusy(false)
+    setGbpNote(got.length
+      ? `${label} Drafted ${summarize(got)}. Review and tweak anything as you go.`
+      : label)
   }
 
   // Initialize Google Places autocomplete on the primary address field

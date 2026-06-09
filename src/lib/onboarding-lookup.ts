@@ -63,6 +63,13 @@ export interface WebsiteExtract {
   dietary_options: string[]
   reservations_platform: string
   delivery_platforms: string[]
+  // Later-step drafts (Story / Brand / Discovery). Free-form, so we only trim
+  // and cap them; the owner reviews and edits every one. Grounded in the site
+  // text only -- the model is told to leave them empty when unsupported.
+  unique: string            // what makes this place stand out (story step)
+  main_offerings: string    // the core of what they sell (promote step)
+  target_keywords: string[] // search phrases a diner would use (discovery)
+  brand_hashtags: string[]  // hashtags/handles shown on the site (discovery)
 }
 
 // Allowed values, mirrored from the wizard's data.ts option lists. The model
@@ -392,12 +399,20 @@ Return ONLY raw JSON (no markdown, no commentary) with exactly this shape:
   "service_styles": [],
   "dietary_options": [],
   "reservations_platform": "",
-  "delivery_platforms": []
+  "delivery_platforms": [],
+  "unique": "one plain sentence on what makes this place stand out, or empty string",
+  "main_offerings": "one short phrase naming the core of what they sell, or empty string",
+  "target_keywords": ["search phrases a hungry local would type to find a place like this"],
+  "brand_hashtags": ["hashtags or social handles actually shown on the site"]
 }
 
 Rules:
 - menu_items: include real items you can see, with price as written (e.g. "$12") or "" if none. category is a section like "Tacos" or "" if unclear. Cap at 25 items.
 - specials: recurring deals like happy hour or taco Tuesday only. Empty array if none.
+- unique: only if the site states or clearly implies a standout (a specialty, an award, a method, history). Empty string if nothing stands out. 5th-grade reading level.
+- main_offerings: e.g. "wood-fired pizza and pasta" or "specialty coffee and pastries". Empty string if unclear.
+- target_keywords: up to 6 lowercase phrases grounded in the cuisine, dishes, and city you can see (e.g. "ramen seattle", "late night noodles"). Empty array if you cannot ground them. Do not invent a city.
+- brand_hashtags: only hashtags (with #) or @handles that literally appear in the text. Empty array if none. Never invent one.
 - Keep all copy free of em dashes.
 
 Facts only for the next four fields. Include a value ONLY when the website text clearly supports it. Never guess. Never infer service style from cuisine alone. Copy values VERBATIM from these lists; if nothing fits, leave it empty.
@@ -450,6 +465,25 @@ ${text}`
           .slice(0, 10)
       : []
 
+    // Trim + cap a free-form string list (keywords, hashtags). De-dupes
+    // case-insensitively and drops blanks so a sloppy model reply stays clean.
+    const cleanStrList = (v: unknown, cap: number, max = 40): string[] => {
+      if (!Array.isArray(v)) return []
+      const seen = new Set<string>()
+      const out: string[] = []
+      for (const s of v) {
+        if (typeof s !== 'string') continue
+        const t = s.trim().slice(0, max)
+        if (!t) continue
+        const key = t.toLowerCase()
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push(t)
+        if (out.length >= cap) break
+      }
+      return out
+    }
+
     return {
       description: typeof parsed.description === 'string' ? parsed.description.trim() : '',
       cuisine: typeof parsed.cuisine === 'string' ? parsed.cuisine.trim() : '',
@@ -462,6 +496,10 @@ ${text}`
       dietary_options: keepAllowed(parsed.dietary_options, ALLOWED_DIETARY),
       reservations_platform: keepAllowed([parsed.reservations_platform], ALLOWED_RESERVATIONS)[0] || '',
       delivery_platforms: keepAllowed(parsed.delivery_platforms, ALLOWED_DELIVERY),
+      unique: typeof parsed.unique === 'string' ? parsed.unique.trim() : '',
+      main_offerings: typeof parsed.main_offerings === 'string' ? parsed.main_offerings.trim() : '',
+      target_keywords: cleanStrList(parsed.target_keywords, 6),
+      brand_hashtags: cleanStrList(parsed.brand_hashtags, 6),
     }
   } catch (e) {
     console.error('[lookup] extractFromWebsite model/parse threw:', e)

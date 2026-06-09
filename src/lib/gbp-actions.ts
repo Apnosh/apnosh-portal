@@ -55,6 +55,7 @@ export interface OnboardingGBPLocation {
   state: string
   zip: string
   phone: string
+  website: string
   hours?: Record<string, {
     open: string; close: string; closed: boolean
     ranges?: Array<{ open: string; close: string }>
@@ -90,6 +91,7 @@ export async function getGBPLocationsForOnboarding(
         state: loc.regionCode || '',
         zip: loc.postalCode || '',
         phone: loc.primaryPhone || '',
+        website: loc.websiteUri || '',
         hours: loc.hours,
       })
     }
