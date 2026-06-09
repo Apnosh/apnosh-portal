@@ -354,8 +354,10 @@ export async function completeOnboardingCRM(
   //     they land with shape/goals blank, which is honest, and can set them by
   //     hand if relevant.
   try {
+    const { FOOD_BIZ_TYPES } = await import('@/app/(auth)/onboarding/full/data')
     const isFoodBusiness =
-      typeof data.biz_type === 'string' && data.biz_type === 'Restaurant / café / bar'
+      typeof data.biz_type === 'string' &&
+      (FOOD_BIZ_TYPES as readonly string[]).includes(data.biz_type)
     const { inferShapeFromOnboarding, defaultGoalsForShape } = await import('@/lib/goals/defaults')
     const { data: clientRow } = await supabase
       .from('clients')

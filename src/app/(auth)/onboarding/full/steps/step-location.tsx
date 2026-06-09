@@ -224,24 +224,28 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
       }
       // gbp === 'connected'
       setGbpBusy(true)
-      const clientId = await ensureClientForBusiness(businessId!)
-      if (!clientId) {
-        setGbpBusy(false)
-        setGbpNote("We couldn't load your locations. You can enter them by hand.")
-        return
-      }
-      const res = await getGBPLocationsForOnboarding(clientId)
-      setGbpBusy(false)
-      if (!res.success) {
+      try {
+        const clientId = await ensureClientForBusiness(businessId!)
+        if (!clientId) {
+          setGbpNote("We couldn't load your locations. You can enter them by hand.")
+          return
+        }
+        const res = await getGBPLocationsForOnboarding(clientId)
+        if (!res.success) {
+          setGbpNote("We couldn't read your locations from Google. You can enter them by hand.")
+          return
+        }
+        if (!res.data.length) {
+          setGbpNote("We didn't find any locations on that Google account. You can enter them by hand.")
+          return
+        }
+        setCandidates(res.data)
+        setPicked(Object.fromEntries(res.data.map((_, i) => [i, true])))
+      } catch {
         setGbpNote("We couldn't read your locations from Google. You can enter them by hand.")
-        return
+      } finally {
+        setGbpBusy(false)
       }
-      if (!res.data.length) {
-        setGbpNote("We didn't find any locations on that Google account. You can enter them by hand.")
-        return
-      }
-      setCandidates(res.data)
-      setPicked(Object.fromEntries(res.data.map((_, i) => [i, true])))
     })()
   }, [businessId])
 
