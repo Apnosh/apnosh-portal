@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, ShoppingBag, Kanban, UserCog, FileBarChart,
   FileText, CreditCard, MessageSquare, Settings, Menu, X, ChevronDown, Shield, Plus,
   BarChart3, Calendar, ListTodo, Send, MessageCircle, Sparkles, CheckSquare,
-  Plug, Gauge, BookOpen, Megaphone,
+  Plug, Gauge, BookOpen, Megaphone, Inbox,
 } from 'lucide-react'
 import { useUser, signOut } from '@/lib/supabase/hooks'
 import { ToastProvider } from '@/components/ui/toast'
@@ -50,6 +50,7 @@ const navSections = [
   {
     label: 'Business',
     items: [
+      { label: 'Leads', href: '/admin/leads', icon: Inbox },
       { label: 'Messages', href: '/admin/messages', icon: MessageSquare },
       { label: 'Billing', href: '/admin/billing', icon: CreditCard },
       { label: 'Reports', href: '/admin/reports', icon: FileBarChart },
@@ -93,7 +94,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       const endOfToday = new Date()
       endOfToday.setHours(23, 59, 59, 999)
 
-      const [today, queue, messages, billing] = await Promise.all([
+      const [today, queue, messages, billing, leads] = await Promise.all([
         supabase
           .from('client_tasks')
           .select('id', { count: 'exact', head: true })
@@ -112,6 +113,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           .from('invoices')
           .select('id', { count: 'exact', head: true })
           .in('status', ['draft', 'overdue']),
+        supabase
+          .from('feature_intake')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'new'),
       ])
 
       if (cancelled) return
@@ -120,6 +125,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         '/admin/queue': queue.count ?? 0,
         '/admin/messages': messages.count ?? 0,
         '/admin/billing': billing.count ?? 0,
+        '/admin/leads': leads.count ?? 0,
       })
     }
     void load()
@@ -134,6 +140,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     '/admin/queue':    'bg-amber-500',
     '/admin/messages': 'bg-emerald-500',
     '/admin/billing':  'bg-amber-500',
+    '/admin/leads':    'bg-brand',
   }
 
   // Is the signed-in user an actual admin? Non-admin strategists hit

@@ -932,9 +932,14 @@ export interface Client {
   churn_date: string | null
   churn_reason: ChurnReason | null
   churn_notes: string | null
+  // Lifecycle status (migration 043). A "lead" is a client with status 'pending'.
+  status: ClientLifecycleStatus
   created_at: string
   updated_at: string
 }
+
+export type ClientLifecycleStatus =
+  | 'pending' | 'onboarding' | 'active' | 'paused' | 'churned' | 'declined'
 
 export type LifecycleEventType =
   | 'acquired' | 'upgraded' | 'downgraded' | 'paused' | 'reactivated' | 'churned'
@@ -1693,5 +1698,43 @@ export interface ClientMonthlyReport {
   created_at: string
   // Joined
   team_member?: TeamMember
+}
+
+// Public "Get Featured" intake submissions (migration 161).
+// Top-of-funnel leads from the static marketing site at /featured.
+// lead_score is computed server-side by a BEFORE INSERT trigger.
+export type FeatureIntakeStatus = 'new' | 'contacted' | 'qualified' | 'archived' | 'converted'
+export type FeatureIntakeLeadScore = 'hot' | 'warm' | 'low'
+
+export interface FeatureIntake {
+  id: string
+  created_at: string
+  restaurant_name: string
+  contact_name: string
+  role: string
+  email: string
+  phone: string | null
+  neighborhood: string
+  concept: string | null
+  years_open: string | null
+  story: string
+  anything_else: string | null
+  consent: boolean
+  source: string
+  status: FeatureIntakeStatus
+  lead_score: FeatureIntakeLeadScore | null
+  // Set when an admin converts the lead into a CRM client (migration 163).
+  converted_client_id: string | null
+}
+
+// Opt-in newsletter list (migration 162). Fed by public signups.
+export interface NewsletterSubscriber {
+  id: string
+  created_at: string
+  email: string
+  name: string | null
+  source: string
+  status: 'subscribed' | 'unsubscribed'
+  consented_at: string
 }
 
