@@ -582,16 +582,49 @@ function mapGBPHours(
   return out
 }
 
-export async function listGBPAccounts(accessToken: string): Promise<GBPAccount[]> {
-  const res = await fetch(
-    'https://mybusinessaccountmanagement.googleapis.com/v1/accounts?pageSize=50',
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      // Never let a stalled serverless->Google connection hang the onboarding
-      // spinner. Fail fast so the caller's catch path can show a fallback.
-      cache: 'no-store',
-      signal: AbortSignal.timeout(12000),
+/**
+ * Statuses worth retrying. The Google Business Profile APIs sporadically
+ * return 401 (a valid, unexpired token is rejected for one call then
+ * accepted on the next), 429 (rate limit), and 5xx. Without a retry a
+ * single flaky response fails the whole onboarding import. Verified by
+ * hand: the same token 401s once, then 200s immediately after.
+ */
+const GBP_RETRIABLE_STATUS = new Set([401, 408, 429, 500, 502, 503, 504])
+
+/**
+ * GET a GBP endpoint with short exponential backoff. Retries transient
+ * statuses and network/abort errors; returns the final Response (ok or
+ * not) so the caller keeps its own error-message handling. Each attempt
+ * still gets a 12s hard timeout so a real stall can't hang onboarding.
+ */
+async function gbpFetch(url: string, accessToken: string, tries = 3): Promise<Response> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt < tries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(12000),
+      })
+      if (res.ok || !GBP_RETRIABLE_STATUS.has(res.status) || attempt === tries - 1) {
+        return res
+      }
+      lastErr = new Error(`GBP transient ${res.status}`)
+    } catch (err) {
+      lastErr = err
+      if (attempt === tries - 1) throw err
     }
+    // 400ms, 800ms (+ jitter) between attempts. Transient 401s come back
+    // fast, so this adds ~1s in the worst realistic case.
+    await new Promise((r) => setTimeout(r, 400 * 2 ** attempt + Math.floor(Math.random() * 200)))
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('GBP request failed')
+}
+
+export async function listGBPAccounts(accessToken: string): Promise<GBPAccount[]> {
+  const res = await gbpFetch(
+    'https://mybusinessaccountmanagement.googleapis.com/v1/accounts?pageSize=50',
+    accessToken,
   )
   const data = await res.json()
   if (!res.ok) {
@@ -615,13 +648,9 @@ export async function listGBPLocations(
   const readMask = 'name,title,storeCode,phoneNumbers,websiteUri,categories,storefrontAddress,regularHours'
   const url = `https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?readMask=${encodeURIComponent(readMask)}&pageSize=100`
 
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    // Hard timeout so a stalled serverless->Google connection can't hang the
-    // onboarding location import indefinitely.
-    cache: 'no-store',
-    signal: AbortSignal.timeout(12000),
-  })
+  // Retry transient failures (sporadic 401/429/5xx) so one flaky response
+  // doesn't drop an account's locations from the onboarding import.
+  const res = await gbpFetch(url, accessToken)
   const data = await res.json()
   if (!res.ok) {
     throw new Error(data.error?.message || 'Failed to list GBP locations')
