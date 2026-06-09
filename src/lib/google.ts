@@ -585,7 +585,13 @@ function mapGBPHours(
 export async function listGBPAccounts(accessToken: string): Promise<GBPAccount[]> {
   const res = await fetch(
     'https://mybusinessaccountmanagement.googleapis.com/v1/accounts?pageSize=50',
-    { headers: { Authorization: `Bearer ${accessToken}` } }
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      // Never let a stalled serverless->Google connection hang the onboarding
+      // spinner. Fail fast so the caller's catch path can show a fallback.
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12000),
+    }
   )
   const data = await res.json()
   if (!res.ok) {
@@ -611,6 +617,10 @@ export async function listGBPLocations(
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    // Hard timeout so a stalled serverless->Google connection can't hang the
+    // onboarding location import indefinitely.
+    cache: 'no-store',
+    signal: AbortSignal.timeout(12000),
   })
   const data = await res.json()
   if (!res.ok) {

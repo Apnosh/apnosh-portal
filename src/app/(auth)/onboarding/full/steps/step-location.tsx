@@ -15,6 +15,22 @@ declare global {
   }
 }
 
+/**
+ * Reject a promise if it doesn't settle in time. Guards the post-OAuth
+ * location import: a server action that never returns (e.g. a stalled
+ * serverless->Google connection) would otherwise leave the Connect button
+ * stuck on "Connecting..." forever. With this, the caller's catch path runs
+ * and the owner gets a fallback to enter their address by hand.
+ */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), ms),
+    ),
+  ])
+}
+
 /** A short line listing what the autofill populated, for the recap note. */
 function summarize(found: string[]): string {
   if (!found.length) return ''
@@ -225,12 +241,12 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
       // gbp === 'connected'
       setGbpBusy(true)
       try {
-        const clientId = await ensureClientForBusiness(businessId!)
+        const clientId = await withTimeout(ensureClientForBusiness(businessId!), 20000)
         if (!clientId) {
           setGbpNote("We couldn't load your locations. You can enter them by hand.")
           return
         }
-        const res = await getGBPLocationsForOnboarding(clientId)
+        const res = await withTimeout(getGBPLocationsForOnboarding(clientId), 20000)
         if (!res.success) {
           setGbpNote("We couldn't read your locations from Google. You can enter them by hand.")
           return
