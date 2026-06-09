@@ -477,8 +477,8 @@ export const INITIAL_DATA: OnboardingData = {
   connected: {},
   logo_name: '',
   photo_count: 0,
-  color1: '#4abd98',
-  color2: '#2e9a78',
+  color1: '',
+  color2: '',
   brand_drive: '',
   agreed_terms: false,
 }

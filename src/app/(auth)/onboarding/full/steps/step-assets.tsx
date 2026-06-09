@@ -82,7 +82,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
           <div className="flex items-center gap-2.5 mb-3">
             <input
               type="color"
-              value={data.color1}
+              value={data.color1 || '#ffffff'}
               onChange={(e) => update('color1', e.target.value)}
               className="w-10 h-10 rounded-lg cursor-pointer flex-shrink-0 p-0"
               style={{ border: '1.5px solid #e0e0e0' }}
@@ -96,7 +96,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
           <div className="flex items-center gap-2.5">
             <input
               type="color"
-              value={data.color2}
+              value={data.color2 || '#ffffff'}
               onChange={(e) => update('color2', e.target.value)}
               className="w-10 h-10 rounded-lg cursor-pointer flex-shrink-0 p-0"
               style={{ border: '1.5px solid #e0e0e0' }}

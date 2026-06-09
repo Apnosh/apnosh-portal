@@ -119,6 +119,21 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
       : data.full_address.trim()
 
     if (primaryFilled) {
+      // Skip spots we already have. Match on place_id when present, else on a
+      // normalized address, and also guard against re-adding the primary. Stops
+      // the same location landing twice when an owner picks it more than once or
+      // searches for a spot they already imported from Google.
+      const norm = (a: string) => a.trim().toLowerCase()
+      const dup =
+        (!!c.placeId && (c.placeId === data.primary_place_id ||
+          data.locations.some((l) => l.place_id === c.placeId))) ||
+        (!!p.full_address.trim() && (norm(p.full_address) === norm(data.full_address) ||
+          data.locations.some((l) => norm(l.full_address) === norm(p.full_address))))
+      if (dup) {
+        setPulling(false)
+        setSearchNote(`${name} is already on your list.`)
+        return
+      }
       // Additional spot -> append to the roster. We still read this spot's
       // website to draft any profile fields that are still empty (description,
       // cuisine, menu, and the later Story/Brand/Discovery steps). The draft is
@@ -313,14 +328,31 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
     if (primary.website && !data.website.trim()) update('website', primary.website)
     if (!data.biz_type) update('biz_type', FOOD_BIZ_TYPES[0])
     if (isMulti && rest.length) {
-      update('locations', [
-        ...data.locations,
-        ...rest.map((l) => ({
-          name: l.title, full_address: l.full_address,
-          city: l.city, state: l.state, zip: l.zip, place_id: '',
-          phone: l.phone || '', hours: l.hours || {},
-        })),
+      // Dedupe by normalized address: against the primary, against spots already
+      // on the roster, and within this batch itself (Google can list the same
+      // location twice). Without this the review screen shows duplicate spots.
+      const norm = (a: string) => a.trim().toLowerCase()
+      const seen = new Set<string>([
+        norm(primary.full_address),
+        norm(data.full_address),
+        ...data.locations.map((l) => norm(l.full_address)),
       ])
+      const toAdd = rest.filter((l) => {
+        const key = norm(l.full_address)
+        if (!key || seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      if (toAdd.length) {
+        update('locations', [
+          ...data.locations,
+          ...toAdd.map((l) => ({
+            name: l.title, full_address: l.full_address,
+            city: l.city, state: l.state, zip: l.zip, place_id: '',
+            phone: l.phone || '', hours: l.hours || {},
+          })),
+        ])
+      }
     }
 
     const label = `Imported ${chosen.length} location${chosen.length > 1 ? 's' : ''} from Google.`

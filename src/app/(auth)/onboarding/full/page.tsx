@@ -118,8 +118,8 @@ export default function OnboardingPage() {
             : {},
           logo_name: '',
           photo_count: 0,
-          color1: colors.primary || '#4abd98',
-          color2: colors.secondary || '#2e9a78',
+          color1: colors.primary || '',
+          color2: colors.secondary || '',
           brand_drive: biz.brand_drive || '',
           agreed_terms: biz.agreed_terms || false,
         })

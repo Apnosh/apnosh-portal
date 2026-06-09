@@ -31,10 +31,15 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
     .join(', ') || null
   const hashtagList = data.brand_hashtags.map((h) => `#${h}`).join(' ') || null
   const keywordList = data.target_keywords.join(', ') || null
-  const extraLocList = data.locations
-    .filter((l) => l.full_address.trim())
+  const extraLocs = data.locations.filter((l) => l.full_address.trim())
+  const extraLocList = extraLocs
     .map((l) => (l.name.trim() ? `${l.name} (${l.full_address})` : l.full_address))
     .join(', ') || null
+  // Keep the count honest: when extra spots exist, show the real total
+  // (primary + extras) so it can never read "Just 1" above a list of spots.
+  const locationsValue = extraLocs.length
+    ? `${extraLocs.length + 1} total`
+    : (data.location_count || null)
 
   return (
     <>
@@ -52,7 +57,7 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
           {isFood && <Row label="Cuisine" value={data.cuisine === 'Other' ? data.cuisine_other : data.cuisine} />}
           {isFood && <Row label="Style" value={data.service_styles.length ? data.service_styles.join(', ') : null} />}
           <Row label="Location" value={mainLoc} />
-          <Row label="Locations" value={data.location_count || null} />
+          <Row label="Locations" value={locationsValue} />
           {extraLocList && <Row label="Other spots" value={extraLocList} />}
         </ReviewCard>
 
