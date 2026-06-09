@@ -119,8 +119,12 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
       : data.full_address.trim()
 
     if (primaryFilled) {
-      // Additional spot -> append to the roster, leave the rest of the
-      // profile alone.
+      // Additional spot -> append to the roster. We still read this spot's
+      // website to draft any profile fields that are still empty (description,
+      // cuisine, menu, and the later Story/Brand/Discovery steps). The draft is
+      // guarded per-field, so it only fills blanks and never clobbers the
+      // primary spot's details. Without this, owners who fill their address
+      // first (by hand or via Google) would never get the later steps drafted.
       update('locations', [
         ...data.locations,
         {
@@ -129,8 +133,12 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
           phone: p.phone || '', hours: hasHours ? p.hours : {},
         },
       ])
+      const site = (p.website || data.website).trim()
+      const drafted = await draftFromWebsite(site)
       setPulling(false)
-      setSearchNote(`Added ${name}.`)
+      setSearchNote(drafted.length
+        ? `Added ${name}. Drafted ${summarize(drafted)}. Review and tweak anything as you go.`
+        : `Added ${name}.`)
       return
     }
 
