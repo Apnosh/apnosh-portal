@@ -42,7 +42,10 @@ export interface BusinessPrefill {
   city: string
   state: string
   zip: string
-  hours: Record<string, { open: string; close: string; closed: boolean }>
+  hours: Record<string, {
+    open: string; close: string; closed: boolean
+    ranges?: Array<{ open: string; close: string }>
+  }>
   price_range: '' | '$' | '$$' | '$$$' | '$$$$'
   is_food: boolean
 }
@@ -161,8 +164,10 @@ function fmtTime(hour?: number, minute?: number): string {
 
 /**
  * Convert Places regularOpeningHours.periods into the wizard's per-day map.
- * A day with no period is marked closed. Days that span midnight keep the
- * open day's close time as given (good enough for a prefill the owner edits).
+ * A day with no period is marked closed. Days with more than one period (a
+ * lunch + dinner service with a midday closure) keep every window in `ranges`
+ * so the closure is preserved; `open`/`close` carry the overall span for any
+ * reader that only looks at those. Good enough for a prefill the owner edits.
  */
 function mapHours(
   periods?: Array<{
@@ -173,15 +178,22 @@ function mapHours(
   const hours: BusinessPrefill['hours'] = {}
   for (const key of DAY_KEYS) hours[key] = { open: '', close: '', closed: true }
   if (!periods) return hours
+  const byDay: Record<string, Array<{ open: string; close: string }>> = {}
   for (const p of periods) {
     const day = p.open?.day
     if (typeof day !== 'number' || day < 0 || day > 6) continue
     const key = DAY_KEYS[day]
-    hours[key] = {
+    ;(byDay[key] ||= []).push({
       open: fmtTime(p.open?.hour, p.open?.minute),
       close: fmtTime(p.close?.hour, p.close?.minute),
-      closed: false,
-    }
+    })
+  }
+  for (const key of DAY_KEYS) {
+    const ranges = (byDay[key] || []).sort((a, b) => a.open.localeCompare(b.open))
+    if (!ranges.length) continue
+    const open = ranges[0].open
+    const close = ranges.reduce((a, r) => (r.close > a ? r.close : a), ranges[0].close)
+    hours[key] = { open, close, closed: false, ranges }
   }
   return hours
 }

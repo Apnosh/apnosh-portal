@@ -1,7 +1,10 @@
 'use client'
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { type OnboardingData, type LocationDraft, DAYS } from '../data'
+import {
+  type OnboardingData, type LocationDraft, type WeekHours, type HourRange,
+  DAYS, spanFromRanges, rangesForDay,
+} from '../data'
 import { Question, Input, FieldLabel, Hint } from '../ui'
 import { getBusinessPrefill } from '@/lib/onboarding-lookup'
 
@@ -11,52 +14,119 @@ interface Props {
   nav: ReactNode
 }
 
-type Hours = Record<string, { open: string; close: string; closed: boolean }>
+type Hours = WeekHours
 
-const DEFAULT_HOUR = { open: '09:00', close: '17:00', closed: false }
+const DEFAULT_RANGE: HourRange = { open: '09:00', close: '17:00' }
+// A second window defaults to a typical dinner shift so adding one is one tap.
+const DEFAULT_SECOND_RANGE: HourRange = { open: '17:00', close: '21:00' }
 
-/** A compact week editor reused for each location's hours. */
+const inputCls =
+  'w-[104px] max-sm:w-auto max-sm:flex-1 max-sm:min-w-0 text-sm text-center rounded-[10px] px-2.5 max-sm:px-1.5 py-2 outline-none disabled:opacity-35'
+const inputStyle = { border: '1.5px solid #e0e0e0', fontFamily: 'DM Sans, sans-serif' } as const
+
+/**
+ * A compact week editor reused for each location's hours. Each day can hold
+ * more than one open->close window so a lunch + dinner service with a midday
+ * closure is captured, not flattened. We always write back a synced overall
+ * open/close span alongside `ranges` so downstream readers keep working.
+ */
 function HoursEditor({ hours, onChange }: { hours: Hours; onChange: (h: Hours) => void }) {
-  function setDay(day: string, field: 'open' | 'close' | 'closed', value: string | boolean) {
-    const next = { ...hours }
-    if (!next[day]) next[day] = { ...DEFAULT_HOUR }
-    next[day] = { ...next[day], [field]: value }
+  // Replace one day's ranges, keeping the flat span + closed flag in sync.
+  function writeDay(day: string, ranges: HourRange[]) {
+    const next: Hours = { ...hours }
+    if (!ranges.length) {
+      next[day] = { ...spanFromRanges([]), closed: true, ranges: [] }
+    } else {
+      next[day] = { ...spanFromRanges(ranges), closed: false, ranges }
+    }
     onChange(next)
   }
+
+  function setClosed(day: string, closed: boolean) {
+    if (closed) {
+      writeDay(day, [])
+    } else {
+      const existing = rangesForDay(hours[day])
+      writeDay(day, existing.length ? existing : [{ ...DEFAULT_RANGE }])
+    }
+  }
+
+  function setRange(day: string, idx: number, field: 'open' | 'close', value: string) {
+    const ranges = rangesForDay(hours[day]).map((r) => ({ ...r }))
+    if (!ranges[idx]) return
+    ranges[idx][field] = value
+    writeDay(day, ranges)
+  }
+
+  function addRange(day: string) {
+    const ranges = rangesForDay(hours[day]).map((r) => ({ ...r }))
+    ranges.push({ ...(ranges.length ? DEFAULT_SECOND_RANGE : DEFAULT_RANGE) })
+    writeDay(day, ranges)
+  }
+
+  function removeRange(day: string, idx: number) {
+    const ranges = rangesForDay(hours[day]).filter((_, i) => i !== idx)
+    writeDay(day, ranges)
+  }
+
   return (
-    <div className="flex flex-col gap-2 mt-2">
+    <div className="flex flex-col gap-2.5 mt-2">
       {DAYS.map((day) => {
-        const hr = hours[day] || DEFAULT_HOUR
+        const closed = hours[day]?.closed ?? false
+        const ranges = rangesForDay(hours[day])
+        const shown = closed || !ranges.length ? [] : ranges
         return (
-          <div key={day} className="flex items-center gap-2 max-sm:gap-1.5">
-            <span className="w-9 text-sm font-medium flex-shrink-0" style={{ color: '#111' }}>
+          <div key={day} className="flex items-start gap-2 max-sm:gap-1.5">
+            <span className="w-9 text-sm font-medium flex-shrink-0 pt-2" style={{ color: '#111' }}>
               {day}
             </span>
-            <input
-              type="time"
-              value={hr.open}
-              disabled={hr.closed}
-              onChange={(e) => setDay(day, 'open', e.target.value)}
-              className="w-[110px] max-sm:w-auto max-sm:flex-1 max-sm:min-w-0 text-sm text-center rounded-[10px] px-2.5 max-sm:px-1.5 py-2 outline-none disabled:opacity-35"
-              style={{ border: '1.5px solid #e0e0e0', fontFamily: 'DM Sans, sans-serif' }}
-            />
-            <span className="text-[13px] flex-shrink-0" style={{ color: '#999' }}>to</span>
-            <input
-              type="time"
-              value={hr.close}
-              disabled={hr.closed}
-              onChange={(e) => setDay(day, 'close', e.target.value)}
-              className="w-[110px] max-sm:w-auto max-sm:flex-1 max-sm:min-w-0 text-sm text-center rounded-[10px] px-2.5 max-sm:px-1.5 py-2 outline-none disabled:opacity-35"
-              style={{ border: '1.5px solid #e0e0e0', fontFamily: 'DM Sans, sans-serif' }}
-            />
+            <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+              {closed ? (
+                <div className="flex items-center h-[38px] text-[13px]" style={{ color: '#bbb' }}>
+                  Closed
+                </div>
+              ) : (
+                shown.map((r, idx) => (
+                  <div key={idx} className="flex items-center gap-2 max-sm:gap-1.5">
+                    <input
+                      type="time" value={r.open}
+                      onChange={(e) => setRange(day, idx, 'open', e.target.value)}
+                      className={inputCls} style={inputStyle}
+                    />
+                    <span className="text-[13px] flex-shrink-0" style={{ color: '#999' }}>to</span>
+                    <input
+                      type="time" value={r.close}
+                      onChange={(e) => setRange(day, idx, 'close', e.target.value)}
+                      className={inputCls} style={inputStyle}
+                    />
+                    {idx > 0 ? (
+                      <button
+                        type="button" onClick={() => removeRange(day, idx)}
+                        aria-label="Remove hours"
+                        className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[15px] leading-none"
+                        style={{ color: '#999', background: '#efefec' }}
+                      >×</button>
+                    ) : (
+                      <span className="flex-shrink-0 w-6" />
+                    )}
+                  </div>
+                ))
+              )}
+              {!closed && (
+                <button
+                  type="button" onClick={() => addRange(day)}
+                  className="self-start text-[12px] font-medium mt-0.5"
+                  style={{ color: '#0f6e56' }}
+                >+ Add hours</button>
+              )}
+            </div>
             <label
-              className="text-[13px] flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              className="text-[13px] flex items-center gap-1 cursor-pointer whitespace-nowrap flex-shrink-0 pt-2"
               style={{ color: '#555' }}
             >
               <input
-                type="checkbox"
-                checked={hr.closed}
-                onChange={(e) => setDay(day, 'closed', e.target.checked)}
+                type="checkbox" checked={closed}
+                onChange={(e) => setClosed(day, e.target.checked)}
                 className="accent-[#4abd98]"
               />
               Closed

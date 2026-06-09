@@ -533,8 +533,13 @@ export interface GBPLocation {
   primaryPhone?: string
   websiteUri?: string
   primaryCategory?: string
-  /** Opening hours mapped to the onboarding wizard's shape (Mon..Sun). */
-  hours?: Record<string, { open: string; close: string; closed: boolean }>
+  /** Opening hours mapped to the onboarding wizard's shape (Mon..Sun).
+   *  `ranges` preserves split service windows (lunch + dinner); `open`/`close`
+   *  stay the overall span so legacy readers keep working. */
+  hours?: Record<string, {
+    open: string; close: string; closed: boolean
+    ranges?: Array<{ open: string; close: string }>
+  }>
 }
 
 // GBP returns opening hours as a flat list of periods keyed by a full
@@ -552,6 +557,11 @@ function gbpFmtTime(t?: { hours?: number; minutes?: number }): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
+type DayHoursOut = {
+  open: string; close: string; closed: boolean
+  ranges?: Array<{ open: string; close: string }>
+}
+
 function mapGBPHours(
   regularHours?: {
     periods?: Array<{
@@ -561,22 +571,29 @@ function mapGBPHours(
       closeTime?: { hours?: number; minutes?: number }
     }>
   },
-): Record<string, { open: string; close: string; closed: boolean }> | undefined {
+): Record<string, DayHoursOut> | undefined {
   if (!regularHours?.periods?.length) return undefined
-  const out: Record<string, { open: string; close: string; closed: boolean }> = {}
-  // Default every day closed; periods below flip the days that have hours.
-  for (const short of GBP_SHORT_DAYS) {
-    out[short] = { open: '09:00', close: '17:00', closed: true }
-  }
+  // First collect every service window per day so a midday closure (a day
+  // with two periods, e.g. lunch + dinner) is preserved instead of being
+  // flattened into one long block.
+  const byDay: Record<string, Array<{ open: string; close: string }>> = {}
   for (const p of regularHours.periods) {
     const short = p.openDay ? GBP_DAY_TO_SHORT[p.openDay] : undefined
     if (!short) continue
-    if (out[short].closed) {
-      out[short] = { open: gbpFmtTime(p.openTime), close: gbpFmtTime(p.closeTime), closed: false }
+    ;(byDay[short] ||= []).push({
+      open: gbpFmtTime(p.openTime),
+      close: gbpFmtTime(p.closeTime),
+    })
+  }
+  const out: Record<string, DayHoursOut> = {}
+  for (const short of GBP_SHORT_DAYS) {
+    const ranges = (byDay[short] || []).sort((a, b) => a.open.localeCompare(b.open))
+    if (!ranges.length) {
+      out[short] = { open: '09:00', close: '17:00', closed: true }
     } else {
-      // Multi-period day (e.g. lunch + dinner): keep the earliest open and
-      // extend to the latest close so the single-range UI still reads right.
-      out[short].close = gbpFmtTime(p.closeTime)
+      const open = ranges[0].open
+      const close = ranges.reduce((a, r) => (r.close > a ? r.close : a), ranges[0].close)
+      out[short] = { open, close, closed: false, ranges }
     }
   }
   return out

@@ -152,6 +152,44 @@ export const PLATFORMS = [
 
 export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 
+// One open->close interval within a day, e.g. lunch 11:00-14:00.
+export interface HourRange { open: string; close: string }
+
+// A single day's hours. `open`/`close` stay the overall span (first open,
+// last close) so every legacy reader that only looks at open/close keeps
+// working. `ranges` is the source of truth when present: it carries each
+// separate service window so a mid-day closure (lunch, then dinner) is
+// preserved instead of being flattened into one long block. Absent or a
+// single entry means a plain open->close day.
+export interface DayHours {
+  open: string
+  close: string
+  closed: boolean
+  ranges?: HourRange[]
+}
+
+export type WeekHours = Record<string, DayHours>
+
+// Build the overall open/close span from a day's split ranges. Keeps the
+// flat open/close fields in sync with `ranges` for legacy consumers.
+export function spanFromRanges(ranges: HourRange[]): { open: string; close: string } {
+  const valid = ranges.filter((r) => r.open && r.close)
+  if (!valid.length) return { open: '', close: '' }
+  const open = valid.reduce((a, r) => (r.open < a ? r.open : a), valid[0].open)
+  const close = valid.reduce((a, r) => (r.close > a ? r.close : a), valid[0].close)
+  return { open, close }
+}
+
+// Normalize any stored day (legacy single-range or new multi-range) into a
+// ranges array. A closed day yields []. Used by the editor and any reader
+// that wants the full split rather than just the outer span.
+export function rangesForDay(day: DayHours | undefined): HourRange[] {
+  if (!day || day.closed) return []
+  if (day.ranges && day.ranges.length) return day.ranges
+  if (day.open && day.close) return [{ open: day.open, close: day.close }]
+  return []
+}
+
 // Step IDs in order — food steps are inserted dynamically
 export type StepId =
   | 'role' | 'biz_name' | 'biz_type' | 'serve'
@@ -321,7 +359,7 @@ export interface LocationDraft {
   zip: string
   place_id: string      // Google place_id when picked, for later GBP linking
   phone: string         // this location's phone (review page; not persisted to CRM yet)
-  hours: Record<string, { open: string; close: string; closed: boolean }>
+  hours: WeekHours
 }
 
 // Form data shape
@@ -353,7 +391,7 @@ export interface OnboardingData {
   primary_location_name: string
   location_count: string
   primary_place_id: string  // Google place_id for the primary address, for auto-pulling hours/phone
-  hours: Record<string, { open: string; close: string; closed: boolean }>
+  hours: WeekHours
   biz_desc: string
   unique: string
   competitors: string

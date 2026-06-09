@@ -55,7 +55,10 @@ export interface OnboardingGBPLocation {
   state: string
   zip: string
   phone: string
-  hours?: Record<string, { open: string; close: string; closed: boolean }>
+  hours?: Record<string, {
+    open: string; close: string; closed: boolean
+    ranges?: Array<{ open: string; close: string }>
+  }>
 }
 
 /**
