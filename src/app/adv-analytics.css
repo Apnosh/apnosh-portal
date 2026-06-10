@@ -65,6 +65,18 @@
   & .adv-xrow { display: flex; justify-content: space-between; margin-top: 8px; font-size: 10px; font-weight: 600; letter-spacing: .03em; color: var(--ink-4); }
   & .adv-xrow .adv-xl { flex: 1; text-align: center; white-space: nowrap; overflow: hidden; }
 
+  /* 1b. Over-time chart — home-style total bars + dashed previous-period line */
+  & .adv-trendkey { display: flex; gap: 18px; margin-bottom: 14px; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+  & .adv-trendkey > span { display: inline-flex; align-items: center; gap: 7px; }
+  & .adv-tk-bar { width: 11px; height: 11px; border-radius: 3px; background: var(--brand); flex: 0 0 auto; }
+  & .adv-tk-line { width: 15px; height: 0; border-top: 2px dashed var(--ink-4); flex: 0 0 auto; }
+  & .adv-plot { position: relative; height: 150px; }
+  & .adv-bars { display: flex; align-items: flex-end; gap: 5px; height: 100%; }
+  & .adv-bar { flex: 1; min-width: 2px; background: rgba(74,189,152,0.24); border-radius: 5px 5px 0 0; transform-origin: bottom; animation: adv-rise .5s var(--ease-out) both; }
+  & .adv-bar.last { background: var(--brand); }
+  & .adv-bar.blank { background: rgba(74,189,152,0.08); height: 5%; }
+  & .adv-prevline { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+
   /* Legend (tap to toggle) */
   & .adv-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--hairline-2); }
   & .adv-leg { display: inline-flex; align-items: center; gap: 7px; background: none; border: 0; padding: 4px 6px; border-radius: 8px; cursor: pointer; font-family: inherit; }
@@ -121,6 +133,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    & .adv-col, & .adv-cmp-bar, & .adv-share-bar { animation: none; }
+    & .adv-col, & .adv-bar, & .adv-cmp-bar, & .adv-share-bar { animation: none; }
   }
 }
