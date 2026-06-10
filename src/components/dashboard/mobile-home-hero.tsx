@@ -389,6 +389,11 @@ export function MobileHomeHero({ metrics }: { metrics: HomeMetric[] }) {
                 <button key={r} type="button" className={'seg-btn' + (r === cur ? ' on' : '')} onClick={() => setRange(r)}>{RANGE_LABEL[r]}</button>
               ))}
             </div>
+
+            <Link className="seedetails" href="/dashboard/analytics/advanced">
+              See where it came from
+              <Icon name="chevDown" className="sd-chev" sw={2.6} />
+            </Link>
           </>
         )}
       </section>

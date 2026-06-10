@@ -93,6 +93,11 @@
   & .seg-btn { position: relative; z-index: 1; height: 30px; border: 0; background: none; font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink-3); cursor: pointer; transition: color .2s ease; }
   & .seg-btn.on { color: var(--brand-d); }
 
+  /* "See where it came from" — link from the hero into advanced analytics */
+  & .seedetails { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 14px; padding: 11px; border-radius: 12px; background: var(--brand-t); color: var(--brand-d); font-size: 13px; font-weight: 700; text-decoration: none; }
+  & .seedetails:active { background: #ddf0e9; }
+  & .sd-chev { width: 13px; height: 13px; transform: rotate(-90deg); }
+
   & .nodata { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 30px 16px; color: var(--ink-4); }
   & .nodata .nd-t { font-size: 14px; font-weight: 600; color: var(--ink-3); }
   & .nodata .nd-s { font-size: 12.5px; }
