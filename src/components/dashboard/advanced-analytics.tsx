@@ -128,16 +128,6 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
     }
     const max = Math.max(1, ...colTotals.map(v => v ?? 0))
 
-    // Same columns for the previous period, so the home-style overlay line
-    // shares the bars' scale and "this vs last" reads true day-for-day.
-    const prevColTotals: (number | null)[] = []
-    for (let i = 0; i < nCols; i++) {
-      let any = false, t = 0
-      for (const s of active) { const v = s.prev[i]; if (v != null) { any = true; t += v } }
-      prevColTotals.push(any ? t : null)
-    }
-    const chartMax = Math.max(1, max, ...prevColTotals.map(v => v ?? 0))
-
     const grandTotal = active.reduce((s, src) => s + sum(src.vals), 0)
     const prevGrand = active.reduce((s, src) => s + sum(src.prev), 0)
 
@@ -151,7 +141,7 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
     })
 
     const connectedCount = sources.filter(isConn).length
-    return { sources, active, nCols, colTotals, prevColTotals, max, chartMax, grandTotal, prevGrand, cards, connectedCount }
+    return { sources, active, nCols, colTotals, max, grandTotal, prevGrand, cards, connectedCount }
   }, [period, hidden])
 
   if (!metric || !period || !view) {
@@ -172,20 +162,6 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
   // Last column that has settled data — gets the solid "current" bar accent,
   // same live cue the home hero uses.
   const lastColIdx = (() => { let li = -1; view.colTotals.forEach((v, i) => { if (v != null) li = i }); return li })()
-
-  // Previous-period overlay as a dashed line, aligned to bar centres and
-  // broken across days with no data. Shares chartMax with the bars.
-  const prevPath = (() => {
-    let d = '', pen = false
-    view.prevColTotals.forEach((v, i) => {
-      if (v == null) { pen = false; return }
-      const x = ((i + 0.5) / view.nCols) * 100
-      const y = 100 - (v / view.chartMax) * 100
-      d += (pen ? ' L ' : ' M ') + x.toFixed(2) + ' ' + y.toFixed(2)
-      pen = true
-    })
-    return d
-  })()
 
   // rating metrics (e.g. Reputation): average score headline, no stacks/share
   const isRating = metric.kind === 'rating'
@@ -253,33 +229,22 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
           summable (count) metrics. Rating metrics skip straight to compare. */}
       {!isRating && <>
 
-      {/* 1. Over time — this period's total per day as bars, with last
-          period overlaid as a dashed line so the trend reads at a glance.
-          Same visual language as the home hero. */}
+      {/* 1. Over time — this period's total per sub-period as bars, last
+          settled bar accented live. Same chart as the home hero. */}
       <div className="adv-card">
         <div className="adv-card-h">
           <span className="adv-card-t">Over time</span>
-          <span className="adv-card-s">this {range} vs last {range}</span>
-        </div>
-        <div className="adv-trendkey">
-          <span><span className="adv-tk-bar" />This {range}</span>
-          <span><span className="adv-tk-line" />Last {range}</span>
+          <span className="adv-card-s">this {range}</span>
         </div>
         <div className="adv-plot">
           <div className="adv-bars">
             {view.colTotals.map((ct, i) => {
               if (ct == null) return <div key={i} className="adv-bar blank" />
-              const h = Math.max(2, (ct / view.chartMax) * 100)
+              const h = Math.max(2, (ct / view.max) * 100)
               return <div key={i} className={'adv-bar' + (i === lastColIdx ? ' last' : '')}
                 style={{ height: `${h.toFixed(1)}%`, animationDelay: `${(i * 0.03).toFixed(2)}s` }} />
             })}
           </div>
-          {prevPath && (
-            <svg className="adv-prevline" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-              <path d={prevPath} fill="none" stroke="var(--ink-4)" strokeWidth={2} strokeDasharray="3 3"
-                strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-            </svg>
-          )}
         </div>
         <div className="adv-xrow">
           {period.ticks.map((t, i) => <span key={i} className="adv-xl">{t}</span>)}
