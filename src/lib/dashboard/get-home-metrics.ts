@@ -21,6 +21,7 @@
  *   reach        — people who saw you (social reach + Google views)
  *   interactions — people who engaged (calls, directions, clicks, likes)
  *   bookings     — people who acted (tables booked + orders placed)
+ *   loyalty      — people you brought back (email opens/clicks; SMS soon)
  *   reputation   — reviews received per day + average rating (rate metric)
  *
  * Each tier blends the channels that feed it. A source that isn't
@@ -45,7 +46,7 @@ export interface HomeInstance {
 }
 
 export interface HomeMetric {
-  key: 'reach' | 'interactions' | 'bookings' | 'reputation'
+  key: 'reach' | 'interactions' | 'bookings' | 'loyalty' | 'reputation'
   label: string
   sub: string
   fmt: HomeFmt
@@ -74,7 +75,7 @@ function fmtCompact(n: number): string {
 }
 
 type Maps = Map<string, number>
-interface CompDef { label: string; icon: string; map: Maps }
+interface CompDef { label: string; icon: string; map: Maps; money?: boolean }
 interface RateMaps { count: Maps; ratingSum: Maps; replied: Maps; five: Maps }
 
 const sumOver = (map: Maps, days: Date[]): number =>
@@ -123,11 +124,11 @@ function buildMetric(cfg: BuildCfg, today: Date, earliest: Date | null, frontier
       /* A comp whose map was never populated (the source isn't connected)
          shows "—", not a fake 0. A connected source that simply had no
          activity this period still shows a real 0. */
-      breakdown = (cfg.comps ?? []).map(c => ({
-        label: c.label,
-        value: c.map.size === 0 ? '—' : fmtCompact(sumOver(c.map, inDays)),
-        icon: c.icon,
-      }))
+      breakdown = (cfg.comps ?? []).map(c => {
+        if (c.map.size === 0) return { label: c.label, value: '—', icon: c.icon }
+        const sum = sumOver(c.map, inDays)
+        return { label: c.label, value: (c.money ? '$' : '') + fmtCompact(sum), icon: c.icon }
+      })
     }
     return { vals, start, sub, total, rating, breakdown }
   }
@@ -224,7 +225,7 @@ function frontierFor(maps: Maps, today: Date, settleDays: number): Date {
    haven't reported yet, so this floor only needs to be small. Keeping it
    at GBP's typical 1-2 day reporting lag means we include every day that
    has real data and never invent zeros. */
-const SETTLE = { gbp: 2, social: 1, web: 1 }
+const SETTLE = { gbp: 2, social: 1, web: 1, email: 1 }
 
 const EMPTY: HomeMetrics = { metrics: [] }
 
@@ -242,7 +243,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
   const today = startOfDay(new Date())
   const bound = ymd(new Date(today.getTime() - BOUND_DAYS * DAY))
 
-  const [gbp, social, reviews, localReviews] = await Promise.all([
+  const [gbp, social, reviews, localReviews, email] = await Promise.all([
     admin.from('gbp_metrics')
       .select('date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks')
       .eq('client_id', clientId).gte('date', bound).order('date', { ascending: true }),
@@ -255,6 +256,9 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     admin.from('local_reviews')
       .select('rating, reply_text, created_at_platform')
       .eq('client_id', clientId).gte('created_at_platform', bound + 'T00:00:00'),
+    admin.from('email_metrics')
+      .select('sent_date, sent_count, open_count, click_count, revenue_attributed')
+      .eq('client_id', clientId).gte('sent_date', bound).order('sent_date', { ascending: true }),
   ])
 
   /* Per-day source maps. We only create+populate a map when the source
@@ -335,7 +339,30 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     ],
   }, today, earliestOf(bookMain), frontierFor(bookMain, today, SETTLE.gbp))
 
-  /* ── 4. reputation ── */
+  /* ── 4. Loyalty — people you brought back (email today; SMS soon) ── */
+  const eSent: Maps = new Map(), eOpen: Maps = new Map(), eClick: Maps = new Map(), eRev: Maps = new Map()
+  for (const r of (email.data ?? []) as Record<string, unknown>[]) {
+    if (!r.sent_date) continue
+    const d = String(r.sent_date).slice(0, 10)
+    eSent.set(d, (eSent.get(d) ?? 0) + num(r.sent_count))
+    eOpen.set(d, (eOpen.get(d) ?? 0) + num(r.open_count))
+    eClick.set(d, (eClick.get(d) ?? 0) + num(r.click_count))
+    eRev.set(d, (eRev.get(d) ?? 0) + num(r.revenue_attributed))
+  }
+  /* SMS isn't wired to a daily source yet — stays empty → honest "—". */
+  const smsSent: Maps = new Map()
+  const loyalty = buildMetric({
+    key: 'loyalty', label: 'Loyalty', sub: 'Regulars you bring back by email and SMS', fmt: 'num',
+    mainMap: eClick,
+    comps: [
+      { label: 'Emails sent', icon: 'message', map: eSent },
+      { label: 'Opens', icon: 'eye', map: eOpen },
+      { label: 'Email revenue', icon: 'gift', map: eRev, money: true },
+      { label: 'SMS sent', icon: 'phone', map: smsSent },
+    ],
+  }, today, earliestOf(eClick), frontierFor(eClick, today, SETTLE.email))
+
+  /* ── 5. reputation ── */
   const repCount: Maps = new Map(), repRating: Maps = new Map(), repReplied: Maps = new Map(), repFive: Maps = new Map()
   for (const r of (reviews.data ?? []) as Record<string, unknown>[]) {
     if (!r.posted_at) continue
@@ -362,5 +389,5 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     rate: { count: repCount, ratingSum: repRating, replied: repReplied, five: repFive },
   }, today, earliestOf(repCount), today)
 
-  return { metrics: [reach, interactions, bookings, reputation] }
+  return { metrics: [reach, interactions, bookings, loyalty, reputation] }
 }

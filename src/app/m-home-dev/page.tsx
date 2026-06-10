@@ -79,6 +79,7 @@ const MOCK: HomeMetric[] = [
   numMetric('reach', 'Reach', 'People who saw you on Google and social', 1200, [['Social reach', 'eye'], ['Google views', 'pin'], ['Profile visits', 'user'], ['New followers', 'heart']]),
   numMetric('interactions', 'Interactions', 'Calls, directions, clicks and likes', 64, [['Calls', 'phone'], ['Directions', 'pin'], ['Site clicks', 'cursor'], ['Engaged', 'heart']]),
   numMetric('bookings', 'Bookings & orders', 'Tables booked and orders placed', 9, [['Bookings', 'calendar'], ['Food orders', 'gift'], ['Menu clicks', 'cursor'], ['Reservations', 'clock']]),
+  numMetric('loyalty', 'Loyalty', 'Regulars you bring back by email and SMS', 38, [['Emails sent', 'message'], ['Opens', 'eye'], ['Email revenue', 'gift'], ['SMS sent', 'phone']]),
   repMetric(),
 ]
 
