@@ -552,8 +552,13 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
     )
   }
 
+  // The dashboard home is a single full-bleed white surface, so the gray
+  // app-shell tint reads as clutter there. Paint that one route white;
+  // every other page keeps the gray that separates its white cards.
+  const isHome = pathname === '/dashboard'
+
   return (
-    <div className="min-h-screen bg-bg-2 flex pb-tabbar lg:pb-0">
+    <div className={`min-h-screen flex pb-tabbar lg:pb-0 ${isHome ? 'bg-white' : 'bg-bg-2'}`}>
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
@@ -684,7 +689,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
         {/* Content */}
         <main className="p-4 lg:p-6">
-          <Breadcrumbs />
+          {!isHome && <Breadcrumbs />}
           {children}
         </main>
       </div>
