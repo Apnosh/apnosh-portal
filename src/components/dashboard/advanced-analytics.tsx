@@ -28,6 +28,10 @@ export interface AdvSource {
   /** false = platform exists for this metric but isn't connected yet.
       Shows "—" + "Not connected"; contributes nothing to totals/stacks. */
   connected?: boolean
+  /** this source's total per trailing period (oldest → newest, last entry =
+      current period), summed across the period. Powers the home-style trend
+      line beneath the bars. null = period older than the data frontier. */
+  trendVals?: (number | null)[]
 }
 
 export interface AdvPeriod {
@@ -35,6 +39,8 @@ export interface AdvPeriod {
   /** axis tick labels, one per sub-period */
   ticks: string[]
   sources: AdvSource[]
+  /** one label per trailing trend period (aligns with source.trendVals) */
+  trendTicks?: string[]
   /** rating metrics only: average score this period / last period */
   rating?: number
   ratingPrev?: number
@@ -94,6 +100,21 @@ const sum = (a: (number | null)[]) => a.reduce<number>((s, v) => s + (v ?? 0), 0
 const fmt = (n: number) => Math.round(n).toLocaleString()
 const fmtCompact = (n: number) => (n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/, '') + 'k' : Math.round(n).toLocaleString())
 
+/* Catmull-Rom smoothing — same curve the home hero uses for its trend line. */
+function smooth(pts: { x: number; y: number }[]): string {
+  if (!pts.length) return ''
+  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`
+  const t = 0.18
+  let d = `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2
+    const c1x = p1.x + (p2.x - p0.x) * t, c1y = p1.y + (p2.y - p0.y) * t
+    const c2x = p2.x - (p3.x - p1.x) * t, c2y = p2.y - (p3.y - p1.y) * t
+    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`
+  }
+  return d
+}
+
 export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
   const [metricKey, setMetricKey] = useState(metrics[0]?.key ?? '')
   const [range, setRange] = useState<AdvRange>('week')
@@ -128,6 +149,16 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
     }
     const max = Math.max(1, ...colTotals.map(v => v ?? 0))
 
+    // Trailing period-over-period totals (blended across active sources) for
+    // the home-style mini trend line beneath the bars.
+    const trendLen = sources.find(s => s.trendVals)?.trendVals?.length ?? 0
+    const trendTotals: (number | null)[] = []
+    for (let i = 0; i < trendLen; i++) {
+      let any = false, t = 0
+      for (const s of active) { const v = s.trendVals?.[i]; if (v != null) { any = true; t += v } }
+      trendTotals.push(any ? t : null)
+    }
+
     const grandTotal = active.reduce((s, src) => s + sum(src.vals), 0)
     const prevGrand = active.reduce((s, src) => s + sum(src.prev), 0)
 
@@ -141,12 +172,48 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
     })
 
     const connectedCount = sources.filter(isConn).length
-    return { sources, active, nCols, colTotals, max, grandTotal, prevGrand, cards, connectedCount }
+    return { sources, active, nCols, colTotals, max, trendTotals, trendTicks: period.trendTicks ?? [], grandTotal, prevGrand, cards, connectedCount }
   }, [period, hidden])
+
+  // Mini trend line geometry — totals across past periods, smoothed, with a
+  // dashed average reference and a dot per period (last = current). Mirrors
+  // the home hero's small trend graph.
+  const mini = useMemo(() => {
+    if (!view) return null
+    const vals = view.trendTotals
+    const pts: { i: number; v: number }[] = []
+    vals.forEach((v, i) => { if (v != null) pts.push({ i, v }) })
+    if (pts.length < 2) return null
+    const nums = pts.map(p => p.v)
+    const min = Math.min(...nums), max = Math.max(...nums), rg = Math.max(max - min, 0.0001)
+    const n = vals.length, Wm = 100, Hm = 40, pd = 5
+    const P = pts.map(p => ({
+      x: n === 1 ? Wm / 2 : (p.i * Wm) / (n - 1),
+      y: pd + (Hm - 2 * pd) - ((p.v - min) / rg) * (Hm - 2 * pd),
+      i: p.i,
+    }))
+    const avg = nums.reduce((a, b) => a + b, 0) / nums.length
+    const by = pd + (Hm - 2 * pd) - ((avg - min) / rg) * (Hm - 2 * pd)
+    return { P, d: smooth(P), by, Hm, lastI: pts[pts.length - 1].i }
+  }, [view])
 
   if (!metric || !period || !view) {
     return <div className="adv"><div className="adv-empty">No data yet</div></div>
   }
+
+  // Sparse axis labels under the trend line (≤4 evenly spaced).
+  const mticks = (() => {
+    const t = view.trendTicks, n = t.length
+    if (!n) return [] as { l: string; x: number; first: boolean; last: boolean }[]
+    const c = n <= 6 ? n : 4
+    const out: { l: string; x: number; first: boolean; last: boolean }[] = []
+    for (let k = 0; k < c; k++) {
+      const x = c === 1 ? 50 : (k * 100) / (c - 1)
+      const i = Math.round((k * (n - 1)) / (c - 1))
+      out.push({ l: t[i], x, first: k === 0, last: k === c - 1 })
+    }
+    return out
+  })()
 
   const toggle = (k: string) => setHidden(prev => {
     const next = new Set(prev)
@@ -249,6 +316,32 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
         <div className="adv-xrow">
           {period.ticks.map((t, i) => <span key={i} className="adv-xl">{t}</span>)}
         </div>
+        {/* Trend line — metric total across past periods (last = current),
+            with a dashed average reference. Same graph as the home hero. */}
+        {mini && (
+          <>
+            <div className="adv-mticks">
+              {mticks.map((t, i) => (
+                <span key={i} className={'adv-mtick' + (t.first ? ' first' : '') + (t.last ? ' last' : '')}
+                  style={{ left: `${t.x.toFixed(1)}%` }}>{t.l}</span>
+              ))}
+            </div>
+            <div className="adv-mini">
+              <svg className="adv-mini-svg" viewBox="0 0 100 40" preserveAspectRatio="none">
+                <path d={`M0 ${mini.by.toFixed(1)} L100 ${mini.by.toFixed(1)}`} stroke="var(--ink-4)" strokeWidth={1}
+                  strokeDasharray="2 3" fill="none" vectorEffect="non-scaling-stroke" />
+                <path d={mini.d} stroke="var(--brand-d)" strokeWidth={2} fill="none"
+                  strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+              </svg>
+              <div className="adv-mdots">
+                {mini.P.map((p, i) => (
+                  <span key={i} className={'adv-mdot' + (p.i === mini.lastI ? ' last' : '')}
+                    style={{ left: `${p.x.toFixed(1)}%`, top: `${((p.y / mini.Hm) * 100).toFixed(1)}%` }} />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
         {/* Source filter — tap to add/remove a platform from the totals above */}
         {view.connectedCount > 1 && (
           <div className="adv-legend">

@@ -103,6 +103,62 @@ const ticksFor = (range: 'week' | 'month' | 'year', n: number): string[] => {
   return Array.from({ length: n }, (_, i) => (i % 6 === 0 ? `${i + 1}` : ''))
 }
 
+/* How many past periods the mini trend line trails back through, per range. */
+const WK_BACK = 8, MO_BACK = 6, YR_BACK = 3
+const yr2 = (y: number): string => `'${`${y}`.slice(2)}`
+
+type Trail = { vals: (number | null)[]; ticks: string[] }
+
+/* Trailing per-period totals (oldest → newest, last entry = current period),
+   each summed over the reliable window. Powers the home-style trend line. */
+function trailWeekly(map: Maps, today: Date, earliest: Date | null, front: Date): Trail {
+  const dow = today.getDay()
+  const thisSun = sod(new Date(today.getTime() - dow * DAY))
+  const vals: (number | null)[] = [], ticks: string[] = []
+  for (let w = WK_BACK - 1; w >= 0; w--) {
+    const sun = sod(new Date(thisSun.getTime() - w * 7 * DAY))
+    let s = 0, has = false
+    for (let d = 0; d < 7; d++) {
+      const day = sod(new Date(sun.getTime() + d * DAY))
+      if (inWin(day, earliest, front)) { s += map.get(ymd(day)) ?? 0; has = true }
+    }
+    vals.push(has ? s : null); ticks.push(fmtDay(sun))
+  }
+  return { vals, ticks }
+}
+
+function trailMonthly(map: Maps, today: Date, earliest: Date | null, front: Date): Trail {
+  const vals: (number | null)[] = [], ticks: string[] = []
+  for (let b = MO_BACK - 1; b >= 0; b--) {
+    const first = sod(new Date(today.getFullYear(), today.getMonth() - b, 1))
+    const y = first.getFullYear(), m = first.getMonth(), days = dim(y, m)
+    let s = 0, has = false
+    for (let d = 0; d < days; d++) {
+      const day = sod(new Date(y, m, d + 1))
+      if (inWin(day, earliest, front)) { s += map.get(ymd(day)) ?? 0; has = true }
+    }
+    vals.push(has ? s : null); ticks.push(MON[m] + (m === 0 ? ` ${yr2(y)}` : ''))
+  }
+  return { vals, ticks }
+}
+
+function trailYearly(map: Maps, today: Date, earliest: Date | null, front: Date): Trail {
+  const vals: (number | null)[] = [], ticks: string[] = []
+  for (let b = YR_BACK - 1; b >= 0; b--) {
+    const y = today.getFullYear() - b
+    let s = 0, has = false
+    for (let mo = 0; mo < 12; mo++) {
+      const days = dim(y, mo)
+      for (let d = 0; d < days; d++) {
+        const day = sod(new Date(y, mo, d + 1))
+        if (inWin(day, earliest, front)) { s += map.get(ymd(day)) ?? 0; has = true }
+      }
+    }
+    vals.push(has ? s : null); ticks.push(`${y}`)
+  }
+  return { vals, ticks }
+}
+
 /* A platform column in the order it should appear. `google: true` marks the
    one we fill with real numbers; everything else returns not-connected. */
 interface Plat { key: string; label: string; icon: string; google?: boolean }
@@ -115,13 +171,19 @@ function countMetric(
   const front = frontierOf(map, today, SETTLE_GBP)
   const connected = map.size > 0
 
-  const buildSources = (n: number, gVals: (number | null)[], gPrev: (number | null)[]): AdvSource[] =>
+  const buildSources = (
+    n: number, gVals: (number | null)[], gPrev: (number | null)[], gTrend: (number | null)[],
+  ): AdvSource[] =>
     plats.map(p => {
       if (p.google && connected) {
-        return { key: p.key, label: p.label, icon: p.icon, vals: gVals, prev: gPrev }
+        return { key: p.key, label: p.label, icon: p.icon, vals: gVals, prev: gPrev, trendVals: gTrend }
       }
-      return { key: p.key, label: p.label, icon: p.icon, vals: nulls(n), prev: nulls(n), connected: false }
+      return { key: p.key, label: p.label, icon: p.icon, vals: nulls(n), prev: nulls(n), trendVals: nulls(gTrend.length), connected: false }
     })
+
+  const wkTrail = trailWeekly(map, today, earliest, front)
+  const moTrail = trailMonthly(map, today, earliest, front)
+  const yrTrail = trailYearly(map, today, earliest, front)
 
   // Week — this week's days (Sun–Sat) vs last week
   const dow = today.getDay()
@@ -130,9 +192,11 @@ function countMetric(
   const week: AdvPeriod = {
     cap: `This week · ${fmtDay(thisSun)} – ${fmtDay(sod(new Date(thisSun.getTime() + 6 * DAY)))}`,
     ticks: ticksFor('week', 7),
+    trendTicks: wkTrail.ticks,
     sources: buildSources(7,
       dailySeries(map, thisSun, 7, earliest, front),
-      dailySeries(map, lastSun, 7, earliest, front)),
+      dailySeries(map, lastSun, 7, earliest, front),
+      wkTrail.vals),
   }
 
   // Month — this month's days vs last month
@@ -142,9 +206,11 @@ function countMetric(
   const month: AdvPeriod = {
     cap: `This month · ${MON[mm]} 1 – ${mN}`,
     ticks: ticksFor('month', mN),
+    trendTicks: moTrail.ticks,
     sources: buildSources(mN,
       dailySeries(map, mFirst, mN, earliest, front),
-      dailySeries(map, pFirst, pN, earliest, front)),
+      dailySeries(map, pFirst, pN, earliest, front),
+      moTrail.vals),
   }
 
   // Year — this year's months vs last year
@@ -152,9 +218,11 @@ function countMetric(
   const year: AdvPeriod = {
     cap: `This year · Jan – ${MON[today.getMonth()]}`,
     ticks: ticksFor('year', 12),
+    trendTicks: yrTrail.ticks,
     sources: buildSources(12,
       monthlySeries(map, yy, earliest, front, today),
-      monthlySeries(map, yy - 1, earliest, front, today)),
+      monthlySeries(map, yy - 1, earliest, front, today),
+      yrTrail.vals),
   }
 
   return { key, label, sub, week, month, year }

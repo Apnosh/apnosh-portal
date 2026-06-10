@@ -72,6 +72,17 @@
   & .adv-bar.last { background: var(--brand); }
   & .adv-bar.blank { background: rgba(74,189,152,0.08); height: 5%; }
 
+  /* 1c. Mini trend line — metric total across past periods, like the home hero */
+  & .adv-mticks { position: relative; height: 14px; margin-top: 16px; }
+  & .adv-mtick { position: absolute; transform: translateX(-50%); font-size: 10px; font-weight: 600; color: var(--ink-4); white-space: nowrap; }
+  & .adv-mtick.first { transform: translateX(0); }
+  & .adv-mtick.last { transform: translateX(-100%); }
+  & .adv-mini { position: relative; height: 44px; margin-top: 2px; }
+  & .adv-mini-svg { width: 100%; height: 100%; display: block; }
+  & .adv-mdots { position: absolute; inset: 0; pointer-events: none; }
+  & .adv-mdot { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--brand-d); transform: translate(-50%,-50%); }
+  & .adv-mdot.last { width: 11px; height: 11px; background: var(--surface, #fff); border: 2.5px solid var(--brand-d); }
+
   /* Legend (tap to toggle) */
   & .adv-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--hairline-2); }
   & .adv-leg { display: inline-flex; align-items: center; gap: 7px; background: none; border: 0; padding: 4px 6px; border-radius: 8px; cursor: pointer; font-family: inherit; }

@@ -23,13 +23,28 @@ function series(base: number, n: number, future = 0): { vals: (number | null)[];
   return { vals: gen(1), prev: gen(0.86) }
 }
 
-function src(key: string, label: string, icon: string, base: number, n: number, future = 0, connected = true): AdvSource {
+// trailing per-period totals (oldest → newest) with a slight upward drift
+function trend(base: number, len: number, periodDays: number): (number | null)[] {
+  return Array.from({ length: len }, (_, i) =>
+    Math.max(0, Math.round(base * periodDays * (0.6 + rnd() * 0.7) * (0.75 + (i / Math.max(1, len - 1)) * 0.4))))
+}
+
+const TREND_LEN: Record<'week' | 'month' | 'year', number> = { week: 8, month: 6, year: 3 }
+const PERIOD_DAYS: Record<'week' | 'month' | 'year', number> = { week: 7, month: 30, year: 365 }
+const TREND_TICKS: Record<'week' | 'month' | 'year', string[]> = {
+  week: ['Apr 19', 'Apr 26', 'May 3', 'May 10', 'May 17', 'May 24', 'May 31', 'Jun 7'],
+  month: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+  year: ['2024', '2025', '2026'],
+}
+
+function src(key: string, label: string, icon: string, base: number, n: number, future = 0, connected = true, range: 'week' | 'month' | 'year' = 'week'): AdvSource {
+  const tLen = TREND_LEN[range]
   if (!connected) {
     const nulls = Array.from({ length: n }, () => null)
-    return { key, label, icon, vals: nulls, prev: nulls, connected: false }
+    return { key, label, icon, vals: nulls, prev: nulls, trendVals: Array.from({ length: tLen }, () => null), connected: false }
   }
   const s = series(base, n, future)
-  return { key, label, icon, vals: s.vals, prev: s.prev }
+  return { key, label, icon, vals: s.vals, prev: s.prev, trendVals: trend(base, tLen, PERIOD_DAYS[range]) }
 }
 
 function ticks(range: 'week' | 'month' | 'year'): string[] {
@@ -46,7 +61,8 @@ function metric(key: string, label: string, sub: string, caps: [string, string, 
   const mk = (range: 'week' | 'month' | 'year', n: number, future: number, cap: string) => ({
     cap,
     ticks: ticks(range),
-    sources: sources.map(([k, l, ic, base, conn]) => src(k, l, ic, range === 'year' ? base * 22 : range === 'month' ? base : base, n, future, conn ?? true)),
+    trendTicks: TREND_TICKS[range],
+    sources: sources.map(([k, l, ic, base, conn]) => src(k, l, ic, range === 'year' ? base * 22 : range === 'month' ? base : base, n, future, conn ?? true, range)),
   })
   return {
     key, label, sub,
