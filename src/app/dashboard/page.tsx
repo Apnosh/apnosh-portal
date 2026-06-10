@@ -25,7 +25,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { useClient } from '@/lib/client-context'
 import AdminClientPicker from '@/components/admin/admin-client-picker'
-import FinishProfileBanner from '@/components/dashboard/finish-profile-banner'
+import FinishProfileBanner, { useFinishProfileNudge } from '@/components/dashboard/finish-profile-banner'
 import GettingStarted from '@/components/dashboard/getting-started'
 import MobileHome from './mobile-home'
 import DesktopHome from '@/components/dashboard/desktop-home'
@@ -124,6 +124,13 @@ export default function DashboardPage() {
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Finish-your-profile nudge. We lift its visibility here so the home
+  // content below can drop its negative top margin when the banner shows,
+  // preventing the home from riding up and clipping the banner.
+  const nudge = useFinishProfileNudge()
+  const [nudgeDismissed, setNudgeDismissed] = useState(false)
+  const bannerVisible = nudge.show && !nudgeDismissed
+
   useEffect(() => {
     // Wait until the client context has finished resolving. Until then the
     // gate below keeps the spinner up.
@@ -197,10 +204,16 @@ export default function DashboardPage() {
       <>
         {/* Finish-your-profile nudge for clients who skipped or paused
             setup — show it here too, not just on the full dashboard. */}
-        <FinishProfileBanner />
+        <FinishProfileBanner
+          show={bannerVisible}
+          stepLeftOff={nudge.stepLeftOff}
+          onDismiss={() => setNudgeDismissed(true)}
+        />
         {/* Phones stack (MobileHome); desktop gets a real full-screen
-            layout (DesktopHome) that reuses the same pieces and data. */}
-        <div className="-m-4 lg:hidden">
+            layout (DesktopHome) that reuses the same pieces and data.
+            Negative margins bleed the home edge-to-edge; we keep the top
+            bleed only when the banner is hidden so it never overlaps. */}
+        <div className={`-mx-4 -mb-4 ${bannerVisible ? '' : '-mt-4'} lg:hidden`}>
           <MobileHome
             homeMetrics={data?.homeMetrics ?? null}
             homeSections={data?.homeSections ?? null}
@@ -208,7 +221,7 @@ export default function DashboardPage() {
             failed={!loading && !!client?.id && !data}
           />
         </div>
-        <div className="hidden lg:block lg:-m-6">
+        <div className={`hidden lg:block lg:-mx-6 lg:-mb-6 ${bannerVisible ? '' : 'lg:-mt-6'}`}>
           <DesktopHome
             homeMetrics={data?.homeMetrics ?? null}
             homeSections={data?.homeSections ?? null}
@@ -227,7 +240,11 @@ export default function DashboardPage() {
   return (
     <div className="relative">
       {/* Finish-your-profile nudge for clients who used 'Save and explore' */}
-      <FinishProfileBanner />
+      <FinishProfileBanner
+        show={bannerVisible}
+        stepLeftOff={nudge.stepLeftOff}
+        onDismiss={() => setNudgeDismissed(true)}
+      />
 
       {/* ─── MOBILE HOME ────────────────────────────────────────────
           Simplified, thumb-first home for phones. Receives the same
@@ -235,8 +252,10 @@ export default function DashboardPage() {
           health hero → top 3 needs → 3-metric strip → strategist nudge
           → coming up. Phones get the stacked column (MobileHome);
           desktop gets a real full-screen layout (DesktopHome) built from
-          the same pieces and the same data. */}
-      <div className="-m-4 lg:hidden">
+          the same pieces and the same data. Negative margins bleed the
+          home edge-to-edge; keep the top bleed only when the banner is
+          hidden so it never overlaps. */}
+      <div className={`-mx-4 -mb-4 ${bannerVisible ? '' : '-mt-4'} lg:hidden`}>
         <MobileHome
           homeMetrics={data?.homeMetrics ?? null}
           homeSections={data?.homeSections ?? null}
@@ -244,7 +263,7 @@ export default function DashboardPage() {
           failed={!loading && !!client?.id && !data}
         />
       </div>
-      <div className="hidden lg:block lg:-m-6">
+      <div className={`hidden lg:block lg:-mx-6 lg:-mb-6 ${bannerVisible ? '' : 'lg:-mt-6'}`}>
         <DesktopHome
           homeMetrics={data?.homeMetrics ?? null}
           homeSections={data?.homeSections ?? null}

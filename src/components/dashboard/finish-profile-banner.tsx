@@ -6,6 +6,12 @@
  * want to block them from poking around -- they got into the portal
  * exactly because we promised them they could -- but we do want a
  * persistent nudge to finish the data capture that strategists need.
+ *
+ * Split into a data hook (useFinishProfileNudge) and a presentational
+ * component so the dashboard page can know whether the banner is
+ * actually showing. That matters because the home content below bleeds
+ * edge-to-edge with a negative top margin; when the banner is present
+ * we drop that top bleed so the home doesn't ride up over the banner.
  */
 
 import { useEffect, useState } from 'react'
@@ -13,10 +19,9 @@ import Link from 'next/link'
 import { ArrowRight, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
-export default function FinishProfileBanner() {
+export function useFinishProfileNudge() {
   const [show, setShow] = useState(false)
   const [stepLeftOff, setStepLeftOff] = useState<number | null>(null)
-  const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -39,7 +44,17 @@ export default function FinishProfileBanner() {
     return () => { cancelled = true }
   }, [])
 
-  if (!show || dismissed) return null
+  return { show, stepLeftOff }
+}
+
+interface FinishProfileBannerProps {
+  show: boolean
+  stepLeftOff: number | null
+  onDismiss: () => void
+}
+
+export default function FinishProfileBanner({ show, stepLeftOff, onDismiss }: FinishProfileBannerProps) {
+  if (!show) return null
 
   return (
     <div className="mx-4 lg:mx-8 mt-4 rounded-2xl bg-gradient-to-r from-amber-50 via-amber-50 to-rose-50 ring-1 ring-amber-200/60 px-4 py-3 flex items-center gap-3">
@@ -62,7 +77,7 @@ export default function FinishProfileBanner() {
         <ArrowRight className="w-3.5 h-3.5" />
       </Link>
       <button
-        onClick={() => setDismissed(true)}
+        onClick={onDismiss}
         className="text-ink-4 hover:text-ink-2 flex-shrink-0"
         aria-label="Dismiss"
       >
