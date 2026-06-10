@@ -80,8 +80,13 @@
   & .adv-mini { position: relative; height: 44px; margin-top: 2px; }
   & .adv-mini-svg { width: 100%; height: 100%; display: block; }
   & .adv-mdots { position: absolute; inset: 0; pointer-events: none; }
-  & .adv-mdot { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--brand-d); transform: translate(-50%,-50%); }
+  & .adv-mdot { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: var(--brand-d); transform: translate(-50%,-50%); border: 0; padding: 0; margin: 0; cursor: pointer; pointer-events: auto; transition: box-shadow .15s ease; }
+  & .adv-mdot::before { content: ''; position: absolute; inset: -8px; border-radius: 50%; }
+  & .adv-mdot:hover { box-shadow: 0 0 0 4px rgba(46,154,120,0.16); }
+  /* current period marker — hollow ring, like the home hero */
   & .adv-mdot.last { width: 11px; height: 11px; background: var(--surface, #fff); border: 2.5px solid var(--brand-d); }
+  /* the period currently loaded — halo so you can see what you tapped */
+  & .adv-mdot.sel { box-shadow: 0 0 0 4px rgba(46,154,120,0.22); }
 
   /* Legend (tap to toggle) */
   & .adv-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--hairline-2); }

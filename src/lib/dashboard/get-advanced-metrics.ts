@@ -103,60 +103,103 @@ const ticksFor = (range: 'week' | 'month' | 'year', n: number): string[] => {
   return Array.from({ length: n }, (_, i) => (i % 6 === 0 ? `${i + 1}` : ''))
 }
 
-/* How many past periods the mini trend line trails back through, per range. */
+/* How many past period instances the trend line trails back through, per
+   range. The last instance is always the current period; tapping a dot on
+   the trend line loads that instance's bars, totals and breakdown. */
 const WK_BACK = 8, MO_BACK = 6, YR_BACK = 3
 const yr2 = (y: number): string => `'${`${y}`.slice(2)}`
 
-type Trail = { vals: (number | null)[]; ticks: string[] }
+/* Average rating over a [start, n days] window, blank if no reviews. */
+function avgWindow(count: Maps, sum: Maps, start: Date, n: number, earliest: Date | null, front: Date): number {
+  let c = 0, s = 0
+  for (let i = 0; i < n; i++) {
+    const d = sod(new Date(start.getTime() + i * DAY))
+    if (inWin(d, earliest, front)) { c += count.get(ymd(d)) ?? 0; s += sum.get(ymd(d)) ?? 0 }
+  }
+  return c > 0 ? Math.round((s / c) * 10) / 10 : 0
+}
+function avgYearWindow(count: Maps, sum: Maps, y: number, earliest: Date | null, front: Date): number {
+  let c = 0, s = 0
+  for (let mo = 0; mo < 12; mo++) {
+    const days = dim(y, mo)
+    for (let d = 0; d < days; d++) {
+      const day = sod(new Date(y, mo, d + 1))
+      if (inWin(day, earliest, front)) { c += count.get(ymd(day)) ?? 0; s += sum.get(ymd(day)) ?? 0 }
+    }
+  }
+  return c > 0 ? Math.round((s / c) * 10) / 10 : 0
+}
 
-/* Trailing per-period totals (oldest → newest, last entry = current period),
-   each summed over the reliable window. Powers the home-style trend line. */
-function trailWeekly(map: Maps, today: Date, earliest: Date | null, front: Date): Trail {
+/* One period instance described once, then filled with whichever map(s) a
+   metric uses. series/prevSeries build the daily bars (this period vs the
+   one before); avg/avgPrev build the rating headline for rating metrics. */
+interface Frame {
+  cap: string
+  ticks: string[]
+  trendLabel: string
+  n: number
+  series: (m: Maps) => (number | null)[]
+  prevSeries: (m: Maps) => (number | null)[]
+  avg: (count: Maps, sum: Maps) => number
+  avgPrev: (count: Maps, sum: Maps) => number
+}
+
+function weekFrames(today: Date, earliest: Date | null, front: Date): Frame[] {
   const dow = today.getDay()
   const thisSun = sod(new Date(today.getTime() - dow * DAY))
-  const vals: (number | null)[] = [], ticks: string[] = []
-  for (let w = WK_BACK - 1; w >= 0; w--) {
-    const sun = sod(new Date(thisSun.getTime() - w * 7 * DAY))
-    let s = 0, has = false
-    for (let d = 0; d < 7; d++) {
-      const day = sod(new Date(sun.getTime() + d * DAY))
-      if (inWin(day, earliest, front)) { s += map.get(ymd(day)) ?? 0; has = true }
-    }
-    vals.push(has ? s : null); ticks.push(fmtDay(sun))
+  const out: Frame[] = []
+  for (let back = WK_BACK - 1; back >= 0; back--) {
+    const sun = sod(new Date(thisSun.getTime() - back * 7 * DAY))
+    const prevSun = sod(new Date(sun.getTime() - 7 * DAY))
+    const end = sod(new Date(sun.getTime() + 6 * DAY))
+    const cap = back === 0 ? `This week · ${fmtDay(sun)} – ${fmtDay(end)}`
+      : back === 1 ? `Last week · ${fmtDay(sun)} – ${fmtDay(end)}`
+      : `Week of ${fmtDay(sun)}`
+    out.push({
+      cap, ticks: ticksFor('week', 7), trendLabel: fmtDay(sun), n: 7,
+      series: m => dailySeries(m, sun, 7, earliest, front),
+      prevSeries: m => dailySeries(m, prevSun, 7, earliest, front),
+      avg: (c, s) => avgWindow(c, s, sun, 7, earliest, front),
+      avgPrev: (c, s) => avgWindow(c, s, prevSun, 7, earliest, front),
+    })
   }
-  return { vals, ticks }
+  return out
 }
 
-function trailMonthly(map: Maps, today: Date, earliest: Date | null, front: Date): Trail {
-  const vals: (number | null)[] = [], ticks: string[] = []
-  for (let b = MO_BACK - 1; b >= 0; b--) {
-    const first = sod(new Date(today.getFullYear(), today.getMonth() - b, 1))
-    const y = first.getFullYear(), m = first.getMonth(), days = dim(y, m)
-    let s = 0, has = false
-    for (let d = 0; d < days; d++) {
-      const day = sod(new Date(y, m, d + 1))
-      if (inWin(day, earliest, front)) { s += map.get(ymd(day)) ?? 0; has = true }
-    }
-    vals.push(has ? s : null); ticks.push(MON[m] + (m === 0 ? ` ${yr2(y)}` : ''))
+function monthFrames(today: Date, earliest: Date | null, front: Date): Frame[] {
+  const out: Frame[] = []
+  for (let back = MO_BACK - 1; back >= 0; back--) {
+    const first = sod(new Date(today.getFullYear(), today.getMonth() - back, 1))
+    const fy = first.getFullYear(), fm = first.getMonth(), n = dim(fy, fm)
+    const pFirst = sod(new Date(fy, fm - 1, 1)), pN = dim(pFirst.getFullYear(), pFirst.getMonth())
+    const cap = back === 0 ? `This month · ${MON[fm]} 1 – ${n}`
+      : back === 1 ? `Last month · ${MON[fm]} 1 – ${n}`
+      : `${MON[fm]} ${fy}`
+    out.push({
+      cap, ticks: ticksFor('month', n), trendLabel: MON[fm] + (fm === 0 ? ` ${yr2(fy)}` : ''), n,
+      series: m => dailySeries(m, first, n, earliest, front),
+      prevSeries: m => dailySeries(m, pFirst, pN, earliest, front),
+      avg: (c, s) => avgWindow(c, s, first, n, earliest, front),
+      avgPrev: (c, s) => avgWindow(c, s, pFirst, pN, earliest, front),
+    })
   }
-  return { vals, ticks }
+  return out
 }
 
-function trailYearly(map: Maps, today: Date, earliest: Date | null, front: Date): Trail {
-  const vals: (number | null)[] = [], ticks: string[] = []
-  for (let b = YR_BACK - 1; b >= 0; b--) {
-    const y = today.getFullYear() - b
-    let s = 0, has = false
-    for (let mo = 0; mo < 12; mo++) {
-      const days = dim(y, mo)
-      for (let d = 0; d < days; d++) {
-        const day = sod(new Date(y, mo, d + 1))
-        if (inWin(day, earliest, front)) { s += map.get(ymd(day)) ?? 0; has = true }
-      }
-    }
-    vals.push(has ? s : null); ticks.push(`${y}`)
+function yearFrames(today: Date, earliest: Date | null, front: Date): Frame[] {
+  const out: Frame[] = []
+  for (let back = YR_BACK - 1; back >= 0; back--) {
+    const y = today.getFullYear() - back
+    const cap = back === 0 ? `This year · Jan – ${MON[today.getMonth()]}` : `${y}`
+    out.push({
+      cap, ticks: ticksFor('year', 12), trendLabel: `${y}`, n: 12,
+      series: m => monthlySeries(m, y, earliest, front, today),
+      prevSeries: m => monthlySeries(m, y - 1, earliest, front, today),
+      avg: (c, s) => avgYearWindow(c, s, y, earliest, front),
+      avgPrev: (c, s) => avgYearWindow(c, s, y - 1, earliest, front),
+    })
   }
-  return { vals, ticks }
+  return out
 }
 
 /* A platform column in the order it should appear. `google: true` marks the
@@ -171,61 +214,21 @@ function countMetric(
   const front = frontierOf(map, today, SETTLE_GBP)
   const connected = map.size > 0
 
-  const buildSources = (
-    n: number, gVals: (number | null)[], gPrev: (number | null)[], gTrend: (number | null)[],
-  ): AdvSource[] =>
-    plats.map(p => {
-      if (p.google && connected) {
-        return { key: p.key, label: p.label, icon: p.icon, vals: gVals, prev: gPrev, trendVals: gTrend }
-      }
-      return { key: p.key, label: p.label, icon: p.icon, vals: nulls(n), prev: nulls(n), trendVals: nulls(gTrend.length), connected: false }
-    })
+  const build = (frames: Frame[]): AdvPeriod[] =>
+    frames.map(f => ({
+      cap: f.cap, ticks: f.ticks, trendLabel: f.trendLabel,
+      sources: plats.map(p =>
+        p.google && connected
+          ? { key: p.key, label: p.label, icon: p.icon, vals: f.series(map), prev: f.prevSeries(map) }
+          : { key: p.key, label: p.label, icon: p.icon, vals: nulls(f.n), prev: nulls(f.n), connected: false }),
+    }))
 
-  const wkTrail = trailWeekly(map, today, earliest, front)
-  const moTrail = trailMonthly(map, today, earliest, front)
-  const yrTrail = trailYearly(map, today, earliest, front)
-
-  // Week — this week's days (Sun–Sat) vs last week
-  const dow = today.getDay()
-  const thisSun = sod(new Date(today.getTime() - dow * DAY))
-  const lastSun = sod(new Date(thisSun.getTime() - 7 * DAY))
-  const week: AdvPeriod = {
-    cap: `This week · ${fmtDay(thisSun)} – ${fmtDay(sod(new Date(thisSun.getTime() + 6 * DAY)))}`,
-    ticks: ticksFor('week', 7),
-    trendTicks: wkTrail.ticks,
-    sources: buildSources(7,
-      dailySeries(map, thisSun, 7, earliest, front),
-      dailySeries(map, lastSun, 7, earliest, front),
-      wkTrail.vals),
+  return {
+    key, label, sub,
+    week: build(weekFrames(today, earliest, front)),
+    month: build(monthFrames(today, earliest, front)),
+    year: build(yearFrames(today, earliest, front)),
   }
-
-  // Month — this month's days vs last month
-  const my = today.getFullYear(), mm = today.getMonth()
-  const mFirst = sod(new Date(my, mm, 1)), mN = dim(my, mm)
-  const pFirst = sod(new Date(my, mm - 1, 1)), pN = dim(pFirst.getFullYear(), pFirst.getMonth())
-  const month: AdvPeriod = {
-    cap: `This month · ${MON[mm]} 1 – ${mN}`,
-    ticks: ticksFor('month', mN),
-    trendTicks: moTrail.ticks,
-    sources: buildSources(mN,
-      dailySeries(map, mFirst, mN, earliest, front),
-      dailySeries(map, pFirst, pN, earliest, front),
-      moTrail.vals),
-  }
-
-  // Year — this year's months vs last year
-  const yy = today.getFullYear()
-  const year: AdvPeriod = {
-    cap: `This year · Jan – ${MON[today.getMonth()]}`,
-    ticks: ticksFor('year', 12),
-    trendTicks: yrTrail.ticks,
-    sources: buildSources(12,
-      monthlySeries(map, yy, earliest, front, today),
-      monthlySeries(map, yy - 1, earliest, front, today),
-      yrTrail.vals),
-  }
-
-  return { key, label, sub, week, month, year }
 }
 
 /* ── Rating metric (Reputation) — average score headline + review counts ── */
@@ -236,64 +239,22 @@ function ratingMetric(
   const front = today // reviews settle immediately
   const connected = count.size > 0
 
-  const avgOver = (start: Date, n: number): number => {
-    let c = 0, s = 0
-    for (let i = 0; i < n; i++) {
-      const d = sod(new Date(start.getTime() + i * DAY))
-      if (inWin(d, earliest, front)) { c += count.get(ymd(d)) ?? 0; s += ratingSum.get(ymd(d)) ?? 0 }
-    }
-    return c > 0 ? Math.round((s / c) * 10) / 10 : 0
-  }
-  const avgYear = (y: number): number => {
-    let c = 0, s = 0
-    for (let mo = 0; mo < 12; mo++) {
-      const days = dim(y, mo)
-      for (let d = 0; d < days; d++) {
-        const day = sod(new Date(y, mo, d + 1))
-        if (inWin(day, earliest, front)) { c += count.get(ymd(day)) ?? 0; s += ratingSum.get(ymd(day)) ?? 0 }
-      }
-    }
-    return c > 0 ? Math.round((s / c) * 10) / 10 : 0
-  }
+  const build = (frames: Frame[]): AdvPeriod[] =>
+    frames.map(f => ({
+      cap: f.cap, ticks: f.ticks, trendLabel: f.trendLabel,
+      rating: f.avg(count, ratingSum), ratingPrev: f.avgPrev(count, ratingSum),
+      sources: plats.map(p =>
+        p.google && connected
+          ? { key: p.key, label: p.label, icon: p.icon, vals: f.series(count), prev: f.prevSeries(count) }
+          : { key: p.key, label: p.label, icon: p.icon, vals: nulls(f.n), prev: nulls(f.n), connected: false }),
+    }))
 
-  const buildSources = (n: number, gVals: (number | null)[], gPrev: (number | null)[]): AdvSource[] =>
-    plats.map(p => {
-      if (p.google && connected) return { key: p.key, label: p.label, icon: p.icon, vals: gVals, prev: gPrev }
-      return { key: p.key, label: p.label, icon: p.icon, vals: nulls(n), prev: nulls(n), connected: false }
-    })
-
-  const dow = today.getDay()
-  const thisSun = sod(new Date(today.getTime() - dow * DAY))
-  const lastSun = sod(new Date(thisSun.getTime() - 7 * DAY))
-  const week: AdvPeriod = {
-    cap: `This week · ${fmtDay(thisSun)} – ${fmtDay(sod(new Date(thisSun.getTime() + 6 * DAY)))}`,
-    ticks: ticksFor('week', 7), rating: avgOver(thisSun, 7), ratingPrev: avgOver(lastSun, 7),
-    sources: buildSources(7,
-      dailySeries(count, thisSun, 7, earliest, front),
-      dailySeries(count, lastSun, 7, earliest, front)),
+  return {
+    key: 'reputation', label: 'Reputation', sub: 'Average rating and where reviews come from', kind: 'rating',
+    week: build(weekFrames(today, earliest, front)),
+    month: build(monthFrames(today, earliest, front)),
+    year: build(yearFrames(today, earliest, front)),
   }
-
-  const my = today.getFullYear(), mm = today.getMonth()
-  const mFirst = sod(new Date(my, mm, 1)), mN = dim(my, mm)
-  const pFirst = sod(new Date(my, mm - 1, 1)), pN = dim(pFirst.getFullYear(), pFirst.getMonth())
-  const month: AdvPeriod = {
-    cap: `This month · ${MON[mm]} 1 – ${mN}`,
-    ticks: ticksFor('month', mN), rating: avgOver(mFirst, mN), ratingPrev: avgOver(pFirst, pN),
-    sources: buildSources(mN,
-      dailySeries(count, mFirst, mN, earliest, front),
-      dailySeries(count, pFirst, pN, earliest, front)),
-  }
-
-  const yy = today.getFullYear()
-  const year: AdvPeriod = {
-    cap: `This year · Jan – ${MON[today.getMonth()]}`,
-    ticks: ticksFor('year', 12), rating: avgYear(yy), ratingPrev: avgYear(yy - 1),
-    sources: buildSources(12,
-      monthlySeries(count, yy, earliest, front, today),
-      monthlySeries(count, yy - 1, earliest, front, today)),
-  }
-
-  return { key: 'reputation', label: 'Reputation', sub: 'Average rating and where reviews come from', kind: 'rating', week, month, year }
 }
 
 const EMPTY: AdvancedMetrics = { metrics: [] }

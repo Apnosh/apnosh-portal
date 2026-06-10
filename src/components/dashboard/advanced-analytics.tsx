@@ -28,10 +28,6 @@ export interface AdvSource {
   /** false = platform exists for this metric but isn't connected yet.
       Shows "—" + "Not connected"; contributes nothing to totals/stacks. */
   connected?: boolean
-  /** this source's total per trailing period (oldest → newest, last entry =
-      current period), summed across the period. Powers the home-style trend
-      line beneath the bars. null = period older than the data frontier. */
-  trendVals?: (number | null)[]
 }
 
 export interface AdvPeriod {
@@ -39,8 +35,8 @@ export interface AdvPeriod {
   /** axis tick labels, one per sub-period */
   ticks: string[]
   sources: AdvSource[]
-  /** one label per trailing trend period (aligns with source.trendVals) */
-  trendTicks?: string[]
+  /** short label for this period's dot on the trend line (e.g. "May 11") */
+  trendLabel?: string
   /** rating metrics only: average score this period / last period */
   rating?: number
   ratingPrev?: number
@@ -53,9 +49,11 @@ export interface AdvMetric {
   /** 'count' (default) stacks summable sources; 'rating' shows an average
       score headline + a comparison of review counts by source, no stacks */
   kind?: 'count' | 'rating'
-  week: AdvPeriod
-  month: AdvPeriod
-  year: AdvPeriod
+  /** each range is a trail of period instances, oldest → newest; the last
+      entry is the current period. Tapping a trend-line dot loads one. */
+  week: AdvPeriod[]
+  month: AdvPeriod[]
+  year: AdvPeriod[]
 }
 
 /* Cohesive cool palette — greens into teal into periwinkle so stacked
@@ -120,9 +118,13 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
   const [range, setRange] = useState<AdvRange>('week')
   const [menuOpen, setMenuOpen] = useState(false)
   const [hidden, setHidden] = useState<Set<string>>(new Set())
+  // which period instance is loaded; null = the current (latest) period
+  const [instIdx, setInstIdx] = useState<number | null>(null)
 
   const metric = metrics.find(m => m.key === metricKey) ?? metrics[0]
-  const period = metric?.[range]
+  const insts: AdvPeriod[] = metric?.[range] ?? []
+  const idx = instIdx == null || instIdx < 0 || instIdx > insts.length - 1 ? insts.length - 1 : instIdx
+  const period: AdvPeriod | undefined = insts[idx]
 
   const view = useMemo(() => {
     if (!period) return null
@@ -149,15 +151,19 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
     }
     const max = Math.max(1, ...colTotals.map(v => v ?? 0))
 
-    // Trailing period-over-period totals (blended across active sources) for
-    // the home-style mini trend line beneath the bars.
-    const trendLen = sources.find(s => s.trendVals)?.trendVals?.length ?? 0
-    const trendTotals: (number | null)[] = []
-    for (let i = 0; i < trendLen; i++) {
+    // Trend line — each past period's total, blended across the active
+    // sources, summed from that instance's own daily series. Powers the
+    // home-style mini graph; a dot per period, the selected one accented.
+    const activeKeys = new Set(active.map(s => s.key))
+    const trendTotals: (number | null)[] = insts.map(inst => {
       let any = false, t = 0
-      for (const s of active) { const v = s.trendVals?.[i]; if (v != null) { any = true; t += v } }
-      trendTotals.push(any ? t : null)
-    }
+      for (const s of inst.sources) {
+        if (!activeKeys.has(s.key)) continue
+        for (const v of s.vals) if (v != null) { any = true; t += v }
+      }
+      return any ? t : null
+    })
+    const trendLabels: string[] = insts.map(inst => inst.trendLabel ?? '')
 
     const grandTotal = active.reduce((s, src) => s + sum(src.vals), 0)
     const prevGrand = active.reduce((s, src) => s + sum(src.prev), 0)
@@ -172,8 +178,8 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
     })
 
     const connectedCount = sources.filter(isConn).length
-    return { sources, active, nCols, colTotals, max, trendTotals, trendTicks: period.trendTicks ?? [], grandTotal, prevGrand, cards, connectedCount }
-  }, [period, hidden])
+    return { sources, active, nCols, colTotals, max, trendTotals, trendLabels, grandTotal, prevGrand, cards, connectedCount }
+  }, [period, insts, hidden])
 
   // Mini trend line geometry — totals across past periods, smoothed, with a
   // dashed average reference and a dot per period (last = current). Mirrors
@@ -194,7 +200,7 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
     }))
     const avg = nums.reduce((a, b) => a + b, 0) / nums.length
     const by = pd + (Hm - 2 * pd) - ((avg - min) / rg) * (Hm - 2 * pd)
-    return { P, d: smooth(P), by, Hm, lastI: pts[pts.length - 1].i }
+    return { P, d: smooth(P), by, Hm }
   }, [view])
 
   if (!metric || !period || !view) {
@@ -203,7 +209,7 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
 
   // Sparse axis labels under the trend line (≤4 evenly spaced).
   const mticks = (() => {
-    const t = view.trendTicks, n = t.length
+    const t = view.trendLabels, n = t.length
     if (!n) return [] as { l: string; x: number; first: boolean; last: boolean }[]
     const c = n <= 6 ? n : 4
     const out: { l: string; x: number; first: boolean; last: boolean }[] = []
@@ -220,6 +226,10 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
     if (next.has(k)) next.delete(k); else if (next.size < view.connectedCount - 1) next.add(k)
     return next
   })
+  // Tap a trend-line dot to load that period (toggle back to current if re-tapped)
+  const tapDot = (i: number) => setInstIdx(p => (p === i || i === insts.length - 1 ? null : i))
+  const pickMetric = (k: string) => { setMetricKey(k); setRange('week'); setHidden(new Set()); setInstIdx(null); setMenuOpen(false) }
+  const pickRange = (r: AdvRange) => { setRange(r); setHidden(new Set()); setInstIdx(null) }
 
   const grandDelta = view.grandTotal - view.prevGrand
   const grandDir = grandDelta >= 0 ? 'up' : 'down'
@@ -249,7 +259,7 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
             <div className="adv-menu">
               {metrics.map(m => (
                 <button key={m.key} type="button" className={m.key === metricKey ? 'on' : ''}
-                  onClick={() => { setMetricKey(m.key); setRange('week'); setHidden(new Set()); setMenuOpen(false) }}>{m.label}</button>
+                  onClick={() => pickMetric(m.key)}>{m.label}</button>
               ))}
             </div>
           )}
@@ -258,7 +268,7 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
         <div className="adv-seg">
           <div className="adv-seg-ind" style={{ transform: `translateX(${segIdx * 100}%)` }} />
           {RANGES.map(r => (
-            <button key={r} type="button" className={'adv-seg-btn' + (r === range ? ' on' : '')} onClick={() => { setRange(r); setHidden(new Set()) }}>{RANGE_LABEL[r]}</button>
+            <button key={r} type="button" className={'adv-seg-btn' + (r === range ? ' on' : '')} onClick={() => pickRange(r)}>{RANGE_LABEL[r]}</button>
           ))}
         </div>
       </div>
@@ -301,7 +311,7 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
       <div className="adv-card">
         <div className="adv-card-h">
           <span className="adv-card-t">Over time</span>
-          <span className="adv-card-s">this {range}</span>
+          <span className="adv-card-s">{idx === insts.length - 1 ? `this ${range}` : (period.trendLabel ?? `past ${range}`)}</span>
         </div>
         <div className="adv-plot">
           <div className="adv-bars">
@@ -334,9 +344,12 @@ export function AdvancedAnalytics({ metrics }: { metrics: AdvMetric[] }) {
                   strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
               </svg>
               <div className="adv-mdots">
-                {mini.P.map((p, i) => (
-                  <span key={i} className={'adv-mdot' + (p.i === mini.lastI ? ' last' : '')}
-                    style={{ left: `${p.x.toFixed(1)}%`, top: `${((p.y / mini.Hm) * 100).toFixed(1)}%` }} />
+                {mini.P.map((p) => (
+                  <button key={p.i} type="button"
+                    className={'adv-mdot' + (p.i === idx ? ' sel' : '') + (p.i === insts.length - 1 ? ' last' : '')}
+                    style={{ left: `${p.x.toFixed(1)}%`, top: `${((p.y / mini.Hm) * 100).toFixed(1)}%` }}
+                    onClick={() => tapDot(p.i)}
+                    aria-label={`Load ${view.trendLabels[p.i] || 'period'}`} />
                 ))}
               </div>
             </div>
