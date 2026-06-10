@@ -17,10 +17,15 @@
  *   - rating:    reputation only — average rating over the period.
  *   - breakdown: the 4 stat cards for that exact period.
  *
- * Metrics:
- *   customers  — GBP actions (directions + calls + website clicks + bookings)
- *   reputation — reviews received per day + average rating (rate metric)
- *   reach      — social reach per day
+ * Metrics — the customer funnel, top to bottom:
+ *   reach        — people who saw you (social reach + Google views)
+ *   interactions — people who engaged (calls, directions, clicks, likes)
+ *   bookings     — people who acted (tables booked + orders placed)
+ *   reputation   — reviews received per day + average rating (rate metric)
+ *
+ * Each tier blends the channels that feed it. A source that isn't
+ * connected contributes nothing and shows an honest "—" tile rather
+ * than a fake zero, so the rollups never look inflated.
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -40,7 +45,7 @@ export interface HomeInstance {
 }
 
 export interface HomeMetric {
-  key: 'customers' | 'reputation' | 'reach'
+  key: 'reach' | 'interactions' | 'bookings' | 'reputation'
   label: string
   sub: string
   fmt: HomeFmt
@@ -115,7 +120,14 @@ function buildMetric(cfg: BuildCfg, today: Date, earliest: Date | null, frontier
         { label: '5-star', value: fmtCompact(five), icon: 'star' },
       ]
     } else {
-      breakdown = (cfg.comps ?? []).map(c => ({ label: c.label, value: fmtCompact(sumOver(c.map, inDays)), icon: c.icon }))
+      /* A comp whose map was never populated (the source isn't connected)
+         shows "—", not a fake 0. A connected source that simply had no
+         activity this period still shows a real 0. */
+      breakdown = (cfg.comps ?? []).map(c => ({
+        label: c.label,
+        value: c.map.size === 0 ? '—' : fmtCompact(sumOver(c.map, inDays)),
+        icon: c.icon,
+      }))
     }
     return { vals, start, sub, total, rating, breakdown }
   }
@@ -232,7 +244,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
 
   const [gbp, social, reviews, localReviews] = await Promise.all([
     admin.from('gbp_metrics')
-      .select('date, directions, calls, website_clicks, bookings')
+      .select('date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks')
       .eq('client_id', clientId).gte('date', bound).order('date', { ascending: true }),
     admin.from('social_metrics')
       .select('date, reach, engagement, posts_published, followers_gained, profile_visits')
@@ -245,50 +257,85 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
       .eq('client_id', clientId).gte('created_at_platform', bound + 'T00:00:00'),
   ])
 
-  /* ── customers ── */
-  const cMain: Maps = new Map(), cDir: Maps = new Map(), cCall: Maps = new Map(), cClick: Maps = new Map(), cBook: Maps = new Map()
+  /* Per-day source maps. We only create+populate a map when the source
+     can produce it; a map left empty (size 0) renders an honest "—". */
+  // Google Business Profile
+  const gImpr: Maps = new Map()   // people who saw the listing
+  const gDir: Maps = new Map(), gCall: Maps = new Map(), gClick: Maps = new Map()
+  const gConv: Maps = new Map(), gMenu: Maps = new Map()
+  const gBook: Maps = new Map(), gFood: Maps = new Map()
   for (const r of (gbp.data ?? []) as Record<string, unknown>[]) {
     const d = String(r.date).slice(0, 10)
-    const dir = num(r.directions), call = num(r.calls), click = num(r.website_clicks), book = num(r.bookings)
-    cMain.set(d, (cMain.get(d) ?? 0) + dir + call + click + book)
-    cDir.set(d, (cDir.get(d) ?? 0) + dir)
-    cCall.set(d, (cCall.get(d) ?? 0) + call)
-    cClick.set(d, (cClick.get(d) ?? 0) + click)
-    cBook.set(d, (cBook.get(d) ?? 0) + book)
+    const views = num(r.impressions_total) || num(r.search_views)
+    gImpr.set(d, (gImpr.get(d) ?? 0) + views)
+    gDir.set(d, (gDir.get(d) ?? 0) + num(r.directions))
+    gCall.set(d, (gCall.get(d) ?? 0) + num(r.calls))
+    gClick.set(d, (gClick.get(d) ?? 0) + num(r.website_clicks))
+    gConv.set(d, (gConv.get(d) ?? 0) + num(r.conversations))
+    gMenu.set(d, (gMenu.get(d) ?? 0) + num(r.food_menu_clicks))
+    gBook.set(d, (gBook.get(d) ?? 0) + num(r.bookings))
+    gFood.set(d, (gFood.get(d) ?? 0) + num(r.food_orders))
   }
-  const customers = buildMetric({
-    key: 'customers', label: 'Customer actions', sub: 'Calls, directions & website clicks', fmt: 'num',
-    mainMap: cMain,
-    comps: [
-      { label: 'Directions', icon: 'pin', map: cDir },
-      { label: 'Calls', icon: 'phone', map: cCall },
-      { label: 'Site clicks', icon: 'cursor', map: cClick },
-      { label: 'Bookings', icon: 'calendar', map: cBook },
-    ],
-  }, today, earliestOf(cMain), frontierFor(cMain, today, SETTLE.gbp))
-
-  /* ── reach ── */
-  const rMain: Maps = new Map(), rEng: Maps = new Map(), rPost: Maps = new Map(), rFol: Maps = new Map(), rVis: Maps = new Map()
+  // Social
+  const sReach: Maps = new Map(), sEng: Maps = new Map(), sFol: Maps = new Map(), sVis: Maps = new Map()
   for (const r of (social.data ?? []) as Record<string, unknown>[]) {
     const d = String(r.date).slice(0, 10)
-    rMain.set(d, (rMain.get(d) ?? 0) + num(r.reach))
-    rEng.set(d, (rEng.get(d) ?? 0) + num(r.engagement))
-    rPost.set(d, (rPost.get(d) ?? 0) + num(r.posts_published))
-    rFol.set(d, (rFol.get(d) ?? 0) + num(r.followers_gained))
-    rVis.set(d, (rVis.get(d) ?? 0) + num(r.profile_visits))
+    sReach.set(d, (sReach.get(d) ?? 0) + num(r.reach))
+    sEng.set(d, (sEng.get(d) ?? 0) + num(r.engagement))
+    sFol.set(d, (sFol.get(d) ?? 0) + num(r.followers_gained))
+    sVis.set(d, (sVis.get(d) ?? 0) + num(r.profile_visits))
   }
-  const reach = buildMetric({
-    key: 'reach', label: 'Reach', sub: 'People who saw your content', fmt: 'num',
-    mainMap: rMain,
-    comps: [
-      { label: 'Engaged', icon: 'heart', map: rEng },
-      { label: 'Posts', icon: 'image', map: rPost },
-      { label: 'Followers', icon: 'user', map: rFol },
-      { label: 'Profile visits', icon: 'eye', map: rVis },
-    ],
-  }, today, earliestOf(rMain), frontierFor(rMain, today, SETTLE.social))
 
-  /* ── reputation ── */
+  /* Reservations + delivery aren't wired to a daily source yet, so these
+     stay empty and surface as honest "—" tiles in the Bookings tier. */
+  const reservations: Maps = new Map()
+
+  const addInto = (...maps: Maps[]): Maps => {
+    const out: Maps = new Map()
+    for (const m of maps) for (const [k, v] of m) out.set(k, (out.get(k) ?? 0) + v)
+    return out
+  }
+
+  /* ── 1. Reach — people who saw you (social reach + Google views) ── */
+  const reachMain = addInto(sReach, gImpr)
+  const reach = buildMetric({
+    key: 'reach', label: 'Reach', sub: 'People who saw you on Google and social', fmt: 'num',
+    mainMap: reachMain,
+    comps: [
+      { label: 'Social reach', icon: 'eye', map: sReach },
+      { label: 'Google views', icon: 'pin', map: gImpr },
+      { label: 'Profile visits', icon: 'user', map: sVis },
+      { label: 'New followers', icon: 'heart', map: sFol },
+    ],
+  }, today, earliestOf(reachMain), frontierFor(reachMain, today, SETTLE.gbp))
+
+  /* ── 2. Interactions — people who engaged ── */
+  const interMain = addInto(gDir, gCall, gClick, gConv, gMenu, sEng, sVis)
+  const interactions = buildMetric({
+    key: 'interactions', label: 'Interactions', sub: 'Calls, directions, clicks and likes', fmt: 'num',
+    mainMap: interMain,
+    comps: [
+      { label: 'Calls', icon: 'phone', map: gCall },
+      { label: 'Directions', icon: 'pin', map: gDir },
+      { label: 'Site clicks', icon: 'cursor', map: gClick },
+      { label: 'Engaged', icon: 'heart', map: sEng },
+    ],
+  }, today, earliestOf(interMain), frontierFor(interMain, today, SETTLE.gbp))
+
+  /* ── 3. Bookings & orders — people who acted ── */
+  const bookMain = addInto(gBook, gFood)
+  const bookings = buildMetric({
+    key: 'bookings', label: 'Bookings & orders', sub: 'Tables booked and orders placed', fmt: 'num',
+    mainMap: bookMain,
+    comps: [
+      { label: 'Bookings', icon: 'calendar', map: gBook },
+      { label: 'Food orders', icon: 'gift', map: gFood },
+      { label: 'Menu clicks', icon: 'cursor', map: gMenu },
+      { label: 'Reservations', icon: 'clock', map: reservations },
+    ],
+  }, today, earliestOf(bookMain), frontierFor(bookMain, today, SETTLE.gbp))
+
+  /* ── 4. reputation ── */
   const repCount: Maps = new Map(), repRating: Maps = new Map(), repReplied: Maps = new Map(), repFive: Maps = new Map()
   for (const r of (reviews.data ?? []) as Record<string, unknown>[]) {
     if (!r.posted_at) continue
@@ -315,5 +362,5 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     rate: { count: repCount, ratingSum: repRating, replied: repReplied, five: repFive },
   }, today, earliestOf(repCount), today)
 
-  return { metrics: [customers, reputation, reach] }
+  return { metrics: [reach, interactions, bookings, reputation] }
 }

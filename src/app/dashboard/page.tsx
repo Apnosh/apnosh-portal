@@ -28,6 +28,7 @@ import AdminClientPicker from '@/components/admin/admin-client-picker'
 import FinishProfileBanner from '@/components/dashboard/finish-profile-banner'
 import GettingStarted from '@/components/dashboard/getting-started'
 import MobileHome from './mobile-home'
+import DesktopHome from '@/components/dashboard/desktop-home'
 import type { HomeMetrics } from '@/lib/dashboard/get-home-metrics'
 import type { HomeSectionsData } from '@/lib/dashboard/get-home-sections'
 import {
@@ -197,7 +198,9 @@ export default function DashboardPage() {
         {/* Finish-your-profile nudge for clients who skipped or paused
             setup — show it here too, not just on the full dashboard. */}
         <FinishProfileBanner />
-        <div className="lg:hidden -m-4">
+        {/* Phones stack (MobileHome); desktop gets a real full-screen
+            layout (DesktopHome) that reuses the same pieces and data. */}
+        <div className="-m-4 lg:hidden">
           <MobileHome
             homeMetrics={data?.homeMetrics ?? null}
             homeSections={data?.homeSections ?? null}
@@ -205,7 +208,16 @@ export default function DashboardPage() {
             failed={!loading && !!client?.id && !data}
           />
         </div>
-        <div className="hidden lg:block">
+        <div className="hidden lg:block lg:-m-6">
+          <DesktopHome
+            homeMetrics={data?.homeMetrics ?? null}
+            homeSections={data?.homeSections ?? null}
+            loading={loading}
+            failed={!loading && !!client?.id && !data}
+          />
+        </div>
+        {/* Old desktop empty state kept (hidden) so it's easy to restore. */}
+        <div className="hidden">
           <GettingStarted clientName={client?.name ?? ''} />
         </div>
       </>
@@ -221,8 +233,10 @@ export default function DashboardPage() {
           Simplified, thumb-first home for phones. Receives the same
           DashboardLoad data and renders a 30-second scan: greeting →
           health hero → top 3 needs → 3-metric strip → strategist nudge
-          → coming up. Desktop keeps the existing rich layout below. */}
-      <div className="lg:hidden -m-4">
+          → coming up. Phones get the stacked column (MobileHome);
+          desktop gets a real full-screen layout (DesktopHome) built from
+          the same pieces and the same data. */}
+      <div className="-m-4 lg:hidden">
         <MobileHome
           homeMetrics={data?.homeMetrics ?? null}
           homeSections={data?.homeSections ?? null}
@@ -230,9 +244,17 @@ export default function DashboardPage() {
           failed={!loading && !!client?.id && !data}
         />
       </div>
+      <div className="hidden lg:block lg:-m-6">
+        <DesktopHome
+          homeMetrics={data?.homeMetrics ?? null}
+          homeSections={data?.homeSections ?? null}
+          loading={loading}
+          failed={!loading && !!client?.id && !data}
+        />
+      </div>
 
-      {/* ─── DESKTOP HOME ────────────────────────────────────────── */}
-      <div className="hidden lg:block">
+      {/* ─── OLD DESKTOP HOME (hidden, kept for easy rollback) ────── */}
+      <div className="hidden">
 
       {/* Page-level topbar: title + date + sync pill */}
       <div className="px-4 lg:px-8 pt-6 pb-2 flex items-center justify-between">
@@ -268,7 +290,7 @@ export default function DashboardPage() {
 
             <div className="mt-4 flex items-center gap-2.5 flex-wrap">
               <Link
-                href="/dashboard/weekly-briefs"
+                href="/dashboard/briefs"
                 className="inline-flex items-center gap-1.5 bg-brand hover:bg-brand-dark text-white rounded-full px-4 py-2 text-[13px] font-semibold"
               >
                 Open briefing

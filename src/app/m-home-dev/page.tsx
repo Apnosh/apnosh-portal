@@ -76,9 +76,10 @@ function repMetric(): HomeMetric {
 }
 
 const MOCK: HomeMetric[] = [
-  numMetric('customers', 'Customer actions', 'Calls, directions & website clicks', 18, [['Directions', 'pin'], ['Calls', 'phone'], ['Site clicks', 'cursor'], ['Bookings', 'calendar']]),
+  numMetric('reach', 'Reach', 'People who saw you on Google and social', 1200, [['Social reach', 'eye'], ['Google views', 'pin'], ['Profile visits', 'user'], ['New followers', 'heart']]),
+  numMetric('interactions', 'Interactions', 'Calls, directions, clicks and likes', 64, [['Calls', 'phone'], ['Directions', 'pin'], ['Site clicks', 'cursor'], ['Engaged', 'heart']]),
+  numMetric('bookings', 'Bookings & orders', 'Tables booked and orders placed', 9, [['Bookings', 'calendar'], ['Food orders', 'gift'], ['Menu clicks', 'cursor'], ['Reservations', 'clock']]),
   repMetric(),
-  numMetric('reach', 'Reach', 'People who saw your content', 1200, [['Engaged', 'heart'], ['Posts', 'image'], ['Followers', 'user'], ['Profile visits', 'eye']]),
 ]
 
 const MOCK_SECTIONS: HomeSectionsData = {

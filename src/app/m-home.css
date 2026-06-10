@@ -181,4 +181,64 @@
   @media (prefers-reduced-motion: reduce) {
     & .bars.anim .bar, & .bars.anim .bar.last { animation: none; }
   }
+
 }
+
+/* ── Desktop home (.home-desk) ─────────────────────────────────────────
+   A real desktop layout built from the same pieces as the phone home.
+   Metric + chart on the left, Needs / This week / Channels stacked on
+   the right, and Plan as a full-width card grid below (no slider). Used
+   only by DesktopHome, which renders inside the lg-only container in
+   the dashboard page — phones never get these rules. */
+.home-desk {
+  max-width: none;
+  margin: 0;
+  padding: 6px 32px 44px;
+  --num-size: 72px;
+}
+
+/* Top zone: hero (wide) beside the right-hand stack. */
+.home-desk .hd-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+
+/* Hero — unwrap its own .m-home so it fills the column, scale it up. */
+.home-desk .hd-hero .m-home { max-width: none; margin: 0; }
+.home-desk .spot { padding: 6px 0 0; }
+.home-desk .bell { display: none; }            /* header already has a bell */
+.home-desk .hero-num { line-height: .9; }
+.home-desk .chartbox { height: 150px; }
+.home-desk .tiles { gap: 12px; margin-top: 26px; }
+.home-desk .tile { padding: 14px 14px; }
+.home-desk .tile .tv { font-size: 23px; }
+.home-desk .seg { max-width: 340px; }
+
+/* Right-hand stack: Needs → This week → Channels. */
+.home-desk .hd-side { display: flex; flex-direction: column; }
+.home-desk .hd-side .sx { padding: 24px 0 0; }
+.home-desk .hd-side .sx:first-child { padding-top: 6px; }
+
+/* Plan — full-width grid of cards instead of the mobile slider. */
+.home-desk > .plan { padding: 34px 0 0; }
+.home-desk > .plan .plan-head { padding: 0; margin-bottom: 12px; }
+.home-desk > .plan .plan-scroll {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+  gap: 14px;
+  overflow: visible;
+  padding: 0;
+  scroll-snap-type: none;
+}
+.home-desk > .plan .plan-card { flex: initial; width: auto; }
+.home-desk > .plan .planempty { max-width: 420px; }
+
+/* Skeleton tweaks for the desktop two-column shell. */
+.home-desk .hd-hero .skel-eyebrow { width: 160px; height: 12px; margin-bottom: 18px; }
+.home-desk .hd-hero .skel-num { width: 180px; height: 56px; margin-bottom: 20px; }
+.home-desk .hd-hero .skel-chart { width: 100%; height: 150px; margin-bottom: 18px; }
+.home-desk .hd-hero .skel-cards { display: flex; gap: 12px; }
+.home-desk .hd-hero .skel-card { flex: 1; height: 60px; border-radius: 15px; }
+.home-desk .hd-side .skel-line { height: 16px; margin-top: 18px; }

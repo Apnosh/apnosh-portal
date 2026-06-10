@@ -29,7 +29,7 @@ const R = {
   messages: '/dashboard/messages',
 }
 
-function NeedsSection({ needs }: { needs: NeedItem[] }) {
+export function NeedsSection({ needs }: { needs: NeedItem[] }) {
   const n = needs.length
   return (
     <section className="sx">
@@ -63,7 +63,7 @@ function NeedsSection({ needs }: { needs: NeedItem[] }) {
   )
 }
 
-function WeekSection({ week }: { week: WeekRecap }) {
+export function WeekSection({ week }: { week: WeekRecap }) {
   const paid = !!week.strategist
   const lead = paid
     ? <span className="avatar">{week.strategist!.charAt(0)}</span>
@@ -92,7 +92,7 @@ function WeekSection({ week }: { week: WeekRecap }) {
   )
 }
 
-function ChannelsSection({ channels }: { channels: Channel[] }) {
+export function ChannelsSection({ channels }: { channels: Channel[] }) {
   if (!channels.length) return null
   return (
     <section className="sx">
@@ -118,7 +118,7 @@ function ChannelsSection({ channels }: { channels: Channel[] }) {
   )
 }
 
-function PlanSection({ plan }: { plan: PlanItem[] }) {
+export function PlanSection({ plan }: { plan: PlanItem[] }) {
   return (
     <section className="plan">
       <div className="plan-head"><p className="t-eyebrow">Plan</p><Link className="btn-quiet" href={R.planner}>Open <MhIcon name="chevRight" sw={2.2} size={14} /></Link></div>
