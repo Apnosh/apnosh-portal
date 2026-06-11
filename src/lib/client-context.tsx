@@ -35,6 +35,9 @@ interface CachedShape {
   client: Client | null
   isAdmin: boolean
   cachedAt: number
+  /** auth user this cache belongs to — guards against a different account
+      signing in to the same tab inheriting the previous user's client. */
+  userId: string | null
 }
 
 function readCache(): CachedShape | null {
@@ -46,11 +49,16 @@ function readCache(): CachedShape | null {
   } catch { return null }
 }
 
-function writeCache(client: Client | null, isAdmin: boolean): void {
+function clearCache(): void {
+  if (typeof window === 'undefined') return
+  try { sessionStorage.removeItem(CACHE_KEY) } catch { /* ignore */ }
+}
+
+function writeCache(client: Client | null, isAdmin: boolean, userId: string | null): void {
   if (typeof window === 'undefined') return
   try {
     sessionStorage.setItem(CACHE_KEY, JSON.stringify({
-      client, isAdmin, cachedAt: Date.now(),
+      client, isAdmin, cachedAt: Date.now(), userId,
     }))
   } catch { /* quota exceeded etc — ignore */ }
 }
@@ -63,15 +71,20 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
   // to the rest of the app.
   const urlClientId = searchParams?.get('clientId') ?? null
   const cached = typeof window !== 'undefined' ? readCache() : null
-  const [client, setClient] = useState<Client | null>(cached?.client ?? null)
-  const [isAdmin, setIsAdmin] = useState<boolean>(cached?.isAdmin ?? false)
-  const [loading, setLoading] = useState(cached === null)
+  // Only seed from cache when it's still fresh. A stale cache (past TTL) must
+  // NOT paint a client name/data before we re-verify against the DB — that's
+  // how the previous account briefly bleeds into the current one. When stale
+  // we start blank + loading so consumers wait for the verified resolve.
+  const cachedFresh = !!cached && Date.now() - cached.cachedAt < CACHE_TTL_MS
+  const [client, setClient] = useState<Client | null>(cachedFresh ? cached!.client : null)
+  const [isAdmin, setIsAdmin] = useState<boolean>(cachedFresh ? cached!.isAdmin : false)
+  const [loading, setLoading] = useState(!cachedFresh)
 
   const refresh = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setClient(null); setIsAdmin(false); setLoading(false)
-      writeCache(null, false)
+      writeCache(null, false, null)
       return
     }
 
@@ -134,7 +147,7 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
     if (!clientId) {
       setClient(null)
       setLoading(false)
-      writeCache(null, admin)
+      writeCache(null, admin, user.id)
       return
     }
 
@@ -146,10 +159,10 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
 
     if (clientRow) {
       setClient(clientRow as Client)
-      writeCache(clientRow as Client, admin)
+      writeCache(clientRow as Client, admin, user.id)
     } else {
       setClient(null)
-      writeCache(null, admin)
+      writeCache(null, admin, user.id)
     }
     setLoading(false)
   }, [supabase])
@@ -166,6 +179,29 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
     if (cachedFresh && !cachedAdminMismatch) return
     refresh()
   }, [refresh, urlClientId])
+
+  // A different account signing in to the same tab must never inherit the
+  // previous user's cached client (that briefly shows the wrong account's
+  // name + data). When the auth user changes, drop the cache and re-resolve;
+  // on sign-out, clear immediately. Same-user token refreshes are ignored so
+  // the cache keeps serving instant navigations.
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        clearCache()
+        setClient(null); setIsAdmin(false); setLoading(false)
+        return
+      }
+      const newUserId = session?.user?.id ?? null
+      const cachedUserId = readCache()?.userId ?? null
+      if (newUserId && cachedUserId && newUserId !== cachedUserId) {
+        clearCache()
+        setLoading(true)
+        refresh()
+      }
+    })
+    return () => sub.subscription.unsubscribe()
+  }, [supabase, refresh])
 
   const enrolledServices = resolveEnrolledServices(client?.services_active)
   const hasService = (area: ServiceArea) => hasServiceUtil(client?.services_active, area)
