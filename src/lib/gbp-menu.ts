@@ -52,7 +52,7 @@ interface TokenRow {
   platform_account_id: string | null
 }
 
-async function getActiveTokenForClient(
+export async function getActiveTokenForClient(
   clientId: string,
   locationId?: string | null,
 ): Promise<{

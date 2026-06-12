@@ -15,6 +15,7 @@ import {
   createTextSnippet,
 } from '@/lib/asset-actions'
 import type { Asset, AssetFolder, GlobalAssetType } from '@/types/database'
+import { GBP_PHOTO_CATEGORIES, type GbpPhotoCategory } from '@/lib/gbp-media'
 
 const TAG_PRESETS = [
   'food', 'exterior', 'interior', 'team', 'product', 'behind the scenes',
@@ -65,6 +66,32 @@ export default function AssetsPage() {
 
   // Detail panel
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
+
+  // Push-to-Google-Business-Profile (per selected image)
+  const [gbpCategory, setGbpCategory] = useState<GbpPhotoCategory>('ADDITIONAL')
+  const [gbpSending, setGbpSending] = useState(false)
+  const [gbpResult, setGbpResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  // Clear any prior result when a different asset is opened.
+  useEffect(() => { setGbpResult(null) }, [selectedAsset?.id])
+
+  async function sendPhotoToGbp() {
+    if (!selectedAsset?.file_url) return
+    setGbpSending(true); setGbpResult(null)
+    try {
+      const res = await fetch('/api/dashboard/listing/media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceUrl: selectedAsset.file_url, category: gbpCategory }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (res.ok) setGbpResult({ ok: true, msg: 'Added to your Google listing' })
+      else setGbpResult({ ok: false, msg: body.error || `Failed (HTTP ${res.status})` })
+    } catch (e) {
+      setGbpResult({ ok: false, msg: (e as Error).message })
+    } finally {
+      setGbpSending(false)
+    }
+  }
   const [editingName, setEditingName] = useState(false)
   const [editName, setEditName] = useState('')
   const [editTags, setEditTags] = useState<string[]>([])
@@ -613,6 +640,33 @@ export default function AssetsPage() {
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              {/* Push an image straight to the connected Google Business Profile. */}
+              {selectedAsset.type === 'image' && selectedAsset.file_url && (
+                <div className="pt-3 mt-1 border-t border-ink-6 space-y-2">
+                  <p className="text-xs font-medium text-ink-2">Add to Google Business Profile</p>
+                  <div className="flex gap-2">
+                    <select
+                      value={gbpCategory}
+                      onChange={e => setGbpCategory(e.target.value as GbpPhotoCategory)}
+                      className="flex-1 bg-white border border-ink-6 text-ink-2 text-xs rounded-lg px-2 py-2"
+                    >
+                      {GBP_PHOTO_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                    <button
+                      onClick={sendPhotoToGbp}
+                      disabled={gbpSending}
+                      className="bg-white border border-ink-6 text-ink-2 text-xs font-medium rounded-lg px-3 py-2 flex items-center gap-1.5 hover:border-brand/40 transition-colors disabled:opacity-50"
+                    >
+                      {gbpSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageIcon className="w-3.5 h-3.5" />}
+                      Add to Google
+                    </button>
+                  </div>
+                  {gbpResult && (
+                    <p className={'text-xs ' + (gbpResult.ok ? 'text-green-600' : 'text-red-500')}>{gbpResult.msg}</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
