@@ -234,15 +234,20 @@ function countMetric(
 /* ── Rating metric (Reputation) — average score headline + review counts ── */
 function ratingMetric(
   plats: Plat[], count: Maps, ratingSum: Maps, today: Date,
+  /** Google's overall star rating from the Places API. When present it's the
+      true average across all reviews, so it wins over the per-period average
+      computed from the handful of review rows we can ingest. */
+  placeRating: number | null = null,
 ): AdvMetric {
   const earliest = earliestOf(count)
   const front = today // reviews settle immediately
-  const connected = count.size > 0
+  const connected = count.size > 0 || placeRating != null
 
   const build = (frames: Frame[]): AdvPeriod[] =>
     frames.map(f => ({
       cap: f.cap, ticks: f.ticks, trendLabel: f.trendLabel,
-      rating: f.avg(count, ratingSum), ratingPrev: f.avgPrev(count, ratingSum),
+      rating: placeRating ?? f.avg(count, ratingSum),
+      ratingPrev: placeRating ?? f.avgPrev(count, ratingSum),
       sources: plats.map(p =>
         p.google && connected
           ? { key: p.key, label: p.label, icon: p.icon, vals: f.series(count), prev: f.prevSeries(count) }
@@ -273,7 +278,7 @@ async function load(clientId: string): Promise<AdvancedMetrics> {
   const today = sod(new Date())
   const bound = ymd(new Date(today.getTime() - BOUND_DAYS * DAY))
 
-  const [gbp, reviews, localReviews] = await Promise.all([
+  const [gbp, reviews, localReviews, gbpLoc] = await Promise.all([
     admin.from('gbp_metrics')
       .select('date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks')
       .eq('client_id', clientId).gte('date', bound).order('date', { ascending: true }),
@@ -283,6 +288,9 @@ async function load(clientId: string): Promise<AdvancedMetrics> {
     admin.from('local_reviews')
       .select('rating, created_at_platform')
       .eq('client_id', clientId).gte('created_at_platform', bound + 'T00:00:00'),
+    admin.from('gbp_locations')
+      .select('place_rating, place_rating_count, is_primary')
+      .eq('client_id', clientId),
   ])
 
   // Google Business Profile — one map per underlying signal.
@@ -318,6 +326,11 @@ async function load(clientId: string): Promise<AdvancedMetrics> {
     repSum.set(d, (repSum.get(d) ?? 0) + num(r.rating))
   }
 
+  // Google's overall rating from the Places API stopgap (primary listing).
+  const locRows = (gbpLoc.data ?? []) as Array<{ place_rating: number | null; place_rating_count: number | null; is_primary?: boolean }>
+  const primaryLoc = locRows.find(l => l.is_primary) ?? locRows[0]
+  const placeRating = primaryLoc?.place_rating ?? null
+
   // Google contribution per metric.
   const reachMap = gImpr
   const interMap = addInto(gDir, gCall, gClick, gConv, gMenu)
@@ -348,7 +361,7 @@ async function load(clientId: string): Promise<AdvancedMetrics> {
 
     ratingMetric(
       [G(), { key: 'yelp', label: 'Yelp', icon: 'star' }, { key: 'facebook', label: 'Facebook', icon: 'facebook' },
-       { key: 'tripadvisor', label: 'TripAdvisor', icon: 'eye' }], repCount, repSum, today),
+       { key: 'tripadvisor', label: 'TripAdvisor', icon: 'eye' }], repCount, repSum, today, placeRating),
   ]
 
   return { metrics }

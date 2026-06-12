@@ -19,6 +19,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { syncClientGbp } from '@/lib/gbp-client-sync'
+import { syncPlacesReviewsForClient } from '@/lib/places-reviews'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300  /* 5 minutes — covers many clients */
@@ -50,18 +51,26 @@ export async function GET(req: Request) {
     ok: boolean
     metricsImported?: number
     reviewsImported?: number
+    placesRating?: number | null
+    placesReviews?: number
     error?: string
   }> = []
 
   for (const conn of connections) {
     try {
       const r = await syncClientGbp(conn.client_id)
+      // Reviews stopgap: while the legacy review API is disabled, pull the
+      // overall Google rating + recent reviews from the Places API. Isolated
+      // so a Places failure never affects the metrics/reviews sync above.
+      const places = await syncPlacesReviewsForClient(conn.client_id)
       outcomes.push({
         clientId: conn.client_id,
         locationName: conn.platform_account_name,
         ok: r.ok,
         metricsImported: r.metricsImported,
         reviewsImported: r.reviewsImported,
+        placesRating: places?.rating ?? null,
+        placesReviews: places?.reviewsUpserted ?? 0,
         error: r.ok ? undefined : r.message,
       })
     } catch (err) {
