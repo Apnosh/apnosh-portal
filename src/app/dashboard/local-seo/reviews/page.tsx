@@ -366,14 +366,22 @@ export default function ReviewsPage() {
           <p className="text-ink-3 text-sm mt-0.5">Every review across every platform, with our responses.</p>
         </div>
         <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          <button
-            onClick={syncNow}
-            disabled={syncing}
-            className="bg-white border border-ink-6 text-ink-2 text-xs font-medium rounded-lg px-3 py-2 flex items-center gap-1.5 hover:border-brand/40 transition-colors disabled:opacity-50"
-          >
-            {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            {syncing ? 'Syncing…' : 'Sync now'}
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/dashboard/local-seo/reviews/get"
+              className="bg-brand hover:bg-brand-dark text-white text-xs font-medium rounded-lg px-3 py-2 flex items-center gap-1.5 transition-colors"
+            >
+              <Star className="w-3.5 h-3.5" /> Get reviews
+            </Link>
+            <button
+              onClick={syncNow}
+              disabled={syncing}
+              className="bg-white border border-ink-6 text-ink-2 text-xs font-medium rounded-lg px-3 py-2 flex items-center gap-1.5 hover:border-brand/40 transition-colors disabled:opacity-50"
+            >
+              {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              {syncing ? 'Syncing…' : 'Sync now'}
+            </button>
+          </div>
           {syncMsg && <span className="text-[11px] text-ink-4 max-w-[220px] text-right">{syncMsg}</span>}
         </div>
       </div>
