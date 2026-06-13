@@ -19,18 +19,27 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
-  const body = await req.json().catch(() => null) as { text?: string; imageUrl?: string | null } | null
+  const body = await req.json().catch(() => null) as {
+    text?: string
+    imageUrl?: string | null
+    cta?: { actionType?: string; url?: string } | null
+  } | null
   const text = body?.text?.trim()
   if (!text) return NextResponse.json({ error: 'Post text is required' }, { status: 400 })
 
   const tok = await getActiveTokenForClient(clientId, null)
   if ('error' in tok) return NextResponse.json({ error: tok.error }, { status: 409 })
 
+  const cta = body?.cta?.actionType
+    ? { actionType: body.cta.actionType, url: body.cta.url }
+    : null
+
   const result = await publishToGbp({
     resourceName: tok.v4Path,
     accessToken: tok.accessToken,
     text,
     mediaUrls: body?.imageUrl ? [body.imageUrl] : [],
+    callToAction: cta,
   })
 
   try {

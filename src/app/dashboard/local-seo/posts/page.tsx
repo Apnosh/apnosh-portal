@@ -1,12 +1,20 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Megaphone, Loader2, Check, ExternalLink, ImagePlus, X } from 'lucide-react'
+import { Megaphone, Loader2, Check, ExternalLink, ImagePlus, X, Sparkles } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useClient } from '@/lib/client-context'
 
 interface AssetImg { id: string; name: string; file_url: string }
 const LIMIT = 1500
+
+const CTAS: { value: string; label: string; needsUrl: boolean }[] = [
+  { value: '', label: 'No button', needsUrl: false },
+  { value: 'CALL', label: 'Call', needsUrl: false },
+  { value: 'ORDER', label: 'Order online', needsUrl: true },
+  { value: 'BOOK', label: 'Book a table', needsUrl: true },
+  { value: 'LEARN_MORE', label: 'Learn more', needsUrl: true },
+]
 
 export default function PostsPage() {
   const supabase = createClient()
@@ -17,6 +25,30 @@ export default function PostsPage() {
   const [showPicker, setShowPicker] = useState(false)
   const [posting, setPosting] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; text: string; url?: string | null } | null>(null)
+  const [topic, setTopic] = useState('')
+  const [drafting, setDrafting] = useState(false)
+  const [ctaType, setCtaType] = useState('')
+  const [ctaUrl, setCtaUrl] = useState('')
+
+  const ctaMeta = CTAS.find(c => c.value === ctaType)
+
+  async function aiDraft() {
+    setDrafting(true); setResult(null)
+    try {
+      const res = await fetch('/api/dashboard/listing/post/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topic.trim() || undefined }),
+      })
+      const b = await res.json().catch(() => ({}))
+      if (!res.ok) setResult({ ok: false, text: b.error || `Couldn’t draft (${res.status})` })
+      else setText((b.text || '').slice(0, LIMIT))
+    } catch (e) {
+      setResult({ ok: false, text: (e as Error).message })
+    } finally {
+      setDrafting(false)
+    }
+  }
 
   useEffect(() => {
     if (!client?.id) return
@@ -29,17 +61,19 @@ export default function PostsPage() {
 
   async function publish() {
     if (!text.trim()) return
+    if (ctaMeta?.needsUrl && !ctaUrl.trim()) { setResult({ ok: false, text: 'Add a link for your button' }); return }
     setPosting(true); setResult(null)
     try {
+      const cta = ctaType ? { actionType: ctaType, url: ctaMeta?.needsUrl ? ctaUrl.trim() : undefined } : null
       const res = await fetch('/api/dashboard/listing/post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.trim(), imageUrl: pickedImg?.file_url ?? null }),
+        body: JSON.stringify({ text: text.trim(), imageUrl: pickedImg?.file_url ?? null, cta }),
       })
       const b = await res.json().catch(() => ({}))
       if (!res.ok) { setResult({ ok: false, text: b.error || `Failed (HTTP ${res.status})` }); return }
       setResult({ ok: true, text: 'Posted to Google', url: b.searchUrl })
-      setText(''); setPicked(null)
+      setText(''); setPicked(null); setCtaType(''); setCtaUrl('')
     } catch (e) {
       setResult({ ok: false, text: (e as Error).message })
     } finally {
@@ -61,6 +95,23 @@ export default function PostsPage() {
       </div>
 
       <div className="rounded-2xl bg-white ring-1 ring-ink-6 p-5 space-y-3">
+        {/* AI draft */}
+        <div className="flex items-center gap-2">
+          <input
+            value={topic}
+            onChange={e => setTopic(e.target.value)}
+            placeholder="What's it about? (optional) e.g. weekend special"
+            className="flex-1 text-sm px-3 py-2 rounded-lg border border-ink-6 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+          />
+          <button
+            onClick={aiDraft}
+            disabled={drafting}
+            className="text-xs font-medium text-brand-dark bg-brand-tint hover:bg-brand/10 rounded-lg px-3 py-2 inline-flex items-center gap-1.5 disabled:opacity-50 flex-shrink-0"
+          >
+            {drafting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+            {drafting ? 'Writing…' : 'AI draft'}
+          </button>
+        </div>
         <textarea
           value={text}
           maxLength={LIMIT}
@@ -102,6 +153,26 @@ export default function PostsPage() {
             <p className="text-xs text-ink-4">No photos in your asset library yet. You can post text only, or upload photos under Brand &amp; Assets.</p>
           )
         )}
+
+        {/* Button (call to action) */}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <span className="text-xs text-ink-4">Button:</span>
+          <select
+            value={ctaType}
+            onChange={e => { setCtaType(e.target.value); setResult(null) }}
+            className="text-sm border border-ink-6 rounded-lg px-2 py-1.5 bg-white"
+          >
+            {CTAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
+          {ctaMeta?.needsUrl && (
+            <input
+              value={ctaUrl}
+              onChange={e => setCtaUrl(e.target.value)}
+              placeholder="https://link-for-the-button.com"
+              className="flex-1 min-w-[180px] text-sm px-3 py-1.5 rounded-lg border border-ink-6 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+            />
+          )}
+        </div>
 
         {result && (
           <p className={'text-sm flex items-center gap-1.5 ' + (result.ok ? 'text-green-600' : 'text-red-500')}>

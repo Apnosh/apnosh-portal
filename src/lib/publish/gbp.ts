@@ -40,6 +40,9 @@ interface GbpPublishInput {
   accessToken: string
   text: string
   mediaUrls: string[]
+  /** Optional button. CALL needs no url (uses the listing phone); the
+      others (ORDER, LEARN_MORE, BOOK, SHOP, SIGN_UP) require a url. */
+  callToAction?: { actionType: string; url?: string } | null
 }
 
 const SUMMARY_LIMIT = 1500
@@ -65,11 +68,16 @@ export async function publishToGbp(input: GbpPublishInput): Promise<GbpPublishRe
     ? [{ mediaFormat: 'PHOTO', sourceUrl: mediaUrls[0] }]
     : undefined
 
+  const cta = input.callToAction?.actionType
+    ? { actionType: input.callToAction.actionType, ...(input.callToAction.url ? { url: input.callToAction.url } : {}) }
+    : undefined
+
   const body = {
     languageCode: 'en',
     summary,
     topicType: 'STANDARD',
     ...(media ? { media } : {}),
+    ...(cta ? { callToAction: cta } : {}),
   }
 
   let res: Response
