@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import {
   Star, Flag, MessageSquare, ExternalLink, ChevronDown,
-  TrendingUp, AlertTriangle, Filter,
+  TrendingUp, AlertTriangle, Filter, RefreshCw, Loader2,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from '@/lib/realtime'
@@ -254,6 +254,30 @@ export default function ReviewsPage() {
   useEffect(() => { load() }, [load])
   useRealtimeRefresh(['reviews'], load)
 
+  // On-demand review refresh — pulls from Google (v4) + Places into our DB,
+  // then reloads the list. Uses the owner session, no cron secret needed.
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  async function syncNow() {
+    setSyncing(true); setSyncMsg(null)
+    try {
+      const res = await fetch('/api/dashboard/listing/sync-reviews', { method: 'POST' })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) { setSyncMsg(body.error || `Sync failed (HTTP ${res.status})`); return }
+      const pulled = (body.reviewsImported ?? 0) + (body.placesReviews ?? 0)
+      setSyncMsg(
+        body.warning
+          ? `Synced. ${pulled} review${pulled === 1 ? '' : 's'} updated. Note: ${body.warning}`
+          : `Synced. ${pulled} review${pulled === 1 ? '' : 's'} updated.`,
+      )
+      await load()
+    } catch (e) {
+      setSyncMsg((e as Error).message)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   /* Check whether the legacy v4 Business Profile API is enabled for
      this connection — drives whether the Reply UI is interactive.
      Also tracks whether the client is connected at all so we can
@@ -330,15 +354,28 @@ export default function ReviewsPage() {
   return (
     <div className="max-w-[1100px] mx-auto px-4 lg:px-6 pt-6 pb-20 space-y-5">
       {/* Header -- matches the portal-wide page-title pattern */}
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
-          Local SEO
-        </p>
-        <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1 flex items-center gap-2">
-          <Star className="w-6 h-6 text-amber-400 fill-amber-400" />
-          Reviews
-        </h1>
-        <p className="text-ink-3 text-sm mt-0.5">Every review across every platform, with our responses.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
+            Local SEO
+          </p>
+          <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1 flex items-center gap-2">
+            <Star className="w-6 h-6 text-amber-400 fill-amber-400" />
+            Reviews
+          </h1>
+          <p className="text-ink-3 text-sm mt-0.5">Every review across every platform, with our responses.</p>
+        </div>
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <button
+            onClick={syncNow}
+            disabled={syncing}
+            className="bg-white border border-ink-6 text-ink-2 text-xs font-medium rounded-lg px-3 py-2 flex items-center gap-1.5 hover:border-brand/40 transition-colors disabled:opacity-50"
+          >
+            {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            {syncing ? 'Syncing…' : 'Sync now'}
+          </button>
+          {syncMsg && <span className="text-[11px] text-ink-4 max-w-[220px] text-right">{syncMsg}</span>}
+        </div>
       </div>
 
       {/* Heads-up: Google reviews require the legacy v4 Business Profile API,
