@@ -378,22 +378,18 @@ export default function ReviewsPage() {
         </div>
       </div>
 
-      {/* Heads-up: Google reviews require the legacy v4 Business Profile API,
-         which Google deprecated and gates behind a separate allowlist. We've
-         submitted the request — until it's approved, no Google reviews can
-         flow in. */}
+      {/* Empty state. Google review access is live now, so no reviews here
+         means the listing isn't connected, the sync hasn't run yet, or there
+         genuinely aren't any. Point the owner at the Sync now button. */}
       {!hasData && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 flex items-start gap-3">
-          <AlertTriangle className="w-4.5 h-4.5 text-amber-700 flex-shrink-0 mt-0.5" />
+        <div className="rounded-2xl border border-ink-6 bg-bg-2 p-4 flex items-start gap-3">
+          <AlertTriangle className="w-4.5 h-4.5 text-ink-4 flex-shrink-0 mt-0.5" />
           <div className="text-sm leading-relaxed">
-            <p className="font-semibold text-amber-900">Google reviews aren&rsquo;t flowing in yet</p>
-            <p className="text-amber-900/85 mt-1">
-              Reading and replying to Google reviews uses Google&rsquo;s legacy v4
-              Business Profile API, which Google gates behind a separate access
-              request. We&rsquo;ve submitted ours (case 5-7311000040463) — typical
-              turnaround is 7–10 business days. The reply UI is already wired,
-              so the moment Google approves it, every existing review will
-              show up here automatically.
+            <p className="font-semibold text-ink">No reviews to show yet</p>
+            <p className="text-ink-3 mt-1">
+              If your Google Business Profile is connected, tap{' '}
+              <span className="font-medium text-ink-2">Sync now</span> above to pull your latest
+              reviews. New reviews also refresh automatically every day.
             </p>
           </div>
         </div>
