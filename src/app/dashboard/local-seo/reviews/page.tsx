@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import {
   Star, Flag, MessageSquare, ExternalLink, ChevronDown,
-  TrendingUp, AlertTriangle, Filter, RefreshCw, Loader2,
+  TrendingUp, AlertTriangle, Filter, RefreshCw, Loader2, Sparkles,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRealtimeRefresh } from '@/lib/realtime'
@@ -129,7 +129,23 @@ function ReplyBox({ reviewId, source, v4Enabled, onSent }: {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [drafting, setDrafting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  async function draft() {
+    setDrafting(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/dashboard/reviews/${reviewId}/draft`, { method: 'POST' })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) setError(body.error || `Couldn’t draft a reply (${res.status})`)
+      else setText(body.reply || '')
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setDrafting(false)
+    }
+  }
 
   if (source !== 'google') {
     return <div className="mt-3 text-[11px] text-ink-4 italic">No response yet · reply available on Google soon</div>
@@ -191,6 +207,14 @@ function ReplyBox({ reviewId, source, v4Enabled, onSent }: {
       />
       {error && <p className="text-xs text-rose-700">{error}</p>}
       <div className="flex items-center gap-2">
+        <button
+          onClick={draft}
+          disabled={busy || drafting}
+          className="text-xs font-medium text-brand-dark bg-brand-tint hover:bg-brand/10 rounded-full px-3 py-1.5 inline-flex items-center gap-1 disabled:opacity-50"
+        >
+          {drafting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+          {drafting ? 'Drafting…' : text.trim() ? 'Redraft' : 'AI draft'}
+        </button>
         <button
           onClick={submit}
           disabled={busy || !text.trim()}
