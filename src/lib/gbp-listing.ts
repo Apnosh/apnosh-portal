@@ -326,12 +326,16 @@ export async function updateClientAttributes(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
-  const attributes = Object.entries(values).map(([id, v]) => ({
+  const ids = Object.keys(values)
+  const attributes = ids.map(id => ({
     name: `attributes/${id}`,
     valueType: 'BOOL',
-    values: [v],
+    values: [values[id]],
   }))
-  const url = `${V1_BASE}/${tok.resourceName}/attributes?updateMask=attributes`
+  // Scope the write to ONLY the attributes we send (attributeMask), so a save
+  // never removes attributes the owner set elsewhere on the listing.
+  const attributeMask = ids.map(id => `attributes/${id}`).join(',')
+  const url = `${V1_BASE}/${tok.resourceName}/attributes?attributeMask=${encodeURIComponent(attributeMask)}`
   const res = await fetch(url, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${tok.accessToken}`, 'Content-Type': 'application/json' },
