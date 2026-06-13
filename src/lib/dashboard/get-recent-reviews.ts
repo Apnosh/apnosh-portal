@@ -33,7 +33,7 @@ export async function getRecentReviews(
 ): Promise<RecentReviewsResult> {
   const admin = createAdminClient()
 
-  const [recentRes, statsRes] = await Promise.all([
+  const [recentRes, statsRes, placesRes] = await Promise.all([
     admin
       .from('reviews')
       .select('id, author_name, rating, review_text, source, posted_at, response_text')
@@ -43,6 +43,10 @@ export async function getRecentReviews(
     admin
       .from('reviews')
       .select('rating', { count: 'exact' })
+      .eq('client_id', clientId),
+    admin
+      .from('gbp_locations')
+      .select('place_rating, is_primary')
       .eq('client_id', clientId),
   ])
 
@@ -64,9 +68,14 @@ export async function getRecentReviews(
   /* Average rating across all reviews — cheap roll-up since we need
      the count anyway for the "★ 4.7 · 312 total" header line. */
   const ratings = (statsRes.data ?? []).map(r => Number(r.rating ?? 0)).filter(n => n > 0)
-  const avgRating = ratings.length > 0
+  const computedAvg = ratings.length > 0
     ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10
     : null
+  // Prefer Google's true overall rating (Places, every review) when we have
+  // it — the computed average only covers the reviews we've ingested.
+  const placeRows = (placesRes.data ?? []) as { place_rating?: number | null; is_primary?: boolean }[]
+  const placeRating = (placeRows.find(p => p.is_primary) ?? placeRows[0])?.place_rating ?? null
+  const avgRating = placeRating ?? computedAvg
 
   return {
     items,

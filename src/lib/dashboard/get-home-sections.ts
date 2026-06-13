@@ -144,7 +144,7 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
   const safe = async <T,>(p: PromiseLike<{ data: T[] | null }>): Promise<T[]> => {
     try { const r = await p; return r.data ?? [] } catch { return [] }
   }
-  const [gbp, social, web, reviews, localRevs, gbpConn, socialConn, clientRow] = await Promise.all([
+  const [gbp, social, web, reviews, localRevs, gbpConn, socialConn, clientRow, places] = await Promise.all([
     safe(admin.from('gbp_metrics').select('date, search_views, photo_views').eq('client_id', clientId).gte('date', bound)),
     safe(admin.from('social_metrics').select('date, reach').eq('client_id', clientId).gte('date', bound)),
     safe(admin.from('website_metrics').select('date, visitors').eq('client_id', clientId).gte('date', bound)),
@@ -153,6 +153,7 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
     safe(admin.from('gbp_connections').select('id').eq('client_id', clientId)),
     safe(admin.from('social_connections').select('sync_status').eq('client_id', clientId)),
     safe(admin.from('clients').select('has_apnosh_website').eq('id', clientId)),
+    safe(admin.from('gbp_locations').select('place_rating, is_primary').eq('client_id', clientId)),
   ])
 
   /* Connected = a real connection record exists (not "has recent data"),
@@ -193,12 +194,17 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
       ...(localRevs as { rating?: number | null; created_at_platform?: string | null }[]).map(r => ({ rating: num(r.rating), date: r.created_at_platform ? String(r.created_at_platform) : null })),
     ]
     const hasRev = revs.length > 0
-    const avg = hasRev ? revs.reduce((s, r) => s + r.rating, 0) / revs.length : 0
+    // Prefer Google's true overall rating (Places, all reviews) over an
+    // average of the subset we've ingested — they differ when we only have
+    // some of the reviews. Fall back to the computed average.
+    const placeRows = places as { place_rating?: number | null; is_primary?: boolean }[]
+    const placeRating = (placeRows.find(p => p.is_primary) ?? placeRows[0])?.place_rating ?? null
+    const displayRating = placeRating ?? (hasRev ? Math.round(revs.reduce((s, r) => s + r.rating, 0) / revs.length * 10) / 10 : null)
     const weekAgo = today.getTime() - 7 * DAY
     const newCount = revs.filter(r => r.date && new Date(r.date).getTime() >= weekAgo).length
     const rows = revs.filter(r => r.date).map(r => ({ date: String(r.date).slice(0, 10), v: 1 }))
     const st = seriesStats(rows, today)
-    out.push({ name: 'Reviews', sub: 'Avg rating', value: hasRev ? avg.toFixed(1) + '★' : '—', delta: newCount > 0 ? `+${newCount} new` : '—', dir: 'up', spark: st.spark, connected: gbpConnected, href: '/dashboard/local-seo/reviews' })
+    out.push({ name: 'Reviews', sub: 'Avg rating', value: displayRating != null ? displayRating.toFixed(1) + '★' : '—', delta: newCount > 0 ? `+${newCount} new` : '—', dir: 'up', spark: st.spark, connected: gbpConnected || placeRating != null, href: '/dashboard/local-seo/reviews' })
   }
 
   return out
