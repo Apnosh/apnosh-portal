@@ -37,8 +37,11 @@ function ScoreRing({ score, color }: { score: number; color: string }) {
   )
 }
 
+interface GbpStatus { connected: boolean; verified: boolean; tokenRevoked: boolean; syncError: string | null }
+
 export default function ListingHealthPage() {
   const [data, setData] = useState<ListingHealth | null>(null)
+  const [status, setStatus] = useState<GbpStatus | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -47,7 +50,20 @@ export default function ListingHealthPage() {
       .then((d: ListingHealth | null) => setData(d))
       .catch(() => setData(null))
       .finally(() => setLoading(false))
+    fetch('/api/dashboard/gbp/status')
+      .then(r => r.ok ? r.json() : null)
+      .then((s: GbpStatus | null) => setStatus(s))
+      .catch(() => setStatus(null))
   }, [])
+
+  // Listing-health alert: surface connection/verification problems up front.
+  const alert = (() => {
+    if (!status) return null
+    if (status.tokenRevoked) return { title: 'Google access was revoked', body: 'Reconnect your Google Business Profile so reviews, posts, and edits keep working.', cta: 'Reconnect', href: '/dashboard/connect-accounts' }
+    if (!status.connected) return { title: 'Google Business Profile not connected', body: 'Connect your listing to manage reviews, posts, photos, and info from here.', cta: 'Connect', href: '/dashboard/connect-accounts' }
+    if (status.verified === false) return { title: 'Your listing isn’t verified on Google', body: 'An unverified listing can be hidden or limited. Verify it in your Google Business Profile to protect your visibility.', cta: null, href: null }
+    return null
+  })()
 
   const failed = data?.checks.filter(c => c.status === 'fail') ?? []
   const passed = data?.checks.filter(c => c.status === 'pass') ?? []
@@ -66,6 +82,21 @@ export default function ListingHealthPage() {
           How complete and competitive your Google listing is, with the exact fixes to climb higher.
         </p>
       </div>
+
+      {alert && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-900">{alert.title}</p>
+            <p className="text-sm text-amber-900/85 mt-0.5 leading-relaxed">{alert.body}</p>
+          </div>
+          {alert.href && alert.cta && (
+            <Link href={alert.href} className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-lg px-3 py-2 flex-shrink-0">
+              {alert.cta}
+            </Link>
+          )}
+        </div>
+      )}
 
       {loading && (
         <div className="rounded-2xl bg-white ring-1 ring-ink-6 p-10 flex items-center justify-center text-ink-3">
