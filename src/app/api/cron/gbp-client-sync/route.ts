@@ -20,6 +20,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { syncClientGbp } from '@/lib/gbp-client-sync'
 import { syncPlacesReviewsForClient } from '@/lib/places-reviews'
+import { autoReplyFiveStarForClient } from '@/lib/reviews/auto-reply'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300  /* 5 minutes — covers many clients */
@@ -53,6 +54,7 @@ export async function GET(req: Request) {
     reviewsImported?: number
     placesRating?: number | null
     placesReviews?: number
+    autoReplied?: number
     error?: string
   }> = []
 
@@ -63,6 +65,9 @@ export async function GET(req: Request) {
       // overall Google rating + recent reviews from the Places API. Isolated
       // so a Places failure never affects the metrics/reviews sync above.
       const places = await syncPlacesReviewsForClient(conn.client_id)
+      // Opt-in: auto-reply to new 5-star reviews (no-op unless enabled).
+      let autoReplied = 0
+      try { autoReplied = (await autoReplyFiveStarForClient(conn.client_id)).replied } catch { /* never block sync */ }
       outcomes.push({
         clientId: conn.client_id,
         locationName: conn.platform_account_name,
@@ -71,6 +76,7 @@ export async function GET(req: Request) {
         reviewsImported: r.reviewsImported,
         placesRating: places?.rating ?? null,
         placesReviews: places?.reviewsUpserted ?? 0,
+        autoReplied,
         error: r.ok ? undefined : r.message,
       })
     } catch (err) {

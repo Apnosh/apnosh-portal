@@ -244,6 +244,26 @@ export default function ReviewsPage() {
   const [loading, setLoading] = useState(true)
   const [v4Enabled, setV4Enabled] = useState(false)
   const [connected, setConnected] = useState<boolean | null>(null)
+  const [autoReply, setAutoReply] = useState(false)
+  const [autoReplySaving, setAutoReplySaving] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/dashboard/reviews/auto-reply')
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (j) setAutoReply(!!j.enabled) })
+      .catch(() => {})
+  }, [])
+
+  async function toggleAutoReply() {
+    const next = !autoReply
+    setAutoReply(next); setAutoReplySaving(true)
+    try {
+      const res = await fetch('/api/dashboard/reviews/auto-reply', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: next }),
+      })
+      if (!res.ok) setAutoReply(!next) // revert on failure
+    } catch { setAutoReply(!next) } finally { setAutoReplySaving(false) }
+  }
 
   const [sourceFilter, setSourceFilter] = useState<ReviewSource | 'all'>('all')
   const [ratingFilter, setRatingFilter] = useState<'all' | '5' | '4' | '3' | '2' | '1'>('all')
@@ -409,6 +429,29 @@ export default function ReviewsPage() {
           {syncMsg && <span className="text-[11px] text-ink-4 max-w-[220px] text-right">{syncMsg}</span>}
         </div>
       </div>
+
+      {/* Auto-reply to 5-star reviews (opt-in) */}
+      {v4Enabled && (
+        <div className="rounded-2xl bg-white ring-1 ring-ink-6 p-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-ink flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-brand" /> Auto-reply to 5-star reviews
+            </p>
+            <p className="text-xs text-ink-3 mt-0.5 leading-relaxed">
+              We draft and post a warm, on-brand thank-you to new 5-star reviews for you. Never touches reviews under 5 stars — those always need a human.
+            </p>
+          </div>
+          <button
+            onClick={toggleAutoReply}
+            disabled={autoReplySaving}
+            role="switch"
+            aria-checked={autoReply}
+            className={'relative inline-flex h-6 w-11 flex-shrink-0 rounded-full transition-colors disabled:opacity-50 ' + (autoReply ? 'bg-brand' : 'bg-ink-5')}
+          >
+            <span className={'inline-block h-5 w-5 mt-0.5 rounded-full bg-white shadow transition-transform ' + (autoReply ? 'translate-x-5' : 'translate-x-0.5')} />
+          </button>
+        </div>
+      )}
 
       {/* Empty state. Google review access is live now, so no reviews here
          means the listing isn't connected, the sync hasn't run yet, or there
