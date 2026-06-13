@@ -43,6 +43,18 @@ interface GbpPublishInput {
   /** Optional button. CALL needs no url (uses the listing phone); the
       others (ORDER, LEARN_MORE, BOOK, SHOP, SIGN_UP) require a url. */
   callToAction?: { actionType: string; url?: string } | null
+  /** Post type. OFFER and EVENT both require `event` (title + dates). */
+  postType?: 'STANDARD' | 'OFFER' | 'EVENT'
+  /** Required for OFFER/EVENT. Dates as 'YYYY-MM-DD'. */
+  event?: { title: string; startDate: string; endDate: string } | null
+  /** OFFER only — all fields optional. */
+  offer?: { couponCode?: string; redeemUrl?: string; terms?: string } | null
+}
+
+function toGbpDate(s: string): { year: number; month: number; day: number } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+  if (!m) return null
+  return { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) }
 }
 
 const SUMMARY_LIMIT = 1500
@@ -68,16 +80,43 @@ export async function publishToGbp(input: GbpPublishInput): Promise<GbpPublishRe
     ? [{ mediaFormat: 'PHOTO', sourceUrl: mediaUrls[0] }]
     : undefined
 
+  const topicType = input.postType ?? 'STANDARD'
+
   const cta = input.callToAction?.actionType
     ? { actionType: input.callToAction.actionType, ...(input.callToAction.url ? { url: input.callToAction.url } : {}) }
+    : undefined
+
+  // OFFER and EVENT require an `event` with a title and a start/end date.
+  let eventObj: { title: string; schedule: Record<string, unknown> } | undefined
+  if ((topicType === 'OFFER' || topicType === 'EVENT') && input.event?.title) {
+    const start = toGbpDate(input.event.startDate)
+    const end = toGbpDate(input.event.endDate)
+    if (!start || !end) {
+      return { success: false, error: 'Offer/event needs a valid start and end date.' }
+    }
+    eventObj = { title: input.event.title.slice(0, 58), schedule: { startDate: start, endDate: end } }
+  }
+  if ((topicType === 'OFFER' || topicType === 'EVENT') && !eventObj) {
+    return { success: false, error: 'Offer/event needs a title and dates.' }
+  }
+
+  const offerObj = topicType === 'OFFER' && input.offer
+    ? {
+        ...(input.offer.couponCode ? { couponCode: input.offer.couponCode } : {}),
+        ...(input.offer.redeemUrl ? { redeemOnlineUrl: input.offer.redeemUrl } : {}),
+        ...(input.offer.terms ? { termsConditions: input.offer.terms } : {}),
+      }
     : undefined
 
   const body = {
     languageCode: 'en',
     summary,
-    topicType: 'STANDARD',
+    topicType,
     ...(media ? { media } : {}),
-    ...(cta ? { callToAction: cta } : {}),
+    // Offers carry their own redeem button, so CTA only applies to the others.
+    ...(cta && topicType !== 'OFFER' ? { callToAction: cta } : {}),
+    ...(eventObj ? { event: eventObj } : {}),
+    ...(offerObj ? { offer: offerObj } : {}),
   }
 
   let res: Response

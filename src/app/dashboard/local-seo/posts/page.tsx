@@ -29,8 +29,16 @@ export default function PostsPage() {
   const [drafting, setDrafting] = useState(false)
   const [ctaType, setCtaType] = useState('')
   const [ctaUrl, setCtaUrl] = useState('')
+  const [postType, setPostType] = useState<'STANDARD' | 'OFFER' | 'EVENT'>('STANDARD')
+  const [evTitle, setEvTitle] = useState('')
+  const [evStart, setEvStart] = useState('')
+  const [evEnd, setEvEnd] = useState('')
+  const [coupon, setCoupon] = useState('')
+  const [redeemUrl, setRedeemUrl] = useState('')
+  const [terms, setTerms] = useState('')
 
   const ctaMeta = CTAS.find(c => c.value === ctaType)
+  const needsEvent = postType === 'OFFER' || postType === 'EVENT'
 
   async function aiDraft() {
     setDrafting(true); setResult(null)
@@ -61,19 +69,33 @@ export default function PostsPage() {
 
   async function publish() {
     if (!text.trim()) return
-    if (ctaMeta?.needsUrl && !ctaUrl.trim()) { setResult({ ok: false, text: 'Add a link for your button' }); return }
+    if (postType === 'OFFER' && ctaMeta?.value) { /* offers ignore CTA, fine */ }
+    if (ctaMeta?.needsUrl && postType !== 'OFFER' && !ctaUrl.trim()) { setResult({ ok: false, text: 'Add a link for your button' }); return }
+    if (needsEvent && (!evTitle.trim() || !evStart || !evEnd)) {
+      setResult({ ok: false, text: `Add a title and start/end date for your ${postType === 'OFFER' ? 'offer' : 'event'}` }); return
+    }
     setPosting(true); setResult(null)
     try {
       const cta = ctaType ? { actionType: ctaType, url: ctaMeta?.needsUrl ? ctaUrl.trim() : undefined } : null
       const res = await fetch('/api/dashboard/listing/post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.trim(), imageUrl: pickedImg?.file_url ?? null, cta }),
+        body: JSON.stringify({
+          text: text.trim(),
+          imageUrl: pickedImg?.file_url ?? null,
+          cta: postType === 'OFFER' ? null : cta,
+          postType,
+          event: needsEvent ? { title: evTitle.trim(), startDate: evStart, endDate: evEnd } : null,
+          offer: postType === 'OFFER'
+            ? { couponCode: coupon.trim() || undefined, redeemUrl: redeemUrl.trim() || undefined, terms: terms.trim() || undefined }
+            : null,
+        }),
       })
       const b = await res.json().catch(() => ({}))
       if (!res.ok) { setResult({ ok: false, text: b.error || `Failed (HTTP ${res.status})` }); return }
       setResult({ ok: true, text: 'Posted to Google', url: b.searchUrl })
       setText(''); setPicked(null); setCtaType(''); setCtaUrl('')
+      setPostType('STANDARD'); setEvTitle(''); setEvStart(''); setEvEnd(''); setCoupon(''); setRedeemUrl(''); setTerms('')
     } catch (e) {
       setResult({ ok: false, text: (e as Error).message })
     } finally {
@@ -95,6 +117,19 @@ export default function PostsPage() {
       </div>
 
       <div className="rounded-2xl bg-white ring-1 ring-ink-6 p-5 space-y-3">
+        {/* Post type */}
+        <div className="flex gap-1.5">
+          {([['STANDARD', 'Update'], ['OFFER', 'Offer'], ['EVENT', 'Event']] as const).map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => { setPostType(v); setResult(null) }}
+              className={'text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ' + (postType === v ? 'bg-brand text-white border-brand' : 'bg-white text-ink-2 border-ink-6 hover:border-brand/40')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* AI draft */}
         <div className="flex items-center gap-2">
           <input
@@ -123,6 +158,32 @@ export default function PostsPage() {
         <div className="flex items-center justify-between text-xs text-ink-4">
           <span>{text.length}/{LIMIT}</span>
         </div>
+
+        {/* Offer / event details */}
+        {needsEvent && (
+          <div className="space-y-2 rounded-lg bg-bg-2 border border-ink-6 p-3">
+            <input
+              value={evTitle}
+              maxLength={58}
+              onChange={e => { setEvTitle(e.target.value); setResult(null) }}
+              placeholder={postType === 'OFFER' ? 'Offer title — e.g. 20% off lunch' : 'Event title — e.g. Live jazz night'}
+              className="w-full text-sm px-3 py-2 rounded-lg border border-ink-6 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs text-ink-4">From</label>
+              <input type="date" value={evStart} onChange={e => setEvStart(e.target.value)} className="text-sm px-2 py-1.5 rounded-lg border border-ink-6 bg-white" />
+              <label className="text-xs text-ink-4">to</label>
+              <input type="date" value={evEnd} onChange={e => setEvEnd(e.target.value)} className="text-sm px-2 py-1.5 rounded-lg border border-ink-6 bg-white" />
+            </div>
+            {postType === 'OFFER' && (
+              <div className="space-y-2 pt-1">
+                <input value={coupon} onChange={e => setCoupon(e.target.value)} placeholder="Coupon code (optional)" className="w-full text-sm px-3 py-2 rounded-lg border border-ink-6 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30" />
+                <input value={redeemUrl} onChange={e => setRedeemUrl(e.target.value)} placeholder="Redeem link (optional)" className="w-full text-sm px-3 py-2 rounded-lg border border-ink-6 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30" />
+                <input value={terms} onChange={e => setTerms(e.target.value)} placeholder="Terms (optional)" className="w-full text-sm px-3 py-2 rounded-lg border border-ink-6 bg-white focus:outline-none focus:ring-2 focus:ring-brand/30" />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Photo */}
         {pickedImg ? (
@@ -154,7 +215,8 @@ export default function PostsPage() {
           )
         )}
 
-        {/* Button (call to action) */}
+        {/* Button (call to action) — offers carry their own redeem button */}
+        {postType !== 'OFFER' && (
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <span className="text-xs text-ink-4">Button:</span>
           <select
@@ -173,6 +235,7 @@ export default function PostsPage() {
             />
           )}
         </div>
+        )}
 
         {result && (
           <p className={'text-sm flex items-center gap-1.5 ' + (result.ok ? 'text-green-600' : 'text-red-500')}>

@@ -23,6 +23,9 @@ export async function POST(req: NextRequest) {
     text?: string
     imageUrl?: string | null
     cta?: { actionType?: string; url?: string } | null
+    postType?: 'STANDARD' | 'OFFER' | 'EVENT'
+    event?: { title?: string; startDate?: string; endDate?: string } | null
+    offer?: { couponCode?: string; redeemUrl?: string; terms?: string } | null
   } | null
   const text = body?.text?.trim()
   if (!text) return NextResponse.json({ error: 'Post text is required' }, { status: 400 })
@@ -34,12 +37,19 @@ export async function POST(req: NextRequest) {
     ? { actionType: body.cta.actionType, url: body.cta.url }
     : null
 
+  const event = body?.event?.title && body.event.startDate && body.event.endDate
+    ? { title: body.event.title, startDate: body.event.startDate, endDate: body.event.endDate }
+    : null
+
   const result = await publishToGbp({
     resourceName: tok.v4Path,
     accessToken: tok.accessToken,
     text,
     mediaUrls: body?.imageUrl ? [body.imageUrl] : [],
     callToAction: cta,
+    postType: body?.postType ?? 'STANDARD',
+    event,
+    offer: body?.offer ?? null,
   })
 
   try {
