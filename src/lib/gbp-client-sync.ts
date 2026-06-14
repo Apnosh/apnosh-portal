@@ -245,11 +245,15 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
 
   let metricsImported = 0
   /* Only sync metrics for locations actually tied to this client now
-     (covers the "store_code claimed by another client" edge case). */
+     (covers the "store_code claimed by another client" edge case), and
+     skip any marked 'skipped' — those are stale/duplicate store codes
+     Google doesn't recognise, which otherwise throw "entity not found"
+     and pollute the client's sync error every run. */
   const { data: clientLocations } = await admin
     .from('gbp_locations')
     .select('store_code, location_name')
     .eq('client_id', clientId)
+    .neq('status', 'skipped')
   for (const row of clientLocations ?? []) {
     const storeCode = row.store_code as string
     const title = row.location_name as string
@@ -283,6 +287,18 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
         /* Permission/not-found errors repeat for every date on the
            same location — log once per location, not per date. */
         const msg = (err as Error).message
+        /* A location Google can't find is usually a stale/duplicate store
+           code. Self-heal: mark it 'skipped' so future syncs don't query it,
+           which stops it erroring every run (and inflating the API error
+           rate). Guard: only when the client has MORE THAN ONE location, so
+           we never strand a single (possibly new/propagating) listing on a
+           transient not-found. */
+        if (/requested entity was not found|not_found/i.test(msg) && (clientLocations?.length ?? 0) > 1) {
+          await admin.from('gbp_locations')
+            .update({ status: 'skipped' })
+            .eq('client_id', clientId)
+            .eq('store_code', storeCode)
+        }
         const tag = `metrics ${title}: ${msg}`
         if (!errors.includes(tag)) errors.push(tag)
         break
