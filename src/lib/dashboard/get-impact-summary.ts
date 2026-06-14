@@ -3,8 +3,11 @@
  * this month, and how it compares to last." Computed live from gbp_metrics +
  * reviews + the Places rating, so it needs no manual publishing.
  *
- * Comparison is month-to-date vs the SAME number of days last month, so the
- * delta is fair even early in the month (not partial-month vs full-month).
+ * Fairness matters here. Google's daily performance data lags a few days, so
+ * "month so far" is really only complete through the last ingested day. We
+ * anchor BOTH windows to that last-complete day (this month days 1..N vs last
+ * month days 1..N), otherwise an incomplete June would always look down
+ * against a complete May — a false negative.
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -20,6 +23,7 @@ export interface ImpactMetric { key: string; label: string; value: number; prev:
 export interface ImpactSummary {
   monthLabel: string
   rangeLabel: string
+  throughLabel: string | null
   metrics: ImpactMetric[]
   reviewsThisMonth: number
   reviewsPrevMonth: number
@@ -31,11 +35,9 @@ export interface ImpactSummary {
 export async function getImpactSummary(clientId: string): Promise<ImpactSummary> {
   const admin = createAdminClient()
   const now = new Date()
-  const y = now.getFullYear(), m = now.getMonth(), dom = now.getDate()
+  const y = now.getFullYear(), m = now.getMonth()
   const monthStart = ymd(new Date(y, m, 1))
   const prevMonthStart = ymd(new Date(y, m - 1, 1))
-  // Same window length last month (days 1..today-of-month).
-  const prevCutoff = ymd(new Date(y, m - 1, dom))
 
   const [gbp, reviews, locs] = await Promise.all([
     admin.from('gbp_metrics')
@@ -48,14 +50,45 @@ export async function getImpactSummary(clientId: string): Promise<ImpactSummary>
       .select('place_rating, place_rating_count, is_primary').eq('client_id', clientId),
   ])
 
-  let views_t = 0, views_p = 0, calls_t = 0, calls_p = 0, dir_t = 0, dir_p = 0, clicks_t = 0, clicks_p = 0
-  for (const r of (gbp.data ?? []) as Record<string, unknown>[]) {
+  const rows = (gbp.data ?? []) as Record<string, unknown>[]
+  const viewsOf = (r: Record<string, unknown>) => num(r.impressions_total) || num(r.search_views)
+  const hasAny = (r: Record<string, unknown>) =>
+    viewsOf(r) + num(r.directions) + num(r.calls) + num(r.website_clicks) > 0
+
+  // Anchor: the latest day THIS month that actually has data. Google lags a few
+  // days, so trailing empty days don't count as a real decline.
+  let cutoff = ''
+  for (const r of rows) {
     const d = String(r.date).slice(0, 10)
-    const views = num(r.impressions_total) || num(r.search_views)
-    if (d >= monthStart) {
-      views_t += views; calls_t += num(r.calls); dir_t += num(r.directions); clicks_t += num(r.website_clicks)
+    if (d >= monthStart && hasAny(r) && d > cutoff) cutoff = d
+  }
+
+  if (!cutoff) {
+    const locRows0 = (locs.data ?? []) as { place_rating: number | null; place_rating_count: number | null; is_primary?: boolean }[]
+    const primary0 = locRows0.find(l => l.is_primary) ?? locRows0[0]
+    return {
+      monthLabel: `${MON[m]} ${y}`,
+      rangeLabel: '', throughLabel: null,
+      metrics: [],
+      reviewsThisMonth: 0, reviewsPrevMonth: 0,
+      rating: primary0?.place_rating ?? null, ratingCount: primary0?.place_rating_count ?? null,
+      hasData: false,
+    }
+  }
+
+  const cutoffDom = parseInt(cutoff.slice(8, 10), 10)
+  // Same window length last month, clamped to that month's length.
+  const daysInPrevMonth = new Date(y, m, 0).getDate()
+  const prevDom = Math.min(cutoffDom, daysInPrevMonth)
+  const prevCutoff = ymd(new Date(y, m - 1, prevDom))
+
+  let views_t = 0, views_p = 0, calls_t = 0, calls_p = 0, dir_t = 0, dir_p = 0, clicks_t = 0, clicks_p = 0
+  for (const r of rows) {
+    const d = String(r.date).slice(0, 10)
+    if (d >= monthStart && d <= cutoff) {
+      views_t += viewsOf(r); calls_t += num(r.calls); dir_t += num(r.directions); clicks_t += num(r.website_clicks)
     } else if (d >= prevMonthStart && d <= prevCutoff) {
-      views_p += views; calls_p += num(r.calls); dir_p += num(r.directions); clicks_p += num(r.website_clicks)
+      views_p += viewsOf(r); calls_p += num(r.calls); dir_p += num(r.directions); clicks_p += num(r.website_clicks)
     }
   }
 
@@ -63,7 +96,7 @@ export async function getImpactSummary(clientId: string): Promise<ImpactSummary>
   for (const r of (reviews.data ?? []) as Record<string, unknown>[]) {
     if (!r.posted_at) continue
     const d = String(r.posted_at).slice(0, 10)
-    if (d >= monthStart) rev_t++
+    if (d >= monthStart && d <= cutoff) rev_t++
     else if (d >= prevMonthStart && d <= prevCutoff) rev_p++
   }
 
@@ -81,16 +114,15 @@ export async function getImpactSummary(clientId: string): Promise<ImpactSummary>
     { key: 'clicks', label: 'Website clicks', value: clicks_t, prev: clicks_p, deltaPct: pct(clicks_t, clicks_p) },
   ]
 
-  const hasData = views_t + actions_t + rev_t > 0
-
   return {
     monthLabel: `${MON[m]} ${y}`,
-    rangeLabel: `${MON[m].slice(0, 3)} 1–${dom}`,
+    rangeLabel: `${MON[m].slice(0, 3)} 1–${cutoffDom}`,
+    throughLabel: `${MON[m].slice(0, 3)} ${cutoffDom}`,
     metrics,
     reviewsThisMonth: rev_t,
     reviewsPrevMonth: rev_p,
     rating: primary?.place_rating ?? null,
     ratingCount: primary?.place_rating_count ?? null,
-    hasData,
+    hasData: true,
   }
 }

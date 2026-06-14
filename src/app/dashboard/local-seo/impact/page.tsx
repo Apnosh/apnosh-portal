@@ -13,6 +13,7 @@ interface ImpactMetric { key: string; label: string; value: number; prev: number
 interface ImpactSummary {
   monthLabel: string
   rangeLabel: string
+  throughLabel: string | null
   metrics: ImpactMetric[]
   reviewsThisMonth: number
   reviewsPrevMonth: number
@@ -89,6 +90,9 @@ export default function ImpactPage() {
               Here&rsquo;s what your Google presence did this month.
             </h2>
             <p className="text-sm text-ink-3 mt-1">{data.rangeLabel} vs the same days last month.</p>
+            {data.throughLabel && (
+              <p className="text-xs text-ink-4 mt-0.5">Through {data.throughLabel}, Google&rsquo;s latest data.</p>
+            )}
             {data.rating != null && (
               <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-50 ring-1 ring-amber-200 px-3 py-1.5">
                 <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
@@ -128,7 +132,7 @@ export default function ImpactPage() {
           </div>
 
           <p className="text-xs text-ink-4 px-1">
-            Numbers come straight from Google. They update daily, so today&rsquo;s totals may still be settling.
+            Numbers come straight from Google, which reports a few days behind. We compare only the days Google has finished counting, so the change is apples to apples.
           </p>
         </>
       )}
