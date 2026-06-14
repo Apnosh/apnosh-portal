@@ -12,7 +12,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { BarChart3, Star, MapPin, Utensils, Layers, LineChart, Wand2, Gauge, Tag, Megaphone } from 'lucide-react'
+import { BarChart3, Star, MapPin, Utensils, Layers, LineChart, Wand2, Gauge, Tag, Megaphone, ShoppingBag } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 
 interface Tab {
@@ -34,6 +34,7 @@ const TABS: Tab[] = [
   { label: 'Your listing', href: '/dashboard/local-seo/listing', icon: MapPin },
   { label: 'Menu', href: '/dashboard/local-seo/menu', icon: Utensils },
   { label: 'Post', href: '/dashboard/local-seo/posts', icon: Megaphone },
+  { label: 'Order & reserve', href: '/dashboard/local-seo/ordering', icon: ShoppingBag },
   { label: 'Amenities', href: '/dashboard/local-seo/amenities', icon: Tag },
   { label: 'Locations', href: '/dashboard/local-seo/locations', icon: Layers, multiLocationOnly: true },
   { label: 'Bulk update', href: '/dashboard/local-seo/bulk', icon: Wand2, multiLocationOnly: true },
