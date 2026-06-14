@@ -121,11 +121,6 @@ export default function DashboardPage() {
   const { client, isAdmin, loading: clientLoading } = useClient()
   const [data, setData] = useState<DashboardLoad | null>(null)
   const [loading, setLoading] = useState(true)
-  const [health, setHealth] = useState<{
-    score: number
-    grade: 'great' | 'good' | 'needs-work'
-    checks: Array<{ key: string; label: string; status: string; fixLabel?: string; fixHref?: string }>
-  } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -158,18 +153,6 @@ export default function DashboardPage() {
         if (!cancelled) setLoading(false)
       }
     })()
-    return () => { cancelled = true }
-  }, [client?.id, clientLoading])
-
-  // Listing health drives the "next win" card. Fetched separately because it
-  // makes a live Google call — don't block the rest of the dashboard on it.
-  useEffect(() => {
-    if (clientLoading || !client?.id) return
-    let cancelled = false
-    fetch('/api/dashboard/listing/health')
-      .then(r => r.ok ? r.json() : null)
-      .then(h => { if (!cancelled && h) setHealth(h) })
-      .catch(() => {})
     return () => { cancelled = true }
   }, [client?.id, clientLoading])
 
@@ -349,38 +332,6 @@ export default function DashboardPage() {
 
           {/* ─── LEFT ─── */}
           <div className="flex flex-col gap-5">
-
-            {/* Listing health — the "do one thing today" front door */}
-            {health && (() => {
-              const topFix = health.checks.find(c => c.status === 'fail' && c.fixHref)
-              const color = health.grade === 'great' ? '#16a34a' : health.grade === 'good' ? '#d97706' : '#dc2626'
-              const C = 2 * Math.PI * 24
-              return (
-                <Link
-                  href={topFix?.fixHref ?? '/dashboard/local-seo/health'}
-                  className="block rounded-2xl bg-white ring-1 ring-ink-6 px-6 py-5 hover:ring-brand/30 transition-all"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="relative w-14 h-14 flex-shrink-0">
-                      <svg viewBox="0 0 56 56" className="w-14 h-14 -rotate-90">
-                        <circle cx="28" cy="28" r="24" fill="none" stroke="var(--ink-6,#e5e5ea)" strokeWidth="6" />
-                        <circle cx="28" cy="28" r="24" fill="none" stroke={color} strokeWidth="6" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={(1 - health.score / 100) * C} />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center text-[17px] font-bold text-ink">{health.score}</div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-3">Listing health</div>
-                      {topFix ? (
-                        <p className="text-sm text-ink mt-0.5"><span className="font-semibold">Next win:</span> {topFix.label}</p>
-                      ) : (
-                        <p className="text-sm text-ink mt-0.5 font-semibold">Your Google listing looks great</p>
-                      )}
-                    </div>
-                    <span className="text-[12px] font-medium text-brand-dark flex-shrink-0">{topFix ? (topFix.fixLabel ?? 'Fix') : 'View'} →</span>
-                  </div>
-                </Link>
-              )
-            })()}
 
             {/* Needs you today */}
             <section className="rounded-2xl bg-white ring-1 ring-ink-6 px-6 py-5">
