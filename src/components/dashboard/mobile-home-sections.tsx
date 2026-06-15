@@ -35,7 +35,7 @@ export function NeedsSection({ needs }: { needs: NeedItem[] }) {
     <section className="sx">
       <div className="sx-head">
         <p className="t-eyebrow">{n ? `Needs you · ${n}` : 'Needs you'}</p>
-        {n > 0 && <Link className="btn-quiet" href={R.inbox}>Inbox <MhIcon name="chevRight" sw={2.2} size={14} /></Link>}
+        {n > 0 && <Link className="btn-quiet" href={R.inbox}>Review <MhIcon name="chevRight" sw={2.2} size={14} /></Link>}
       </div>
       {n === 0 ? (
         <div className="allclear">

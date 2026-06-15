@@ -192,7 +192,7 @@ export default function InboxView({ items, initialFilter }: Props) {
       {/* Header */}
       <div className="ib-head">
         <div className="ib-bar">
-          <h1 className="ib-title">Inbox</h1>
+          <h1 className="ib-title">Review</h1>
           <div className="ib-acts">
             <button
               onClick={() => setShowSearch(s => !s)}
@@ -381,7 +381,7 @@ function InboxRow({
 
 function EmptyState({ tab }: { tab: PrimaryTab }) {
   const messages: Record<PrimaryTab, { title: string; body: string }> = {
-    all:      { title: 'Inbox zero', body: 'Nothing needs your attention. Nice work.' },
+    all:      { title: 'All reviewed', body: 'Nothing needs your attention. Nice work.' },
     action:   { title: 'No actions waiting', body: 'All your approvals and tasks are done.' },
     reviews:  { title: 'No new reviews', body: 'You’re caught up on review responses.' },
     updates:  { title: 'Everything connected', body: 'All your integrations are healthy.' },

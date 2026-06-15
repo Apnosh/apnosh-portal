@@ -44,8 +44,8 @@ type Tab = NavTab | ActionTab
 
 const clientTabs: Tab[] = [
   { kind: 'nav',    label: 'Home',      href: '/dashboard',           icon: Home,       match: 'exact' },
-  { kind: 'nav',    label: 'Inbox',     href: '/dashboard/inbox',     icon: Inbox,      match: 'prefix' },
-  { kind: 'action', label: 'Quick',     icon: Plus, action: 'plus' },
+  { kind: 'nav',    label: 'Review',    href: '/dashboard/inbox',     icon: Inbox,      match: 'prefix' },
+  { kind: 'action', label: 'Build',     icon: Plus, action: 'plus' },
   { kind: 'nav',    label: 'Plan',      href: '/dashboard/analytics', icon: CalendarDays, match: 'prefix' },
   /* Menu now points at a real /dashboard/menu page (grouped nav cards)
      instead of opening the slide-in drawer. The drawer remains for

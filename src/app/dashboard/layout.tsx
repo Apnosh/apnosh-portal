@@ -93,7 +93,7 @@ const navSections: NavSection[] = [
     items: [
       { label: 'Today', href: '/dashboard', icon: LayoutDashboard, exact: true },
       { label: 'Audit', href: '/dashboard/audit', icon: Target, exact: false },
-      { label: 'Approvals', href: '/dashboard/approvals', icon: CheckSquare, exact: false },
+      { label: 'Review', href: '/dashboard/approvals', icon: CheckSquare, exact: false },
       { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, exact: false },
       { label: 'Plan', href: '/dashboard/analytics', icon: Calendar, exact: false },
     ],
