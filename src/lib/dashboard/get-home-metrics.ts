@@ -243,22 +243,33 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
   const today = startOfDay(new Date())
   const bound = ymd(new Date(today.getTime() - BOUND_DAYS * DAY))
 
+  /* PostgREST caps a single .select() at 1000 rows. A multi-location client
+     (Do Si = 2 locations × ~530 days = 1060 rows) or a high-review client
+     (Shinya = 1766 reviews) blows past that; ordered oldest-first, the query
+     returns the OLDEST 1000 and silently drops everything recent — the home
+     dashboard then looks like it has "no data after mid-May". Paginate every
+     time-series query so we always get the full window. Mirrors the same
+     guard in get-local-seo-view. */
+  async function fetchAll(table: string, cols: string, dateCol: string, gteVal: string): Promise<{ data: Record<string, unknown>[] }> {
+    const page = 1000
+    const out: Record<string, unknown>[] = []
+    for (let from = 0; ; from += page) {
+      const res = await admin.from(table).select(cols)
+        .eq('client_id', clientId).gte(dateCol, gteVal)
+        .order(dateCol, { ascending: true }).range(from, from + page - 1)
+      const batch = (res.data ?? []) as unknown as Record<string, unknown>[]
+      out.push(...batch)
+      if (batch.length < page) break
+    }
+    return { data: out }
+  }
+
   const [gbp, social, reviews, localReviews, email] = await Promise.all([
-    admin.from('gbp_metrics')
-      .select('date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks')
-      .eq('client_id', clientId).gte('date', bound).order('date', { ascending: true }),
-    admin.from('social_metrics')
-      .select('date, reach, engagement, posts_published, followers_gained, profile_visits')
-      .eq('client_id', clientId).gte('date', bound).order('date', { ascending: true }),
-    admin.from('reviews')
-      .select('rating, response_text, posted_at')
-      .eq('client_id', clientId).gte('posted_at', bound + 'T00:00:00'),
-    admin.from('local_reviews')
-      .select('rating, reply_text, created_at_platform')
-      .eq('client_id', clientId).gte('created_at_platform', bound + 'T00:00:00'),
-    admin.from('email_metrics')
-      .select('sent_date, sent_count, open_count, click_count, revenue_attributed')
-      .eq('client_id', clientId).gte('sent_date', bound).order('sent_date', { ascending: true }),
+    fetchAll('gbp_metrics', 'date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks', 'date', bound),
+    fetchAll('social_metrics', 'date, reach, engagement, posts_published, followers_gained, profile_visits', 'date', bound),
+    fetchAll('reviews', 'rating, response_text, posted_at', 'posted_at', bound + 'T00:00:00'),
+    fetchAll('local_reviews', 'rating, reply_text, created_at_platform', 'created_at_platform', bound + 'T00:00:00'),
+    fetchAll('email_metrics', 'sent_date, sent_count, open_count, click_count, revenue_attributed', 'sent_date', bound),
   ])
 
   /* Per-day source maps. We only create+populate a map when the source
