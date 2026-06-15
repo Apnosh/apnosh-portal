@@ -112,46 +112,53 @@ export async function syncPlacesReviewsForClient(
   if (!PLACES_KEY) return null
   try {
     const admin = createAdminClient()
+    /* Every location (not just the primary), so multi-location clients get a
+       Google rating on each location tab. Skip deliberately-excluded rows. */
     const { data: locs } = await admin
       .from('gbp_locations')
-      .select('id, location_name, address, place_id')
+      .select('id, location_name, address, place_id, is_primary')
       .eq('client_id', clientId)
+      .neq('status', 'skipped')
       .order('is_primary', { ascending: false })
-    const loc = (locs ?? [])[0] as
-      | { id: string; location_name: string; address: string | null; place_id: string | null }
-      | undefined
-    if (!loc) return null
+    const list = (locs ?? []) as Array<{ id: string; location_name: string; address: string | null; place_id: string | null; is_primary: boolean | null }>
+    if (!list.length) return null
 
-    let placeId = loc.place_id
-    if (!placeId) {
-      const found = await resolvePlaceId(loc.location_name, loc.address)
-      if (!found) return null
-      placeId = found.id
-    }
-
-    const place = await fetchPlaceData(placeId)
-    if (!place) return null
-
-    await admin
-      .from('gbp_locations')
-      .update({
-        place_id: placeId,
-        place_rating: place.rating,
-        place_rating_count: place.count,
-        places_synced_at: new Date().toISOString(),
-      })
-      .eq('id', loc.id)
-
+    let primary: { placeId: string; rating: number | null; ratingCount: number | null } | null = null
     let reviewsUpserted = 0
-    if (place.reviews.length) {
-      const rows = place.reviews.map(r => ({ client_id: clientId, source: 'gbp', ...r }))
-      const { error } = await admin
-        .from('local_reviews')
-        .upsert(rows, { onConflict: 'client_id,source,external_id', ignoreDuplicates: false })
-      if (!error) reviewsUpserted = rows.length
+
+    for (const loc of list) {
+      let placeId = loc.place_id
+      if (!placeId) {
+        const found = await resolvePlaceId(loc.location_name, loc.address)
+        if (!found) continue
+        placeId = found.id
+      }
+      const place = await fetchPlaceData(placeId)
+      if (!place) continue
+
+      await admin
+        .from('gbp_locations')
+        .update({
+          place_id: placeId,
+          place_rating: place.rating,
+          place_rating_count: place.count,
+          places_synced_at: new Date().toISOString(),
+        })
+        .eq('id', loc.id)
+
+      /* Reviews are stored client-level, so pull them once from the primary
+         (first) listing only. */
+      if (!primary && place.reviews.length) {
+        const rows = place.reviews.map(r => ({ client_id: clientId, source: 'gbp', ...r }))
+        const { error } = await admin
+          .from('local_reviews')
+          .upsert(rows, { onConflict: 'client_id,source,external_id', ignoreDuplicates: false })
+        if (!error) reviewsUpserted = rows.length
+      }
+      if (!primary) primary = { placeId, rating: place.rating, ratingCount: place.count }
     }
 
-    return { placeId, rating: place.rating, ratingCount: place.count, reviewsUpserted }
+    return primary ? { ...primary, reviewsUpserted } : null
   } catch (err) {
     console.error('[places-reviews] sync failed for client', clientId, (err as Error).message)
     return null
