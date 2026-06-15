@@ -1,22 +1,27 @@
 'use client'
 
 /**
- * ActionSheet — mobile-first bottom sheet for quick actions.
+ * Build sheet — the "+" is the single front door to building a campaign.
  *
- * Triggered by the center "+" FAB in the bottom tab bar. Slides up
- * from below, blurs the backdrop, dismisses on backdrop tap or
- * swipe-down. Each action is a large touch target (56px+) with an
- * icon + label.
+ * Redesigned to mirror the campaign builder's start screen (outcome-first:
+ * "what result do you want?"). Same outcomes + wording as the builder so the
+ * portal and the builder feel like one product. Picking an outcome opens the
+ * live request flow today; "build it yourself" opens the campaign builder.
  *
- * Items can be Links (navigate on tap) or buttons (call a callback).
+ * Maintenance actions that used to live here (reply to reviews, update
+ * business) were moved out — they belong in Review and Settings, not Build.
  */
 
 import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import {
-  X, Sparkles, MessageCircle, Building2, Wand2, ArrowRight, CalendarDays, Star,
-} from 'lucide-react'
+import { X, ArrowRight, Sparkles } from 'lucide-react'
+
+/* The team's campaign builder (work in progress, separate deploy). Until it's
+   mounted under the portal shell (multi-zone) and reads real business context,
+   this opens the standalone builder. Swap for the stable URL / same-domain
+   path when it lands. */
+const BUILDER_URL = 'https://apnosh-flow-builder-git-claude-mobile-friendly-op-b11c7e-apnosh.vercel.app/v2/start'
 
 interface ActionSheetProps {
   open: boolean
@@ -24,28 +29,34 @@ interface ActionSheetProps {
   strategistId?: string | null
 }
 
-interface SheetAction {
+interface Outcome {
   key: string
-  icon: typeof Sparkles
+  emoji: string
   label: string
   description: string
-  href: string
-  tint: string
 }
 
-export default function ActionSheet({ open, onClose, strategistId }: ActionSheetProps) {
+/* The four results an owner can chase — identical to the builder's. */
+const OUTCOMES: Outcome[] = [
+  { key: 'new_customers', emoji: '📣', label: 'Get more new customers', description: 'Be found by people who’ve never been in.' },
+  { key: 'regulars',      emoji: '💛', label: 'Turn visitors into regulars', description: 'Bring first-timers back, again and again.' },
+  { key: 'slow_nights',   emoji: '🌙', label: 'Fill the slow nights', description: 'Drive covers on your quiet days.' },
+  { key: 'reviews',       emoji: '⭐', label: 'Fix reviews & rating', description: 'More fresh reviews and a higher rating.' },
+]
+
+export default function ActionSheet({ open, onClose }: ActionSheetProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  /* Build a deep-link to the current page that PRESERVES existing query
-     params (e.g. ?clientId for admins) and adds the action param. */
-  const linkWith = (key: string, value: string) => {
+  /* Open the live request flow on the current page, preserving existing
+     params (e.g. ?clientId for admins) and seeding the chosen goal. */
+  const outcomeHref = (goal: string) => {
     const params = new URLSearchParams(searchParams?.toString() ?? '')
-    params.set(key, value)
+    params.set('request', 'open')
+    params.set('goal', goal)
     return `${pathname}?${params.toString()}`
   }
 
-  /* Lock body scroll while sheet is open. */
   useEffect(() => {
     if (!open) return
     const prev = document.body.style.overflow
@@ -53,7 +64,6 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
     return () => { document.body.style.overflow = prev }
   }, [open])
 
-  /* Dismiss on Escape. */
   useEffect(() => {
     if (!open) return
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -63,70 +73,12 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
 
   if (!open) return null
 
-  /* Four broad, intuitive actions. An owner instantly knows which one
-     they want without parsing granular sub-choices.
-
-     Deep-link conventions:
-       ?chat=open    → AgentChat opens blank
-       ?request=open → QuickRequest (content) opens
-     Plain paths navigate to a real page. */
-  const actions: SheetAction[] = [
-    {
-      key: 'plan',
-      icon: CalendarDays,
-      label: 'Plan a moment',
-      description: 'Promotions, events, and specials',
-      href: '/dashboard/analytics?plan=new',
-      tint: 'bg-emerald-50 text-emerald-700',
-    },
-    {
-      key: 'create',
-      icon: Wand2,
-      label: 'Request content',
-      description: 'Posts, photos, video, graphics',
-      href: linkWith('request', 'open'),
-      tint: 'bg-purple-50 text-purple-700',
-    },
-    {
-      key: 'reviews',
-      icon: Star,
-      label: 'Reply to reviews',
-      description: 'Respond to recent customer reviews',
-      href: '/dashboard/local-seo/reviews',
-      tint: 'bg-amber-50 text-amber-700',
-    },
-    {
-      key: 'business',
-      icon: Building2,
-      label: 'Update business',
-      description: 'Hours, menu, and info',
-      href: '/dashboard/business-info',
-      tint: 'bg-blue-50 text-blue-700',
-    },
-    {
-      key: 'ai',
-      icon: Sparkles,
-      label: 'Ask Apnosh AI',
-      description: 'Questions, ideas, instant help',
-      href: linkWith('chat', 'open'),
-      tint: 'bg-brand-tint text-brand-dark',
-    },
-    {
-      key: 'message',
-      icon: MessageCircle,
-      label: 'Message your strategist',
-      description: 'Talk to your human team',
-      href: strategistId ? `/dashboard/messages?to=${strategistId}` : '/dashboard/messages',
-      tint: 'bg-rose-50 text-rose-700',
-    },
-  ]
-
   return (
     <>
       {/* Backdrop */}
       <button
         type="button"
-        aria-label="Close quick actions"
+        aria-label="Close build"
         onClick={onClose}
         className="fixed inset-0 z-[60] bg-black/40 sheet-backdrop lg:hidden"
       />
@@ -135,7 +87,7 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Quick actions"
+        aria-label="Build a campaign"
         className="fixed bottom-0 left-0 right-0 z-[61] bg-white rounded-t-3xl sheet-up safe-bottom lg:hidden max-h-[85vh] flex flex-col"
       >
         {/* Grab handle */}
@@ -144,40 +96,60 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-2">
-          <h2 className="text-[17px] font-semibold text-ink">Quick actions</h2>
+        <div className="flex items-start justify-between px-5 py-2">
+          <div>
+            <h2 className="text-[19px] font-semibold text-ink leading-tight">Build a campaign</h2>
+            <p className="text-[13px] text-ink-3 mt-0.5">Pick the result you’re after. We handle the rest.</p>
+          </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-ink-7 text-ink-3 flex items-center justify-center active:bg-ink-6"
+            className="w-8 h-8 rounded-full bg-ink-7 text-ink-3 flex items-center justify-center active:bg-ink-6 flex-shrink-0"
             aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <ul className="px-3 pb-3 pt-1 overflow-y-auto touch-scroll">
-          {actions.map(a => {
-            const Icon = a.icon
-            return (
-              <li key={a.key}>
+        <div className="px-3 pb-3 pt-1 overflow-y-auto touch-scroll">
+          <ul>
+            {OUTCOMES.map(o => (
+              <li key={o.key}>
                 <Link
-                  href={a.href}
+                  href={outcomeHref(o.key)}
                   onClick={onClose}
                   className="flex items-center gap-3 px-3 py-3 rounded-2xl active:bg-ink-7 transition-colors min-h-[64px]"
                 >
-                  <span className={`inline-flex items-center justify-center w-11 h-11 rounded-2xl flex-shrink-0 ${a.tint}`}>
-                    <Icon className="w-5 h-5" />
+                  <span className="inline-flex items-center justify-center w-11 h-11 rounded-2xl flex-shrink-0 bg-ink-7 text-[22px] leading-none">
+                    {o.emoji}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[15px] font-semibold text-ink leading-tight">{a.label}</p>
-                    <p className="text-[12.5px] text-ink-3 mt-0.5">{a.description}</p>
+                    <p className="text-[15px] font-semibold text-ink leading-tight">{o.label}</p>
+                    <p className="text-[12.5px] text-ink-3 mt-0.5">{o.description}</p>
                   </div>
                   <ArrowRight className="w-4 h-4 text-ink-4 flex-shrink-0" />
                 </Link>
               </li>
-            )
-          })}
-        </ul>
+            ))}
+          </ul>
+
+          {/* Build-it-yourself: hands off to the campaign builder. */}
+          <div className="mt-2 pt-3 border-t border-ink-7">
+            <a
+              href={BUILDER_URL}
+              onClick={onClose}
+              className="flex items-center gap-3 px-3 py-3 rounded-2xl active:bg-ink-7 transition-colors"
+            >
+              <span className="inline-flex items-center justify-center w-11 h-11 rounded-2xl flex-shrink-0 bg-brand-tint text-brand-dark">
+                <Sparkles className="w-5 h-5" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[15px] font-semibold text-ink leading-tight">Build it yourself</p>
+                <p className="text-[12.5px] text-ink-3 mt-0.5">Open the campaign builder and design every step.</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-ink-4 flex-shrink-0" />
+            </a>
+          </div>
+        </div>
       </div>
     </>
   )
