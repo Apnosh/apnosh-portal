@@ -132,6 +132,23 @@
   & .chip { font-size: 12px; color: var(--brand-d); background: var(--brand-t); padding: 4px 10px; border-radius: 9999px; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
   & .morebtn { display: flex; align-items: center; gap: 3px; width: 100%; background: none; border: 0; border-top: 1px solid var(--hairline-2); padding: 14px 0 2px; font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--brand-d); cursor: pointer; }
   & .morebtn svg { width: 14px; height: 14px; }
+  /* Since you were here — timeline recap. Reuses .list/.row but swaps the
+     icon box for a small status dot, and the time chip reads neutral. */
+  & .slc .rowt { font-size: 15px; font-weight: 500; }
+  & .slc-row { cursor: default; }
+  & .slc-row:active { opacity: 1; }
+  & .slc-dot { flex: 0 0 auto; width: 20px; display: flex; align-items: center; justify-content: center; color: #fff; }
+  & .slc-dot::before { content: ''; width: 8px; height: 8px; border-radius: 9999px; background: var(--ink-4); }
+  & .slc-dot.win::before { background: #16a34a; }
+  & .slc-dot.info::before { background: var(--brand); }
+  & .slc-dot.mute::before { background: var(--ink-4); }
+  & .slc-dot.big { width: 20px; height: 20px; border-radius: 9999px; }
+  & .slc-dot.big::before { display: none; }
+  & .slc-dot.big.win { background: #16a34a; }
+  & .slc-dot.big.info { background: var(--brand); }
+  & .slc-dot.big svg { width: 11px; height: 11px; }
+  & .slc-when { color: var(--ink-3); background: var(--hairline-2); }
+
   & .allclear { display: flex; align-items: center; gap: 13px; background: var(--brand-g); border-radius: 14px; padding: 15px 16px; margin-top: 2px; }
   & .ac-ic { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 9999px; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; }
   & .ac-ic svg { width: 19px; height: 19px; }

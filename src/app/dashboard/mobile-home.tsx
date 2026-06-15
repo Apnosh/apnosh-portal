@@ -17,12 +17,14 @@
 
 import { MobileHomeHero } from '@/components/dashboard/mobile-home-hero'
 import { MobileHomeSections } from '@/components/dashboard/mobile-home-sections'
+import { SinceLastChecked, type SinceEvent } from '@/components/dashboard/since-last-checked'
 import type { HomeMetrics } from '@/lib/dashboard/get-home-metrics'
 import type { HomeSectionsData } from '@/lib/dashboard/get-home-sections'
 
 interface Props {
   homeMetrics: HomeMetrics | null
   homeSections: HomeSectionsData | null
+  sinceLastChecked?: SinceEvent[]
   loading?: boolean
   failed?: boolean
 }
@@ -63,12 +65,15 @@ function ErrorState() {
   )
 }
 
-export default function MobileHome({ homeMetrics, homeSections, loading, failed }: Props) {
+export default function MobileHome({ homeMetrics, homeSections, sinceLastChecked, loading, failed }: Props) {
   if (loading) return <Skeleton />
   if (failed) return <ErrorState />
   return (
     <>
       <MobileHomeHero metrics={homeMetrics?.metrics ?? []} />
+      {sinceLastChecked && sinceLastChecked.length > 0 && (
+        <div className="m-home"><SinceLastChecked events={sinceLastChecked} /></div>
+      )}
       <MobileHomeSections data={homeSections ?? EMPTY_SECTIONS} />
     </>
   )

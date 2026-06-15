@@ -28,6 +28,7 @@ import AdminClientPicker from '@/components/admin/admin-client-picker'
 import FinishProfileBanner, { useFinishProfileNudge } from '@/components/dashboard/finish-profile-banner'
 import GettingStarted from '@/components/dashboard/getting-started'
 import MobileHome from './mobile-home'
+import type { SinceEvent } from '@/components/dashboard/since-last-checked'
 import DesktopHome from '@/components/dashboard/desktop-home'
 import type { HomeMetrics } from '@/lib/dashboard/get-home-metrics'
 import type { HomeSectionsData } from '@/lib/dashboard/get-home-sections'
@@ -113,6 +114,7 @@ interface DashboardLoad {
   counts: { unansweredReviews: number; pendingApprovals: number }
   homeMetrics: HomeMetrics | null
   homeSections: HomeSectionsData | null
+  sinceLastChecked: SinceEvent[]
 }
 
 // ─── Page ────────────────────────────────────────────────────────────
@@ -234,6 +236,7 @@ export default function DashboardPage() {
           <MobileHome
             homeMetrics={data?.homeMetrics ?? null}
             homeSections={data?.homeSections ?? null}
+            sinceLastChecked={data?.sinceLastChecked ?? []}
             loading={loading}
             failed={!loading && !!client?.id && !data}
           />
@@ -276,6 +279,7 @@ export default function DashboardPage() {
         <MobileHome
           homeMetrics={data?.homeMetrics ?? null}
           homeSections={data?.homeSections ?? null}
+          sinceLastChecked={data?.sinceLastChecked ?? []}
           loading={loading}
           failed={!loading && !!client?.id && !data}
         />

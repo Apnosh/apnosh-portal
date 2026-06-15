@@ -53,60 +53,94 @@ const MUTED_TYPES = new Set([
   'draft.client_revise_requested',
 ])
 
+/* How far back "since you were here" looks. Reviews and replies inside this
+   window count as recent activity worth surfacing. */
+const WINDOW_DAYS = 30
+
+interface RawEvent { id: string; occurredAt: string; text: string; extra?: string; emphasis: TimelineUrgency }
+
 export async function getSinceLastChecked(
   clientId: string,
   limit = 5,
 ): Promise<TimelineEvent[]> {
   const admin = createAdminClient()
+  const sinceIso = new Date(Date.now() - WINDOW_DAYS * 86_400_000).toISOString()
 
-  /* Pull more than we'll show — some event types get filtered out,
-     and we want the result list to land near the cap even after. */
-  const { data: events } = await admin
-    .from('events')
-    .select('id, event_type, summary, payload, occurred_at, actor_role')
-    .eq('client_id', clientId)
-    .in('event_type', Object.keys(EVENT_TYPE_LABELS))
-    .order('occurred_at', { ascending: false })
-    .limit(limit * 2)
+  /* Two real sources:
+       1. The events audit log (posts going live, team activity) — used when
+          it's actually populated.
+       2. Reviews + replies — the activity owners care about most, and the
+          source that reliably has data. */
+  const [eventsRes, reviewsRes] = await Promise.all([
+    admin
+      .from('events')
+      .select('id, event_type, summary, occurred_at')
+      .eq('client_id', clientId)
+      .in('event_type', Object.keys(EVENT_TYPE_LABELS))
+      .gte('occurred_at', sinceIso)
+      .order('occurred_at', { ascending: false })
+      .limit(limit * 2),
+    admin
+      .from('reviews')
+      .select('id, author_name, rating, posted_at, responded_at, source')
+      .eq('client_id', clientId)
+      .or(`posted_at.gte.${sinceIso},responded_at.gte.${sinceIso}`)
+      .order('posted_at', { ascending: false })
+      .limit(20),
+  ])
 
-  if (!events?.length) return []
+  const raw: RawEvent[] = []
 
-  /* The first published-post in the window becomes the "big" event.
-     Falls back to the most recent positive event if no publish. */
-  let bigId: string | null = null
-  for (const e of events) {
-    if (e.event_type === 'draft.published_to_platforms') { bigId = e.id as string; break }
+  for (const e of (eventsRes.data ?? []) as Array<{ id: string; event_type: string; summary: string | null; occurred_at: string }>) {
+    const labelFn = EVENT_TYPE_LABELS[e.event_type]
+    if (!labelFn) continue
+    const text = labelFn(e.summary ?? null)
+    if (!text) continue
+    raw.push({
+      id: `ev_${e.id}`,
+      occurredAt: e.occurred_at,
+      text,
+      emphasis: POSITIVE_TYPES.has(e.event_type) ? 'win' : MUTED_TYPES.has(e.event_type) ? 'mute' : 'info',
+    })
   }
-  if (!bigId) {
-    for (const e of events) {
-      if (POSITIVE_TYPES.has(e.event_type as string)) { bigId = e.id as string; break }
+
+  for (const r of (reviewsRes.data ?? []) as Array<{ id: string; author_name: string | null; rating: number | null; posted_at: string | null; responded_at: string | null; source: string | null }>) {
+    const who = r.author_name?.trim() || 'A customer'
+    const stars = Math.max(1, Math.min(5, Math.round(Number(r.rating ?? 0))))
+    if (r.posted_at && r.posted_at >= sinceIso) {
+      raw.push({
+        id: `rv_${r.id}`,
+        occurredAt: r.posted_at,
+        text: `New ${stars}★ review`,
+        extra: who,
+        emphasis: stars >= 4 ? 'win' : 'info',
+      })
+    }
+    if (r.responded_at && r.responded_at >= sinceIso) {
+      raw.push({
+        id: `rp_${r.id}`,
+        occurredAt: r.responded_at,
+        text: `Replied to ${who}’s review`,
+        emphasis: 'win',
+      })
     }
   }
 
-  const out: TimelineEvent[] = []
-  for (const e of events) {
-    const type = e.event_type as string
-    const labelFn = EVENT_TYPE_LABELS[type]
-    if (!labelFn) continue
-    const text = labelFn((e.summary as string) ?? null)
-    if (!text) continue
+  if (!raw.length) return []
 
-    const emphasis: TimelineUrgency =
-      POSITIVE_TYPES.has(type) ? 'win'
-      : MUTED_TYPES.has(type) ? 'mute'
-      : 'info'
+  raw.sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1))
 
-    out.push({
-      id: e.id as string,
-      whenLabel: relativeLabel(e.occurred_at as string),
-      text,
-      emphasis,
-      big: e.id === bigId,
-    })
-    if (out.length >= limit) break
-  }
+  /* The most recent "win" becomes the headline (filled dot). */
+  const bigId = raw.find(e => e.emphasis === 'win')?.id ?? null
 
-  return out
+  return raw.slice(0, limit).map(e => ({
+    id: e.id,
+    whenLabel: relativeLabel(e.occurredAt),
+    text: e.text,
+    emphasis: e.emphasis,
+    big: e.id === bigId,
+    extra: e.extra,
+  }))
 }
 
 /** Compact time labels like 'YESTERDAY', 'SUN 9PM', 'FRI'. */
