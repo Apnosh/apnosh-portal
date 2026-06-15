@@ -17,6 +17,7 @@
 
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { triggerSocialSync } from '@/lib/social/trigger-sync'
 
 interface AdminContext {
   userId: string
@@ -238,6 +239,9 @@ export async function mapAgencyPageToClient(input: {
         connected_at: new Date().toISOString(),
       })
   }
+
+  // Sync the just-mapped client's social data immediately.
+  await triggerSocialSync(input.clientId)
 
   return { success: true }
 }

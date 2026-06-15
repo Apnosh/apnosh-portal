@@ -4,6 +4,9 @@ import {
   exchangeCodeForToken,
   exchangeForLongLivedToken,
 } from '@/lib/instagram'
+import { triggerSocialSync } from '@/lib/social/trigger-sync'
+
+export const maxDuration = 60  // allow the post-connect sync to complete
 
 /**
  * GET /api/auth/instagram/callback
@@ -221,6 +224,10 @@ export async function GET(request: NextRequest) {
         break // Only connect the first IG account found
       }
     }
+
+    // Sync immediately so the new connection populates now, not at the next
+    // nightly cron. Best-effort — never blocks the redirect.
+    await triggerSocialSync(state.clientId)
 
     // 5. Redirect back
     const connectedPlatforms = ['facebook']

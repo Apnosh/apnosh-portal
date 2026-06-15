@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { exchangeInstagramDirectCode, exchangeForLongLivedIgToken } from '@/lib/instagram'
+import { triggerSocialSync } from '@/lib/social/trigger-sync'
+
+export const maxDuration = 60  // allow the post-connect sync to complete
 
 /**
  * GET /api/auth/instagram-direct/callback
@@ -86,6 +89,10 @@ export async function GET(request: NextRequest) {
       connected_at: new Date().toISOString(),
       sync_status: 'pending',
     }, { onConflict: 'client_id,platform,platform_account_id' })
+
+    // Sync immediately so it doesn't sit at "last synced: never" until the
+    // nightly cron. Best-effort — never blocks the redirect on failure.
+    await triggerSocialSync(state.clientId)
 
     // 5. Redirect back
     if (state.popup) {
