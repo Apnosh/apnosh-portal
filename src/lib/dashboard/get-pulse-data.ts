@@ -48,7 +48,7 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
   // roundtrips to 3.
   const d7Date = fmt(d7)
   const d14Date = fmt(d14)
-  const [gbpDaily, reviewsRecent, socialDaily] = await Promise.all([
+  const [gbpDaily, reviewsRecent, socialDaily, locsRes] = await Promise.all([
     admin
       .from('gbp_metrics')
       .select('date, directions, calls, website_clicks, bookings, conversations')
@@ -66,6 +66,10 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
       .eq('client_id', clientId)
       .gte('date', d14Date)
       .order('date', { ascending: true }),
+    admin
+      .from('gbp_locations')
+      .select('place_rating, is_primary')
+      .eq('client_id', clientId),
   ])
 
   // Slice the 14-day datasets in memory.
@@ -145,11 +149,18 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
   // ---------- Reputation ----------
   const reviews = reviewsRecent.data ?? []
   const reviewCount = reviews.length
-  const avgStar = reviewCount > 0
+  // Google's true overall rating (every review, all-time) — the authoritative
+  // number to show. The 30-day computed average is only a fallback for when we
+  // have no synced overall rating, since a handful of recent reviews (or one
+  // angry 1-star) is NOT the business's reputation.
+  const locRows = (locsRes.data ?? []) as { place_rating?: number | null; is_primary?: boolean }[]
+  const placeRating = (locRows.find(l => l.is_primary) ?? locRows[0])?.place_rating ?? null
+  const computedAvg = reviewCount > 0
     ? reviews.reduce((s, r) => s + Number(r.rating ?? 0), 0) / reviewCount
     : null
+  const displayRating = placeRating ?? computedAvg
 
-  const reputation: PulseCard = reviewCount === 0
+  const reputation: PulseCard = displayRating === null
     ? {
         label: 'Your reputation',
         state: 'no-data',
@@ -160,12 +171,14 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
     : {
         label: 'Your reputation',
         state: 'live',
-        value: avgStar !== null ? `${avgStar.toFixed(1)}★` : '—',
-        delta: `${reviewCount} new`,
-        up: avgStar !== null ? avgStar >= 4.3 : null,
-        subtitle: 'Last 30 days',
+        value: `${displayRating.toFixed(1)}★`,
+        delta: reviewCount > 0 ? `${reviewCount} new` : null,
+        up: displayRating >= 4.3,
+        // When we show Google's overall rating, say so; the 30-day fallback
+        // keeps its old label.
+        subtitle: placeRating !== null ? 'Overall on Google' : 'Last 30 days',
         href: '/dashboard/local-seo/reviews',
-        alert: avgStar !== null && avgStar < 3.8,
+        alert: displayRating < 3.8,
       }
 
   // ---------- Reach ----------
