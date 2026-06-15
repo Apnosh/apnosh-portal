@@ -146,7 +146,7 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
   }
   const [gbp, social, web, reviews, localRevs, gbpConn, socialConn, clientRow, places] = await Promise.all([
     safe(admin.from('gbp_metrics').select('date, search_views, photo_views').eq('client_id', clientId).gte('date', bound)),
-    safe(admin.from('social_metrics').select('date, reach').eq('client_id', clientId).gte('date', bound)),
+    safe(admin.from('social_metrics').select('date, reach, followers_total').eq('client_id', clientId).gte('date', bound)),
     safe(admin.from('website_metrics').select('date, visitors').eq('client_id', clientId).gte('date', bound)),
     safe(admin.from('reviews').select('rating, posted_at').eq('client_id', clientId)),
     safe(admin.from('local_reviews').select('rating, created_at_platform').eq('client_id', clientId)),
@@ -171,12 +171,29 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
     const d = pctDelta(st.last7, st.prev7)
     out.push({ name: 'Local presence', sub: 'Profile views', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: gbpConnected, href: '/dashboard/local-seo' })
   }
-  // Social — reach
+  // Social — reach, falling back to followers when reach insights aren't
+  // available (e.g. an Instagram connected via direct login, which gives
+  // followers but not reach/engagement). Avoids a bare "0" on a real account.
   {
-    const rows = (social as Record<string, unknown>[]).map(r => ({ date: String(r.date), v: num(r.reach) }))
+    const socialRows = social as Record<string, unknown>[]
+    const rows = socialRows.map(r => ({ date: String(r.date), v: num(r.reach) }))
     const st = seriesStats(rows, today, 1)
     const d = pctDelta(st.last7, st.prev7)
-    out.push({ name: 'Social media', sub: 'Reach', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: socialConnected, href: '/dashboard/social' })
+    if (st.last7 > 0) {
+      out.push({ name: 'Social media', sub: 'Reach', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: socialConnected, href: '/dashboard/social' })
+    } else {
+      const latest = socialRows
+        .filter(r => r.followers_total != null)
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]
+      const followers = latest ? num(latest.followers_total) : 0
+      out.push({
+        name: 'Social media',
+        sub: followers > 0 ? 'Followers' : 'Reach',
+        value: fmtCompact(followers),
+        delta: '—', dir: 'up', spark: st.spark,
+        connected: socialConnected, href: '/dashboard/social',
+      })
+    }
   }
   // Website — visitors
   {
