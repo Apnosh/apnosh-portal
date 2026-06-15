@@ -30,6 +30,7 @@ import {
   runGBPDailyMetrics,
 } from '@/lib/google'
 import type { ConnectionRow } from '@/lib/integrations/types'
+import { reconcileLocationLinks } from '@/lib/dashboard/reconcile-location-links'
 
 export interface ClientSyncResult {
   ok: boolean
@@ -386,6 +387,10 @@ export async function syncClientGbp(clientId: string): Promise<ClientSyncResult>
       sync_error: errors.length > 0 ? errors.join('; ').slice(0, 500) : null,
     })
     .eq('id', conn.id)
+
+  /* 9. Link client_locations to their GBP metric key so per-location
+        filtering works for multi-location clients (idempotent, non-fatal). */
+  try { await reconcileLocationLinks(admin, clientId) } catch { /* best-effort */ }
 
   return {
     ok: true,
