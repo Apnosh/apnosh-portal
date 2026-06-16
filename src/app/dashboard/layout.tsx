@@ -557,6 +557,13 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   // every other page keeps the gray that separates its white cards.
   const isHome = pathname === '/dashboard'
 
+  // Redesigned owner surfaces (the apnosh-mvp home + campaigns) render their own
+  // full-screen chrome — header and bottom nav — over the whole viewport. Skip
+  // the portal shell entirely here. This also removes the client-gated sidebar
+  // nav from the tree, which was causing a hydration mismatch on these routes.
+  const isFullScreenOwner = pathname === '/dashboard' || pathname === '/dashboard/campaigns'
+  if (isFullScreenOwner) return <>{children}</>
+
   return (
     <div className={`min-h-screen flex pb-tabbar lg:pb-0 ${isHome ? 'bg-white' : 'bg-bg-2'}`}>
       {/* Mobile overlay */}
