@@ -33,6 +33,8 @@ export interface MvpHomeData {
   hero: { total: number; weekPct: number; down: boolean; monthPct: number; prevMonthLabel: string }
   chart: { label: string; value: number; prev: number }[]
   chartStart?: string
+  daily?: { date: string; value: number }[]
+  monthly?: { label: string; value: number }[]
   sources: { key: string; label: string; value: string; configured: boolean }[]
   signal: { state: 'recommendation' | 'ontrack'; metric?: string; message?: string }
   approvals: { id: string; tag: string; timing: string; title: string; subtitle: string }[]
@@ -103,7 +105,7 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
         </div>
 
         {/* CHART */}
-        <ActionsChart chart={data.chart} chartStart={data.chartStart} picked={picked} setPicked={setPicked} />
+        <ActionsChart chart={data.chart} chartStart={data.chartStart} daily={data.daily} monthly={data.monthly} picked={picked} setPicked={setPicked} />
 
         {/* SOURCES */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, margin: '10px 0' }}>
@@ -177,50 +179,107 @@ function SourceCard({ s }: { s: { key: string; label: string; value: string; con
   )
 }
 
-/* ActionsChart — ported from the design: grouped bars (this week green +
-   last week grey), an average dashed line, tappable bars with a date +
-   comparison tooltip, and a legend. Bars are always green (the down-week
-   coral accent applies only to the hero pill, as in the design). */
+/* ActionsChart — faithful port of the design: range chips (Last 7 days /
+   Last 30 days / Last year / Custom), grouped bars (current green + comparison
+   grey), an average dashed line, tappable bars with a date + comparison
+   tooltip, and a legend. Wired to the real daily + monthly series. */
+type ChartRange = '7d' | '30d' | '1y' | 'custom'
+const RANGES: [ChartRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['1y', 'Last year'], ['custom', 'Custom']]
+
 function ActionsChart({
-  chart, chartStart, picked, setPicked,
+  chart, chartStart, daily = [], monthly = [], picked, setPicked,
 }: {
   chart: { label: string; value: number; prev: number }[]
   chartStart?: string
+  daily?: { date: string; value: number }[]
+  monthly?: { label: string; value: number }[]
   picked: number | null
   setPicked: (i: number | null) => void
 }) {
   const H = 62
-  const total = chart.reduce((s, b) => s + b.value, 0)
-  const avg = chart.length ? Math.round(total / chart.length) : 0
-  const max = Math.max(1, ...chart.map((b) => Math.max(b.value, b.prev)), avg)
+  const [range, setRange] = useState<ChartRange>('7d')
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const parseISO = (s: string) => new Date(s + 'T00:00:00')
+  const today = new Date()
+  const [cStart, setCStart] = useState(() => iso(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 13)))
+  const [cEnd, setCEnd] = useState(() => iso(today))
+  const dmap = new Map(daily.map((d) => [d.date, d.value]))
+  const start = chartStart ? parseISO(chartStart) : null
+
+  type Bar = { value: number; compare: number; label: string; tip: string; cmpTip: string }
+  let bars: Bar[] = []; let curLbl = ''; let cmpLbl = ''
+  const wk = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' })
+  const full = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+
+  if (range === '7d') {
+    curLbl = 'Last 7 days'; cmpLbl = 'Last week'
+    bars = chart.map((b, i) => {
+      const d = start ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + i) : null
+      return { value: b.value, compare: b.prev, label: d ? wk(d) : b.label, tip: d ? full(d) : b.label, cmpTip: `${b.prev.toLocaleString()} last week` }
+    })
+  } else if (range === '30d') {
+    curLbl = 'Last 30 days'; cmpLbl = 'Prior 30 days'
+    bars = daily.slice(-30).map((d) => {
+      const dt = parseISO(d.date); const prior = new Date(dt); prior.setDate(prior.getDate() - 30)
+      const cmp = dmap.get(iso(prior)) ?? 0
+      return { value: d.value, compare: cmp, label: String(dt.getDate()), tip: full(dt), cmpTip: `${cmp.toLocaleString()} prior` }
+    })
+  } else if (range === '1y') {
+    curLbl = 'Last 12 months'; cmpLbl = 'Prior year'
+    const last12 = monthly.slice(-12); const prior12 = monthly.slice(-24, -12)
+    bars = last12.map((m, i) => ({ value: m.value, compare: prior12[i]?.value ?? 0, label: m.label.slice(0, 3), tip: m.label, cmpTip: `${(prior12[i]?.value ?? 0).toLocaleString()} prior year` }))
+  } else {
+    curLbl = 'Custom'; cmpLbl = 'Prior period'
+    const s = parseISO(cStart), e = parseISO(cEnd); const lo = s <= e ? s : e, hi = s <= e ? e : s
+    const span = Math.min(92, Math.max(1, Math.round((hi.getTime() - lo.getTime()) / 86400000) + 1))
+    bars = Array.from({ length: span }, (_, i) => {
+      const dt = new Date(lo.getFullYear(), lo.getMonth(), lo.getDate() + i)
+      const prior = new Date(dt); prior.setDate(prior.getDate() - span)
+      return { value: dmap.get(iso(dt)) ?? 0, compare: dmap.get(iso(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpTip: '' }
+    })
+  }
+
+  const total = bars.reduce((s, b) => s + b.value, 0)
+  const avg = bars.length ? Math.round(total / bars.length) : 0
+  const max = Math.max(1, ...bars.map((b) => Math.max(b.value, b.compare)), avg)
   const avgY = (avg / max) * H
-  const start = chartStart ? new Date(chartStart + 'T00:00:00') : null
-  const dateAt = (i: number) => start ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + i) : null
-  const fmtFull = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const dense = bars.length > 8
+  const dateInput: React.CSSProperties = { border: `1px solid ${C.line}`, borderRadius: 8, padding: '5px 8px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', background: '#fff' }
 
   return (
     <div style={{ margin: '8px 0 0' }}>
+      <div style={{ display: 'flex', gap: 7, marginBottom: 12, overflowX: 'auto', paddingBottom: 2 }}>
+        {RANGES.map(([k, l]) => {
+          const on = range === k
+          return (
+            <button key={k} onClick={() => { setRange(k); setPicked(null) }} style={{ flexShrink: 0, whiteSpace: 'nowrap', border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer' }}>{l}</button>
+          )
+        })}
+      </div>
+      {range === 'custom' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 11.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 6 }}>From<input type="date" value={cStart} max={cEnd} onChange={(e) => { setCStart(e.target.value); setPicked(null) }} style={dateInput} /></label>
+          <label style={{ fontSize: 11.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 6 }}>To<input type="date" value={cEnd} min={cStart} onChange={(e) => { setCEnd(e.target.value); setPicked(null) }} style={dateInput} /></label>
+        </div>
+      )}
       <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 8 }}>
         <b style={{ color: C.ink, fontWeight: 700 }}>{total.toLocaleString()}</b> took action
       </div>
       <div style={{ position: 'relative', height: H }}>
         <div style={{ position: 'absolute', left: 0, right: 0, bottom: avgY, borderTop: `1px dashed ${C.faint}`, opacity: 0.6 }} />
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: '100%' }}>
-          {chart.map((b, i) => {
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: dense ? 3 : 10, height: '100%' }}>
+          {bars.map((b, i) => {
             const isPicked = picked === i
-            const edge = i < 2 ? 'left' : i > chart.length - 3 ? 'right' : 'mid'
-            const d = dateAt(i)
+            const edge = i < 2 ? 'left' : i > bars.length - 3 ? 'right' : 'mid'
             return (
-              <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, height: '100%', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 3, cursor: 'pointer' }}>
+              <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, height: '100%', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: dense ? 1.5 : 3, cursor: 'pointer' }}>
                 <div style={{ width: '42%', maxWidth: 17, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: isPicked ? C.greenDk : C.green, borderRadius: '3px 3px 0 0' }} />
-                <div style={{ width: '42%', maxWidth: 17, height: `${(b.prev / max) * 100}%`, background: C.ghost, borderRadius: '3px 3px 0 0' }} />
+                <div style={{ width: '42%', maxWidth: 17, height: `${(b.compare / max) * 100}%`, background: C.ghost, borderRadius: '3px 3px 0 0' }} />
                 {isPicked && (
                   <div style={{ position: 'absolute', bottom: '100%', marginBottom: 6, ...(edge === 'mid' ? { left: '50%', transform: 'translateX(-50%)' } : edge === 'left' ? { left: 0 } : { right: 0 }), background: C.ink, color: '#fff', borderRadius: 8, padding: '7px 10px', fontSize: 11, whiteSpace: 'nowrap', zIndex: 5, lineHeight: 1.4, textAlign: 'left' }}>
-                    <div style={{ fontWeight: 700 }}>{d ? fmtFull(d) : b.label}</div>
+                    <div style={{ fontWeight: 700 }}>{b.tip}</div>
                     <div style={{ opacity: 0.85 }}>{b.value.toLocaleString()} took action</div>
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,.22)', marginTop: 5, paddingTop: 5, opacity: 0.7 }}>
-                      <div>{b.prev.toLocaleString()} last week</div>
-                    </div>
+                    {b.cmpTip && <div style={{ borderTop: '1px solid rgba(255,255,255,.22)', marginTop: 5, paddingTop: 5, opacity: 0.7 }}>{b.cmpTip}</div>}
                   </div>
                 )}
               </div>
@@ -228,14 +287,15 @@ function ActionsChart({
           })}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 10, marginTop: 5 }}>
-        {chart.map((b, i) => (
-          <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10.5, color: C.faint }}>{b.label}</div>
-        ))}
+      <div style={{ display: 'flex', gap: dense ? 3 : 10, marginTop: 5 }}>
+        {bars.map((b, i) => {
+          const show = !dense || i === 0 || i === bars.length - 1 || i % Math.max(1, Math.ceil(bars.length / 6)) === 0
+          return <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: dense ? 9 : 10.5, color: C.faint, whiteSpace: 'nowrap' }}>{show ? b.label : ''}</div>
+        })}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 9, fontSize: 11, flexWrap: 'wrap' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 9, height: 9, borderRadius: 3, background: C.green }} /> This week</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 9, height: 9, borderRadius: 3, background: C.ghost }} /> Last week</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 9, height: 9, borderRadius: 3, background: C.green }} /> {curLbl}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 9, height: 9, borderRadius: 3, background: C.ghost }} /> {cmpLbl}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 11, borderTop: `1px dashed ${C.faint}`, display: 'inline-block' }} /> Avg {avg}</span>
       </div>
     </div>

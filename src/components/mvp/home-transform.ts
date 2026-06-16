@@ -14,6 +14,10 @@ export interface AgendaItem { id: string; type: string; urgency: string; label: 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function pct(curr: number, prev: number): number {
   if (prev === 0) return curr > 0 ? 100 : 0
   return Math.round(((curr - prev) / prev) * 100)
@@ -69,6 +73,18 @@ export function transformHome(
   const chart = DOW.map((label, i) => ({ label, value: Number(tv[i] ?? 0), prev: Number(lv[i] ?? 0) }))
   const chartStart = thisWeek?.start
 
+  // Continuous daily series (for the 30-day / custom ranges) flattened from
+  // the month instances, plus a monthly series (for the 1-year range).
+  const daily: { date: string; value: number }[] = []
+  for (const m of months) {
+    const d0 = new Date(m.start + 'T00:00:00')
+    ;(m.vals ?? []).forEach((v, i) => {
+      if (v != null) daily.push({ date: ymd(new Date(d0.getFullYear(), d0.getMonth(), 1 + i)), value: Number(v) })
+    })
+  }
+  daily.sort((a, b) => a.date.localeCompare(b.date))
+  const monthly = months.map((m) => ({ label: monthName(m.start), value: m.total }))
+
   const bWeek = bookings?.week ?? []
   const bThis = bWeek[bWeek.length - 1]
 
@@ -101,6 +117,8 @@ export function transformHome(
     hero: { total: heroTotal, weekPct, down, monthPct, prevMonthLabel: lastMonth ? monthName(lastMonth.start) : '' },
     chart,
     chartStart,
+    daily,
+    monthly,
     sources,
     signal,
     approvals,

@@ -1,17 +1,23 @@
 'use client'
 
 /**
- * /dashboard/mvp-home — desktop-viewable preview of the redesigned owner
- * Home (the same design that now powers the real mobile /dashboard). Shows
- * it inside a 430px phone frame so it can be reviewed on a laptop. Wired to
- * the real /api/dashboard/load via the shared transform. Unlinked; safe to
- * delete once the redesign ships.
+ * /dashboard/mvp-home — full-screen owner Home, faithful to the apnosh-mvp
+ * design. Renders edge-to-edge OVER the portal chrome (fixed inset:0) with
+ * the design's own header + bottom nav, so it matches the design screenshot
+ * top-to-bottom. Wired to real data via the shared transform.
+ *
+ * This is the review surface for the redesign; once approved it becomes the
+ * owner's actual home.
  */
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { Home as HomeIcon, CalendarDays, Plus, Inbox, Menu } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import MvpHome, { type MvpHomeData } from '@/components/mvp/mvp-home'
 import { transformHome } from '@/components/mvp/home-transform'
+
+const C = { green: '#4abd98', greenDk: '#2e9a78', ink: '#1d1d1f', faint: '#aeaeb2', line: '#e6e6ea', navOff: '#aeaeb2' }
 
 export default function MvpHomePage() {
   const { client, loading: clientLoading } = useClient()
@@ -27,17 +33,14 @@ export default function MvpHomePage() {
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Load failed (${r.status})`)
         return r.json()
       })
-      .then((json) => {
-        if (!live) return
-        setData(transformHome(json.homeMetrics, json.agenda, client.name ?? '·'))
-      })
+      .then((json) => { if (live) setData(transformHome(json.homeMetrics, json.agenda, client.name ?? '·')) })
       .catch((e) => { if (live) setError(e.message) })
     return () => { live = false }
   }, [client?.id, client?.name])
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#f0f0f3', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '24px 0' }}>
-      <div style={{ width: 430, maxWidth: '100%', minHeight: 800, background: '#fff', borderRadius: 28, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.12)' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#fff', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {clientLoading || (!data && !error) ? (
           <Centered>Loading your numbers…</Centered>
         ) : error ? (
@@ -48,13 +51,39 @@ export default function MvpHomePage() {
           <Centered>No client found for this account.</Centered>
         )}
       </div>
+      <BottomNav />
     </div>
+  )
+}
+
+function BottomNav() {
+  return (
+    <nav style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', padding: '8px 8px calc(8px + env(safe-area-inset-bottom))', position: 'relative' }}>
+      <NavItem href="/dashboard" icon={<HomeIcon size={21} />} label="Home" active />
+      <NavItem href="/dashboard/calendar" icon={<CalendarDays size={21} />} label="Campaigns" />
+      <Link href="/dashboard/requests/new" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, textDecoration: 'none', marginTop: -18 }}>
+        <span style={{ width: 52, height: 52, borderRadius: '50%', background: C.green, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px rgba(74,189,152,0.4)' }}><Plus size={26} /></span>
+        <span style={{ fontSize: 10, fontWeight: 500, color: C.navOff }}>Request</span>
+      </Link>
+      <NavItem href="/dashboard/inbox" icon={<Inbox size={21} />} label="Inbox" />
+      <NavItem href="/dashboard/profile" icon={<Menu size={21} />} label="More" />
+    </nav>
+  )
+}
+
+function NavItem({ href, icon, label, active }: { href: string; icon: React.ReactNode; label: string; active?: boolean }) {
+  const col = active ? C.greenDk : C.navOff
+  return (
+    <Link href={href} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, textDecoration: 'none', color: col, minWidth: 56 }}>
+      {icon}
+      <span style={{ fontSize: 10, fontWeight: active ? 600 : 500 }}>{label}</span>
+    </Link>
   )
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ height: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', color: '#6e6e73', fontSize: 14, fontFamily: "'Inter',system-ui,sans-serif" }}>
+    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', color: '#6e6e73', fontSize: 14, fontFamily: "'Inter',system-ui,sans-serif" }}>
       {children}
     </div>
   )
