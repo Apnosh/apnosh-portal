@@ -50,7 +50,7 @@ export default function DashboardHomePage() {
   }, [client?.id, client?.name])
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: '#f0f0f3', display: 'flex', justifyContent: 'center' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#f0f0f3', display: 'flex', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 480, background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)' }}>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           {clientLoading || (!data && !error) ? (
