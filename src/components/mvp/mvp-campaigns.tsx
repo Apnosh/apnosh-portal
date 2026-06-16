@@ -57,17 +57,18 @@ const CAMPAIGNS: Camp[] = [
   { key: 'c9', kind: 'done', title: 'Cinco de Mayo special', pill: 'Done', pillIcon: 'check', blurb: 'Wrapped — full results inside', cost: null, perf: { type: 'lift', pct: 28, reach: 12400 } },
 ]
 
-type Tab = 'all' | 'live' | 'draft' | 'done'
+type Tab = 'all' | 'live' | 'production' | 'draft' | 'done'
 
 export default function MvpCampaigns() {
   const [view, setView] = useState<'list' | 'calendar'>('list')
   const [tab, setTab] = useState<Tab>('all')
 
   const live = CAMPAIGNS.filter((c) => c.kind === 'live')
+  const production = CAMPAIGNS.filter((c) => c.pill === 'In production')
   const drafts = CAMPAIGNS.filter((c) => c.kind === 'draft')
   const done = CAMPAIGNS.filter((c) => c.kind === 'done')
-  const counts: Record<Tab, number> = { all: CAMPAIGNS.length, live: live.length, draft: drafts.length, done: done.length }
-  const shown = tab === 'all' ? CAMPAIGNS : tab === 'live' ? live : tab === 'draft' ? drafts : done
+  const counts: Record<Tab, number> = { all: CAMPAIGNS.length, live: live.length, production: production.length, draft: drafts.length, done: done.length }
+  const shown = tab === 'all' ? CAMPAIGNS : tab === 'live' ? live : tab === 'production' ? production : tab === 'draft' ? drafts : done
 
   return (
     <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
@@ -95,7 +96,7 @@ export default function MvpCampaigns() {
           <>
             {/* filter chips */}
             <div className="cc-scroll" style={{ display: 'flex', gap: 7, marginBottom: 16, overflowX: 'auto', paddingBottom: 2 }}>
-              {([['all', 'All'], ['live', 'Live'], ['draft', 'Drafts'], ['done', 'Done']] as const).map(([k, l]) => {
+              {([['all', 'All'], ['live', 'Live'], ['production', 'In production'], ['draft', 'Drafts'], ['done', 'Done']] as const).map(([k, l]) => {
                 const on = tab === k; const n = counts[k]
                 return (
                   <button key={k} onClick={() => setTab(k)} style={{ flexShrink: 0, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 7, border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', transition: 'all .15s' }}>
