@@ -37,10 +37,11 @@ export const IG_DIRECT_SCOPES = [
   'instagram_business_manage_messages',
   'instagram_business_manage_comments',
   'instagram_business_content_publish',
-  // NOTE: insights (reach/engagement) need 'instagram_business_manage_insights',
-  // but that permission must first be enabled + approved (App Review) on the
-  // Meta app. Adding it before then makes the OAuth dialog error with
-  // "invalid scopes". Re-add this line once the app holds the permission.
+  // Insights (reach/engagement). This is the Instagram-Login variant and is
+  // valid for this app — Apnosh's own IG was connected with it and pulls
+  // insights fine. New accounts (e.g. Do Si) were connecting WITHOUT it, so
+  // their token gets "permission denied" (code 10) on every reach call.
+  'instagram_business_manage_insights',
 ].join(',')
 
 export function getInstagramDirectOAuthUrl(state: string): string {
