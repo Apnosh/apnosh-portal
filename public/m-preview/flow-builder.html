@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Apnosh Flow Builder — Step 6 preview (polished)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#fff; --canvas:#fafaf8;
+    --ink:#1c1d22; --ink-2:#3a3d44; --ink-3:#6b6f78; --ink-4:#9da2ab;
+    --line:#e9eaee;
+    --brand:#4abd98; --brand-deep:#2f8f72; --brand-darker:#1f5e4a; --brand-soft:#e9f6f1;
+    --stage-awareness:#4f9bc4;
+    --stage-decision:#3fae8e;
+    --stage-loyalty:#d98a3a;
+    --shadow-card:0 1px 2px rgba(28,29,34,.04);
+    --shadow-card-h:0 8px 24px -10px rgba(28,29,34,.18),0 1px 2px rgba(28,29,34,.04);
+    --shadow-trigger:0 14px 36px -16px rgba(28,29,34,.5),0 2px 4px rgba(28,29,34,.08);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'DM Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  @keyframes apn-in-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes apn-in-fade{from{opacity:0}to{opacity:1}}
+  .anim-in-up{animation:apn-in-up 280ms cubic-bezier(.2,.7,.2,1) both}
+  .anim-in-up.d1{animation-delay:60ms}
+  .anim-in-up.d2{animation-delay:120ms}
+  .anim-in-up.d3{animation-delay:180ms}
+  .anim-in-up.d4{animation-delay:240ms}
+  .anim-in-fade{animation:apn-in-fade 220ms ease-out both;animation-delay:380ms}
+
+  /* App bar */
+  .appbar{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand-mark{width:20px;height:20px;border-radius:6px;background:var(--brand)}
+  .brand-name{font-family:'Playfair Display',serif;font-weight:600;font-size:15px}
+  .pill{font-size:11px;color:var(--ink-3);background:var(--brand-soft);border:1px solid #d6ece2;padding:3px 9px;border-radius:999px}
+
+  /* Tabs row */
+  .tabs-row{position:sticky;top:0;background:rgba(255,255,255,.95);backdrop-filter:saturate(140%) blur(10px);border-bottom:1px solid var(--line);z-index:5}
+  .tabs-inner{display:flex;align-items:center;gap:4px;padding:0 16px;height:46px;overflow-x:auto;max-width:1000px;margin:0 auto}
+  .tab{flex-shrink:0;display:inline-flex;align-items:center;height:32px;border-radius:999px;color:var(--ink-2);font-size:12.5px;font-weight:500;white-space:nowrap}
+  .tab:not(.active):hover{background:rgba(233,246,241,.6)}
+  .tab.active{background:var(--ink);color:#fff}
+  .tab .lbl{padding:0 6px 0 12px;display:flex;align-items:center;gap:6px}
+  .tab .dots{padding:0 8px 0 4px;font-size:14px;opacity:.7}
+  .tab.active .dots{color:rgba(255,255,255,.7)}
+  .new-flow{margin-left:6px;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;font-size:12.5px;font-weight:500;color:var(--ink-3)}
+  .new-flow:hover{background:rgba(233,246,241,.6);color:var(--brand-darker)}
+  .new-flow .plus{width:16px;height:16px;border-radius:999px;border:1px solid var(--ink-4);display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1}
+
+  /* Header */
+  .flow-header{padding:20px 20px 6px;display:flex;align-items:baseline;gap:10px;max-width:680px;margin:0 auto}
+  .flow-title{font-family:'Playfair Display',serif;font-weight:600;font-size:28px;letter-spacing:-.01em}
+  .kind-pill{margin-left:auto;font-size:10.5px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+
+  /* Canvas with soft brand aura */
+  .canvas{
+    background-color:var(--canvas);
+    background-image:
+      radial-gradient(ellipse 90% 60% at 50% -10%, rgba(74,189,152,.07), transparent 70%),
+      radial-gradient(circle, rgba(28,29,34,.08) 1px, transparent 1px);
+    background-size:auto, 22px 22px;
+    background-repeat:no-repeat, repeat;
+    padding:22px 14px 60px;
+    min-height:calc(100vh - 110px);
+    display:flex;justify-content:center;
+  }
+  .stack{display:flex;flex-direction:column;align-items:stretch;width:100%;max-width:520px}
+
+  /* Trigger with gradient + premium shadow */
+  .trigger{
+    color:#fff;border-radius:16px;
+    background:linear-gradient(135deg,#1c1d22 0%,#1c1d22 60%,#26282e 100%);
+    box-shadow:var(--shadow-trigger);
+    padding:14px 18px;display:flex;align-items:center;gap:12px;
+  }
+  .trigger .glyph{font-size:20px}
+  .trigger .lbl{font-family:'Playfair Display',serif;font-size:16px;font-weight:600;flex:1}
+  .trigger .caret{opacity:.5;font-size:11px}
+
+  .wire{height:26px;width:2px;background:var(--line);margin:0 auto}
+
+  /* Step card with refined shadow + hover lift */
+  .step{
+    background:#fff;border:1px solid var(--line);border-radius:14px;
+    padding:13px 15px;display:flex;gap:12px;
+    box-shadow:var(--shadow-card);
+    transition:transform .2s, box-shadow .2s, border-color .2s;
+  }
+  .step:hover{transform:translateY(-1px);box-shadow:var(--shadow-card-h);border-color:rgba(157,162,171,.4)}
+  .step .icon{font-size:21px;margin-top:1px}
+  .step .name{font-family:'Playfair Display',serif;font-weight:600;font-size:15px;margin-top:3px}
+  .step .desc{font-size:12.5px;color:var(--ink-3);margin-top:3px;line-height:1.45}
+  .step{position:relative;padding-bottom:38px !important}
+  .vendor-row{position:absolute;left:0;right:0;bottom:0;border-top:1px solid var(--line);background:rgba(250,250,248,.6);padding:8px 15px;display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:var(--ink-4);border-radius:0 0 14px 14px}
+  .vendor-row .by-name{color:var(--ink-2);font-weight:500}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .chip .dot{width:6px;height:6px;border-radius:50%}
+  .tag-priority{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--brand-darker);background:var(--brand-soft);border:1px solid #c7e6d8;padding:2px 6px;border-radius:6px}
+
+  /* Add-a-step */
+  .add-btn{margin:0 auto;display:flex;align-items:center;gap:8px;border:1px dashed var(--ink-4);background:rgba(255,255,255,.7);border-radius:999px;padding:0 14px;height:36px;font-size:12.5px;font-weight:500;color:var(--ink-2);transition:all .15s}
+  .add-btn:hover{background:#fff;border-color:var(--brand);color:var(--brand-darker);box-shadow:var(--shadow-card)}
+  .add-btn .plus{width:18px;height:18px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1}
+
+  /* Coverage */
+  .coverage{margin-top:28px;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow-card)}
+  .cov-head{display:flex;justify-content:space-between;align-items:baseline;padding:14px 18px 6px}
+  .cov-head h2{font-family:'Playfair Display',serif;font-weight:600;font-size:15px;margin:0}
+  .cov-head p{font-size:11px;color:var(--ink-4);margin:0}
+  .cov-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:0 18px 12px}
+  .cov-cell{position:relative}
+  .cov-tile{height:54px;border:1px solid var(--line);background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+  .cov-tile:hover{transform:translateY(-1px)}
+  .cov-tile .blob{width:8px;height:8px;border-radius:999px;background:var(--ink-4);opacity:.35}
+  .cov-tile.covered .blob{width:12px;height:12px;opacity:1}
+  .cov-star{position:absolute;top:-7px;right:-7px;height:19px;width:19px;border-radius:999px;background:var(--brand);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+  .cov-label{margin-top:6px;text-align:center;font-size:11px;font-weight:500;color:var(--ink-2)}
+  .cov-note{display:flex;align-items:flex-start;gap:10px;padding:12px 18px;border-top:1px solid var(--line);font-size:13px;line-height:1.45;background:var(--brand-soft);color:var(--brand-darker);border-color:#c7e6d8}
+
+  .caption{max-width:520px;margin:20px auto 0;color:var(--ink-4);font-size:11.5px;text-align:center;padding:0 16px}
+</style>
+</head>
+<body>
+
+  <div class="appbar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div class="brand-name">Apnosh · Flow Builder</div>
+    </div>
+    <div class="pill">Platform pivot · vendor row</div>
+  </div>
+
+  <div class="tabs-row">
+    <div class="tabs-inner">
+      <div class="tab"><span class="lbl"><span>🔁</span>Always-on baseline</span><span class="dots">⋯</span></div>
+      <div class="tab active"><span class="lbl"><span>👀</span>Discovery → first visit</span><span class="dots">⋯</span></div>
+      <div class="tab"><span class="lbl"><span>⚡</span>Turn visitors into regulars</span><span class="dots">⋯</span></div>
+      <button class="new-flow"><span class="plus">+</span> New flow</button>
+    </div>
+  </div>
+
+  <div class="flow-header">
+    <div class="flow-title">Discovery → first visit</div>
+    <span class="kind-pill">Journey flow</span>
+  </div>
+
+  <div class="canvas">
+    <div class="stack">
+
+      <div class="trigger anim-in-up">
+        <div class="glyph">👀</div>
+        <div class="lbl">A stranger discovers you</div>
+        <div class="caret">▾</div>
+      </div>
+      <div class="wire"></div>
+
+      <div class="step anim-in-up d1">
+        <div class="icon">🎬</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="chip" style="color:var(--stage-awareness)"><span class="dot" style="background:var(--stage-awareness)"></span>Awareness</span>
+            <span class="tag-priority">priority</span>
+          </div>
+          <div class="name">Brand awareness reels</div>
+          <div class="desc">Short, scroll-stopping video that introduces your restaurant to people who don't know you yet.</div>
+        </div>
+        <div class="vendor-row">
+          <span>by <span class="by-name">Apnosh</span></span>
+          <span>▾</span>
+        </div>
+      </div>
+      <div class="wire"></div>
+
+      <div class="step anim-in-up d2">
+        <div class="icon">📸</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="chip" style="color:var(--stage-awareness)"><span class="dot" style="background:var(--stage-awareness)"></span>Awareness</span>
+            <span class="tag-priority">priority</span>
+          </div>
+          <div class="name">Discovery photo posts</div>
+          <div class="desc">Polished food photos tuned for discovery feeds — the first hello before someone walks in.</div>
+        </div>
+        <div class="vendor-row">
+          <span>Choose a vendor <span style="color:var(--ink-4)">· 4 available</span></span>
+          <span>▾</span>
+        </div>
+      </div>
+      <div class="wire"></div>
+
+      <div class="step anim-in-up d3">
+        <div class="icon">⭐</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="chip" style="color:var(--stage-awareness)"><span class="dot" style="background:var(--stage-awareness)"></span>Awareness</span>
+            <span class="tag-priority">priority</span>
+          </div>
+          <div class="name">Paid food influencer visits</div>
+          <div class="desc">A trusted local food creator visits, posts, and sends their audience your way.</div>
+        </div>
+        <div class="vendor-row">
+          <span>by <span class="by-name">Freelancer pool</span></span>
+          <span>▾</span>
+        </div>
+      </div>
+      <div class="wire"></div>
+
+      <button class="add-btn anim-in-up d4"><span class="plus">+</span> Add a step</button>
+
+      <section class="coverage anim-in-fade">
+        <header class="cov-head"><h2>Coverage</h2><p>★ marks Vinason&rsquo;s priorities</p></header>
+        <div class="cov-grid">
+          <div class="cov-cell">
+            <div class="cov-tile covered" style="background:rgba(79,155,196,.08);border-color:var(--stage-awareness)">
+              <span class="blob" style="background:var(--stage-awareness)"></span>
+            </div>
+            <span class="cov-star">★</span>
+            <div class="cov-label">Awareness</div>
+          </div>
+          <div class="cov-cell"><div class="cov-tile"><span class="blob"></span></div><div class="cov-label">Consideration</div></div>
+          <div class="cov-cell"><div class="cov-tile"><span class="blob"></span></div><div class="cov-label">Decision</div></div>
+          <div class="cov-cell"><div class="cov-tile"><span class="blob"></span></div><span class="cov-star">★</span><div class="cov-label">Loyalty</div></div>
+          <div class="cov-cell"><div class="cov-tile"><span class="blob"></span></div><div class="cov-label">Advocacy</div></div>
+        </div>
+        <div class="cov-note" style="background:#fff6e8;color:#7a5418;border-color:#f1d39a">
+          <span>⚠</span>
+          <p style="margin:0">Loyalty is a priority for Vinason but not in this flow yet.</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <div class="caption">
+    Each step shows who delivers it. Apnosh is one vendor; in-house, freelancer pool, and outside agency are equally first-class. The honest brain stays vendor-neutral.
+  </div>
+
+</body>
+</html>

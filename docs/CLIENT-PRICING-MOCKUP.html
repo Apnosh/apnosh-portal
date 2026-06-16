@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apnosh — what the owner sees</title>
+<style>
+  :root{
+    --brand:#4abd98; --brand-d:#2f9e7d;
+    --ink:#1a1a1a; --ink2:#555; --ink3:#999;
+    --border:#eee; --bg:#fff; --bg2:#fafafa; --bg3:#f3f3f3;
+    --radius:14px; --up:#00C805; --up-bg:rgba(0,200,5,0.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg3);color:var(--ink);line-height:1.5;
+    -webkit-font-smoothing:antialiased;padding:32px 16px 80px;
+  }
+  .wrap{max-width:760px;margin:0 auto}
+  .browser{
+    background:var(--bg);border-radius:18px;overflow:hidden;
+    box-shadow:0 12px 40px rgba(0,0,0,.10),0 2px 8px rgba(0,0,0,.04);
+  }
+  .chrome{
+    background:#f6f6f6;border-bottom:1px solid var(--border);
+    padding:11px 14px;display:flex;align-items:center;gap:8px;
+  }
+  .dot{width:11px;height:11px;border-radius:50%}
+  .dot.r{background:#ff5f57}.dot.y{background:#febc2e}.dot.g{background:#28c840}
+  .url{
+    flex:1;margin-left:10px;background:#fff;border:1px solid var(--border);
+    border-radius:8px;font-size:12px;color:var(--ink3);padding:5px 12px;
+  }
+  .pad{padding:28px 26px 34px}
+
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+  h1.page{font-size:24px;font-weight:800;margin:6px 0 4px;letter-spacing:-.01em}
+  .sub{font-size:14px;color:var(--ink2);max-width:62ch}
+
+  /* plan / allotment card */
+  .plan{
+    margin-top:22px;border:1px solid var(--border);border-radius:var(--radius);
+    background:linear-gradient(180deg,#fff,var(--bg2));padding:18px 20px;
+  }
+  .plan-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+  .pill{
+    display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;
+    background:rgba(74,189,152,.12);color:var(--brand-d);padding:4px 10px;border-radius:999px;
+  }
+  .meter{margin-top:14px}
+  .meter-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:7px}
+  .meter-row b{font-weight:700}
+  .track{height:9px;background:var(--bg3);border-radius:999px;overflow:hidden}
+  .fill{height:100%;width:70%;background:linear-gradient(90deg,var(--brand),var(--brand-d));border-radius:999px}
+  .meter-note{font-size:12px;color:var(--ink3);margin-top:8px}
+
+  .section-h{font-size:13px;font-weight:800;letter-spacing:.02em;margin:30px 0 4px}
+  .section-s{font-size:13px;color:var(--ink2);margin-bottom:14px}
+
+  /* menu cards */
+  .menu{display:grid;gap:12px}
+  .item{
+    border:1px solid var(--border);border-radius:var(--radius);background:#fff;
+    padding:16px 18px;display:flex;gap:16px;align-items:flex-start;
+  }
+  .item.included{border-color:rgba(74,189,152,.45);background:linear-gradient(180deg,rgba(74,189,152,.05),#fff)}
+  .ico{
+    width:42px;height:42px;border-radius:11px;flex-shrink:0;display:flex;
+    align-items:center;justify-content:center;font-size:20px;background:var(--bg3);
+  }
+  .item.included .ico{background:rgba(74,189,152,.15)}
+  .item-body{flex:1;min-width:0}
+  .item-title{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tag{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:6px}
+  .tag.free{background:rgba(74,189,152,.15);color:var(--brand-d)}
+  .tag.add{background:#f0eef9;color:#6b5bd0}
+  .item-desc{font-size:13px;color:var(--ink2);margin:5px 0 9px}
+  .incl{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:11px;color:var(--ink2);background:var(--bg2);border:1px solid var(--border);padding:3px 9px;border-radius:7px}
+  .price{text-align:right;flex-shrink:0}
+  .price .n{font-size:19px;font-weight:800;letter-spacing:-.01em}
+  .price .u{font-size:11px;color:var(--ink3);display:block;margin-top:1px}
+  .price .free{color:var(--brand-d)}
+
+  /* approval flow */
+  .flow{
+    margin-top:16px;border:1px solid var(--border);border-radius:var(--radius);
+    background:#fff;overflow:hidden;
+  }
+  .flow-h{padding:14px 18px;border-bottom:1px solid var(--border);font-size:13px;font-weight:800;display:flex;align-items:center;gap:8px}
+  .steps{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0}
+  .step{padding:16px 16px;text-align:center;border-right:1px solid var(--border);position:relative}
+  .step:last-child{border-right:none}
+  .step .s-ico{font-size:22px}
+  .step .s-t{font-size:13px;font-weight:700;margin-top:6px}
+  .step .s-d{font-size:11.5px;color:var(--ink3);margin-top:3px}
+  .step.on{background:rgba(74,189,152,.06)}
+
+  /* quote example */
+  .quote{
+    margin-top:16px;border:1px solid rgba(74,189,152,.4);border-radius:var(--radius);
+    background:linear-gradient(180deg,rgba(74,189,152,.05),#fff);padding:18px 20px;
+  }
+  .q-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .q-title{font-size:15px;font-weight:700}
+  .q-status{font-size:11px;font-weight:700;color:#b07d00;background:rgba(254,188,46,.18);padding:3px 9px;border-radius:999px}
+  .q-line{display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px dashed var(--border)}
+  .q-line .l{color:var(--ink2)}
+  .q-line.tot{border-bottom:none;padding-top:11px;font-weight:800;font-size:15px}
+  .q-msg{font-size:12.5px;color:var(--ink2);background:#fff;border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin:12px 0}
+  .q-actions{display:flex;gap:10px;margin-top:4px}
+  .btn{font-size:13px;font-weight:700;padding:10px 18px;border-radius:10px;border:none;cursor:pointer}
+  .btn.go{background:var(--brand);color:#fff}
+  .btn.ghost{background:#fff;border:1px solid var(--border);color:var(--ink2)}
+  .q-guard{font-size:11.5px;color:var(--ink3);margin-top:10px;display:flex;align-items:center;gap:6px}
+
+  /* outcome */
+  .outcome{
+    margin-top:16px;border:1px solid var(--border);border-radius:var(--radius);
+    background:#fff;padding:16px 18px;display:flex;align-items:center;gap:14px;
+  }
+  .o-ico{width:42px;height:42px;border-radius:11px;background:var(--up-bg);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+  .o-body .o-t{font-size:14px;font-weight:700}
+  .o-body .o-d{font-size:12.5px;color:var(--ink2);margin-top:2px}
+  .o-body .o-d b{color:var(--up)}
+
+  .foot{font-size:11.5px;color:var(--ink3);text-align:center;margin-top:24px;line-height:1.6}
+  .legend{
+    max-width:760px;margin:18px auto 0;font-size:12.5px;color:var(--ink2);
+    background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 18px;
+  }
+  .legend b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="browser">
+    <div class="chrome">
+      <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="url">app.apnosh.com / dashboard / content</span>
+    </div>
+    <div class="pad">
+
+      <span class="eyebrow">Your content</span>
+      <h1 class="page">What you can do this month</h1>
+      <p class="sub">A simple menu. Fixed prices. You always see the cost before any work starts.</p>
+
+      <!-- PLAN + ALLOTMENT -->
+      <div class="plan">
+        <div class="plan-top">
+          <div>
+            <span class="pill">● Pro plan · $35/mo</span>
+            <div style="font-size:12px;color:var(--ink3);margin-top:7px">Renews July 1</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:13px;color:var(--ink2)">Posts included</div>
+            <div style="font-size:22px;font-weight:800">7 <span style="color:var(--ink3);font-weight:600;font-size:15px">/ 10</span></div>
+          </div>
+        </div>
+        <div class="meter">
+          <div class="meter-row"><span>This month</span><span><b>3 posts left</b></span></div>
+          <div class="track"><div class="fill"></div></div>
+          <div class="meter-note">When you run out, you can add a 5-pack or upgrade. We will never charge you without asking.</div>
+        </div>
+      </div>
+
+      <!-- MENU -->
+      <div class="section-h">The menu</div>
+      <div class="section-s">Everything is one of these. No surprises, no hidden line items.</div>
+
+      <div class="menu">
+
+        <div class="item included">
+          <div class="ico">📱</div>
+          <div class="item-body">
+            <div class="item-title">A post <span class="tag free">In your plan</span></div>
+            <div class="item-desc">One post from photos we already have, or yours. The everyday stuff.</div>
+            <div class="incl">
+              <span class="chip">1 caption</span>
+              <span class="chip">1 photo or graphic</span>
+              <span class="chip">Scheduled for you</span>
+              <span class="chip">1 round of edits</span>
+            </div>
+          </div>
+          <div class="price"><span class="n free">$0</span><span class="u">counts as 1 of 10</span></div>
+        </div>
+
+        <div class="item">
+          <div class="ico">🎨</div>
+          <div class="item-body">
+            <div class="item-title">A designed post <span class="tag add">Add-on</span></div>
+            <div class="item-desc">A custom graphic made just for you. Menu drops, events, specials.</div>
+            <div class="incl">
+              <span class="chip">Original design</span>
+              <span class="chip">1 caption</span>
+              <span class="chip">Scheduled</span>
+              <span class="chip">2 rounds of edits</span>
+            </div>
+          </div>
+          <div class="price"><span class="n">$40</span><span class="u">each</span></div>
+        </div>
+
+        <div class="item">
+          <div class="ico">📸</div>
+          <div class="item-body">
+            <div class="item-title">A content day <span class="tag add">Add-on</span></div>
+            <div class="item-desc">A photographer comes to you and shoots. You get a library to post from all month.</div>
+            <div class="incl">
+              <span class="chip">2 hour shoot</span>
+              <span class="chip">~20 ready photos</span>
+              <span class="chip">Yours to keep</span>
+              <span class="chip">Feeds your posts</span>
+            </div>
+          </div>
+          <div class="price"><span class="n">$350</span><span class="u">per visit</span></div>
+        </div>
+
+      </div>
+
+      <!-- APPROVAL FLOW -->
+      <div class="flow">
+        <div class="flow-h">🔒 How anything paid works</div>
+        <div class="steps">
+          <div class="step on">
+            <div class="s-ico">💬</div>
+            <div class="s-t">You ask</div>
+            <div class="s-d">Tell us what you want</div>
+          </div>
+          <div class="step on">
+            <div class="s-ico">🧾</div>
+            <div class="s-t">You see the price</div>
+            <div class="s-d">From the menu above</div>
+          </div>
+          <div class="step">
+            <div class="s-ico">✅</div>
+            <div class="s-t">You approve</div>
+            <div class="s-d">Then work starts</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- QUOTE EXAMPLE -->
+      <div class="section-h" style="margin-top:30px">When something is bigger than a post</div>
+      <div class="section-s">You get a clear quote, built from the same menu. Tap approve, or not.</div>
+
+      <div class="quote">
+        <div class="q-top">
+          <div class="q-title">Win back a lapsed regular</div>
+          <span class="q-status">Waiting for you</span>
+        </div>
+        <div class="q-line"><span class="l">Text + email to 200 quiet customers</span><span><b>In plan</b></span></div>
+        <div class="q-line"><span class="l">1 designed post × 1</span><span>$40</span></div>
+        <div class="q-line tot"><span>Total today</span><span>$40</span></div>
+        <div class="q-msg">We will reach the 200 regulars who have not been in for 60 days with a comeback offer, and a fresh graphic to match. One time. Live within 3 days.</div>
+        <div class="q-actions">
+          <button class="btn go">Approve $40</button>
+          <button class="btn ghost">Not now</button>
+        </div>
+        <div class="q-guard">🔒 Nothing is charged until you tap approve.</div>
+      </div>
+
+      <!-- OUTCOME -->
+      <div class="outcome">
+        <div class="o-ico">📈</div>
+        <div class="o-body">
+          <div class="o-t">Last campaign result</div>
+          <div class="o-d">$46 spent · <b>brought back 12 regulars</b> · ~$540 in covers</div>
+        </div>
+      </div>
+
+      <p class="foot">
+        One plan. A short menu. A price you see before you say yes.<br>
+        That is the whole thing.
+      </p>
+
+    </div>
+  </div>
+
+  <div class="legend">
+    <b>How to read this mockup.</b> The owner never sees the nine sub-tasks inside a post.
+    They see three named products, a counter for what is included, and a price before any
+    paid work begins. The result sits next to the cost. All the internal complexity is
+    absorbed on Apnosh's side as an average, which is what keeps it predictable from 10
+    clients to 500. Prices shown are placeholders for testing.
+  </div>
+</div>
+</body>
+</html>

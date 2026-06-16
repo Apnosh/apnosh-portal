@@ -236,6 +236,8 @@ export default function DashboardPage() {
           <MobileHome
             homeMetrics={data?.homeMetrics ?? null}
             homeSections={data?.homeSections ?? null}
+            agenda={data?.agenda ?? null}
+            avatarText={client?.name ?? ''}
             sinceLastChecked={data?.sinceLastChecked ?? []}
             loading={loading}
             failed={!loading && !!client?.id && !data}
@@ -279,6 +281,8 @@ export default function DashboardPage() {
         <MobileHome
           homeMetrics={data?.homeMetrics ?? null}
           homeSections={data?.homeSections ?? null}
+          agenda={data?.agenda ?? null}
+          avatarText={client?.name ?? ''}
           sinceLastChecked={data?.sinceLastChecked ?? []}
           loading={loading}
           failed={!loading && !!client?.id && !data}

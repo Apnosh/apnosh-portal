@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Apnosh Owner Dashboard · Visual User Journey</title>
+<style>
+  :root{
+    --brand:#4abd98; --brand-dark:#2e9a78; --brand-tint:#eaf7f3;
+    --ink:#1d1d1f; --ink-2:#424245; --ink-3:#6e6e73; --ink-4:#aeaeb2;
+    --line:#d2d2d7; --canvas:#f5f5f7; --card:#ffffff; --alert:#FF5000;
+    --sees:#7aa7ff; --feels:#f0b03d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); background:var(--canvas);
+    -webkit-font-smoothing:antialiased; line-height:1.45;
+    padding:48px 32px 80px;
+  }
+  .wrap{max-width:1240px;margin:0 auto}
+  header.top{margin-bottom:36px}
+  .badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--brand-dark);background:var(--brand-tint);
+    padding:6px 12px;border-radius:999px;margin-bottom:16px}
+  h1{font-size:34px;font-weight:700;letter-spacing:-.02em}
+  .sub{font-size:16px;color:var(--ink-3);margin-top:8px;max-width:720px}
+  .legend{display:flex;gap:22px;flex-wrap:wrap;margin:24px 0 8px;font-size:13px;color:var(--ink-3)}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .dot.does{background:var(--brand)} .dot.sees{background:var(--sees)} .dot.feels{background:var(--feels)}
+
+  /* phase rail */
+  .rail{display:flex;gap:10px;flex-wrap:wrap;margin:28px 0 36px}
+  .pill{flex:1;min-width:150px;text-align:center;background:var(--card);
+    border:1px solid var(--line);border-radius:14px;padding:14px 12px;position:relative}
+  .pill .n{font-size:11px;font-weight:700;color:var(--brand-dark);letter-spacing:.08em}
+  .pill .t{font-size:14px;font-weight:600;margin-top:3px}
+  .pill .arrow{position:absolute;right:-13px;top:50%;transform:translateY(-50%);
+    color:var(--ink-4);font-size:18px;z-index:2}
+  .pill:last-child .arrow{display:none}
+
+  /* phase card: phone | content */
+  .phase{background:var(--card);border:1px solid var(--line);border-radius:20px;
+    padding:26px;margin-bottom:18px;display:grid;
+    grid-template-columns:296px 1fr;gap:30px;align-items:start}
+  .phase.loop{background:linear-gradient(135deg,var(--brand-tint),#ffffff);border-color:var(--brand)}
+  .step{font-size:12px;font-weight:700;color:var(--brand-dark);letter-spacing:.08em}
+  .phase h2{font-size:21px;font-weight:700;margin:6px 0 8px;letter-spacing:-.01em}
+  .goal{font-size:13.5px;color:var(--ink-3)}
+  .route{display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:11.5px;color:var(--ink-2);background:var(--canvas);border:1px solid var(--line);
+    border-radius:7px;padding:3px 8px;margin-top:12px;word-break:break-all}
+
+  .lanes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:18px}
+  .lane h3{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+    display:flex;align-items:center;gap:7px;margin-bottom:8px;color:var(--ink-3)}
+  .lane ul{list-style:none}
+  .lane li{font-size:13px;color:var(--ink-2);padding:5px 0 5px 16px;position:relative}
+  .lane li::before{content:"";position:absolute;left:0;top:12px;width:5px;height:5px;border-radius:50%;background:var(--ink-4)}
+  .lane.does li::before{background:var(--brand)}
+  .lane.sees li::before{background:var(--sees)}
+  .lane.feels li{font-style:italic;color:var(--ink-3)}
+  .lane.feels li::before{background:var(--feels)}
+
+  /* "when you'd use it" scenarios */
+  .scenarios{margin-top:20px;border-top:1px dashed var(--line);padding-top:16px}
+  .scenarios h3{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px}
+  .scn{display:grid;grid-template-columns:200px 1fr;gap:14px;padding:8px 0;border-bottom:1px solid var(--canvas)}
+  .scn:last-child{border-bottom:none}
+  .scn .when{font-size:12.5px;font-weight:600;color:var(--ink)}
+  .scn .when em{display:block;font-style:normal;font-weight:400;color:var(--ink-4);font-size:11.5px;margin-top:2px}
+  .scn .what{font-size:13px;color:var(--ink-2)}
+
+  /* habit ring */
+  .loop-ring{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .loop-ring .node{background:#fff;border:1px solid var(--brand);border-radius:12px;
+    padding:9px 13px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .loop-ring .sep{align-self:center;color:var(--brand);font-size:15px}
+
+  /* go-deep grid */
+  .deep{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}
+  .deep .tool{background:var(--canvas);border:1px solid var(--line);border-radius:12px;padding:13px}
+  .deep .tool .nm{font-size:13.5px;font-weight:600}
+  .deep .tool .ds{font-size:12px;color:var(--ink-3);margin-top:3px}
+  .deep .tool .rt{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--ink-4);margin-top:7px}
+
+  footer{margin-top:40px;font-size:12.5px;color:var(--ink-4);text-align:center;line-height:1.7}
+
+  /* ============ PHONE MOCKUP ============ */
+  .phone{width:284px;border:11px solid #1d1d1f;border-radius:44px;background:#1d1d1f;
+    box-shadow:0 24px 60px -16px rgba(0,0,0,.4);position:sticky;top:24px;justify-self:center}
+  .phone .notch{height:26px;background:#1d1d1f;border-radius:44px 44px 0 0;display:flex;
+    align-items:flex-start;justify-content:center}
+  .phone .notch::after{content:"";width:74px;height:18px;background:#000;border-radius:0 0 12px 12px}
+  /* Every phone is the same device height so the row reads as a consistent
+   * set of screens, not a ragged long/short mix. Content sits at the top
+   * (like a real app screen); the bottom tab bar anchors the bottom edge. */
+  .screen{background:#fff;height:548px;overflow:hidden;position:relative;
+    border-radius:2px 2px 30px 30px}
+  .screen .scroll{padding:14px 14px 18px;overflow:hidden}
+  /* A genuinely long feed (the daily home) shows its top and fades out to
+   * signal "scrolls for more" — no hard chop mid-row. The fade ends above
+   * the tab bar so it never dims it. */
+  .screen.more::after{content:"";position:absolute;left:0;right:0;bottom:48px;height:62px;
+    background:linear-gradient(to bottom, rgba(255,255,255,0), #fff);pointer-events:none}
+  /* Part 3 concept phones sit ABOVE their own caption, so they must not be
+   * sticky — a sticky phone pins while the caption scrolls up behind it.
+   * Use `relative` (not `static`): it keeps the phone in normal flow but
+   * still anchors the absolutely-positioned bottom tab bar inside the
+   * frame. With `static` the tab bar had no positioned ancestor and pinned
+   * itself to the viewport bottom, floating over the whole page. */
+  .concept .phone{position:relative}
+  /* Phones with a bottom tab bar need extra bottom padding so the last
+   * row clears the (absolutely-positioned) bar. */
+  .screen:has(.tabbar) .scroll{padding-bottom:60px}
+  .cap{font-size:9px;font-weight:700;letter-spacing:.09em;color:var(--brand-dark);text-transform:uppercase}
+  .cap.ink{color:var(--ink-4)}
+  /* tab bar */
+  .tabbar{position:absolute;left:0;right:0;bottom:0;height:48px;background:#fff;
+    border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-around;
+    font-size:8px;color:var(--ink-4)}
+  .tabbar .tb{display:flex;flex-direction:column;align-items:center;gap:2px}
+  .tabbar .tb.on{color:var(--brand-dark)}
+  .tabbar .tb .ic{font-size:15px;line-height:1}
+
+  /* home screen bits */
+  .m-top{display:flex;align-items:center;justify-content:space-between}
+  .m-bell{position:relative;font-size:14px}
+  .m-bell::after{content:"";position:absolute;top:-1px;right:-1px;width:6px;height:6px;background:var(--brand);border-radius:50%}
+  .m-subtle{font-size:10px;color:var(--ink-3);margin-top:7px}
+  .m-hero{display:flex;align-items:flex-end;justify-content:space-between;margin-top:2px}
+  .m-big{font-size:46px;font-weight:700;letter-spacing:-.03em;line-height:1}
+  .m-avg{text-align:right}
+  .m-avg .v{font-size:21px;font-weight:700;letter-spacing:-.02em}
+  .m-range{font-size:9.5px;color:var(--ink-3);margin-top:3px}
+  .m-bars{display:flex;align-items:flex-end;gap:6px;height:62px;margin-top:12px}
+  .m-bars i{flex:1;background:var(--brand-tint);border-radius:4px 4px 0 0;display:block}
+  .m-days{display:flex;gap:6px;margin-top:5px}
+  .m-days span{flex:1;text-align:center;font-size:7.5px;color:var(--ink-4);letter-spacing:.04em}
+  .m-tiles{display:flex;gap:6px;margin-top:13px}
+  .m-tile{flex:1;border:1px solid var(--line);border-radius:9px;padding:8px 6px}
+  .m-tile b{font-size:15px;font-weight:700}
+  .m-tile span{display:block;font-size:8px;color:var(--ink-3);margin-top:2px}
+  .m-spark{height:34px;margin-top:13px;position:relative}
+  .m-spark svg{width:100%;height:100%;display:block}
+  .m-seg{display:flex;background:var(--canvas);border-radius:999px;padding:3px;margin-top:12px}
+  .m-seg span{flex:1;text-align:center;font-size:10px;font-weight:600;color:var(--ink-3);padding:5px 0;border-radius:999px}
+  .m-seg span.on{background:#fff;color:var(--brand-dark);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .m-sec{display:flex;align-items:center;justify-content:space-between;margin-top:20px}
+  .m-row{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--canvas)}
+  .m-row .ic{width:26px;height:26px;border-radius:7px;background:var(--brand-tint);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+  .m-row .tx{flex:1;font-size:11.5px;font-weight:600}
+  .m-row .pchip{font-size:8.5px;font-weight:600;color:var(--brand-dark);background:var(--brand-tint);border-radius:999px;padding:2px 7px}
+  .m-row .chev{color:var(--ink-4);font-size:11px}
+  .m-band{background:var(--brand-tint);border-radius:13px;padding:12px;margin-top:14px;display:flex;gap:10px;align-items:center}
+  .m-band .av{width:28px;height:28px;border-radius:50%;background:var(--brand);color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .m-band .bt{font-size:11px;font-weight:600}
+  .m-band .bs{font-size:9px;color:var(--ink-3);margin-top:1px}
+  .m-ins{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:11px}
+  .m-ins .c{border:1px solid var(--line);border-radius:10px;padding:9px}
+  .m-ins .c .k{font-size:8.5px;color:var(--ink-3)}
+  .m-ins .c .vv{font-size:15px;font-weight:700;margin-top:2px}
+  .m-ins .c .dl{font-size:8.5px;font-weight:600;color:var(--brand-dark);margin-top:1px}
+  .m-plan{border:1px solid var(--line);border-radius:11px;padding:11px;margin-top:9px}
+  .m-plan .tag{font-size:8px;font-weight:700;letter-spacing:.06em;color:var(--alert)}
+  .m-plan .tt{font-size:12.5px;font-weight:700;margin-top:3px}
+  .m-plan .dd{font-size:10px;color:var(--ink-3);margin-top:2px}
+  .m-plan .cta{font-size:10.5px;font-weight:600;color:var(--brand-dark);margin-top:6px}
+
+  /* setup / cards screens */
+  .m-h{font-size:18px;font-weight:700;letter-spacing:-.01em;line-height:1.2}
+  .m-p{font-size:11px;color:var(--ink-3);margin-top:6px}
+  .m-prog{display:flex;gap:5px;margin:14px 0 4px}
+  .m-prog i{height:4px;border-radius:999px;background:var(--line);flex:1}
+  .m-prog i.on{background:var(--brand)}
+  .m-opt{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:9px;display:flex;align-items:center;gap:10px}
+  .m-opt.sel{border-color:var(--brand);background:var(--brand-tint)}
+  .m-opt .ic{font-size:17px}
+  .m-opt .ot{font-size:12.5px;font-weight:600}
+  .m-opt .od{font-size:9.5px;color:var(--ink-3);margin-top:1px}
+  .m-opt .ck{margin-left:auto;color:var(--brand-dark);font-weight:700;font-size:13px}
+  .m-btn{background:var(--brand);color:#fff;border-radius:12px;text-align:center;
+    font-size:12.5px;font-weight:600;padding:12px;margin-top:16px}
+  .m-skip{text-align:center;font-size:11px;color:var(--ink-3);margin-top:11px}
+  .m-guide{border:1px solid var(--line);border-radius:14px;padding:13px;margin-top:10px}
+  .m-guide .gi{width:32px;height:32px;border-radius:9px;background:var(--brand-tint);display:flex;align-items:center;justify-content:center;font-size:15px}
+  .m-guide .gt{font-size:12.5px;font-weight:700;margin-top:9px}
+  .m-guide .gd{font-size:10px;color:var(--ink-3);margin-top:3px}
+  .m-guide .gl{font-size:10.5px;font-weight:600;color:var(--brand-dark);margin-top:7px}
+
+  /* go-deep area screen */
+  .m-areahero{background:linear-gradient(135deg,var(--brand-tint),#fff);border:1px solid var(--line);border-radius:14px;padding:13px;margin-top:6px}
+  .m-list .li{display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px solid var(--canvas)}
+  .m-list .li .ic{width:30px;height:30px;border-radius:8px;background:var(--canvas);display:flex;align-items:center;justify-content:center;font-size:14px}
+  .m-list .li .lt{font-size:12px;font-weight:600}
+  .m-list .li .ld{font-size:9.5px;color:var(--ink-3);margin-top:1px}
+  .m-list .li .lc{margin-left:auto;color:var(--ink-4);font-size:12px}
+
+  /* report screen */
+  .m-kpi{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px}
+  .m-kpi .c{background:var(--canvas);border-radius:11px;padding:11px}
+  .m-kpi .c .k{font-size:9px;color:var(--ink-3)}
+  .m-kpi .c .v{font-size:19px;font-weight:700;margin-top:3px}
+  .m-kpi .c .d{font-size:9px;font-weight:600;color:var(--brand-dark);margin-top:1px}
+  .m-goal{margin-top:13px}
+  .m-goal .g{margin-top:10px}
+  .m-goal .gr{display:flex;justify-content:space-between;font-size:10.5px;font-weight:600}
+  .m-goal .gb{height:6px;background:var(--canvas);border-radius:999px;margin-top:5px;overflow:hidden}
+  .m-goal .gb i{display:block;height:100%;background:var(--brand);border-radius:999px}
+
+  .capt{font-size:11px;color:var(--ink-4);text-align:center;margin-top:11px}
+  .capt b{color:var(--brand-dark);font-weight:600}
+
+  /* ============ TWO-SURFACES EXPLAINER ============ */
+  .surfaces{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:30px 0 8px}
+  .surf{border:1px solid var(--line);border-radius:16px;padding:18px 20px;background:var(--card)}
+  .surf .st{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--brand-dark)}
+  .surf h3{font-size:17px;font-weight:700;margin:5px 0 4px;letter-spacing:-.01em}
+  .surf p{font-size:13px;color:var(--ink-3)}
+  .surf .who{font-size:11.5px;color:var(--ink-4);margin-top:9px}
+  .surf .who b{color:var(--ink-2);font-weight:600}
+
+  /* ============ SECTION DIVIDER ============ */
+  .divider{margin:46px 0 8px}
+  .divider .step{font-size:12px}
+  .divider h2{font-size:27px;font-weight:700;letter-spacing:-.02em;margin-top:5px}
+  .divider p{font-size:15px;color:var(--ink-3);max-width:760px;margin-top:7px}
+
+  /* ============ WORKBENCH PANEL ============ */
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px;margin-bottom:18px}
+  .panel .phead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  .panel .phead .pn{font-size:12px;font-weight:700;color:var(--brand-dark);letter-spacing:.06em}
+  .panel .phead h2{font-size:21px;font-weight:700;letter-spacing:-.01em}
+  .panel .phead .rt{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--ink-4)}
+  .translate{background:var(--brand-tint);border-radius:12px;padding:12px 15px;margin:12px 0 18px;font-size:13.5px;color:var(--ink-2)}
+  .translate b{color:var(--brand-dark)}
+  .pgrid{display:grid;grid-template-columns:1.15fr .85fr;gap:26px;margin-top:20px;align-items:start}
+  .block h4{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);margin:0 0 9px}
+  .block + .block{margin-top:18px}
+  .block ul{list-style:none}
+  .block li{font-size:13px;color:var(--ink-2);padding:5px 0 5px 16px;position:relative}
+  .block li::before{content:"";position:absolute;left:0;top:12px;width:5px;height:5px;border-radius:50%;background:var(--brand)}
+  .block li b{font-weight:600;color:var(--ink)}
+
+  /* ============ DESKTOP WINDOW MOCKUP ============ */
+  .win{border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#fff;box-shadow:0 16px 44px -18px rgba(0,0,0,.24)}
+  .win .bar{height:34px;background:#f6f6f7;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:7px;padding:0 13px}
+  .win .bar i{width:11px;height:11px;border-radius:50%;background:#dcdce0;display:block}
+  .win .bar i.r{background:#ff5f57}.win .bar i.y{background:#febc2e}.win .bar i.g{background:#28c840}
+  .win .bar .url{margin-left:13px;font-size:10.5px;color:var(--ink-4);background:#fff;border:1px solid var(--line);border-radius:7px;padding:3px 13px;font-family:ui-monospace,Menlo,monospace}
+  .win .vp{padding:15px 17px 18px;max-height:560px;overflow:hidden;position:relative}
+  .win .vp::after{content:"";position:absolute;left:0;right:0;bottom:0;height:34px;background:linear-gradient(to top,#fff,transparent)}
+
+  .wb-tabs{display:flex;gap:5px;border-bottom:1px solid var(--line);margin-bottom:15px;padding-bottom:9px}
+  .wb-tabs span{font-size:12.5px;font-weight:600;color:var(--ink-3);padding:6px 12px;border-radius:9px;display:inline-flex;gap:6px;align-items:center}
+  .wb-tabs span.on{background:var(--ink);color:#fff}
+  .wb-h{font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:700;letter-spacing:-.01em}
+  .wb-sub{font-size:12px;color:var(--ink-3);margin-top:2px}
+  .wb-topline{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .wb-pill{font-size:11px;font-weight:600;color:var(--ink-2);border:1px solid var(--line);border-radius:999px;padding:5px 12px;white-space:nowrap}
+  .wb-card{border:1px solid var(--line);border-radius:13px;padding:14px 15px;margin-top:13px}
+  .wb-cap{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+  .wb-aichip{font-size:9.5px;font-weight:700;color:var(--brand-dark);background:var(--brand-tint);border-radius:999px;padding:3px 9px;margin-left:7px}
+  .wb-brieftext{font-size:13px;color:var(--ink-2);margin-top:9px;line-height:1.5}
+  .wb-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:13px}
+  .wb-goal{padding:9px 0;border-bottom:1px solid var(--canvas)}
+  .wb-goal:last-child{border-bottom:none}
+  .wb-goal .gt{font-size:12.5px;font-weight:600}
+  .wb-goal .gs{font-size:9.5px;font-weight:700;letter-spacing:.05em;margin-top:3px}
+  .gs.ok{color:var(--brand-dark)} .gs.risk{color:#c98a2e}
+  .wb-bet{display:flex;gap:9px;padding:8px 0;font-size:12.5px;color:var(--ink-2)}
+  .wb-bet .bn{width:18px;height:18px;border-radius:50%;background:var(--brand-tint);color:var(--brand-dark);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+
+  /* plan calendar */
+  .wb-cal{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:6px}
+  .wb-months{display:flex;background:var(--canvas);border-bottom:1px solid var(--line)}
+  .wb-months span{flex:1;font-size:8.5px;color:var(--ink-4);padding:7px 4px;text-align:left;border-right:1px solid #ececee;letter-spacing:.03em}
+  .wb-track{position:relative;padding:12px 0;min-height:150px}
+  .wb-bar{position:absolute;height:25px;border-radius:7px;color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;gap:7px;padding:0 9px;white-space:nowrap;overflow:hidden}
+  .wb-bar .bud{opacity:.85;font-weight:500}
+  .wb-newc{font-size:11px;font-weight:600;color:#fff;background:var(--brand);border-radius:999px;padding:6px 13px}
+
+  /* flows canvas */
+  .wb-ftabs{display:flex;gap:7px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .wb-ftab{font-size:11.5px;font-weight:600;color:var(--ink-3);padding:6px 12px;border-radius:999px}
+  .wb-ftab.on{background:var(--ink);color:#fff}
+  .wb-trigger{background:#1d1d1f;color:#fff;border-radius:13px;padding:13px 15px;max-width:340px;margin:0 auto}
+  .wb-trigger .tl{display:flex;justify-content:space-between;font-size:9px;font-weight:700;letter-spacing:.08em;color:#9a9aa0}
+  .wb-trigger .tm{font-size:14px;font-weight:600;margin-top:7px;display:flex;align-items:center;gap:8px}
+  .wb-wait{text-align:center;font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-4);padding:9px 0}
+  .wb-wait .pl{display:inline-flex;width:20px;height:20px;border:1px solid var(--line);border-radius:50%;align-items:center;justify-content:center;color:var(--brand-dark);margin-bottom:5px}
+  .wb-stage{border:1px solid var(--line);border-radius:13px;overflow:hidden}
+  .wb-stage .strip{height:4px}
+  .wb-stage .sh{display:flex;align-items:center;gap:9px;padding:12px 14px 8px}
+  .wb-stage .num{width:22px;height:22px;border-radius:50%;border:1.5px solid currentColor;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .wb-stage .snm{font-size:14px;font-weight:700;font-family:Georgia,serif}
+  .wb-stage .sdesc{font-size:11px;color:var(--ink-3)}
+  .wb-stage .prio{font-size:8.5px;font-weight:700;letter-spacing:.05em;color:var(--brand-dark);background:var(--brand-tint);border-radius:5px;padding:2px 6px}
+  .wb-stage .scnt{margin-left:auto;font-size:9px;font-weight:600;color:var(--ink-4);letter-spacing:.05em}
+  .wb-svc{display:flex;align-items:flex-start;gap:10px;border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin:0 12px 12px}
+  .wb-svc .si{font-size:16px;flex-shrink:0}
+  .wb-svc .snm2{font-size:12.5px;font-weight:600}
+  .wb-svc .sd2{font-size:10.5px;color:var(--ink-3);margin-top:1px}
+  .wb-svc .vendor{margin-left:auto;font-size:10px;color:var(--ink-4);border:1px solid var(--line);border-radius:999px;padding:4px 10px;white-space:nowrap;align-self:center}
+  .wb-chips{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
+  .wb-chip{font-size:8.5px;font-weight:700;letter-spacing:.04em;border-radius:5px;padding:2px 6px}
+
+  /* results */
+  .wb-demo{font-size:9.5px;font-weight:700;letter-spacing:.04em;color:#c98a2e;background:#fdf3e2;border-radius:999px;padding:5px 11px}
+  .wb-headline{font-size:14.5px;color:var(--ink-2);line-height:1.55;margin-top:10px}
+  .wb-gcards{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:13px}
+  .wb-gcard{border:1px solid var(--line);border-radius:12px;padding:13px}
+  .wb-gcard .gn{font-size:11px;font-weight:600;color:var(--ink-2);line-height:1.3;min-height:28px}
+  .wb-gcard .gp{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:7px}
+  .wb-gcard .gp small{font-size:9px;font-weight:700;letter-spacing:.05em;margin-left:6px;vertical-align:middle}
+  .wb-gcard .gmeta{font-size:9.5px;color:var(--ink-4);margin-top:3px}
+  .wb-run{display:flex;align-items:center;gap:11px;border-left:3px solid var(--brand);padding:8px 0 8px 12px;margin-top:6px}
+  .wb-run .rt2{font-size:12.5px;font-weight:700}
+  .wb-run .rok{font-size:9px;font-weight:700;color:var(--brand-dark);background:var(--brand-tint);border-radius:5px;padding:2px 7px}
+  .wb-run .rd{font-size:10.5px;color:var(--ink-3)}
+
+  /* ============ GLOSSARY ============ */
+  .glossary{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px;margin-bottom:18px}
+  .glossary > .step{font-size:12px}
+  .glossary h2{font-size:21px;font-weight:700;letter-spacing:-.01em;margin:5px 0 4px}
+  .glossary > p{font-size:13.5px;color:var(--ink-3);margin-bottom:16px}
+  .gloss-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .gterm{border:1px solid var(--line);border-radius:13px;padding:14px 16px}
+  .gterm .word{font-size:14px;font-weight:700}
+  .gterm .word .app{font-size:10.5px;font-weight:600;color:var(--ink-4);margin-left:8px}
+  .gterm .mean{font-size:12.5px;color:var(--ink-2);margin-top:6px}
+  .gterm .mean b{color:var(--brand-dark);font-weight:600}
+
+  /* ============ MOBILE-CONCEPT WORKBENCH ============ */
+  .concept-note{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-3);
+    background:#fff7ed;border:1px solid #f3d9b8;border-radius:999px;padding:6px 13px;margin-top:12px}
+  .concept-note b{color:#b9762a;font-weight:700}
+  .concepts{display:grid;grid-template-columns:repeat(auto-fit,minmax(256px,1fr));gap:26px;margin-top:24px}
+  .concept{display:flex;flex-direction:column;align-items:center}
+  .concept .cbadge{font-size:8.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:#b9762a;background:#fff7ed;border:1px solid #f3d9b8;border-radius:6px;padding:3px 8px;margin-bottom:11px}
+  .concept .ctitle{font-size:15px;font-weight:700;margin-top:14px}
+  .concept .cwhat{font-size:12px;color:var(--ink-3);text-align:center;margin-top:4px;max-width:262px}
+  .concept .cnotes{margin-top:13px;width:100%;max-width:284px}
+  .concept .cnotes h4{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+  .concept .cnotes ul{list-style:none}
+  .concept .cnotes li{font-size:11.5px;color:var(--ink-2);padding:4px 0 4px 14px;position:relative}
+  .concept .cnotes li::before{content:"";position:absolute;left:0;top:11px;width:4px;height:4px;border-radius:50%;background:var(--brand)}
+  .concept .cnotes li b{color:var(--ink);font-weight:600}
+
+  /* mobile-concept workbench bits (scaled to the ~256px screen) */
+  .mwb-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .mwb-h{font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:700;letter-spacing:-.01em;line-height:1.1}
+  .mwb-sub{font-size:9px;color:var(--ink-3);margin-top:2px}
+  .mwb-pill{font-size:9px;font-weight:600;border:1px solid var(--line);border-radius:999px;padding:4px 9px;color:var(--ink-2);white-space:nowrap}
+  .mwb-fab{width:26px;height:26px;border-radius:50%;background:var(--brand);color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .mwb-card{border:1px solid var(--line);border-radius:11px;padding:11px;margin-top:11px}
+  .mwb-cap{font-size:8px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
+  .mwb-ai{font-size:8px;font-weight:700;color:var(--brand-dark);background:var(--brand-tint);border-radius:999px;padding:2px 7px;margin-left:6px}
+  .mwb-brief{font-size:10.5px;color:var(--ink-2);margin-top:7px;line-height:1.45}
+  .mwb-goal{padding:7px 0;border-bottom:1px solid var(--canvas)}
+  .mwb-goal:last-child{border-bottom:none}
+  .mwb-goal .t{font-size:10.5px;font-weight:600}
+  .mwb-goal .s{font-size:8px;font-weight:700;letter-spacing:.04em;margin-top:2px}
+  .mwb-bet{display:flex;gap:7px;padding:6px 0;font-size:10.5px;color:var(--ink-2)}
+  .mwb-bet .n{width:15px;height:15px;border-radius:50%;background:var(--brand-tint);color:var(--brand-dark);font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+  /* plan concept */
+  .mwb-strip{display:flex;gap:5px;margin-top:11px;overflow:hidden}
+  .mwb-strip span{font-size:8.5px;font-weight:600;color:var(--ink-4);padding:5px 9px;border:1px solid var(--line);border-radius:8px;white-space:nowrap}
+  .mwb-strip span.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .mwb-camp{border:1px solid var(--line);border-radius:11px;padding:10px 11px;margin-top:9px;border-left:3px solid}
+  .mwb-camp .cn{font-size:11px;font-weight:700}
+  .mwb-camp .cm{font-size:8.5px;color:var(--ink-3);margin-top:2px;display:flex;justify-content:space-between}
+  .mwb-camp .cbar{height:5px;background:var(--canvas);border-radius:999px;margin-top:8px;overflow:hidden}
+  .mwb-camp .cbar i{display:block;height:100%;border-radius:999px}
+  /* flows concept */
+  .mwb-trig{background:#1d1d1f;color:#fff;border-radius:11px;padding:10px 12px;margin-top:4px}
+  .mwb-trig .l{display:flex;justify-content:space-between;font-size:7.5px;font-weight:700;letter-spacing:.07em;color:#9a9aa0}
+  .mwb-trig .m{font-size:11.5px;font-weight:600;margin-top:5px}
+  .mwb-wait{text-align:center;font-size:7.5px;font-weight:700;letter-spacing:.07em;color:var(--ink-4);padding:7px 0}
+  .mwb-wait .pl{display:inline-flex;width:17px;height:17px;border:1px solid var(--line);border-radius:50%;align-items:center;justify-content:center;color:var(--brand-dark);margin-bottom:4px}
+  .mwb-stage{border:1px solid var(--line);border-radius:11px;overflow:hidden}
+  .mwb-stage .strip{height:3px}
+  .mwb-stage .sh{display:flex;align-items:center;gap:7px;padding:9px 10px 6px}
+  .mwb-stage .num{width:17px;height:17px;border:1.5px solid currentColor;border-radius:50%;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .mwb-stage .nm{font-size:11.5px;font-weight:700;font-family:Georgia,serif}
+  .mwb-stage .ds{font-size:8.5px;color:var(--ink-3)}
+  .mwb-stage .pr{font-size:7px;font-weight:700;color:var(--brand-dark);background:var(--brand-tint);border-radius:4px;padding:2px 5px}
+  .mwb-stage .sc{margin-left:auto;font-size:7.5px;font-weight:600;color:var(--ink-4)}
+  .mwb-svc{border:1px solid var(--line);border-radius:9px;padding:8px 9px;margin:0 10px 10px;display:flex;gap:7px}
+  .mwb-svc .i{font-size:13px;flex-shrink:0}
+  .mwb-svc .n{font-size:10px;font-weight:600}
+  .mwb-svc .d{font-size:8px;color:var(--ink-3);margin-top:1px}
+  .mwb-svc .v{margin-left:auto;font-size:8px;color:var(--ink-4);border:1px solid var(--line);border-radius:999px;padding:3px 7px;align-self:center;white-space:nowrap}
+  .mwb-chips{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
+  .mwb-chip{font-size:7px;font-weight:700;letter-spacing:.03em;border-radius:4px;padding:1px 5px}
+  /* results concept */
+  .mwb-demo{font-size:7.5px;font-weight:700;letter-spacing:.03em;color:#c98a2e;background:#fdf3e2;border-radius:999px;padding:3px 8px;white-space:nowrap}
+  .mwb-head{font-size:11px;color:var(--ink-2);line-height:1.5;margin-top:7px}
+  .mwb-gcard{border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-top:8px;display:flex;align-items:center;gap:11px}
+  .mwb-gcard .gp{font-size:21px;font-weight:700;letter-spacing:-.02em;flex-shrink:0}
+  .mwb-gcard .gn{font-size:9.5px;font-weight:600;color:var(--ink-2)}
+  .mwb-gcard .gs{font-size:7.5px;font-weight:700;letter-spacing:.04em;margin-top:2px}
+  .mwb-run{border-left:3px solid var(--brand);padding:6px 0 6px 9px;margin-top:8px}
+  .mwb-run .rt{font-size:10.5px;font-weight:700;display:flex;align-items:center;gap:6px}
+  .mwb-run .ok{font-size:7.5px;font-weight:700;color:var(--brand-dark);background:var(--brand-tint);border-radius:4px;padding:1px 6px}
+  .mwb-run .rd{font-size:8px;color:var(--ink-3);margin-top:2px}
+  .gs.ok{color:var(--brand-dark)} .gs.risk{color:#c98a2e}
+
+  @media(max-width:900px){
+    .surfaces{grid-template-columns:1fr}
+    .pgrid{grid-template-columns:1fr}
+    .wb-gcards{grid-template-columns:1fr}
+    .gloss-grid{grid-template-columns:1fr}
+    .phase{grid-template-columns:1fr;justify-items:center}
+    .phase .pane{width:100%}
+    .phone{position:static;margin-bottom:8px}
+    .lanes{grid-template-columns:1fr}
+    .deep{grid-template-columns:1fr 1fr}
+    .scn{grid-template-columns:1fr}
+    .scn .what{color:var(--ink-3)}
+  }
+
+  /* ===================================================================
+     VISUAL ENHANCEMENT LAYER  (overrides — cascade wins by coming last)
+     Goal: faster to grasp. Color-coded lanes, clearer steps, more depth.
+     =================================================================== */
+
+  /* Soft brand + blue glow so the page reads as designed, not a flat doc. */
+  body{
+    background:
+      radial-gradient(1150px 540px at 10% -10%, #e6f5ef 0%, rgba(230,245,239,0) 58%),
+      radial-gradient(950px 520px at 102% -4%, #eef1ff 0%, rgba(238,241,255,0) 55%),
+      var(--canvas);
+    background-attachment:fixed;
+  }
+
+  /* Header: bigger title, badge with a dot. */
+  h1{font-size:40px;line-height:1.04}
+  .sub{font-size:16.5px;line-height:1.55}
+  .badge{box-shadow:0 1px 2px rgba(46,154,120,.12)}
+  .badge::before{content:"●";color:var(--brand);font-size:8px;margin-right:7px;vertical-align:1px}
+  /* Legend items become little chips. */
+  .legend span{background:#fff;border:1px solid var(--line);border-radius:999px;
+    padding:6px 13px;font-weight:500;color:var(--ink-2);box-shadow:0 1px 2px rgba(0,0,0,.03)}
+
+  /* "Step" labels everywhere become a consistent tinted chip. */
+  .step,.divider .step,.glossary > .step,.panel .phead .pn{
+    display:inline-block;background:var(--brand-tint);color:var(--brand-dark);
+    padding:4px 11px;border-radius:999px;letter-spacing:.06em}
+
+  /* Surface explainer cards: a big glyph, tint, top accent, hover lift. */
+  .surf{position:relative;padding:20px 20px 18px 68px;overflow:hidden;transition:transform .16s,box-shadow .16s}
+  .surf::after{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--brand)}
+  .surf::before{position:absolute;left:18px;top:19px;font-size:30px;line-height:1}
+  .surfaces .surf:first-child{background:linear-gradient(180deg,rgba(74,189,152,.07),#fff)}
+  .surfaces .surf:first-child::before{content:"📱"}
+  .surfaces .surf:last-child{background:linear-gradient(180deg,rgba(122,167,255,.08),#fff)}
+  .surfaces .surf:last-child::after{background:var(--sees)}
+  .surfaces .surf:last-child::before{content:"🖥️"}
+  .surfaces .surf:last-child .st{color:#4f74c9}
+  .surf:hover{transform:translateY(-2px);box-shadow:0 16px 38px -20px rgba(0,0,0,.22)}
+
+  /* Phase rail: progression chips with hover, brand arrows, top accent. */
+  .pill{box-shadow:0 1px 3px rgba(0,0,0,.05);transition:transform .15s,box-shadow .15s,border-color .15s;overflow:hidden}
+  .pill::after{content:"";position:absolute;left:0;right:0;top:0;height:3px;
+    background:linear-gradient(90deg,var(--brand),#7fd3ba)}
+  .pill .n{display:inline-block;background:var(--brand-tint);color:var(--brand-dark);
+    border-radius:999px;padding:2px 9px}
+  .pill .arrow{color:var(--brand);font-weight:700}
+  .pill:hover{transform:translateY(-2px);box-shadow:0 12px 26px -14px rgba(0,0,0,.22);border-color:var(--brand)}
+
+  /* Phase / panel / glossary cards: gentle depth + hover lift. */
+  .phase,.panel,.glossary{box-shadow:0 1px 3px rgba(0,0,0,.04);transition:box-shadow .2s}
+  .phase:hover,.panel:hover,.glossary:hover{box-shadow:0 22px 56px -28px rgba(0,0,0,.20)}
+
+  /* THE BIG WIN: tint each lane so Does / Sees / Feels are instantly distinct. */
+  .lanes{gap:14px}
+  .lane{border-radius:13px;padding:13px 14px;border:1px solid}
+  .lane.does{background:rgba(74,189,152,.07);border-color:rgba(74,189,152,.26)}
+  .lane.sees{background:rgba(122,167,255,.09);border-color:rgba(122,167,255,.30)}
+  .lane.feels{background:rgba(240,176,61,.10);border-color:rgba(240,176,61,.32)}
+  .lane h3{margin:-2px -2px 9px;padding-bottom:8px;border-bottom:1px solid rgba(0,0,0,.06)}
+  .lane.does h3{color:var(--brand-dark)}
+  .lane.sees h3{color:#4f74c9}
+  .lane.feels h3{color:#c98a2e}
+  .lane li::before{top:13px}
+
+  /* Setup-style screens have no bottom tab bar, so short content would leave
+   * a white void. Fill the device height and pin the primary CTA to the
+   * bottom — exactly how a real mobile onboarding screen looks. */
+  .screen .scroll.fill{display:flex;flex-direction:column;height:100%}
+  .screen .scroll.fill .m-btn{margin-top:auto}
+
+  /* Section dividers: an on-brand banner so each PART is unmistakable. */
+  .divider{background:linear-gradient(118deg,var(--brand-tint),#ffffff 70%);
+    border:1px solid #bfe6d8;border-left:5px solid var(--brand);
+    border-radius:16px;padding:20px 24px;margin:56px 0 16px;
+    box-shadow:0 1px 3px rgba(0,0,0,.04)}
+
+  /* "Plain words" translate callout: speech glyph + accent rail. */
+  .translate{position:relative;padding:12px 16px 12px 46px;border-left:4px solid var(--brand)}
+  .translate::before{content:"💬";position:absolute;left:15px;top:11px;font-size:15px}
+
+  /* Scenario rows ("When you'd use it"): hover highlight, accent on the cue. */
+  .scenarios .scn{border-bottom:none;border-radius:10px;padding:9px 12px;transition:background .14s}
+  .scenarios .scn:hover{background:rgba(74,189,152,.06)}
+  .scenarios .scn .when{border-left:2px solid var(--brand);padding-left:11px}
+
+  /* Glossary terms: lead dot + hover lift. */
+  .gterm{transition:transform .14s,border-color .14s,box-shadow .14s}
+  .gterm:hover{transform:translateY(-2px);border-color:var(--brand);box-shadow:0 12px 26px -16px rgba(0,0,0,.18)}
+  .gterm .word::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;
+    background:var(--brand);margin-right:8px;vertical-align:2px}
+
+  /* Part 4 teaser: the compounding-value story, with a link to the full doc. */
+  .compound{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+  .compound .eng{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;
+    box-shadow:0 1px 3px rgba(0,0,0,.04);transition:box-shadow .2s,transform .2s}
+  .compound .eng:hover{box-shadow:0 18px 44px -24px rgba(0,0,0,.20);transform:translateY(-2px)}
+  .compound .eng .gl{font-size:24px;line-height:1}
+  .compound .eng h3{font-size:16px;font-weight:700;margin-top:10px}
+  .compound .eng p{font-size:13px;color:var(--ink-2);margin-top:6px}
+  .compound-cta{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;
+    background:linear-gradient(135deg,var(--brand-dark),#207a5d);color:#fff;border-radius:18px;
+    padding:22px 26px;box-shadow:0 24px 56px -30px rgba(32,122,93,.6)}
+  .compound-cta .ct-txt{max-width:640px}
+  .compound-cta .ct-txt .s{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.72)}
+  .compound-cta .ct-txt h3{font-size:21px;font-weight:700;letter-spacing:-.01em;margin-top:6px}
+  .compound-cta .ct-txt p{font-size:13.5px;color:rgba(255,255,255,.9);margin-top:5px}
+  .compound-cta a.btn{flex-shrink:0;background:#fff;color:var(--brand-dark);font-size:14px;font-weight:700;
+    text-decoration:none;border-radius:999px;padding:13px 22px;white-space:nowrap;transition:transform .15s}
+  .compound-cta a.btn:hover{transform:translateY(-2px)}
+  @media (max-width:760px){.compound{grid-template-columns:1fr}}
+
+  /* Phone→Workbench bridge: makes the handoff explicit and reassures the owner
+     they co-pilot while the strategist drives. */
+  .handoff{display:flex;gap:20px;align-items:flex-start;
+    background:linear-gradient(135deg,#0e1a16,#13261f);color:#fff;border-radius:20px;
+    padding:26px 30px;margin:8px 0 40px;box-shadow:0 30px 70px -36px rgba(14,26,22,.7)}
+  .handoff .hf-ic{font-size:30px;line-height:1;flex-shrink:0;margin-top:2px}
+  .handoff .s{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}
+  .handoff h3{font-size:22px;font-weight:700;letter-spacing:-.01em;margin-top:7px}
+  .handoff p{font-size:14px;line-height:1.55;color:rgba(255,255,255,.86);margin-top:9px;max-width:760px}
+  .handoff p b{color:#fff}
+  @media (max-width:620px){.handoff{flex-direction:column;gap:12px;padding:22px}}
+
+  /* Inline primer: defines the 3 foundational terms before the first panel uses them. */
+  .primer{margin:0 0 26px}
+  .primer .pl{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px}
+  .primer .pcards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .primer .pc{background:var(--brand-tint);border:1px solid #cfeae0;border-radius:14px;padding:14px 16px}
+  .primer .pc .w{font-size:14px;font-weight:700;color:var(--brand-dark)}
+  .primer .pc .m{font-size:12.5px;color:var(--ink-2);margin-top:4px;line-height:1.5}
+  @media (max-width:760px){.primer .pcards{grid-template-columns:1fr}}
+
+  /* Shared doc nav: jump between the three companion docs. */
+  .docnav{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:24px}
+  .docnav a{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
+    text-decoration:none;color:var(--ink-2);background:var(--card);border:1px solid var(--line);
+    border-radius:999px;padding:8px 15px;transition:border-color .15s,color .15s,background .15s,transform .15s}
+  .docnav a:hover{border-color:var(--brand);color:var(--brand-dark);transform:translateY(-1px)}
+  .docnav a.on{background:var(--brand);border-color:var(--brand);color:#fff}
+  .docnav a.on:hover{color:#fff;transform:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="docnav">
+    <a href="OWNER-JOURNEY-MAP.html" class="on">🗺 Owner journey</a>
+    <a href="WHY-IT-COMPOUNDS.html">📈 Why it compounds</a>
+    <a href="FLOWS-AND-PRICING.html">🔀 Flows + pricing</a>
+  </nav>
+
+  <header class="top">
+    <span class="badge">Apnosh · Owner Dashboard</span>
+    <h1>How a restaurant owner uses the portal</h1>
+    <p class="sub">A visual journey from first sign up to a steady weekly habit. Each phase shows the real mobile screen, what the owner does, what they see, how they feel, and exactly when they would use it. Part 2 opens the Workbench, where the plan behind the briefing is built.</p>
+    <div class="legend">
+      <span><i class="dot does"></i> Does (the action)</span>
+      <span><i class="dot sees"></i> Sees (on screen)</span>
+      <span><i class="dot feels"></i> Feels (mindset)</span>
+    </div>
+    <div class="surfaces">
+      <div class="surf">
+        <div class="st">Part 1 · On your phone</div>
+        <h3>The daily dashboard</h3>
+        <p>The home you check with morning coffee. Numbers, what needs you, what's coming. Two minutes a day.</p>
+        <div class="who"><b>Who:</b> the owner, on the go &nbsp;·&nbsp; <b>How often:</b> daily</div>
+      </div>
+      <div class="surf">
+        <div class="st">Part 2 · On a bigger screen</div>
+        <h3>The Workbench</h3>
+        <p>Where your strategist builds the plan behind your briefing: the game plan, the calendar, the recipes that run, and the scoreboard. You drop in to set direction and approve.</p>
+        <div class="who"><b>Who:</b> your strategist, with you &nbsp;·&nbsp; <b>How often:</b> monthly, or when planning</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- phase rail -->
+  <div class="rail">
+    <div class="pill"><div class="n">PHASE 1</div><div class="t">Sign up &amp; set up</div><span class="arrow">›</span></div>
+    <div class="pill"><div class="n">PHASE 2</div><div class="t">First run</div><span class="arrow">›</span></div>
+    <div class="pill"><div class="n">PHASE 3</div><div class="t">Daily briefing</div><span class="arrow">›</span></div>
+    <div class="pill"><div class="n">PHASE 4</div><div class="t">Go deep</div><span class="arrow">›</span></div>
+    <div class="pill"><div class="n">PHASE 5</div><div class="t">Review &amp; grow</div></div>
+  </div>
+
+  <!-- ===================== PHASE 1 ===================== -->
+  <section class="phase">
+    <div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen"><div class="scroll fill">
+          <div class="cap ink">Step 2 of 3</div>
+          <div class="m-prog"><i class="on"></i><i class="on"></i><i></i></div>
+          <div class="m-h">Pick your goals</div>
+          <div class="m-p">Up to 3. This shapes your whole plan.</div>
+          <div class="m-opt sel"><span class="ic">📣</span><div><div class="ot">Get more new diners</div><div class="od">Reach people nearby</div></div><span class="ck">✓</span></div>
+          <div class="m-opt sel"><span class="ic">🔁</span><div><div class="ot">Bring regulars back</div><div class="od">Email &amp; SMS offers</div></div><span class="ck">✓</span></div>
+          <div class="m-opt"><span class="ic">⭐</span><div><div class="ot">Raise my rating</div><div class="od">Reviews &amp; replies</div></div></div>
+          <div class="m-opt"><span class="ic">📅</span><div><div class="ot">Fill slow nights</div><div class="od">Deals on quiet days</div></div></div>
+          <div class="m-btn">Continue</div>
+        </div></div>
+      </div>
+      <p class="capt">Built mockup · matches <b>/setup/goals</b></p>
+    </div>
+    <div class="pane">
+      <div class="step">PHASE 1</div>
+      <h2>Sign up &amp; set up</h2>
+      <p class="goal">A short gate before the dashboard. Tell us the shape of the business and pick the goals that drive everything else.</p>
+      <span class="route">/setup → /setup/restaurant → /setup/goals → /setup/connect</span>
+      <div class="lanes">
+        <div class="lane does"><h3><i class="dot does"></i>Does</h3><ul>
+          <li>Answers 4 questions about the restaurant</li>
+          <li>Picks up to 3 goals from the catalog</li>
+          <li>Connects accounts, or taps "I'll do this later"</li>
+        </ul></div>
+        <div class="lane sees"><h3><i class="dot sees"></i>Sees</h3><ul>
+          <li>Three short steps, one screen each</li>
+          <li>A goal picker that sets the whole plan</li>
+          <li>A clear skip option on connect</li>
+        </ul></div>
+        <div class="lane feels"><h3><i class="dot feels"></i>Feels</h3><ul>
+          <li>"This is quick."</li>
+          <li>"They get my kind of place."</li>
+          <li>"I can finish later if I'm busy."</li>
+        </ul></div>
+      </div>
+      <div class="scenarios">
+        <h3>When you'd use it</h3>
+        <div class="scn"><div class="when">First time signing in<em>Brand new account</em></div><div class="what">Walks the 3 steps once. Sets the concept and goals the rest of the plan is built on.</div></div>
+        <div class="scn"><div class="when">Goals change<em>New season or focus</em></div><div class="what">Comes back to swap goals (e.g. from "new diners" to "fill slow nights") when priorities shift.</div></div>
+        <div class="scn"><div class="when">Too busy to finish<em>Mid-service signup</em></div><div class="what">Taps "I'll do this later" on connect and lands on the dashboard. Profile shows as paused.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PHASE 2 ===================== -->
+  <section class="phase">
+    <div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen"><div class="scroll">
+          <div class="cap ink">Welcome</div>
+          <div class="m-h" style="margin-top:5px">Let's get you set up</div>
+          <div class="m-p">Four quick steps to your first win.</div>
+          <div class="m-guide"><div class="gi">🔗</div><div class="gt">Connect your accounts</div><div class="gd">Google, Instagram, Facebook</div><div class="gl">Connect now ›</div></div>
+          <div class="m-guide"><div class="gi">🧭</div><div class="gt">Browse services</div><div class="gd">See what's free and what's paid</div><div class="gl">Explore ›</div></div>
+          <div class="m-guide"><div class="gi">👋</div><div class="gt">Meet your strategist</div><div class="gd">A real person on your side</div><div class="gl">Say hi ›</div></div>
+        </div></div>
+        <div class="tabbar">
+          <div class="tb on"><span class="ic">🏠</span>Home</div>
+          <div class="tb"><span class="ic">📥</span>Inbox</div>
+          <div class="tb"><span class="ic">＋</span>Quick</div>
+          <div class="tb"><span class="ic">📅</span>Plan</div>
+          <div class="tb"><span class="ic">☰</span>Menu</div>
+        </div>
+      </div>
+      <p class="capt">Built mockup · matches <b>getting-started</b> state</p>
+    </div>
+    <div class="pane">
+      <div class="step">PHASE 2</div>
+      <h2>First run</h2>
+      <p class="goal">A fresh account with no data yet. Instead of an empty page, four guide cards point the way to Day 1.</p>
+      <span class="route">/dashboard (getting-started state)</span>
+      <div class="lanes">
+        <div class="lane does"><h3><i class="dot does"></i>Does</h3><ul>
+          <li>Connects the accounts marked at signup</li>
+          <li>Browses free and paid services</li>
+          <li>Meets their strategist</li>
+          <li>Finishes the profile if it was paused</li>
+        </ul></div>
+        <div class="lane sees"><h3><i class="dot sees"></i>Sees</h3><ul>
+          <li>Four big guide cards, not a blank screen</li>
+          <li>A "finish your profile" banner if needed</li>
+          <li>A real person to message</li>
+        </ul></div>
+        <div class="lane feels"><h3><i class="dot feels"></i>Feels</h3><ul>
+          <li>"I know what to do first."</li>
+          <li>"I'm not alone in this."</li>
+          <li>"There's value here before I pay."</li>
+        </ul></div>
+      </div>
+      <div class="scenarios">
+        <h3>When you'd use it</h3>
+        <div class="scn"><div class="when">Right after setup<em>No data yet</em></div><div class="what">Sees the four cards instead of empty charts. Connects accounts so real numbers start flowing in.</div></div>
+        <div class="scn"><div class="when">Skipped connect earlier<em>Profile paused</em></div><div class="what">A banner nudges them to finish. One tap returns to the connect step.</div></div>
+        <div class="scn"><div class="when">Curious about value<em>Before committing</em></div><div class="what">Browses services and messages the strategist to feel out the relationship before paying.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PHASE 3 (HABIT LOOP) ===================== -->
+  <section class="phase loop">
+    <div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen more"><div class="scroll">
+          <div class="m-top"><span class="cap">Customer actions ⌄</span><span class="m-bell">🔔</span></div>
+          <div class="m-subtle">Calls, directions &amp; website clicks</div>
+          <div class="m-hero">
+            <div class="m-big">18</div>
+            <div class="m-avg"><div class="cap ink">Avg / day</div><div class="v">3.0</div><div class="m-range">No change</div></div>
+          </div>
+          <div class="m-range">This week · May 24 – May 30</div>
+          <div class="m-bars"><i style="height:60%"></i><i style="height:48%"></i><i style="height:90%"></i><i style="height:68%"></i><i style="height:46%"></i><i style="height:94%"></i><i style="height:7%"></i></div>
+          <div class="m-days"><span>SUN</span><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span></div>
+          <div class="m-tiles">
+            <div class="m-tile"><b>6</b><span>📍 Directions</span></div>
+            <div class="m-tile"><b>5</b><span>📞 Calls</span></div>
+            <div class="m-tile"><b>4</b><span>➤ Site clicks</span></div>
+            <div class="m-tile"><b>3</b><span>📅 Bookings</span></div>
+          </div>
+          <div class="m-spark">
+            <svg viewBox="0 0 240 34" preserveAspectRatio="none">
+              <polyline points="0,16 30,22 60,18 90,26 120,8 150,20 180,24 210,12 240,17"
+                fill="none" stroke="#2e9a78" stroke-width="2" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="m-seg"><span class="on">Week</span><span>Month</span><span>Year</span></div>
+
+          <div class="m-sec"><span class="cap">Needs you · 3</span><span class="cap">Inbox ›</span></div>
+          <div class="m-row"><span class="ic">↩</span><span class="tx">Reply to a 3-star review</span><span class="pchip">2 min</span><span class="chev">›</span></div>
+          <div class="m-row"><span class="ic">🖼</span><span class="tx">Approve Friday's Instagram post</span><span class="pchip">30 sec</span><span class="chev">›</span></div>
+          <div class="m-row"><span class="ic">🕐</span><span class="tx">Set Memorial Day hours</span><span class="pchip">1 min</span><span class="chev">›</span></div>
+
+          <div class="m-sec"><span class="cap">This week</span></div>
+          <div class="m-band"><span class="av">M</span><div><div class="bt">Maria shipped 7 updates for you</div><div class="bs">3 posts · 2 review replies · 2 profile updates</div></div></div>
+
+          <div class="m-sec"><span class="cap">Your channels</span><span class="cap">Insights</span></div>
+          <div class="m-ins">
+            <div class="c"><div class="k">Local presence · Profile views</div><div class="vv">1,840</div><div class="dl">+12%</div></div>
+            <div class="c"><div class="k">Social media · Reach</div><div class="vv">1,720</div><div class="dl">+22%</div></div>
+            <div class="c"><div class="k">Website</div><div class="vv" style="font-size:12px;color:var(--ink-3)">Not connected</div><div class="dl">Connect</div></div>
+            <div class="c"><div class="k">Reviews · Avg rating</div><div class="vv">4.7★</div><div class="dl">+3 new</div></div>
+          </div>
+
+          <div class="m-sec"><span class="cap">Plan</span><span class="cap">Open</span></div>
+          <div class="m-plan"><div class="tag">IN 4 DAYS</div><div class="tt">Memorial Day</div><div class="dd">Your busiest Monday. Launch a promo to capture it.</div><div class="cta">Plan a promo ›</div></div>
+          <div class="m-plan"><div class="tag">IN 3 WEEKS</div><div class="tt">Father's Day</div><div class="dd">Families book early. Add a special now.</div><div class="cta">Add a special ›</div></div>
+        </div></div>
+        <div class="tabbar">
+          <div class="tb on"><span class="ic">🏠</span>Home</div>
+          <div class="tb"><span class="ic">📥</span>Inbox</div>
+          <div class="tb"><span class="ic">＋</span>Quick</div>
+          <div class="tb"><span class="ic">📅</span>Plan</div>
+          <div class="tb"><span class="ic">☰</span>Menu</div>
+        </div>
+      </div>
+      <p class="capt">Rendered from the live <b>/m-home-dev</b> mobile home</p>
+    </div>
+    <div class="pane">
+      <div class="step">PHASE 3 · THE HABIT LOOP</div>
+      <h2>Daily briefing</h2>
+      <p class="goal">The page they return to. Numbers at the top, then the work that needs them, then what's coming. This loop is the core of the product.</p>
+      <span class="route">/dashboard  ·  mobile home</span>
+      <div class="loop-ring">
+        <div class="node">📈 Read the numbers</div><span class="sep">→</span>
+        <div class="node">✅ Clear "Needs you"</div><span class="sep">→</span>
+        <div class="node">➕ Request new work</div><span class="sep">→</span>
+        <div class="node">📅 Check what's coming</div><span class="sep">↺</span>
+      </div>
+      <div class="lanes">
+        <div class="lane does"><h3><i class="dot does"></i>Does</h3><ul>
+          <li>Approves a drafted post</li>
+          <li>Replies to a review that needs a reply</li>
+          <li>Sets holiday hours before a busy day</li>
+          <li>Taps a plan card to launch a promo</li>
+        </ul></div>
+        <div class="lane sees"><h3><i class="dot sees"></i>Sees</h3><ul>
+          <li>One headline number with a 7-day chart</li>
+          <li>"Needs you" rows with time-to-do chips</li>
+          <li>What the strategist shipped this week</li>
+          <li>Channel insights and upcoming dates</li>
+        </ul></div>
+        <div class="lane feels"><h3><i class="dot feels"></i>Feels</h3><ul>
+          <li>"I see what matters in 2 minutes."</li>
+          <li>"Nothing is slipping through."</li>
+          <li>"Work moves even when I'm in service."</li>
+        </ul></div>
+      </div>
+      <div class="scenarios">
+        <h3>When you'd use it</h3>
+        <div class="scn"><div class="when">Morning coffee check<em>Daily, 2 minutes</em></div><div class="what">Glances at the number, clears the "Needs you" list, approves anything waiting. The core daily habit.</div></div>
+        <div class="scn"><div class="when">A bad review lands<em>Reputation moment</em></div><div class="what">The 3-star reply jumps to the top of "Needs you." Taps in, sends a reply in under 2 minutes.</div></div>
+        <div class="scn"><div class="when">A holiday is near<em>Plan prompt</em></div><div class="what">The plan card flags Memorial Day 4 days out. One tap starts a promo to capture the rush.</div></div>
+        <div class="scn"><div class="when">Wondering "is it working?"<em>Quick gut check</em></div><div class="what">Reach +22%, rating 4.7. Switches Week / Month / Year to see the trend without leaving home.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PHASE 4 ===================== -->
+  <section class="phase">
+    <div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen"><div class="scroll">
+          <div class="cap ink">Social</div>
+          <div class="m-areahero">
+            <div class="cap">This month</div>
+            <div style="font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:3px">12 posts</div>
+            <div style="font-size:10px;color:var(--ink-3);margin-top:2px">Reach 1,720 · +22% vs last month</div>
+          </div>
+          <div class="m-list">
+            <div class="li"><span class="ic">🗓</span><div><div class="lt">Calendar</div><div class="ld">See and schedule posts</div></div><span class="lc">›</span></div>
+            <div class="li"><span class="ic">📊</span><div><div class="lt">Results</div><div class="ld">What's landing, what's not</div></div><span class="lc">›</span></div>
+            <div class="li"><span class="ic">💬</span><div><div class="lt">Engage</div><div class="ld">Reply to comments &amp; DMs</div></div><span class="lc">›</span></div>
+            <div class="li"><span class="ic">📣</span><div><div class="lt">Ads</div><div class="ld">Boost a post or run a promo</div></div><span class="lc">›</span></div>
+          </div>
+        </div></div>
+        <div class="tabbar">
+          <div class="tb"><span class="ic">🏠</span>Home</div>
+          <div class="tb"><span class="ic">📥</span>Inbox</div>
+          <div class="tb"><span class="ic">＋</span>Quick</div>
+          <div class="tb"><span class="ic">📅</span>Plan</div>
+          <div class="tb on"><span class="ic">☰</span>Menu</div>
+        </div>
+      </div>
+      <p class="capt">Built mockup · a deep area (Social shown)</p>
+    </div>
+    <div class="pane">
+      <div class="step">PHASE 4</div>
+      <h2>Go deep</h2>
+      <p class="goal">When the owner wants detail, each area has its own home. Reached from a briefing card or the bottom tab bar.</p>
+      <span class="route">Home · Inbox · Quick · Plan · Menu (tab bar) + full nav</span>
+      <div class="deep">
+        <div class="tool"><div class="nm">Social</div><div class="ds">Plan, calendar, results, ads, engage</div><div class="rt">/dashboard/social</div></div>
+        <div class="tool"><div class="nm">Website</div><div class="ds">Copy, photos, health, traffic</div><div class="rt">/dashboard/website</div></div>
+        <div class="tool"><div class="nm">Local SEO</div><div class="ds">Reviews, listing, menu, locations</div><div class="rt">/dashboard/local-seo</div></div>
+        <div class="tool"><div class="nm">Email &amp; SMS</div><div class="ds">Campaigns, list, performance</div><div class="rt">/dashboard/email-sms</div></div>
+        <div class="tool"><div class="nm">Plan</div><div class="ds">The forward planner</div><div class="rt">/dashboard/analytics</div></div>
+        <div class="tool"><div class="nm">Inbox</div><div class="ds">Everything waiting on you</div><div class="rt">/dashboard/inbox</div></div>
+        <div class="tool"><div class="nm">Marketplace</div><div class="ds">Find vendors and influencers</div><div class="rt">/dashboard/marketplace</div></div>
+        <div class="tool"><div class="nm">Goals</div><div class="ds">Track the goals from setup</div><div class="rt">/dashboard/goals</div></div>
+      </div>
+      <div class="scenarios">
+        <h3>When you'd use it</h3>
+        <div class="scn"><div class="when">Planning a campaign<em>Proactive</em></div><div class="what">Opens Social or Plan to map a week of posts, or Marketplace to hire an influencer for a launch.</div></div>
+        <div class="scn"><div class="when">Stacked-up to-dos<em>Catch-up</em></div><div class="what">Opens the Inbox to clear everything waiting on you in one pass, not one ping at a time.</div></div>
+        <div class="scn"><div class="when">Fixing the basics<em>Maintenance</em></div><div class="what">Local SEO to correct hours or menu, Website to swap a photo, Email &amp; SMS to send an offer to regulars.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PHASE 5 ===================== -->
+  <section class="phase">
+    <div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen"><div class="scroll">
+          <div class="cap ink">May report</div>
+          <div class="m-h" style="margin-top:5px">Here's how May went</div>
+          <div class="m-p">Against the goals you set.</div>
+          <div class="m-kpi">
+            <div class="c"><div class="k">New diners</div><div class="v">+148</div><div class="d">+12% vs Apr</div></div>
+            <div class="c"><div class="k">Repeat visits</div><div class="v">+63</div><div class="d">+9% vs Apr</div></div>
+            <div class="c"><div class="k">Avg rating</div><div class="v">4.7★</div><div class="d">+0.2</div></div>
+            <div class="c"><div class="k">Reach</div><div class="v">1,720</div><div class="d">+22%</div></div>
+          </div>
+          <div class="m-goal">
+            <div class="cap">Goal progress</div>
+            <div class="g"><div class="gr"><span>More new diners</span><span>78%</span></div><div class="gb"><i style="width:78%"></i></div></div>
+            <div class="g"><div class="gr"><span>Bring regulars back</span><span>54%</span></div><div class="gb"><i style="width:54%"></i></div></div>
+            <div class="g"><div class="gr"><span>Raise my rating</span><span>91%</span></div><div class="gb"><i style="width:91%"></i></div></div>
+          </div>
+          <div class="m-btn">See what to add next</div>
+        </div></div>
+        <div class="tabbar">
+          <div class="tb"><span class="ic">🏠</span>Home</div>
+          <div class="tb"><span class="ic">📥</span>Inbox</div>
+          <div class="tb"><span class="ic">＋</span>Quick</div>
+          <div class="tb on"><span class="ic">📅</span>Plan</div>
+          <div class="tb"><span class="ic">☰</span>Menu</div>
+        </div>
+      </div>
+      <p class="capt">Built mockup · matches the report view</p>
+    </div>
+    <div class="pane">
+      <div class="step">PHASE 5</div>
+      <h2>Review &amp; grow</h2>
+      <p class="goal">Step back, see the trend against the goals, and decide what to add next.</p>
+      <span class="route">/dashboard/reports · /dashboard/quarterly-review · /dashboard/upgrade</span>
+      <div class="lanes">
+        <div class="lane does"><h3><i class="dot does"></i>Does</h3><ul>
+          <li>Reads the monthly or quarterly report</li>
+          <li>Compares results against the set goals</li>
+          <li>Adds a service or upgrades the plan</li>
+        </ul></div>
+        <div class="lane sees"><h3><i class="dot sees"></i>Sees</h3><ul>
+          <li>Plain results tied to real dates</li>
+          <li>Progress on each goal</li>
+          <li>A clear next step to grow</li>
+        </ul></div>
+        <div class="lane feels"><h3><i class="dot feels"></i>Feels</h3><ul>
+          <li>"I can see it's working."</li>
+          <li>"I know where my money went."</li>
+          <li>"I'm ready to do more."</li>
+        </ul></div>
+      </div>
+      <div class="scenarios">
+        <h3>When you'd use it</h3>
+        <div class="scn"><div class="when">End of the month<em>Monthly rhythm</em></div><div class="what">Opens the report to see the month against goals. Two minutes, no spreadsheet needed.</div></div>
+        <div class="scn"><div class="when">Quarterly check-in<em>With the strategist</em></div><div class="what">Reviews the quarter together, agrees what worked, and sets the focus for the next 90 days.</div></div>
+        <div class="scn"><div class="when">A goal is nearly met<em>Growth moment</em></div><div class="what">Rating goal at 91%. Taps "see what to add next" to upgrade or layer in a new service.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PHONE → WORKBENCH BRIDGE ============ -->
+  <div class="handoff">
+    <div class="hf-ic">🤝</div>
+    <div>
+      <div class="s">From your phone to the Workbench</div>
+      <h3>You stay on your phone. The Workbench is your strategist's bench.</h3>
+      <p>Phases 1 to 5 are your daily life: a two-minute glance, a few approvals, one tap to launch a promo. The next four screens are where your <b>strategist builds the plan</b> behind that briefing. You drop in to set your goals and approve the direction, usually side by side with them on a call. <b>You never have to build it alone.</b></p>
+    </div>
+  </div>
+
+  <!-- ============ PART 2 DIVIDER ============ -->
+  <div class="divider">
+    <div class="step">PART 2 · THE WORKBENCH</div>
+    <h2>Where the plan is built</h2>
+    <p>The briefing on your phone does not appear by magic. It comes from four screens in the Workbench. Your strategist drives these screens; you drop in to set goals and approve the direction. Each one answers a plain question, and each is made to read like a strategist's worksheet, not a database. Here is what each is for, what's on screen, and exactly when you'd open it.</p>
+  </div>
+
+  <!-- ===================== INLINE PRIMER ===================== -->
+  <div class="primer">
+    <div class="pl">Three words before we start</div>
+    <div class="pcards">
+      <div class="pc"><div class="w">Brief</div><div class="m">Your restaurant and its challenge, in a paragraph.</div></div>
+      <div class="pc"><div class="w">Goal</div><div class="m">A number you want to hit by a date.</div></div>
+      <div class="pc"><div class="w">Strategy bet</div><div class="m">A big move you're betting will work.</div></div>
+    </div>
+  </div>
+
+  <!-- ===================== WORKBENCH · STRATEGY ===================== -->
+  <section class="panel">
+    <div class="phead"><span class="pn">WORKBENCH 1 OF 4</span><h2>Strategy</h2><span class="rt">/workbench · Strategy tab</span></div>
+    <div class="translate"><b>In plain words:</b> your game plan. What kind of place you are, what you're trying to win this year, and the few big bets to get there.</div>
+    <div class="pgrid">
+      <div>
+        <div class="win">
+          <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="url">apnosh.com/workbench</span></div>
+          <div class="vp">
+            <div class="wb-tabs"><span class="on">🎯 Strategy</span><span>📋 Plan</span><span>🔀 Flows</span><span>📈 Results</span></div>
+            <div class="wb-topline">
+              <div><div class="wb-h">Strategy</div><div class="wb-sub">What we know about this restaurant, and what we're trying to do about it.</div></div>
+              <span class="wb-pill">🏠 Casual neighborhood ▾</span>
+            </div>
+            <div class="wb-card">
+              <div><span class="wb-cap">The brief</span><span class="wb-aichip">✨ AI · drafted</span></div>
+              <div class="wb-brieftext">Vinason is a neighborhood Vietnamese spot in a dense walkable area. Covers are steady at lunch but soft on Tue–Thu dinners. Loyal lunch crowd; weak weeknight dinner pull from the broader neighborhood.</div>
+            </div>
+            <div class="wb-two">
+              <div class="wb-card">
+                <span class="wb-cap">Goals · 3</span>
+                <div class="wb-goal"><div class="gt">★ +12% Tue–Thu dinner covers by end of Q3</div><div class="gs ok">ON TRACK</div></div>
+                <div class="wb-goal"><div class="gt">+50 email subscribers per month</div><div class="gs risk">AT RISK</div></div>
+                <div class="wb-goal"><div class="gt">Maintain 4.6★ rating on Google</div><div class="gs ok">ON TRACK</div></div>
+              </div>
+              <div class="wb-card">
+                <span class="wb-cap">Strategy bets · 3</span>
+                <div class="wb-bet"><span class="bn">1</span>Get nearby food influencers to try us and post</div>
+                <div class="wb-bet"><span class="bn">2</span>Convert first visits to seconds with a warm welcome flow</div>
+                <div class="wb-bet"><span class="bn">3</span>Build a regulars tier so lunch guests come for dinner</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="capt">Rendered from the live <b>Strategy</b> view</p>
+      </div>
+      <div>
+        <div class="block">
+          <h4>What's on screen</h4>
+          <ul>
+            <li><b>The brief</b>: a short AI-drafted read on your business. Tap "Regenerate" to redraft it.</li>
+            <li><b>Concept</b>: the pill up top (Casual neighborhood). It tailors every template.</li>
+            <li><b>Goals</b>: up to 3, each tagged On track or At risk.</li>
+            <li><b>Strategy bets</b>: the few big moves the whole plan rolls up to.</li>
+            <li><b>Coverage</b>: a check that every priority stage has at least one campaign.</li>
+          </ul>
+        </div>
+        <div class="block">
+          <h4>When you'd use it</h4>
+          <ul>
+            <li><b>Kickoff</b>: first real planning session, to set goals and bets together.</li>
+            <li><b>Season change</b>: patio season or holidays shift the focus.</li>
+            <li><b>A goal stalls</b>: "At risk" shows up, so you rethink the bet behind it.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== WORKBENCH · PLAN ===================== -->
+  <section class="panel">
+    <div class="phead"><span class="pn">WORKBENCH 2 OF 4</span><h2>Plan</h2><span class="rt">/workbench · Plan tab</span></div>
+    <div class="translate"><b>In plain words:</b> your marketing calendar for the year. Each bar is a campaign. Drag it to move it, click it to set the budget and details.</div>
+    <div class="pgrid">
+      <div>
+        <div class="win">
+          <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="url">apnosh.com/workbench</span></div>
+          <div class="vp">
+            <div class="wb-tabs"><span>🎯 Strategy</span><span class="on">📋 Plan</span><span>🔀 Flows</span><span>📈 Results</span></div>
+            <div class="wb-topline">
+              <div><div class="wb-h">Plan</div><div class="wb-sub">Drop campaigns onto months. Click a bar to edit. Drag a bar to move it.</div></div>
+              <span class="wb-newc">+ New campaign</span>
+            </div>
+            <div class="wb-cal">
+              <div class="wb-months"><span>MAY</span><span>JUN</span><span>JUL</span><span>AUG</span><span>SEP</span><span>OCT</span><span>NOV</span><span>DEC</span><span>JAN</span><span>FEB</span><span>MAR</span><span>APR</span></div>
+              <div class="wb-track">
+                <div class="wb-bar" style="left:1%;width:64%;top:8px;background:#9aa0a6"><span>🔁 Always-on baseline</span><span class="bud">· $1.2k</span></div>
+                <div class="wb-bar" style="left:9%;width:25%;top:42px;background:#5b9bd5"><span>Summer creator series</span><span class="bud">· $4.8k</span></div>
+                <div class="wb-bar" style="left:18%;width:33%;top:76px;background:#d98a4a"><span>Turn visitors into regulars</span><span class="bud">· $2.4k</span></div>
+                <div class="wb-bar" style="left:50%;width:9%;top:42px;background:#7a82d6"><span>Fall</span><span class="bud">· $3.2k</span></div>
+                <div class="wb-bar" style="left:67%;width:15%;top:42px;background:#3fa784"><span>Holiday catering</span><span class="bud">· $1.8k</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="capt">Rendered from the live <b>Plan</b> view</p>
+      </div>
+      <div>
+        <div class="block">
+          <h4>What's on screen</h4>
+          <ul>
+            <li><b>One row per campaign</b> across a 12-month strip (switch to 90 days or 6 months up top).</li>
+            <li><b>Drag</b> a bar to reschedule, <b>stretch</b> an edge to change how long it runs.</li>
+            <li><b>Budget</b> shows right on the bar, so the year's spend is visible at a glance.</li>
+            <li><b>Click any bar</b> to open its sheet.</li>
+          </ul>
+        </div>
+        <div class="block">
+          <h4>Click a campaign: what you can set</h4>
+          <ul>
+            <li><b>Goal</b>: one line on what success looks like.</li>
+            <li><b>Start &amp; end</b> dates, and a <b>budget</b>.</li>
+            <li><b>Primary stage</b>: sets the bar's color (Awareness, Decision, Loyalty…).</li>
+            <li><b>Channels</b>: Instagram, Email, Google, and more.</li>
+            <li><b>Vendors</b>: who delivers it (Apnosh, a freelancer, an agency, DIY).</li>
+            <li><b>Ongoing</b>: mark it on if it runs all the time.</li>
+            <li><b>Tactics</b>: jump straight to the flows attached to it.</li>
+          </ul>
+        </div>
+        <div class="block">
+          <h4>When you'd use it</h4>
+          <ul>
+            <li><b>Mapping the year</b>: lay out the big moments (Memorial Day, Father's Day, holidays).</li>
+            <li><b>Spreading budget</b>: see if too much lands in one month.</li>
+            <li><b>Reacting fast</b>: a slow stretch appears, so you drop in a quick campaign.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== WORKBENCH · FLOWS ===================== -->
+  <section class="panel">
+    <div class="phead"><span class="pn">WORKBENCH 3 OF 4</span><h2>Flows</h2><span class="rt">/workbench · Flows tab</span></div>
+    <div class="translate"><b>In plain words:</b> a recipe that runs itself. Pick a moment to start (a trigger), then list the steps in order. Once it's set, it keeps working without you.</div>
+    <div class="pgrid">
+      <div>
+        <div class="win">
+          <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="url">apnosh.com/workbench</span></div>
+          <div class="vp">
+            <div class="wb-tabs"><span>🎯 Strategy</span><span>📋 Plan</span><span class="on">🔀 Flows</span><span>📈 Results</span></div>
+            <div class="wb-ftabs">
+              <span class="wb-ftab on">🔁 Always-on baseline</span>
+              <span class="wb-ftab">👀 Discovery → first visit</span>
+              <span class="wb-ftab">⚡ Turn visitors into regulars</span>
+              <span class="wb-ftab" style="color:var(--brand-dark)">+ New flow</span>
+            </div>
+            <div class="wb-trigger">
+              <div class="tl"><span>WHEN</span><span>RECURRING</span></div>
+              <div class="tm">🔁 Always running &nbsp;<span style="font-size:10px;color:#9a9aa0">· every week, Mon 10:00 AM</span></div>
+            </div>
+            <div class="wb-wait"><div class="pl">+</div><br>RIGHT AWAY</div>
+            <div class="wb-stage">
+              <div class="strip" style="background:#5b9bd5"></div>
+              <div class="sh" style="color:#5b9bd5">
+                <span class="num">1</span>
+                <div><div class="snm">Awareness</div><div class="sdesc">Get strangers to notice you</div></div>
+                <span class="prio">★ PRIORITY</span><span class="scnt">1 SERVICE</span>
+              </div>
+              <div class="wb-svc">
+                <span class="si">🎬</span>
+                <div style="flex:1">
+                  <div class="snm2">Discovery photo posts ★</div>
+                  <div class="sd2">Eye-catching food/space posts for feed &amp; explore</div>
+                  <div class="wb-chips"><span class="wb-chip" style="background:#fce4ee;color:#a11759">INSTAGRAM</span><span class="wb-chip" style="background:#ececec;color:#1a1a1a">TIKTOK</span><span class="wb-chip" style="background:#e3edfb;color:#0f4a8f">FACEBOOK</span></div>
+                </div>
+                <span class="vendor">Pick vendor</span>
+              </div>
+            </div>
+            <div class="wb-wait"><div class="pl">+</div><br>RIGHT AWAY</div>
+            <div class="wb-stage">
+              <div class="strip" style="background:#3fa784"></div>
+              <div class="sh" style="color:#3fa784">
+                <span class="num">2</span>
+                <div><div class="snm">Decision</div><div class="sdesc">Help them pick you tonight</div></div>
+                <span class="scnt">1 SERVICE</span>
+              </div>
+              <div class="wb-svc">
+                <span class="si">📍</span>
+                <div style="flex:1">
+                  <div class="snm2">Regular Google Posts</div>
+                  <div class="sd2">Regular posts that catch deciders</div>
+                  <div class="wb-chips"><span class="wb-chip" style="background:#e6effc;color:#1a4699">GOOGLE</span></div>
+                </div>
+                <span class="vendor">Pick vendor</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="capt">Rendered from the live <b>Flows</b> canvas</p>
+      </div>
+      <div>
+        <div class="block">
+          <h4>How to read a flow, top to bottom</h4>
+          <ul>
+            <li><b>Trigger</b>: the moment it starts. Here it just runs every week. Others start when someone visits, orders, or a date arrives.</li>
+            <li><b>Stages</b>: the steps of the customer's journey: <b>Awareness</b> (get noticed), <b>Decision</b> (help them choose you), <b>Loyalty / Advocacy</b> (bring them back, get referrals).</li>
+            <li><b>Services</b>: the actual work in each stage (a post, a Google update), with the <b>channels</b> it runs on as colored tags.</li>
+            <li><b>Vendor</b>: who delivers it. "Pick vendor" until you choose.</li>
+            <li><b>Right away</b>: the wait between steps. Change it to wait days or weeks.</li>
+          </ul>
+        </div>
+        <div class="block">
+          <h4>When you'd use it</h4>
+          <ul>
+            <li><b>Set and forget</b>: build a welcome flow once; every new diner gets it automatically.</li>
+            <li><b>Start from a template</b>: pick a ready-made recipe tailored to your concept, then tweak.</li>
+            <li><b>Add a tactic</b>: a campaign needs a step, so you drop a service into the right stage.</li>
+            <li><b>Hand off</b>: assign a vendor so your strategist or a freelancer runs it.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== WORKBENCH · RESULTS ===================== -->
+  <section class="panel">
+    <div class="phead"><span class="pn">WORKBENCH 4 OF 4</span><h2>Results</h2><span class="rt">/workbench · Results tab</span></div>
+    <div class="translate"><b>In plain words:</b> your report card. One plain-English headline, progress on each goal, and what's running right now.</div>
+    <div class="pgrid">
+      <div>
+        <div class="win">
+          <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="url">apnosh.com/workbench</span></div>
+          <div class="vp">
+            <div class="wb-tabs"><span>🎯 Strategy</span><span>📋 Plan</span><span>🔀 Flows</span><span class="on">📈 Results</span></div>
+            <div class="wb-topline">
+              <div><div class="wb-h">Results</div><div class="wb-sub">What's happening · last 12 months</div></div>
+              <span class="wb-demo">✨ EXAMPLE · LIVE DATA COMING</span>
+            </div>
+            <div class="wb-card">
+              <span class="wb-cap">Headline</span>
+              <div class="wb-headline">In the last 12 months, Vinason hit 2,641 covers, up 4% and ahead of the prior window. Goals are tracking at 57%, across 1 active campaign right now.</div>
+            </div>
+            <div class="wb-gcards">
+              <div class="wb-gcard"><div class="gn">+12% Tue–Thu dinner covers by end of Q3</div><div class="gp">80<small class="gs ok">% ON TRACK</small></div><div class="gmeta">9.6% of 12% · by Sep 30</div></div>
+              <div class="wb-gcard"><div class="gn">+50 email subscribers per month</div><div class="gp">32<small class="gs risk">% AT RISK</small></div><div class="gmeta">15.8 /mo of 50 /mo · ongoing</div></div>
+              <div class="wb-gcard"><div class="gn">Maintain 4.6★ rating on Google</div><div class="gp">61<small class="gs ok">% ON TRACK</small></div><div class="gmeta">4.4★ of 4.6★ · ongoing</div></div>
+            </div>
+            <div class="wb-card">
+              <span class="wb-cap">Running now · 1 live</span>
+              <div class="wb-run"><div><div class="rt2">Always-on baseline <span class="rok">ON TRACK</span></div><div class="rd">Keep us visible across every stage every week · May 1 → Dec 31</div></div></div>
+            </div>
+          </div>
+        </div>
+        <p class="capt">Rendered from the live <b>Results</b> view</p>
+      </div>
+      <div>
+        <div class="block">
+          <h4>What's on screen</h4>
+          <ul>
+            <li><b>Headline</b>: the year in one sentence, plain English. "Draft with AI" rewrites it.</li>
+            <li><b>Goal cards</b>: each goal as a percent, with On track or At risk and a trend line.</li>
+            <li><b>Running now</b>: which campaigns are live today and how they're pacing.</li>
+            <li><b>Window</b>: set the date range from the top bar (90 days, 6 or 12 months).</li>
+          </ul>
+        </div>
+        <div class="block">
+          <h4>When you'd use it</h4>
+          <ul>
+            <li><b>Monthly check-in</b>: the two-minute "is it working?" read.</li>
+            <li><b>Quarterly review</b>: sit with your strategist and decide the next 90 days.</li>
+            <li><b>Before you spend more</b>: see what paid off before adding budget or services.</li>
+          </ul>
+        </div>
+        <p class="capt" style="text-align:left;margin-top:14px">Note: these numbers are an example today; live data is on the way (shown by the badge).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PART 3 DIVIDER · MOBILE CONCEPT ============ -->
+  <div class="divider">
+    <div class="step">PART 3 · DESIGN CONCEPT</div>
+    <h2>If the Workbench were on your phone</h2>
+    <p>Today the Workbench is a big-screen tool. But owners live on their phones. Here is how each of the four screens could work on mobile, using the same patterns as the daily dashboard: one column, big tap targets, a bottom tab bar to switch, and the wide year-calendar reimagined as a swipeable strip with stacked campaign cards.</p>
+    <div class="concept-note">⚠️ <span><b>Concept only.</b> These screens are not built yet. They show the proposed mobile design.</span></div>
+  </div>
+
+  <section class="panel">
+    <div class="concepts">
+
+      <!-- CONCEPT · STRATEGY -->
+      <div class="concept">
+        <div class="cbadge">Concept · not built</div>
+        <div class="phone">
+          <div class="notch"></div>
+          <div class="screen"><div class="scroll">
+            <div class="mwb-top">
+              <div><div class="mwb-h">Strategy</div><div class="mwb-sub">Your game plan</div></div>
+              <span class="mwb-pill">🏠 Casual ▾</span>
+            </div>
+            <div class="mwb-card">
+              <span class="mwb-cap">The brief</span><span class="mwb-ai">✨ AI</span>
+              <div class="mwb-brief">Neighborhood Vietnamese spot. Steady at lunch, soft on Tue–Thu dinners. Loyal lunch crowd, weak weeknight pull.</div>
+            </div>
+            <div class="mwb-card">
+              <span class="mwb-cap">Goals · 3</span>
+              <div class="mwb-goal"><div class="t">★ +12% Tue–Thu dinner covers</div><div class="s gs ok">ON TRACK</div></div>
+              <div class="mwb-goal"><div class="t">+50 email subscribers / month</div><div class="s gs risk">AT RISK</div></div>
+              <div class="mwb-goal"><div class="t">Maintain 4.6★ on Google</div><div class="s gs ok">ON TRACK</div></div>
+            </div>
+            <div class="mwb-card">
+              <span class="mwb-cap">Strategy bets · 3</span>
+              <div class="mwb-bet"><span class="n">1</span>Drive trial via local creators</div>
+              <div class="mwb-bet"><span class="n">2</span>Warm welcome flow for first visits</div>
+            </div>
+          </div></div>
+          <div class="tabbar">
+            <div class="tb on"><span class="ic">🎯</span>Strategy</div>
+            <div class="tb"><span class="ic">📋</span>Plan</div>
+            <div class="tb"><span class="ic">🔀</span>Flows</div>
+            <div class="tb"><span class="ic">📈</span>Results</div>
+          </div>
+        </div>
+        <div class="ctitle">Strategy</div>
+        <p class="cwhat">The game plan, stacked into cards you scroll.</p>
+        <div class="cnotes"><h4>Mobile design moves</h4><ul>
+          <li><b>Concept pill shortens</b> to fit ("Casual ▾").</li>
+          <li>Brief, goals, bets become <b>full-width cards</b>, one per scroll.</li>
+          <li><b>Tap a goal</b> to edit it in a sheet, like the dashboard.</li>
+        </ul></div>
+      </div>
+
+      <!-- CONCEPT · PLAN -->
+      <div class="concept">
+        <div class="cbadge">Concept · not built</div>
+        <div class="phone">
+          <div class="notch"></div>
+          <div class="screen"><div class="scroll">
+            <div class="mwb-top">
+              <div><div class="mwb-h">Plan</div><div class="mwb-sub">Your year, by campaign</div></div>
+              <span class="mwb-fab">+</span>
+            </div>
+            <div class="mwb-strip"><span class="on">MAY</span><span>JUN</span><span>JUL</span><span>AUG</span><span>SEP</span><span>OCT</span></div>
+            <div class="mwb-camp" style="border-left-color:#9aa0a6">
+              <div class="cn">🔁 Always-on baseline</div>
+              <div class="cm"><span>May 1 → Dec 31</span><span>$1.2k</span></div>
+              <div class="cbar"><i style="width:64%;background:#9aa0a6"></i></div>
+            </div>
+            <div class="mwb-camp" style="border-left-color:#5b9bd5">
+              <div class="cn">Summer creator series</div>
+              <div class="cm"><span>Jun 1 → Aug 31</span><span>$4.8k</span></div>
+              <div class="cbar"><i style="width:25%;margin-left:9%;background:#5b9bd5"></i></div>
+            </div>
+            <div class="mwb-camp" style="border-left-color:#d98a4a">
+              <div class="cn">Turn visitors into regulars</div>
+              <div class="cm"><span>Jul 1 → Oct 31</span><span>$2.4k</span></div>
+              <div class="cbar"><i style="width:33%;margin-left:18%;background:#d98a4a"></i></div>
+            </div>
+            <div class="mwb-camp" style="border-left-color:#3fa784">
+              <div class="cn">Holiday catering</div>
+              <div class="cm"><span>Nov 1 → Dec 31</span><span>$1.8k</span></div>
+              <div class="cbar"><i style="width:15%;margin-left:67%;background:#3fa784"></i></div>
+            </div>
+          </div></div>
+          <div class="tabbar">
+            <div class="tb"><span class="ic">🎯</span>Strategy</div>
+            <div class="tb on"><span class="ic">📋</span>Plan</div>
+            <div class="tb"><span class="ic">🔀</span>Flows</div>
+            <div class="tb"><span class="ic">📈</span>Results</div>
+          </div>
+        </div>
+        <div class="ctitle">Plan</div>
+        <p class="cwhat">The wide year-calendar, rethought for one thumb.</p>
+        <div class="cnotes"><h4>Mobile design moves</h4><ul>
+          <li><b>Swipeable month strip</b> up top replaces the wide gantt.</li>
+          <li>Each campaign is a <b>card</b> with dates, budget, and a mini timeline bar showing when it runs.</li>
+          <li><b>"+" button</b> adds a campaign; tap a card to edit the full sheet.</li>
+        </ul></div>
+      </div>
+
+      <!-- CONCEPT · FLOWS -->
+      <div class="concept">
+        <div class="cbadge">Concept · not built</div>
+        <div class="phone">
+          <div class="notch"></div>
+          <div class="screen"><div class="scroll">
+            <div class="mwb-top">
+              <div><div class="mwb-h">Flows</div><div class="mwb-sub">Recipes that run themselves</div></div>
+              <span class="mwb-pill">Always-on ▾</span>
+            </div>
+            <div class="mwb-trig" style="margin-top:11px">
+              <div class="l"><span>WHEN</span><span>RECURRING</span></div>
+              <div class="m">🔁 Every week · Mon 10 AM</div>
+            </div>
+            <div class="mwb-wait"><div class="pl">+</div><br>RIGHT AWAY</div>
+            <div class="mwb-stage">
+              <div class="strip" style="background:#5b9bd5"></div>
+              <div class="sh" style="color:#5b9bd5">
+                <span class="num">1</span>
+                <div><div class="nm">Awareness</div><div class="ds">Get strangers to notice you</div></div>
+                <span class="pr">★</span>
+              </div>
+              <div class="mwb-svc">
+                <span class="i">🎬</span>
+                <div style="flex:1">
+                  <div class="n">Discovery photo posts</div>
+                  <div class="d">Feed &amp; explore posts</div>
+                  <div class="mwb-chips"><span class="mwb-chip" style="background:#fce4ee;color:#a11759">IG</span><span class="mwb-chip" style="background:#ececec;color:#1a1a1a">TIKTOK</span><span class="mwb-chip" style="background:#e3edfb;color:#0f4a8f">FB</span></div>
+                </div>
+                <span class="v">Vendor</span>
+              </div>
+            </div>
+            <div class="mwb-wait"><div class="pl">+</div><br>RIGHT AWAY</div>
+            <div class="mwb-stage">
+              <div class="strip" style="background:#3fa784"></div>
+              <div class="sh" style="color:#3fa784">
+                <span class="num">2</span>
+                <div><div class="nm">Decision</div><div class="ds">Help them pick you tonight</div></div>
+              </div>
+            </div>
+          </div></div>
+          <div class="tabbar">
+            <div class="tb"><span class="ic">🎯</span>Strategy</div>
+            <div class="tb"><span class="ic">📋</span>Plan</div>
+            <div class="tb on"><span class="ic">🔀</span>Flows</div>
+            <div class="tb"><span class="ic">📈</span>Results</div>
+          </div>
+        </div>
+        <div class="ctitle">Flows</div>
+        <p class="cwhat">Already vertical. It travels to mobile almost as is.</p>
+        <div class="cnotes"><h4>Mobile design moves</h4><ul>
+          <li><b>Flow picker</b> collapses into a dropdown ("Always-on ▾").</li>
+          <li>The trigger → stage → stage <b>stack stays</b>, just narrower.</li>
+          <li><b>Channel chips abbreviate</b> (IG, FB) to save width.</li>
+          <li><b>Tap a stage</b> to add or reorder services.</li>
+        </ul></div>
+      </div>
+
+      <!-- CONCEPT · RESULTS -->
+      <div class="concept">
+        <div class="cbadge">Concept · not built</div>
+        <div class="phone">
+          <div class="notch"></div>
+          <div class="screen"><div class="scroll">
+            <div class="mwb-top">
+              <div><div class="mwb-h">Results</div><div class="mwb-sub">Last 12 months</div></div>
+              <span class="mwb-demo">EXAMPLE</span>
+            </div>
+            <div class="mwb-card">
+              <span class="mwb-cap">Headline</span>
+              <div class="mwb-head">Vinason hit 2,641 covers, up 4% and ahead of the prior window. Goals tracking at 57%.</div>
+            </div>
+            <span class="mwb-cap" style="display:block;margin-top:13px">Goals · progress</span>
+            <div class="mwb-gcard"><div class="gp">80<small style="font-size:9px">%</small></div><div><div class="gn">+12% Tue–Thu dinner covers</div><div class="gs ok">ON TRACK · by Sep 30</div></div></div>
+            <div class="mwb-gcard"><div class="gp">32<small style="font-size:9px">%</small></div><div><div class="gn">+50 email subscribers / month</div><div class="gs risk">AT RISK · ongoing</div></div></div>
+            <div class="mwb-gcard"><div class="gp">61<small style="font-size:9px">%</small></div><div><div class="gn">Maintain 4.6★ on Google</div><div class="gs ok">ON TRACK · ongoing</div></div></div>
+            <div class="mwb-card">
+              <span class="mwb-cap">Running now · 1 live</span>
+              <div class="mwb-run"><div class="rt">Always-on baseline <span class="ok">ON TRACK</span></div><div class="rd">Visible across every stage, every week</div></div>
+            </div>
+          </div></div>
+          <div class="tabbar">
+            <div class="tb"><span class="ic">🎯</span>Strategy</div>
+            <div class="tb"><span class="ic">📋</span>Plan</div>
+            <div class="tb"><span class="ic">🔀</span>Flows</div>
+            <div class="tb on"><span class="ic">📈</span>Results</div>
+          </div>
+        </div>
+        <div class="ctitle">Results</div>
+        <p class="cwhat">The report card, read in one thumb-scroll.</p>
+        <div class="cnotes"><h4>Mobile design moves</h4><ul>
+          <li><b>Headline first</b>: the one-sentence read leads.</li>
+          <li>Goal cards go <b>full-width</b>, big percent on the left.</li>
+          <li><b>Window picker</b> moves into the top bar, like the dashboard.</li>
+        </ul></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ PART 4 DIVIDER · WHY IT COMPOUNDS ============ -->
+  <div class="divider">
+    <div class="step">PART 4 · WHY IT GETS BETTER</div>
+    <h2>The plan you just saw is the worst it will ever be</h2>
+    <p>Everything above is day one. Apnosh is a system that learns. Every restaurant, every campaign, every result makes the next plan smarter, and harder for anyone to copy. Here is why the value compounds, and where it is headed.</p>
+  </div>
+
+  <section class="panel">
+    <div class="compound">
+      <div class="eng">
+        <div class="gl">📊</div>
+        <h3>Owned data</h3>
+        <p>Every campaign and result is a labeled outcome. More restaurants mean sharper predictions of what works for a place like yours. A general AI model can't see this.</p>
+      </div>
+      <div class="eng">
+        <div class="gl">🚀</div>
+        <h3>Free AI tailwind</h3>
+        <p>The strategist brain is model-agnostic. When the world's AI gets better, every owner's plan gets better overnight, with no new work from us.</p>
+      </div>
+      <div class="eng">
+        <div class="gl">🔒</div>
+        <h3>Rising lock-in</h3>
+        <p>The longer you stay, the more it knows your menu, seasons, customers, and what worked. Value rises every month. Leaving means starting over.</p>
+      </div>
+    </div>
+    <div class="compound-cta">
+      <div class="ct-txt">
+        <div class="s">The compounding thesis</div>
+        <h3>The tool gets you in. The data is the moat.</h3>
+        <p>See the full where, when, and why: the three engines, the surfaces that get smarter, and the timeline from cold start to defensible asset.</p>
+      </div>
+      <a class="btn" href="WHY-IT-COMPOUNDS.html">Read the full thesis →</a>
+    </div>
+    <div class="compound-cta">
+      <div class="ct-txt">
+        <div class="s">How flows work + pricing</div>
+        <h3>How the work gets done, and what it costs.</h3>
+        <p>The four moves of a live flow, who does each step, a real priced example, and the plans, with no surprise bills.</p>
+      </div>
+      <a class="btn" href="FLOWS-AND-PRICING.html">See flows + pricing →</a>
+    </div>
+  </section>
+
+  <!-- ===================== GLOSSARY ===================== -->
+  <section class="glossary">
+    <div class="step">PLAIN WORDS</div>
+    <h2>The jargon, translated</h2>
+    <p>Every term an owner meets in the Workbench, in one line.</p>
+    <div class="gloss-grid">
+      <div class="gterm"><div class="word">Brief</div><div class="mean">A short write-up of your restaurant and its challenge. <b>Think: the situation in a paragraph.</b></div></div>
+      <div class="gterm"><div class="word">Goal</div><div class="mean">A number you want to hit by a date. <b>Think: the finish line.</b></div></div>
+      <div class="gterm"><div class="word">Strategy bet</div><div class="mean">A big move you're betting will work. <b>Think: the plan to win.</b></div></div>
+      <div class="gterm"><div class="word">Campaign <span class="app">Plan</span></div><div class="mean">A push with a start, end, and budget. <b>Think: one bar on your calendar.</b></div></div>
+      <div class="gterm"><div class="word">Flow <span class="app">Flows</span></div><div class="mean">A set of steps that runs on its own. <b>Think: a recipe that cooks itself.</b></div></div>
+      <div class="gterm"><div class="word">Trigger <span class="app">Flows</span></div><div class="mean">The moment a flow starts. <b>Think: "when this happens, begin."</b></div></div>
+      <div class="gterm"><div class="word">Stage <span class="app">Flows</span></div><div class="mean">Where a customer is: Awareness, Decision, Loyalty, Advocacy. <b>Think: steps from stranger to regular.</b></div></div>
+      <div class="gterm"><div class="word">Service</div><div class="mean">One piece of actual work, like a post or a review reply. <b>Think: a task.</b></div></div>
+      <div class="gterm"><div class="word">Channel</div><div class="mean">Where the work shows up: Instagram, Email, Google. <b>Think: the place customers see it.</b></div></div>
+      <div class="gterm"><div class="word">Vendor</div><div class="mean">Who does the work: Apnosh, a freelancer, an agency, or you. <b>Think: who's on the job.</b></div></div>
+    </div>
+  </section>
+
+  <footer>
+    Part 1 (phone): Phase 3 is reconstructed from the live <b>/m-home-dev</b> mobile home; phases 1, 2, 4, 5 are faithful mockups of the real setup, getting-started, deep-tool, and report screens in apnosh-portal.<br>
+    Part 2 (Workbench): all four panels are reconstructed from the live Strategy, Plan, Flows, and Results views, using the real Vinason data.<br>
+    Part 3 (Mobile concept): proposed phone designs for the Workbench. Not built yet; shown to illustrate the mobile direction.<br>
+    Does = the action · Sees = on screen · Feels = mindset · "When you'd use it" = the real situations each screen covers.
+  </footer>
+
+</div>
+</body>
+</html>

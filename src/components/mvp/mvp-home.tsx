@@ -42,7 +42,7 @@ const SRC_ICON: Record<string, React.ComponentType<{ size?: number; color?: stri
   directions: Navigation, calls: Phone, clicks: MousePointerClick, bookings: CalendarDays,
 }
 
-export default function MvpHome({ data }: { data: MvpHomeData }) {
+export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData; showHeader?: boolean }) {
   const { hero } = data
   const [reviewHidden, setReviewHidden] = useState(false)
   const [actionDone, setActionDone] = useState(data.signal.state !== 'recommendation')
@@ -51,7 +51,9 @@ export default function MvpHome({ data }: { data: MvpHomeData }) {
 
   return (
     <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
-      {/* sticky greeting bar */}
+      {/* sticky greeting bar — suppressed when embedded under the portal's
+          own top bar (the design's full chrome lands in the nav-shell step). */}
+      {showHeader && (
       <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', padding: '14px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 15, color: C.mute }}>{data.greeting}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -59,6 +61,7 @@ export default function MvpHome({ data }: { data: MvpHomeData }) {
           <div style={{ width: 34, height: 34, borderRadius: '50%', background: C.greenSoft, border: `1px solid ${C.greenLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 600 }}>{data.avatarText}</div>
         </div>
       </div>
+      )}
 
       <div style={{ padding: '16px 18px 0' }}>
         {/* monthly review nudge */}

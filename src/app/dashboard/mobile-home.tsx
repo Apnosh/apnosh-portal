@@ -1,80 +1,68 @@
 'use client'
 
 /**
- * Mobile home — the redesigned, data-wired phone dashboard.
+ * Mobile home — the owner phone dashboard, redesigned to match the
+ * apnosh-mvp design (yejukim/apnosh-mvp). Renders the ported design Home
+ * (components/mvp/mvp-home) wired to the real /api/dashboard/load payload
+ * via the shared transform. Logic/data untouched; this is presentation.
  *
- * Thin wrapper that composes the two ported components:
- *   MobileHomeHero     — metric switcher, big number, avg + trend,
- *                        Week/Month/Year bar chart, trend mini-graph,
- *                        breakdown cards (from homeMetrics)
- *   MobileHomeSections — Needs you, This week recap, Your channels,
- *                        Plan (from homeSections)
- *
- * Handles loading (skeleton) and load-failure (error) up top; once data
- * is present each component renders its own empty / not-connected /
- * no-data states.
+ * The previous version (MobileHomeHero + MobileHomeSections) is preserved
+ * in git on main; this swap lives on the design/mvp-home branch.
  */
 
-import { MobileHomeHero } from '@/components/dashboard/mobile-home-hero'
-import { MobileHomeSections } from '@/components/dashboard/mobile-home-sections'
-import { SinceLastChecked, type SinceEvent } from '@/components/dashboard/since-last-checked'
+import MvpHome from '@/components/mvp/mvp-home'
+import { transformHome, type AgendaItem } from '@/components/mvp/home-transform'
 import type { HomeMetrics } from '@/lib/dashboard/get-home-metrics'
 import type { HomeSectionsData } from '@/lib/dashboard/get-home-sections'
+import type { SinceEvent } from '@/components/dashboard/since-last-checked'
 
 interface Props {
   homeMetrics: HomeMetrics | null
   homeSections: HomeSectionsData | null
+  agenda?: AgendaItem[] | null
+  avatarText?: string
   sinceLastChecked?: SinceEvent[]
   loading?: boolean
   failed?: boolean
 }
 
-const EMPTY_SECTIONS: HomeSectionsData = {
-  needs: [], plan: [], channels: [],
-  week: { shipped: 0, items: '', strategist: null },
+function greetingForNow(): string {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 18) return 'Good afternoon'
+  return 'Good evening'
 }
 
-function Skeleton() {
+function Frame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="m-home" aria-hidden>
-      <div className="spot">
-        <div className="mh-skel skel-eyebrow" />
-        <div className="mh-skel skel-num" />
-        <div className="mh-skel skel-chart" />
-        <div className="skel-cards">
-          {[0, 1, 2, 3].map(i => <div key={i} className="mh-skel skel-card" />)}
+    <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', color: '#6e6e73', fontSize: 14, fontFamily: "'Inter',system-ui,sans-serif" }}>
+      {children}
+    </div>
+  )
+}
+
+export default function MobileHome({ homeMetrics, agenda, avatarText, loading, failed }: Props) {
+  if (loading) return <Frame>Loading your numbers…</Frame>
+  if (failed) {
+    return (
+      <Frame>
+        <div>
+          <p style={{ color: '#1d1d1f', fontWeight: 600, marginBottom: 4 }}>Couldn&rsquo;t load your dashboard</p>
+          <p style={{ marginBottom: 12 }}>Check your connection and try again.</p>
+          <button type="button" onClick={() => { if (typeof window !== 'undefined') window.location.reload() }}
+            style={{ background: '#4abd98', color: '#fff', border: 'none', borderRadius: 12, padding: '10px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+            Try again
+          </button>
         </div>
-      </div>
-      <div className="skel-rows">
-        <div className="mh-skel skel-eyebrow" style={{ marginBottom: 0 }} />
-        {[0, 1, 2].map(i => <div key={i} className="mh-skel skel-line" />)}
-      </div>
-    </div>
-  )
-}
+      </Frame>
+    )
+  }
 
-function ErrorState() {
-  return (
-    <div className="m-home">
-      <div className="mh-error">
-        <p className="er-t">Couldn&rsquo;t load your dashboard</p>
-        <p className="er-s">Check your connection and try again.</p>
-        <button type="button" onClick={() => { if (typeof window !== 'undefined') window.location.reload() }}>Try again</button>
-      </div>
-    </div>
+  const data = transformHome(
+    homeMetrics as Parameters<typeof transformHome>[0],
+    agenda ?? null,
+    (avatarText?.[0] ?? '·').toUpperCase(),
+    greetingForNow(),
   )
-}
-
-export default function MobileHome({ homeMetrics, homeSections, sinceLastChecked, loading, failed }: Props) {
-  if (loading) return <Skeleton />
-  if (failed) return <ErrorState />
-  return (
-    <>
-      <MobileHomeHero metrics={homeMetrics?.metrics ?? []} />
-      {sinceLastChecked && sinceLastChecked.length > 0 && (
-        <div className="m-home"><SinceLastChecked events={sinceLastChecked} /></div>
-      )}
-      <MobileHomeSections data={homeSections ?? EMPTY_SECTIONS} />
-    </>
-  )
+  return <MvpHome data={data} showHeader={false} />
 }
