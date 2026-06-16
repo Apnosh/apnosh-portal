@@ -15,6 +15,7 @@
 import {
   Bell, Sparkles, Check, Plus, TrendingUp, TrendingDown,
   ChevronRight, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
+  Heart, Star, MessageCircle, Mail, Eye, Users,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -46,33 +47,50 @@ const MVP_ANIM_CSS = `
 @media (prefers-reduced-motion: reduce){.mvp-rise,.mvp-reviewGlow,.mvp-floaty,.mvp-driftA,.mvp-driftB,.mvp-spin{animation:none}}
 `
 
+export interface MetricView {
+  key: string
+  tabLabel: string          // short label for the metric switcher
+  heroLabel: string         // hero title
+  heroSub: string           // hero subtitle
+  unit: string              // chart verb, e.g. "took action", "reached"
+  total: number
+  weekPct: number
+  monthPct: number
+  prevMonthLabel: string
+  chart: { label: string; value: number; prev: number }[]
+  chartStart?: string
+  daily: { date: string; value: number }[]
+  monthly: { label: string; value: number }[]
+  tiles: { key: string; label: string; value: string; configured: boolean }[]
+}
+
 export interface MvpHomeData {
   greeting: string
   avatarText: string
   avatarEmoji?: string
   avatarImage?: string
-  hero: { total: number; weekPct: number; down: boolean; monthPct: number; prevMonthLabel: string }
-  chart: { label: string; value: number; prev: number }[]
-  chartStart?: string
-  daily?: { date: string; value: number }[]
-  monthly?: { label: string; value: number }[]
-  sources: { key: string; label: string; value: string; configured: boolean }[]
+  metrics: MetricView[]
   signal: { state: 'recommendation' | 'ontrack'; metric?: string; message?: string }
   approvals: { id: string; tag: string; timing: string; title: string; subtitle: string; emoji?: string; image?: string }[]
   review: { prevMonthLabel: string; cycleLabel: string; budget: number } | null
 }
 
-const SRC_ICON: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
-  directions: Navigation, calls: Phone, clicks: MousePointerClick, bookings: CalendarDays,
+// Breakdown-tile icons keyed by the icon name get-home-metrics emits.
+const TILE_ICON: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
+  pin: Navigation, phone: Phone, cursor: MousePointerClick, heart: Heart, star: Star,
+  message: MessageCircle, mail: Mail, calendar: CalendarDays, eye: Eye, users: Users,
 }
 
 export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData; showHeader?: boolean }) {
-  const { hero } = data
+  const metrics = data.metrics ?? []
+  const [metricKey, setMetricKey] = useState(metrics[0]?.key ?? '')
+  const m = metrics.find((v) => v.key === metricKey) ?? metrics[0]
   const [reviewHidden, setReviewHidden] = useState(false)
   const [actionDone, setActionDone] = useState(data.signal.state !== 'recommendation')
   const [picked, setPicked] = useState<number | null>(null)
-  const accent = hero.down ? C.coral : C.green
-  const accentBg = hero.down ? C.coralBg : C.greenSoft
+  const down = (m?.weekPct ?? 0) < 0
+  const accent = down ? C.coral : C.green
+  const accentBg = down ? C.coralBg : C.greenSoft
 
   return (
     <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
@@ -114,33 +132,54 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
           </div>
         )}
 
-        {/* HERO */}
-        <div>
-          <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>Customers who took action</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
-            <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{hero.total || '—'}</span>
-            {hero.total > 0 && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, color: accent, background: accentBg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
-                <span style={{ fontSize: 11 }}>{hero.down ? '▼' : '▲'}</span>{Math.abs(hero.weekPct)}% this week
-              </span>
+        {/* METRIC SWITCHER — pick which graph to view (like the old hero) */}
+        {metrics.length > 1 && (
+          <div style={{ display: 'flex', gap: 7, marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>
+            {metrics.map((v) => {
+              const on = v.key === metricKey
+              return (
+                <button key={v.key} onClick={() => { setMetricKey(v.key); setPicked(null) }} style={{ flexShrink: 0, whiteSpace: 'nowrap', border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 14px', fontSize: 13, fontWeight: on ? 700 : 500, cursor: 'pointer' }}>{v.tabLabel}</button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* HERO (driven by the selected metric) */}
+        {m && (
+          <div>
+            <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>{m.heroLabel}</div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
+              <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{m.total ? m.total.toLocaleString() : '—'}</span>
+              {m.total > 0 && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, color: accent, background: accentBg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
+                  <span style={{ fontSize: 11 }}>{down ? '▼' : '▲'}</span>{Math.abs(m.weekPct)}% this week
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 14, color: C.faint, marginTop: 5 }}>{m.heroSub}</div>
+            {m.monthPct !== 0 && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: m.monthPct > 0 ? C.green : C.coral }}>
+                {m.monthPct > 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                {m.monthPct > 0 ? 'Up' : 'Down'} {Math.abs(m.monthPct)}% from {m.prevMonthLabel}
+              </div>
             )}
           </div>
-          <div style={{ fontSize: 14, color: C.faint, marginTop: 5 }}>called, got directions, or visited your site</div>
-          {hero.monthPct !== 0 && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: hero.monthPct > 0 ? C.green : C.coral }}>
-              {hero.monthPct > 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-              {hero.monthPct > 0 ? 'Up' : 'Down'} {Math.abs(hero.monthPct)}% from {hero.prevMonthLabel}
-            </div>
-          )}
-        </div>
+        )}
 
         {/* CHART */}
-        <ActionsChart chart={data.chart} chartStart={data.chartStart} daily={data.daily} monthly={data.monthly} picked={picked} setPicked={setPicked} />
+        {m && <ActionsChart chart={m.chart} chartStart={m.chartStart} daily={m.daily} monthly={m.monthly} noun={m.unit} picked={picked} setPicked={setPicked} />}
 
-        {/* SOURCES */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, margin: '10px 0' }}>
-          {data.sources.map((s) => <SourceCard key={s.key} s={s} />)}
-        </div>
+        {/* See all insights — small text link directly under the graph */}
+        <a href="/dashboard/insights" style={{ display: 'block', textAlign: 'center', marginTop: 8, marginBottom: 2, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>
+          See all insights · full year →
+        </a>
+
+        {/* SOURCES (breakdown for the selected metric) */}
+        {m && m.tiles.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, m.tiles.length)},1fr)`, gap: 8, margin: '10px 0' }}>
+            {m.tiles.slice(0, 4).map((s) => <SourceCard key={s.key + s.label} s={s} />)}
+          </div>
+        )}
 
         {/* DO THIS NEXT */}
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.amber, marginBottom: 11 }}>Do this next</div>
@@ -189,9 +228,6 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
           </>
         )}
 
-        <button style={{ width: '100%', marginTop: 6, background: '#fff', color: C.ink, border: `0.5px solid ${C.line}`, borderRadius: 13, padding: 13, fontWeight: 600, fontSize: 13.5, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <TrendingUp size={15} color={C.green} /> See all insights <span style={{ color: C.faint, fontWeight: 500 }}>· full year</span>
-        </button>
       </div>
     </div>
   )
@@ -209,7 +245,7 @@ function Thumb({ emoji, image }: { emoji?: string; image?: string }) {
 }
 
 function SourceCard({ s }: { s: { key: string; label: string; value: string; configured: boolean } }) {
-  const Icon = SRC_ICON[s.key] ?? MousePointerClick
+  const Icon = TILE_ICON[s.key] ?? MousePointerClick
   const zero = !s.value || s.value === '0' || s.value === '—'
   return (
     <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '7px 4px', textAlign: 'center', minHeight: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: zero ? 0.5 : 1 }}>
@@ -228,12 +264,13 @@ type ChartRange = '7d' | '30d' | '1y' | 'custom'
 const RANGES: [ChartRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['1y', 'Last year'], ['custom', 'Custom']]
 
 function ActionsChart({
-  chart, chartStart, daily = [], monthly = [], picked, setPicked,
+  chart, chartStart, daily = [], monthly = [], noun = 'took action', picked, setPicked,
 }: {
   chart: { label: string; value: number; prev: number }[]
   chartStart?: string
   daily?: { date: string; value: number }[]
   monthly?: { label: string; value: number }[]
+  noun?: string
   picked: number | null
   setPicked: (i: number | null) => void
 }) {
@@ -247,7 +284,7 @@ function ActionsChart({
   const dmap = new Map(daily.map((d) => [d.date, d.value]))
   const start = chartStart ? parseISO(chartStart) : null
 
-  type Bar = { value: number; compare: number; label: string; tip: string; cmpTip: string }
+  type Bar = { value: number; compare: number; label: string; tip: string; cmpLabel: string; cmpDate: string }
   let bars: Bar[] = []; let curLbl = ''; let cmpLbl = ''
   const wk = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' })
   const full = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -256,19 +293,19 @@ function ActionsChart({
     curLbl = 'Last 7 days'; cmpLbl = 'Last week'
     bars = chart.map((b, i) => {
       const d = start ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + i) : null
-      return { value: b.value, compare: b.prev, label: d ? wk(d) : b.label, tip: d ? full(d) : b.label, cmpTip: `${b.prev.toLocaleString()} last week` }
+      const prior = d ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 7) : null
+      return { value: b.value, compare: b.prev, label: d ? wk(d) : b.label, tip: d ? full(d) : b.label, cmpLabel: 'last week', cmpDate: prior ? full(prior) : '' }
     })
   } else if (range === '30d') {
     curLbl = 'Last 30 days'; cmpLbl = 'Prior 30 days'
     bars = daily.slice(-30).map((d) => {
       const dt = parseISO(d.date); const prior = new Date(dt); prior.setDate(prior.getDate() - 30)
-      const cmp = dmap.get(iso(prior)) ?? 0
-      return { value: d.value, compare: cmp, label: String(dt.getDate()), tip: full(dt), cmpTip: `${cmp.toLocaleString()} prior` }
+      return { value: d.value, compare: dmap.get(iso(prior)) ?? 0, label: String(dt.getDate()), tip: full(dt), cmpLabel: '30 days earlier', cmpDate: full(prior) }
     })
   } else if (range === '1y') {
     curLbl = 'Last 12 months'; cmpLbl = 'Prior year'
     const last12 = monthly.slice(-12); const prior12 = monthly.slice(-24, -12)
-    bars = last12.map((m, i) => ({ value: m.value, compare: prior12[i]?.value ?? 0, label: m.label.slice(0, 3), tip: m.label, cmpTip: `${(prior12[i]?.value ?? 0).toLocaleString()} prior year` }))
+    bars = last12.map((m, i) => ({ value: m.value, compare: prior12[i]?.value ?? 0, label: m.label.slice(0, 3), tip: m.label, cmpLabel: 'a year earlier', cmpDate: '' }))
   } else {
     curLbl = 'Custom'; cmpLbl = 'Prior period'
     const s = parseISO(cStart), e = parseISO(cEnd); const lo = s <= e ? s : e, hi = s <= e ? e : s
@@ -276,7 +313,7 @@ function ActionsChart({
     bars = Array.from({ length: span }, (_, i) => {
       const dt = new Date(lo.getFullYear(), lo.getMonth(), lo.getDate() + i)
       const prior = new Date(dt); prior.setDate(prior.getDate() - span)
-      return { value: dmap.get(iso(dt)) ?? 0, compare: dmap.get(iso(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpTip: '' }
+      return { value: dmap.get(iso(dt)) ?? 0, compare: dmap.get(iso(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpLabel: 'prior period', cmpDate: full(prior) }
     })
   }
 
@@ -304,7 +341,7 @@ function ActionsChart({
         </div>
       )}
       <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 8 }}>
-        <b style={{ color: C.ink, fontWeight: 700 }}>{total.toLocaleString()}</b> took action
+        <b style={{ color: C.ink, fontWeight: 700 }}>{total.toLocaleString()}</b> {noun}
       </div>
       <div style={{ position: 'relative', height: H }}>
         <div style={{ position: 'absolute', left: 0, right: 0, bottom: avgY, borderTop: `1px dashed ${C.faint}`, opacity: 0.6 }} />
@@ -316,13 +353,24 @@ function ActionsChart({
               <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, height: '100%', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: dense ? 1.5 : 3, cursor: 'pointer' }}>
                 <div style={{ width: '42%', maxWidth: 17, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: isPicked ? C.greenDk : C.green, borderRadius: '3px 3px 0 0' }} />
                 <div style={{ width: '42%', maxWidth: 17, height: `${(b.compare / max) * 100}%`, background: C.ghost, borderRadius: '3px 3px 0 0' }} />
-                {isPicked && (
-                  <div style={{ position: 'absolute', bottom: '100%', marginBottom: 6, ...(edge === 'mid' ? { left: '50%', transform: 'translateX(-50%)' } : edge === 'left' ? { left: 0 } : { right: 0 }), background: C.ink, color: '#fff', borderRadius: 8, padding: '7px 10px', fontSize: 11, whiteSpace: 'nowrap', zIndex: 5, lineHeight: 1.4, textAlign: 'left' }}>
-                    <div style={{ fontWeight: 700 }}>{b.tip}</div>
-                    <div style={{ opacity: 0.85 }}>{b.value.toLocaleString()} took action</div>
-                    {b.cmpTip && <div style={{ borderTop: '1px solid rgba(255,255,255,.22)', marginTop: 5, paddingTop: 5, opacity: 0.7 }}>{b.cmpTip}</div>}
-                  </div>
-                )}
+                {isPicked && (() => {
+                  const delta = b.value - b.compare
+                  const dpct = b.compare ? Math.round((delta / b.compare) * 100) : null
+                  const dCol = delta > 0 ? '#6fe3bf' : delta < 0 ? '#ef9a9a' : 'rgba(255,255,255,.6)'
+                  return (
+                    <div style={{ position: 'absolute', bottom: '100%', marginBottom: 6, ...(edge === 'mid' ? { left: '50%', transform: 'translateX(-50%)' } : edge === 'left' ? { left: 0 } : { right: 0 }), background: C.ink, color: '#fff', borderRadius: 8, padding: '8px 11px', fontSize: 11, whiteSpace: 'nowrap', zIndex: 5, lineHeight: 1.45, textAlign: 'left' }}>
+                      <div style={{ fontWeight: 700 }}>{b.tip}</div>
+                      <div style={{ opacity: 0.9 }}>{b.value.toLocaleString()} {noun}</div>
+                      <div style={{ borderTop: '1px solid rgba(255,255,255,.22)', marginTop: 6, paddingTop: 6 }}>
+                        <div style={{ opacity: 0.6, fontSize: 10 }}>vs {b.cmpLabel}{b.cmpDate ? ` · ${b.cmpDate}` : ''}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
+                          <span style={{ opacity: 0.9 }}>{b.compare.toLocaleString()} {noun}</span>
+                          {dpct != null && <span style={{ color: dCol, fontWeight: 700 }}>{delta > 0 ? '▲' : delta < 0 ? '▼' : ''}{Math.abs(dpct)}%</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             )
           })}
