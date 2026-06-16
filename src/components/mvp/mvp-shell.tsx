@@ -10,9 +10,9 @@
 import BottomNav, { type NavKey } from './bottom-nav'
 
 const SHELL_CSS = `
-.mvp-shell{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:60;background:#f0f0f3;display:flex;justify-content:center}
-.mvp-frame{width:100%;max-width:none;background:#fff;display:flex;flex-direction:column;min-height:0;overflow:hidden}
-.mvp-frame-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.mvp-shell{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:60;background:#f0f0f3;display:flex;justify-content:center;overflow:hidden}
+.mvp-frame{width:100%;max-width:none;background:#fff;display:flex;flex-direction:column;min-height:0}
+.mvp-frame-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
 @media (min-width:560px){.mvp-frame{max-width:480px;box-shadow:0 0 40px rgba(0,0,0,0.06)}}
 `
 
