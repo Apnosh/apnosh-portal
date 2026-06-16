@@ -13,7 +13,7 @@
  */
 
 import {
-  Bell, Sparkles, Check, Plus, ClipboardList, TrendingUp, TrendingDown,
+  Bell, Sparkles, Check, Plus, TrendingUp, TrendingDown,
   ChevronRight, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -30,6 +30,8 @@ const DISPLAY = "'Cal Sans','Inter',sans-serif"
 export interface MvpHomeData {
   greeting: string
   avatarText: string
+  avatarEmoji?: string
+  avatarImage?: string
   hero: { total: number; weekPct: number; down: boolean; monthPct: number; prevMonthLabel: string }
   chart: { label: string; value: number; prev: number }[]
   chartStart?: string
@@ -37,7 +39,7 @@ export interface MvpHomeData {
   monthly?: { label: string; value: number }[]
   sources: { key: string; label: string; value: string; configured: boolean }[]
   signal: { state: 'recommendation' | 'ontrack'; metric?: string; message?: string }
-  approvals: { id: string; tag: string; timing: string; title: string; subtitle: string }[]
+  approvals: { id: string; tag: string; timing: string; title: string; subtitle: string; emoji?: string; image?: string }[]
   review: { prevMonthLabel: string; cycleLabel: string; budget: number } | null
 }
 
@@ -62,7 +64,10 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
         <div style={{ fontSize: 15, color: C.mute }}>{data.greeting}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ position: 'relative' }}><Bell size={20} color={C.ink} /><div style={{ position: 'absolute', top: -1, right: -1, width: 7, height: 7, borderRadius: 4, background: C.green }} /></div>
-          <div style={{ width: 34, height: 34, borderRadius: '50%', background: C.greenSoft, border: `1px solid ${C.greenLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 600 }}>{data.avatarText}</div>
+          <div style={{ width: 34, height: 34, borderRadius: '50%', background: C.greenSoft, border: `1px solid ${C.greenLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 600, color: C.greenDk, position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
+            {data.avatarEmoji || data.avatarText}
+            {data.avatarImage && <img src={data.avatarImage} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+          </div>
         </div>
       </div>
       )}
@@ -70,7 +75,11 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
       <div style={{ padding: '16px 18px 0' }}>
         {/* monthly review nudge */}
         {data.review && !reviewHidden && (
-          <div style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 18, padding: '13px 16px', color: '#fff', background: 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)' }}>
+          <div style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 18, padding: '13px 16px', color: '#fff', background: 'linear-gradient(110deg,#2e9a78 0%,#3a9e90 42%,#4f93ab 100%)' }}>
+            {/* soft geometric shapes, echoing the design's review card */}
+            <span aria-hidden style={{ position: 'absolute', width: 118, height: 118, top: -44, right: -28, borderRadius: '50%', background: 'rgba(255,255,255,.10)' }} />
+            <span aria-hidden style={{ position: 'absolute', width: 66, height: 66, bottom: -26, left: 40, borderRadius: '50%', border: '2px solid rgba(255,255,255,.18)' }} />
+            <span aria-hidden style={{ position: 'absolute', width: 22, height: 22, top: 34, right: 30, borderRadius: 6, background: 'rgba(255,255,255,.12)', transform: 'rotate(45deg)' }} />
             <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 11 }}>
               <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Receipt size={19} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -146,7 +155,7 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
             <div style={{ marginBottom: 10 }}>
               {data.approvals.map((a) => (
                 <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 10, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ClipboardList size={20} color={C.greenDk} /></div>
+                  <Thumb emoji={a.emoji} image={a.image} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', color: C.faint, marginBottom: 2 }}>{a.tag} <span style={{ fontWeight: 600 }}>· {a.timing}</span></div>
                     <div style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</div>
@@ -163,6 +172,17 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
           <TrendingUp size={15} color={C.green} /> See all insights <span style={{ color: C.faint, fontWeight: 500 }}>· full year</span>
         </button>
       </div>
+    </div>
+  )
+}
+
+/* Thumb — ported from the design: a rounded preview that shows an emoji
+   fallback with the real image layered on top (hidden if it fails to load). */
+function Thumb({ emoji, image }: { emoji?: string; image?: string }) {
+  return (
+    <div style={{ width: 42, height: 42, borderRadius: 10, background: '#f5f4f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 21, position: 'relative', overflow: 'hidden' }}>
+      {emoji || '📄'}
+      {image && <img src={image} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
     </div>
   )
 }

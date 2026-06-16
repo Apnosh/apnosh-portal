@@ -19,6 +19,14 @@ import { transformHome } from '@/components/mvp/home-transform'
 
 const C = { green: '#4abd98', greenDk: '#2e9a78', ink: '#1d1d1f', faint: '#aeaeb2', line: '#e6e6ea', navOff: '#aeaeb2' }
 
+// Design sample content (from apnosh-mvp lib/api.ts) — shown on this review
+// surface only when the client has no real approvals / monthly review yet.
+const SAMPLE_APPROVALS: MvpHomeData['approvals'] = [
+  { id: 's1', tag: 'POST', timing: 'By 5pm', title: 'Kimchi Burger reel', subtitle: 'For Saturday lunch · drafted by your team', emoji: '🌶️', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=320&q=80&auto=format&fit=crop' },
+  { id: 's2', tag: 'DESIGN', timing: 'No rush', title: 'Summer menu poster', subtitle: 'Studio applied your notes', emoji: '🍑', image: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=320&q=80&auto=format&fit=crop' },
+]
+const SAMPLE_REVIEW: MvpHomeData['review'] = { prevMonthLabel: 'May', cycleLabel: 'June', budget: 800 }
+
 export default function MvpHomePage() {
   const { client, loading: clientLoading } = useClient()
   const [data, setData] = useState<MvpHomeData | null>(null)
@@ -33,7 +41,17 @@ export default function MvpHomePage() {
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Load failed (${r.status})`)
         return r.json()
       })
-      .then((json) => { if (live) setData(transformHome(json.homeMetrics, json.agenda, client.name ?? '·')) })
+      .then((json) => {
+        if (!live) return
+        const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·')
+        // Review surface: where real data is empty (Do Si has no pending
+        // approvals / monthly review yet), fall back to the design's sample
+        // content so the full design can be evaluated. The real /dashboard
+        // shows real data only.
+        if (d.approvals.length === 0) d.approvals = SAMPLE_APPROVALS
+        if (!d.review) d.review = SAMPLE_REVIEW
+        setData(d)
+      })
       .catch((e) => { if (live) setError(e.message) })
     return () => { live = false }
   }, [client?.id, client?.name])

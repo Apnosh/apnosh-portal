@@ -104,6 +104,7 @@ export function transformHome(
       timing: a.urgency === 'high' ? 'Soon' : 'No rush',
       title: a.label.replace(/^Approve:\s*/i, ''),
       subtitle: a.detail ?? 'Drafted by your team',
+      emoji: '📄',
     }))
 
   const down = weekPct < 0
@@ -114,6 +115,7 @@ export function transformHome(
   return {
     greeting,
     avatarText,
+    avatarEmoji: '🍽️',
     hero: { total: heroTotal, weekPct, down, monthPct, prevMonthLabel: lastMonth ? monthName(lastMonth.start) : '' },
     chart,
     chartStart,
