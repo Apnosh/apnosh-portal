@@ -27,6 +27,25 @@ const C = {
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
+/* Banner animations — ported verbatim from the design (apnosh-mvp App.tsx):
+   an animated green→blue→indigo gradient, drifting/spinning background shapes,
+   a floating icon, and a rise-in entrance. Honors reduced-motion. */
+const MVP_ANIM_CSS = `
+@keyframes mvpRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes mvpGradShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes mvpFloaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes mvpSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes mvpDriftA{0%,100%{transform:translate(0,0) rotate(0)}50%{transform:translate(6px,-5px) rotate(8deg)}}
+@keyframes mvpDriftB{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-7px,4px) scale(1.08)}}
+.mvp-rise{animation:mvpRise .5s cubic-bezier(.2,.7,.3,1) both}
+.mvp-reviewGlow{background:linear-gradient(120deg,#2e9a78,#3a8fb0,#5b6fc9);background-size:200% 200%;animation:mvpGradShift 13s ease infinite}
+.mvp-floaty{animation:mvpFloaty 3.2s ease-in-out infinite}
+.mvp-driftA{animation:mvpDriftA 6s ease-in-out infinite}
+.mvp-driftB{animation:mvpDriftB 7.5s ease-in-out infinite}
+.mvp-spin{animation:mvpSpin 18s linear infinite}
+@media (prefers-reduced-motion: reduce){.mvp-rise,.mvp-reviewGlow,.mvp-floaty,.mvp-driftA,.mvp-driftB,.mvp-spin{animation:none}}
+`
+
 export interface MvpHomeData {
   greeting: string
   avatarText: string
@@ -57,6 +76,7 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
 
   return (
     <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
+      <style>{MVP_ANIM_CSS}</style>
       {/* sticky greeting bar — suppressed when embedded under the portal's
           own top bar (the design's full chrome lands in the nav-shell step). */}
       {showHeader && (
@@ -75,13 +95,14 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
       <div style={{ padding: '16px 18px 0' }}>
         {/* monthly review nudge */}
         {data.review && !reviewHidden && (
-          <div style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 18, padding: '13px 16px', color: '#fff', background: 'linear-gradient(110deg,#2e9a78 0%,#3a9e90 42%,#4f93ab 100%)' }}>
-            {/* soft geometric shapes, echoing the design's review card */}
-            <span aria-hidden style={{ position: 'absolute', width: 118, height: 118, top: -44, right: -28, borderRadius: '50%', background: 'rgba(255,255,255,.10)' }} />
-            <span aria-hidden style={{ position: 'absolute', width: 66, height: 66, bottom: -26, left: 40, borderRadius: '50%', border: '2px solid rgba(255,255,255,.18)' }} />
-            <span aria-hidden style={{ position: 'absolute', width: 22, height: 22, top: 34, right: 30, borderRadius: 6, background: 'rgba(255,255,255,.12)', transform: 'rotate(45deg)' }} />
+          <div className="mvp-rise mvp-reviewGlow" style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 18, padding: '13px 16px', color: '#fff' }}>
+            {/* drifting / spinning shapes, ported from the design */}
+            <i aria-hidden className="mvp-driftB" style={{ position: 'absolute', width: 118, height: 118, top: -44, right: -28, borderRadius: '50%', background: 'rgba(255,255,255,.10)' }} />
+            <i aria-hidden className="mvp-driftA" style={{ position: 'absolute', width: 66, height: 66, bottom: -26, left: 40, borderRadius: '50%', border: '2px solid rgba(255,255,255,.18)' }} />
+            <i aria-hidden className="mvp-spin" style={{ position: 'absolute', width: 22, height: 22, top: 34, right: 30, borderRadius: 6, background: 'rgba(255,255,255,.12)' }} />
+            <i aria-hidden className="mvp-driftA" style={{ position: 'absolute', width: 11, height: 11, bottom: 18, right: 78, borderRadius: '50%', background: 'rgba(255,255,255,.3)' }} />
             <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 11 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Receipt size={19} /></div>
+              <div className="mvp-floaty" style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Receipt size={19} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Sparkles size={13} /><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', opacity: .92 }}>New this month</span></div>
                 <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2 }}>Your {data.review.prevMonthLabel} review is ready</div>
