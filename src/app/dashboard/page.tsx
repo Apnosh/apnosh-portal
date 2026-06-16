@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react'
 import { useClient } from '@/lib/client-context'
 import MvpHome, { type MvpHomeData } from '@/components/mvp/mvp-home'
 import { transformHome } from '@/components/mvp/home-transform'
-import BottomNav from '@/components/mvp/bottom-nav'
+import MvpShell from '@/components/mvp/mvp-shell'
 
 // Design sample content — shown only where the client has no real approvals /
 // monthly review yet, so the home reads complete during this build phase.
@@ -50,22 +50,17 @@ export default function DashboardHomePage() {
   }, [client?.id, client?.name])
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#f0f0f3', display: 'flex', justifyContent: 'center' }}>
-      <div style={{ width: '100%', maxWidth: 480, background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)' }}>
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          {clientLoading || (!data && !error) ? (
-            <Centered>Loading your numbers…</Centered>
-          ) : error ? (
-            <Centered>Couldn&apos;t load: {error}</Centered>
-          ) : data ? (
-            <MvpHome data={data} />
-          ) : (
-            <Centered>No client found for this account.</Centered>
-          )}
-        </div>
-        <BottomNav active="home" />
-      </div>
-    </div>
+    <MvpShell active="home">
+      {clientLoading || (!data && !error) ? (
+        <Centered>Loading your numbers…</Centered>
+      ) : error ? (
+        <Centered>Couldn&apos;t load: {error}</Centered>
+      ) : data ? (
+        <MvpHome data={data} />
+      ) : (
+        <Centered>No client found for this account.</Centered>
+      )}
+    </MvpShell>
   )
 }
 
