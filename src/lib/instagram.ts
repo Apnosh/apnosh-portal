@@ -28,11 +28,6 @@ export const OAUTH_SCOPES = [
   'pages_read_engagement',
   'pages_manage_posts',
   'business_management',
-  // Required to read the Page's linked Instagram + its insights (reach,
-  // engagement). Without these the Page token can't pull IG insights and
-  // every reach call fails with "permission denied" (code 10).
-  'instagram_basic',
-  'instagram_manage_insights',
 ].join(',')
 
 // Instagram Direct Login scopes — uses instagram.com OAuth instead of facebook.com
@@ -42,6 +37,10 @@ export const IG_DIRECT_SCOPES = [
   'instagram_business_manage_messages',
   'instagram_business_manage_comments',
   'instagram_business_content_publish',
+  // Insights (reach, engagement) for the Instagram-Login flow. This is the
+  // Instagram-Login variant of the permission (the Facebook-Login
+  // 'instagram_manage_insights' is invalid for this app type).
+  'instagram_business_manage_insights',
 ].join(',')
 
 export function getInstagramDirectOAuthUrl(state: string): string {
