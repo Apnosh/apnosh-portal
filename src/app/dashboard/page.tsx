@@ -237,6 +237,7 @@ export default function DashboardPage() {
             homeMetrics={data?.homeMetrics ?? null}
             homeSections={data?.homeSections ?? null}
             agenda={data?.agenda ?? null}
+            comingUp={data?.comingUp ?? null}
             avatarText={client?.name ?? ''}
             sinceLastChecked={data?.sinceLastChecked ?? []}
             loading={loading}
@@ -282,6 +283,7 @@ export default function DashboardPage() {
           homeMetrics={data?.homeMetrics ?? null}
           homeSections={data?.homeSections ?? null}
           agenda={data?.agenda ?? null}
+          comingUp={data?.comingUp ?? null}
           avatarText={client?.name ?? ''}
           sinceLastChecked={data?.sinceLastChecked ?? []}
           loading={loading}

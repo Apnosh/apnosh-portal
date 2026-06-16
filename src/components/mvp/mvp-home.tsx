@@ -75,6 +75,7 @@ export interface MvpHomeData {
   signal: { state: 'recommendation' | 'ontrack'; metric?: string; message?: string }
   approvals: { id: string; tag: string; timing: string; title: string; subtitle: string; emoji?: string; image?: string }[]
   review: { prevMonthLabel: string; cycleLabel: string; budget: number } | null
+  planner?: { id: string; day: string; mon: string; daysLabel: string; label: string; hook: string; planned: boolean }[]
 }
 
 // Breakdown-tile icons keyed by the icon name get-home-metrics emits.
@@ -238,6 +239,37 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
           </>
         )}
 
+        {/* PLAN AHEAD — upcoming holidays / food days worth a post, each
+            with a one-line idea. "Plan it" hands it to the team. */}
+        {data.planner && data.planner.length > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Plan ahead</span>
+              <span style={{ fontSize: 11, color: C.faint }}>moments worth a post</span>
+            </div>
+            {data.planner.map((p) => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
+                <div style={{ width: 44, height: 48, borderRadius: 11, background: C.greenSoft, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 500, lineHeight: 1, color: C.greenDk }}>{p.day}</span>
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.green, marginTop: 2 }}>{p.mon}</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.label}</span>
+                    <span style={{ fontSize: 10.5, color: C.faint, flexShrink: 0 }}>· {p.daysLabel}</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.35, marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.hook}</div>
+                </div>
+                {p.planned ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, fontSize: 12, fontWeight: 600, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '6px 11px' }}><Check size={13} />Planned</span>
+                ) : (
+                  <a href="/dashboard/requests/new" style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none', whiteSpace: 'nowrap' }}>Plan it →</a>
+                )}
+              </div>
+            ))}
+            <div style={{ fontSize: 11, color: C.faint, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>Holidays &amp; food days that fit your restaurant. Nearby food events coming soon.</div>
+          </div>
+        )}
       </div>
     </div>
   )

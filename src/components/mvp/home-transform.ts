@@ -11,6 +11,15 @@ import type { MvpHomeData, MetricView } from './mvp-home'
 export interface HomeInstance { vals: (number | null)[]; start: string; total: number; breakdown: { label: string; value: string; icon: string }[] }
 export interface HomeMetric { key: string; label: string; sub: string; fmt: string; hasData: boolean; week: HomeInstance[]; month: HomeInstance[] }
 export interface AgendaItem { id: string; type: string; urgency: string; label: string; detail?: string }
+export interface ComingUpItem { date: string; label: string; hook: string; weight: number; daysUntil: number; queuedCount: number }
+
+function planLabel(days: number): string {
+  if (days <= 0) return 'Today'
+  if (days === 1) return 'Tomorrow'
+  if (days < 7) return `in ${days} days`
+  if (days < 14) return 'next week'
+  return `in ${Math.round(days / 7)} weeks`
+}
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
@@ -92,6 +101,7 @@ export function transformHome(
   agenda: AgendaItem[] | null,
   avatarText: string,
   greeting = 'Good day',
+  comingUp: ComingUpItem[] | null = null,
 ): MvpHomeData {
   const metrics = homeMetrics?.metrics ?? []
   const views = ORDER
@@ -117,6 +127,19 @@ export function transformHome(
     ? { state: 'recommendation', metric: primary?.tabLabel.toLowerCase() ?? 'numbers', message: 'Fewer customers took action this week than last. A fresh post can bring it back up.' }
     : { state: 'ontrack' }
 
+  const planner = (comingUp ?? []).slice(0, 4).map((e, i) => {
+    const d = new Date(e.date)
+    return {
+      id: `${e.label}-${i}`,
+      day: String(d.getDate()),
+      mon: d.toLocaleDateString('en-US', { month: 'short' }),
+      daysLabel: planLabel(e.daysUntil),
+      label: e.label,
+      hook: e.hook,
+      planned: e.queuedCount > 0,
+    }
+  })
+
   return {
     greeting,
     avatarText,
@@ -125,5 +148,6 @@ export function transformHome(
     approvals,
     signal,
     review: null,
+    planner,
   }
 }

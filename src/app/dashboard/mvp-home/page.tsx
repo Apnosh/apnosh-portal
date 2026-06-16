@@ -43,7 +43,7 @@ export default function MvpHomePage() {
       })
       .then((json) => {
         if (!live) return
-        const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·')
+        const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·', undefined, json.comingUp)
         // Review surface: where real data is empty (Do Si has no pending
         // approvals / monthly review yet), fall back to the design's sample
         // content so the full design can be evaluated. The real /dashboard

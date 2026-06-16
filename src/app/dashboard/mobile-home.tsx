@@ -11,7 +11,7 @@
  */
 
 import MvpHome from '@/components/mvp/mvp-home'
-import { transformHome, type AgendaItem } from '@/components/mvp/home-transform'
+import { transformHome, type AgendaItem, type ComingUpItem } from '@/components/mvp/home-transform'
 import type { HomeMetrics } from '@/lib/dashboard/get-home-metrics'
 import type { HomeSectionsData } from '@/lib/dashboard/get-home-sections'
 import type { SinceEvent } from '@/components/dashboard/since-last-checked'
@@ -20,6 +20,7 @@ interface Props {
   homeMetrics: HomeMetrics | null
   homeSections: HomeSectionsData | null
   agenda?: AgendaItem[] | null
+  comingUp?: ComingUpItem[] | null
   avatarText?: string
   sinceLastChecked?: SinceEvent[]
   loading?: boolean
@@ -41,7 +42,7 @@ function Frame({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default function MobileHome({ homeMetrics, agenda, avatarText, loading, failed }: Props) {
+export default function MobileHome({ homeMetrics, agenda, comingUp, avatarText, loading, failed }: Props) {
   if (loading) return <Frame>Loading your numbers…</Frame>
   if (failed) {
     return (
@@ -63,6 +64,7 @@ export default function MobileHome({ homeMetrics, agenda, avatarText, loading, f
     agenda ?? null,
     (avatarText?.[0] ?? '·').toUpperCase(),
     greetingForNow(),
+    comingUp ?? null,
   )
   return <MvpHome data={data} showHeader={false} />
 }
