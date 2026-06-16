@@ -27,6 +27,10 @@ export async function POST(req: NextRequest) {
   if (!access.authorized) return denied(access.reason)
   const supa = await createClient()
   const { data: { user } } = await supa.auth.getUser()
-  const id = await createCampaign(clientId, user?.id ?? null, draft)
-  return NextResponse.json({ id })
+  try {
+    const id = await createCampaign(clientId, user?.id ?? null, draft)
+    return NextResponse.json({ id })
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'create failed' }, { status: 500 })
+  }
 }

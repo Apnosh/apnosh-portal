@@ -11,16 +11,9 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { CampaignDraft, LineItem, CampaignBrief, BillingCadence } from './types'
 import type { StageId } from './stages'
+import type { SavedCampaign } from './view'
 
-export interface SavedCampaign {
-  clientId: string
-  draft: CampaignDraft
-  phase: 'build' | 'review' | 'ship' | 'monitor' | 'iterate'
-  status: 'draft' | 'shipped'
-  shippedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
+export type { SavedCampaign } from './view'
 
 // ── row → domain ─────────────────────────────────────────────
 function rowToLineItem(r: Record<string, unknown>): LineItem {
@@ -37,6 +30,9 @@ function rowToLineItem(r: Record<string, unknown>): LineItem {
     metric: (r.metric as LineItem['metric']) ?? undefined,
     why: (r.why as string) ?? undefined,
     market: (r.market as LineItem['market']) ?? undefined,
+    handler: (r.handler as LineItem['handler']) ?? undefined,
+    when: (r.when_label as string) ?? undefined,
+    draft: (r.draft as LineItem['draft']) ?? undefined,
     included: (r.included as boolean) ?? true,
     optOut: (r.opt_out as LineItem['optOut']) ?? undefined,
     paused: (r.paused as boolean) ?? undefined,
@@ -107,6 +103,9 @@ function lineItemToRow(campaignId: string, clientId: string, it: LineItem, posit
     metric: it.metric ?? null,
     why: it.why ?? null,
     market: it.market ?? null,
+    handler: it.handler ?? null,
+    when_label: it.when ?? null,
+    draft: it.draft ?? null,
   }
 }
 
@@ -157,6 +156,7 @@ export async function createCampaign(clientId: string, createdBy: string | null,
       name: draft.name,
       intent: draft.intent,
       path: draft.path,
+      phase: draft.phase ?? 'build',
       budget_monthly: draft.budgetMonthly,
       planned: draft.planned ?? false,
       goal_key: draft.goalKey ?? null,
@@ -171,17 +171,19 @@ export async function createCampaign(clientId: string, createdBy: string | null,
   const campaignId = c.id as string
 
   if (draft.items.length) {
-    await admin.from('campaign_line_items').insert(draft.items.map((it, i) => lineItemToRow(campaignId, clientId, it, i)))
+    const { error: liErr } = await admin.from('campaign_line_items').insert(draft.items.map((it, i) => lineItemToRow(campaignId, clientId, it, i)))
+    if (liErr) throw new Error(`line items: ${liErr.message}`)
   }
   if (draft.brief) {
     const b = draft.brief
-    await admin.from('campaign_briefs').insert({
+    const { error: bErr } = await admin.from('campaign_briefs').insert({
       campaign_id: campaignId, client_id: clientId,
       template_id: b.templateId, objective: b.objective, offer: b.offer ?? null,
       audience_ids: b.audienceIds, channel_ids: b.channelIds, kpi: b.kpi,
       duration_weeks: b.durationWeeks, projected: b.projected ?? null,
       content_beats: b.contentBeats, spec: b.spec,
     })
+    if (bErr) throw new Error(`brief: ${bErr.message}`)
   }
   return campaignId
 }
@@ -189,9 +191,11 @@ export async function createCampaign(clientId: string, createdBy: string | null,
 /** Replace a campaign's line items wholesale (positions preserved). */
 export async function replaceLineItems(campaignId: string, clientId: string, items: LineItem[]): Promise<void> {
   const admin = createAdminClient()
-  await admin.from('campaign_line_items').delete().eq('campaign_id', campaignId)
+  const { error: delErr } = await admin.from('campaign_line_items').delete().eq('campaign_id', campaignId)
+  if (delErr) throw new Error(`clear line items: ${delErr.message}`)
   if (items.length) {
-    await admin.from('campaign_line_items').insert(items.map((it, i) => lineItemToRow(campaignId, clientId, it, i)))
+    const { error: insErr } = await admin.from('campaign_line_items').insert(items.map((it, i) => lineItemToRow(campaignId, clientId, it, i)))
+    if (insErr) throw new Error(`replace line items: ${insErr.message}`)
   }
   await admin.from('campaigns').update({ updated_at: new Date().toISOString() }).eq('id', campaignId)
 }

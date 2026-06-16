@@ -80,6 +80,12 @@ export interface LineItem {
   why?: string
   /** Market comparison, for radical-transparency pricing. */
   market?: { low: number; high: number; label?: string }
+  /** Who builds it by default — drives the per-line handler chip. */
+  handler?: 'apnosh' | 'ai' | 'hybrid'
+  /** Relative timing label from the play blueprint, e.g. "10 days before". */
+  when?: string
+  /** AI-drafted content for this piece (the "AI builds it" path). */
+  draft?: { title?: string; body: string }
   included: boolean
   optOut?: OptOutReason
   /** Recurring lines can be paused — charges stop, line stays. */
@@ -94,6 +100,8 @@ export interface CampaignDraft {
   name: string
   intent: CampaignIntent
   path: BuildPath
+  /** Lifecycle phase to create the campaign in (strategist path → 'review'). */
+  phase?: 'build' | 'review' | 'ship' | 'monitor' | 'iterate'
   /** The monthly running budget the owner picked (their ceiling). */
   budgetMonthly: number
   items: LineItem[]

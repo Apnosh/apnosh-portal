@@ -392,6 +392,39 @@ export const PRICED_CATALOG: PricedService[] = [
     prices: [{ amount: 135, kind: 'monthly', cost: { us: 0.25, offshore: 1.5, tools: 10 } }],
     fit: { great: ['foodTruck'] },
   },
+  {
+    id: 'graphic', section: 'awareness', name: 'Event graphic / promo design',
+    metric: { label: 'Saves & shares of the announcement', expect: 'A clear, on-brand graphic earns more saves than a plain photo' },
+    desc: 'A scroll-stopping designed graphic for the moment — sized for Google, social and the event page.',
+    essential: false,
+    evidence: 'One strong graphic is the asset every channel reuses — the same design carries Google, social and the Facebook event page.',
+    handler: 'hybrid',
+    handlerWhy: 'AI explores layouts fast; an Apnosh designer makes the final, on-brand call. One revision included.',
+    // NOTE: placeholder price — confirm Apnosh rate + market band before launch.
+    prices: [{ amount: 85, kind: 'one-time', cost: { us: 0.25, offshore: 0.5, tools: 2 }, market: { low: 50, high: 200, label: 'freelance graphic design' } }],
+  },
+  {
+    id: 'gbp-event-post', section: 'awareness', name: 'Google event post',
+    metric: { label: 'Google event views & clicks', expect: 'Extra profile actions in the days around the event' },
+    desc: 'A dated event post on your Google Business Profile so it shows in Search & Maps on the right days.',
+    essential: false,
+    evidence: 'Google event posts put your event in front of locals searching your area on the exact dates they’re looking.',
+    handler: 'ai',
+    handlerWhy: 'Formulaic and grounded in your event details — AI drafts, a human QAs before publish.',
+    // NOTE: placeholder price — confirm Apnosh rate + market band before launch.
+    prices: [{ amount: 45, kind: 'one-time', cost: { us: 0.15, offshore: 0.25, tools: 1 }, market: { low: 40, high: 150, label: 'per-post GBP management' } }],
+  },
+  {
+    id: 'fb-event', section: 'awareness', name: 'Facebook event page',
+    metric: { label: 'Event responses & shares', expect: 'RSVPs and friend-of-attendee reach that compounds as people respond' },
+    desc: 'A real Facebook event page: invite your followers, show who’s going, auto-remind everyone who responds.',
+    essential: false,
+    evidence: 'A Facebook event page invites your followers, shows them which friends are going, and auto-reminds attendees — organic reach you can’t buy.',
+    handler: 'hybrid',
+    handlerWhy: 'We set up the page, artwork and details; the platform handles the invites and reminders.',
+    // NOTE: placeholder price — confirm Apnosh rate + market band before launch.
+    prices: [{ amount: 65, kind: 'one-time', cost: { us: 0.25, offshore: 0.5 }, market: { low: 50, high: 150, label: 'event-page setup' } }],
+  },
 
   /* ── Capture ───────────────────────────────────────────────────── */
   {
@@ -413,11 +446,13 @@ export const PRICED_CATALOG: PricedService[] = [
   },
   {
     id: 'landing-page', section: 'capture', name: 'Offer landing page & signup form',
+    metric: { label: 'RSVPs / signups captured', expect: 'A list of who’s coming, so you can fill the rest of the room' },
     desc: 'A single fast page: the offer, the form, the confirmation — wired into the CRM.',
     essential: true,
+    evidence: 'The page that turns interest into a contact you own — the only channel without an algorithm between you and the guest.',
     handler: 'hybrid',
     handlerWhy: 'AI drafts the copy; Apnosh builds the page, wires the form and tests the whole path.',
-    prices: [{ amount: 275, kind: 'one-time', cost: { us: 1, offshore: 2, tools: 3 } }],
+    prices: [{ amount: 275, kind: 'one-time', cost: { us: 1, offshore: 2, tools: 3 }, market: { low: 150, high: 600, label: 'freelance landing pages' } }],
   },
   {
     id: 'incentive-design', section: 'capture', name: 'Signup incentive design',
@@ -595,6 +630,18 @@ export const PRICED_CATALOG: PricedService[] = [
         ghost: 'No tables at all.',
       },
     },
+  },
+  {
+    id: 'reminder-send', section: 'convert', name: 'Reminder send (“book now”)',
+    metric: { label: 'Bookings from the nudge', expect: 'A spike in reservations in the 48 hours after the send' },
+    desc: 'A timed reminder text or email — “book now / tonight!” — sent to your list a couple days out.',
+    essential: false,
+    evidence: 'A timed “book now” reminder is what turns interest into a reservation — the single send most likely to fill the date.',
+    handler: 'hybrid',
+    handlerWhy: 'AI drafts the message in your voice; Apnosh owns the timing, segment and compliance on every send.',
+    compliance: 'TCPA quiet hours and opt-out honored on every send.',
+    // NOTE: placeholder price — confirm Apnosh rate + market band before launch.
+    prices: [{ amount: 40, kind: 'per-unit', unit: 'send', cost: { us: 0.1, offshore: 0.4, tools: 1 }, passthrough: 'message volume billed at cost', market: { low: 25, high: 60, label: 'managed reminder sends' } }],
   },
 
   /* ── Retain ────────────────────────────────────────────────────── */

@@ -1,47 +1,36 @@
+'use client'
+
 /**
- * /dashboard/inbox — Unified mobile-first inbox.
+ * /dashboard/inbox — the owner Inbox, redesigned to the apnosh-mvp design.
+ * Renders the full-screen owner shell (design chrome + bottom nav) with the
+ * 3-tab Inbox (Approvals · Messages · Reviews), wired to real data.
  *
- * Surfaces every "needs attention" item across approvals, reviews,
- * tasks, broken connections, and content drafts in a single
- * filterable feed. Replaces the old redirect-stub.
- *
- * Mobile-first design: filter chips along the top, vertical card
- * list below sized for thumb scrolling. Each card is a tap target
- * with urgency color, kind icon, title, preview, and relative time.
- * On wide screens (lg:) we render the same content with a tighter
- * 2-col layout — the data model is the same.
- *
- * The feed is dynamic (force-dynamic) because we want fresh counts
- * on every visit. Server-rendered for fast initial paint.
+ * The previous unified-feed inbox is preserved in git history / on main.
  */
 
-import { redirect } from 'next/navigation'
-import { resolveCurrentClient } from '@/lib/auth/resolve-client'
-import { getInbox } from '@/lib/dashboard/get-inbox'
-import InboxView from './inbox-view'
+import { useClient } from '@/lib/client-context'
+import MvpShell from '@/components/mvp/mvp-shell'
+import MvpInbox from '@/components/mvp/mvp-inbox'
 
-export const dynamic = 'force-dynamic'
-
-interface PageProps {
-  searchParams: Promise<{ clientId?: string; filter?: string }>
+export default function InboxPage() {
+  const { client, loading } = useClient()
+  return (
+    <MvpShell active="inbox">
+      {loading ? (
+        <Centered>Loading…</Centered>
+      ) : client?.id ? (
+        <MvpInbox clientId={client.id} />
+      ) : (
+        <Centered>Sign in as a client to see your inbox.</Centered>
+      )}
+    </MvpShell>
+  )
 }
 
-export default async function InboxPage({ searchParams }: PageProps) {
-  const { clientId: clientIdParam, filter } = await searchParams
-  const { user, clientId } = await resolveCurrentClient(clientIdParam ?? null)
-  if (!user) redirect('/login')
-  if (!clientId) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-12 text-center text-ink-3">
-        Sign in as a client to see your inbox.
-      </div>
-    )
-  }
-
-  const items = await getInbox(clientId, user.id)
+function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="-m-4 lg:-m-6">
-      <InboxView items={items} initialFilter={filter ?? 'all'} />
+    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', color: '#6e6e73', fontSize: 14, fontFamily: "'Inter',system-ui,sans-serif" }}>
+      {children}
     </div>
   )
 }

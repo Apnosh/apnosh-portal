@@ -25,8 +25,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { campaign, res } = await authorize(id)
   if (res || !campaign) return res ?? NextResponse.json({ error: 'not found' }, { status: 404 })
   const body = await req.json().catch(() => ({}))
-  if (Array.isArray(body.items)) await replaceLineItems(id, campaign.clientId, body.items as LineItem[])
-  if (body.fields && typeof body.fields === 'object') await updateCampaignFields(id, body.fields)
+  try {
+    if (Array.isArray(body.items)) await replaceLineItems(id, campaign.clientId, body.items as LineItem[])
+    if (body.fields && typeof body.fields === 'object') await updateCampaignFields(id, body.fields)
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'update failed' }, { status: 500 })
+  }
   return NextResponse.json({ campaign: await getCampaign(id) })
 }
 

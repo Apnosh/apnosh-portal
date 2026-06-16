@@ -6,19 +6,9 @@
  * (charged per piece, on delivery) plus optional ad spend — no abstract
  * subscriptions stacked on top.
  */
-import { serviceById, serviceToLine } from '@/lib/campaigns/catalog'
+import { serviceById, serviceToLine, buildContentLine, CONTENT_META } from '@/lib/campaigns/catalog'
 import { AUDIENCES, CHANNELS, type CampaignTemplate } from '@/lib/campaigns/data/campaign-templates'
 import type { CampaignBrief, ContentBeat, LineItem } from '@/lib/campaigns/types'
-
-/** Per-piece economics + presentation for each content type. */
-const CONTENT_META: Record<string, { price: number; stage: LineItem['stage']; unit: string; label: string; plain: string }> = {
-  reel: { price: 120, stage: 'awareness', unit: 'reel', label: 'Short-form video', plain: 'A reel' },
-  photo: { price: 65, stage: 'awareness', unit: 'photo', label: 'Photo', plain: 'A photo' },
-  post: { price: 70, stage: 'awareness', unit: 'post', label: 'Post / graphic', plain: 'A post' },
-  story: { price: 45, stage: 'awareness', unit: 'story', label: 'Story', plain: 'A story' },
-  email: { price: 85, stage: 'retain', unit: 'email', label: 'Email', plain: 'An email' },
-  sms: { price: 40, stage: 'retain', unit: 'text', label: 'Text blast', plain: 'A text' },
-}
 
 const SENTINEL_NO_OFFER = new Set(['Just show it off', 'No offer — just the invite', 'No offer', 'Just ask, nicely'])
 
@@ -70,15 +60,9 @@ export function composeCampaign(t: CampaignTemplate, spec: Record<string, string
   for (const b of contentBeats) byType.set(b.type, (byType.get(b.type) ?? 0) + 1)
   let i = 0
   for (const [type, qty] of byType) {
-    const m = CONTENT_META[type]
-    if (!m) continue
-    items.push({
-      id: `li-c-${type}-${i++}`, serviceId: `content-${type}`,
-      name: `${m.label} × ${qty}`, plain: `${qty} ${m.unit}${qty === 1 ? '' : 's'}`,
-      does: `${qty} ${m.label.toLowerCase()}${qty === 1 ? '' : 's'} across the campaign`,
-      stage: m.stage, price: m.price, cadence: { kind: 'per-occurrence', unit: m.unit }, qty,
-      eta: '~5 days', included: true, lock: 'editable',
-    })
+    if (!CONTENT_META[type]) continue
+    const line = buildContentLine(type, `li-c-${type}-${i++}`, { qty })
+    if (line) items.push(line)
   }
   if (channelIds.includes('ads')) {
     const s = serviceById('paid-ads')

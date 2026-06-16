@@ -13,7 +13,7 @@ import { serviceById, serviceToLine } from '@/lib/campaigns/catalog'
 import type { GoalKey, LineItem } from '@/lib/campaigns/types'
 
 /** Onboarding capability → the service ids it makes redundant. */
-const HAS_MAP: Record<string, string[]> = {
+export const HAS_MAP: Record<string, string[]> = {
   'A good website': ['site-menu'],
   'A good website with our menu on it': ['site-menu'],
   'A customer list': ['crm-list'],
