@@ -1,457 +1,231 @@
 'use client'
 
 /**
- * MVP Campaigns — the apnosh-mvp design's "Your marketing" (Plan) screen,
- * reproduced faithfully. The owner steers (pause / swap / drop / add) but never
- * authors. Shows: running monthly total, what the spend is getting (ROI), the
- * money map sized by cost, what results say (best vs lagging), the running
- * lines, and recommended adds.
+ * MVP Campaigns — the apnosh-mvp design's Campaign Board: a scannable card
+ * list of campaigns (All / Live / Drafts / Done) with a List/Calendar toggle.
+ * Each card shows status, cadence, cost, a one-line status, an at-a-glance
+ * performance signal (production progress / metric trend / finished lift), and
+ * a "see how it's doing" footer.
  *
- * No real plan/billing data is modelled yet, so this runs on sample data (a
- * representative subscriber). Once a services-with-cost model exists, swap the
- * SAMPLE_TACTICS for the client's real lines — the components stay the same.
+ * Runs on sample campaigns (no campaign model exists yet); the CampVM shape is
+ * what real campaigns would map to.
  */
 
 import { useState } from 'react'
 import {
-  Navigation, Phone, MousePointerClick, CalendarDays, TrendingUp, TrendingDown,
-  Minus, Sparkles, ChevronRight, ChevronDown, ArrowRight, Receipt, Info, Clock,
-  Plus, Pause, Play, Trash2, Film, Repeat, Check, X,
+  Plus, Repeat, Check, TrendingUp, TrendingDown, Minus, ArrowRight, Clock,
+  CalendarDays, Eye, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 
 const C = {
-  green: '#4abd98', greenDk: '#2e9a78', greenBar: '#4abd98', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
+  green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
   ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea',
-  amber: '#8a5a0c', amberBtn: '#bd7e16', amberBg: '#fbf3e4', amberLine: '#eed9b3',
-  coral: '#a85c3c', coralBg: '#f8efe9', red: '#c0392b', redBg: '#fdecea', bg: '#f5f5f7',
+  amber: '#8a5a0c', amberBg: '#fbf3e4', amberLine: '#eed9b3',
+  red: '#c0392b', redBg: '#fdecea',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
-const GRAD = 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)'
 
 const ANIM = `
-@keyframes crRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-.cr-rise{animation:crRise .5s cubic-bezier(.2,.7,.3,1) both}
-@media (prefers-reduced-motion: reduce){.cr-rise{animation:none}}
+@keyframes ccRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.cc-stagger>*{animation:ccRise .45s cubic-bezier(.2,.7,.3,1) both}
+.cc-stagger>*:nth-child(1){animation-delay:.03s}.cc-stagger>*:nth-child(2){animation-delay:.08s}.cc-stagger>*:nth-child(3){animation-delay:.13s}.cc-stagger>*:nth-child(4){animation-delay:.18s}.cc-stagger>*:nth-child(5){animation-delay:.23s}.cc-stagger>*:nth-child(6){animation-delay:.28s}.cc-stagger>*:nth-child(7){animation-delay:.33s}.cc-stagger>*:nth-child(8){animation-delay:.38s}.cc-stagger>*:nth-child(9){animation-delay:.43s}
+.cc-scroll{scrollbar-width:none}.cc-scroll::-webkit-scrollbar{display:none}
+@media (prefers-reduced-motion: reduce){.cc-stagger>*{animation:none}}
 `
 
-const METRIC_ICON: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
-  Directions: Navigation, Calls: Phone, Clicks: MousePointerClick, Bookings: CalendarDays,
-}
-const SRC_TAG: Record<string, { t: string; c: string; bg: string }> = {
-  apnosh: { t: 'Apnosh', c: '#2e9a78', bg: '#eaf7f3' },
-  ai: { t: 'AI pick', c: '#6b5bd1', bg: '#eeeafc' },
-  owner: { t: 'You', c: '#6e6e73', bg: '#f0f0f5' },
-}
-const SIGNAL_COPY: Record<string, string> = {
-  Directions: 'We watch your Google Maps "directions" requests, week over week.',
-  Calls: 'We track taps on the call button on your profile.',
-  Clicks: 'We track website clicks coming from your profile.',
-  Bookings: 'We track reservations started from your profile.',
+type Perf =
+  | { type: 'progress'; live: number; total: number }
+  | { type: 'ready'; ready: number }
+  | { type: 'trend'; trend: 'up' | 'down' | 'flat'; note: string; metric: string; spark: number[] }
+  | { type: 'lift'; pct: number; reach: number }
+type Camp = {
+  key: string; kind: 'live' | 'draft' | 'done'; title: string
+  pill: string; pillIcon: 'dot' | 'calendar' | 'check'
+  blurb: string; cost: string | null; recurring?: boolean
+  perf?: Perf | null; review?: boolean; goLive?: string
 }
 
-type Lane = 'self_serve' | 'done_for_you'
-interface Service { id: string; category: string; title: string; desc: string; metric: string; lane: Lane; cost: number; recommended?: boolean; rec?: string }
-const SERVICE_CATALOG: Service[] = [
-  { id: 'svc_reels', category: 'Social media', title: 'Weekly Reels', desc: 'Our team films, edits & posts a short video every week — you just approve each one.', metric: 'Directions', lane: 'done_for_you', cost: 280, recommended: true, rec: 'Reels reach the most new locals — a steady weekly cadence keeps Directions climbing.' },
-  { id: 'svc_stories', category: 'Social media', title: 'Daily Stories', desc: 'Behind-the-scenes stories posted every day to keep you top of feed.', metric: 'Clicks', lane: 'done_for_you', cost: 120 },
-  { id: 'svc_feed', category: 'Social media', title: 'Feed posts · 3×/week', desc: 'Branded photo posts to Instagram & Facebook — captioned, designed and scheduled.', metric: 'Clicks', lane: 'done_for_you', cost: 180 },
-  { id: 'svc_gbp_opt', category: 'Google Business Profile', title: 'Profile optimization', desc: 'We keep your Google listing complete — photos, hours, categories, Q&A — so you rank in Maps.', metric: 'Directions', lane: 'done_for_you', cost: 90, recommended: true, rec: 'Directions are your strongest metric right now — a fuller profile compounds that.' },
-  { id: 'svc_reviews', category: 'Local SEO', title: 'Reply to reviews', desc: 'We respond to every Google review in your voice, fast — replies lift your ranking.', metric: 'Calls', lane: 'done_for_you', cost: 70 },
-  { id: 'svc_localseo', category: 'Local SEO', title: 'Local SEO setup', desc: 'Directory citations, listings & local keywords so nearby customers find you first.', metric: 'Clicks', lane: 'done_for_you', cost: 150 },
+const CAMPAIGNS: Camp[] = [
+  { key: 'c1', kind: 'live', title: "Promote Father's Day menu", pill: 'In production', pillIcon: 'dot', blurb: "In production · your team's on it", cost: '$150/mo', recurring: true, perf: { type: 'progress', live: 1, total: 3 }, review: true },
+  { key: 'c2', kind: 'live', title: 'Pork belly combo launch', pill: 'Scheduled', pillIcon: 'calendar', blurb: 'Goes live Jun 22', cost: '$240 one-time', recurring: false, perf: { type: 'ready', ready: 2 } },
+  { key: 'c3', kind: 'live', title: "Father's Day brunch", pill: 'In production', pillIcon: 'dot', blurb: 'Goes live Jun 27', cost: null, perf: null },
+  { key: 'c4', kind: 'live', title: 'Weekly Reels', pill: 'Live', pillIcon: 'dot', blurb: 'Working — your directions are climbing', cost: '$280/mo', recurring: true, perf: { type: 'trend', trend: 'up', note: '+34%', metric: 'Directions', spark: [40, 52, 48, 60, 72, 68, 90] } },
+  { key: 'c5', kind: 'live', title: 'Summer cocktail series', pill: 'In production', pillIcon: 'dot', blurb: "In production · your team's on it", cost: '$120/mo', recurring: true, perf: { type: 'progress', live: 2, total: 4 } },
+  { key: 'c6', kind: 'live', title: 'Google profile refresh', pill: 'Live', pillIcon: 'dot', blurb: 'Working — your directions are climbing', cost: '$90/mo', recurring: true, perf: { type: 'trend', trend: 'up', note: '+12%', metric: 'Directions', spark: [30, 34, 33, 38, 42, 44, 48] } },
+  { key: 'c7', kind: 'live', title: 'Review reply program', pill: 'Live', pillIcon: 'dot', blurb: 'Worth a look — calls dipped', cost: '$70/mo', recurring: true, perf: { type: 'trend', trend: 'down', note: '-8%', metric: 'Calls', spark: [60, 58, 55, 50, 48, 46, 44] } },
+  { key: 'c8', kind: 'draft', title: 'Late-night menu teaser', pill: 'Draft', pillIcon: 'dot', blurb: 'Ready when you are · 2 parts', cost: '$90 one-time', recurring: false, perf: null },
+  { key: 'c9', kind: 'done', title: 'Cinco de Mayo special', pill: 'Done', pillIcon: 'check', blurb: 'Wrapped — full results inside', cost: null, perf: { type: 'lift', pct: 28, reach: 12400 } },
 ]
 
-interface Tactic { id: string; title: string; why: string; cost: number; metric: string; trend: 'up' | 'down' | null; note: string; pct: number; spark: number[]; status: 'active' | 'suggested'; lane: Lane; source: string; swapTo?: { title: string; cost: number; startsLabel: string } | null }
-const SAMPLE_TACTICS: Tactic[] = [
-  { id: 't1', title: 'Weekly Reels', why: 'We film, edit & post a short video every week — you just approve each one.', cost: 280, metric: 'Directions', trend: 'up', note: '+34%', pct: 34, spark: [40, 52, 48, 60, 72, 68, 90], status: 'active', lane: 'done_for_you', source: 'apnosh' },
-  { id: 't2', title: 'Reply to reviews', why: 'We respond to every Google review in your voice, fast.', cost: 70, metric: 'Calls', trend: 'down', note: '-8%', pct: -8, spark: [60, 58, 55, 50, 48, 46, 44], status: 'active', lane: 'done_for_you', source: 'apnosh' },
-  { id: 't3', title: 'Local SEO setup', why: 'Directory citations & local keywords so nearby diners find you first.', cost: 150, metric: 'Clicks', trend: 'up', note: '+6%', pct: 6, spark: [30, 32, 31, 34, 36, 35, 38], status: 'active', lane: 'done_for_you', source: 'apnosh' },
-  { id: 't4', title: 'Profile monitoring', why: 'We keep your Google listing accurate — hours, photos, Q&A.', cost: 0, metric: 'Directions', trend: null, note: '', pct: 0, spark: [], status: 'active', lane: 'done_for_you', source: 'apnosh' },
-]
-const MONTH_ACTIONS = 1836
-const MONTH_PCT = 12
-const PREV_MONTH = 'May'
+type Tab = 'all' | 'live' | 'draft' | 'done'
 
 export default function MvpCampaigns() {
-  const [tactics, setTactics] = useState<Tactic[]>(SAMPLE_TACTICS)
-  const [showCatalog, setShowCatalog] = useState(false)
-  const [swapping, setSwapping] = useState<Tactic | null>(null)
+  const [view, setView] = useState<'list' | 'calendar'>('list')
+  const [tab, setTab] = useState<Tab>('all')
 
-  const active = tactics.filter((t) => t.status === 'active')
-  const paused = tactics.filter((t) => t.status === 'suggested')
-  const spent = active.reduce((s, t) => s + Number(t.cost || 0), 0)
-  const paidCount = active.filter((t) => Number(t.cost) > 0).length
-  const cycleLabel = new Date().toLocaleString('en-US', { month: 'long' })
-  const nextLabel = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toLocaleString('en-US', { month: 'long' })
-
-  const setStatus = (id: string, status: 'active' | 'suggested') => setTactics((t) => t.map((x) => x.id === id ? { ...x, status } : x))
-  const del = (id: string) => setTactics((t) => t.filter((x) => x.id !== id))
-  const undoSwap = (id: string) => setTactics((t) => t.map((x) => x.id === id ? { ...x, swapTo: null } : x))
-  const confirmSwap = (oldT: Tactic, s: Service) => {
-    setTactics((list) => list.map((x) => x.id === oldT.id ? { ...x, swapTo: { title: s.title, cost: s.cost, startsLabel: nextLabel } } : x))
-    setSwapping(null)
-  }
-  const addService = (s: Service) => {
-    setTactics((list) => list.some((x) => x.id === s.id) ? list : [...list, { id: s.id, title: s.title, why: s.desc, cost: s.cost, metric: s.metric, trend: null, note: '', pct: 0, spark: [], status: 'active', lane: s.lane, source: 'apnosh' }])
-  }
-
-  const best = active.length ? active.reduce((a, b) => (b.pct > a.pct ? b : a), active[0]) : null
-  const bestId = active.length > 1 && best && best.pct > 0 ? best.id : null
-  const paidLagging = active.filter((t) => t.cost > 0 && t.pct <= 0).sort((a, b) => a.pct - b.pct)[0]
-  const wasteId = paidLagging ? paidLagging.id : null
-  const winner = bestId ? best : null
-
-  const onPlan = new Set(tactics.map((t) => t.title.toLowerCase().trim()))
-  const avail = SERVICE_CATALOG.filter((s) => !onPlan.has(s.title.toLowerCase()) && !tactics.some((t) => t.id === s.id))
-  const recommended = avail.filter((s) => s.recommended)
-  const browse = avail.filter((s) => !s.recommended)
-  const categories = [...new Set(browse.map((s) => s.category))]
-  const amplify = (winner && recommended.find((s) => s.metric === winner.metric)) || recommended[0] || null
-  const doMore = () => { if (amplify) addService(amplify); else setShowCatalog(true) }
-
-  const perCust = spent > 0 && MONTH_ACTIONS ? spent / MONTH_ACTIONS : 0
-  const costEach = perCust >= 1 ? `$${perCust.toFixed(2)} each` : `${Math.round(perCust * 100)}¢ each`
+  const live = CAMPAIGNS.filter((c) => c.kind === 'live')
+  const drafts = CAMPAIGNS.filter((c) => c.kind === 'draft')
+  const done = CAMPAIGNS.filter((c) => c.kind === 'done')
+  const counts: Record<Tab, number> = { all: CAMPAIGNS.length, live: live.length, draft: drafts.length, done: done.length }
+  const shown = tab === 'all' ? CAMPAIGNS : tab === 'live' ? live : tab === 'draft' ? drafts : done
 
   return (
     <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{ANIM}</style>
-      <div style={{ padding: '20px 20px 0' }}>
-        <h1 className="cr-rise" style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 27, margin: '0 0 4px' }}>Your marketing</h1>
-        <p className="cr-rise" style={{ fontSize: 13.5, color: C.mute, margin: '0 0 16px', animationDelay: '.05s' }}>Everything you&apos;re paying for, and what it&apos;s doing. Your strategist runs it — add, pause, or drop anything.</p>
+      {/* sticky header */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', padding: '14px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}` }}>
+        <div style={{ fontSize: 15, color: C.ink, fontWeight: 600 }}>Campaigns</div>
+        <a href="/dashboard/requests/new" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 99, padding: '8px 14px', fontWeight: 700, fontSize: 13.5 }}><Plus size={16} strokeWidth={2.5} /> New</a>
+      </div>
 
-        {/* RUNNING TOTAL */}
-        <div className="cr-rise" style={{ animationDelay: '.1s', background: '#fff', borderRadius: 22, padding: '18px 20px', boxShadow: '0 2px 10px rgba(0,0,0,.04)', marginBottom: 16, border: `1px solid ${C.line}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ fontSize: 12, color: C.mute, fontWeight: 600, letterSpacing: '.05em' }}>{cycleLabel.toUpperCase()} · YOU&apos;RE PAYING</span>
-              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.green, background: C.greenSoft, padding: '2px 8px', borderRadius: 99, display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 5, height: 5, borderRadius: 3, background: C.greenBar }} />Running</span>
-            </div>
-            <span style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 600 }}>${spent}<span style={{ fontSize: 14, color: C.mute, fontWeight: 400 }}>/mo</span></span>
-          </div>
-          <div style={{ fontSize: 13, color: C.mute, marginTop: 6 }}>{paidCount > 0 ? <><b style={{ color: C.ink }}>{paidCount}</b> {paidCount === 1 ? 'service' : 'services'} running.</> : 'Nothing running yet — add a service to grow.'}</div>
-          <div style={{ marginTop: 12, fontSize: 12, color: C.faint, lineHeight: 1.5, display: 'flex', gap: 7 }}>
-            <Info size={14} color={C.faint} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>Your monthly total. Adding shows the new total before any charge; pausing applies next month.</span>
-          </div>
+      <div style={{ padding: '16px 18px 0' }}>
+        <p style={{ fontSize: 13.5, color: C.mute, margin: '0 0 16px' }}>Open any card to see what it costs, what it&apos;s driving, and how it&apos;s doing inside.</p>
+
+        {/* List / Calendar toggle */}
+        <div style={{ display: 'inline-flex', background: '#f1f3f2', borderRadius: 10, padding: 3, marginBottom: 18 }}>
+          {([['list', 'List'], ['calendar', 'Calendar']] as const).map(([k, l]) => {
+            const on = view === k
+            return <button key={k} onClick={() => setView(k)} style={{ border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 13, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 3px rgba(0,0,0,.08)' : 'none', cursor: 'pointer', transition: 'all .15s' }}>{l}</button>
+          })}
         </div>
 
-        {/* ROI LINE */}
-        {spent > 0 && MONTH_ACTIONS > 0 && (
-          <div className="cr-rise" style={{ animationDelay: '.12s', background: '#fff', borderRadius: 22, padding: '16px 20px', boxShadow: '0 2px 10px rgba(0,0,0,.04)', marginBottom: 16, border: `1px solid ${C.line}` }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute, marginBottom: 9 }}>What it&apos;s getting you</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <b style={{ color: C.ink, fontFamily: DISPLAY, fontWeight: 600, fontSize: 19 }}>${spent}</b>
-              <span style={{ color: C.faint, fontSize: 14 }}>this month</span>
-              <ArrowRight size={15} color={C.faint} />
-              <b style={{ color: C.ink, fontFamily: DISPLAY, fontWeight: 600, fontSize: 19 }}>{MONTH_ACTIONS.toLocaleString()}</b>
-              <span style={{ color: C.faint, fontSize: 14 }}>customers · {costEach}</span>
-            </div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 9, fontSize: 12.5, fontWeight: 600, color: MONTH_PCT > 0 ? C.green : C.coral }}>
-              {MONTH_PCT > 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}{MONTH_PCT > 0 ? 'Up' : 'Down'} {Math.abs(MONTH_PCT)}% from {PREV_MONTH}
-            </div>
-          </div>
-        )}
-
-        {/* MONEY MAP */}
-        <BudgetBreakdown active={active} spent={spent} bestId={bestId} wasteId={wasteId} />
-
-        {/* WHAT YOUR RESULTS SAY */}
-        {(winner || wasteId) && (
-          <div className="cr-rise" style={{ animationDelay: '.15s', background: '#fff', borderRadius: 22, padding: '16px 18px', boxShadow: '0 2px 10px rgba(0,0,0,.04)', marginBottom: 16, border: `1px solid ${C.line}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-              <TrendingUp size={14} color={C.green} />
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute }}>What your results say</span>
-            </div>
-            {winner && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: wasteId ? 14 : 0 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 11, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><TrendingUp size={18} color={C.green} /></div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.35 }}><b>{winner.title}</b> is your best performer <span style={{ color: C.green, fontWeight: 700 }}>{winner.note}</span></div>
-                </div>
-                <button onClick={doMore} style={{ flexShrink: 0, background: GRAD, color: '#fff', border: 'none', borderRadius: 10, padding: '9px 13px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Do more</button>
-              </div>
-            )}
-            {winner && wasteId && <div style={{ borderTop: `1px solid ${C.line}` }} />}
-            {wasteId && paidLagging && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 0 0' }}>
-                <div style={{ width: 38, height: 38, borderRadius: 11, background: C.amberBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><TrendingDown size={18} color={C.amberBtn} /></div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.35 }}><b>{paidLagging.title}</b> isn&apos;t moving <span style={{ color: C.amber, fontWeight: 700 }}>{paidLagging.note}</span></div>
-                  <div style={{ fontSize: 12, color: C.faint, marginTop: 2 }}>${paidLagging.cost}/mo, flat.</div>
-                </div>
-                <button onClick={() => setStatus(wasteId, 'suggested')} style={{ flexShrink: 0, background: '#fff', color: C.amber, border: `1px solid ${C.amberLine}`, borderRadius: 10, padding: '9px 13px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Pause it</button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* WHAT YOU'RE RUNNING */}
-        {active.length > 0 && (
+        {view === 'calendar' ? (
+          <CampaignCalendar camps={CAMPAIGNS} />
+        ) : (
           <>
-            <Label>What you&apos;re running now</Label>
-            <p style={{ fontSize: 12, color: C.faint, lineHeight: 1.5, margin: '-4px 0 12px' }}>Each line&apos;s trend is the metric it grows, this month vs. last — so a winner and a laggard are easy to spot.</p>
-            {active.map((t) => (
-              <TacticRow key={t.id} t={t} bucket="active" rank={t.id === bestId ? 'best' : t.id === wasteId ? 'waste' : undefined} onDelete={() => del(t.id)} onToggle={() => setStatus(t.id, 'suggested')} onSwap={() => setSwapping(t)} onUndoSwap={() => undoSwap(t.id)} />
-            ))}
-          </>
-        )}
-
-        {paused.length > 0 && (
-          <>
-            <div style={{ height: 18 }} /><Label>Paused</Label>
-            {paused.map((t) => <TacticRow key={t.id} t={t} bucket="paused" onResume={() => setStatus(t.id, 'active')} onDelete={() => del(t.id)} />)}
-          </>
-        )}
-
-        {/* RECOMMENDED */}
-        {recommended.length > 0 && (
-          <>
-            <div style={{ height: 18 }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 10px' }}>
-              <Sparkles size={14} color={C.green} />
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.green }}>Recommended for you</span>
+            {/* filter chips */}
+            <div className="cc-scroll" style={{ display: 'flex', gap: 7, marginBottom: 16, overflowX: 'auto', paddingBottom: 2 }}>
+              {([['all', 'All'], ['live', 'Live'], ['draft', 'Drafts'], ['done', 'Done']] as const).map(([k, l]) => {
+                const on = tab === k; const n = counts[k]
+                return (
+                  <button key={k} onClick={() => setTab(k)} style={{ flexShrink: 0, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 7, border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', transition: 'all .15s' }}>
+                    {l}<span style={{ minWidth: 17, height: 17, padding: '0 5px', borderRadius: 99, background: on ? C.green : '#eef0ef', color: on ? '#fff' : C.faint, fontSize: 10.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{n}</span>
+                  </button>
+                )
+              })}
             </div>
-            {recommended.map((s) => <ServiceRow key={s.id} s={s} onAdd={() => addService(s)} />)}
-          </>
-        )}
 
-        {/* CATALOG behind a link */}
-        {browse.length > 0 && (
-          <>
-            <div style={{ height: 18 }} />
-            {!showCatalog ? (
-              <div onClick={() => setShowCatalog(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, padding: '14px 16px', cursor: 'pointer' }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: '#f5f4f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Plus size={17} color={C.mute} /></div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: C.ink }}>Add something else</div>
-                  <div style={{ fontSize: 12, color: C.faint }}>Browse everything we can run for you</div>
-                </div>
-                <ChevronDown size={18} color={C.faint} style={{ flexShrink: 0 }} />
-              </div>
+            {shown.length === 0 ? (
+              <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 16, padding: '26px 16px', textAlign: 'center', color: C.faint, fontSize: 13.5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}><Plus size={20} color={C.faint} />Nothing here yet — tap <b style={{ color: C.mute }}>+ New</b> to start one.</div>
             ) : (
-              <>
-                <Label>Add a service</Label>
-                <p style={{ fontSize: 12, color: C.faint, lineHeight: 1.5, margin: '-4px 0 14px' }}>Prices are a starting point — your strategist confirms before any charge.</p>
-                {categories.map((cat) => (
-                  <div key={cat} style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, color: C.mute, margin: '6px 0 9px' }}>{cat}</div>
-                    {browse.filter((s) => s.category === cat).map((s) => <ServiceRow key={s.id} s={s} onAdd={() => addService(s)} />)}
-                  </div>
-                ))}
-              </>
+              <div className="cc-stagger" key={tab}>
+                {shown.map((c) => <CampaignCard key={c.key} c={c} />)}
+              </div>
             )}
           </>
         )}
       </div>
-
-      {swapping && (
-        <SwapSheet
-          line={swapping}
-          options={SERVICE_CATALOG.filter((s) => s.cost <= swapping.cost && !onPlan.has(s.title.toLowerCase()) && !tactics.some((t) => t.id === s.id))}
-          nextLabel={nextLabel}
-          onPick={(s) => confirmSwap(swapping, s)}
-          onClose={() => setSwapping(null)}
-        />
-      )}
     </div>
-  )
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, margin: '4px 0 10px' }}>{children}</div>
-}
-
-function MiniBtn({ children, onClick, danger, compact }: { children: React.ReactNode; onClick?: () => void; danger?: boolean; compact?: boolean }) {
-  return (
-    <button onClick={onClick} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, background: '#fff', color: danger ? C.coral : C.mute, border: `1px solid ${C.line}`, borderRadius: 9, padding: compact ? '7px 9px' : '7px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>{children}</button>
   )
 }
 
 function Spark({ values, color }: { values: number[]; color: string }) {
-  if (!values || values.length < 2) return <div style={{ width: 56, height: 20 }} />
+  if (!values || values.length < 2) return null
   const max = Math.max(...values), min = Math.min(...values), range = max - min || 1
   const w = 56, h = 20
   const pts = values.map((v, i) => `${(i / (values.length - 1)) * w},${h - ((v - min) / range) * h}`).join(' ')
-  return (
-    <svg width={w} height={h} style={{ display: 'block' }}>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
+  return <svg width={w} height={h} style={{ display: 'block' }}><polyline points={pts} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
 }
 
-function BudgetBreakdown({ active, spent, bestId, wasteId }: { active: Tactic[]; spent: number; bestId: string | null; wasteId: string | null }) {
-  const paid = active.filter((t) => Number(t.cost) > 0).sort((a, b) => Number(b.cost) - Number(a.cost))
-  const free = active.filter((t) => !Number(t.cost))
-  if (paid.length === 0 && free.length === 0) return null
+function CampaignCard({ c }: { c: Camp }) {
+  const tone = c.kind === 'draft'
+    ? { bar: '#cfd4d1', dot: '#aeb4b0', pillBg: '#eef0ef', pillC: C.mute }
+    : { bar: C.green, dot: C.green, pillBg: C.greenSoft, pillC: C.greenDk }
+  const ts = (t: 'up' | 'down' | 'flat') => t === 'up' ? { c: C.green, bg: C.greenSoft, I: TrendingUp } : t === 'down' ? { c: C.red, bg: C.redBg, I: TrendingDown } : { c: C.mute, bg: '#f0f0ee', I: Minus }
+  const fmtReach = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+
   return (
-    <div className="cr-rise" style={{ animationDelay: '.13s', background: '#fff', borderRadius: 22, padding: '18px 20px', boxShadow: '0 2px 10px rgba(0,0,0,.04)', marginBottom: 16, border: `1px solid ${C.line}` }}>
-      <span style={{ fontSize: 12, color: C.mute, fontWeight: 600, letterSpacing: '.05em' }}>WHERE IT GOES</span>
-      <p style={{ fontSize: 12, color: C.faint, lineHeight: 1.5, margin: '5px 0 16px' }}>Each line, sized by cost — and how it&apos;s pulling.</p>
-      {paid.map((t) => {
-        const w = spent > 0 ? Math.round((Number(t.cost) / spent) * 100) : 0
-        const isBest = t.id === bestId, isWaste = t.id === wasteId
-        const barColor = isWaste ? C.coral : isBest ? C.green : C.greenBar
-        const trendColor = t.trend === 'up' ? C.green : t.trend === 'down' ? C.coral : C.faint
-        return (
-          <div key={t.id} style={{ marginBottom: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
-              <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 15, flexShrink: 0 }}>${t.cost}<span style={{ fontSize: 11, color: C.mute, fontWeight: 400 }}>/mo</span></span>
-            </div>
-            <div style={{ height: 7, background: '#eef2f0', borderRadius: 5, overflow: 'hidden' }}>
-              <div style={{ width: `${w}%`, height: '100%', background: barColor, borderRadius: 5 }} />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11.5, color: C.faint }}>{w}% of spend · grows {t.metric}</span>
-              {t.trend && t.note && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11.5, fontWeight: 700, color: trendColor }}>{t.trend === 'up' ? '↑' : t.trend === 'down' ? '↓' : ''}{t.note}</span>
-              )}
-              {isBest && <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', color: C.green, background: C.greenSoft, padding: '2px 7px', borderRadius: 99 }}>✓ Working best</span>}
-              {isWaste && <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', color: C.coral, background: C.coralBg, padding: '2px 7px', borderRadius: 99 }}>Not pulling its weight</span>}
-            </div>
+    <div style={{ position: 'relative', overflow: 'hidden', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '11px 13px 10px', marginBottom: 9, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: tone.bar }} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: tone.pillBg, color: tone.pillC, borderRadius: 99, padding: '2px 8px', fontWeight: 700, fontSize: 11 }}>
+            {c.pillIcon === 'check' ? <Check size={11} strokeWidth={3} /> : c.pillIcon === 'calendar' ? <CalendarDays size={11} /> : <span style={{ width: 6, height: 6, borderRadius: 99, background: tone.dot, display: 'inline-block' }} />}{c.pill}
+          </span>
+          {c.kind !== 'done' && c.cost && (c.recurring
+            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#eef0ef', color: C.mute, borderRadius: 99, padding: '2px 8px', fontWeight: 700, fontSize: 10 }}><Repeat size={10} /> Recurring</span>
+            : <span style={{ background: '#eef0ef', color: C.mute, borderRadius: 99, padding: '2px 8px', fontWeight: 700, fontSize: 10 }}>One-time</span>)}
+        </div>
+        {c.cost && <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 14.5, color: C.ink, flexShrink: 0 }}>{c.cost}</span>}
+      </div>
+
+      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, color: C.ink, lineHeight: 1.15, marginBottom: 2 }}>{c.title}</div>
+      <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.35, marginBottom: 8 }}>{c.blurb}</div>
+
+      {c.perf?.type === 'trend' && (() => { const s = ts(c.perf.trend); return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: s.bg, color: s.c, borderRadius: 7, padding: '3px 8px', fontWeight: 700, fontSize: 11.5 }}><s.I size={12} /> {c.perf.metric}{c.perf.note ? ` ${c.perf.note}` : ''}</span>
+          <Spark values={c.perf.spark} color={s.c} />
+        </div>
+      ) })()}
+      {c.perf?.type === 'progress' && (() => { const pct = c.perf.total ? c.perf.live / c.perf.total : 0; return (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: C.ink }}>{c.perf.live} of {c.perf.total} parts live</span>
+            <span style={{ fontSize: 10.5, color: C.faint }}>{Math.round(pct * 100)}%</span>
           </div>
-        )
-      })}
-      {free.length > 0 && (
-        <div style={{ borderTop: `1px solid ${C.line}`, marginTop: 4, paddingTop: 12 }}>
-          {free.map((t) => (
-            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-              <span style={{ fontSize: 13, color: C.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
-              <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', color: C.green, background: C.greenSoft, padding: '2px 8px', borderRadius: 99, flexShrink: 0 }}>Free</span>
-            </div>
-          ))}
-          <div style={{ fontSize: 11.5, color: C.faint, marginTop: 4 }}>Included at no cost — work we do that you don&apos;t pay extra for.</div>
+          <div style={{ height: 5, borderRadius: 99, background: '#eef0ef', overflow: 'hidden' }}><div style={{ width: `${Math.max(5, pct * 100)}%`, height: '100%', background: C.green, borderRadius: 99 }} /></div>
+        </div>
+      ) })()}
+      {c.perf?.type === 'ready' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+          <Clock size={14} color={C.mute} />
+          <span style={{ fontSize: 12.5 }}><b style={{ fontWeight: 700 }}>{c.perf.ready} parts ready</b> <span style={{ color: C.faint }}>· waiting to go live</span></span>
         </div>
       )}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: `2px solid ${C.ink}`, marginTop: 14, paddingTop: 12 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Committed monthly</span>
-        <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 20, color: C.greenDk }}>${spent}<span style={{ fontSize: 12, color: C.mute, fontWeight: 400 }}>/mo</span></span>
+      {c.perf?.type === 'lift' && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.greenSoft, color: C.greenDk, borderRadius: 7, padding: '3px 8px', fontWeight: 700, fontSize: 11.5, marginBottom: 8 }}><TrendingUp size={12} /> +{c.perf.pct}% actions · {fmtReach(c.perf.reach)} reached</div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: C.greenDk, fontWeight: 700, fontSize: 12.5 }}>See how it&apos;s doing <ArrowRight size={14} /></span>
+        {c.review && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.amberBg, border: `0.5px solid ${C.amberLine}`, color: C.amber, borderRadius: 99, padding: '4px 10px', fontWeight: 700, fontSize: 11.5 }}><Eye size={12} /> 1 to review</span>}
       </div>
     </div>
   )
 }
 
-function ServiceRow({ s, onAdd }: { s: Service; onAdd: () => void }) {
-  const Icon = METRIC_ICON[s.metric] || MousePointerClick
-  return (
-    <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: '15px 16px', marginBottom: 9 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            {s.lane === 'done_for_you' && <Film size={14} color={C.green} />}{s.title}
-            {s.recommended && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.green, background: C.greenSoft, padding: '2px 7px', borderRadius: 99 }}>Recommended</span>}
-          </div>
-          <div style={{ fontSize: 12.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 4 }}>{s.cost === 0 ? 'Free' : `$${s.cost}/mo`} · <Icon size={13} color={C.green} /> grows <b style={{ color: C.ink, fontWeight: 600 }}>{s.metric}</b></div>
-          <div style={{ fontSize: 12, color: C.faint, marginTop: 6, lineHeight: 1.45 }}>{s.rec || s.desc}</div>
-        </div>
-        <button onClick={onAdd} style={{ flexShrink: 0, background: GRAD, color: '#fff', border: 'none', borderRadius: 10, padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Plus size={14} />Add</button>
-      </div>
-    </div>
-  )
-}
+/* Lightweight month calendar: campaign go-live dates + holidays as dots. */
+function CampaignCalendar({ camps }: { camps: Camp[] }) {
+  const [cur, setCur] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() } })
+  const first = new Date(cur.y, cur.m, 1)
+  const startDow = first.getDay()
+  const days = new Date(cur.y, cur.m + 1, 0).getDate()
+  const monthLabel = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const today = new Date()
+  const isToday = (d: number) => today.getFullYear() === cur.y && today.getMonth() === cur.m && today.getDate() === d
 
-function TacticRow({ t, bucket, rank, onDelete, onToggle, onResume, onSwap, onUndoSwap }: {
-  t: Tactic; bucket: 'active' | 'paused'; rank?: 'best' | 'waste'
-  onDelete: () => void; onToggle?: () => void; onResume?: () => void; onSwap?: () => void; onUndoSwap?: () => void
-}) {
-  const [open, setOpen] = useState(false)
-  const Icon = METRIC_ICON[t.metric] || MousePointerClick
-  const T = t.trend === 'up' ? TrendingUp : t.trend === 'down' ? TrendingDown : Minus
-  const c = t.trend === 'up' ? C.green : t.trend === 'down' ? C.red : C.mute
-  const src = SRC_TAG[t.source]
-  return (
-    <div className="cr-rise" style={{ background: '#fff', borderRadius: 16, padding: '15px 16px', marginBottom: 9, boxShadow: rank === 'best' ? '0 2px 12px rgba(31,122,84,.12)' : '0 1px 4px rgba(0,0,0,.04)', border: rank === 'best' ? `1px solid ${C.greenLine}` : rank === 'waste' ? `1px solid ${C.amberLine}` : '1px solid transparent', opacity: bucket === 'paused' ? .7 : 1 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 14.5, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            {t.lane === 'done_for_you' && <Film size={14} color={C.green} />}{t.title}
-            {rank === 'best' && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.green, background: C.greenSoft, padding: '2px 7px', borderRadius: 99 }}>★ Working best</span>}
-            {rank === 'waste' && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.amber, background: C.amberBg, padding: '2px 7px', borderRadius: 99 }}>Not pulling its weight</span>}
-            {src && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: src.c, background: src.bg, padding: '2px 7px', borderRadius: 99 }}>{src.t}</span>}
-          </div>
-          <div style={{ fontSize: 12.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 4 }}>{t.cost === 0 ? 'Free' : `$${t.cost}/mo`} · <Icon size={13} color={C.green} /> grows <b style={{ color: C.ink, fontWeight: 600 }}>{t.metric}</b></div>
-          {t.why && <div style={{ fontSize: 12, color: C.faint, marginTop: 6, lineHeight: 1.45 }}>{t.why}</div>}
-        </div>
-        {bucket === 'active' && t.trend && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
-            <Spark values={t.spark} color={c} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12.5, fontWeight: 700, color: c, background: t.trend === 'down' ? C.redBg : t.trend === 'up' ? C.greenSoft : '#f0f0ee', padding: '4px 9px', borderRadius: 8, whiteSpace: 'nowrap' }}><T size={13} />{t.metric} {t.note}</div>
-          </div>
-        )}
-      </div>
-      {bucket === 'active' && t.swapTo && (
-        <div style={{ marginTop: 12, background: C.greenSoft, border: `0.5px solid ${C.greenLine}`, borderRadius: 12, padding: '11px 13px', display: 'flex', alignItems: 'center', gap: 9 }}>
-          <Repeat size={15} color={C.greenDk} style={{ flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12.5, color: C.ink, fontWeight: 600, lineHeight: 1.4 }}>Switching to {t.swapTo.title} in {t.swapTo.startsLabel}</div>
-            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 2 }}>{t.title} runs through this month · {t.swapTo.cost === 0 ? 'Free' : `$${t.swapTo.cost}/mo`}, no charge now</div>
-          </div>
-          <button onClick={onUndoSwap} style={{ flexShrink: 0, background: 'none', border: 'none', fontSize: 12, fontWeight: 700, color: C.greenDk, cursor: 'pointer', padding: '4px 2px' }}>Undo</button>
-        </div>
-      )}
-      {bucket === 'active' ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 12 }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: C.faint }}>{t.lane === 'done_for_you' ? <><Film size={12} /> Your strategist runs this</> : <><Check size={12} /> You run this</>}</span>
-          <div style={{ flex: 1 }} />
-          {!t.swapTo && <MiniBtn onClick={onSwap} compact><Repeat size={13} /></MiniBtn>}
-          <MiniBtn onClick={onToggle} compact><Pause size={13} /></MiniBtn>
-          <MiniBtn onClick={onDelete} danger><Trash2 size={13} /></MiniBtn>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 12 }}>
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: C.amber }}>Paused</span>
-          <div style={{ flex: 1 }} />
-          <MiniBtn onClick={onResume} compact><Play size={13} /></MiniBtn>
-          <MiniBtn onClick={onDelete} danger><Trash2 size={13} /></MiniBtn>
-        </div>
-      )}
-      {bucket === 'active' && (
-        <>
-          <div onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 11, paddingTop: 11, borderTop: `1px solid ${C.line}`, fontSize: 12, fontWeight: 600, color: C.green, cursor: 'pointer' }}>
-            <Info size={13} /> What you&apos;re paying for
-            <ChevronDown size={15} style={{ marginLeft: 'auto', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
-          </div>
-          {open && (
-            <div style={{ marginTop: 11, border: `1px solid ${C.line}`, borderRadius: 12, overflow: 'hidden' }}>
-              {[
-                { k: 'What you get', v: t.why || `${t.title}, run for you every week.` },
-                { k: 'Who runs it', v: t.lane === 'done_for_you' ? 'Your strategist produces, schedules and posts it — you only approve.' : 'You run this one yourself; we just track how it does.' },
-                { k: "How we'll know it's working", v: SIGNAL_COPY[t.metric] || `We track your ${t.metric}.` },
-              ].map((row, i) => (
-                <div key={row.k} style={{ padding: '11px 13px', borderTop: i ? `1px solid ${C.line}` : 'none', background: '#fcfcfb' }}>
-                  <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.green, marginBottom: 4 }}>{row.k}</div>
-                  <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5 }}>{row.v}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  )
-}
+  // Sample go-live marks (matching the cards) + a holiday.
+  const marks: Record<number, { type: 'camp' | 'holiday' }[]> = {}
+  if (cur.m === 5) { // June
+    ;[20, 22, 27].forEach((d) => (marks[d] ||= []).push({ type: 'camp' }))
+    ;(marks[21] ||= []).push({ type: 'holiday' })
+  }
 
-function SwapSheet({ line, options, nextLabel, onPick, onClose }: { line: Tactic; options: Service[]; nextLabel: string; onPick: (s: Service) => void; onClose: () => void }) {
+  const cells: (number | null)[] = [...Array(startDow).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)]
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,.4)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: '22px 22px 0 0', padding: '18px 20px 24px', maxHeight: '80%', overflowY: 'auto' }}>
-        <div style={{ width: 36, height: 4, borderRadius: 99, background: C.line, margin: '0 auto 14px' }} />
-        <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 19, marginBottom: 4 }}>Swap {line.title}</div>
-        <p style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.5, margin: '0 0 16px' }}>Redirect the same ${line.cost}/mo. {line.title} runs through this month; your pick starts in {nextLabel}. Nothing&apos;s charged now.</p>
-        {options.length === 0 ? (
-          <div style={{ fontSize: 13, color: C.faint, textAlign: 'center', padding: '20px 0' }}>No same-or-lower-price options available right now.</div>
-        ) : options.map((s) => {
-          const Icon = METRIC_ICON[s.metric] || MousePointerClick
-          return (
-            <div key={s.id} onClick={() => onPick(s)} style={{ display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${C.line}`, borderRadius: 14, padding: '13px 14px', marginBottom: 9, cursor: 'pointer' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{s.title}</div>
-                <div style={{ fontSize: 12.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 4 }}>{s.cost === 0 ? 'Free' : `$${s.cost}/mo`} · <Icon size={12} color={C.green} /> grows <b style={{ color: C.ink, fontWeight: 600 }}>{s.metric}</b></div>
-              </div>
-              <ChevronRight size={18} color={C.faint} />
+    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <button onClick={() => setCur((c) => ({ y: c.m === 0 ? c.y - 1 : c.y, m: c.m === 0 ? 11 : c.m - 1 }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.mute, padding: 4 }}><ChevronLeft size={18} /></button>
+        <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 15 }}>{monthLabel}</span>
+        <button onClick={() => setCur((c) => ({ y: c.m === 11 ? c.y + 1 : c.y, m: c.m === 11 ? 0 : c.m + 1 }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.mute, padding: 4 }}><ChevronRight size={18} /></button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginBottom: 4 }}>
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: C.faint }}>{d}</div>)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
+        {cells.map((d, i) => (
+          <div key={i} style={{ aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, borderRadius: 9, background: d && isToday(d) ? C.greenSoft : 'transparent' }}>
+            {d && <span style={{ fontSize: 12, fontWeight: isToday(d) ? 700 : 500, color: isToday(d) ? C.greenDk : C.ink }}>{d}</span>}
+            <div style={{ display: 'flex', gap: 2, height: 4 }}>
+              {(marks[d ?? -1] ?? []).slice(0, 3).map((mk, j) => <span key={j} style={{ width: 4, height: 4, borderRadius: 99, background: mk.type === 'holiday' ? C.amber : C.green }} />)}
             </div>
-          )
-        })}
-        <button onClick={onClose} style={{ width: '100%', marginTop: 6, background: '#fff', color: C.mute, border: `1px solid ${C.line}`, borderRadius: 12, padding: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><X size={15} />Cancel</button>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12, fontSize: 11, color: C.mute }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 7, height: 7, borderRadius: 99, background: C.green }} /> Campaign go-live</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 7, height: 7, borderRadius: 99, background: C.amber }} /> Holiday</span>
       </div>
     </div>
   )
