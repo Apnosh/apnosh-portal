@@ -61,6 +61,14 @@ export async function GET(req: Request) {
   for (const conn of connections) {
     try {
       const r = await syncClientGbp(conn.client_id)
+      // Stamp THIS connection as synced. syncClientGbp only stamps the
+      // client's first GBP connection, so a multi-location client's second
+      // connection would otherwise show "last sync: never" forever even
+      // though its data synced fine.
+      await admin
+        .from('channel_connections')
+        .update({ last_sync_at: new Date().toISOString() })
+        .eq('id', conn.id)
       // Reviews stopgap: while the legacy review API is disabled, pull the
       // overall Google rating + recent reviews from the Places API. Isolated
       // so a Places failure never affects the metrics/reviews sync above.
