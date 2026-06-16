@@ -11,13 +11,10 @@
  */
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { Home as HomeIcon, CalendarDays, Plus, Inbox, Menu } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import MvpHome, { type MvpHomeData } from '@/components/mvp/mvp-home'
 import { transformHome } from '@/components/mvp/home-transform'
-
-const C = { green: '#4abd98', greenDk: '#2e9a78', ink: '#1d1d1f', faint: '#aeaeb2', line: '#e6e6ea', navOff: '#aeaeb2' }
+import BottomNav from '@/components/mvp/bottom-nav'
 
 // Design sample content (from apnosh-mvp lib/api.ts) — shown on this review
 // surface only when the client has no real approvals / monthly review yet.
@@ -69,33 +66,8 @@ export default function MvpHomePage() {
           <Centered>No client found for this account.</Centered>
         )}
       </div>
-      <BottomNav />
+      <BottomNav active="home" />
     </div>
-  )
-}
-
-function BottomNav() {
-  return (
-    <nav style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', padding: '8px 8px calc(8px + env(safe-area-inset-bottom))', position: 'relative' }}>
-      <NavItem href="/dashboard" icon={<HomeIcon size={21} />} label="Home" active />
-      <NavItem href="/dashboard/calendar" icon={<CalendarDays size={21} />} label="Campaigns" />
-      <Link href="/dashboard/requests/new" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, textDecoration: 'none', marginTop: -18 }}>
-        <span style={{ width: 52, height: 52, borderRadius: '50%', background: C.green, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px rgba(74,189,152,0.4)' }}><Plus size={26} /></span>
-        <span style={{ fontSize: 10, fontWeight: 500, color: C.navOff }}>Request</span>
-      </Link>
-      <NavItem href="/dashboard/inbox" icon={<Inbox size={21} />} label="Inbox" />
-      <NavItem href="/dashboard/profile" icon={<Menu size={21} />} label="More" />
-    </nav>
-  )
-}
-
-function NavItem({ href, icon, label, active }: { href: string; icon: React.ReactNode; label: string; active?: boolean }) {
-  const col = active ? C.greenDk : C.navOff
-  return (
-    <Link href={href} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, textDecoration: 'none', color: col, minWidth: 56 }}>
-      {icon}
-      <span style={{ fontSize: 10, fontWeight: active ? 600 : 500 }}>{label}</span>
-    </Link>
   )
 }
 
