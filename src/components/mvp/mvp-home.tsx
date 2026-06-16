@@ -47,6 +47,18 @@ const MVP_ANIM_CSS = `
 @media (prefers-reduced-motion: reduce){.mvp-rise,.mvp-reviewGlow,.mvp-floaty,.mvp-driftA,.mvp-driftB,.mvp-spin{animation:none}}
 .mvp-swipe{scrollbar-width:none;-ms-overflow-style:none}
 .mvp-swipe::-webkit-scrollbar{display:none}
+@keyframes mvpGrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.mvp-grow{transform-origin:bottom;animation:mvpGrow .45s cubic-bezier(.2,.7,.3,1) both}
+.mvp-stagger>*{animation:mvpRise .5s cubic-bezier(.2,.7,.3,1) both}
+.mvp-stagger>*:nth-child(1){animation-delay:.03s}
+.mvp-stagger>*:nth-child(2){animation-delay:.09s}
+.mvp-stagger>*:nth-child(3){animation-delay:.15s}
+.mvp-stagger>*:nth-child(4){animation-delay:.21s}
+.mvp-stagger>*:nth-child(5){animation-delay:.27s}
+.mvp-stagger>*:nth-child(6){animation-delay:.33s}
+.mvp-stagger>*:nth-child(7){animation-delay:.39s}
+.mvp-stagger>*:nth-child(8){animation-delay:.45s}
+@media (prefers-reduced-motion: reduce){.mvp-grow,.mvp-stagger>*{animation:none}}
 `
 
 export interface MetricView {
@@ -137,6 +149,8 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
           </div>
         )}
 
+        {/* Everything below the banner cascades in on load (staggered rise). */}
+        <div className="mvp-stagger">
         {/* SWIPEABLE METRIC CARDS — swipe left/right to change which graph
             you're looking at; dots show where you are. No tabs. */}
         <div ref={scrollRef} onScroll={onScroll} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory' }}>
@@ -270,6 +284,7 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
             <div style={{ fontSize: 11, color: C.faint, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>Holidays &amp; food days that fit your restaurant. Nearby food events coming soon.</div>
           </div>
         )}
+        </div>
       </div>
     </div>
   )
@@ -392,7 +407,7 @@ function ActionsChart({
             const edge = i < 2 ? 'left' : i > bars.length - 3 ? 'right' : 'mid'
             return (
               <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, height: '100%', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: dense ? 1.5 : 3, cursor: 'pointer' }}>
-                <div style={{ width: '42%', maxWidth: 17, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: isPicked ? C.greenDk : C.green, borderRadius: '3px 3px 0 0' }} />
+                <div className="mvp-grow" style={{ width: '42%', maxWidth: 17, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: isPicked ? C.greenDk : C.green, borderRadius: '3px 3px 0 0', animationDelay: `${20 + i * 14}ms` }} />
                 <div style={{ width: '42%', maxWidth: 17, height: `${(b.compare / max) * 100}%`, background: C.ghost, borderRadius: '3px 3px 0 0' }} />
                 {isPicked && (() => {
                   const delta = b.value - b.compare
