@@ -122,6 +122,21 @@ async function syncInstagram(
   const token = conn.access_token
   const igUserId = conn.platform_account_id
 
+  // ----- Token health check ---------------------------------------------
+  // Validate the token before writing anything. A dead token (password
+  // change / revoked session -> code 190) otherwise silently overwrites a
+  // day's good metrics with zeros. Throwing here flags the connection as
+  // "reconnect needed" instead.
+  {
+    const probeRes = await fetch(
+      `https://graph.instagram.com/v21.0/${igUserId}?fields=id&access_token=${token}`,
+    )
+    const probe = await probeRes.json()
+    if (probe.error) {
+      throw new Error(`Instagram token invalid (reconnect may be needed): ${probe.error.message}`)
+    }
+  }
+
   // ----- Backfill detection ---------------------------------------------
   // If this client has no Instagram metrics rows yet (or caller forced it),
   // pull the last 30 days of daily insights -- Meta's maximum account-level
@@ -542,11 +557,20 @@ async function syncFacebook(
     callInsight('page_post_engagements', sinceUnix, untilUnix),
   ])
 
-  // Current fan count (only known for today)
-  const pageUrl = `https://graph.facebook.com/v21.0/${pageId}?fields=fan_count&access_token=${token}`
+  // Current follower count (only known for today). Prefer `followers_count`
+  // (the Page *followers* metric Meta uses on modern Pages); fall back to
+  // `fan_count` (legacy Page *likes*) for older Pages that still expose it.
+  const pageUrl = `https://graph.facebook.com/v21.0/${pageId}?fields=followers_count,fan_count&access_token=${token}`
   const pageRes = await fetch(pageUrl)
   const pageData = await pageRes.json()
-  const currentFollowersTotal = pageData.fan_count ?? 0
+  // A dead/invalid token (password change, revoked session -> error code 190)
+  // must surface as a sync error so the connection shows "reconnect needed".
+  // Otherwise the old code wrote `fan_count ?? 0` = 0 over good data, making a
+  // broken connection look like a real "0 followers / 0 reach" account.
+  if (pageData.error) {
+    throw new Error(`Facebook Page fetch failed (reconnect may be needed): ${pageData.error.message}`)
+  }
+  const currentFollowersTotal = pageData.followers_count ?? pageData.fan_count ?? 0
 
   for (let offset = windowDays; offset >= 1; offset--) {
     const dayDate = addDays(todayMidnight, -offset)
