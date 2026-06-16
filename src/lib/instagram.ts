@@ -37,10 +37,10 @@ export const IG_DIRECT_SCOPES = [
   'instagram_business_manage_messages',
   'instagram_business_manage_comments',
   'instagram_business_content_publish',
-  // Insights (reach, engagement) for the Instagram-Login flow. This is the
-  // Instagram-Login variant of the permission (the Facebook-Login
-  // 'instagram_manage_insights' is invalid for this app type).
-  'instagram_business_manage_insights',
+  // NOTE: insights (reach/engagement) need 'instagram_business_manage_insights',
+  // but that permission must first be enabled + approved (App Review) on the
+  // Meta app. Adding it before then makes the OAuth dialog error with
+  // "invalid scopes". Re-add this line once the app holds the permission.
 ].join(',')
 
 export function getInstagramDirectOAuthUrl(state: string): string {
