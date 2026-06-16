@@ -17,7 +17,7 @@ import {
   ChevronRight, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
   Heart, Star, MessageCircle, Mail, Eye, Users,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 
 /* Theme tokens lifted from the design's `C` palette. */
 const C = {
@@ -45,6 +45,8 @@ const MVP_ANIM_CSS = `
 .mvp-driftB{animation:mvpDriftB 7.5s ease-in-out infinite}
 .mvp-spin{animation:mvpSpin 18s linear infinite}
 @media (prefers-reduced-motion: reduce){.mvp-rise,.mvp-reviewGlow,.mvp-floaty,.mvp-driftA,.mvp-driftB,.mvp-spin{animation:none}}
+.mvp-swipe{scrollbar-width:none;-ms-overflow-style:none}
+.mvp-swipe::-webkit-scrollbar{display:none}
 `
 
 export interface MetricView {
@@ -83,14 +85,16 @@ const TILE_ICON: Record<string, React.ComponentType<{ size?: number; color?: str
 
 export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData; showHeader?: boolean }) {
   const metrics = data.metrics ?? []
-  const [metricKey, setMetricKey] = useState(metrics[0]?.key ?? '')
-  const m = metrics.find((v) => v.key === metricKey) ?? metrics[0]
   const [reviewHidden, setReviewHidden] = useState(false)
   const [actionDone, setActionDone] = useState(data.signal.state !== 'recommendation')
-  const [picked, setPicked] = useState<number | null>(null)
-  const down = (m?.weekPct ?? 0) < 0
-  const accent = down ? C.coral : C.green
-  const accentBg = down ? C.coralBg : C.greenSoft
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [activeIdx, setActiveIdx] = useState(0)
+  const onScroll = () => {
+    const el = scrollRef.current; if (!el) return
+    const idx = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
+    setActiveIdx((p) => (p === idx ? p : idx))
+  }
+  const goTo = (i: number) => { const el = scrollRef.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' }) }
 
   return (
     <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
@@ -132,54 +136,60 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
           </div>
         )}
 
-        {/* METRIC SWITCHER — pick which graph to view (like the old hero) */}
-        {metrics.length > 1 && (
-          <div style={{ display: 'flex', gap: 7, marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>
-            {metrics.map((v) => {
-              const on = v.key === metricKey
-              return (
-                <button key={v.key} onClick={() => { setMetricKey(v.key); setPicked(null) }} style={{ flexShrink: 0, whiteSpace: 'nowrap', border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 14px', fontSize: 13, fontWeight: on ? 700 : 500, cursor: 'pointer' }}>{v.tabLabel}</button>
-              )
-            })}
-          </div>
-        )}
-
-        {/* HERO (driven by the selected metric) */}
-        {m && (
-          <div>
-            <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>{m.heroLabel}</div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
-              <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{m.total ? m.total.toLocaleString() : '—'}</span>
-              {m.total > 0 && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, color: accent, background: accentBg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
-                  <span style={{ fontSize: 11 }}>{down ? '▼' : '▲'}</span>{Math.abs(m.weekPct)}% this week
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: 14, color: C.faint, marginTop: 5 }}>{m.heroSub}</div>
-            {m.monthPct !== 0 && (
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: m.monthPct > 0 ? C.green : C.coral }}>
-                {m.monthPct > 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                {m.monthPct > 0 ? 'Up' : 'Down'} {Math.abs(m.monthPct)}% from {m.prevMonthLabel}
+        {/* SWIPEABLE METRIC CARDS — swipe left/right to change which graph
+            you're looking at; dots show where you are. No tabs. */}
+        <div ref={scrollRef} onScroll={onScroll} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory' }}>
+          {metrics.map((mv) => {
+            const dn = mv.weekPct < 0
+            const ac = dn ? C.coral : C.green
+            const acbg = dn ? C.coralBg : C.greenSoft
+            return (
+              <div key={mv.key} style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'center' }}>
+                {/* hero */}
+                <div>
+                  <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>{mv.heroLabel}</div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
+                    <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{mv.total ? mv.total.toLocaleString() : '—'}</span>
+                    {mv.total > 0 && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, color: ac, background: acbg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
+                        <span style={{ fontSize: 11 }}>{dn ? '▼' : '▲'}</span>{Math.abs(mv.weekPct)}% this week
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 14, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
+                  {mv.monthPct !== 0 && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: mv.monthPct > 0 ? C.green : C.coral }}>
+                      {mv.monthPct > 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                      {mv.monthPct > 0 ? 'Up' : 'Down'} {Math.abs(mv.monthPct)}% from {mv.prevMonthLabel}
+                    </div>
+                  )}
+                </div>
+                {/* chart */}
+                <ActionsChart chart={mv.chart} chartStart={mv.chartStart} daily={mv.daily} monthly={mv.monthly} noun={mv.unit} />
+                {/* breakdown tiles */}
+                {mv.tiles.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, mv.tiles.length)},1fr)`, gap: 8, margin: '10px 0 0' }}>
+                    {mv.tiles.slice(0, 4).map((s) => <SourceCard key={s.key + s.label} s={s} />)}
+                  </div>
+                )}
               </div>
-            )}
+            )
+          })}
+        </div>
+
+        {/* dots — current metric + tap to jump */}
+        {metrics.length > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7, marginTop: 12 }}>
+            {metrics.map((mv, i) => (
+              <button key={mv.key} aria-label={mv.tabLabel} onClick={() => goTo(i)} style={{ width: i === activeIdx ? 20 : 7, height: 7, borderRadius: 99, border: 'none', padding: 0, cursor: 'pointer', background: i === activeIdx ? C.green : C.line, transition: 'width .2s, background .2s' }} />
+            ))}
           </div>
         )}
 
-        {/* CHART */}
-        {m && <ActionsChart chart={m.chart} chartStart={m.chartStart} daily={m.daily} monthly={m.monthly} noun={m.unit} picked={picked} setPicked={setPicked} />}
-
-        {/* See all insights — small text link directly under the graph */}
-        <a href="/dashboard/insights" style={{ display: 'block', textAlign: 'center', marginTop: 8, marginBottom: 2, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>
+        {/* See all insights — small text link under the graphs */}
+        <a href="/dashboard/insights" style={{ display: 'block', textAlign: 'center', marginTop: 12, marginBottom: 2, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>
           See all insights · full year →
         </a>
-
-        {/* SOURCES (breakdown for the selected metric) */}
-        {m && m.tiles.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, m.tiles.length)},1fr)`, gap: 8, margin: '10px 0' }}>
-            {m.tiles.slice(0, 4).map((s) => <SourceCard key={s.key + s.label} s={s} />)}
-          </div>
-        )}
 
         {/* DO THIS NEXT */}
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.amber, marginBottom: 11 }}>Do this next</div>
@@ -264,18 +274,17 @@ type ChartRange = '7d' | '30d' | '1y' | 'custom'
 const RANGES: [ChartRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['1y', 'Last year'], ['custom', 'Custom']]
 
 function ActionsChart({
-  chart, chartStart, daily = [], monthly = [], noun = 'took action', picked, setPicked,
+  chart, chartStart, daily = [], monthly = [], noun = 'took action',
 }: {
   chart: { label: string; value: number; prev: number }[]
   chartStart?: string
   daily?: { date: string; value: number }[]
   monthly?: { label: string; value: number }[]
   noun?: string
-  picked: number | null
-  setPicked: (i: number | null) => void
 }) {
   const H = 62
   const [range, setRange] = useState<ChartRange>('7d')
+  const [picked, setPicked] = useState<number | null>(null)
   const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   const parseISO = (s: string) => new Date(s + 'T00:00:00')
   const today = new Date()
