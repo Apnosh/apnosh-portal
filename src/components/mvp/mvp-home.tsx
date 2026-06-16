@@ -21,7 +21,7 @@ import { useState } from 'react'
 /* Theme tokens lifted from the design's `C` palette. */
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
-  ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea',
+  ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', ghost: '#e6e6ea',
   amber: '#8a5a0c', amberBtn: '#bd7e16', amberBg: '#fbf3e4', amberLine: '#eed9b3',
   coral: '#a85c3c', coralBg: '#f8efe9', bg: '#f5f5f7',
 }
@@ -32,6 +32,7 @@ export interface MvpHomeData {
   avatarText: string
   hero: { total: number; weekPct: number; down: boolean; monthPct: number; prevMonthLabel: string }
   chart: { label: string; value: number; prev: number }[]
+  chartStart?: string
   sources: { key: string; label: string; value: string; configured: boolean }[]
   signal: { state: 'recommendation' | 'ontrack'; metric?: string; message?: string }
   approvals: { id: string; tag: string; timing: string; title: string; subtitle: string }[]
@@ -46,6 +47,7 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
   const { hero } = data
   const [reviewHidden, setReviewHidden] = useState(false)
   const [actionDone, setActionDone] = useState(data.signal.state !== 'recommendation')
+  const [picked, setPicked] = useState<number | null>(null)
   const accent = hero.down ? C.coral : C.green
   const accentBg = hero.down ? C.coralBg : C.greenSoft
 
@@ -101,7 +103,7 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
         </div>
 
         {/* CHART */}
-        <Bars chart={data.chart} accent={accent} />
+        <ActionsChart chart={data.chart} chartStart={data.chartStart} picked={picked} setPicked={setPicked} />
 
         {/* SOURCES */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, margin: '10px 0' }}>
@@ -165,50 +167,76 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
 
 function SourceCard({ s }: { s: { key: string; label: string; value: string; configured: boolean } }) {
   const Icon = SRC_ICON[s.key] ?? MousePointerClick
-  if (!s.configured) {
-    return (
-      <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 13, padding: '11px 9px', textAlign: 'center', opacity: 0.7 }}>
-        <Icon size={15} color={C.faint} />
-        <div style={{ fontSize: 11, fontWeight: 600, color: C.faint, marginTop: 4 }}>Set up</div>
-        <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>{s.label}</div>
-      </div>
-    )
-  }
+  const zero = !s.value || s.value === '0' || s.value === '—'
   return (
-    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '11px 9px', textAlign: 'center' }}>
-      <Icon size={15} color={C.green} />
-      <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 500, color: C.ink, marginTop: 4 }}>{s.value}</div>
-      <div style={{ fontSize: 10, color: C.mute, marginTop: 1 }}>{s.label}</div>
+    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '7px 4px', textAlign: 'center', minHeight: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: zero ? 0.5 : 1 }}>
+      <Icon size={14} color={C.green} />
+      <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 500, lineHeight: 1, color: C.ink }}>{s.value}</div>
+      <div style={{ fontSize: 10, color: C.faint }}>{s.label}</div>
     </div>
   )
 }
 
-/* Bar chart — this week (solid) over last week (ghost), faithful to the
-   design's ActionsChart without its interactive picker. */
-function Bars({ chart, accent }: { chart: { label: string; value: number; prev: number }[]; accent: string }) {
-  const max = Math.max(1, ...chart.map((d) => Math.max(d.value, d.prev)))
+/* ActionsChart — ported from the design: grouped bars (this week green +
+   last week grey), an average dashed line, tappable bars with a date +
+   comparison tooltip, and a legend. Bars are always green (the down-week
+   coral accent applies only to the hero pill, as in the design). */
+function ActionsChart({
+  chart, chartStart, picked, setPicked,
+}: {
+  chart: { label: string; value: number; prev: number }[]
+  chartStart?: string
+  picked: number | null
+  setPicked: (i: number | null) => void
+}) {
+  const H = 62
+  const total = chart.reduce((s, b) => s + b.value, 0)
+  const avg = chart.length ? Math.round(total / chart.length) : 0
+  const max = Math.max(1, ...chart.map((b) => Math.max(b.value, b.prev)), avg)
+  const avgY = (avg / max) * H
+  const start = chartStart ? new Date(chartStart + 'T00:00:00') : null
+  const dateAt = (i: number) => start ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + i) : null
+  const fmtFull = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+
   return (
-    <div style={{ marginTop: 16, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '16px 14px 12px' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 110 }}>
-        {chart.map((d, i) => (
-          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%', position: 'relative' }}>
-            <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-              {/* ghost prev week */}
-              <div style={{ position: 'absolute', bottom: 0, width: '64%', height: `${(d.prev / max) * 100}%`, background: C.line, borderRadius: '5px 5px 0 0', opacity: 0.7 }} />
-              {/* this week */}
-              <div style={{ position: 'relative', width: '64%', height: `${(d.value / max) * 100}%`, minHeight: 3, background: accent, borderRadius: '5px 5px 0 0' }} />
-            </div>
-          </div>
+    <div style={{ margin: '8px 0 0' }}>
+      <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 8 }}>
+        <b style={{ color: C.ink, fontWeight: 700 }}>{total.toLocaleString()}</b> took action
+      </div>
+      <div style={{ position: 'relative', height: H }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, bottom: avgY, borderTop: `1px dashed ${C.faint}`, opacity: 0.6 }} />
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: '100%' }}>
+          {chart.map((b, i) => {
+            const isPicked = picked === i
+            const edge = i < 2 ? 'left' : i > chart.length - 3 ? 'right' : 'mid'
+            const d = dateAt(i)
+            return (
+              <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, height: '100%', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 3, cursor: 'pointer' }}>
+                <div style={{ width: '42%', maxWidth: 17, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: isPicked ? C.greenDk : C.green, borderRadius: '3px 3px 0 0' }} />
+                <div style={{ width: '42%', maxWidth: 17, height: `${(b.prev / max) * 100}%`, background: C.ghost, borderRadius: '3px 3px 0 0' }} />
+                {isPicked && (
+                  <div style={{ position: 'absolute', bottom: '100%', marginBottom: 6, ...(edge === 'mid' ? { left: '50%', transform: 'translateX(-50%)' } : edge === 'left' ? { left: 0 } : { right: 0 }), background: C.ink, color: '#fff', borderRadius: 8, padding: '7px 10px', fontSize: 11, whiteSpace: 'nowrap', zIndex: 5, lineHeight: 1.4, textAlign: 'left' }}>
+                    <div style={{ fontWeight: 700 }}>{d ? fmtFull(d) : b.label}</div>
+                    <div style={{ opacity: 0.85 }}>{b.value.toLocaleString()} took action</div>
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,.22)', marginTop: 5, paddingTop: 5, opacity: 0.7 }}>
+                      <div>{b.prev.toLocaleString()} last week</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 10, marginTop: 5 }}>
+        {chart.map((b, i) => (
+          <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10.5, color: C.faint }}>{b.label}</div>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 7 }}>
-        {chart.map((d, i) => (
-          <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: C.faint }}>{d.label}</div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}`, fontSize: 11, color: C.mute }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><i style={{ width: 9, height: 9, borderRadius: 2, background: accent }} /> This week</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><i style={{ width: 9, height: 9, borderRadius: 2, background: C.line }} /> Last week</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 9, fontSize: 11, flexWrap: 'wrap' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 9, height: 9, borderRadius: 3, background: C.green }} /> This week</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 9, height: 9, borderRadius: 3, background: C.ghost }} /> Last week</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 11, borderTop: `1px dashed ${C.faint}`, display: 'inline-block' }} /> Avg {avg}</span>
       </div>
     </div>
   )

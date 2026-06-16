@@ -45,9 +45,14 @@ export function transformHome(
   const inter = metrics.find((m) => m.key === 'interactions')
   const bookings = metrics.find((m) => m.key === 'bookings')
 
+  // "This week" = the most recent week bucket that actually has data. The
+  // last bucket is the current calendar week, which is empty early in the
+  // week / while GBP data lags — using it blindly shows 0 everywhere.
   const weeks = inter?.week ?? []
-  const thisWeek = weeks[weeks.length - 1]
-  const lastWeek = weeks[weeks.length - 2]
+  let ti = weeks.length - 1
+  while (ti > 0 && (weeks[ti]?.total ?? 0) === 0) ti--
+  const thisWeek = weeks[ti]
+  const lastWeek = weeks[ti - 1]
   const heroTotal = thisWeek?.total ?? 0
   const weekPct = pct(thisWeek?.total ?? 0, lastWeek?.total ?? 0)
 
@@ -62,6 +67,7 @@ export function transformHome(
   const tv = thisWeek?.vals ?? []
   const lv = lastWeek?.vals ?? []
   const chart = DOW.map((label, i) => ({ label, value: Number(tv[i] ?? 0), prev: Number(lv[i] ?? 0) }))
+  const chartStart = thisWeek?.start
 
   const bWeek = bookings?.week ?? []
   const bThis = bWeek[bWeek.length - 1]
@@ -94,6 +100,7 @@ export function transformHome(
     avatarText,
     hero: { total: heroTotal, weekPct, down, monthPct, prevMonthLabel: lastMonth ? monthName(lastMonth.start) : '' },
     chart,
+    chartStart,
     sources,
     signal,
     approvals,
