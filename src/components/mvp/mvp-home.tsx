@@ -293,6 +293,18 @@ const SUG_ICON: Record<string, React.ComponentType<{ size?: number; color?: stri
 }
 const DISMISS_TTL = 3 * 24 * 60 * 60 * 1000 // 3 days
 
+// Keep exactly one "DO THIS NEXT" after client-side filtering: the lead can be
+// dismissed, so re-promote the first remaining actionable card (and clear the
+// label from any other). Returns new objects so it never mutates the data prop.
+function markLeadLocal(list: Suggestion[]): Suggestion[] {
+  const leadIdx = list.findIndex((s) => s.href)
+  return list.map((s, i) => {
+    if (i === leadIdx) return s.eyebrow === 'DO THIS NEXT' ? s : { ...s, eyebrow: 'DO THIS NEXT' }
+    if (s.eyebrow === 'DO THIS NEXT') return { ...s, eyebrow: 'WORTH A LOOK' }
+    return s
+  })
+}
+
 function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: string }) {
   const key = `apnosh:dismissed-suggestions:${clientId || 'default'}`
   const [dismissed, setDismissed] = useState<Record<string, number>>({})
@@ -311,7 +323,11 @@ function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: 
     setLoaded(true)
   }, [key])
 
-  const visible = useMemo(() => items.filter((s) => !dismissed[s.id]).slice(0, 5), [items, dismissed])
+  const visible = useMemo(() => markLeadLocal(items.filter((s) => !dismissed[s.id]).slice(0, 5)), [items, dismissed])
+
+  // When the set identity changes (the instant set is replaced by the AI set),
+  // snap back to the first card so the dots never point past the new end.
+  useEffect(() => { scrollRef.current?.scrollTo({ left: 0 }); setIdx(0) }, [items])
 
   const dismiss = (id: string) => setDismissed((prev) => {
     const next = { ...prev, [id]: Date.now() }
@@ -328,6 +344,10 @@ function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: 
 
   if (!loaded) return null
   if (visible.length === 0) {
+    // Only claim "all caught up" when there were genuinely no cards. If the
+    // owner merely dismissed everything, stay quiet rather than say nothing
+    // needs them while a real signal (a broken link, a waiting review) persists.
+    if (items.length > 0) return null
     return (
       <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: 16, marginBottom: 22, display: 'flex', gap: 13, alignItems: 'center' }}>
         <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={19} color={C.greenDk} /></div>
@@ -335,6 +355,7 @@ function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: 
       </div>
     )
   }
+  const activeDot = Math.min(idx, visible.length - 1)
   return (
     <div style={{ marginBottom: 20 }}>
       <div ref={scrollRef} onScroll={onScroll} className="mvp-swipe" style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: 2 }}>
@@ -342,7 +363,7 @@ function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: 
       </div>
       {visible.length > 1 && (
         <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
-          {visible.map((s, i) => <span key={s.id} style={{ width: i === idx ? 18 : 6, height: 6, borderRadius: 99, background: i === idx ? C.green : C.line, transition: 'width .2s, background .2s' }} />)}
+          {visible.map((s, i) => <span key={s.id} style={{ width: i === activeDot ? 18 : 6, height: 6, borderRadius: 99, background: i === activeDot ? C.green : C.line, transition: 'width .2s, background .2s' }} />)}
         </div>
       )}
     </div>

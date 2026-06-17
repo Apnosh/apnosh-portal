@@ -50,7 +50,7 @@ export function buildCandidates(f: SuggestionFacts): Suggestion[] {
 
   for (const p of f.connections?.broken ?? []) {
     out.push({ id: `reconnect-${slug(p)}`, eyebrow: 'NEEDS A FIX', accent: 'amber', icon: 'plug', priority: 100,
-      title: `Reconnect ${cap(p)}`, body: `Your ${cap(p)} link dropped, so posts can't go out. It takes one tap to fix.`,
+      title: `Reconnect ${cap(p)}`, body: `Your ${cap(p)} connection dropped. Reconnect to keep your posts and data flowing.`,
       cta: 'Reconnect', href: '/dashboard/connected-accounts' })
   }
   if (f.reviews?.lowest && f.reviews.lowest.rating <= 3) {

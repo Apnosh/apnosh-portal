@@ -141,14 +141,14 @@ export function transformHome(
     }
   })
 
-  // Instant suggestion stack from the data already in hand (approvals, primary
-  // metric, next planning moment). The home page enriches this asynchronously
-  // with the AI-tailored set from /api/dashboard/suggestions.
-  const firstPlan = (comingUp ?? []).find((e) => e.queuedCount === 0)
+  // Instant suggestion stack from the data already in hand (approvals + primary
+  // metric only). The richer cards — reviews, connections, tasks, and the next
+  // planning moment — come from /api/dashboard/suggestions, which the home page
+  // merges in a moment later. Keeping plan out of the instant set avoids an
+  // id/moment mismatch (and a visible card swap) when that set arrives.
   const facts: SuggestionFacts = {
     approvalsCount: approvals.length,
     metric: primary ? { label: primary.tabLabel, weekPct: primary.weekPct, monthPct: primary.monthPct } : null,
-    plan: firstPlan ? { label: firstPlan.label, daysLabel: planLabel(firstPlan.daysUntil), hook: firstPlan.hook } : null,
   }
   const suggestions = markLead(buildCandidates(facts).slice(0, 5))
 

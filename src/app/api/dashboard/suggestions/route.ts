@@ -63,18 +63,27 @@ const CARD_SCHEMA = {
   properties: {
     cards: {
       type: 'array',
-      description: 'Up to 5 chosen cards, most important first. The first should read as the single next step.',
+      description: 'Up to 5 chosen cards, most important first. The first is the single next step.',
       items: {
-        type: 'object', additionalProperties: false, required: ['id', 'eyebrow', 'title', 'body'],
+        type: 'object', additionalProperties: false, required: ['id', 'title', 'body'],
         properties: {
           id: { type: 'string', description: 'Must be one of the candidate ids exactly' },
-          eyebrow: { type: 'string', description: 'A 1-3 word uppercase tag, e.g. DO THIS NEXT, GOOD NEWS, HEADS UP' },
-          title: { type: 'string', description: 'Short, warm, plain headline. Keep every number/fact from the candidate.' },
-          body: { type: 'string', description: 'One short plain sentence. No em dashes.' },
+          title: { type: 'string', description: 'Short, warm, plain headline. Keep every number and fact from the candidate exactly.' },
+          body: { type: 'string', description: 'One short plain sentence. Keep every number from the candidate exactly. No em dashes.' },
         },
       },
     },
   },
+}
+
+// True only when `candidate` carries exactly the same multiset of numbers as
+// `base`, so an AI rewrite can never drop, round, or invent a figure shown to
+// the owner. (Eyebrow + link are kept deterministic, so this guards the copy.)
+function numbersPreserved(base: string, candidate?: string): boolean {
+  if (!candidate) return false
+  const nums = (s: string) => (s.match(/\d+(?:\.\d+)?/g) ?? []).sort()
+  const a = nums(base), b = nums(candidate)
+  return a.length === b.length && a.every((n, i) => n === b[i])
 }
 
 async function refine(candidates: Suggestion[], businessName: string): Promise<Suggestion[] | null> {
@@ -85,11 +94,9 @@ async function refine(candidates: Suggestion[], businessName: string): Promise<S
   const system = `You are the trusted operator behind a busy restaurant owner's dashboard. From a list of candidate cards, pick the up-to-5 most useful to surface right now and write each as a calm, friendly, plain-English card the owner will actually act on.
 Rules:
 - Only choose from the candidate ids given. Never invent a card, a number, or a fact.
-- Keep every number and concrete fact from the candidate; you may rephrase for warmth and brevity.
-- The FIRST card must be the single most important next step; give it the eyebrow "DO THIS NEXT".
-- Vary the other eyebrows naturally (e.g. GOOD NEWS, HEADS UP, WORTH A REPLY, OPPORTUNITY).
-- Short sentences. No em dashes. Never mention AI, models, or automation.
-- Order by what matters most to the owner today.`
+- Keep every number and concrete fact from the candidate EXACTLY; you may only rephrase the surrounding words for warmth and brevity.
+- Return the cards in priority order: the FIRST card is the single most important next step.
+- Short sentences. No em dashes. Never mention AI, models, or automation.`
   const user = `Restaurant: ${businessName || 'this restaurant'}
 Candidate cards:
 ${list}
@@ -114,7 +121,7 @@ Choose and rewrite the best up to 5.`
     if (!res.ok) return null
     const data = await res.json()
     const text = data.content?.find((b: { type: string }) => b.type === 'text')?.text ?? '{}'
-    const parsed = JSON.parse(text) as { cards?: { id: string; eyebrow: string; title: string; body: string }[] }
+    const parsed = JSON.parse(text) as { cards?: { id: string; title?: string; body?: string }[] }
     const byId = new Map(candidates.map((c) => [c.id, c]))
     const seen = new Set<string>()
     const out: Suggestion[] = []
@@ -122,7 +129,13 @@ Choose and rewrite the best up to 5.`
       const base = byId.get(card.id)
       if (!base || seen.has(card.id)) continue
       seen.add(card.id)
-      out.push({ ...base, eyebrow: card.eyebrow?.trim() || base.eyebrow, title: card.title?.trim() || base.title, body: card.body?.trim() || base.body })
+      // Accept the model's wording only when it preserves every number from the
+      // candidate; otherwise keep the grounded copy. Eyebrow + link come from
+      // the candidate (spread), so the model can never show a wrong figure or a
+      // dead link — only reword, reorder, and select.
+      const title = numbersPreserved(base.title, card.title) ? (card.title!.trim() || base.title) : base.title
+      const body = numbersPreserved(base.body, card.body) ? (card.body!.trim() || base.body) : base.body
+      out.push({ ...base, title, body })
       if (out.length >= 5) break
     }
     return out.length ? out : null
@@ -162,11 +175,14 @@ export async function GET(req: NextRequest) {
     lowest: lowestRow ? { author: (lowestRow.author_name as string) || 'A guest', rating: Number(lowestRow.rating ?? 0) } : null,
   }
 
-  // connections — broken social links (row exists but token dropped) + whether
-  // any social is connected at all
+  // connections — a dropped link is a channel_connections error/expired/
+  // disconnected row, which getInbox already surfaces as kind:'connection'
+  // (with the platform label as senderName). It is NOT a null token on
+  // platform_connections (deauth DELETES that row), so use the inbox signal.
+  // missingSocial = no social platform connected at all (drives "Connect IG").
   const pcs = pcRes.data ?? []
-  const connectedSocial = pcs.filter((p) => p.access_token && social.includes(p.platform as string)).map((p) => p.platform as string)
-  const broken = pcs.filter((p) => !p.access_token && social.includes(p.platform as string)).map((p) => p.platform as string)
+  const connectedSocial = pcs.filter((p) => p.access_token && social.includes(p.platform as string))
+  const broken = inbox.filter((i) => i.kind === 'connection').map((i) => i.senderName || '').filter(Boolean) as string[]
   const connections = { broken, missingSocial: connectedSocial.length === 0 }
 
   // next planning moment within ~3 weeks
