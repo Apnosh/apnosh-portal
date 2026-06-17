@@ -34,7 +34,8 @@ interface InboxData { items: Item[]; wins: Win[]; history: Hist[]; thread: { thr
 export default function MvpInbox({ clientId }: { clientId: string }) {
   const [data, setData] = useState<InboxData | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<string>('all')
+  const [seg, setSeg] = useState<'all' | 'history'>('all')  // top level: needs-you vs handled
+  const [sub, setSub] = useState<string>('all')              // category sub-filter within All
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
@@ -77,14 +78,22 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
         {searchOpen && (
           <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your inbox…" style={{ width: '100%', marginTop: 12, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 13px', fontSize: 14, color: C.ink, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
         )}
-        <div style={{ display: 'flex', gap: 6, marginTop: 14, overflowX: 'auto', paddingBottom: 2 }}>
-          {TABS.map((t) => <TabPill key={t.key} label={t.label} count={t.key === 'done' ? undefined : countFor(t.key)} active={tab === t.key} onClick={() => setTab(t.key)} />)}
+        {/* top level — All (needs you) vs History (handled) */}
+        <div style={{ display: 'flex', background: '#eef0ef', borderRadius: 12, padding: 3, gap: 3, marginTop: 14 }}>
+          <SegBtn label="All" active={seg === 'all'} onClick={() => setSeg('all')} />
+          <SegBtn label="History" active={seg === 'history'} onClick={() => setSeg('history')} />
         </div>
+        {/* sub-filters within All */}
+        {seg === 'all' && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 11, overflowX: 'auto', paddingBottom: 2 }}>
+            {SUBS.map((t) => <TabPill key={t.key} label={t.label} count={t.key === 'all' ? undefined : countFor(t.key)} active={sub === t.key} onClick={() => setSub(t.key)} />)}
+          </div>
+        )}
       </div>
 
-      {tab === 'done'
+      {seg === 'history'
         ? <HistoryView history={data.history} q={q} />
-        : <ListView tab={tab} items={items} wins={data.wins} q={q} onReplied={onReplied} />}
+        : <ListView sub={sub} items={items} wins={data.wins} q={q} onReplied={onReplied} />}
 
       {chatOpen && <ChatSheet initial={data.thread} onClose={() => setChatOpen(false)} />}
       <style>{`@keyframes inrise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.inrise{animation:inrise .28s ease both}@keyframes sheetin{from{transform:translateY(100%)}to{transform:none}}`}</style>
@@ -106,11 +115,16 @@ function GlyphBtn({ children, onClick, active, dot }: { children: React.ReactNod
     </button>
   )
 }
-// Small category tabs across the top — every category visible, one list at a
-// time (no cross-category scrolling). "All" is the overview; "Done" is history.
-const TABS: { key: string; label: string }[] = [
+// Top-level segmented control: All (needs you) vs History (handled).
+function SegBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return <button onClick={onClick} style={{ flex: 1, borderRadius: 9, border: 'none', padding: '7px 0', fontSize: 13.5, fontWeight: active ? 700 : 600, color: active ? C.ink : C.mute, background: active ? '#fff' : 'transparent', boxShadow: active ? '0 1px 3px rgba(0,0,0,.08)' : 'none', cursor: 'pointer', transition: 'all .15s' }}>{label}</button>
+}
+
+// Category sub-filters shown under All — every category visible, one list at a
+// time. The "All" sub-filter groups its list into "Needs you" then "The rest".
+const SUBS: { key: string; label: string }[] = [
   { key: 'all', label: 'All' }, { key: 'approvals', label: 'Approvals' }, { key: 'reviews', label: 'Reviews' },
-  { key: 'todos', label: 'To-dos' }, { key: 'fix', label: 'Fix-its' }, { key: 'done', label: 'Done' },
+  { key: 'todos', label: 'To-dos' }, { key: 'fix', label: 'Fix-its' },
 ]
 function TabPill({ label, count, active, onClick }: { label: string; count?: number; active: boolean; onClick: () => void }) {
   return (
@@ -140,30 +154,41 @@ function Divider({ label, count }: { label: string; count?: number }) {
 
 const matchItem = (i: Item, q: string) => !q || `${i.title} ${i.subtitle} ${i.review?.text ?? ''}`.toLowerCase().includes(q)
 
-/* ── List for the selected tab — a flat, prioritized list (urgent first). "All"
- *  is the cross-category overview + the quiet wins lane; a category tab shows
- *  just that category, so there's no scrolling across categories. */
-function ListView({ tab, items, wins, q, onReplied }: { tab: string; items: Item[]; wins: Win[]; q: string; onReplied: (id: string) => void }) {
-  const list = (tab === 'all' ? items : items.filter((i) => i.chip === tab)).filter((i) => matchItem(i, q))
-  const sorted = [...list].sort((a, b) => (a.band === 'today' ? 0 : 1) - (b.band === 'today' ? 0 : 1))
-  const winList = tab === 'all' ? (q ? wins.filter((w) => `${w.title} ${w.body}`.toLowerCase().includes(q)) : wins) : []
-  const label = (TABS.find((t) => t.key === tab)?.label ?? '').toLowerCase()
+/* ── List for the selected sub-filter. The "All" sub-filter groups into
+ *  "Needs you" (urgent) then "The rest", plus the quiet wins lane. A single
+ *  category shows just that category's flat list (urgent first). */
+function ListView({ sub, items, wins, q, onReplied }: { sub: string; items: Item[]; wins: Win[]; q: string; onReplied: (id: string) => void }) {
+  const list = (sub === 'all' ? items : items.filter((i) => i.chip === sub)).filter((i) => matchItem(i, q))
+  const winList = sub === 'all' ? (q ? wins.filter((w) => `${w.title} ${w.body}`.toLowerCase().includes(q)) : wins) : []
+  const label = (SUBS.find((s) => s.key === sub)?.label ?? '').toLowerCase()
+  const pad: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 16px 28px' }
 
+  if (sub === 'all') {
+    const today = list.filter((i) => i.band === 'today')
+    const rest = list.filter((i) => i.band !== 'today')
+    return (
+      <div style={pad}>
+        {q && list.length === 0 && winList.length === 0 && <InboxEmpty icon={Search} title="No matches" sub="Nothing in your inbox matches that search." />}
+        {!q && list.length === 0 && (
+          <div style={{ margin: '6px 0 2px', background: C.greenSoft, borderRadius: 14, padding: '15px 16px', display: 'flex', alignItems: 'center', gap: 11 }}>
+            <span style={{ fontSize: 22 }}>🎉</span>
+            <div><div style={{ fontWeight: 700, fontSize: 14.5, color: C.greenDk }}>You&apos;re all caught up</div><div style={{ fontSize: 12, color: C.greenDk, opacity: 0.85 }}>Nothing is waiting on you right now.</div></div>
+          </div>
+        )}
+        {today.length > 0 && <><Divider label="Needs you" count={today.length} />{today.map((i) => <Row key={i.id} item={i} onReplied={onReplied} />)}</>}
+        {rest.length > 0 && <><Divider label="The rest" count={rest.length} />{rest.map((i) => <Row key={i.id} item={i} onReplied={onReplied} />)}</>}
+        {winList.length > 0 && <><Divider label="Good to know" />{winList.map((w) => <WinLink key={w.id} w={w} />)}</>}
+      </div>
+    )
+  }
+
+  const sorted = [...list].sort((a, b) => (a.band === 'today' ? 0 : 1) - (b.band === 'today' ? 0 : 1))
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 16px 28px' }}>
-      {sorted.length === 0 && (
-        q ? <InboxEmpty icon={Search} title="No matches" sub="Nothing in your inbox matches that search." />
-          : tab === 'all'
-            ? <InboxEmpty icon={Check} title="You're all caught up" sub="Nothing is waiting on you right now." />
-            : <InboxEmpty icon={Check} title={`No ${label} right now`} sub={`When something needs you in ${label}, it shows up here.`} />
-      )}
-      {sorted.map((i) => <Row key={i.id} item={i} onReplied={onReplied} />)}
-      {tab === 'all' && winList.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          <Divider label="Good to know" />
-          {winList.map((w) => <WinLink key={w.id} w={w} />)}
-        </div>
-      )}
+    <div style={pad}>
+      {sorted.length === 0
+        ? (q ? <InboxEmpty icon={Search} title="No matches" sub="Nothing in your inbox matches that search." />
+             : <InboxEmpty icon={Check} title={`No ${label} right now`} sub={`When something needs you in ${label}, it shows up here.`} />)
+        : sorted.map((i) => <Row key={i.id} item={i} onReplied={onReplied} />)}
     </div>
   )
 }
