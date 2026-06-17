@@ -21,12 +21,16 @@ const GRAD = 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)'
 
 interface ReviewData { id: string; author: string; rating: number; text: string; source: string; postedAt: string | null; responseText: string | null; respondedAt: string | null }
 
-const TONES = [
-  { key: 'winback', label: 'Win them back' },
-  { key: 'thankful', label: 'Thank them' },
-  { key: 'professional', label: 'Keep professional' },
-  { key: 'short', label: 'Keep it short' },
-]
+const ALL_TONES: Record<string, string> = {
+  winback: 'Win them back',
+  thankful: 'Thank them',
+  professional: 'Keep professional',
+  short: 'Keep it short',
+}
+// The warm-vs-recover intent depends on the rating; the modifiers always apply.
+function tonesForRating(rating: number): string[] {
+  return [rating > 0 && rating <= 3 ? 'winback' : 'thankful', 'professional', 'short']
+}
 
 function sourceLabel(s: string) { return s === 'instagram' ? 'Instagram' : s === 'yelp' ? 'Yelp' : s === 'facebook' ? 'Facebook' : 'Google' }
 function fmtDate(iso: string | null) { return iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '' }
@@ -53,19 +57,25 @@ export default function ReviewPage() {
       .then((j: { review: ReviewData }) => {
         if (!live) return
         setReview(j.review)
-        // Sensible default: an unhappy review leans "Win them back", a happy one "Thank them".
-        if (j.review.rating && j.review.rating <= 3) setTone('winback')
-        if (j.review.responseText) { setText(j.review.responseText); setPosted(true) }
+        if (j.review.responseText) {
+          // Already replied: show their posted reply, don't draft over it.
+          setText(j.review.responseText); setPosted(true)
+        } else {
+          // Auto-draft a suggested reply on open, with the intent the rating implies.
+          const t = j.review.rating && j.review.rating <= 3 ? 'winback' : 'thankful'
+          setTone(t)
+          draft(t)
+        }
       })
       .catch((e) => { if (live) setError(e.message) })
     return () => { live = false }
   }, [id])
 
-  const draft = async () => {
+  const draft = async (useTone?: string) => {
     if (drafting) return
     setDraftErr(null); setDrafting(true)
     try {
-      const res = await fetch('/api/dashboard/reviews/draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reviewId: id, tone }) })
+      const res = await fetch('/api/dashboard/reviews/draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reviewId: id, tone: useTone ?? tone }) })
       const j = await res.json().catch(() => ({}))
       if (res.ok && j.reply) { setText(j.reply); setPosted(false) }
       else setDraftErr(j.error || 'Could not write a reply. Try again.')
@@ -117,31 +127,34 @@ export default function ReviewPage() {
               {review.text || <span style={{ color: C.faint }}>No written comment, just a {review.rating}-star rating.</span>}
             </div>
 
-            {/* reply */}
-            <div style={{ marginTop: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-              <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17 }}>Your reply</div>
-              {posted && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '5px 11px' }}><Check size={13} /> Posted</span>}
-            </div>
-
-            {/* tone chips */}
-            <div style={{ display: 'flex', gap: 8, marginTop: 12, overflowX: 'auto', paddingBottom: 2 }} className="rev-x">
-              {TONES.map((t) => (
-                <button key={t.key} onClick={() => setTone(t.key)} style={{ flexShrink: 0, whiteSpace: 'nowrap', border: `1px solid ${tone === t.key ? C.green : '#d8d8de'}`, background: tone === t.key ? C.greenSoft : '#fff', color: tone === t.key ? C.greenDk : C.ink2, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>{t.label}</button>
+            {/* how it should sound — the options depend on the rating; tapping
+                one re-drafts the suggested reply in that intent */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 22, overflowX: 'auto', paddingBottom: 2 }} className="rev-x">
+              {tonesForRating(review.rating).map((k) => (
+                <button key={k} onClick={() => { if (drafting) return; setTone(k); draft(k) }} style={{ flexShrink: 0, whiteSpace: 'nowrap', border: `1px solid ${tone === k ? C.green : '#d8d8de'}`, background: tone === k ? C.greenSoft : '#fff', color: tone === k ? C.greenDk : C.ink2, borderRadius: 999, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: drafting ? 'default' : 'pointer', opacity: drafting && tone !== k ? 0.6 : 1 }}>{ALL_TONES[k]}</button>
               ))}
             </div>
 
-            <button onClick={draft} disabled={drafting} style={{ marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: `1.5px solid ${C.green}`, background: C.greenSoft, color: C.greenDk, borderRadius: 12, padding: '12px', fontWeight: 700, fontSize: 14, cursor: drafting ? 'default' : 'pointer' }}>
-              {drafting ? <><Loader2 size={16} className="animate-spin" /> Writing a reply…</> : <><Sparkles size={16} /> {text.trim() ? 'Redraft for me' : 'Draft a reply for me'}</>}
-            </button>
-            {draftErr && <div style={{ fontSize: 12.5, color: '#c0564f', marginTop: 8 }}>{draftErr}</div>}
+            {/* suggested reply — auto-drafted on open, fully editable */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Sparkles size={15} color={C.greenDk} />
+                <span style={{ fontWeight: 700, fontSize: 13, color: C.ink2 }}>{posted ? 'Your reply' : 'Suggested reply'}</span>
+              </div>
+              {posted
+                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '4px 10px' }}><Check size={12} /> Posted</span>
+                : drafting ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.mute }}><Loader2 size={13} className="animate-spin" /> Writing…</span> : null}
+            </div>
 
             <textarea
               value={text}
               onChange={(e) => { setText(e.target.value); if (posted) setPosted(false) }}
-              placeholder="Write your reply, or let us draft one above…"
+              placeholder={drafting ? 'Writing your reply…' : 'Your suggested reply will appear here. Edit it however you like.'}
+              disabled={drafting}
               rows={7}
-              style={{ width: '100%', marginTop: 12, border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, fontSize: 14.5, color: C.ink, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.5, outline: 'none' }}
+              style={{ width: '100%', marginTop: 9, border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, fontSize: 14.5, color: C.ink, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.5, outline: 'none', background: drafting ? '#fbfcfb' : '#fff' }}
             />
+            {draftErr && <div style={{ fontSize: 12.5, color: '#c0564f', marginTop: 8 }}>{draftErr} <button onClick={() => draft()} style={{ border: 'none', background: 'none', color: C.greenDk, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', padding: 0 }}>Try again</button></div>}
 
             <button onClick={post} disabled={!text.trim() || posting} style={{ marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: 'none', background: text.trim() ? GRAD : '#e3e9e6', color: '#fff', borderRadius: 12, padding: '14px', fontWeight: 700, fontSize: 15, cursor: text.trim() && !posting ? 'pointer' : 'default' }}>
               {posting ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}{posted ? 'Update reply' : 'Post reply'}
