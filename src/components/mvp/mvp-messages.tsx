@@ -14,6 +14,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { ChevronLeft, Search, Send, Loader2, Plus, MessageCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { sendMessage, createThread } from '@/lib/actions'
+import { markThreadRead } from '@/app/dashboard/messages/actions'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenBar: '#34c759',
@@ -33,13 +34,20 @@ const CONTACTS: Contact[] = [
   { key: 'account',      name: 'Account & billing', blurb: 'Plans, invoices, payments',    emoji: '💳', color: '#0ea5e9', subject: 'Account & billing' },
   { key: 'support',      name: 'Support',           blurb: 'Anything else',                emoji: '💬', color: '#8b5cf6', subject: 'Support' },
 ]
+function hasWord(haystack: string, word: string): boolean {
+  return new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(haystack)
+}
+// Map a thread's subject back to a contact. Threads this UI creates use a
+// contact's exact subject, so they always resolve on the exact pass. Only the
+// exact pass + the strategist alias decide UI threads; the word-boundary
+// fallback is for legacy / admin-authored free-text subjects, and we never let
+// a bare substring (e.g. "designer" inside another word) hijack the match.
 function contactForSubject(subject: string): Contact | null {
-  const s = (subject || '').toLowerCase()
-  for (const c of CONTACTS) {
-    if (s === c.subject.toLowerCase()) return c
-    if (c.key === 'strategist' && s.includes('strateg')) return c
-    if (s.includes(c.key) || s.includes(c.name.toLowerCase())) return c
-  }
+  const s = (subject || '').trim().toLowerCase()
+  if (!s) return null
+  for (const c of CONTACTS) if (s === c.subject.toLowerCase()) return c // exact first, across all
+  if (s.includes('strateg')) return CONTACTS.find((c) => c.key === 'strategist') ?? null
+  for (const c of CONTACTS) if (hasWord(s, c.key) || hasWord(s, c.name.toLowerCase())) return c
   return null
 }
 
@@ -256,8 +264,10 @@ function Conversation({ active, userId, onBack, onThreadCreated }: { active: Act
   const scrollRef = useRef<HTMLDivElement>(null)
   const c = active.contact
 
+  // Don't toggle `loading` here: it starts true only for an existing thread's
+  // first open. On the first-send path load() re-reads after the thread is
+  // created, and we don't want the composed bubble to flash back to a spinner.
   const load = useCallback(async (id: string) => {
-    setLoading(true)
     const { data } = await supabase
       .from('messages')
       .select('id, sender_id, sender_name, sender_role, content, read_at, created_at')
@@ -266,8 +276,9 @@ function Conversation({ active, userId, onBack, onThreadCreated }: { active: Act
     const mapped: Msg[] = (data ?? []).map((m) => ({ id: m.id as string, from: (m.sender_role as string) === 'client' ? 'owner' : 'team', senderName: (m.sender_name as string) ?? 'Apnosh', text: (m.content as string) ?? '', createdAt: m.created_at as string }))
     setMsgs(mapped)
     setLoading(false)
-    const unread = (data ?? []).filter((m) => m.sender_id !== userId && !m.read_at).map((m) => m.id as string)
-    if (unread.length) await supabase.from('messages').update({ read_at: new Date().toISOString() }).in('id', unread)
+    // Mark inbound (team) messages read via a server action — owners have no
+    // UPDATE grant on messages, so a browser update would silently no-op.
+    if ((data ?? []).some((m) => m.sender_id !== userId && !m.read_at)) void markThreadRead(id)
   }, [supabase, userId])
 
   useEffect(() => { if (threadId) load(threadId) }, [threadId, load])
@@ -280,8 +291,18 @@ function Conversation({ active, userId, onBack, onThreadCreated }: { active: Act
       .channel(`mvp-msg-${threadId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `thread_id=eq.${threadId}` }, (payload) => {
         const m = payload.new as Record<string, unknown>
-        setMsgs((prev) => prev.some((x) => x.id === m.id) ? prev : [...prev, { id: m.id as string, from: (m.sender_role as string) === 'client' ? 'owner' : 'team', senderName: (m.sender_name as string) ?? 'Apnosh', text: (m.content as string) ?? '', createdAt: m.created_at as string }])
-        if (m.sender_id !== userId && !m.read_at) supabase.from('messages').update({ read_at: new Date().toISOString() }).eq('id', m.id as string).then(() => {}, () => {})
+        const row: Msg = { id: m.id as string, from: (m.sender_role as string) === 'client' ? 'owner' : 'team', senderName: (m.sender_name as string) ?? 'Apnosh', text: (m.content as string) ?? '', createdAt: m.created_at as string }
+        setMsgs((prev) => {
+          if (prev.some((x) => x.id === row.id)) return prev
+          // The owner's own send is echoed back here — reconcile it with the
+          // optimistic temp row instead of appending a duplicate bubble.
+          if (m.sender_id === userId) {
+            const idx = prev.findIndex((x) => x.id.startsWith('tmp-') && x.from === 'owner' && x.text === row.text)
+            if (idx !== -1) { const copy = prev.slice(); copy[idx] = row; return copy }
+          }
+          return [...prev, row]
+        })
+        if (m.sender_id !== userId) void markThreadRead(threadId)
       })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
