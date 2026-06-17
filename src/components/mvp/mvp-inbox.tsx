@@ -1,12 +1,15 @@
 'use client'
 
 /**
- * Owner Inbox — redesigned IA (ported from apnosh-mvp, made more intuitive).
+ * Owner Notifications — redesigned IA (ported from apnosh-mvp, made more
+ * intuitive). The page lives at /dashboard/inbox (route kept) but reads as
+ * "Notifications" to the owner: it is the one hub for everything they may need
+ * to see or act on.
  *
  * Two segments: ALL (everything that needs you, in Today / This week / Good-to-
  * know bands, with type filter chips) and HISTORY (what you've handled). A
  * search icon searches across both. Messaging lives on its own screen now
- * (the header messages icon → /dashboard/messages), so the inbox is purely the
+ * (the header messages icon → /dashboard/messages), so this page is purely the
  * things that need the owner. Wired to real data (/api/dashboard/inbox).
  */
 import { useEffect, useState, useMemo } from 'react'
@@ -54,8 +57,8 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
     if (t && SUBS.some((s) => s.key === t)) { setSeg('all'); setSub(t) }
   }, [])
 
-  if (error) return <Shell><Centered>Couldn&apos;t load your inbox: {error}</Centered></Shell>
-  if (!data) return <Shell><Centered><Loader2 size={16} className="animate-spin" /> Loading your inbox…</Centered></Shell>
+  if (error) return <Shell><Centered>Couldn&apos;t load your notifications: {error}</Centered></Shell>
+  if (!data) return <Shell><Centered><Loader2 size={16} className="animate-spin" /> Loading your notifications…</Centered></Shell>
 
   const needsYou = items.length
   const status = needsYou === 0 ? "You're all caught up 🎉" : `${needsYou} thing${needsYou === 1 ? '' : 's'} need${needsYou === 1 ? 's' : ''} you`
@@ -71,7 +74,7 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
       <div style={{ padding: '18px 18px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
           <div>
-            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 25, lineHeight: 1 }}>Inbox</div>
+            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 25, lineHeight: 1 }}>Notifications</div>
             <div style={{ fontSize: 12.5, color: needsYou ? C.mute : C.greenDk, marginTop: 5, fontWeight: needsYou ? 400 : 600 }}>{status}</div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -79,7 +82,7 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
           </div>
         </div>
         {searchOpen && (
-          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search your inbox…" style={{ width: '100%', marginTop: 12, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 13px', fontSize: 14, color: C.ink, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
+          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notifications…" style={{ width: '100%', marginTop: 12, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 13px', fontSize: 14, color: C.ink, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
         )}
         {/* top level — All (needs you) vs History (handled) */}
         <div style={{ display: 'flex', background: '#eef0ef', borderRadius: 12, padding: 3, gap: 3, marginTop: 14 }}>
@@ -170,7 +173,7 @@ function ListView({ sub, items, wins, q, onReplied }: { sub: string; items: Item
     const rest = list.filter((i) => i.band !== 'today')
     return (
       <div style={pad}>
-        {q && list.length === 0 && winList.length === 0 && <InboxEmpty icon={Search} title="No matches" sub="Nothing in your inbox matches that search." />}
+        {q && list.length === 0 && winList.length === 0 && <InboxEmpty icon={Search} title="No matches" sub="Nothing here matches that search." />}
         {!q && list.length === 0 && (
           <div style={{ margin: '6px 0 2px', background: C.greenSoft, borderRadius: 14, padding: '15px 16px', display: 'flex', alignItems: 'center', gap: 11 }}>
             <span style={{ fontSize: 22 }}>🎉</span>
@@ -188,7 +191,7 @@ function ListView({ sub, items, wins, q, onReplied }: { sub: string; items: Item
   return (
     <div style={pad}>
       {sorted.length === 0
-        ? (q ? <InboxEmpty icon={Search} title="No matches" sub="Nothing in your inbox matches that search." />
+        ? (q ? <InboxEmpty icon={Search} title="No matches" sub="Nothing here matches that search." />
              : <InboxEmpty icon={Check} title={`No ${label} right now`} sub={`When something needs you in ${label}, it shows up here.`} />)
         : sorted.map((i) => <Row key={i.id} item={i} onReplied={onReplied} />)}
     </div>

@@ -63,7 +63,7 @@ export function buildCandidates(f: SuggestionFacts): Suggestion[] {
     const n = f.approvalsCount!
     out.push({ id: 'approvals', eyebrow: 'NEEDS YOUR OK', accent: 'amber', icon: 'sparkles', priority: 90,
       title: 'Review what is waiting', body: `${n} ${n === 1 ? 'thing is' : 'things are'} ready for your OK before they go live.`,
-      cta: 'Open inbox', href: '/dashboard/inbox?tab=approvals' })
+      cta: 'Review', href: '/dashboard/inbox?tab=approvals' })
   }
   if (f.metric && f.metric.weekPct < 0) {
     const m = f.metric
@@ -80,8 +80,8 @@ export function buildCandidates(f: SuggestionFacts): Suggestion[] {
   if ((f.tasksCount ?? 0) > 0) {
     const n = f.tasksCount!
     out.push({ id: 'tasks', eyebrow: 'A FEW UPDATES', accent: 'violet', icon: 'bell', priority: 52,
-      title: `${n} ${n === 1 ? 'update needs' : 'updates need'} a look`, body: 'Small things are waiting in your inbox. None are urgent.',
-      cta: 'Open inbox', href: '/dashboard/inbox?tab=todos' })
+      title: `${n} ${n === 1 ? 'update needs' : 'updates need'} a look`, body: 'Small things are waiting for you. None are urgent.',
+      cta: 'See all', href: '/dashboard/inbox?tab=todos' })
   }
   if (f.plan) {
     const p = f.plan

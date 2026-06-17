@@ -3,7 +3,7 @@
 /**
  * Persistent app top bar (DoorDash-style). Left: the current location as a
  * dropdown — tap to switch between locations an owner manages. Right: profile,
- * notifications (→ Inbox), and messages (→ Messages). Rendered by MvpShell so
+ * notifications (→ Notifications), and messages (→ Messages). Rendered by MvpShell so
  * it stays put across the owner app screens with the bottom nav — one app.
  */
 import { useState } from 'react'
