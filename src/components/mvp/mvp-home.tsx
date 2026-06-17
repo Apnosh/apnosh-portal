@@ -14,7 +14,7 @@
 
 import {
   Bell, Sparkles, Check, Plus, TrendingUp, TrendingDown,
-  ChevronRight, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
+  ChevronRight, ChevronLeft, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
   Heart, Star, MessageCircle, Mail, Eye, Users, Plug,
 } from 'lucide-react'
 import { useState, useRef, useEffect, useMemo } from 'react'
@@ -309,7 +309,7 @@ function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: 
   const key = `apnosh:dismissed-suggestions:${clientId || 'default'}`
   const [dismissed, setDismissed] = useState<Record<string, number>>({})
   const [loaded, setLoaded] = useState(false)
-  const [frontId, setFrontId] = useState<string | null>(null)
+  const [step, setStep] = useState(0)
 
   useEffect(() => {
     try {
@@ -324,24 +324,18 @@ function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: 
 
   const visible = useMemo(() => markLeadLocal(items.filter((s) => !dismissed[s.id]).slice(0, 5)), [items, dismissed])
 
-  // When the set identity changes (the instant set is replaced by the richer
-  // server set), bring the new top card forward.
-  useEffect(() => { setFrontId(null) }, [items])
+  // Linear stepper through the deck (a "1 of N" counter, not a swipe carousel):
+  // the front card is visible[step]; the next one or two peek behind it. Reset
+  // to the top when the set identity changes (instant set → richer server set).
+  useEffect(() => { setStep(0) }, [items])
+  const safeStep = Math.min(step, Math.max(0, visible.length - 1))
+  const deck = visible.slice(safeStep, safeStep + 3)
 
-  // The deck, rotated so the chosen front card sits on top. Tapping a card
-  // behind brings it forward; dismissing the top reveals the next.
-  const frontIdx = Math.max(0, visible.findIndex((s) => s.id === frontId))
-  const order = visible.length ? [...visible.slice(frontIdx), ...visible.slice(0, frontIdx)] : []
-
-  const advance = () => setFrontId(order[1]?.id ?? null)
-  const dismiss = (id: string) => {
-    if (id === order[0]?.id) setFrontId(order[1]?.id ?? null)
-    setDismissed((prev) => {
-      const next = { ...prev, [id]: Date.now() }
-      try { localStorage.setItem(key, JSON.stringify(next)) } catch { /* ignore */ }
-      return next
-    })
-  }
+  const dismiss = (id: string) => setDismissed((prev) => {
+    const next = { ...prev, [id]: Date.now() }
+    try { localStorage.setItem(key, JSON.stringify(next)) } catch { /* ignore */ }
+    return next
+  })
 
   if (!loaded) return null
   if (visible.length === 0) {
@@ -358,21 +352,41 @@ function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: 
   }
   return (
     <div style={{ marginBottom: 20 }}>
-      {/* Layered deck: the top card is live; the cards behind peek at the
-          bottom. Tap a peeking card (or a dot) to bring it forward. */}
-      <div style={{ position: 'relative', paddingBottom: order.length > 1 ? 8 : 0 }}>
-        {order.map((s, pos) => (
-          <SuggestionCard key={s.id} s={s} pos={pos} isFront={pos === 0} onAdvance={advance} onDismiss={() => dismiss(s.id)} />
+      {/* Layered deck: the top card is live; the next one or two peek at the
+          bottom. Step through with the "1 of N" controls (or tap a peek). */}
+      <div style={{ position: 'relative', paddingBottom: deck.length > 1 ? 8 : 0 }}>
+        {deck.map((s, pos) => (
+          <SuggestionCard
+            key={s.id}
+            s={s}
+            pos={pos}
+            isFront={pos === 0}
+            onAdvance={() => setStep(Math.min(safeStep + pos, visible.length - 1))}
+            onDismiss={() => dismiss(s.id)}
+          />
         ))}
       </div>
       {visible.length > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 12 }}>
-          {visible.map((s, i) => (
-            <button key={s.id} onClick={() => setFrontId(s.id)} aria-label={`Card ${i + 1} of ${visible.length}`} style={{ width: i === frontIdx ? 18 : 6, height: 6, borderRadius: 99, border: 'none', padding: 0, cursor: 'pointer', background: i === frontIdx ? C.green : C.line, transition: 'width .2s, background .2s' }} />
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 13, padding: '0 2px' }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>
+            <span style={{ color: C.ink }}>{safeStep + 1}</span>
+            <span style={{ color: C.faint }}> of {visible.length}</span>
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <StepBtn label="Previous" disabled={safeStep === 0} onClick={() => setStep(Math.max(safeStep - 1, 0))}><ChevronLeft size={17} /></StepBtn>
+            <StepBtn label="Next" disabled={safeStep >= visible.length - 1} onClick={() => setStep(Math.min(safeStep + 1, visible.length - 1))}><ChevronRight size={17} /></StepBtn>
+          </div>
         </div>
       )}
     </div>
+  )
+}
+
+function StepBtn({ children, onClick, disabled, label }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; label: string }) {
+  return (
+    <button onClick={onClick} disabled={disabled} aria-label={label} style={{ width: 32, height: 32, borderRadius: '50%', border: `1px solid ${C.line}`, background: '#fff', color: disabled ? C.faint : C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'default' : 'pointer', padding: 0, opacity: disabled ? 0.45 : 1, transition: 'opacity .15s' }}>
+      {children}
+    </button>
   )
 }
 
