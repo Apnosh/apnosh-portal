@@ -12,10 +12,10 @@
  * Under "All" the feed still leads with "Needs you" so urgent items surface
  * first. Wired to real data (/api/dashboard/inbox).
  */
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Check, Star, Loader2, Search, MoreHorizontal } from 'lucide-react'
-import { markInboxRead, replyToReview } from '@/app/dashboard/inbox/actions'
+import { markInboxRead } from '@/app/dashboard/inbox/actions'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenBar: '#34c759',
@@ -23,7 +23,6 @@ const C = {
   coral: '#c0564f', coralSoft: '#fdeeee', preview: '#f4f5f6',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
-const GRAD = 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)'
 
 type Chip = 'approvals' | 'reviews' | 'todos' | 'fix'
 interface Review { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string }
@@ -81,8 +80,7 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
   const q = query.trim().toLowerCase()
   const countFor = (k: string) => k === 'all' ? items.length : items.filter((i) => CHIPS[k]?.includes(i.chip)).length
 
-  // Removing an item from the open feed (replied review, or dismissed via "⋯").
-  const onReplied = (reviewId: string) => setItems((xs) => xs.filter((x) => x.review?.reviewId !== reviewId))
+  // Dismiss an item via the "⋯" (mark read + drop from the feed).
   const onDismiss = (id: string) => { setItems((xs) => xs.filter((x) => x.id !== id)); void markInboxRead(id) }
 
   return (
@@ -107,7 +105,7 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
         </div>
       </div>
 
-      <ListView filter={filter} items={items} wins={data.wins} q={q} onReplied={onReplied} onDismiss={onDismiss} />
+      <ListView filter={filter} items={items} wins={data.wins} q={q} onDismiss={onDismiss} />
 
       <style>{`@keyframes inrise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.inrise{animation:inrise .26s ease both}.mvp-swipe-x{scrollbar-width:none}.mvp-swipe-x::-webkit-scrollbar{display:none}`}</style>
     </Shell>
@@ -179,29 +177,11 @@ function IconAvatar({ emoji, danger }: { emoji: string; danger?: boolean }) {
 }
 const clampStyle = (lines: number): React.CSSProperties => ({ display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical', overflow: 'hidden' })
 
-// Clamps to `lines`, then shows a "…more / See less" toggle only when the text
-// actually overflows (measured after layout). Works inside a row Link — the
-// toggle stops the click from navigating.
-function ExpandableText({ children, lines = 3, style }: { children: React.ReactNode; lines?: number; style?: React.CSSProperties }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [expanded, setExpanded] = useState(false)
-  const [overflow, setOverflow] = useState(false)
-  useEffect(() => { const el = ref.current; if (el) setOverflow(el.scrollHeight - el.clientHeight > 2) }, [])
-  return (
-    <>
-      <div ref={ref} style={{ ...style, ...(expanded ? {} : clampStyle(lines)) }}>{children}</div>
-      {overflow && (
-        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpanded((v) => !v) }} style={{ marginTop: 4, background: 'none', border: 'none', padding: 0, color: C.mute, fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{expanded ? 'See less' : '…more'}</button>
-      )}
-    </>
-  )
-}
-
 function Lead({ bold, rest, lines = 3 }: { bold: string; rest?: string; lines?: number }) {
   return (
-    <ExpandableText lines={lines} style={{ fontSize: 14, lineHeight: 1.4, color: C.ink }}>
+    <div style={{ fontSize: 14, lineHeight: 1.4, color: C.ink, ...clampStyle(lines) }}>
       <b style={{ fontWeight: 700 }}>{bold}</b>{rest ? <span style={{ color: C.mute, fontWeight: 400 }}>{' '}{rest}</span> : null}
-    </ExpandableText>
+    </div>
   )
 }
 // Outlined action button (visual span; the row's own Link carries the nav).
@@ -214,7 +194,7 @@ const matchItem = (i: Item, q: string) => !q || `${i.title} ${i.subtitle} ${i.re
 
 /* ── Feed for the selected filter. "All" leads with "Needs you", then "The
  *  rest", then the quiet wins lane. A single category is a flat list. */
-function ListView({ filter, items, wins, q, onReplied, onDismiss }: { filter: string; items: Item[]; wins: Win[]; q: string; onReplied: (id: string) => void; onDismiss: (id: string) => void }) {
+function ListView({ filter, items, wins, q, onDismiss }: { filter: string; items: Item[]; wins: Win[]; q: string; onDismiss: (id: string) => void }) {
   const list = (filter === 'all' ? items : items.filter((i) => (CHIPS[filter] ?? []).includes(i.chip))).filter((i) => matchItem(i, q))
   const wq = q ? wins.filter((w) => `${w.title} ${w.body}`.toLowerCase().includes(q)) : wins
   const winList = (filter === 'all' || filter === 'activity') ? wq : []
@@ -233,8 +213,8 @@ function ListView({ filter, items, wins, q, onReplied, onDismiss }: { filter: st
             <div><div style={{ fontWeight: 700, fontSize: 14.5, color: C.greenDk }}>You&apos;re all caught up</div><div style={{ fontSize: 12, color: C.greenDk, opacity: 0.85 }}>Nothing is waiting on you right now.</div></div>
           </div>
         )}
-        {today.length > 0 && <><Divider label="Needs you" count={today.length} />{today.map((i) => <Row key={i.id} item={i} onReplied={onReplied} onDismiss={onDismiss} />)}</>}
-        {rest.length > 0 && <><Divider label="The rest" count={rest.length} />{rest.map((i) => <Row key={i.id} item={i} onReplied={onReplied} onDismiss={onDismiss} />)}</>}
+        {today.length > 0 && <><Divider label="Needs you" count={today.length} />{today.map((i) => <Row key={i.id} item={i} onDismiss={onDismiss} />)}</>}
+        {rest.length > 0 && <><Divider label="The rest" count={rest.length} />{rest.map((i) => <Row key={i.id} item={i} onDismiss={onDismiss} />)}</>}
         {winList.length > 0 && <><Divider label="Good to know" />{winList.map((w) => <WinLink key={w.id} w={w} />)}</>}
       </div>
     )
@@ -254,7 +234,7 @@ function ListView({ filter, items, wins, q, onReplied, onDismiss }: { filter: st
   }
   return (
     <div style={pad}>
-      {sorted.map((i) => <Row key={i.id} item={i} onReplied={onReplied} onDismiss={onDismiss} />)}
+      {sorted.map((i) => <Row key={i.id} item={i} onDismiss={onDismiss} />)}
       {winList.length > 0 && <><Divider label="Good to know" />{winList.map((w) => <WinLink key={w.id} w={w} />)}</>}
     </div>
   )
@@ -268,9 +248,10 @@ function WinLink({ w }: { w: Win }) {
   )
 }
 
-/* generic row — review rows expand for inline reply; everything else deep-links */
-function Row({ item, onReplied, onDismiss }: { item: Item; onReplied: (id: string) => void; onDismiss: (id: string) => void }) {
-  if (item.review) return <ReviewRow item={item} onReplied={onReplied} onDismiss={onDismiss} />
+/* generic row — every row deep-links to its own page (reviews → the review
+   page with AI reply); nothing expands inline. */
+function Row({ item, onDismiss }: { item: Item; onDismiss: (id: string) => void }) {
+  if (item.review) return <ReviewRow item={item} onDismiss={onDismiss} />
   const isFix = item.kind === 'connection'
   const cta = isFix ? 'Reconnect' : item.chip === 'approvals' ? 'Review' : null
   return (
@@ -281,34 +262,19 @@ function Row({ item, onReplied, onDismiss }: { item: Item; onReplied: (id: strin
   )
 }
 
-function ReviewRow({ item, onReplied, onDismiss }: { item: Item; onReplied: (id: string) => void; onDismiss: (id: string) => void }) {
+function ReviewRow({ item, onDismiss }: { item: Item; onDismiss: (id: string) => void }) {
   const r = item.review!
-  const [open, setOpen] = useState(false)
-  const [text, setText] = useState(r.suggestedReply)
   const tone = ['#4abd98', '#a85c3c', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b'][(r.author.charCodeAt(0) || 0) % 6]
   const source = r.source === 'instagram' ? 'Instagram' : r.source === 'yelp' ? 'Yelp' : 'Google'
-  const send = () => { if (!text.trim()) return; void replyToReview(r.reviewId, text.trim()); onReplied(r.reviewId) }
   const avatar = <div style={{ width: 48, height: 48, borderRadius: '50%', background: tone, color: '#fff', fontWeight: 700, fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{r.author.charAt(0).toUpperCase()}</div>
   return (
-    <NotifRow unread={item.unread} time={item.time} onDismiss={() => onDismiss(item.id)} avatar={avatar}>
+    <NotifRow href={`/dashboard/reviews/${r.reviewId}`} unread={item.unread} time={item.time} onDismiss={() => onDismiss(item.id)} onNav={() => { void markInboxRead(item.id) }} avatar={avatar}>
       <div style={{ fontSize: 14, lineHeight: 1.4, color: C.ink }}>
         <b style={{ fontWeight: 700 }}>{r.author}</b><span style={{ color: C.mute }}> left a {r.rating}-star review on {source}.</span>
       </div>
       <div style={{ marginTop: 4 }}><Stars n={r.rating} /></div>
-      {r.text && (
-        <ExpandableText lines={3} style={{ marginTop: 9, background: C.preview, borderRadius: 12, padding: '10px 13px', fontSize: 13, color: C.ink2, lineHeight: 1.45 }}>{r.text}</ExpandableText>
-      )}
-      {!open ? (
-        <button onClick={() => setOpen(true)} style={{ marginTop: 10, border: `1.5px solid ${C.greenDk}`, color: C.greenDk, background: '#fff', borderRadius: 999, padding: '6px 18px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Reply</button>
-      ) : (
-        <div style={{ marginTop: 10 }}>
-          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} style={{ width: '100%', border: `1px solid ${C.line}`, borderRadius: 12, padding: 11, fontSize: 13.5, color: C.ink, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.45 }} />
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button onClick={() => setOpen(false)} style={{ background: '#fff', border: `1px solid ${C.line}`, color: C.mute, borderRadius: 10, padding: '9px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Cancel</button>
-            <button onClick={send} style={{ flex: 1, background: GRAD, border: 'none', color: '#fff', borderRadius: 10, padding: '9px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Post reply</button>
-          </div>
-        </div>
-      )}
+      {r.text && <div style={{ marginTop: 9, background: C.preview, borderRadius: 12, padding: '10px 13px', fontSize: 13, color: C.ink2, lineHeight: 1.45, ...clampStyle(3) }}>{r.text}</div>}
+      <PillBtn label="Reply" />
     </NotifRow>
   )
 }
