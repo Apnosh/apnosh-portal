@@ -309,8 +309,7 @@ function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: 
   const key = `apnosh:dismissed-suggestions:${clientId || 'default'}`
   const [dismissed, setDismissed] = useState<Record<string, number>>({})
   const [loaded, setLoaded] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [idx, setIdx] = useState(0)
+  const [frontId, setFrontId] = useState<string | null>(null)
 
   useEffect(() => {
     try {
@@ -325,21 +324,23 @@ function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: 
 
   const visible = useMemo(() => markLeadLocal(items.filter((s) => !dismissed[s.id]).slice(0, 5)), [items, dismissed])
 
-  // When the set identity changes (the instant set is replaced by the AI set),
-  // snap back to the first card so the dots never point past the new end.
-  useEffect(() => { scrollRef.current?.scrollTo({ left: 0 }); setIdx(0) }, [items])
+  // When the set identity changes (the instant set is replaced by the richer
+  // server set), bring the new top card forward.
+  useEffect(() => { setFrontId(null) }, [items])
 
-  const dismiss = (id: string) => setDismissed((prev) => {
-    const next = { ...prev, [id]: Date.now() }
-    try { localStorage.setItem(key, JSON.stringify(next)) } catch { /* ignore */ }
-    return next
-  })
-  const onScroll = () => {
-    const el = scrollRef.current; if (!el) return
-    const first = el.firstElementChild as HTMLElement | null
-    const step = first ? first.clientWidth + 10 : el.clientWidth
-    const i = Math.round(el.scrollLeft / Math.max(1, step))
-    setIdx((p) => (p === i ? p : i))
+  // The deck, rotated so the chosen front card sits on top. Tapping a card
+  // behind brings it forward; dismissing the top reveals the next.
+  const frontIdx = Math.max(0, visible.findIndex((s) => s.id === frontId))
+  const order = visible.length ? [...visible.slice(frontIdx), ...visible.slice(0, frontIdx)] : []
+
+  const advance = () => setFrontId(order[1]?.id ?? null)
+  const dismiss = (id: string) => {
+    if (id === order[0]?.id) setFrontId(order[1]?.id ?? null)
+    setDismissed((prev) => {
+      const next = { ...prev, [id]: Date.now() }
+      try { localStorage.setItem(key, JSON.stringify(next)) } catch { /* ignore */ }
+      return next
+    })
   }
 
   if (!loaded) return null
@@ -355,42 +356,72 @@ function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: 
       </div>
     )
   }
-  const activeDot = Math.min(idx, visible.length - 1)
   return (
     <div style={{ marginBottom: 20 }}>
-      <div ref={scrollRef} onScroll={onScroll} className="mvp-swipe" style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: 2 }}>
-        {visible.map((s) => <SuggestionCard key={s.id} s={s} solo={visible.length === 1} onDismiss={() => dismiss(s.id)} />)}
+      {/* Layered deck: the top card is live; the cards behind peek at the
+          bottom. Tap a peeking card (or a dot) to bring it forward. */}
+      <div style={{ position: 'relative', paddingBottom: order.length > 1 ? 8 : 0 }}>
+        {order.map((s, pos) => (
+          <SuggestionCard key={s.id} s={s} pos={pos} isFront={pos === 0} onAdvance={advance} onDismiss={() => dismiss(s.id)} />
+        ))}
       </div>
       {visible.length > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
-          {visible.map((s, i) => <span key={s.id} style={{ width: i === activeDot ? 18 : 6, height: 6, borderRadius: 99, background: i === activeDot ? C.green : C.line, transition: 'width .2s, background .2s' }} />)}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 12 }}>
+          {visible.map((s, i) => (
+            <button key={s.id} onClick={() => setFrontId(s.id)} aria-label={`Card ${i + 1} of ${visible.length}`} style={{ width: i === frontIdx ? 18 : 6, height: 6, borderRadius: 99, border: 'none', padding: 0, cursor: 'pointer', background: i === frontIdx ? C.green : C.line, transition: 'width .2s, background .2s' }} />
+          ))}
         </div>
       )}
     </div>
   )
 }
 
-function SuggestionCard({ s, solo, onDismiss }: { s: Suggestion; solo: boolean; onDismiss: () => void }) {
+// Depth styles for the stacked deck: the front card is in flow; the ones
+// behind are absolute, nudged down + narrowed so a clean strip peeks below.
+function deckDepth(pos: number): React.CSSProperties {
+  if (pos === 0) return { position: 'relative', zIndex: 30, transform: 'none', opacity: 1 }
+  if (pos === 1) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 20, transform: 'translateY(5px) scaleX(0.95)', opacity: 1 }
+  if (pos === 2) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, transform: 'translateY(10px) scaleX(0.90)', opacity: 0.97 }
+  return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(14px) scaleX(0.85)', opacity: 0, pointerEvents: 'none' }
+}
+
+function SuggestionCard({ s, pos, isFront, onAdvance, onDismiss }: { s: Suggestion; pos: number; isFront: boolean; onAdvance: () => void; onDismiss: () => void }) {
   const a = ACCENT[s.accent] ?? ACCENT.amber
   const Icon = SUG_ICON[s.icon] ?? Sparkles
-  const card: React.CSSProperties = { position: 'relative', flex: solo ? '0 0 100%' : '0 0 86%', minWidth: 0, scrollSnapAlign: 'start', background: a.bg, border: `0.5px solid ${a.border}`, borderRadius: 18, padding: 16, boxSizing: 'border-box' }
-  const inner = (
-    <>
-      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDismiss() }} aria-label="Dismiss" style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,0.04)', color: C.faint, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><X size={14} /></button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+  // Cards behind take the deck's full height (= front + peek) so their bottom
+  // strip is always empty colored card, never clipped content.
+  const style: React.CSSProperties = {
+    ...deckDepth(pos),
+    height: isFront ? undefined : '100%',
+    transformOrigin: 'top center',
+    transition: 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s',
+    background: a.bg, border: `0.5px solid ${a.border}`, borderRadius: 18,
+    padding: '15px 16px', boxSizing: 'border-box', overflow: 'hidden',
+    textDecoration: 'none', display: 'block', color: 'inherit', cursor: 'pointer',
+    boxShadow: pos === 0 ? '0 8px 22px rgba(0,0,0,0.08)' : '0 2px 10px rgba(0,0,0,0.05)',
+  }
+  return (
+    <Link
+      href={s.href ?? '#'}
+      aria-hidden={!isFront}
+      tabIndex={isFront ? 0 : -1}
+      onClick={(e) => { if (!isFront) { e.preventDefault(); onAdvance() } else if (!s.href) e.preventDefault() }}
+      style={style}
+    >
+      {isFront && (
+        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDismiss() }} aria-label="Dismiss" style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,0.05)', color: C.faint, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 2 }}><X size={14} /></button>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 9 }}>
         <div style={{ width: 38, height: 38, borderRadius: 11, background: '#fff', border: `0.5px solid ${a.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={18} color={a.fg} /></div>
         <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.07em', color: a.fg }}>{s.eyebrow}</span>
       </div>
-      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.22, color: C.ink, marginBottom: 5, paddingRight: 14 }}>{s.title}</div>
+      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.22, color: C.ink, marginBottom: 5, paddingRight: 14, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.title}</div>
       <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, marginBottom: s.cta ? 13 : 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.body}</div>
       {s.cta && (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: a.fg, color: '#fff', borderRadius: 99, padding: '9px 15px', fontWeight: 700, fontSize: 12.5 }}>{s.cta} <ChevronRight size={14} /></span>
       )}
-    </>
+    </Link>
   )
-  return s.href
-    ? <Link href={s.href} style={{ ...card, textDecoration: 'none', display: 'block' }}>{inner}</Link>
-    : <div style={card}>{inner}</div>
 }
 
 /* Thumb — ported from the design: a rounded preview that shows an emoji
