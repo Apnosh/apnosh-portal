@@ -142,6 +142,17 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Read state — an item stays "unread" (highlighted) until the owner opens it
+  // (the row's onNav writes user_inbox_read via markInboxRead). getInbox already
+  // applies this to its own items; apply it to the campaign + review items too
+  // so they clear once opened instead of staying highlighted forever.
+  const itemIds = items.map((i) => i.id)
+  if (itemIds.length) {
+    const { data: readRows } = await admin.from('user_inbox_read').select('item_id').eq('user_id', userId).in('item_id', itemIds)
+    const readSet = new Set((readRows ?? []).map((r) => r.item_id as string))
+    for (const it of items) it.unread = !readSet.has(it.id)
+  }
+
   items.sort((a, b) => {
     const band = (a.band === 'today' ? 0 : 1) - (b.band === 'today' ? 0 : 1)
     if (band !== 0) return band

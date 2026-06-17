@@ -154,13 +154,19 @@ function Divider({ label, count }: { label: string; count?: number }) {
 /* ── A single flat notification row (LinkedIn-style): avatar · body · time/⋯,
  *  with a full-width divider. Renders as a Link when it has a destination. */
 function NotifRow({ href, unread, time, onDismiss, onNav, avatar, children }: { href?: string; unread?: boolean; time?: string; onDismiss?: () => void; onNav?: () => void; avatar: React.ReactNode; children: React.ReactNode }) {
-  const frame: React.CSSProperties = { display: 'flex', gap: 12, alignItems: 'flex-start', padding: '13px 16px', borderBottom: `0.5px solid ${C.line}`, background: unread ? 'rgba(74,189,152,0.06)' : 'transparent' }
+  // Unread = highlighted (soft green tint + a green dot/timestamp); read = white.
+  const frame: React.CSSProperties = { display: 'flex', gap: 12, alignItems: 'flex-start', padding: '13px 16px', borderBottom: `0.5px solid ${C.line}`, background: unread ? 'rgba(74,189,152,0.09)' : '#fff' }
   const inner = (
     <>
       {avatar}
       <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, paddingTop: 1, minWidth: 26 }}>
-        {time ? <span style={{ fontSize: 11.5, color: C.faint, whiteSpace: 'nowrap' }}>{time}</span> : null}
+        {(time || unread) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            {unread && <span style={{ width: 7, height: 7, borderRadius: 99, background: C.green, flexShrink: 0 }} />}
+            {time && <span style={{ fontSize: 11.5, fontWeight: unread ? 700 : 400, color: unread ? C.greenDk : C.faint, whiteSpace: 'nowrap' }}>{time}</span>}
+          </div>
+        )}
         {onDismiss && (
           <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDismiss() }} aria-label="Dismiss" style={{ width: 26, height: 22, border: 'none', background: 'none', color: C.faint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: 0 }}><MoreHorizontal size={18} /></button>
         )}
