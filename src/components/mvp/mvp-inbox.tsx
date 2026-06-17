@@ -12,7 +12,7 @@
  * Under "All" the feed still leads with "Needs you" so urgent items surface
  * first. Wired to real data (/api/dashboard/inbox).
  */
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Check, Star, Loader2, Search, MoreHorizontal } from 'lucide-react'
 import { markInboxRead, replyToReview } from '@/app/dashboard/inbox/actions'
@@ -29,16 +29,23 @@ type Chip = 'approvals' | 'reviews' | 'todos' | 'fix'
 interface Review { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string }
 interface Item { id: string; kind: string; chip: Chip; band: 'today' | 'week'; icon: string; title: string; subtitle: string; time: string; href: string; status?: string; unread: boolean; review?: Review }
 interface Win { id: string; icon: string; title: string; body: string; time: string; link: string | null; read: boolean }
-interface Hist { id: string; icon: string; chip: string; title: string; subtitle: string; outcome: string; day: string; whenIso: string; href?: string }
-interface InboxData { items: Item[]; wins: Win[]; history: Hist[]; counts: { needsYou: number; today: number } }
+interface InboxData { items: Item[]; wins: Win[]; counts: { needsYou: number; today: number } }
 
-// Single LinkedIn-style pill row (active = filled). History is just another
-// pill, so the whole page is one feed with one filter row.
+// Single LinkedIn-style pill row (active = filled).
 const FILTERS: { key: string; label: string }[] = [
-  { key: 'all', label: 'All' }, { key: 'approvals', label: 'Approvals' }, { key: 'reviews', label: 'Reviews' },
-  { key: 'todos', label: 'Updates' }, { key: 'fix', label: 'Fix-its' }, { key: 'history', label: 'History' },
+  { key: 'all', label: 'All' }, { key: 'needsyou', label: 'Needs you' },
+  { key: 'reviews', label: 'Reviews' }, { key: 'activity', label: 'Activity' },
 ]
-const COUNTED = new Set(['approvals', 'reviews', 'todos', 'fix'])
+const COUNTED = new Set(['needsyou', 'reviews', 'activity'])
+// Which item chips each filter shows. "Needs you" folds in the old Fix-its
+// (broken connections); "Activity" is the tasks/updates + wins stream.
+const CHIPS: Record<string, Chip[]> = {
+  needsyou: ['approvals', 'fix'],
+  reviews: ['reviews'],
+  activity: ['todos'],
+}
+// Old ?tab= deep-link values still resolve (home + suggestion cards use them).
+const TAB_ALIAS: Record<string, string> = { approvals: 'needsyou', fix: 'needsyou', reviews: 'reviews', todos: 'activity', all: 'all' }
 
 export default function MvpInbox({ clientId }: { clientId: string }) {
   const [data, setData] = useState<InboxData | null>(null)
@@ -57,10 +64,13 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
     return () => { live = false }
   }, [clientId])
 
-  // Deep link: Home's "Needs your approval" → ?tab=approvals.
+  // Deep link: Home's "Needs your approval" → ?tab=approvals (aliased to the
+  // new filter keys, so old links keep working).
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('tab')
-    if (t && FILTERS.some((f) => f.key === t)) setFilter(t)
+    if (!t) return
+    const target = TAB_ALIAS[t] ?? (FILTERS.some((f) => f.key === t) ? t : null)
+    if (target) setFilter(target)
   }, [])
 
   if (error) return <Shell><Centered>Couldn&apos;t load your notifications: {error}</Centered></Shell>
@@ -69,7 +79,7 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
   const needsYou = items.length
   const status = needsYou === 0 ? "You're all caught up 🎉" : `${needsYou} thing${needsYou === 1 ? '' : 's'} need${needsYou === 1 ? 's' : ''} you`
   const q = query.trim().toLowerCase()
-  const countFor = (k: string) => k === 'all' ? items.length : items.filter((i) => i.chip === k).length
+  const countFor = (k: string) => k === 'all' ? items.length : items.filter((i) => CHIPS[k]?.includes(i.chip)).length
 
   // Removing an item from the open feed (replied review, or dismissed via "⋯").
   const onReplied = (reviewId: string) => setItems((xs) => xs.filter((x) => x.review?.reviewId !== reviewId))
@@ -97,9 +107,7 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
         </div>
       </div>
 
-      {filter === 'history'
-        ? <HistoryView history={data.history} q={q} />
-        : <ListView filter={filter} items={items} wins={data.wins} q={q} onReplied={onReplied} onDismiss={onDismiss} />}
+      <ListView filter={filter} items={items} wins={data.wins} q={q} onReplied={onReplied} onDismiss={onDismiss} />
 
       <style>{`@keyframes inrise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.inrise{animation:inrise .26s ease both}.mvp-swipe-x{scrollbar-width:none}.mvp-swipe-x::-webkit-scrollbar{display:none}`}</style>
     </Shell>
@@ -187,8 +195,9 @@ const matchItem = (i: Item, q: string) => !q || `${i.title} ${i.subtitle} ${i.re
 /* ── Feed for the selected filter. "All" leads with "Needs you", then "The
  *  rest", then the quiet wins lane. A single category is a flat list. */
 function ListView({ filter, items, wins, q, onReplied, onDismiss }: { filter: string; items: Item[]; wins: Win[]; q: string; onReplied: (id: string) => void; onDismiss: (id: string) => void }) {
-  const list = (filter === 'all' ? items : items.filter((i) => i.chip === filter)).filter((i) => matchItem(i, q))
-  const winList = filter === 'all' ? (q ? wins.filter((w) => `${w.title} ${w.body}`.toLowerCase().includes(q)) : wins) : []
+  const list = (filter === 'all' ? items : items.filter((i) => (CHIPS[filter] ?? []).includes(i.chip))).filter((i) => matchItem(i, q))
+  const wq = q ? wins.filter((w) => `${w.title} ${w.body}`.toLowerCase().includes(q)) : wins
+  const winList = (filter === 'all' || filter === 'activity') ? wq : []
   const label = (FILTERS.find((s) => s.key === filter)?.label ?? '').toLowerCase()
   const pad: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '2px 0 28px' }
 
@@ -212,12 +221,21 @@ function ListView({ filter, items, wins, q, onReplied, onDismiss }: { filter: st
   }
 
   const sorted = [...list].sort((a, b) => (a.band === 'today' ? 0 : 1) - (b.band === 'today' ? 0 : 1))
+  if (sorted.length === 0 && winList.length === 0) {
+    return (
+      <div style={pad}>
+        {q
+          ? <InboxEmpty icon={Search} title="No matches" sub="Nothing here matches that search." />
+          : filter === 'needsyou'
+            ? <InboxEmpty icon={Check} title="You're all caught up" sub="Nothing is waiting on you right now." />
+            : <InboxEmpty icon={Check} title={`No ${label} right now`} sub={`When something shows up in ${label}, it lands here.`} />}
+      </div>
+    )
+  }
   return (
     <div style={pad}>
-      {sorted.length === 0
-        ? (q ? <InboxEmpty icon={Search} title="No matches" sub="Nothing here matches that search." />
-             : <InboxEmpty icon={Check} title={`No ${label} right now`} sub={`When something needs you in ${label}, it shows up here.`} />)
-        : sorted.map((i) => <Row key={i.id} item={i} onReplied={onReplied} onDismiss={onDismiss} />)}
+      {sorted.map((i) => <Row key={i.id} item={i} onReplied={onReplied} onDismiss={onDismiss} />)}
+      {winList.length > 0 && <><Divider label="Good to know" />{winList.map((w) => <WinLink key={w.id} w={w} />)}</>}
     </div>
   )
 }
@@ -276,30 +294,4 @@ function ReviewRow({ item, onReplied, onDismiss }: { item: Item; onReplied: (id:
 }
 function Stars({ n }: { n: number }) {
   return <span style={{ display: 'inline-flex', gap: 1 }}>{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={13} color={i <= n ? '#f5a623' : '#dfe3e1'} fill={i <= n ? '#f5a623' : 'none'} />)}</span>
-}
-
-/* ── HISTORY — same flat rows, grouped by day, with a sent-check avatar. */
-function HistoryView({ history, q }: { history: Hist[]; q: string }) {
-  const filtered = useMemo(() => history.filter((h) => !q || `${h.title} ${h.subtitle} ${h.outcome}`.toLowerCase().includes(q)), [history, q])
-  if (!filtered.length) return <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><InboxEmpty icon={Check} title="Nothing here yet" sub="Things you've handled — replies sent, plans shipped, sign-offs — show up here." /></div>
-  const days = ['Today', 'Yesterday', 'Earlier']
-  return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '2px 0 28px' }}>
-      {days.map((day) => {
-        const rows = filtered.filter((h) => h.day === day)
-        if (!rows.length) return null
-        return (
-          <div key={day}>
-            <Divider label={day} count={rows.length} />
-            {rows.map((h) => (
-              <NotifRow key={h.id} href={h.href ?? undefined} avatar={<div style={{ width: 48, height: 48, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={21} color={C.green} /></div>}>
-                <Lead bold={h.title} lines={2} />
-                <div style={{ fontSize: 12, color: C.faint, marginTop: 2 }}><b style={{ color: C.greenDk, fontWeight: 600 }}>{h.outcome}</b> · {h.subtitle}</div>
-              </NotifRow>
-            ))}
-          </div>
-        )
-      })}
-    </div>
-  )
 }
