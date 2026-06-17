@@ -23,6 +23,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { stripe } from '@/lib/stripe'  // lazy client — not constructed at build time
 import {
   ensureClientForStripeCustomer,
   grantFromCatalogItem,
@@ -30,10 +31,6 @@ import {
 } from '@/lib/billing-grants'
 
 export const runtime = 'nodejs'
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-02-24.acacia',
-})
 
 // Generic SupabaseClient (no generated DB types) -- the billing tables
 // from migration 055 are not in the generated types yet. Once the repo's

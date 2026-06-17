@@ -2,13 +2,25 @@ import Stripe from 'stripe'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY is not set')
+// Lazy init: construct the Stripe client on first use, not at module load, so
+// importing this file never requires STRIPE_SECRET_KEY at *build* time (e.g.
+// preview deploys without billing env). Production is unchanged — the key is
+// present and the client is built on the first request. Missing key throws at
+// request time (when billing is actually used), not during the build.
+let _stripe: Stripe | null = null
+function stripeClient(): Stripe {
+  if (_stripe) return _stripe
+  const key = process.env.STRIPE_SECRET_KEY
+  if (!key) throw new Error('STRIPE_SECRET_KEY is not set')
+  _stripe = new Stripe(key, { apiVersion: '2025-02-24.acacia', typescript: true })
+  return _stripe
 }
-
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2025-02-24.acacia',
-  typescript: true,
+export const stripe = new Proxy({} as Stripe, {
+  get(_t, prop) {
+    const c = stripeClient()
+    const v = (c as unknown as Record<string | symbol, unknown>)[prop]
+    return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(c) : v
+  },
 })
 
 // ============================================================
