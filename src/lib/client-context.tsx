@@ -14,6 +14,10 @@ interface ClientContextValue {
   enrolledServices: Set<ServiceArea>
   hasService: (area: ServiceArea) => boolean
   refresh: () => Promise<void>
+  /** Every location this owner can access (for the header location switcher). */
+  availableClients: { id: string; name: string }[]
+  /** Switch the active location (only among accessible ones; persisted). */
+  switchClient: (id: string) => void
 }
 
 const ClientContext = createContext<ClientContextValue>({
@@ -23,7 +27,11 @@ const ClientContext = createContext<ClientContextValue>({
   enrolledServices: new Set(),
   hasService: () => false,
   refresh: async () => {},
+  availableClients: [],
+  switchClient: () => {},
 })
+
+const SELECTED_KEY = 'apnosh:selected-client'
 
 // Cache key + TTL — keeps client data across navigations within the same
 // browser session so every page click doesn't re-fetch. Bumped to v2 when
@@ -79,6 +87,7 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
   const [client, setClient] = useState<Client | null>(cachedFresh ? cached!.client : null)
   const [isAdmin, setIsAdmin] = useState<boolean>(cachedFresh ? cached!.isAdmin : false)
   const [loading, setLoading] = useState(!cachedFresh)
+  const [availableClients, setAvailableClients] = useState<{ id: string; name: string }[]>([])
 
   const refresh = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -142,6 +151,26 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
           clientId = await ensureClientForBusiness(business.id as string)
         } catch { /* leave clientId null — handled below */ }
       }
+
+      // Multi-location: gather every location this owner can access (their own
+      // businesses + magic-link client_users rows). If they've picked one before
+      // and still have access, make it active — that's the header switcher.
+      try {
+        const [bizAll, cuAll] = await Promise.all([
+          supabase.from('businesses').select('client_id').eq('owner_id', user.id),
+          supabase.from('client_users').select('client_id').eq('auth_user_id', user.id),
+        ])
+        const ids = Array.from(new Set([...(bizAll.data ?? []), ...(cuAll.data ?? [])]
+          .map((r) => r.client_id as string | null).filter((x): x is string => !!x)))
+        const saved = typeof window !== 'undefined' ? localStorage.getItem(SELECTED_KEY) : null
+        if (saved && ids.includes(saved)) clientId = saved
+        if (ids.length) {
+          const { data: locRows } = await supabase.from('clients').select('id, name').in('id', ids)
+          setAvailableClients((locRows ?? []).map((r) => ({ id: r.id as string, name: (r.name as string) || 'Location' })))
+        } else {
+          setAvailableClients([])
+        }
+      } catch { /* leave the switcher single */ }
     }
 
     if (!clientId) {
@@ -206,8 +235,15 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
   const enrolledServices = resolveEnrolledServices(client?.services_active)
   const hasService = (area: ServiceArea) => hasServiceUtil(client?.services_active, area)
 
+  const switchClient = useCallback((id: string) => {
+    if (typeof window !== 'undefined') localStorage.setItem(SELECTED_KEY, id)
+    clearCache()
+    setLoading(true)
+    refresh()
+  }, [refresh])
+
   return (
-    <ClientContext.Provider value={{ client, loading, isAdmin, enrolledServices, hasService, refresh }}>
+    <ClientContext.Provider value={{ client, loading, isAdmin, enrolledServices, hasService, refresh, availableClients, switchClient }}>
       {children}
     </ClientContext.Provider>
   )

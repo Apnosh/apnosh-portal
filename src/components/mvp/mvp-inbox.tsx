@@ -50,10 +50,13 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
     return () => { live = false }
   }, [clientId])
 
-  // Deep link from elsewhere (e.g. Home's "Needs your approval" → ?tab=approvals).
+  // Deep links: Home's "Needs your approval" → ?tab=approvals; the header
+  // messages icon → ?chat=1 (opens the strategist chat sheet).
   useEffect(() => {
-    const t = new URLSearchParams(window.location.search).get('tab')
+    const p = new URLSearchParams(window.location.search)
+    const t = p.get('tab')
     if (t && SUBS.some((s) => s.key === t)) { setSeg('all'); setSub(t) }
+    if (p.get('chat') === '1') setChatOpen(true)
   }, [])
 
   if (error) return <Shell><Centered>Couldn&apos;t load your inbox: {error}</Centered></Shell>
