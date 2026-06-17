@@ -12,7 +12,7 @@
  * Under "All" the feed still leads with "Needs you" so urgent items surface
  * first. Wired to real data (/api/dashboard/inbox).
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { Check, Star, Loader2, Search, MoreHorizontal } from 'lucide-react'
 import { markInboxRead, replyToReview } from '@/app/dashboard/inbox/actions'
@@ -177,11 +177,31 @@ function NotifRow({ href, unread, time, onDismiss, onNav, avatar, children }: { 
 function IconAvatar({ emoji, danger }: { emoji: string; danger?: boolean }) {
   return <div style={{ width: 48, height: 48, borderRadius: '50%', background: danger ? C.coralSoft : C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{emoji}</div>
 }
+const clampStyle = (lines: number): React.CSSProperties => ({ display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical', overflow: 'hidden' })
+
+// Clamps to `lines`, then shows a "…more / See less" toggle only when the text
+// actually overflows (measured after layout). Works inside a row Link — the
+// toggle stops the click from navigating.
+function ExpandableText({ children, lines = 3, style }: { children: React.ReactNode; lines?: number; style?: React.CSSProperties }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [overflow, setOverflow] = useState(false)
+  useEffect(() => { const el = ref.current; if (el) setOverflow(el.scrollHeight - el.clientHeight > 2) }, [])
+  return (
+    <>
+      <div ref={ref} style={{ ...style, ...(expanded ? {} : clampStyle(lines)) }}>{children}</div>
+      {overflow && (
+        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpanded((v) => !v) }} style={{ marginTop: 4, background: 'none', border: 'none', padding: 0, color: C.mute, fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>{expanded ? 'See less' : '…more'}</button>
+      )}
+    </>
+  )
+}
+
 function Lead({ bold, rest, lines = 3 }: { bold: string; rest?: string; lines?: number }) {
   return (
-    <div style={{ fontSize: 14, lineHeight: 1.4, color: C.ink, display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+    <ExpandableText lines={lines} style={{ fontSize: 14, lineHeight: 1.4, color: C.ink }}>
       <b style={{ fontWeight: 700 }}>{bold}</b>{rest ? <span style={{ color: C.mute, fontWeight: 400 }}>{' '}{rest}</span> : null}
-    </div>
+    </ExpandableText>
   )
 }
 // Outlined action button (visual span; the row's own Link carries the nav).
@@ -276,7 +296,7 @@ function ReviewRow({ item, onReplied, onDismiss }: { item: Item; onReplied: (id:
       </div>
       <div style={{ marginTop: 4 }}><Stars n={r.rating} /></div>
       {r.text && (
-        <div style={{ marginTop: 9, background: C.preview, borderRadius: 12, padding: '10px 13px', fontSize: 13, color: C.ink2, lineHeight: 1.45, ...(open ? {} : { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }) }}>{r.text}</div>
+        <ExpandableText lines={3} style={{ marginTop: 9, background: C.preview, borderRadius: 12, padding: '10px 13px', fontSize: 13, color: C.ink2, lineHeight: 1.45 }}>{r.text}</ExpandableText>
       )}
       {!open ? (
         <button onClick={() => setOpen(true)} style={{ marginTop: 10, border: `1.5px solid ${C.greenDk}`, color: C.greenDk, background: '#fff', borderRadius: 999, padding: '6px 18px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Reply</button>
