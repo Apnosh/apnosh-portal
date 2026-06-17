@@ -1,184 +1,246 @@
 'use client'
 
 /**
- * MVP Campaigns — a DoorDash-style discovery feed. Instead of a builder front
- * door, the owner browses campaigns to run: a personalized "Recommended for
- * you" row (ranked by their real signals via /api/campaigns/recommend), then
- * category rows of every play. Tapping a card opens the campaign preview
- * (/dashboard/campaigns/preview/[id]) — what's included, the projected outcome,
- * and the cost — before building. Their running campaigns sit in a rail on top.
+ * MVP Campaigns — the design's campaign board, wired to real campaigns from
+ * /api/campaigns. List + Calendar toggle, All/Live/In production/Drafts/Done
+ * filters, and cards that open the campaign detail. Empty until the owner
+ * creates one via ＋ New (the build flow).
  */
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useClient } from '@/lib/client-context'
-import { Loader2, ArrowRight, Sparkles, ChevronRight, Check } from 'lucide-react'
+import {
+  Plus, Repeat, Check, TrendingUp, TrendingDown, Minus, ArrowRight, Clock,
+  CalendarDays, Eye, ChevronLeft, ChevronRight, Loader2,
+} from 'lucide-react'
 import { campaignCardVM, type CampCard, type SavedCampaign } from '@/lib/campaigns/view'
-import { CAMPAIGN_TEMPLATES, CATEGORY_META, TEMPLATE_BY_ID, type CampaignCategory, type CampaignTemplate } from '@/lib/campaigns/data/campaign-templates'
 
 const C = {
-  green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.3)',
-  ink: '#1d1d1f', ink2: '#3a3a3c', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', red: '#c0392b',
+  green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
+  ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea',
+  amber: '#8a5a0c', amberBg: '#fbf3e4', amberLine: '#eed9b3', red: '#c0392b', redBg: '#fdecea',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
-const CAT_ORDER: CampaignCategory[] = ['demand', 'capacity', 'retain', 'reputation']
-const CAT_ACCENT: Record<CampaignCategory, { bg: string; fg: string }> = {
-  demand: { bg: '#eaf1fb', fg: '#2f6fd0' },
-  capacity: { bg: '#fdeee3', fg: '#c2772f' },
-  retain: { bg: '#f1edfb', fg: '#6b4fd0' },
-  reputation: { bg: '#fdeef3', fg: '#c0567f' },
-}
-// Shown until /api/campaigns/recommend returns (or if it fails).
-const DEFAULT_RECS: { id: string; reason: string }[] = [
-  { id: 'fill-shifts', reason: 'Turn your quiet shifts into covers' },
-  { id: 'event', reason: 'Pack your next big date' },
-  { id: 'discover', reason: 'Be found by nearby diners' },
-  { id: 'reviews', reason: 'Lift your rating with fresh reviews' },
-  { id: 'winback', reason: 'Bring back guests who drifted' },
-]
-
 const ANIM = `
 @keyframes ccRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-.cc-rise{animation:ccRise .45s cubic-bezier(.2,.7,.3,1) both}
+.cc-stagger>*{animation:ccRise .45s cubic-bezier(.2,.7,.3,1) both}
+.cc-stagger>*:nth-child(1){animation-delay:.03s}.cc-stagger>*:nth-child(2){animation-delay:.08s}.cc-stagger>*:nth-child(3){animation-delay:.13s}.cc-stagger>*:nth-child(4){animation-delay:.18s}.cc-stagger>*:nth-child(5){animation-delay:.23s}.cc-stagger>*:nth-child(6){animation-delay:.28s}.cc-stagger>*:nth-child(7){animation-delay:.33s}.cc-stagger>*:nth-child(8){animation-delay:.38s}
 .cc-scroll{scrollbar-width:none}.cc-scroll::-webkit-scrollbar{display:none}
-@media (prefers-reduced-motion: reduce){.cc-rise{animation:none}}
+@media (prefers-reduced-motion: reduce){.cc-stagger>*{animation:none}}
 `
 
+type Tab = 'all' | 'live' | 'production' | 'draft' | 'done'
+
 export default function MvpCampaigns() {
-  const { client } = useClient()
+  const { client, loading: clientLoading } = useClient()
   const [saved, setSaved] = useState<SavedCampaign[] | null>(null)
-  const [recs, setRecs] = useState<{ id: string; reason: string }[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [view, setView] = useState<'list' | 'calendar'>('list')
+  const [tab, setTab] = useState<Tab>('all')
 
   useEffect(() => {
     if (!client?.id) return
     let live = true
+    setError(null)
     fetch(`/api/campaigns?clientId=${client.id}`)
-      .then((r) => (r.ok ? r.json() : { campaigns: [] }))
+      .then(async (r) => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Load failed (${r.status})`); return r.json() })
       .then((j) => { if (live) setSaved((j.campaigns ?? []) as SavedCampaign[]) })
-      .catch(() => { if (live) setSaved([]) })
-    fetch(`/api/campaigns/recommend?clientId=${client.id}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (live && j?.recommended?.length) setRecs(j.recommended) })
-      .catch(() => { /* keep defaults */ })
+      .catch((e) => { if (live) setError(e.message) })
     return () => { live = false }
   }, [client?.id])
 
-  const activeCards: CampCard[] = (saved ?? []).map(campaignCardVM)
-  const recList = (recs ?? DEFAULT_RECS)
-    .map((r) => ({ tpl: TEMPLATE_BY_ID[r.id] as CampaignTemplate | undefined, reason: r.reason }))
-    .filter((x): x is { tpl: CampaignTemplate; reason: string } => !!x.tpl)
+  const cards: CampCard[] = (saved ?? []).map(campaignCardVM)
+  const counts: Record<Tab, number> = {
+    all: cards.length,
+    live: cards.filter((c) => c.kind === 'live').length,
+    production: cards.filter((c) => c.pill === 'In production').length,
+    draft: cards.filter((c) => c.kind === 'draft').length,
+    done: cards.filter((c) => c.kind === 'done').length,
+  }
+  const shown = tab === 'all' ? cards
+    : tab === 'live' ? cards.filter((c) => c.kind === 'live')
+    : tab === 'production' ? cards.filter((c) => c.pill === 'In production')
+    : tab === 'draft' ? cards.filter((c) => c.kind === 'draft')
+    : cards.filter((c) => c.kind === 'done')
+
+  const loading = clientLoading || saved === null
+  const empty = !loading && cards.length === 0 && !error
 
   return (
-    <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 30 }}>
+    <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{ANIM}</style>
-      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', padding: '16px 18px 12px', borderBottom: `1px solid ${C.line}` }}>
-        <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 25, lineHeight: 1 }}>Campaigns</div>
-        <div style={{ fontSize: 12.5, color: C.mute, marginTop: 5 }}>Pick a campaign to run. We build it, you approve.</div>
+      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', padding: '14px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}` }}>
+        <div style={{ fontSize: 15, color: C.ink, fontWeight: 600 }}>Campaigns</div>
+        <Link href="/dashboard/campaigns/discover" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 99, padding: '8px 14px', fontWeight: 700, fontSize: 13.5 }}><Plus size={16} strokeWidth={2.5} /> New</Link>
       </div>
 
-      {/* your running campaigns */}
-      {activeCards.length > 0 && (
-        <Section title="Your campaigns">
-          <Rail>
-            {activeCards.map((c) => <ActiveMini key={c.key} c={c} />)}
-          </Rail>
-        </Section>
+      <div style={{ padding: '16px 18px 0' }}>
+        <p style={{ fontSize: 13.5, color: C.mute, margin: '0 0 16px' }}>Open any card to see what it costs, what it&apos;s driving, and how it&apos;s doing inside.</p>
+
+        {!empty && (
+          <div style={{ display: 'inline-flex', background: '#f1f3f2', borderRadius: 10, padding: 3, marginBottom: 18 }}>
+            {([['list', 'List'], ['calendar', 'Calendar']] as const).map(([k, l]) => {
+              const on = view === k
+              return <button key={k} onClick={() => setView(k)} style={{ border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 13, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 3px rgba(0,0,0,.08)' : 'none', cursor: 'pointer', transition: 'all .15s' }}>{l}</button>
+            })}
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: C.faint, fontSize: 13.5 }}><Loader2 size={16} className="animate-spin" /> Loading your campaigns…</div>
+        ) : error ? (
+          <div style={{ color: C.red, fontSize: 13.5, padding: '20px 0', textAlign: 'center' }}>Couldn&apos;t load campaigns: {error}</div>
+        ) : empty ? (
+          <EmptyState />
+        ) : view === 'calendar' ? (
+          <CampaignCalendar saved={saved ?? []} />
+        ) : (
+          <>
+            <div className="cc-scroll" style={{ display: 'flex', gap: 7, marginBottom: 16, overflowX: 'auto', paddingBottom: 2 }}>
+              {([['all', 'All'], ['live', 'Live'], ['production', 'In production'], ['draft', 'Drafts'], ['done', 'Done']] as const).map(([k, l]) => {
+                const on = tab === k; const n = counts[k]
+                return (
+                  <button key={k} onClick={() => setTab(k)} style={{ flexShrink: 0, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 7, border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', transition: 'all .15s' }}>
+                    {l}<span style={{ minWidth: 17, height: 17, padding: '0 5px', borderRadius: 99, background: on ? C.green : '#eef0ef', color: on ? '#fff' : C.faint, fontSize: 10.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{n}</span>
+                  </button>
+                )
+              })}
+            </div>
+            {shown.length === 0 ? (
+              <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 16, padding: '26px 16px', textAlign: 'center', color: C.faint, fontSize: 13.5 }}>Nothing in this filter.</div>
+            ) : (
+              <div className="cc-stagger" key={tab}>
+                {shown.map((c) => <CampaignCard key={c.key} c={c} />)}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function EmptyState() {
+  return (
+    <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 18, padding: '34px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+      <div style={{ width: 48, height: 48, borderRadius: 14, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} color={C.greenDk} /></div>
+      <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600 }}>No campaigns yet</div>
+      <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, maxWidth: 280 }}>Start one and your strategist runs it — you just approve. Pick a goal and we build the plan.</div>
+      <Link href="/dashboard/campaigns/discover" style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 12, padding: '11px 18px', fontWeight: 700, fontSize: 14 }}><Plus size={16} strokeWidth={2.5} /> New campaign</Link>
+    </div>
+  )
+}
+
+function Spark({ values, color }: { values: number[]; color: string }) {
+  if (!values || values.length < 2) return null
+  const max = Math.max(...values), min = Math.min(...values), range = max - min || 1
+  const w = 56, h = 20
+  const pts = values.map((v, i) => `${(i / (values.length - 1)) * w},${h - ((v - min) / range) * h}`).join(' ')
+  return <svg width={w} height={h} style={{ display: 'block' }}><polyline points={pts} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
+}
+
+function CampaignCard({ c }: { c: CampCard }) {
+  const tone = c.kind === 'draft'
+    ? { bar: '#cfd4d1', dot: '#aeb4b0', pillBg: '#eef0ef', pillC: C.mute }
+    : { bar: C.green, dot: C.green, pillBg: C.greenSoft, pillC: C.greenDk }
+  const ts = (t: 'up' | 'down' | 'flat') => t === 'up' ? { c: C.green, bg: C.greenSoft, I: TrendingUp } : t === 'down' ? { c: C.red, bg: C.redBg, I: TrendingDown } : { c: C.mute, bg: '#f0f0ee', I: Minus }
+  const fmtReach = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+
+  return (
+    <Link href={c.href} style={{ display: 'block', textDecoration: 'none', color: 'inherit', position: 'relative', overflow: 'hidden', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '11px 13px 10px', marginBottom: 9, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: tone.bar }} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: tone.pillBg, color: tone.pillC, borderRadius: 99, padding: '2px 8px', fontWeight: 700, fontSize: 11 }}>
+            {c.pillIcon === 'check' ? <Check size={11} strokeWidth={3} /> : c.pillIcon === 'calendar' ? <CalendarDays size={11} /> : <span style={{ width: 6, height: 6, borderRadius: 99, background: tone.dot, display: 'inline-block' }} />}{c.pill}
+          </span>
+          {c.kind !== 'done' && c.cost && (c.recurring
+            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#eef0ef', color: C.mute, borderRadius: 99, padding: '2px 8px', fontWeight: 700, fontSize: 10 }}><Repeat size={10} /> Recurring</span>
+            : <span style={{ background: '#eef0ef', color: C.mute, borderRadius: 99, padding: '2px 8px', fontWeight: 700, fontSize: 10 }}>One-time</span>)}
+        </div>
+        {c.cost && <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 14.5, color: C.ink, flexShrink: 0 }}>{c.cost}</span>}
+      </div>
+
+      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, color: C.ink, lineHeight: 1.15, marginBottom: 2 }}>{c.title}</div>
+      <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.35, marginBottom: 8 }}>{c.blurb}</div>
+
+      {c.perf?.type === 'trend' && (() => { const s = ts(c.perf.trend); return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: s.bg, color: s.c, borderRadius: 7, padding: '3px 8px', fontWeight: 700, fontSize: 11.5 }}><s.I size={12} /> {c.perf.metric}{c.perf.note ? ` ${c.perf.note}` : ''}</span>
+          <Spark values={c.perf.spark} color={s.c} />
+        </div>
+      ) })()}
+      {c.perf?.type === 'progress' && (() => { const pct = c.perf.total ? c.perf.live / c.perf.total : 0; return (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: C.ink }}>{c.perf.live} of {c.perf.total} parts live</span>
+            <span style={{ fontSize: 10.5, color: C.faint }}>{Math.round(pct * 100)}%</span>
+          </div>
+          <div style={{ height: 5, borderRadius: 99, background: '#eef0ef', overflow: 'hidden' }}><div style={{ width: `${Math.max(5, pct * 100)}%`, height: '100%', background: C.green, borderRadius: 99 }} /></div>
+        </div>
+      ) })()}
+      {c.perf?.type === 'ready' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+          <Clock size={14} color={C.mute} />
+          <span style={{ fontSize: 12.5 }}><b style={{ fontWeight: 700 }}>{c.perf.ready} parts ready</b> <span style={{ color: C.faint }}>· waiting to go live</span></span>
+        </div>
+      )}
+      {c.perf?.type === 'lift' && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.greenSoft, color: C.greenDk, borderRadius: 7, padding: '3px 8px', fontWeight: 700, fontSize: 11.5, marginBottom: 8 }}><TrendingUp size={12} /> +{c.perf.pct}% actions · {fmtReach(c.perf.reach)} reached</div>
       )}
 
-      {/* personalized recommendations */}
-      <Section title="Recommended for you" sub="Based on your numbers, reviews, and what's coming up">
-        <Rail>
-          {recList.map(({ tpl, reason }) => <RecCard key={tpl.id} tpl={tpl} reason={reason} />)}
-        </Rail>
-      </Section>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: C.greenDk, fontWeight: 700, fontSize: 12.5 }}>See how it&apos;s doing <ArrowRight size={14} /></span>
+        {c.review && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.amberBg, border: `0.5px solid ${C.amberLine}`, color: C.amber, borderRadius: 99, padding: '4px 10px', fontWeight: 700, fontSize: 11.5 }}><Eye size={12} /> Needs your OK</span>}
+      </div>
+    </Link>
+  )
+}
 
-      {/* categories */}
-      {CAT_ORDER.map((cat) => {
-        const tpls = CAMPAIGN_TEMPLATES.filter((t) => t.category === cat)
-        if (!tpls.length) return null
-        return (
-          <Section key={cat} title={CATEGORY_META[cat].label}>
-            <Rail>
-              {tpls.map((t) => <TplCard key={t.id} tpl={t} />)}
-            </Rail>
-          </Section>
-        )
-      })}
+/* Month calendar: campaign target dates as dots. */
+function CampaignCalendar({ saved }: { saved: SavedCampaign[] }) {
+  const [cur, setCur] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() } })
+  const first = new Date(cur.y, cur.m, 1)
+  const startDow = first.getDay()
+  const days = new Date(cur.y, cur.m + 1, 0).getDate()
+  const monthLabel = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const today = new Date()
+  const isToday = (d: number) => today.getFullYear() === cur.y && today.getMonth() === cur.m && today.getDate() === d
+
+  const marks: Record<number, number> = {}
+  for (const s of saved) {
+    const td = s.draft.targetDate
+    if (!td) continue
+    const d = new Date(td + 'T00:00:00')
+    if (d.getFullYear() === cur.y && d.getMonth() === cur.m) marks[d.getDate()] = (marks[d.getDate()] ?? 0) + 1
+  }
+
+  const cells: (number | null)[] = [...Array(startDow).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)]
+  return (
+    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <button onClick={() => setCur((c) => ({ y: c.m === 0 ? c.y - 1 : c.y, m: c.m === 0 ? 11 : c.m - 1 }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.mute, padding: 4 }}><ChevronLeft size={18} /></button>
+        <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 15 }}>{monthLabel}</span>
+        <button onClick={() => setCur((c) => ({ y: c.m === 11 ? c.y + 1 : c.y, m: c.m === 11 ? 0 : c.m + 1 }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.mute, padding: 4 }}><ChevronRight size={18} /></button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginBottom: 4 }}>
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: C.faint }}>{d}</div>)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
+        {cells.map((d, i) => (
+          <div key={i} style={{ aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, borderRadius: 9, background: d && isToday(d) ? C.greenSoft : 'transparent' }}>
+            {d && <span style={{ fontSize: 12, fontWeight: isToday(d) ? 700 : 500, color: isToday(d) ? C.greenDk : C.ink }}>{d}</span>}
+            <div style={{ display: 'flex', gap: 2, height: 4 }}>
+              {Array.from({ length: Math.min(3, marks[d ?? -1] ?? 0) }).map((_, j) => <span key={j} style={{ width: 4, height: 4, borderRadius: 99, background: C.green }} />)}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12, fontSize: 11, color: C.mute }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 7, height: 7, borderRadius: 99, background: C.green }} /> Campaign date</span>
+      </div>
     </div>
-  )
-}
-
-function Section({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
-  return (
-    <div className="cc-rise" style={{ marginTop: 20 }}>
-      <div style={{ padding: '0 18px', marginBottom: 11 }}>
-        <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18 }}>{title}</div>
-        {sub && <div style={{ fontSize: 12, color: C.faint, marginTop: 2 }}>{sub}</div>}
-      </div>
-      {children}
-    </div>
-  )
-}
-function Rail({ children }: { children: React.ReactNode }) {
-  return <div className="cc-scroll" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 18px 2px', scrollSnapType: 'x proximity' }}>{children}</div>
-}
-
-function IconTile({ emoji, cat, size = 46 }: { emoji: string; cat: CampaignCategory; size?: number }) {
-  const a = CAT_ACCENT[cat]
-  return <div style={{ width: size, height: size, borderRadius: 13, background: a.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.5, flexShrink: 0 }}>{emoji}</div>
-}
-function durationLabel(t: CampaignTemplate) { return t.durationWeeks ? `${t.durationWeeks} weeks` : 'Ongoing' }
-
-// Larger recommended card with the personalized "why".
-function RecCard({ tpl, reason }: { tpl: CampaignTemplate; reason: string }) {
-  return (
-    <Link href={`/dashboard/campaigns/preview/${tpl.id}`} style={{ scrollSnapAlign: 'start', flex: '0 0 78%', maxWidth: 290, minWidth: 0, textDecoration: 'none', color: 'inherit', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: 15, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 10 }}>
-        <IconTile emoji={tpl.icon} cat={tpl.category} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16.5, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tpl.name}</div>
-          <div style={{ fontSize: 12, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{tpl.tagline}</div>
-        </div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, background: C.greenSoft, borderRadius: 10, padding: '8px 10px', marginBottom: 10 }}>
-        <Sparkles size={13} color={C.greenDk} style={{ flexShrink: 0, marginTop: 1 }} />
-        <span style={{ fontSize: 12, color: C.greenDk, fontWeight: 600, lineHeight: 1.35 }}>{reason}</span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 'auto' }}>
-        <span style={{ fontSize: 11.5, color: C.faint }}>{tpl.projected} · {durationLabel(tpl)}</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: C.greenDk, fontWeight: 700, fontSize: 12.5, flexShrink: 0 }}>View <ArrowRight size={13} /></span>
-      </div>
-    </Link>
-  )
-}
-
-// Compact category card.
-function TplCard({ tpl }: { tpl: CampaignTemplate }) {
-  return (
-    <Link href={`/dashboard/campaigns/preview/${tpl.id}`} style={{ scrollSnapAlign: 'start', flex: '0 0 210px', maxWidth: 210, minWidth: 0, textDecoration: 'none', color: 'inherit', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 13, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
-      <IconTile emoji={tpl.icon} cat={tpl.category} size={40} />
-      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 14.5, lineHeight: 1.2, marginTop: 10 }}>{tpl.name}</div>
-      <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.35, marginTop: 3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{tpl.tagline}</div>
-      <div style={{ fontSize: 11, color: C.faint, marginTop: 8 }}>{durationLabel(tpl)}</div>
-    </Link>
-  )
-}
-
-// A running/draft campaign — links to its detail.
-function ActiveMini({ c }: { c: CampCard }) {
-  const live = c.kind === 'live'
-  return (
-    <Link href={c.href} style={{ scrollSnapAlign: 'start', flex: '0 0 232px', maxWidth: 232, minWidth: 0, textDecoration: 'none', color: 'inherit', position: 'relative', overflow: 'hidden', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '12px 13px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
-      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: c.kind === 'draft' ? '#cfd4d1' : C.green }} />
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: live || c.kind === 'done' ? C.greenSoft : '#eef0ef', color: live || c.kind === 'done' ? C.greenDk : C.mute, borderRadius: 99, padding: '2px 9px', fontWeight: 700, fontSize: 10.5 }}>
-          {c.kind === 'done' ? <Check size={10} strokeWidth={3} /> : <span style={{ width: 5, height: 5, borderRadius: 99, background: c.kind === 'draft' ? C.faint : C.green }} />}{c.pill}
-        </span>
-        {c.cost && <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 13, color: C.ink }}>{c.cost}</span>}
-      </div>
-      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 14.5, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.title}</div>
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: C.greenDk, fontWeight: 700, fontSize: 12, marginTop: 8 }}>{c.review ? 'Needs your OK' : "See how it's doing"} <ChevronRight size={13} /></div>
-    </Link>
   )
 }
