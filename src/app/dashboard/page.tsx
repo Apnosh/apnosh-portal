@@ -15,6 +15,7 @@ import { useClient } from '@/lib/client-context'
 import MvpHome, { type MvpHomeData } from '@/components/mvp/mvp-home'
 import { transformHome } from '@/components/mvp/home-transform'
 import MvpShell from '@/components/mvp/mvp-shell'
+import type { Suggestion } from '@/lib/dashboard/suggestions'
 
 // Design sample content — shown only where the client has no real approvals /
 // monthly review yet, so the home reads complete during this build phase.
@@ -28,11 +29,15 @@ export default function DashboardHomePage() {
   const { client, loading: clientLoading } = useClient()
   const [data, setData] = useState<MvpHomeData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // AI-tailored suggestion stack — fetched alongside the load and merged in
+  // when ready, so Home paints instantly with the deterministic set first.
+  const [aiSuggestions, setAiSuggestions] = useState<Suggestion[] | null>(null)
 
   useEffect(() => {
     if (!client?.id) return
     let live = true
     setError(null)
+    setAiSuggestions(null)
     fetch(`/api/dashboard/load?clientId=${client.id}`)
       .then(async (r) => {
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Load failed (${r.status})`)
@@ -46,8 +51,17 @@ export default function DashboardHomePage() {
         setData(d)
       })
       .catch((e) => { if (live) setError(e.message) })
+
+    // Tailored suggestions (server gathers richer signals + an AI rewrite).
+    // Soft: failures just leave the instant set from the transform in place.
+    fetch(`/api/dashboard/suggestions?clientId=${client.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (live && j?.suggestions?.length) setAiSuggestions(j.suggestions) })
+      .catch(() => { /* keep the instant set */ })
     return () => { live = false }
   }, [client?.id, client?.name])
+
+  const view = data ? (aiSuggestions ? { ...data, suggestions: aiSuggestions } : data) : null
 
   return (
     <MvpShell active="home" unread={(data?.approvals?.length ?? 0) > 0}>
@@ -55,8 +69,8 @@ export default function DashboardHomePage() {
         <Centered>Loading your numbers…</Centered>
       ) : error ? (
         <Centered>Couldn&apos;t load: {error}</Centered>
-      ) : data ? (
-        <MvpHome data={data} showHeader={false} />
+      ) : view ? (
+        <MvpHome data={view} showHeader={false} clientId={client?.id} />
       ) : (
         <Centered>No client found for this account.</Centered>
       )}

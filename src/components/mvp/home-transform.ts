@@ -7,6 +7,7 @@
  */
 
 import type { MvpHomeData, MetricView } from './mvp-home'
+import { buildCandidates, markLead, type SuggestionFacts } from '@/lib/dashboard/suggestions'
 
 export interface HomeInstance { vals: (number | null)[]; start: string; total: number; breakdown: { label: string; value: string; icon: string }[] }
 export interface HomeMetric { key: string; label: string; sub: string; fmt: string; hasData: boolean; week: HomeInstance[]; month: HomeInstance[] }
@@ -140,6 +141,17 @@ export function transformHome(
     }
   })
 
+  // Instant suggestion stack from the data already in hand (approvals, primary
+  // metric, next planning moment). The home page enriches this asynchronously
+  // with the AI-tailored set from /api/dashboard/suggestions.
+  const firstPlan = (comingUp ?? []).find((e) => e.queuedCount === 0)
+  const facts: SuggestionFacts = {
+    approvalsCount: approvals.length,
+    metric: primary ? { label: primary.tabLabel, weekPct: primary.weekPct, monthPct: primary.monthPct } : null,
+    plan: firstPlan ? { label: firstPlan.label, daysLabel: planLabel(firstPlan.daysUntil), hook: firstPlan.hook } : null,
+  }
+  const suggestions = markLead(buildCandidates(facts).slice(0, 5))
+
   return {
     greeting,
     avatarText,
@@ -147,6 +159,7 @@ export function transformHome(
     metrics: views,
     approvals,
     signal,
+    suggestions,
     review: null,
     planner,
   }

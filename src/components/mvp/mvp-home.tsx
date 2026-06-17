@@ -15,10 +15,11 @@
 import {
   Bell, Sparkles, Check, Plus, TrendingUp, TrendingDown,
   ChevronRight, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
-  Heart, Star, MessageCircle, Mail, Eye, Users,
+  Heart, Star, MessageCircle, Mail, Eye, Users, Plug,
 } from 'lucide-react'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import type { Suggestion } from '@/lib/dashboard/suggestions'
 
 /* Theme tokens lifted from the design's `C` palette. */
 const C = {
@@ -86,6 +87,8 @@ export interface MvpHomeData {
   avatarImage?: string
   metrics: MetricView[]
   signal: { state: 'recommendation' | 'ontrack'; metric?: string; message?: string }
+  /** Tailored "stack" cards shown at the top of Home (one reads as "Do this next"). */
+  suggestions?: Suggestion[]
   approvals: { id: string; tag: string; timing: string; title: string; subtitle: string; emoji?: string; image?: string }[]
   review: { prevMonthLabel: string; cycleLabel: string; budget: number } | null
   planner?: { id: string; day: string; mon: string; daysLabel: string; label: string; hook: string; planned: boolean }[]
@@ -97,10 +100,9 @@ const TILE_ICON: Record<string, React.ComponentType<{ size?: number; color?: str
   message: MessageCircle, mail: Mail, calendar: CalendarDays, eye: Eye, users: Users,
 }
 
-export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData; showHeader?: boolean }) {
+export default function MvpHome({ data, showHeader = true, clientId }: { data: MvpHomeData; showHeader?: boolean; clientId?: string }) {
   const metrics = data.metrics ?? []
   const [reviewHidden, setReviewHidden] = useState(false)
-  const [actionDone, setActionDone] = useState(data.signal.state !== 'recommendation')
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeIdx, setActiveIdx] = useState(0)
   const onScroll = () => {
@@ -208,28 +210,10 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
           See all insights · full year →
         </a>
 
-        {/* DO THIS NEXT */}
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.amber, marginBottom: 11 }}>Do this next</div>
-        {!actionDone && data.signal.state === 'recommendation' ? (
-          <div style={{ background: C.amberBg, border: `0.5px solid ${C.amberLine}`, borderRadius: 18, padding: 16, marginBottom: 24 }}>
-            <div style={{ display: 'flex', gap: 13, marginBottom: 14 }}>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fff', border: `0.5px solid ${C.amberLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={19} color={C.amberBtn} /></div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 19, lineHeight: 1.2, color: C.ink, marginBottom: 6 }}>Your {data.signal.metric} slipped this week</div>
-                <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5 }}>{data.signal.message}</div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <button style={{ flex: 1, background: C.amberBtn, color: '#fff', border: 'none', borderRadius: 12, padding: '12px 16px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><Plus size={16} />Request a post</button>
-              <button onClick={() => setActionDone(true)} style={{ background: 'transparent', color: C.amber, border: 'none', borderRadius: 12, padding: '12px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Not now</button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ background: C.amberBg, border: `0.5px solid ${C.amberLine}`, borderRadius: 18, padding: 16, marginBottom: 24, display: 'flex', gap: 13, alignItems: 'center' }}>
-            <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fff', border: `0.5px solid ${C.amberLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={19} color={C.amberBtn} /></div>
-            <div style={{ fontSize: 13.5, lineHeight: 1.4, color: C.mute }}><b style={{ color: C.ink }}>You&apos;re on track.</b> Nothing else needs you right now.</div>
-          </div>
-        )}
+        {/* SUGGESTIONS — a small Robinhood-style stack of tailored cards. One
+            reads as "Do this next"; the rest are timely info or genuine
+            recommendations drawn from this restaurant's own signals. */}
+        <SuggestionStack items={data.suggestions ?? []} clientId={clientId} />
 
         {/* NEEDS YOUR APPROVAL */}
         {data.approvals.length > 0 && (
@@ -290,6 +274,102 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
       </div>
     </div>
   )
+}
+
+/* ── SUGGESTION STACK ──────────────────────────────────────────────────────
+   Robinhood-style: a swipeable row of tailored cards, the first reading as
+   "Do this next". Cards are dismissable (remembered for 3 days, so a quick
+   "not now" sticks without burying something that's still relevant later). */
+const ACCENT: Record<string, { bg: string; border: string; fg: string }> = {
+  amber: { bg: '#fbf3e4', border: '#eed9b3', fg: '#bd7e16' },
+  green: { bg: '#eaf7f3', border: 'rgba(74,189,152,0.32)', fg: '#2e9a78' },
+  blue: { bg: '#eef3fc', border: '#cfe0f5', fg: '#2f6fd0' },
+  coral: { bg: '#f8efe9', border: '#ecd4c8', fg: '#a85c3c' },
+  violet: { bg: '#f1edfb', border: '#ddd2f3', fg: '#6b4fd0' },
+}
+const SUG_ICON: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
+  plug: Plug, star: Star, sparkles: Sparkles, message: MessageCircle, bell: Bell,
+  calendar: CalendarDays, plus: Plus, trendingDown: TrendingDown, trendingUp: TrendingUp,
+}
+const DISMISS_TTL = 3 * 24 * 60 * 60 * 1000 // 3 days
+
+function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: string }) {
+  const key = `apnosh:dismissed-suggestions:${clientId || 'default'}`
+  const [dismissed, setDismissed] = useState<Record<string, number>>({})
+  const [loaded, setLoaded] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [idx, setIdx] = useState(0)
+
+  useEffect(() => {
+    try {
+      const obj = JSON.parse(localStorage.getItem(key) || '{}') as Record<string, number>
+      const cutoff = Date.now() - DISMISS_TTL
+      const fresh: Record<string, number> = {}
+      for (const [id, ts] of Object.entries(obj)) if (ts > cutoff) fresh[id] = ts
+      setDismissed(fresh)
+    } catch { /* ignore */ }
+    setLoaded(true)
+  }, [key])
+
+  const visible = useMemo(() => items.filter((s) => !dismissed[s.id]).slice(0, 5), [items, dismissed])
+
+  const dismiss = (id: string) => setDismissed((prev) => {
+    const next = { ...prev, [id]: Date.now() }
+    try { localStorage.setItem(key, JSON.stringify(next)) } catch { /* ignore */ }
+    return next
+  })
+  const onScroll = () => {
+    const el = scrollRef.current; if (!el) return
+    const first = el.firstElementChild as HTMLElement | null
+    const step = first ? first.clientWidth + 10 : el.clientWidth
+    const i = Math.round(el.scrollLeft / Math.max(1, step))
+    setIdx((p) => (p === i ? p : i))
+  }
+
+  if (!loaded) return null
+  if (visible.length === 0) {
+    return (
+      <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: 16, marginBottom: 22, display: 'flex', gap: 13, alignItems: 'center' }}>
+        <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={19} color={C.greenDk} /></div>
+        <div style={{ fontSize: 13.5, lineHeight: 1.4, color: C.mute }}><b style={{ color: C.ink }}>You&apos;re all caught up.</b> Nothing needs you right now.</div>
+      </div>
+    )
+  }
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div ref={scrollRef} onScroll={onScroll} className="mvp-swipe" style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: 2 }}>
+        {visible.map((s) => <SuggestionCard key={s.id} s={s} solo={visible.length === 1} onDismiss={() => dismiss(s.id)} />)}
+      </div>
+      {visible.length > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
+          {visible.map((s, i) => <span key={s.id} style={{ width: i === idx ? 18 : 6, height: 6, borderRadius: 99, background: i === idx ? C.green : C.line, transition: 'width .2s, background .2s' }} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SuggestionCard({ s, solo, onDismiss }: { s: Suggestion; solo: boolean; onDismiss: () => void }) {
+  const a = ACCENT[s.accent] ?? ACCENT.amber
+  const Icon = SUG_ICON[s.icon] ?? Sparkles
+  const card: React.CSSProperties = { position: 'relative', flex: solo ? '0 0 100%' : '0 0 86%', minWidth: 0, scrollSnapAlign: 'start', background: a.bg, border: `0.5px solid ${a.border}`, borderRadius: 18, padding: 16, boxSizing: 'border-box' }
+  const inner = (
+    <>
+      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDismiss() }} aria-label="Dismiss" style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,0.04)', color: C.faint, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><X size={14} /></button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 11, background: '#fff', border: `0.5px solid ${a.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={18} color={a.fg} /></div>
+        <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.07em', color: a.fg }}>{s.eyebrow}</span>
+      </div>
+      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.22, color: C.ink, marginBottom: 5, paddingRight: 14 }}>{s.title}</div>
+      <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, marginBottom: s.cta ? 13 : 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.body}</div>
+      {s.cta && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: a.fg, color: '#fff', borderRadius: 99, padding: '9px 15px', fontWeight: 700, fontSize: 12.5 }}>{s.cta} <ChevronRight size={14} /></span>
+      )}
+    </>
+  )
+  return s.href
+    ? <Link href={s.href} style={{ ...card, textDecoration: 'none', display: 'block' }}>{inner}</Link>
+    : <div style={card}>{inner}</div>
 }
 
 /* Thumb — ported from the design: a rounded preview that shows an emoji
