@@ -41,7 +41,9 @@ export default function ReviewPage() {
   const [text, setText] = useState('')
   const [tone, setTone] = useState('friendly')
   const [drafting, setDrafting] = useState(false)
+  const [draftErr, setDraftErr] = useState<string | null>(null)
   const [posting, setPosting] = useState(false)
+  const [postErr, setPostErr] = useState<string | null>(null)
   const [posted, setPosted] = useState(false)
 
   useEffect(() => {
@@ -59,20 +61,24 @@ export default function ReviewPage() {
 
   const draft = async () => {
     if (drafting) return
-    setDrafting(true)
+    setDraftErr(null); setDrafting(true)
     try {
       const res = await fetch('/api/dashboard/reviews/draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reviewId: id, tone }) })
-      const j = await res.json()
+      const j = await res.json().catch(() => ({}))
       if (res.ok && j.reply) { setText(j.reply); setPosted(false) }
-    } catch { /* leave the current text */ }
+      else setDraftErr(j.error || 'Could not write a reply. Try again.')
+    } catch { setDraftErr('Network problem. Try again.') }
     setDrafting(false)
   }
   const post = async () => {
     if (!text.trim() || posting) return
-    setPosting(true)
-    const res = await replyToReview(id, text.trim())
+    setPostErr(null); setPosting(true)
+    try {
+      const res = await replyToReview(id, text.trim())
+      if (res.ok) setPosted(true)
+      else setPostErr(res.error || 'Could not post your reply. Try again.')
+    } catch { setPostErr('Could not post your reply. Try again.') }
     setPosting(false)
-    if (res.ok) setPosted(true)
   }
 
   const tone6 = review ? ['#4abd98', '#a85c3c', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b'][(review.author.charCodeAt(0) || 0) % 6] : C.green
@@ -82,7 +88,7 @@ export default function ReviewPage() {
       <div style={{ width: '100%', maxWidth: 480, background: '#fff', display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden', boxShadow: '0 0 40px rgba(0,0,0,0.06)' }}>
         {/* header */}
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '12px 12px 12px 6px', borderBottom: `0.5px solid ${C.line}` }}>
-          <button onClick={() => router.back()} aria-label="Back" style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'none', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ChevronLeft size={24} /></button>
+          <button onClick={() => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard/inbox?tab=reviews') }} aria-label="Back" style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'none', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ChevronLeft size={24} /></button>
           <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18 }}>Review</div>
         </div>
 
@@ -125,6 +131,7 @@ export default function ReviewPage() {
             <button onClick={draft} disabled={drafting} style={{ marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: `1.5px solid ${C.green}`, background: C.greenSoft, color: C.greenDk, borderRadius: 12, padding: '12px', fontWeight: 700, fontSize: 14, cursor: drafting ? 'default' : 'pointer' }}>
               {drafting ? <><Loader2 size={16} className="animate-spin" /> Writing a reply…</> : <><Sparkles size={16} /> {text.trim() ? 'Redraft for me' : 'Draft a reply for me'}</>}
             </button>
+            {draftErr && <div style={{ fontSize: 12.5, color: '#c0564f', marginTop: 8 }}>{draftErr}</div>}
 
             <textarea
               value={text}
@@ -137,6 +144,7 @@ export default function ReviewPage() {
             <button onClick={post} disabled={!text.trim() || posting} style={{ marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: 'none', background: text.trim() ? GRAD : '#e3e9e6', color: '#fff', borderRadius: 12, padding: '14px', fontWeight: 700, fontSize: 15, cursor: text.trim() && !posting ? 'pointer' : 'default' }}>
               {posting ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}{posted ? 'Update reply' : 'Post reply'}
             </button>
+            {postErr && <div style={{ fontSize: 12.5, color: '#c0564f', textAlign: 'center', marginTop: 10 }}>{postErr}</div>}
             <div style={{ fontSize: 11.5, color: C.faint, textAlign: 'center', marginTop: 10, lineHeight: 1.45 }}>
               Your reply is recorded here. Posting it publicly to {sourceLabel(review.source)} is coming soon.
             </div>

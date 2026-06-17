@@ -41,13 +41,17 @@ export async function POST(req: NextRequest) {
   const { data: client } = await admin.from('clients').select('name').eq('id', r.client_id as string).maybeSingle()
   const businessName = (client?.name as string) || 'our restaurant'
   const author = (r.author_name as string) || 'a guest'
-  const first = author.split(' ')[0]
+  const rawName = ((r.author_name as string | null) ?? '').trim()
+  const first = rawName ? rawName.split(' ')[0] : ''
   const rating = Number(r.rating ?? 0)
   const source = (r.source as string) ?? 'google'
 
+  const greet = first
+    ? `- Greet ${first} by name where it feels natural, and thank them.`
+    : `- The reviewer left no name, so do not invent or use a name. Open warmly (like "Hi there" or "Thank you so much") and thank them.`
   const system = `You are the owner of ${businessName}, a restaurant, writing a PUBLIC reply to a customer review on ${source}. Write in the owner's own voice: ${TONES[tone]}.
 Rules:
-- Greet ${first} by name where it feels natural, and thank them.
+${greet}
 - For a positive review (4 or 5 stars), be warm and specific, and invite them back.
 - For a critical review (3 stars or fewer), take it seriously, apologize where fair, and offer to make it right. Never be defensive.
 - No em dashes. Short, plain sentences. Sound like a real person, not a form letter.
