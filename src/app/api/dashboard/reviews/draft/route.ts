@@ -14,16 +14,16 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 20
 
 const TONES: Record<string, string> = {
-  friendly: 'warm and friendly, like a real owner who genuinely cares',
-  apologetic: 'gracious and apologetic — own the issue and offer to make it right',
-  professional: 'polished and professional, brief and courteous',
+  winback: 'focused on winning this guest back: be genuinely sorry, take ownership of what went wrong, and offer to make it right and earn another visit',
+  thankful: 'warm and grateful: thank them specifically, make them feel valued, and invite them back',
+  professional: 'polished and professional, measured and courteous',
   short: 'very short, just two or three warm sentences',
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const reviewId: string | undefined = body.reviewId
-  const tone: string = TONES[body.tone] ? body.tone : 'friendly'
+  const tone: string = TONES[body.tone] ? body.tone : 'thankful'
   if (!reviewId) return NextResponse.json({ error: 'reviewId required' }, { status: 400 })
 
   const admin = createAdminClient()

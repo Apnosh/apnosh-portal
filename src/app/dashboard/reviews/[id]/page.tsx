@@ -22,10 +22,10 @@ const GRAD = 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)'
 interface ReviewData { id: string; author: string; rating: number; text: string; source: string; postedAt: string | null; responseText: string | null; respondedAt: string | null }
 
 const TONES = [
-  { key: 'friendly', label: 'Friendly' },
-  { key: 'apologetic', label: 'Make it right' },
-  { key: 'professional', label: 'Professional' },
-  { key: 'short', label: 'Short' },
+  { key: 'winback', label: 'Win them back' },
+  { key: 'thankful', label: 'Thank them' },
+  { key: 'professional', label: 'Keep professional' },
+  { key: 'short', label: 'Keep it short' },
 ]
 
 function sourceLabel(s: string) { return s === 'instagram' ? 'Instagram' : s === 'yelp' ? 'Yelp' : s === 'facebook' ? 'Facebook' : 'Google' }
@@ -39,7 +39,7 @@ export default function ReviewPage() {
   const [review, setReview] = useState<ReviewData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [text, setText] = useState('')
-  const [tone, setTone] = useState('friendly')
+  const [tone, setTone] = useState('thankful')
   const [drafting, setDrafting] = useState(false)
   const [draftErr, setDraftErr] = useState<string | null>(null)
   const [posting, setPosting] = useState(false)
@@ -53,6 +53,8 @@ export default function ReviewPage() {
       .then((j: { review: ReviewData }) => {
         if (!live) return
         setReview(j.review)
+        // Sensible default: an unhappy review leans "Win them back", a happy one "Thank them".
+        if (j.review.rating && j.review.rating <= 3) setTone('winback')
         if (j.review.responseText) { setText(j.review.responseText); setPosted(true) }
       })
       .catch((e) => { if (live) setError(e.message) })
