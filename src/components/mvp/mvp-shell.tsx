@@ -8,6 +8,7 @@
  */
 
 import BottomNav, { type NavKey } from './bottom-nav'
+import AppHeader from './app-header'
 
 const SHELL_CSS = `
 .mvp-shell{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:60;background:#f0f0f3;display:flex;justify-content:center;overflow:hidden}
@@ -16,11 +17,12 @@ const SHELL_CSS = `
 @media (min-width:560px){.mvp-frame{max-width:480px;box-shadow:0 0 40px rgba(0,0,0,0.06)}}
 `
 
-export default function MvpShell({ active, children }: { active: NavKey; children: React.ReactNode }) {
+export default function MvpShell({ active, unread, children }: { active: NavKey; unread?: boolean; children: React.ReactNode }) {
   return (
     <div className="mvp-shell">
       <style>{SHELL_CSS}</style>
       <div className="mvp-frame">
+        <AppHeader unread={unread} />
         <div className="mvp-frame-scroll">{children}</div>
         <BottomNav active={active} />
       </div>

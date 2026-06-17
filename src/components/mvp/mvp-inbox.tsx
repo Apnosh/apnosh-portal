@@ -50,6 +50,12 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
     return () => { live = false }
   }, [clientId])
 
+  // Deep link from elsewhere (e.g. Home's "Needs your approval" → ?tab=approvals).
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    if (t && SUBS.some((s) => s.key === t)) { setSeg('all'); setSub(t) }
+  }, [])
+
   if (error) return <Shell><Centered>Couldn&apos;t load your inbox: {error}</Centered></Shell>
   if (!data) return <Shell><Centered><Loader2 size={16} className="animate-spin" /> Loading your inbox…</Centered></Shell>
 

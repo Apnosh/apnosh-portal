@@ -18,6 +18,7 @@ import {
   Heart, Star, MessageCircle, Mail, Eye, Users,
 } from 'lucide-react'
 import { useState, useRef } from 'react'
+import Link from 'next/link'
 
 /* Theme tokens lifted from the design's `C` palette. */
 const C = {
@@ -128,6 +129,7 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
       )}
 
       <div style={{ padding: '16px 18px 0' }}>
+        {!showHeader && <div style={{ fontSize: 15, color: C.mute, margin: '2px 0 14px' }}>{data.greeting}</div>}
         {/* monthly review nudge */}
         {data.review && !reviewHidden && (
           <div className="mvp-rise mvp-reviewGlow" style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 18, padding: '13px 16px', color: '#fff' }}>
@@ -235,19 +237,19 @@ export default function MvpHome({ data, showHeader = true }: { data: MvpHomeData
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Needs your approval</span>
               <span style={{ width: 18, height: 18, borderRadius: 99, background: C.ink, color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{data.approvals.length}</span>
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: C.faint }}>only you can do this</span>
+              <Link href="/dashboard/inbox?tab=approvals" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>Open inbox <ChevronRight size={13} /></Link>
             </div>
             <div style={{ marginBottom: 10 }}>
               {data.approvals.map((a) => (
-                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
+                <Link key={a.id} href="/dashboard/inbox?tab=approvals" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
                   <Thumb emoji={a.emoji} image={a.image} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', color: C.faint, marginBottom: 2 }}>{a.tag} <span style={{ fontWeight: 600 }}>· {a.timing}</span></div>
                     <div style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</div>
                     <div style={{ fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.subtitle}</div>
                   </div>
-                  <button style={{ background: '#fff', color: C.ink, border: `0.5px solid ${C.line}`, borderRadius: 99, padding: '9px 18px', fontWeight: 600, fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>Review</button>
-                </div>
+                  <span style={{ background: '#fff', color: C.ink, border: `0.5px solid ${C.line}`, borderRadius: 99, padding: '9px 18px', fontWeight: 600, fontSize: 13, flexShrink: 0 }}>Review</span>
+                </Link>
               ))}
             </div>
           </>

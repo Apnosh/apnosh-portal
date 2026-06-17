@@ -50,13 +50,13 @@ export default function DashboardHomePage() {
   }, [client?.id, client?.name])
 
   return (
-    <MvpShell active="home">
+    <MvpShell active="home" unread={(data?.approvals?.length ?? 0) > 0}>
       {clientLoading || (!data && !error) ? (
         <Centered>Loading your numbers…</Centered>
       ) : error ? (
         <Centered>Couldn&apos;t load: {error}</Centered>
       ) : data ? (
-        <MvpHome data={data} />
+        <MvpHome data={data} showHeader={false} />
       ) : (
         <Centered>No client found for this account.</Centered>
       )}
