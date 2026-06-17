@@ -8,7 +8,7 @@
  * always comes back as the whole play, never a thin list.
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, X, ArrowRight, Loader2, Check, Sparkles } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
@@ -41,6 +41,15 @@ export default function NewCampaignPage() {
   const [error, setError] = useState<string | null>(null)
 
   const tpl = CAMPAIGN_TEMPLATES.find((t) => t.id === tplId) ?? null
+
+  // Deep link from the discovery preview: /new?template=<id> jumps straight to
+  // the spec step for that campaign (the discovery feed is the picker now).
+  useEffect(() => {
+    const tid = new URLSearchParams(window.location.search).get('template')
+    if (!tid) return
+    const t = CAMPAIGN_TEMPLATES.find((x) => x.id === tid)
+    if (t) { setTplId(t.id); setSpec({ audience: t.defaultAudienceIds.join(',') }); setStep('spec') }
+  }, [])
 
   const pickTemplate = (t: CampaignTemplate) => {
     setTplId(t.id)
