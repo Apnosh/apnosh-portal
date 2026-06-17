@@ -4,16 +4,15 @@
  * Owner Inbox — redesigned IA (ported from apnosh-mvp, made more intuitive).
  *
  * Two segments: ALL (everything that needs you, in Today / This week / Good-to-
- * know bands, with type filter chips) and HISTORY (what you've handled). The
- * owner↔team strategist chat is a header icon that opens a slide-in sheet, not
- * a tab. A search icon searches across both. Wired to real data
- * (/api/dashboard/inbox) and real server actions.
+ * know bands, with type filter chips) and HISTORY (what you've handled). A
+ * search icon searches across both. Messaging lives on its own screen now
+ * (the header messages icon → /dashboard/messages), so the inbox is purely the
+ * things that need the owner. Wired to real data (/api/dashboard/inbox).
  */
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Send, Check, Star, Loader2, MessageCircle, Search, X, ChevronRight } from 'lucide-react'
-import { markInboxRead, replyToReview, startStrategistThread } from '@/app/dashboard/inbox/actions'
-import { sendMessage } from '@/lib/actions'
+import { Check, Star, Loader2, Search, ChevronRight } from 'lucide-react'
+import { markInboxRead, replyToReview } from '@/app/dashboard/inbox/actions'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenBar: '#34c759',
@@ -28,8 +27,7 @@ interface Review { reviewId: string; rating: number; author: string; source: str
 interface Item { id: string; kind: string; chip: Chip; band: 'today' | 'week'; icon: string; title: string; subtitle: string; time: string; href: string; status?: string; unread: boolean; review?: Review }
 interface Win { id: string; icon: string; title: string; body: string; time: string; link: string | null; read: boolean }
 interface Hist { id: string; icon: string; chip: string; title: string; subtitle: string; outcome: string; day: string; whenIso: string; href?: string }
-interface Msg { id: string; from: 'owner' | 'team'; text: string; createdAt: string }
-interface InboxData { items: Item[]; wins: Win[]; history: Hist[]; thread: { threadId: string | null; messages: Msg[] }; counts: { needsYou: number; today: number; chatUnread: boolean } }
+interface InboxData { items: Item[]; wins: Win[]; history: Hist[]; counts: { needsYou: number; today: number } }
 
 export default function MvpInbox({ clientId }: { clientId: string }) {
   const [data, setData] = useState<InboxData | null>(null)
@@ -38,7 +36,6 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
   const [sub, setSub] = useState<string>('all')              // category sub-filter within All
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
-  const [chatOpen, setChatOpen] = useState(false)
   const [items, setItems] = useState<Item[]>([])
 
   useEffect(() => {
@@ -50,13 +47,11 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
     return () => { live = false }
   }, [clientId])
 
-  // Deep links: Home's "Needs your approval" → ?tab=approvals; the header
-  // messages icon → ?chat=1 (opens the strategist chat sheet).
+  // Deep link: Home's "Needs your approval" → ?tab=approvals.
   useEffect(() => {
     const p = new URLSearchParams(window.location.search)
     const t = p.get('tab')
     if (t && SUBS.some((s) => s.key === t)) { setSeg('all'); setSub(t) }
-    if (p.get('chat') === '1') setChatOpen(true)
   }, [])
 
   if (error) return <Shell><Centered>Couldn&apos;t load your inbox: {error}</Centered></Shell>
@@ -81,7 +76,6 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
           </div>
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             <GlyphBtn onClick={() => setSearchOpen((s) => !s)} active={searchOpen}><Search size={18} /></GlyphBtn>
-            <GlyphBtn onClick={() => setChatOpen(true)} dot={data.counts.chatUnread}><MessageCircle size={18} /></GlyphBtn>
           </div>
         </div>
         {searchOpen && (
@@ -104,8 +98,7 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
         ? <HistoryView history={data.history} q={q} />
         : <ListView sub={sub} items={items} wins={data.wins} q={q} onReplied={onReplied} />}
 
-      {chatOpen && <ChatSheet initial={data.thread} onClose={() => setChatOpen(false)} />}
-      <style>{`@keyframes inrise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.inrise{animation:inrise .28s ease both}@keyframes sheetin{from{transform:translateY(100%)}to{transform:none}}`}</style>
+      <style>{`@keyframes inrise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.inrise{animation:inrise .28s ease both}`}</style>
     </Shell>
   )
 }
@@ -133,7 +126,7 @@ function SegBtn({ label, active, onClick }: { label: string; active: boolean; on
 // time. The "All" sub-filter groups its list into "Needs you" then "The rest".
 const SUBS: { key: string; label: string }[] = [
   { key: 'all', label: 'All' }, { key: 'approvals', label: 'Approvals' }, { key: 'reviews', label: 'Reviews' },
-  { key: 'todos', label: 'To-dos' }, { key: 'fix', label: 'Fix-its' },
+  { key: 'todos', label: 'Updates' }, { key: 'fix', label: 'Fix-its' },
 ]
 function TabPill({ label, count, active, onClick }: { label: string; count?: number; active: boolean; onClick: () => void }) {
   return (
@@ -302,58 +295,6 @@ function HistoryView({ history, q }: { history: Hist[]; q: string }) {
           </div>
         )
       })}
-    </div>
-  )
-}
-
-/* ── CHAT SHEET (owner ↔ Apnosh team) ──────────────────────────── */
-function ChatSheet({ initial, onClose }: { initial: { threadId: string | null; messages: Msg[] }; onClose: () => void }) {
-  const [threadId, setThreadId] = useState(initial.threadId)
-  const [thread, setThread] = useState<Msg[]>(initial.messages)
-  const [input, setInput] = useState('')
-  const [sending, setSending] = useState(false)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  useEffect(() => { scrollRef.current?.scrollTo({ top: 1e9, behavior: 'smooth' }) }, [thread])
-  const send = async () => {
-    const text = input.trim()
-    if (!text || sending) return
-    setInput(''); setSending(true)
-    setThread((t) => [...t, { id: `tmp-${Date.now()}`, from: 'owner', text, createdAt: new Date().toISOString() }])
-    try {
-      if (threadId) await sendMessage(threadId, text)
-      else { const r = await startStrategistThread(text); if (r.ok && r.threadId) setThreadId(r.threadId) }
-    } catch { /* keep optimistic */ }
-    setSending(false)
-  }
-  return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(20,20,22,.28)' }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 52, background: '#fff', borderRadius: '20px 20px 0 0', display: 'flex', flexDirection: 'column', animation: 'sheetin .25s ease', overflow: 'hidden' }}>
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 11, padding: '14px 16px', borderBottom: `0.5px solid ${C.line}` }}>
-          <div style={{ width: 36, height: 36, borderRadius: '50%', background: GRAD, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, flexShrink: 0 }}>S</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: 14.5 }}>Your strategist</div>
-            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: C.greenBar }} />Real people · usually reply within a few hours</div>
-          </div>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: C.faint, cursor: 'pointer', padding: 4 }}><X size={20} /></button>
-        </div>
-        <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 16px 8px' }}>
-          {thread.length === 0 && <div style={{ textAlign: 'center', fontSize: 12.5, color: C.faint, marginTop: 20, lineHeight: 1.6 }}>Your private line to your strategist.<br />Ask anything — your plan, a post, your numbers.</div>}
-          {thread.map((m) => m.from === 'owner' ? (
-            <div key={m.id} className="inrise" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-              <div style={{ maxWidth: '82%', background: GRAD, color: '#fff', borderRadius: '16px 16px 4px 16px', padding: '10px 14px', fontSize: 14, lineHeight: 1.42 }}>{m.text}</div>
-            </div>
-          ) : (
-            <div key={m.id} className="inrise" style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <div style={{ width: 26, height: 26, borderRadius: '50%', background: GRAD, color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>S</div>
-              <div style={{ maxWidth: '80%', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: '16px 16px 16px 4px', padding: '10px 14px', fontSize: 14, lineHeight: 1.45, color: C.ink }}>{m.text}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{ padding: '10px 14px calc(14px + env(safe-area-inset-bottom))', borderTop: `0.5px solid ${C.line}`, flexShrink: 0, display: 'flex', gap: 9, alignItems: 'center' }}>
-          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send() }} placeholder="Message your strategist…" style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 999, padding: '12px 16px', fontSize: 14, color: C.ink, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
-          <button onClick={send} disabled={!input.trim() || sending} style={{ width: 44, height: 44, flexShrink: 0, borderRadius: '50%', border: 'none', background: input.trim() ? C.green : '#e3e9e6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default' }}>{sending ? <Loader2 size={17} className="animate-spin" /> : <Send size={18} />}</button>
-        </div>
-      </div>
     </div>
   )
 }

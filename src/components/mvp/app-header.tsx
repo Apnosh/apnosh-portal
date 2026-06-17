@@ -3,8 +3,8 @@
 /**
  * Persistent app top bar (DoorDash-style). Left: the current location as a
  * dropdown — tap to switch between locations an owner manages. Right: profile,
- * notifications (→ Inbox), and messages (→ Inbox chat). Rendered by MvpShell so
- * it stays put across Home / Campaigns / Inbox with the bottom nav — one app.
+ * notifications (→ Inbox), and messages (→ Messages). Rendered by MvpShell so
+ * it stays put across the owner app screens with the bottom nav — one app.
  */
 import { useState } from 'react'
 import Link from 'next/link'
@@ -34,7 +34,7 @@ export default function AppHeader({ unread }: { unread?: boolean }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
         <IconLink href="/dashboard/profile" label="Profile"><User size={19} /></IconLink>
         <IconLink href="/dashboard/inbox" label="Notifications" dot={unread}><Bell size={19} /></IconLink>
-        <IconLink href="/dashboard/inbox?chat=1" label="Messages"><MessageCircle size={19} /></IconLink>
+        <IconLink href="/dashboard/messages" label="Messages"><MessageCircle size={19} /></IconLink>
       </div>
 
       {/* dropdown */}

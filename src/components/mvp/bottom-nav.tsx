@@ -10,7 +10,9 @@ import { Home as HomeIcon, CalendarDays, Plus, Inbox, Menu } from 'lucide-react'
 
 const C = { green: '#4abd98', greenDk: '#2e9a78', line: '#e6e6ea', navOff: '#aeaeb2' }
 
-export type NavKey = 'home' | 'campaigns' | 'inbox' | 'more'
+// 'messages' is reached from the header (not a bottom tab), so when it's the
+// active key none of the bottom items highlight — that's intentional.
+export type NavKey = 'home' | 'campaigns' | 'inbox' | 'more' | 'messages'
 
 export default function BottomNav({ active }: { active: NavKey }) {
   return (

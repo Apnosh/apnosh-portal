@@ -561,7 +561,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   // full-screen chrome — header and bottom nav — over the whole viewport. Skip
   // the portal shell entirely here. This also removes the client-gated sidebar
   // nav from the tree, which was causing a hydration mismatch on these routes.
-  const isFullScreenOwner = pathname === '/dashboard' || pathname.startsWith('/dashboard/campaigns') || pathname === '/dashboard/inbox'
+  const isFullScreenOwner = pathname === '/dashboard' || pathname.startsWith('/dashboard/campaigns') || pathname === '/dashboard/inbox' || pathname === '/dashboard/messages'
   if (isFullScreenOwner) return <>{children}</>
 
   return (
