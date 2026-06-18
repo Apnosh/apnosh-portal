@@ -40,6 +40,8 @@ export interface SuggestionFacts {
   reviews?: { unanswered: number; lowest?: { author: string; rating: number } | null }
   connections?: { broken?: string[]; missingSocial?: boolean }
   plan?: { label: string; daysLabel: string; hook: string } | null
+  /** The nearest few upcoming moments worth a post. Preferred over `plan`. */
+  plans?: { label: string; daysLabel: string; hook: string }[]
 }
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
@@ -88,11 +90,11 @@ export function buildCandidates(f: SuggestionFacts): Suggestion[] {
       title: `${n} ${n === 1 ? 'update needs' : 'updates need'} a look`, body: 'Small things are waiting for you. None are urgent.',
       cta: 'See all', href: '/dashboard/inbox?tab=todos' })
   }
-  if (f.plan) {
-    const p = f.plan
-    out.push({ id: `plan-${slug(p.label)}`, eyebrow: 'WORTH PLANNING', accent: 'violet', icon: 'calendar', priority: 50,
+  const planMoments = (f.plans && f.plans.length ? f.plans : (f.plan ? [f.plan] : [])).slice(0, 3)
+  planMoments.forEach((p, i) => {
+    out.push({ id: `plan-${slug(p.label)}`, eyebrow: 'WORTH PLANNING', accent: 'violet', icon: 'calendar', priority: 50 - i,
       title: `${p.label} is ${p.daysLabel.toLowerCase()}`, body: p.hook, cta: 'Plan it', href: '/dashboard/campaigns/new' })
-  }
+  })
   if (f.connections?.missingSocial) {
     out.push({ id: 'connect-instagram', eyebrow: 'OPPORTUNITY', accent: 'green', icon: 'plus', priority: 46,
       title: 'Connect Instagram', body: 'Link it once and we start reaching nearby guests for you.',

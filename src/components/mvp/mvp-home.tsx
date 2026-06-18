@@ -341,6 +341,14 @@ function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[
     return next
   })
 
+  // The "×" on a card's corner. A soft tip snoozes for 3 days (leaves the deck);
+  // a pinned obligation is real and can't be cleared, so its × just flips past
+  // to the next card — you still get to step through the whole stack.
+  const closeFront = (s: Suggestion) => {
+    if (s.obligation) setStep((p) => Math.min(p + 1, Math.max(0, visible.length - 1)))
+    else dismiss(s.id)
+  }
+
   if (!loaded) return null
   if (visible.length === 0) {
     // Always render something here — never let the section vanish. While the
@@ -367,7 +375,7 @@ function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[
     <div style={{ marginBottom: 20 }}>
       {/* Layered deck: the top card is live; the next one or two peek at the
           bottom. Step through with the "1 of N" controls (or tap a peek). */}
-      <div style={{ position: 'relative', paddingBottom: deck.length > 1 ? 8 : 0 }}>
+      <div style={{ position: 'relative', paddingBottom: deck.length > 2 ? 26 : deck.length > 1 ? 15 : 0 }}>
         {deck.map((s, pos) => (
           <SuggestionCard
             key={s.id}
@@ -375,12 +383,13 @@ function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[
             pos={pos}
             isFront={pos === 0}
             onAdvance={() => setStep(Math.min(safeStep + pos, visible.length - 1))}
-            onDismiss={() => dismiss(s.id)}
+            onClose={() => closeFront(s)}
+            canClose={!s.obligation || safeStep + pos < visible.length - 1}
           />
         ))}
       </div>
       {visible.length > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 13, padding: '0 2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: deck.length > 2 ? 30 : deck.length > 1 ? 18 : 13, padding: '0 2px' }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>
             <span style={{ color: C.ink }}>{safeStep + 1}</span>
             <span style={{ color: C.faint }}> of {visible.length}</span>
@@ -407,12 +416,12 @@ function StepBtn({ children, onClick, disabled, label }: { children: React.React
 // behind are absolute, nudged down + narrowed so a clean strip peeks below.
 function deckDepth(pos: number): React.CSSProperties {
   if (pos === 0) return { position: 'relative', zIndex: 30, transform: 'none', opacity: 1 }
-  if (pos === 1) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 20, transform: 'translateY(5px) scaleX(0.95)', opacity: 1 }
-  if (pos === 2) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, transform: 'translateY(10px) scaleX(0.90)', opacity: 0.97 }
-  return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(14px) scaleX(0.85)', opacity: 0, pointerEvents: 'none' }
+  if (pos === 1) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 20, transform: 'translateY(12px) scaleX(0.93)', opacity: 1 }
+  if (pos === 2) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, transform: 'translateY(23px) scaleX(0.86)', opacity: 1 }
+  return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(32px) scaleX(0.80)', opacity: 0, pointerEvents: 'none' }
 }
 
-function SuggestionCard({ s, pos, isFront, onAdvance, onDismiss }: { s: Suggestion; pos: number; isFront: boolean; onAdvance: () => void; onDismiss: () => void }) {
+function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }: { s: Suggestion; pos: number; isFront: boolean; onAdvance: () => void; onClose: () => void; canClose?: boolean }) {
   const a = ACCENT[s.accent] ?? ACCENT.amber
   const Icon = SUG_ICON[s.icon] ?? Sparkles
   // Cards behind take the deck's full height (= front + peek) so their bottom
@@ -435,8 +444,8 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onDismiss }: { s: Suggesti
       onClick={(e) => { if (!isFront) { e.preventDefault(); onAdvance() } else if (!s.href) e.preventDefault() }}
       style={style}
     >
-      {isFront && !s.obligation && (
-        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDismiss() }} aria-label="Dismiss" style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,0.05)', color: C.faint, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 2 }}><X size={14} /></button>
+      {isFront && canClose && (
+        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose() }} aria-label={s.obligation ? 'Next' : 'Dismiss'} style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,0.05)', color: C.faint, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 2 }}><X size={14} /></button>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 9 }}>
         <div style={{ width: 38, height: 38, borderRadius: 11, background: '#fff', border: `0.5px solid ${a.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={18} color={a.fg} /></div>

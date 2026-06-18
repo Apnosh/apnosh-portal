@@ -185,10 +185,14 @@ export async function GET(req: NextRequest) {
   const broken = inbox.filter((i) => i.kind === 'connection').map((i) => i.senderName || '').filter(Boolean) as string[]
   const connections = { broken, missingSocial: connectedSocial.length === 0 }
 
-  // next planning moment within ~3 weeks
-  const cal = getMarketingCalendar(new Date(), 30)
-  const moment = cal.find((m) => daysUntil(m.date) >= 0 && m.weight >= 3)
-  const plan = moment ? { label: moment.label, daysLabel: planLabel(daysUntil(moment.date)), hook: moment.hook } : null
+  // the nearest few planning moments worth a post, so the deck has a few real
+  // cards to flip through even on a quiet week
+  const cal = getMarketingCalendar(new Date(), 45)
+  const plans = cal
+    .filter((m) => daysUntil(m.date) >= 0 && m.weight >= 3)
+    .sort((a, b) => daysUntil(a.date) - daysUntil(b.date))
+    .slice(0, 3)
+    .map((m) => ({ label: m.label, daysLabel: planLabel(daysUntil(m.date)), hook: m.hook }))
 
   const facts: SuggestionFacts = {
     approvalsCount,
@@ -196,7 +200,7 @@ export async function GET(req: NextRequest) {
     metric: primaryDelta(hm as unknown as Parameters<typeof primaryDelta>[0]),
     reviews,
     connections,
-    plan,
+    plans,
   }
 
   const candidates = buildCandidates(facts)
