@@ -223,7 +223,11 @@ export async function GET(req: NextRequest) {
   // are several real signals, show several (a single curated card reads empty).
   const usedIds = new Set([...oblIds, ...softCards.map((c) => c.id)])
   const backfill = candidates.filter((c) => !usedIds.has(c.id)).sort((a, b) => b.priority - a.priority)
-  const suggestions = markLead([...obligationCards, ...softCards, ...backfill].slice(0, 5))
+  // Dedup by id before capping — a fact source can yield the same id twice (e.g.
+  // two dropped connections sharing a channel label), and a doubled card would
+  // also double the "DO THIS NEXT" label that markLead sets.
+  const ordered = [...new Map([...obligationCards, ...softCards, ...backfill].map((c) => [c.id, c])).values()]
+  const suggestions = markLead(ordered.slice(0, 5))
 
   return NextResponse.json({ suggestions, source: refined ? 'ai' : 'ranked' })
 }
