@@ -216,7 +216,14 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => b.priority - a.priority)
   const oblIds = new Set(obligationCards.map((c) => c.id))
   const softCards = chosen.filter((c) => !oblIds.has(c.id))
-  const suggestions = markLead([...obligationCards, ...softCards].slice(0, 5))
+
+  // Backfill the deck up to 5 from the remaining grounded candidates the model
+  // left out. The AI's job is to order, reword, and choose the lead — not to
+  // shrink the stack: the owner asked for "up to 5 at a time", so whenever there
+  // are several real signals, show several (a single curated card reads empty).
+  const usedIds = new Set([...oblIds, ...softCards.map((c) => c.id)])
+  const backfill = candidates.filter((c) => !usedIds.has(c.id)).sort((a, b) => b.priority - a.priority)
+  const suggestions = markLead([...obligationCards, ...softCards, ...backfill].slice(0, 5))
 
   return NextResponse.json({ suggestions, source: refined ? 'ai' : 'ranked' })
 }

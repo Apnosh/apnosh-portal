@@ -131,7 +131,6 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
       )}
 
       <div style={{ padding: '16px 18px 0' }}>
-        {!showHeader && <div style={{ fontSize: 15, color: C.mute, margin: '2px 0 14px' }}>{data.greeting}</div>}
         {/* monthly review nudge */}
         {data.review && !reviewHidden && (
           <div className="mvp-rise mvp-reviewGlow" style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 18, padding: '13px 16px', color: '#fff' }}>
