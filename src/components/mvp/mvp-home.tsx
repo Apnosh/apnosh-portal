@@ -100,7 +100,7 @@ const TILE_ICON: Record<string, React.ComponentType<{ size?: number; color?: str
   message: MessageCircle, mail: Mail, calendar: CalendarDays, eye: Eye, users: Users,
 }
 
-export default function MvpHome({ data, showHeader = true, clientId }: { data: MvpHomeData; showHeader?: boolean; clientId?: string }) {
+export default function MvpHome({ data, showHeader = true, clientId, suggestionsReady = true }: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
   const metrics = data.metrics ?? []
   const [reviewHidden, setReviewHidden] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -213,7 +213,7 @@ export default function MvpHome({ data, showHeader = true, clientId }: { data: M
         {/* SUGGESTIONS — a small Robinhood-style stack of tailored cards. One
             reads as "Do this next"; the rest are timely info or genuine
             recommendations drawn from this restaurant's own signals. */}
-        <SuggestionStack items={data.suggestions ?? []} clientId={clientId} />
+        <SuggestionStack items={data.suggestions ?? []} clientId={clientId} ready={suggestionsReady} />
 
         {/* NEEDS YOUR APPROVAL */}
         {data.approvals.length > 0 && (
@@ -305,7 +305,7 @@ function markLeadLocal(list: Suggestion[]): Suggestion[] {
   })
 }
 
-function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: string }) {
+function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[]; clientId?: string; ready?: boolean }) {
   const key = `apnosh:dismissed-suggestions:${clientId || 'default'}`
   const [dismissed, setDismissed] = useState<Record<string, number>>({})
   const [loaded, setLoaded] = useState(false)
@@ -322,12 +322,17 @@ function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: 
     setLoaded(true)
   }, [key])
 
-  const visible = useMemo(() => markLeadLocal(items.filter((s) => !dismissed[s.id]).slice(0, 5)), [items, dismissed])
+  // Obligations (a waiting approval, a low review, a dropped connection) always
+  // show and ignore any past dismissal — they reflect real state and clear once
+  // the owner acts. Only soft tips honor the 3-day dismissal.
+  const visible = useMemo(() => markLeadLocal(items.filter((s) => s.obligation || !dismissed[s.id]).slice(0, 5)), [items, dismissed])
 
   // Linear stepper through the deck (a "1 of N" counter, not a swipe carousel):
   // the front card is visible[step]; the next one or two peek behind it. Reset
-  // to the top when the set identity changes (instant set → richer server set).
-  useEffect(() => { setStep(0) }, [items])
+  // to the top only when the SET of cards changes (instant set → richer server
+  // set), not when one card's copy/count is rewritten in place.
+  const itemsKey = items.map((s) => s.id).join('|')
+  useEffect(() => { setStep(0) }, [itemsKey])
   const safeStep = Math.min(step, Math.max(0, visible.length - 1))
   const deck = visible.slice(safeStep, safeStep + 3)
 
@@ -339,10 +344,19 @@ function SuggestionStack({ items, clientId }: { items: Suggestion[]; clientId?: 
 
   if (!loaded) return null
   if (visible.length === 0) {
-    // Only claim "all caught up" when there were genuinely no cards. If the
-    // owner merely dismissed everything, stay quiet rather than say nothing
-    // needs them while a real signal (a broken link, a waiting review) persists.
-    if (items.length > 0) return null
+    // Always render something here — never let the section vanish. While the
+    // richer server set is still loading, hold a calm placeholder so we don't
+    // flash "all caught up" before a real card has had a chance to arrive.
+    if (!ready) {
+      return (
+        <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: 16, marginBottom: 22, display: 'flex', gap: 13, alignItems: 'center' }}>
+          <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={18} color={C.greenDk} /></div>
+          <div style={{ fontSize: 13.5, lineHeight: 1.4, color: C.faint }}>Looking over what needs you&hellip;</div>
+        </div>
+      )
+    }
+    // Honest now: obligations can't be dismissed, so an empty deck means there
+    // genuinely is nothing waiting — only soft tips were cleared.
     return (
       <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: 16, marginBottom: 22, display: 'flex', gap: 13, alignItems: 'center' }}>
         <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={19} color={C.greenDk} /></div>
@@ -422,7 +436,7 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onDismiss }: { s: Suggesti
       onClick={(e) => { if (!isFront) { e.preventDefault(); onAdvance() } else if (!s.href) e.preventDefault() }}
       style={style}
     >
-      {isFront && (
+      {isFront && !s.obligation && (
         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDismiss() }} aria-label="Dismiss" style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,0.05)', color: C.faint, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 2 }}><X size={14} /></button>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 9 }}>

@@ -201,7 +201,22 @@ export async function GET(req: NextRequest) {
 
   const candidates = buildCandidates(facts)
   const refined = await refine(candidates, (bizRes.data?.name as string) ?? '')
-  const suggestions = markLead((refined ?? candidates).slice(0, 5))
+  const chosen = refined ?? candidates
+
+  // Obligations (waiting approvals, a low review, a dropped connection) must
+  // never be silently dropped by the AI selection: Home pins them and reads an
+  // empty deck as "all caught up", so an omitted obligation would be a lie.
+  // Force every obligation candidate to the front (highest priority first),
+  // preferring the model's reworded copy when it kept the card. Soft cards then
+  // fill the remaining slots in the model's chosen order.
+  const chosenById = new Map(chosen.map((c) => [c.id, c]))
+  const obligationCards = candidates
+    .filter((c) => c.obligation)
+    .map((c) => chosenById.get(c.id) ?? c)
+    .sort((a, b) => b.priority - a.priority)
+  const oblIds = new Set(obligationCards.map((c) => c.id))
+  const softCards = chosen.filter((c) => !oblIds.has(c.id))
+  const suggestions = markLead([...obligationCards, ...softCards].slice(0, 5))
 
   return NextResponse.json({ suggestions, source: refined ? 'ai' : 'ranked' })
 }

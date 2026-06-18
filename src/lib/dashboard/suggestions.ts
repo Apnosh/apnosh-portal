@@ -25,6 +25,11 @@ export interface Suggestion {
   href?: string
   /** ranking weight; not rendered */
   priority: number
+  /** A genuine "needs you" item (waiting approval, a low review, a dropped
+   *  connection) rather than a soft tip. Obligation cards can't be dismissed
+   *  and always show, so Home never hides something real or falsely claims
+   *  "all caught up". They clear themselves once the owner acts. */
+  obligation?: boolean
 }
 
 export interface SuggestionFacts {
@@ -49,19 +54,19 @@ export function buildCandidates(f: SuggestionFacts): Suggestion[] {
   const out: Suggestion[] = []
 
   for (const p of f.connections?.broken ?? []) {
-    out.push({ id: `reconnect-${slug(p)}`, eyebrow: 'NEEDS A FIX', accent: 'amber', icon: 'plug', priority: 100,
+    out.push({ id: `reconnect-${slug(p)}`, eyebrow: 'NEEDS A FIX', accent: 'amber', icon: 'plug', priority: 100, obligation: true,
       title: `Reconnect ${cap(p)}`, body: `Your ${cap(p)} connection dropped. Reconnect to keep your posts and data flowing.`,
       cta: 'Reconnect', href: '/dashboard/connected-accounts' })
   }
   if (f.reviews?.lowest && f.reviews.lowest.rating <= 3) {
     const r = f.reviews.lowest
-    out.push({ id: 'review-low', eyebrow: 'WORTH A REPLY', accent: 'coral', icon: 'star', priority: 95,
+    out.push({ id: 'review-low', eyebrow: 'WORTH A REPLY', accent: 'coral', icon: 'star', priority: 95, obligation: true,
       title: `Reply to ${r.author}`, body: `They left ${r.rating} stars. A quick, kind reply shows future guests you care.`,
       cta: 'Reply', href: '/dashboard/inbox?tab=reviews' })
   }
   if ((f.approvalsCount ?? 0) > 0) {
     const n = f.approvalsCount!
-    out.push({ id: 'approvals', eyebrow: 'NEEDS YOUR OK', accent: 'amber', icon: 'sparkles', priority: 90,
+    out.push({ id: 'approvals', eyebrow: 'NEEDS YOUR OK', accent: 'amber', icon: 'sparkles', priority: 90, obligation: true,
       title: 'Review what is waiting', body: `${n} ${n === 1 ? 'thing is' : 'things are'} ready for your OK before they go live.`,
       cta: 'Review', href: '/dashboard/inbox?tab=approvals' })
   }
