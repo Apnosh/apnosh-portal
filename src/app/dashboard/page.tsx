@@ -12,21 +12,20 @@
 
 import { useEffect, useState } from 'react'
 import { useClient } from '@/lib/client-context'
+import { useUser } from '@/lib/supabase/hooks'
 import MvpHome, { type MvpHomeData } from '@/components/mvp/mvp-home'
 import { transformHome } from '@/components/mvp/home-transform'
 import MvpShell from '@/components/mvp/mvp-shell'
 import type { Suggestion } from '@/lib/dashboard/suggestions'
 
-// Design sample content — shown only where the client has no real approvals /
-// monthly review yet, so the home reads complete during this build phase.
-const SAMPLE_APPROVALS: MvpHomeData['approvals'] = [
-  { id: 's1', tag: 'POST', timing: 'By 5pm', title: 'Kimchi Burger reel', subtitle: 'For Saturday lunch · drafted by your team', emoji: '🌶️', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=320&q=80&auto=format&fit=crop' },
-  { id: 's2', tag: 'DESIGN', timing: 'No rush', title: 'Summer menu poster', subtitle: 'Studio applied your notes', emoji: '🍑', image: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=320&q=80&auto=format&fit=crop' },
-]
-const SAMPLE_REVIEW: MvpHomeData['review'] = { prevMonthLabel: 'May', cycleLabel: 'June', budget: 800 }
+function timeGreeting(): string {
+  const h = new Date().getHours()
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+}
 
 export default function DashboardHomePage() {
   const { client, loading: clientLoading } = useClient()
+  const { data: user } = useUser()
   const [data, setData] = useState<MvpHomeData | null>(null)
   const [error, setError] = useState<string | null>(null)
   // AI-tailored suggestion stack — fetched alongside the load and merged in
@@ -46,8 +45,15 @@ export default function DashboardHomePage() {
       .then((json) => {
         if (!live) return
         const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·', undefined, json.comingUp)
-        if (d.approvals.length === 0) d.approvals = SAMPLE_APPROVALS
-        if (!d.review) d.review = SAMPLE_REVIEW
+        // The calm top read: the AI daily brief, falling back to today's headline.
+        d.brief = json.brief?.text || json.todayHero?.headline || null
+        // Real reputation: standing rating + the latest review (one-tap reply).
+        const rr = json.recentReviews
+        d.reputation = rr && rr.avgRating != null ? { avg: rr.avgRating, total: rr.total, unanswered: json.counts?.unansweredReviews ?? 0 } : null
+        const top = rr?.items?.[0]
+        d.latestReview = top ? { id: top.id, author: top.authorName, rating: top.rating, text: top.text ?? '', source: top.source, needsReply: top.needsReply } : null
+        // What's happened since they last looked (the proof-of-work recap).
+        d.timeline = (json.sinceLastChecked ?? []).slice(0, 5).map((e: { id: string; whenLabel: string; text: string; emphasis: 'win' | 'info' | 'mute'; big: boolean }) => ({ id: e.id, whenLabel: e.whenLabel, text: e.text, emphasis: e.emphasis, big: e.big }))
         setData(d)
       })
       .catch((e) => { if (live) setError(e.message) })
@@ -61,7 +67,9 @@ export default function DashboardHomePage() {
     return () => { live = false }
   }, [client?.id, client?.name])
 
-  const view = data ? (aiSuggestions ? { ...data, suggestions: aiSuggestions } : data) : null
+  const firstName = (user?.full_name || '').trim().split(' ')[0]
+  const greeting = `${timeGreeting()}${firstName ? `, ${firstName}` : ''}`
+  const view = data ? { ...data, greeting, ...(aiSuggestions ? { suggestions: aiSuggestions } : {}) } : null
 
   return (
     <MvpShell active="home" unread={(data?.approvals?.length ?? 0) > 0}>

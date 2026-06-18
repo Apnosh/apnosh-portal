@@ -14,7 +14,7 @@
 
 import {
   Bell, Sparkles, Check, Plus, TrendingUp, TrendingDown,
-  ChevronRight, ChevronLeft, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
+  ChevronRight, ChevronLeft, X, Navigation, Phone, MousePointerClick, CalendarDays,
   Heart, Star, MessageCircle, Mail, Eye, Users, Plug,
 } from 'lucide-react'
 import { useState, useRef, useEffect, useMemo } from 'react'
@@ -80,6 +80,9 @@ export interface MetricView {
   tiles: { key: string; label: string; value: string; configured: boolean }[]
 }
 
+export interface HomeReview { id: string; author: string; rating: number; text: string; source: string; needsReply: boolean }
+export interface HomeTimelineEvent { id: string; whenLabel: string; text: string; emphasis: 'win' | 'info' | 'mute'; big: boolean }
+
 export interface MvpHomeData {
   greeting: string
   avatarText: string
@@ -91,6 +94,14 @@ export interface MvpHomeData {
   suggestions?: Suggestion[]
   approvals: { id: string; tag: string; timing: string; title: string; subtitle: string; emoji?: string; image?: string }[]
   review: { prevMonthLabel: string; cycleLabel: string; budget: number } | null
+  /** Calm top read — the AI daily brief or a one-line headline. */
+  brief?: string | null
+  /** Standing reputation: average rating, total reviews, how many need a reply. */
+  reputation?: { avg: number; total: number; unanswered: number } | null
+  /** The most recent review, for an at-a-glance quote + one-tap reply. */
+  latestReview?: HomeReview | null
+  /** "Since you were here" recap events. */
+  timeline?: HomeTimelineEvent[]
   planner?: { id: string; day: string; mon: string; daysLabel: string; label: string; hook: string; planned: boolean }[]
 }
 
@@ -102,7 +113,6 @@ const TILE_ICON: Record<string, React.ComponentType<{ size?: number; color?: str
 
 export default function MvpHome({ data, showHeader = true, clientId }: { data: MvpHomeData; showHeader?: boolean; clientId?: string }) {
   const metrics = data.metrics ?? []
-  const [reviewHidden, setReviewHidden] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeIdx, setActiveIdx] = useState(0)
   const onScroll = () => {
@@ -131,25 +141,11 @@ export default function MvpHome({ data, showHeader = true, clientId }: { data: M
       )}
 
       <div style={{ padding: '16px 18px 0' }}>
-        {!showHeader && <div style={{ fontSize: 15, color: C.mute, margin: '2px 0 14px' }}>{data.greeting}</div>}
-        {/* monthly review nudge */}
-        {data.review && !reviewHidden && (
-          <div className="mvp-rise mvp-reviewGlow" style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 18, padding: '13px 16px', color: '#fff' }}>
-            {/* drifting / spinning shapes, ported from the design */}
-            <i aria-hidden className="mvp-driftB" style={{ position: 'absolute', width: 118, height: 118, top: -44, right: -28, borderRadius: '50%', background: 'rgba(255,255,255,.10)' }} />
-            <i aria-hidden className="mvp-driftA" style={{ position: 'absolute', width: 66, height: 66, bottom: -26, left: 40, borderRadius: '50%', border: '2px solid rgba(255,255,255,.18)' }} />
-            <i aria-hidden className="mvp-spin" style={{ position: 'absolute', width: 22, height: 22, top: 34, right: 30, borderRadius: 6, background: 'rgba(255,255,255,.12)' }} />
-            <i aria-hidden className="mvp-driftA" style={{ position: 'absolute', width: 11, height: 11, bottom: 18, right: 78, borderRadius: '50%', background: 'rgba(255,255,255,.3)' }} />
-            <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 11 }}>
-              <div className="mvp-floaty" style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Receipt size={19} /></div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Sparkles size={13} /><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', opacity: .92 }}>New this month</span></div>
-                <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2 }}>Your {data.review.prevMonthLabel} review is ready</div>
-                <div style={{ fontSize: 12.5, opacity: .9, marginTop: 1 }}>See what last month&apos;s ${data.review.budget} did, then set {data.review.cycleLabel} in one decision.</div>
-              </div>
-              <ChevronRight size={20} />
-            </div>
-            <button onClick={() => setReviewHidden(true)} aria-label="Hide review" style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(255,255,255,.22)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><X size={14} /></button>
+        {/* The calm top read — a time + name greeting and the day's brief. */}
+        {!showHeader && (
+          <div style={{ margin: '2px 0 16px' }}>
+            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 22, lineHeight: 1.15, color: C.ink }}>{data.greeting}</div>
+            {data.brief && <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5, marginTop: 6 }}>{data.brief}</div>}
           </div>
         )}
 
@@ -214,6 +210,38 @@ export default function MvpHome({ data, showHeader = true, clientId }: { data: M
             reads as "Do this next"; the rest are timely info or genuine
             recommendations drawn from this restaurant's own signals. */}
         <SuggestionStack items={data.suggestions ?? []} clientId={clientId} />
+
+        {/* REPUTATION — standing rating + the latest review (one-tap reply). */}
+        {data.reputation && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 11 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Your reputation</span>
+              <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 700, color: C.ink }}>
+                <Star size={14} color="#f5a623" fill="#f5a623" />{data.reputation.avg.toFixed(1)}
+                <span style={{ color: C.faint, fontWeight: 500 }}>· {data.reputation.total.toLocaleString()} review{data.reputation.total === 1 ? '' : 's'}{data.reputation.unanswered > 0 ? ` · ${data.reputation.unanswered} to reply` : ''}</span>
+              </span>
+            </div>
+            {data.latestReview && <ReviewPeek r={data.latestReview} />}
+          </div>
+        )}
+
+        {/* SINCE YOU WERE HERE — what your team did + recent wins. */}
+        {data.timeline && data.timeline.length > 0 && (
+          <div style={{ marginTop: 18, marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 11 }}>Since you were here</div>
+            <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '4px 14px' }}>
+              {data.timeline.map((e, i) => (
+                <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: '10px 0', borderBottom: i < data.timeline!.length - 1 ? `0.5px solid ${C.line}` : 'none' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 99, marginTop: 5, flexShrink: 0, background: e.emphasis === 'win' ? C.green : e.emphasis === 'info' ? C.faint : '#d8d8de' }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, color: e.big ? C.ink : C.mute, fontWeight: e.big ? 700 : 500, lineHeight: 1.35 }}>{e.text}</div>
+                    <div style={{ fontSize: 11, color: C.faint, marginTop: 1 }}>{e.whenLabel}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* NEEDS YOUR APPROVAL */}
         {data.approvals.length > 0 && (
@@ -434,6 +462,29 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onDismiss }: { s: Suggesti
       {s.cta && (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: a.fg, color: '#fff', borderRadius: 99, padding: '9px 15px', fontWeight: 700, fontSize: 12.5 }}>{s.cta} <ChevronRight size={14} /></span>
       )}
+    </Link>
+  )
+}
+
+/* Latest review peek — quote + stars; one tap to the AI-draft reply page. */
+function HomeStars({ n }: { n: number }) {
+  return <span style={{ display: 'inline-flex', gap: 1 }}>{[1, 2, 3, 4, 5].map((i) => <Star key={i} size={11} color={i <= n ? '#f5a623' : '#dfe3e1'} fill={i <= n ? '#f5a623' : 'none'} />)}</span>
+}
+function ReviewPeek({ r }: { r: HomeReview }) {
+  const tone = ['#4abd98', '#a85c3c', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b'][(r.author.charCodeAt(0) || 0) % 6]
+  return (
+    <Link href={`/dashboard/reviews/${r.id}`} style={{ display: 'flex', gap: 11, textDecoration: 'none', color: 'inherit', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, boxShadow: '0 1px 2px rgba(0,0,0,.03)' }}>
+      <div style={{ width: 38, height: 38, borderRadius: '50%', background: tone, color: '#fff', fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{r.author.charAt(0).toUpperCase()}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontWeight: 700, fontSize: 13.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.author}</span>
+          <HomeStars n={r.rating} />
+        </div>
+        {r.text && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.4, marginTop: 3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.text}</div>}
+      </div>
+      {r.needsReply
+        ? <span style={{ flexShrink: 0, alignSelf: 'center', background: C.greenSoft, color: C.greenDk, borderRadius: 99, padding: '7px 13px', fontWeight: 700, fontSize: 12 }}>Reply</span>
+        : <ChevronRight size={18} color={C.faint} style={{ flexShrink: 0, alignSelf: 'center' }} />}
     </Link>
   )
 }
