@@ -46,7 +46,7 @@ export async function getRecentReviews(
       .eq('client_id', clientId),
     admin
       .from('gbp_locations')
-      .select('place_rating, is_primary')
+      .select('place_rating, place_rating_count, is_primary')
       .eq('client_id', clientId),
   ])
 
@@ -73,13 +73,19 @@ export async function getRecentReviews(
     : null
   // Prefer Google's true overall rating (Places, every review) when we have
   // it — the computed average only covers the reviews we've ingested.
-  const placeRows = (placesRes.data ?? []) as { place_rating?: number | null; is_primary?: boolean }[]
-  const placeRating = (placeRows.find(p => p.is_primary) ?? placeRows[0])?.place_rating ?? null
+  const placeRows = (placesRes.data ?? []) as { place_rating?: number | null; place_rating_count?: number | null; is_primary?: boolean }[]
+  const place = placeRows.find(p => p.is_primary) ?? placeRows[0]
+  const placeRating = place?.place_rating ?? null
+  const placeRatingCount = place?.place_rating_count ?? null
   const avgRating = placeRating ?? computedAvg
 
   return {
     items,
     avgRating,
-    total: statsRes.count ?? ratings.length,
+    // Keep avg + total describing the SAME population: when we show Google's
+    // overall rating (every review), pair it with Google's total review count,
+    // not just the reviews we've ingested. Otherwise pair the computed average
+    // with our own count.
+    total: placeRating != null && placeRatingCount != null ? placeRatingCount : (statsRes.count ?? ratings.length),
   }
 }
