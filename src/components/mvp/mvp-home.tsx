@@ -13,7 +13,7 @@
  */
 
 import {
-  Bell, Sparkles, Check, Plus, TrendingUp, TrendingDown,
+  Bell, Sparkles, Check, Plus, TrendingUp, TrendingDown, Minus,
   ChevronRight, ChevronLeft, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
   Heart, Star, MessageCircle, Mail, Eye, Users, Plug,
 } from 'lucide-react'
@@ -175,10 +175,10 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
                     )}
                   </div>
                   <div style={{ fontSize: 14, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
-                  {mv.monthPct !== 0 && (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: mv.monthPct > 0 ? C.green : C.coral }}>
-                      {mv.monthPct > 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                      {mv.monthPct > 0 ? 'Up' : 'Down'} {Math.abs(mv.monthPct)}% from {mv.prevMonthLabel}
+                  {mv.prevMonthLabel && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: mv.monthPct > 0 ? C.green : mv.monthPct < 0 ? C.coral : C.mute }}>
+                      {mv.monthPct > 0 ? <TrendingUp size={14} /> : mv.monthPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
+                      {mv.monthPct > 0 ? `Up ${mv.monthPct}% from ${mv.prevMonthLabel}` : mv.monthPct < 0 ? `Down ${Math.abs(mv.monthPct)}% from ${mv.prevMonthLabel}` : `Even with ${mv.prevMonthLabel}`}
                     </div>
                   )}
                 </div>

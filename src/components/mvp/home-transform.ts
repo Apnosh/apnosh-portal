@@ -69,7 +69,15 @@ function buildMetricView(m: HomeMetric): MetricView {
   const thisMonth = months[months.length - 1]
   const lastMonth = months[months.length - 2]
   const domCount = (thisMonth?.vals ?? []).filter((v) => v != null).length || 1
-  const monthPct = pct(firstNDays(thisMonth, domCount), firstNDays(lastMonth, domCount))
+  const thisMonthVal = firstNDays(thisMonth, domCount)
+  const lastMonthVal = firstNDays(lastMonth, domCount)
+  // Per-metric month-over-month delta. Only meaningful when last month actually
+  // had data in the comparable (same number of leading days) window — otherwise
+  // the percent is a fake +100%. When it is comparable we always surface it
+  // (up / down / even), so every graph shows its own change, not just the ones
+  // that happen to be non-flat.
+  const hasMonthCompare = !!lastMonth && lastMonthVal > 0
+  const monthPct = hasMonthCompare ? Math.round(((thisMonthVal - lastMonthVal) / lastMonthVal) * 100) : 0
 
   const tv = thisWeek?.vals ?? []
   const lv = lastWeek?.vals ?? []
@@ -105,7 +113,7 @@ function buildMetricView(m: HomeMetric): MetricView {
 
   return {
     key: m.key, tabLabel: meta.tab, heroLabel: meta.heroLabel, heroSub: meta.heroSub, unit: meta.unit,
-    total, weekPct, monthPct, prevMonthLabel: lastMonth ? monthName(lastMonth.start) : '',
+    total, weekPct, monthPct, prevMonthLabel: hasMonthCompare ? monthName(lastMonth!.start) : '',
     chart, chartStart: thisWeek?.start, daily, monthly, tiles,
   }
 }
