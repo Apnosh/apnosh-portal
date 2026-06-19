@@ -47,5 +47,5 @@ export default function InsightsPage() {
     return () => { live = false }
   }, [client?.id, client?.name])
 
-  return <MvpInsights data={data} loading={clientLoading || (!data && !error)} error={error} />
+  return <MvpInsights data={data} loading={clientLoading || (!data && !error)} error={error} clientId={client?.id} />
 }

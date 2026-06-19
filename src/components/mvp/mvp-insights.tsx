@@ -17,7 +17,7 @@
  * sources them from /api/dashboard/load, the same endpoint the home uses).
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -46,6 +46,16 @@ export interface InsightsData {
   unanswered: number
 }
 
+// "What customers are saying" — sentiment split (rating-derived) + an AI theme
+// summary. Lazy-fetched from /api/dashboard/review-summary when Reviews is opened.
+interface ReviewSummary {
+  split: { positive: number; neutral: number; negative: number; total: number; withText: number }
+  summary: string | null
+  loved: string[]
+  improve: string[]
+  source: string
+}
+
 // Short icon per metric key, for the snapshot + the metric switcher.
 const METRIC_ICON: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
   reach: Eye, interactions: MousePointerClick, bookings: CalendarDays, loyalty: Mail, reputation: Star,
@@ -60,9 +70,28 @@ const SNAPSHOT_KEYS = ['reach', 'interactions', 'bookings', 'loyalty']
 // the home (.mvp-swipe) and review-detail surfaces.
 const INSIGHTS_CSS = '.mvp-insights-pills{scrollbar-width:none;-ms-overflow-style:none}.mvp-insights-pills::-webkit-scrollbar{display:none}'
 
-export default function MvpInsights({ data, loading, error }: { data: InsightsData | null; loading: boolean; error: string | null }) {
+export default function MvpInsights({ data, loading, error, clientId }: { data: InsightsData | null; loading: boolean; error: string | null; clientId?: string }) {
   const router = useRouter()
   const [sel, setSel] = useState(0)
+  const [summary, setSummary] = useState<ReviewSummary | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+
+  const clampedSel = data ? Math.min(sel, Math.max(0, data.metrics.length - 1)) : 0
+  const selKey = data?.metrics[clampedSel]?.key
+
+  // Pull the review sentiment + theme summary the first time Reviews is opened
+  // (one AI call), so opening Insights doesn't pay for it unless it's viewed.
+  useEffect(() => {
+    if (selKey !== 'reputation' || !clientId || summary || summaryLoading) return
+    let live = true
+    setSummaryLoading(true)
+    fetch(`/api/dashboard/review-summary?clientId=${clientId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (live && j) setSummary(j) })
+      .catch(() => { /* leave the section quiet on failure */ })
+      .finally(() => { if (live) setSummaryLoading(false) })
+    return () => { live = false }
+  }, [selKey, clientId, summary, summaryLoading])
 
   const back = () => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard') }
 
@@ -87,7 +116,7 @@ export default function MvpInsights({ data, loading, error }: { data: InsightsDa
         ) : !data || data.metrics.length === 0 ? (
           <EmptyState />
         ) : (
-          <Body data={data} sel={Math.min(sel, data.metrics.length - 1)} setSel={setSel} />
+          <Body data={data} sel={clampedSel} setSel={setSel} summary={summary} summaryLoading={summaryLoading} />
         )}
       </div>
       </div>
@@ -95,7 +124,7 @@ export default function MvpInsights({ data, loading, error }: { data: InsightsDa
   )
 }
 
-function Body({ data, sel, setSel }: { data: InsightsData; sel: number; setSel: (i: number) => void }) {
+function Body({ data, sel, setSel, summary, summaryLoading }: { data: InsightsData; sel: number; setSel: (i: number) => void; summary: ReviewSummary | null; summaryLoading: boolean }) {
   const metrics = data.metrics
   const byKey = new Map(metrics.map((m) => [m.key, m]))
   // Magnitude snapshot, sorted biggest to smallest so the bars always read
@@ -213,6 +242,9 @@ function Body({ data, sel, setSel }: { data: InsightsData; sel: number; setSel: 
         )}
       </Section>
 
+      {/* ── What customers are saying (Reviews tab only) ── */}
+      {mv.key === 'reputation' && <ReviewSentiment summary={summary} loading={summaryLoading} />}
+
       {/* ── Recent reviews ── */}
       {data.reviews.length > 0 && (
         <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
@@ -256,6 +288,68 @@ function Highlight({ tone, text }: { tone: 'up' | 'down' | 'star' | 'info'; text
     <div style={{ display: 'flex', gap: 10, background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '11px 13px' }}>
       <span style={{ width: 7, height: 7, borderRadius: 99, background: dot, marginTop: 6, flexShrink: 0 }} />
       <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.45 }}>{text}</div>
+    </div>
+  )
+}
+
+function ReviewSentiment({ summary, loading }: { summary: ReviewSummary | null; loading: boolean }) {
+  if (!summary) {
+    return (
+      <Section title="What customers are saying">
+        <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14, fontSize: 13, color: C.faint }}>
+          {loading ? 'Reading your reviews…' : 'No review summary yet.'}
+        </div>
+      </Section>
+    )
+  }
+  const s = summary.split
+  const total = s.total || 1
+  const pct = (n: number) => `${(n / total) * 100}%`
+  return (
+    <Section title="What customers are saying">
+      {/* positive / neutral / negative split, from the star ratings */}
+      <div style={{ display: 'flex', height: 12, borderRadius: 99, overflow: 'hidden', background: C.bg }}>
+        {s.positive > 0 && <div style={{ width: pct(s.positive), background: C.green }} />}
+        {s.neutral > 0 && <div style={{ width: pct(s.neutral), background: C.faint }} />}
+        {s.negative > 0 && <div style={{ width: pct(s.negative), background: C.coral }} />}
+      </div>
+      <div style={{ display: 'flex', gap: 14, marginTop: 9, fontSize: 11.5, flexWrap: 'wrap' }}>
+        <Legend dot={C.green} label="Positive" n={s.positive} />
+        <Legend dot={C.faint} label="Neutral" n={s.neutral} />
+        <Legend dot={C.coral} label="Negative" n={s.negative} />
+      </div>
+
+      {summary.summary && <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5, marginTop: 14 }}>{summary.summary}</div>}
+
+      {(summary.loved.length > 0 || summary.improve.length > 0) && (
+        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 11 }}>
+          {summary.loved.length > 0 && <ThemeRow label="Loved" items={summary.loved} fg={C.greenDk} bg={C.greenSoft} />}
+          {summary.improve.length > 0 && <ThemeRow label="Could improve" items={summary.improve} fg={C.coral} bg={C.coralBg} />}
+        </div>
+      )}
+
+      {!summary.summary && (
+        <div style={{ fontSize: 12, color: C.faint, marginTop: 12, lineHeight: 1.4 }}>A few more written reviews and we can pull out the themes guests mention.</div>
+      )}
+    </Section>
+  )
+}
+
+function Legend({ dot, label, n }: { dot: string; label: string; n: number }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: C.mute }}>
+      <span style={{ width: 8, height: 8, borderRadius: 99, background: dot }} />{label} <b style={{ color: C.ink, fontWeight: 600 }}>{n.toLocaleString()}</b>
+    </span>
+  )
+}
+
+function ThemeRow({ label, items, fg, bg }: { label: string; items: string[]; fg: string; bg: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 7 }}>{label}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {items.map((t, i) => <span key={i} style={{ fontSize: 12, fontWeight: 600, color: fg, background: bg, borderRadius: 99, padding: '5px 11px' }}>{t}</span>)}
+      </div>
     </div>
   )
 }
