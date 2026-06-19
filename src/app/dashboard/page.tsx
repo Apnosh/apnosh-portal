@@ -16,6 +16,7 @@ import MvpHome, { type MvpHomeData } from '@/components/mvp/mvp-home'
 import { transformHome } from '@/components/mvp/home-transform'
 import MvpShell from '@/components/mvp/mvp-shell'
 import type { Suggestion } from '@/lib/dashboard/suggestions'
+import { campaignCardVM, type CampCard, type SavedCampaign } from '@/lib/campaigns/view'
 
 // Design sample content — shown only where the client has no real approvals /
 // monthly review yet, so the home reads complete during this build phase.
@@ -36,6 +37,8 @@ export default function DashboardHomePage() {
   // holds off on "all caught up" until this is true so it never flashes the
   // message while a real card is still on its way.
   const [suggestionsReady, setSuggestionsReady] = useState(false)
+  // The client's campaigns (mapped to board cards) for the Home campaigns section.
+  const [campaigns, setCampaigns] = useState<CampCard[] | null>(null)
 
   useEffect(() => {
     if (!client?.id) return
@@ -74,16 +77,28 @@ export default function DashboardHomePage() {
     return () => { live = false }
   }, [client?.id])
 
+  // Campaigns for the Home board section — own effect keyed on the client id.
+  useEffect(() => {
+    if (!client?.id) return
+    let live = true
+    setCampaigns(null)
+    fetch(`/api/campaigns?clientId=${client.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (live) setCampaigns(((j?.campaigns ?? []) as SavedCampaign[]).map(campaignCardVM)) })
+      .catch(() => { if (live) setCampaigns([]) })
+    return () => { live = false }
+  }, [client?.id])
+
   const view = data ? (aiSuggestions !== null ? { ...data, suggestions: aiSuggestions } : data) : null
 
   return (
-    <MvpShell active="home" unread={(data?.approvals?.length ?? 0) > 0}>
+    <MvpShell active="home" unread={campaigns?.some((c) => c.review) ?? false}>
       {clientLoading || (!data && !error) ? (
         <Centered>Loading your numbers…</Centered>
       ) : error ? (
         <Centered>Couldn&apos;t load: {error}</Centered>
       ) : view ? (
-        <MvpHome data={view} showHeader={false} clientId={client?.id} suggestionsReady={suggestionsReady} />
+        <MvpHome data={view} showHeader={false} clientId={client?.id} suggestionsReady={suggestionsReady} campaigns={campaigns} />
       ) : (
         <Centered>No client found for this account.</Centered>
       )}
