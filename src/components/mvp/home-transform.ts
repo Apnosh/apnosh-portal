@@ -10,7 +10,7 @@ import type { MvpHomeData, MetricView } from './mvp-home'
 import { buildCandidates, markLead, type SuggestionFacts } from '@/lib/dashboard/suggestions'
 
 export interface HomeInstance { vals: (number | null)[]; start: string; total: number; breakdown: { label: string; value: string; icon: string }[] }
-export interface HomeMetric { key: string; label: string; sub: string; fmt: string; hasData: boolean; week: HomeInstance[]; month: HomeInstance[] }
+export interface HomeMetric { key: string; label: string; sub: string; fmt: string; hasData: boolean; week: HomeInstance[]; month: HomeInstance[]; year: HomeInstance[] }
 export interface AgendaItem { id: string; type: string; urgency: string; label: string; detail?: string }
 export interface ComingUpItem { date: string; label: string; hook: string; weight: number; daysUntil: number; queuedCount: number }
 
@@ -83,7 +83,20 @@ function buildMetricView(m: HomeMetric): MetricView {
     })
   }
   daily.sort((a, b) => a.date.localeCompare(b.date))
-  const monthly = months.map((mo) => ({ label: monthName(mo.start), value: mo.total }))
+
+  // Continuous monthly series across ALL available years, built from the `year`
+  // instances' monthly bars (the `month` field only holds the trailing 12).
+  // This lets the chart's "Last year" view compare each month against the SAME
+  // month a year earlier. `null` months (before onboarding / after the data
+  // frontier) are skipped so there are no blank leading/trailing bars.
+  const monthly: { label: string; value: number; ym: string }[] = []
+  for (const yr of (m.year ?? [])) {
+    const y = Number(String(yr.start).slice(0, 4))
+    ;(yr.vals ?? []).forEach((v, i) => {
+      if (v == null) return
+      monthly.push({ label: MONTHS[i], value: Number(v), ym: `${y}-${String(i + 1).padStart(2, '0')}` })
+    })
+  }
 
   const tiles = (thisWeek?.breakdown ?? []).map((b) => ({
     key: b.icon, label: b.label, value: b.value,

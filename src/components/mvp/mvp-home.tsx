@@ -76,7 +76,7 @@ export interface MetricView {
   chart: { label: string; value: number; prev: number }[]
   chartStart?: string
   daily: { date: string; value: number }[]
-  monthly: { label: string; value: number }[]
+  monthly: { label: string; value: number; ym: string }[]
   tiles: { key: string; label: string; value: string; configured: boolean }[]
 }
 
@@ -496,7 +496,7 @@ function ActionsChart({
   chart: { label: string; value: number; prev: number }[]
   chartStart?: string
   daily?: { date: string; value: number }[]
-  monthly?: { label: string; value: number }[]
+  monthly?: { label: string; value: number; ym: string }[]
   noun?: string
 }) {
   const H = 62
@@ -530,8 +530,17 @@ function ActionsChart({
     })
   } else if (range === '1y') {
     curLbl = 'Last 12 months'; cmpLbl = 'Prior year'
-    const last12 = monthly.slice(-12); const prior12 = monthly.slice(-24, -12)
-    bars = last12.map((m, i) => ({ value: m.value, compare: prior12[i]?.value ?? 0, label: m.label.slice(0, 3), tip: m.label, cmpLabel: 'a year earlier', cmpDate: '' }))
+    // Compare each of the last 12 months to the SAME month a year earlier,
+    // looked up by calendar key — so the prior-year (grey) bars line up
+    // correctly even with fewer than 24 months of history, and fill in wherever
+    // last year's data exists.
+    const byKey = new Map(monthly.map((mo) => [mo.ym, mo.value]))
+    const last12 = monthly.slice(-12)
+    bars = last12.map((mo) => {
+      const yr = Number(mo.ym.slice(0, 4)); const mi = Number(mo.ym.slice(5, 7))
+      const priorKey = `${yr - 1}-${String(mi).padStart(2, '0')}`
+      return { value: mo.value, compare: byKey.get(priorKey) ?? 0, label: mo.label.slice(0, 3), tip: `${mo.label} ${yr}`, cmpLabel: 'a year earlier', cmpDate: `${mo.label} ${yr - 1}` }
+    })
   } else {
     curLbl = 'Custom'; cmpLbl = 'Prior period'
     const s = parseISO(cStart), e = parseISO(cEnd); const lo = s <= e ? s : e, hi = s <= e ? e : s
