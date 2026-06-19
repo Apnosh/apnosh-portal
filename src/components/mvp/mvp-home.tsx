@@ -205,9 +205,9 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
         )}
 
         {/* See all insights — small text link under the graphs */}
-        <a href="/dashboard/insights" style={{ display: 'block', textAlign: 'center', marginTop: 12, marginBottom: 2, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>
+        <Link href="/dashboard/insights" style={{ display: 'block', textAlign: 'center', marginTop: 12, marginBottom: 2, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>
           See all insights · full year →
-        </a>
+        </Link>
 
         {/* SUGGESTIONS — a small Robinhood-style stack of tailored cards. One
             reads as "Do this next"; the rest are timely info or genuine
@@ -471,7 +471,7 @@ function Thumb({ emoji, image }: { emoji?: string; image?: string }) {
   )
 }
 
-function SourceCard({ s }: { s: { key: string; label: string; value: string; configured: boolean } }) {
+export function SourceCard({ s }: { s: { key: string; label: string; value: string; configured: boolean } }) {
   const Icon = TILE_ICON[s.key] ?? MousePointerClick
   const zero = !s.value || s.value === '0' || s.value === '—'
   return (
@@ -490,7 +490,7 @@ function SourceCard({ s }: { s: { key: string; label: string; value: string; con
 type ChartRange = '7d' | '30d' | '1y' | 'custom'
 const RANGES: [ChartRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['1y', 'Last year'], ['custom', 'Custom']]
 
-function ActionsChart({
+export function ActionsChart({
   chart, chartStart, daily = [], monthly = [], noun = 'took action',
 }: {
   chart: { label: string; value: number; prev: number }[]

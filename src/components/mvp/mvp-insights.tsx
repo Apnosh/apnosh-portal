@@ -1,0 +1,270 @@
+'use client'
+
+/**
+ * MVP Insights — the owner's "See all insights" deep-dive, reached from the
+ * home chart. Stays in the apnosh-mvp app design (full-screen phone frame,
+ * brand green, Cal Sans display) and reuses the home's chart + breakdown tiles
+ * so the two surfaces feel like one app.
+ *
+ * Advanced detail the home doesn't have:
+ *   - the customer-journey funnel (Reach -> Customers -> Bookings -> Email)
+ *   - per-metric deep dive: every metric, full chart with 7d/30d/1y/custom
+ *     ranges, and the source breakdown
+ *   - reputation: rating, volume, and the latest reviews (tap to reply)
+ *   - grounded highlights (biggest mover, where you stand)
+ *
+ * Presentation only; all numbers are passed in already-transformed (the page
+ * sources them from /api/dashboard/load, the same endpoint the home uses).
+ */
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import {
+  ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Star,
+  Eye, MousePointerClick, CalendarDays, Mail, BarChart3,
+} from 'lucide-react'
+import { ActionsChart, SourceCard, type MetricView } from './mvp-home'
+
+const C = {
+  green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
+  ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#f5f5f7',
+  amber: '#f5a623', coral: '#a85c3c', coralBg: '#f8efe9',
+}
+const DISPLAY = "'Cal Sans','Inter',sans-serif"
+
+export interface InsightsReview {
+  id: string; authorName: string; rating: number; text: string | null
+  source: string; postedAt: string; replied: boolean; needsReply: boolean
+}
+export interface InsightsData {
+  businessName: string
+  metrics: MetricView[]
+  reviews: InsightsReview[]
+  avgRating: number | null
+  totalReviews: number
+  unanswered: number
+}
+
+// Short icon per metric key, for the funnel + the metric switcher.
+const METRIC_ICON: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
+  reach: Eye, interactions: MousePointerClick, bookings: CalendarDays, loyalty: Mail, reputation: Star,
+}
+// Funnel order: top of the journey (saw you) down to the bottom (came back).
+const FUNNEL_ORDER = ['reach', 'interactions', 'bookings', 'loyalty']
+
+export default function MvpInsights({ data, loading, error }: { data: InsightsData | null; loading: boolean; error: string | null }) {
+  const router = useRouter()
+  const [sel, setSel] = useState(0)
+
+  const back = () => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard') }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#fff', display: 'flex', flexDirection: 'column', maxWidth: 480, margin: '0 auto', height: '100dvh', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
+      {/* sticky back header */}
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 12px 6px', borderBottom: `1px solid ${C.line}`, background: '#fff' }}>
+        <button onClick={back} aria-label="Back" style={{ width: 38, height: 38, borderRadius: 99, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.ink }}><ChevronLeft size={24} /></button>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.1 }}>Insights</div>
+          {data?.businessName && <div style={{ fontSize: 12, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{data.businessName}</div>}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        {loading ? (
+          <Centered>Loading your numbers&hellip;</Centered>
+        ) : error ? (
+          <Centered>Couldn&apos;t load: {error}</Centered>
+        ) : !data || data.metrics.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <Body data={data} sel={Math.min(sel, data.metrics.length - 1)} setSel={setSel} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Body({ data, sel, setSel }: { data: InsightsData; sel: number; setSel: (i: number) => void }) {
+  const metrics = data.metrics
+  const byKey = new Map(metrics.map((m) => [m.key, m]))
+  const funnel = FUNNEL_ORDER.map((k) => byKey.get(k)).filter((m): m is MetricView => !!m && m.total > 0)
+  const funnelMax = Math.max(1, ...funnel.map((m) => m.total))
+  const mv = metrics[sel]
+
+  // Biggest mover this week (by absolute weekly change), for the highlight line.
+  const mover = [...metrics].filter((m) => m.total > 0 && m.weekPct !== 0).sort((a, b) => Math.abs(b.weekPct) - Math.abs(a.weekPct))[0]
+
+  return (
+    <div style={{ padding: '4px 18px 40px' }}>
+
+      {/* ── Highlights ── */}
+      <Section title="Where you stand">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {mover && (
+            <Highlight
+              tone={mover.weekPct > 0 ? 'up' : 'down'}
+              text={<><b style={{ color: C.ink, fontWeight: 600 }}>{mover.tabLabel}</b> {mover.weekPct > 0 ? 'is up' : 'is down'} {Math.abs(mover.weekPct)}% this week{mover.prevMonthLabel ? `, ${mover.monthPct > 0 ? 'up' : mover.monthPct < 0 ? 'down' : 'even'} ${mover.monthPct !== 0 ? Math.abs(mover.monthPct) + '% ' : ''}vs ${mover.prevMonthLabel}` : ''}.</>}
+            />
+          )}
+          {data.avgRating != null && (
+            <Highlight
+              tone="star"
+              text={<>You&apos;re at <b style={{ color: C.ink, fontWeight: 600 }}>{data.avgRating.toFixed(1)}★</b> across {data.totalReviews.toLocaleString()} review{data.totalReviews === 1 ? '' : 's'}{data.unanswered > 0 ? `, with ${data.unanswered} waiting for a reply` : ''}.</>}
+            />
+          )}
+          {funnel[0] && (
+            <Highlight
+              tone="info"
+              text={<><b style={{ color: C.ink, fontWeight: 600 }}>{funnel[0].total.toLocaleString()}</b> {funnel[0].heroSub || 'people saw you'} this period.</>}
+            />
+          )}
+        </div>
+      </Section>
+
+      {/* ── Customer journey funnel ── */}
+      {funnel.length > 1 && (
+        <Section title="Your customer journey" sub="this period, top to bottom">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {funnel.map((m) => {
+              const Icon = METRIC_ICON[m.key] ?? Eye
+              const w = Math.max(14, Math.round((m.total / funnelMax) * 100))
+              const dn = m.weekPct < 0
+              return (
+                <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 9, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={15} color={C.greenDk} /></div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 12.5, color: C.mute, fontWeight: 500 }}>{m.tabLabel}</span>
+                      <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                        <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600 }}>{m.total.toLocaleString()}</span>
+                        {m.weekPct !== 0 && <span style={{ fontSize: 11, fontWeight: 600, color: dn ? C.coral : C.greenDk }}>{dn ? '▼' : '▲'}{Math.abs(m.weekPct)}%</span>}
+                      </span>
+                    </div>
+                    <div style={{ height: 7, borderRadius: 99, background: C.bg, overflow: 'hidden' }}>
+                      <div style={{ width: `${w}%`, height: '100%', borderRadius: 99, background: `linear-gradient(90deg, ${C.green}, ${C.greenDk})` }} />
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ fontSize: 11, color: C.faint, marginTop: 10, lineHeight: 1.4 }}>How many people moved from seeing you to acting. Bars are scaled to your widest stage.</div>
+        </Section>
+      )}
+
+      {/* ── Per-metric deep dive ── */}
+      <Section title="By the numbers">
+        {/* metric switcher */}
+        <div className="mvp-insights-pills" style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 4, marginBottom: 14 }}>
+          {metrics.map((m, i) => {
+            const on = i === sel
+            const Icon = METRIC_ICON[m.key] ?? BarChart3
+            return (
+              <button key={m.key} onClick={() => setSel(i)} style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '7px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                <Icon size={14} color={on ? C.greenDk : C.faint} />{m.tabLabel}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* selected metric */}
+        <div style={{ fontSize: 14, color: C.mute, fontWeight: 500 }}>{mv.heroLabel}</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
+          <span style={{ fontFamily: DISPLAY, fontSize: 44, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em' }}>{mv.total ? mv.total.toLocaleString() : '—'}</span>
+          {mv.total > 0 && mv.weekPct !== 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: mv.weekPct < 0 ? C.coral : C.greenDk, background: mv.weekPct < 0 ? C.coralBg : C.greenSoft, padding: '4px 11px', borderRadius: 99, marginBottom: 5 }}>
+              <span style={{ fontSize: 10 }}>{mv.weekPct < 0 ? '▼' : '▲'}</span>{Math.abs(mv.weekPct)}% this week
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: 13.5, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
+        {mv.prevMonthLabel && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: mv.monthPct > 0 ? C.greenDk : mv.monthPct < 0 ? C.coral : C.mute }}>
+            {mv.monthPct > 0 ? <TrendingUp size={14} /> : mv.monthPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
+            {mv.monthPct > 0 ? `Up ${mv.monthPct}% from ${mv.prevMonthLabel}` : mv.monthPct < 0 ? `Down ${Math.abs(mv.monthPct)}% from ${mv.prevMonthLabel}` : `Even with ${mv.prevMonthLabel}`}
+          </div>
+        )}
+
+        {/* full chart with range chips (reused from the home) */}
+        <ActionsChart chart={mv.chart} chartStart={mv.chartStart} daily={mv.daily} monthly={mv.monthly} noun={mv.unit} />
+
+        {/* what feeds this metric */}
+        {mv.tiles.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, margin: '16px 0 9px' }}>What feeds this</div>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, mv.tiles.length)},1fr)`, gap: 8 }}>
+              {mv.tiles.slice(0, 4).map((s) => <SourceCard key={s.key + s.label} s={s} />)}
+            </div>
+          </>
+        )}
+      </Section>
+
+      {/* ── Recent reviews ── */}
+      {data.reviews.length > 0 && (
+        <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {data.reviews.slice(0, 5).map((r) => (
+              <Link key={r.id} href={`/dashboard/reviews/${r.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{r.authorName}</span>
+                  <Stars n={r.rating} />
+                  <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    {r.needsReply && <span style={{ fontSize: 10, fontWeight: 700, color: C.coral, background: C.coralBg, borderRadius: 99, padding: '2px 8px' }}>Reply</span>}
+                    <ChevronRight size={15} color={C.faint} />
+                  </span>
+                </div>
+                {r.text && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.text}</div>}
+              </Link>
+            ))}
+          </div>
+        </Section>
+      )}
+    </div>
+  )
+}
+
+function Section({ title, sub, action, children }: { title: string; sub?: string; action?: { label: string; href: string }; children: React.ReactNode }) {
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>{title}</span>
+        {sub && <span style={{ fontSize: 11, color: C.faint }}>{sub}</span>}
+        {action && <Link href={action.href} style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>{action.label} <ChevronRight size={13} /></Link>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function Highlight({ tone, text }: { tone: 'up' | 'down' | 'star' | 'info'; text: React.ReactNode }) {
+  const dot = tone === 'down' ? C.coral : tone === 'star' ? C.amber : C.green
+  return (
+    <div style={{ display: 'flex', gap: 10, background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '11px 13px' }}>
+      <span style={{ width: 7, height: 7, borderRadius: 99, background: dot, marginTop: 6, flexShrink: 0 }} />
+      <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.45 }}>{text}</div>
+    </div>
+  )
+}
+
+function Stars({ n }: { n: number }) {
+  return (
+    <span style={{ display: 'inline-flex', gap: 1 }}>
+      {[1, 2, 3, 4, 5].map((i) => <Star key={i} size={11} color={C.amber} fill={i <= Math.round(n) ? C.amber : 'transparent'} />)}
+    </span>
+  )
+}
+
+function Centered({ children }: { children: React.ReactNode }) {
+  return <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', color: C.mute, fontSize: 14 }}>{children}</div>
+}
+
+function EmptyState() {
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 32px', textAlign: 'center' }}>
+      <div style={{ width: 52, height: 52, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}><BarChart3 size={24} color={C.greenDk} /></div>
+      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, marginBottom: 6 }}>Insights are on the way</div>
+      <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5, maxWidth: 280 }}>Once we start tracking your Google, social, and review activity, your numbers and trends show up here.</div>
+    </div>
+  )
+}
