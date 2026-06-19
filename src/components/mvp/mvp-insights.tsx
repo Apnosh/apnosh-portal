@@ -46,12 +46,19 @@ export interface InsightsData {
   unanswered: number
 }
 
-// Short icon per metric key, for the funnel + the metric switcher.
+// Short icon per metric key, for the snapshot + the metric switcher.
 const METRIC_ICON: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
   reach: Eye, interactions: MousePointerClick, bookings: CalendarDays, loyalty: Mail, reputation: Star,
 }
-// Funnel order: top of the journey (saw you) down to the bottom (came back).
-const FUNNEL_ORDER = ['reach', 'interactions', 'bookings', 'loyalty']
+// The volume metrics shown in the "at a glance" snapshot (reputation is a rate,
+// handled separately). Rendered sorted by size, NOT as a strict funnel: these
+// counts come from different sources and don't nest, so we never imply a
+// stage-to-stage conversion.
+const SNAPSHOT_KEYS = ['reach', 'interactions', 'bookings', 'loyalty']
+
+// Hide the native scrollbar on the horizontally-scrolling metric pills, matching
+// the home (.mvp-swipe) and review-detail surfaces.
+const INSIGHTS_CSS = '.mvp-insights-pills{scrollbar-width:none;-ms-overflow-style:none}.mvp-insights-pills::-webkit-scrollbar{display:none}'
 
 export default function MvpInsights({ data, loading, error }: { data: InsightsData | null; loading: boolean; error: string | null }) {
   const router = useRouter()
@@ -60,7 +67,9 @@ export default function MvpInsights({ data, loading, error }: { data: InsightsDa
   const back = () => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard') }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#fff', display: 'flex', flexDirection: 'column', maxWidth: 480, margin: '0 auto', height: '100dvh', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#f0f0f3', display: 'flex', justifyContent: 'center' }}>
+      <style>{INSIGHTS_CSS}</style>
+      <div style={{ width: '100%', maxWidth: 480, height: '100dvh', background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
       {/* sticky back header */}
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 12px 6px', borderBottom: `1px solid ${C.line}`, background: '#fff' }}>
         <button onClick={back} aria-label="Back" style={{ width: 38, height: 38, borderRadius: 99, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.ink }}><ChevronLeft size={24} /></button>
@@ -81,6 +90,7 @@ export default function MvpInsights({ data, loading, error }: { data: InsightsDa
           <Body data={data} sel={Math.min(sel, data.metrics.length - 1)} setSel={setSel} />
         )}
       </div>
+      </div>
     </div>
   )
 }
@@ -88,8 +98,11 @@ export default function MvpInsights({ data, loading, error }: { data: InsightsDa
 function Body({ data, sel, setSel }: { data: InsightsData; sel: number; setSel: (i: number) => void }) {
   const metrics = data.metrics
   const byKey = new Map(metrics.map((m) => [m.key, m]))
-  const funnel = FUNNEL_ORDER.map((k) => byKey.get(k)).filter((m): m is MetricView => !!m && m.total > 0)
-  const funnelMax = Math.max(1, ...funnel.map((m) => m.total))
+  // Magnitude snapshot, sorted biggest to smallest so the bars always read
+  // cleanly (no inverted "funnel"). These are independent counts, not stages.
+  const snapshot = SNAPSHOT_KEYS.map((k) => byKey.get(k)).filter((m): m is MetricView => !!m && m.total > 0).sort((a, b) => b.total - a.total)
+  const snapMax = Math.max(1, ...snapshot.map((m) => m.total))
+  const reach = byKey.get('reach')
   const mv = metrics[sel]
 
   // Biggest mover this week (by absolute weekly change), for the highlight line.
@@ -113,22 +126,22 @@ function Body({ data, sel, setSel }: { data: InsightsData; sel: number; setSel: 
               text={<>You&apos;re at <b style={{ color: C.ink, fontWeight: 600 }}>{data.avgRating.toFixed(1)}★</b> across {data.totalReviews.toLocaleString()} review{data.totalReviews === 1 ? '' : 's'}{data.unanswered > 0 ? `, with ${data.unanswered} waiting for a reply` : ''}.</>}
             />
           )}
-          {funnel[0] && (
+          {reach && reach.total > 0 && (
             <Highlight
               tone="info"
-              text={<><b style={{ color: C.ink, fontWeight: 600 }}>{funnel[0].total.toLocaleString()}</b> {funnel[0].heroSub || 'people saw you'} this period.</>}
+              text={<><b style={{ color: C.ink, fontWeight: 600 }}>{reach.total.toLocaleString()}</b> {reach.heroSub || 'people saw you'} this week.</>}
             />
           )}
         </div>
       </Section>
 
-      {/* ── Customer journey funnel ── */}
-      {funnel.length > 1 && (
-        <Section title="Your customer journey" sub="this period, top to bottom">
+      {/* ── This week at a glance (magnitude snapshot, sorted) ── */}
+      {snapshot.length > 1 && (
+        <Section title="This week at a glance">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {funnel.map((m) => {
+            {snapshot.map((m) => {
               const Icon = METRIC_ICON[m.key] ?? Eye
-              const w = Math.max(14, Math.round((m.total / funnelMax) * 100))
+              const w = Math.max(14, Math.round((m.total / snapMax) * 100))
               const dn = m.weekPct < 0
               return (
                 <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
@@ -149,7 +162,7 @@ function Body({ data, sel, setSel }: { data: InsightsData; sel: number; setSel: 
               )
             })}
           </div>
-          <div style={{ fontSize: 11, color: C.faint, marginTop: 10, lineHeight: 1.4 }}>How many people moved from seeing you to acting. Bars are scaled to your widest stage.</div>
+          <div style={{ fontSize: 11, color: C.faint, marginTop: 10, lineHeight: 1.4 }}>Your channels by volume this week. Bars are scaled to your biggest.</div>
         </Section>
       )}
 
@@ -204,7 +217,7 @@ function Body({ data, sel, setSel }: { data: InsightsData; sel: number; setSel: 
       {data.reviews.length > 0 && (
         <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {data.reviews.slice(0, 5).map((r) => (
+            {data.reviews.slice(0, 3).map((r) => (
               <Link key={r.id} href={`/dashboard/reviews/${r.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
                   <span style={{ fontWeight: 600, fontSize: 13 }}>{r.authorName}</span>
