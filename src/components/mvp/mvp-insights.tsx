@@ -77,13 +77,15 @@ export default function MvpInsights({ data, loading, error, clientId }: { data: 
   const [summaryLoading, setSummaryLoading] = useState(false)
 
   const clampedSel = data ? Math.min(sel, Math.max(0, data.metrics.length - 1)) : 0
-  const selKey = data?.metrics[clampedSel]?.key
 
-  // Pull the review sentiment + theme summary the first time Reviews is opened
-  // (one AI call), so opening Insights doesn't pay for it unless it's viewed.
+  // Prefetch the review sentiment + theme summary once the client is known, so
+  // the Reviews tab is instant. Keyed on the client id ONLY — never on its own
+  // loading/result state — so it can't self-trigger a loop or get stuck if the
+  // user navigates mid-flight.
   useEffect(() => {
-    if (selKey !== 'reputation' || !clientId || summary || summaryLoading) return
+    if (!clientId) return
     let live = true
+    setSummary(null)
     setSummaryLoading(true)
     fetch(`/api/dashboard/review-summary?clientId=${clientId}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -91,7 +93,7 @@ export default function MvpInsights({ data, loading, error, clientId }: { data: 
       .catch(() => { /* leave the section quiet on failure */ })
       .finally(() => { if (live) setSummaryLoading(false) })
     return () => { live = false }
-  }, [selKey, clientId, summary, summaryLoading])
+  }, [clientId])
 
   const back = () => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard') }
 
@@ -297,7 +299,7 @@ function ReviewSentiment({ summary, loading }: { summary: ReviewSummary | null; 
     return (
       <Section title="What customers are saying">
         <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14, fontSize: 13, color: C.faint }}>
-          {loading ? 'Reading your reviews…' : 'No review summary yet.'}
+          {loading ? 'Reading your reviews…' : 'We could not load your review summary just now. Check back in a bit.'}
         </div>
       </Section>
     )
@@ -318,6 +320,7 @@ function ReviewSentiment({ summary, loading }: { summary: ReviewSummary | null; 
         <Legend dot={C.faint} label="Neutral" n={s.neutral} />
         <Legend dot={C.coral} label="Negative" n={s.negative} />
       </div>
+      {s.total > 0 && <div style={{ fontSize: 11, color: C.faint, marginTop: 8 }}>Based on {s.total.toLocaleString()} rated review{s.total === 1 ? '' : 's'} you&apos;ve collected.</div>}
 
       {summary.summary && <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5, marginTop: 14 }}>{summary.summary}</div>}
 
