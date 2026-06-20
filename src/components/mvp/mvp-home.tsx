@@ -229,14 +229,15 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
         <SuggestionStack items={data.suggestions ?? []} clientId={clientId} ready={suggestionsReady} />
 
         {/* COMING UP NEXT — what the team is actively working on and what's
-            going live next, from the content pipeline. */}
-        {(data.upcomingWork?.length ?? 0) > 0 && (
-          <div style={{ marginTop: 22 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Coming up next</span>
-              <span style={{ fontSize: 11, color: C.faint }}>what your team is on</span>
-            </div>
-            {(data.upcomingWork ?? []).map((w) => {
+            going live next, from the content pipeline. Always shown; a calm
+            empty state when nothing is queued. */}
+        <div style={{ marginTop: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Coming up next</span>
+            <span style={{ fontSize: 11, color: C.faint }}>what your team is on</span>
+          </div>
+          {(data.upcomingWork?.length ?? 0) > 0 ? (
+            (data.upcomingWork ?? []).map((w) => {
               const t = WORK_TONE[w.tone] ?? WORK_TONE.planning
               return (
                 <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
@@ -248,19 +249,22 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
                   <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: t.fg, background: t.bg, borderRadius: 99, padding: '4px 10px' }}>{w.statusLabel}</span>
                 </div>
               )
-            })}
-          </div>
-        )}
+            })
+          ) : (
+            <EmptySection icon={<CalendarDays size={18} color={C.faint} />} text="Nothing queued right now. Your next posts will show here as your team lines them up." />
+          )}
+        </div>
 
         {/* RECENT ACTIVITY — a calm highlight reel of what just happened: posts
             that went live, new reviews, replies, milestones. The headline win
-            gets a filled green dot + bold; the rest are quiet context. */}
-        {(data.activity?.length ?? 0) > 0 && (
-          <div style={{ marginTop: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Recent activity</span>
-              <Link href="/dashboard/inbox" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>
-            </div>
+            gets a filled green dot + bold; the rest are quiet context. Always
+            shown; a calm empty state when nothing's happened yet. */}
+        <div style={{ marginTop: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Recent activity</span>
+            {(data.activity?.length ?? 0) > 0 && <Link href="/dashboard/inbox" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>}
+          </div>
+          {(data.activity?.length ?? 0) > 0 ? (
             <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '2px 14px' }}>
               {(data.activity ?? []).map((e, i, arr) => {
                 const dot = e.emphasis === 'win' ? C.green : e.emphasis === 'mute' ? C.ghost : C.faint
@@ -276,8 +280,10 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
                 )
               })}
             </div>
-          </div>
-        )}
+          ) : (
+            <EmptySection icon={<Sparkles size={18} color={C.faint} />} text="Nothing new yet. Your posts, reviews, and wins will show up here." />
+          )}
+        </div>
         </div>
       </div>
     </div>
@@ -384,7 +390,7 @@ function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[
     <div style={{ marginBottom: 14 }}>
       {/* Layered deck: the top card is live; the next one or two peek at the
           bottom. Step through with the "1 of N" controls (or tap a peek). */}
-      <div style={{ position: 'relative', paddingBottom: deck.length > 2 ? 19 : deck.length > 1 ? 11 : 0 }}>
+      <div style={{ position: 'relative', paddingBottom: deck.length > 2 ? 13 : deck.length > 1 ? 7 : 0 }}>
         {deck.map((s, pos) => (
           <SuggestionCard
             key={s.id}
@@ -398,7 +404,7 @@ function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[
         ))}
       </div>
       {visible.length > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: deck.length > 2 ? 22 : deck.length > 1 ? 13 : 10, padding: '0 2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: deck.length > 2 ? 17 : deck.length > 1 ? 11 : 9, padding: '0 2px' }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>
             <span style={{ color: C.ink }}>{safeStep + 1}</span>
             <span style={{ color: C.faint }}> of {visible.length}</span>
@@ -425,9 +431,9 @@ function StepBtn({ children, onClick, disabled, label }: { children: React.React
 // behind are absolute, nudged down + narrowed so a clean strip peeks below.
 function deckDepth(pos: number): React.CSSProperties {
   if (pos === 0) return { position: 'relative', zIndex: 30, transform: 'none', opacity: 1 }
-  if (pos === 1) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 20, transform: 'translateY(8px) scaleX(0.95)', opacity: 1 }
-  if (pos === 2) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, transform: 'translateY(16px) scaleX(0.90)', opacity: 1 }
-  return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(23px) scaleX(0.85)', opacity: 0, pointerEvents: 'none' }
+  if (pos === 1) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 20, transform: 'translateY(6px) scaleX(0.955)', opacity: 1 }
+  if (pos === 2) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, transform: 'translateY(12px) scaleX(0.91)', opacity: 1 }
+  return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(18px) scaleX(0.865)', opacity: 0, pointerEvents: 'none' }
 }
 
 function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }: { s: Suggestion; pos: number; isFront: boolean; onAdvance: () => void; onClose: () => void; canClose?: boolean }) {
@@ -443,7 +449,7 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
     background: a.bg, border: `0.5px solid ${a.border}`, borderRadius: 18,
     padding: '12px 15px', boxSizing: 'border-box', overflow: 'hidden',
     textDecoration: 'none', display: 'block', color: 'inherit', cursor: 'pointer',
-    boxShadow: pos === 0 ? '0 8px 22px rgba(0,0,0,0.08)' : '0 2px 10px rgba(0,0,0,0.05)',
+    boxShadow: pos === 0 ? '0 6px 16px rgba(0,0,0,0.13)' : '0 2px 7px rgba(0,0,0,0.08)',
   }
   return (
     <Link
@@ -466,6 +472,17 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: a.fg, color: '#fff', borderRadius: 99, padding: '9px 15px', fontWeight: 700, fontSize: 12.5 }}>{s.cta} <ChevronRight size={14} /></span>
       )}
     </Link>
+  )
+}
+
+/* Calm empty state for a home section so it still reads as present (and the
+   home never collapses) when there's nothing to show yet. */
+function EmptySection({ icon, text }: { icon?: React.ReactNode; text: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '13px 14px' }}>
+      {icon && <div style={{ width: 34, height: 34, borderRadius: 10, background: '#f1f1f3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</div>}
+      <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>{text}</div>
+    </div>
   )
 }
 
