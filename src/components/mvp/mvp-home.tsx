@@ -151,7 +151,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
   const goTo = (i: number) => { const el = scrollRef.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' }) }
 
   return (
-    <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
+    <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: 'radial-gradient(135% 55% at 50% 0%, rgba(74,189,152,0.10), rgba(255,255,255,0) 52%), #fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{MVP_ANIM_CSS}</style>
       {/* sticky greeting bar — suppressed when embedded under the portal's
           own top bar (the design's full chrome lands in the nav-shell step). */}
@@ -270,7 +270,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
                     <div style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.title}</div>
                     <div style={{ fontSize: 11.5, color: C.faint, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.channel}{w.whenLabel ? ` · ${w.whenLabel}` : ''}</div>
                   </div>
-                  <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: t.fg, background: t.bg, borderRadius: 99, padding: '4px 10px' }}>{w.statusLabel}</span>
+                  <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: t.fg, background: t.bg, borderRadius: 99, padding: '4px 10px', boxShadow: `0 2px 8px ${t.fg}1f` }}>{w.statusLabel}</span>
                 </div>
               )
             })
@@ -323,7 +323,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {QUICK_LINKS.map((q) => (
               <Link key={q.href} href={q.href} className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 13, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '15px 14px', textDecoration: 'none', color: 'inherit' }}>
-                <div style={{ width: 40, height: 40, borderRadius: 11, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><q.Icon size={19} color={C.greenDk} /></div>
+                <div style={{ width: 40, height: 40, borderRadius: 11, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 10px rgba(74,189,152,0.18)' }}><q.Icon size={19} color={C.greenDk} /></div>
                 <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600, lineHeight: 1.2 }}>{q.label}</span>
                 <ChevronRight size={17} color={C.faint} />
               </Link>
@@ -652,7 +652,7 @@ export function ActionsChart({
             const edge = i < 2 ? 'left' : i > bars.length - 3 ? 'right' : 'mid'
             return (
               <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, height: '100%', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: dense ? 1.5 : 3, cursor: 'pointer' }}>
-                <div className="mvp-grow" style={{ width: '42%', maxWidth: 17, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: isPicked ? C.greenDk : C.green, borderRadius: '3px 3px 0 0', animationDelay: `${20 + i * 14}ms` }} />
+                <div className="mvp-grow" style={{ width: '42%', maxWidth: 17, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: isPicked ? C.greenDk : C.green, borderRadius: '3px 3px 0 0', boxShadow: b.value > 0 ? '0 1px 7px rgba(74,189,152,0.45)' : 'none', animationDelay: `${20 + i * 14}ms` }} />
                 <div style={{ width: '42%', maxWidth: 17, height: `${(b.compare / max) * 100}%`, background: C.ghost, borderRadius: '3px 3px 0 0' }} />
                 {isPicked && (() => {
                   const delta = b.value - b.compare
