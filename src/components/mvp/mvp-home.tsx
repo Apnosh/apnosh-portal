@@ -63,6 +63,16 @@ const MVP_ANIM_CSS = `
 .mvp-stagger>*:nth-child(7){animation-delay:.39s}
 .mvp-stagger>*:nth-child(8){animation-delay:.45s}
 @media (prefers-reduced-motion: reduce){.mvp-grow,.mvp-stagger>*{animation:none}}
+/* native-app feel: a quick press-in on tap, a slow breathing glow on the lead
+   card, and a soft ping on live indicators (freshest win, a scheduled post). */
+.mvp-press{transition:transform .16s cubic-bezier(.2,.7,.3,1),box-shadow .2s}
+.mvp-press:active{transform:scale(.975)}
+@media (hover:hover){.mvp-press:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.07)}}
+@keyframes mvpBreathe{0%,100%{box-shadow:0 5px 14px rgba(0,0,0,.10)}50%{box-shadow:0 9px 24px rgba(0,0,0,.16)}}
+.mvp-breathe{animation:mvpBreathe 4.5s ease-in-out infinite}
+@keyframes mvpPing{0%{box-shadow:0 0 0 0 rgba(74,189,152,.32)}70%{box-shadow:0 0 0 7px rgba(74,189,152,0)}100%{box-shadow:0 0 0 0 rgba(74,189,152,0)}}
+.mvp-ping{animation:mvpPing 2.4s ease-out infinite}
+@media (prefers-reduced-motion: reduce){.mvp-breathe,.mvp-ping{animation:none}.mvp-press,.mvp-press:active,.mvp-press:hover{transition:none;transform:none}}
 `
 
 export interface MetricView {
@@ -255,7 +265,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
               const t = WORK_TONE[w.tone] ?? WORK_TONE.planning
               return (
                 <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
-                  <span style={{ width: 9, height: 9, borderRadius: 99, background: t.fg, flexShrink: 0 }} />
+                  <span className={w.tone === 'scheduled' ? 'mvp-ping' : undefined} style={{ width: 9, height: 9, borderRadius: 99, background: t.fg, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.title}</div>
                     <div style={{ fontSize: 11.5, color: C.faint, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.channel}{w.whenLabel ? ` · ${w.whenLabel}` : ''}</div>
@@ -290,7 +300,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
                   <div key={e.id} style={{ display: 'flex', gap: 12, paddingBottom: last ? 7 : 16 }}>
                     <div style={{ position: 'relative', flexShrink: 0, width: 36 }}>
                       {!last && <div style={{ position: 'absolute', left: 18, top: 38, bottom: -16, width: 2, marginLeft: -1, background: C.line }} />}
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: nodeBg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, boxShadow: win ? '0 2px 8px rgba(74,189,152,0.22)' : 'none' }}>
+                      <div className={e.big ? 'mvp-ping' : undefined} style={{ width: 36, height: 36, borderRadius: '50%', background: nodeBg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, boxShadow: win ? '0 2px 8px rgba(74,189,152,0.22)' : 'none' }}>
                         <Icon size={16} color={nodeFg} />
                       </div>
                     </div>
@@ -312,7 +322,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 12 }}>Quick links</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {QUICK_LINKS.map((q) => (
-              <Link key={q.href} href={q.href} style={{ display: 'flex', alignItems: 'center', gap: 13, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '15px 14px', textDecoration: 'none', color: 'inherit' }}>
+              <Link key={q.href} href={q.href} className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 13, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '15px 14px', textDecoration: 'none', color: 'inherit' }}>
                 <div style={{ width: 40, height: 40, borderRadius: 11, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><q.Icon size={19} color={C.greenDk} /></div>
                 <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600, lineHeight: 1.2 }}>{q.label}</span>
                 <ChevronRight size={17} color={C.faint} />
@@ -466,7 +476,7 @@ function StepBtn({ children, onClick, disabled, label }: { children: React.React
 // Depth styles for the stacked deck: the front card is in flow; the ones
 // behind are absolute, nudged down + narrowed so a clean strip peeks below.
 function deckDepth(pos: number): React.CSSProperties {
-  if (pos === 0) return { position: 'relative', zIndex: 30, transform: 'none', opacity: 1 }
+  if (pos === 0) return { position: 'relative', zIndex: 30, opacity: 1 }
   if (pos === 1) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 20, transform: 'translateY(6px) scaleX(0.955)', opacity: 1 }
   if (pos === 2) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, transform: 'translateY(12px) scaleX(0.91)', opacity: 1 }
   return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(18px) scaleX(0.865)', opacity: 0, pointerEvents: 'none' }
@@ -492,6 +502,7 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
       href={s.href ?? '#'}
       aria-hidden={!isFront}
       tabIndex={isFront ? 0 : -1}
+      className={isFront ? 'mvp-press mvp-breathe' : undefined}
       onClick={(e) => { if (!isFront) { e.preventDefault(); onAdvance() } else if (!s.href) e.preventDefault() }}
       style={style}
     >
