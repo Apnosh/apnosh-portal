@@ -25,6 +25,8 @@ export interface TimelineEvent {
   big: boolean
   /** Optional second-line context. */
   extra?: string
+  /** Icon key for the timeline node (post/star/reply/plug/user/check/edit/send). */
+  icon?: string
 }
 
 const EVENT_TYPE_LABELS: Record<string, (summary: string | null) => string | null> = {
@@ -39,6 +41,20 @@ const EVENT_TYPE_LABELS: Record<string, (summary: string | null) => string | nul
   'connection.broken': (s) => s ?? 'A connection broke',
   'team.specialist_assigned': (s) => s ?? 'Someone joined your team',
   'team.swap_resolved': () => 'Your strategist resolved a team request',
+}
+
+const EVENT_TYPE_ICONS: Record<string, string> = {
+  'draft.published_to_platforms': 'post',
+  'draft.client_signed_off': 'check',
+  'draft.client_revise_requested': 'edit',
+  'client_request.created': 'send',
+  'client_request.accepted': 'check',
+  'review.posted': 'star',
+  'review.replied': 'reply',
+  'connection.connected': 'plug',
+  'connection.broken': 'plug',
+  'team.specialist_assigned': 'user',
+  'team.swap_resolved': 'user',
 }
 
 const POSITIVE_TYPES = new Set([
@@ -57,7 +73,7 @@ const MUTED_TYPES = new Set([
    window count as recent activity worth surfacing. */
 const WINDOW_DAYS = 30
 
-interface RawEvent { id: string; occurredAt: string; text: string; extra?: string; emphasis: TimelineUrgency }
+interface RawEvent { id: string; occurredAt: string; text: string; extra?: string; emphasis: TimelineUrgency; icon?: string }
 
 export async function getSinceLastChecked(
   clientId: string,
@@ -101,6 +117,7 @@ export async function getSinceLastChecked(
       occurredAt: e.occurred_at,
       text,
       emphasis: POSITIVE_TYPES.has(e.event_type) ? 'win' : MUTED_TYPES.has(e.event_type) ? 'mute' : 'info',
+      icon: EVENT_TYPE_ICONS[e.event_type] ?? 'dot',
     })
   }
 
@@ -114,6 +131,7 @@ export async function getSinceLastChecked(
         text: `New ${stars}★ review`,
         extra: who,
         emphasis: stars >= 4 ? 'win' : 'info',
+        icon: 'star',
       })
     }
     if (r.responded_at && r.responded_at >= sinceIso) {
@@ -122,6 +140,7 @@ export async function getSinceLastChecked(
         occurredAt: r.responded_at,
         text: `Replied to ${who}’s review`,
         emphasis: 'win',
+        icon: 'reply',
       })
     }
   }

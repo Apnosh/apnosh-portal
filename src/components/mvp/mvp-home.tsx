@@ -15,7 +15,7 @@
 import {
   Bell, Sparkles, Check, Plus, TrendingUp, TrendingDown, Minus,
   ChevronRight, ChevronLeft, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
-  Heart, Star, MessageCircle, Mail, Eye, Users, Plug, Store, HelpCircle,
+  Heart, Star, MessageCircle, Mail, Eye, Users, Plug, Store, HelpCircle, Camera, Pencil, Send,
 } from 'lucide-react'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import Link from 'next/link'
@@ -106,6 +106,12 @@ const WORK_TONE: Record<string, { fg: string; bg: string }> = {
   production: { fg: '#3a6ea5', bg: '#eef3fb' },
   review: { fg: '#bd7e16', bg: '#fbf3e4' },
   planning: { fg: '#6e6e73', bg: '#f1f1f3' },
+}
+
+// Icon per recent-activity event kind (set by getSinceLastChecked).
+const ACT_ICON: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
+  post: Camera, star: Star, reply: MessageCircle, plug: Plug, user: Users,
+  check: Check, edit: Pencil, send: Send, dot: Sparkles,
 }
 
 // Handy shortcuts at the foot of the home.
@@ -273,16 +279,24 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
             {(data.activity?.length ?? 0) > 0 && <Link href="/dashboard/inbox" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>}
           </div>
           {(data.activity?.length ?? 0) > 0 ? (
-            <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '2px 14px' }}>
+            <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '16px 15px 9px', boxShadow: '0 1px 3px rgba(0,0,0,.03)' }}>
               {(data.activity ?? []).map((e, i, arr) => {
-                const dot = e.emphasis === 'win' ? C.green : e.emphasis === 'mute' ? C.ghost : C.faint
+                const last = i === arr.length - 1
+                const Icon = ACT_ICON[e.icon ?? 'dot'] ?? Sparkles
+                const win = e.emphasis === 'win'
+                const nodeBg = win ? C.greenSoft : e.emphasis === 'mute' ? '#f4f4f6' : '#eef3fb'
+                const nodeFg = win ? C.greenDk : e.emphasis === 'mute' ? C.faint : '#3a6ea5'
                 return (
-                  <div key={e.id} style={{ display: 'flex', gap: 11, padding: '11px 0', borderBottom: i < arr.length - 1 ? `0.5px solid ${C.line}` : 'none' }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 99, background: dot, marginTop: 5, flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: e.big ? 600 : 400, color: e.big ? C.ink : C.mute, lineHeight: 1.4 }}>{e.text}</div>
-                      {e.extra && <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.35, marginTop: 1 }}>{e.extra}</div>}
-                      <div style={{ fontSize: 11, color: C.faint, marginTop: 1 }}>{e.whenLabel}</div>
+                  <div key={e.id} style={{ display: 'flex', gap: 12, paddingBottom: last ? 7 : 16 }}>
+                    <div style={{ position: 'relative', flexShrink: 0, width: 36 }}>
+                      {!last && <div style={{ position: 'absolute', left: 18, top: 38, bottom: -16, width: 2, marginLeft: -1, background: C.line }} />}
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: nodeBg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', zIndex: 1, boxShadow: win ? '0 2px 8px rgba(74,189,152,0.22)' : 'none' }}>
+                        <Icon size={16} color={nodeFg} />
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: e.big ? 700 : 500, color: C.ink, lineHeight: 1.35 }}>{e.text}{e.extra ? <span style={{ color: C.mute, fontWeight: 400 }}> · {e.extra}</span> : null}</div>
+                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.05em', color: C.faint, marginTop: 3 }}>{e.whenLabel}</div>
                     </div>
                   </div>
                 )
@@ -296,11 +310,12 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
         {/* QUICK LINKS — handy shortcuts at the foot of the home. */}
         <div style={{ marginTop: 24 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 12 }}>Quick links</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {QUICK_LINKS.map((q) => (
-              <Link key={q.href} href={q.href} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '12px 11px', textDecoration: 'none', color: 'inherit' }}>
-                <div style={{ width: 32, height: 32, borderRadius: 9, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><q.Icon size={16} color={C.greenDk} /></div>
-                <span style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.2 }}>{q.label}</span>
+              <Link key={q.href} href={q.href} style={{ display: 'flex', alignItems: 'center', gap: 13, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '15px 14px', textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 11, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><q.Icon size={19} color={C.greenDk} /></div>
+                <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600, lineHeight: 1.2 }}>{q.label}</span>
+                <ChevronRight size={17} color={C.faint} />
               </Link>
             ))}
           </div>
