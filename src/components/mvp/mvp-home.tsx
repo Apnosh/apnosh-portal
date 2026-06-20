@@ -20,7 +20,6 @@ import {
 import { useState, useRef, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import type { Suggestion } from '@/lib/dashboard/suggestions'
-import type { CampCard } from '@/lib/campaigns/view'
 
 /* Theme tokens lifted from the design's `C` palette. */
 const C = {
@@ -101,7 +100,7 @@ const TILE_ICON: Record<string, React.ComponentType<{ size?: number; color?: str
   message: MessageCircle, mail: Mail, calendar: CalendarDays, eye: Eye, users: Users,
 }
 
-export default function MvpHome({ data, showHeader = true, clientId, suggestionsReady = true, campaigns = null }: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean; campaigns?: CampCard[] | null }) {
+export default function MvpHome({ data, showHeader = true, clientId, suggestionsReady = true }: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
   const metrics = data.metrics ?? []
   const [reviewHidden, setReviewHidden] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -215,9 +214,61 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
             recommendations drawn from this restaurant's own signals. */}
         <SuggestionStack items={data.suggestions ?? []} clientId={clientId} ready={suggestionsReady} />
 
-        {/* YOUR CAMPAIGNS — the campaigns board, condensed for Home: what's
-            live, what's waiting on your OK, and a one-tap start. */}
-        <HomeCampaigns campaigns={campaigns} />
+        {/* NEEDS YOUR APPROVAL */}
+        {data.approvals.length > 0 && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Needs your approval</span>
+              <span style={{ width: 18, height: 18, borderRadius: 99, background: C.ink, color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{data.approvals.length}</span>
+              <Link href="/dashboard/inbox?tab=approvals" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              {data.approvals.map((a) => (
+                <Link key={a.id} href="/dashboard/inbox?tab=approvals" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
+                  <Thumb emoji={a.emoji} image={a.image} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', color: C.faint, marginBottom: 2 }}>{a.tag} <span style={{ fontWeight: 600 }}>· {a.timing}</span></div>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</div>
+                    <div style={{ fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.subtitle}</div>
+                  </div>
+                  <span style={{ background: '#fff', color: C.ink, border: `0.5px solid ${C.line}`, borderRadius: 99, padding: '9px 18px', fontWeight: 600, fontSize: 13, flexShrink: 0 }}>Review</span>
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* PLAN AHEAD — upcoming holidays / food days worth a post, each
+            with a one-line idea. "Plan it" hands it to the team. */}
+        {data.planner && data.planner.length > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Plan ahead</span>
+              <span style={{ fontSize: 11, color: C.faint }}>moments worth a post</span>
+            </div>
+            {data.planner.map((p) => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
+                <div style={{ width: 44, height: 48, borderRadius: 11, background: C.greenSoft, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 500, lineHeight: 1, color: C.greenDk }}>{p.day}</span>
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.green, marginTop: 2 }}>{p.mon}</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.label}</span>
+                    <span style={{ fontSize: 10.5, color: C.faint, flexShrink: 0 }}>· {p.daysLabel}</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.35, marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.hook}</div>
+                </div>
+                {p.planned ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, fontSize: 12, fontWeight: 600, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '6px 11px' }}><Check size={13} />Planned</span>
+                ) : (
+                  <a href="/dashboard/requests/new" style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none', whiteSpace: 'nowrap' }}>Plan it →</a>
+                )}
+              </div>
+            ))}
+            <div style={{ fontSize: 11, color: C.faint, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>Holidays &amp; food days that fit your restaurant. Nearby food events coming soon.</div>
+          </div>
+        )}
         </div>
       </div>
     </div>
@@ -409,79 +460,14 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
   )
 }
 
-/* ── YOUR CAMPAIGNS ────────────────────────────────────────────────────────
-   The Campaigns board, condensed for Home. Leads with anything waiting on the
-   owner's OK, then what's live, then drafts; finished ones drop off (they live
-   on the full board). Always offers a one-tap "Start a campaign". */
-function HomeCampaigns({ campaigns }: { campaigns: CampCard[] | null }) {
-  const Header = ({ count }: { count?: number }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Your campaigns</span>
-      {count ? <span style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 99, background: C.ink, color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{count}</span> : null}
-      <Link href="/dashboard/campaigns" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>
-    </div>
-  )
-
-  if (campaigns === null) {
-    return (
-      <div>
-        <Header />
-        <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 16, fontSize: 13, color: C.faint }}>Loading your campaigns&hellip;</div>
-      </div>
-    )
-  }
-
-  // Lead with needs-OK, then live, then drafts; finished campaigns drop off Home.
-  const rank = (c: CampCard) => (c.review ? 0 : c.kind === 'live' ? 1 : 2)
-  const active = campaigns.filter((c) => c.kind !== 'done').sort((a, b) => rank(a) - rank(b))
-  const shown = active.slice(0, 4)
-
+/* Thumb — ported from the design: a rounded preview that shows an emoji
+   fallback with the real image layered on top (hidden if it fails to load). */
+function Thumb({ emoji, image }: { emoji?: string; image?: string }) {
   return (
-    <div>
-      <Header count={active.length || undefined} />
-      {active.length === 0 ? (
-        <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 16, marginBottom: 10, textAlign: 'center' }}>
-          <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.45 }}><b style={{ color: C.ink }}>No campaigns running yet.</b> Start one and your team builds it with you.</div>
-        </div>
-      ) : (
-        <div style={{ marginBottom: 2 }}>
-          {shown.map((c) => <HomeCampaignCard key={c.key} c={c} />)}
-        </div>
-      )}
-      <Link href="/dashboard/campaigns/discover" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, border: `1px dashed ${C.greenLine}`, color: C.greenDk, borderRadius: 14, padding: 13, fontWeight: 700, fontSize: 13.5, textDecoration: 'none', marginTop: active.length ? 6 : 0 }}>
-        <Plus size={16} /> Start a campaign
-      </Link>
+    <div style={{ width: 42, height: 42, borderRadius: 10, background: '#f5f4f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 21, position: 'relative', overflow: 'hidden' }}>
+      {emoji || '📄'}
+      {image && <img src={image} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
     </div>
-  )
-}
-
-function HomeCampaignCard({ c }: { c: CampCard }) {
-  const review = c.review
-  const dotC = review ? C.amberBtn : c.kind === 'live' ? C.green : C.faint
-  const pct = c.perf?.type === 'progress' && c.perf.total ? c.perf.live / c.perf.total : 0
-  return (
-    <Link href={c.href} style={{ display: 'block', textDecoration: 'none', color: 'inherit', background: review ? C.amberBg : '#fff', border: `0.5px solid ${review ? C.amberLine : C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-        <span style={{ width: 8, height: 8, borderRadius: 99, background: dotC, flexShrink: 0 }} />
-        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: review ? C.amber : C.mute }}>{c.pill}</span>
-        {c.cost && <span style={{ marginLeft: 'auto', fontFamily: DISPLAY, fontWeight: 600, fontSize: 13.5, color: C.ink }}>{c.cost}</span>}
-      </div>
-      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 15.5, color: C.ink, lineHeight: 1.2, marginTop: 6 }}>{c.title}</div>
-      <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.35, marginTop: 2 }}>{c.blurb}</div>
-      {c.perf?.type === 'progress' && (
-        <div style={{ marginTop: 9 }}>
-          <div style={{ height: 5, borderRadius: 99, background: '#eef0ef', overflow: 'hidden' }}><div style={{ width: `${Math.max(5, pct * 100)}%`, height: '100%', background: C.green, borderRadius: 99 }} /></div>
-          <div style={{ fontSize: 10.5, color: C.faint, marginTop: 4 }}>{c.perf.live} of {c.perf.total} parts live</div>
-        </div>
-      )}
-      <div style={{ display: 'flex', alignItems: 'center', marginTop: 9 }}>
-        {review ? (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#fff', border: `0.5px solid ${C.amberLine}`, color: C.amber, borderRadius: 99, padding: '5px 11px', fontWeight: 700, fontSize: 12 }}><Eye size={12} /> Review &amp; approve</span>
-        ) : (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: C.greenDk, fontWeight: 700, fontSize: 12.5 }}>See how it&apos;s doing <ChevronRight size={14} /></span>
-        )}
-      </div>
-    </Link>
   )
 }
 
