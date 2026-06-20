@@ -17,12 +17,8 @@ import { transformHome } from '@/components/mvp/home-transform'
 import MvpShell from '@/components/mvp/mvp-shell'
 import type { Suggestion } from '@/lib/dashboard/suggestions'
 
-// Design sample content — shown only where the client has no real approvals /
-// monthly review yet, so the home reads complete during this build phase.
-const SAMPLE_APPROVALS: MvpHomeData['approvals'] = [
-  { id: 's1', tag: 'POST', timing: 'By 5pm', title: 'Kimchi Burger reel', subtitle: 'For Saturday lunch · drafted by your team', emoji: '🌶️', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=320&q=80&auto=format&fit=crop' },
-  { id: 's2', tag: 'DESIGN', timing: 'No rush', title: 'Summer menu poster', subtitle: 'Studio applied your notes', emoji: '🍑', image: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=320&q=80&auto=format&fit=crop' },
-]
+// Design sample content — shown only where the client has no real monthly
+// review yet, so the home reads complete during this build phase.
 const SAMPLE_REVIEW: MvpHomeData['review'] = { prevMonthLabel: 'May', cycleLabel: 'June', budget: 800 }
 
 export default function DashboardHomePage() {
@@ -49,9 +45,9 @@ export default function DashboardHomePage() {
       .then((json) => {
         if (!live) return
         const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·', undefined, json.comingUp)
-        if (d.approvals.length === 0) d.approvals = SAMPLE_APPROVALS
         if (!d.review) d.review = SAMPLE_REVIEW
         d.activity = json.sinceLastChecked ?? []
+        d.upcomingWork = json.upcomingWork ?? []
         setData(d)
       })
       .catch((e) => { if (live) setError(e.message) })

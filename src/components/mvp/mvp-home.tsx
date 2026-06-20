@@ -21,6 +21,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import type { Suggestion } from '@/lib/dashboard/suggestions'
 import type { TimelineEvent } from '@/lib/dashboard/get-since-last-checked'
+import type { UpcomingWorkItem } from '@/lib/dashboard/get-upcoming-work'
 
 /* Theme tokens lifted from the design's `C` palette. */
 const C = {
@@ -95,6 +96,16 @@ export interface MvpHomeData {
   planner?: { id: string; day: string; mon: string; daysLabel: string; label: string; hook: string; planned: boolean }[]
   /** Recent activity timeline (since-you-last-checked): posts live, reviews, replies, milestones. */
   activity?: TimelineEvent[]
+  /** What the team is actively working on + what's going live next. */
+  upcomingWork?: UpcomingWorkItem[]
+}
+
+// Owner-facing colour per work tone for the "Coming up next" section.
+const WORK_TONE: Record<string, { fg: string; bg: string }> = {
+  scheduled: { fg: '#2e9a78', bg: '#eaf7f3' },
+  production: { fg: '#3a6ea5', bg: '#eef3fb' },
+  review: { fg: '#bd7e16', bg: '#fbf3e4' },
+  planning: { fg: '#6e6e73', bg: '#f1f1f3' },
 }
 
 // Breakdown-tile icons keyed by the icon name get-home-metrics emits.
@@ -217,58 +228,27 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
             recommendations drawn from this restaurant's own signals. */}
         <SuggestionStack items={data.suggestions ?? []} clientId={clientId} ready={suggestionsReady} />
 
-        {/* NEEDS YOUR APPROVAL */}
-        {data.approvals.length > 0 && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Needs your approval</span>
-              <span style={{ width: 18, height: 18, borderRadius: 99, background: C.ink, color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{data.approvals.length}</span>
-              <Link href="/dashboard/inbox?tab=approvals" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              {data.approvals.map((a) => (
-                <Link key={a.id} href="/dashboard/inbox?tab=approvals" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
-                  <Thumb emoji={a.emoji} image={a.image} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.06em', color: C.faint, marginBottom: 2 }}>{a.tag} <span style={{ fontWeight: 600 }}>· {a.timing}</span></div>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</div>
-                    <div style={{ fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.subtitle}</div>
-                  </div>
-                  <span style={{ background: '#fff', color: C.ink, border: `0.5px solid ${C.line}`, borderRadius: 99, padding: '9px 18px', fontWeight: 600, fontSize: 13, flexShrink: 0 }}>Review</span>
-                </Link>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* COMING UP NEXT — the nearest calendar moments, each showing whether
-            content is already queued for it. */}
-        {data.planner && data.planner.length > 0 && (
-          <div style={{ marginTop: 24 }}>
+        {/* COMING UP NEXT — what the team is actively working on and what's
+            going live next, from the content pipeline. */}
+        {(data.upcomingWork?.length ?? 0) > 0 && (
+          <div style={{ marginTop: 22 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Coming up next</span>
-              <span style={{ fontSize: 11, color: C.faint }}>on your calendar</span>
+              <span style={{ fontSize: 11, color: C.faint }}>what your team is on</span>
             </div>
-            {data.planner.map((p) => (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
-                <div style={{ width: 44, height: 48, borderRadius: 11, background: C.greenSoft, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 500, lineHeight: 1, color: C.greenDk }}>{p.day}</span>
-                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.green, marginTop: 2 }}>{p.mon}</span>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.label}</span>
-                    <span style={{ fontSize: 10.5, color: C.faint, flexShrink: 0 }}>· {p.daysLabel}</span>
+            {(data.upcomingWork ?? []).map((w) => {
+              const t = WORK_TONE[w.tone] ?? WORK_TONE.planning
+              return (
+                <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
+                  <span style={{ width: 9, height: 9, borderRadius: 99, background: t.fg, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.title}</div>
+                    <div style={{ fontSize: 11.5, color: C.faint, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.channel}{w.whenLabel ? ` · ${w.whenLabel}` : ''}</div>
                   </div>
-                  <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.35, marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.hook}</div>
+                  <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: t.fg, background: t.bg, borderRadius: 99, padding: '4px 10px' }}>{w.statusLabel}</span>
                 </div>
-                {p.planned ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, fontSize: 12, fontWeight: 600, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '6px 11px' }}><Check size={13} />Ready</span>
-                ) : (
-                  <a href="/dashboard/requests/new" style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none', whiteSpace: 'nowrap' }}>Plan it →</a>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
@@ -401,10 +381,10 @@ function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[
     )
   }
   return (
-    <div style={{ marginBottom: 20 }}>
+    <div style={{ marginBottom: 14 }}>
       {/* Layered deck: the top card is live; the next one or two peek at the
           bottom. Step through with the "1 of N" controls (or tap a peek). */}
-      <div style={{ position: 'relative', paddingBottom: deck.length > 2 ? 26 : deck.length > 1 ? 15 : 0 }}>
+      <div style={{ position: 'relative', paddingBottom: deck.length > 2 ? 19 : deck.length > 1 ? 11 : 0 }}>
         {deck.map((s, pos) => (
           <SuggestionCard
             key={s.id}
@@ -418,7 +398,7 @@ function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[
         ))}
       </div>
       {visible.length > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: deck.length > 2 ? 30 : deck.length > 1 ? 18 : 13, padding: '0 2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: deck.length > 2 ? 22 : deck.length > 1 ? 13 : 10, padding: '0 2px' }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>
             <span style={{ color: C.ink }}>{safeStep + 1}</span>
             <span style={{ color: C.faint }}> of {visible.length}</span>
@@ -445,9 +425,9 @@ function StepBtn({ children, onClick, disabled, label }: { children: React.React
 // behind are absolute, nudged down + narrowed so a clean strip peeks below.
 function deckDepth(pos: number): React.CSSProperties {
   if (pos === 0) return { position: 'relative', zIndex: 30, transform: 'none', opacity: 1 }
-  if (pos === 1) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 20, transform: 'translateY(12px) scaleX(0.93)', opacity: 1 }
-  if (pos === 2) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, transform: 'translateY(23px) scaleX(0.86)', opacity: 1 }
-  return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(32px) scaleX(0.80)', opacity: 0, pointerEvents: 'none' }
+  if (pos === 1) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 20, transform: 'translateY(8px) scaleX(0.95)', opacity: 1 }
+  if (pos === 2) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, transform: 'translateY(16px) scaleX(0.90)', opacity: 1 }
+  return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(23px) scaleX(0.85)', opacity: 0, pointerEvents: 'none' }
 }
 
 function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }: { s: Suggestion; pos: number; isFront: boolean; onAdvance: () => void; onClose: () => void; canClose?: boolean }) {
@@ -461,7 +441,7 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
     transformOrigin: 'top center',
     transition: 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s',
     background: a.bg, border: `0.5px solid ${a.border}`, borderRadius: 18,
-    padding: '15px 16px', boxSizing: 'border-box', overflow: 'hidden',
+    padding: '12px 15px', boxSizing: 'border-box', overflow: 'hidden',
     textDecoration: 'none', display: 'block', color: 'inherit', cursor: 'pointer',
     boxShadow: pos === 0 ? '0 8px 22px rgba(0,0,0,0.08)' : '0 2px 10px rgba(0,0,0,0.05)',
   }
@@ -486,17 +466,6 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: a.fg, color: '#fff', borderRadius: 99, padding: '9px 15px', fontWeight: 700, fontSize: 12.5 }}>{s.cta} <ChevronRight size={14} /></span>
       )}
     </Link>
-  )
-}
-
-/* Thumb — ported from the design: a rounded preview that shows an emoji
-   fallback with the real image layered on top (hidden if it fails to load). */
-function Thumb({ emoji, image }: { emoji?: string; image?: string }) {
-  return (
-    <div style={{ width: 42, height: 42, borderRadius: 10, background: '#f5f4f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 21, position: 'relative', overflow: 'hidden' }}>
-      {emoji || '📄'}
-      {image && <img src={image} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
-    </div>
   )
 }
 

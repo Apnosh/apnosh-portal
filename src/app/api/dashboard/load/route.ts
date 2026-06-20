@@ -33,6 +33,7 @@ import { getPlaybookExplanations } from '@/lib/dashboard/get-playbook-explanatio
 import { getTodayHero } from '@/lib/dashboard/get-today-hero'
 import { getRecentReviews } from '@/lib/dashboard/get-recent-reviews'
 import { getSinceLastChecked } from '@/lib/dashboard/get-since-last-checked'
+import { getUpcomingWork } from '@/lib/dashboard/get-upcoming-work'
 import { getPrimaryStrategist } from '@/lib/dashboard/get-primary-strategist'
 import { getInboxThreads } from '@/lib/dashboard/get-inbox-threads'
 
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
   // Parallel: fire every query at once.
-  const [pulse, metricHistory, homeMetrics, homeSections, weekly, agenda, services, goalCards, strategist, playbooks, todayHero, recentReviews, sinceLastChecked, primaryStrategist, inboxThreads, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow] = await Promise.all([
+  const [pulse, metricHistory, homeMetrics, homeSections, weekly, agenda, services, goalCards, strategist, playbooks, todayHero, recentReviews, sinceLastChecked, primaryStrategist, inboxThreads, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow, upcomingWork] = await Promise.all([
     getPulseData(clientId),
     getMetricHistory(clientId),
     getHomeMetrics(clientId),
@@ -118,6 +119,8 @@ export async function GET(req: NextRequest) {
       .in('status', ['scheduled', 'publishing'])
       .gte('scheduled_for', new Date().toISOString())
       .lte('scheduled_for', new Date(Date.now() + 60 * 86400000).toISOString()),
+    // What the team is actively working on + what's going live next.
+    getUpcomingWork(clientId),
   ])
 
   // Filter out snoozed tasks
@@ -172,6 +175,7 @@ export async function GET(req: NextRequest) {
         pulse.reputation.state === 'live',
     },
     comingUp,
+    upcomingWork,
     reviews: reviewsRow.data ?? [],
     brief: briefRow.data ? {
       text: briefRow.data.raw_text,
