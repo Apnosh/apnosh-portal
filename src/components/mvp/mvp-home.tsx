@@ -15,7 +15,7 @@
 import {
   Bell, Sparkles, Check, Plus, TrendingUp, TrendingDown, Minus,
   ChevronRight, ChevronLeft, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
-  Heart, Star, MessageCircle, Mail, Eye, Users, Plug,
+  Heart, Star, MessageCircle, Mail, Eye, Users, Plug, Store, HelpCircle,
 } from 'lucide-react'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import Link from 'next/link'
@@ -107,6 +107,14 @@ const WORK_TONE: Record<string, { fg: string; bg: string }> = {
   review: { fg: '#bd7e16', bg: '#fbf3e4' },
   planning: { fg: '#6e6e73', bg: '#f1f1f3' },
 }
+
+// Handy shortcuts at the foot of the home.
+const QUICK_LINKS: { label: string; href: string; Icon: React.ComponentType<{ size?: number; color?: string }> }[] = [
+  { label: 'Update business info', href: '/dashboard/business-info', Icon: Store },
+  { label: 'Connected accounts', href: '/dashboard/connected-accounts', Icon: Plug },
+  { label: 'Your team', href: '/dashboard/team', Icon: Users },
+  { label: 'Get help', href: '/dashboard/help', Icon: HelpCircle },
+]
 
 // Breakdown-tile icons keyed by the icon name get-home-metrics emits.
 const TILE_ICON: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
@@ -251,7 +259,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
               )
             })
           ) : (
-            <EmptySection icon={<CalendarDays size={18} color={C.faint} />} text="Nothing queued right now. Your next posts will show here as your team lines them up." />
+            <EmptySection icon={<CalendarDays size={20} color={C.green} />} title="Nothing queued right now" text="Your next posts will show up here as your team lines them up." />
           )}
         </div>
 
@@ -281,8 +289,21 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
               })}
             </div>
           ) : (
-            <EmptySection icon={<Sparkles size={18} color={C.faint} />} text="Nothing new yet. Your posts, reviews, and wins will show up here." />
+            <EmptySection icon={<Sparkles size={20} color={C.green} />} title="Nothing new yet" text="Your posts, reviews, and wins will show up here." />
           )}
+        </div>
+
+        {/* QUICK LINKS — handy shortcuts at the foot of the home. */}
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 12 }}>Quick links</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {QUICK_LINKS.map((q) => (
+              <Link key={q.href} href={q.href} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '12px 11px', textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ width: 32, height: 32, borderRadius: 9, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><q.Icon size={16} color={C.greenDk} /></div>
+                <span style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.2 }}>{q.label}</span>
+              </Link>
+            ))}
+          </div>
         </div>
         </div>
       </div>
@@ -476,12 +497,16 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
 }
 
 /* Calm empty state for a home section so it still reads as present (and the
-   home never collapses) when there's nothing to show yet. */
-function EmptySection({ icon, text }: { icon?: React.ReactNode; text: string }) {
+   home never collapses) when there's nothing to show yet. Centered, soft,
+   with a haloed icon so it feels designed rather than blank. */
+function EmptySection({ icon, title, text }: { icon?: React.ReactNode; title?: string; text: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '13px 14px' }}>
-      {icon && <div style={{ width: 34, height: 34, borderRadius: 10, background: '#f1f1f3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</div>}
-      <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>{text}</div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'linear-gradient(180deg,#fbfdfc,#f5f9f7)', border: `1px dashed ${C.greenLine}`, borderRadius: 18, padding: '22px 20px' }}>
+      {icon && (
+        <div style={{ width: 46, height: 46, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, boxShadow: '0 2px 10px rgba(74,189,152,0.18)' }}>{icon}</div>
+      )}
+      {title && <div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink, marginBottom: 3 }}>{title}</div>}
+      <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.5, maxWidth: 230 }}>{text}</div>
     </div>
   )
 }
