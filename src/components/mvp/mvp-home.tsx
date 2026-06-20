@@ -20,6 +20,7 @@ import {
 import { useState, useRef, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import type { Suggestion } from '@/lib/dashboard/suggestions'
+import type { TimelineEvent } from '@/lib/dashboard/get-since-last-checked'
 
 /* Theme tokens lifted from the design's `C` palette. */
 const C = {
@@ -92,6 +93,8 @@ export interface MvpHomeData {
   approvals: { id: string; tag: string; timing: string; title: string; subtitle: string; emoji?: string; image?: string }[]
   review: { prevMonthLabel: string; cycleLabel: string; budget: number } | null
   planner?: { id: string; day: string; mon: string; daysLabel: string; label: string; hook: string; planned: boolean }[]
+  /** Recent activity timeline (since-you-last-checked): posts live, reviews, replies, milestones. */
+  activity?: TimelineEvent[]
 }
 
 // Breakdown-tile icons keyed by the icon name get-home-metrics emits.
@@ -238,13 +241,13 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
           </>
         )}
 
-        {/* PLAN AHEAD — upcoming holidays / food days worth a post, each
-            with a one-line idea. "Plan it" hands it to the team. */}
+        {/* COMING UP NEXT — the nearest calendar moments, each showing whether
+            content is already queued for it. */}
         {data.planner && data.planner.length > 0 && (
           <div style={{ marginTop: 24 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Plan ahead</span>
-              <span style={{ fontSize: 11, color: C.faint }}>moments worth a post</span>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Coming up next</span>
+              <span style={{ fontSize: 11, color: C.faint }}>on your calendar</span>
             </div>
             {data.planner.map((p) => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
@@ -260,13 +263,39 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
                   <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.35, marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.hook}</div>
                 </div>
                 {p.planned ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, fontSize: 12, fontWeight: 600, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '6px 11px' }}><Check size={13} />Planned</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, fontSize: 12, fontWeight: 600, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '6px 11px' }}><Check size={13} />Ready</span>
                 ) : (
                   <a href="/dashboard/requests/new" style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none', whiteSpace: 'nowrap' }}>Plan it →</a>
                 )}
               </div>
             ))}
-            <div style={{ fontSize: 11, color: C.faint, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>Holidays &amp; food days that fit your restaurant. Nearby food events coming soon.</div>
+          </div>
+        )}
+
+        {/* RECENT ACTIVITY — a calm highlight reel of what just happened: posts
+            that went live, new reviews, replies, milestones. The headline win
+            gets a filled green dot + bold; the rest are quiet context. */}
+        {(data.activity?.length ?? 0) > 0 && (
+          <div style={{ marginTop: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Recent activity</span>
+              <Link href="/dashboard/inbox" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>
+            </div>
+            <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '2px 14px' }}>
+              {(data.activity ?? []).map((e, i, arr) => {
+                const dot = e.emphasis === 'win' ? C.green : e.emphasis === 'mute' ? C.ghost : C.faint
+                return (
+                  <div key={e.id} style={{ display: 'flex', gap: 11, padding: '11px 0', borderBottom: i < arr.length - 1 ? `0.5px solid ${C.line}` : 'none' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 99, background: dot, marginTop: 5, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: e.big ? 600 : 400, color: e.big ? C.ink : C.mute, lineHeight: 1.4 }}>{e.text}</div>
+                      {e.extra && <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.35, marginTop: 1 }}>{e.extra}</div>}
+                      <div style={{ fontSize: 11, color: C.faint, marginTop: 1 }}>{e.whenLabel}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
         </div>

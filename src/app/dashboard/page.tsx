@@ -51,6 +51,7 @@ export default function DashboardHomePage() {
         const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·', undefined, json.comingUp)
         if (d.approvals.length === 0) d.approvals = SAMPLE_APPROVALS
         if (!d.review) d.review = SAMPLE_REVIEW
+        d.activity = json.sinceLastChecked ?? []
         setData(d)
       })
       .catch((e) => { if (live) setError(e.message) })
