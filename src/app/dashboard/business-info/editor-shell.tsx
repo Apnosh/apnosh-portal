@@ -12,6 +12,8 @@ import {
   ArrowLeft, Loader2, CheckCircle2, AlertCircle,
 } from 'lucide-react'
 import type { SaveResult } from './actions'
+import MvpShell from '@/components/mvp/mvp-shell'
+import { MvpDetailHeader, MvpSaveBar, C, DISPLAY } from '@/components/mvp/mvp-detail'
 
 export function EditorHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   const router = useRouter()
@@ -98,6 +100,148 @@ export function ErrorBanner({ message }: { message: string }) {
     <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-start gap-2">
       <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
       <p className="text-[12.5px] text-rose-800">{message}</p>
+    </div>
+  )
+}
+
+/* ──────────────────────────────────────────────────────────────────
+ * apnosh-mvp editor shell. New design language (inline styles + C tokens),
+ * rendered full-screen inside MvpShell with a back-to-hub header and a sticky
+ * green save bar. On save it shows MvpSavedView — the visible, trustworthy
+ * "here's what updated on Google and your website" confirmation. Editors are
+ * migrated onto this one at a time; the legacy pieces above stay for the rest.
+ * ────────────────────────────────────────────────────────────────── */
+
+const AMBER = '#bd7e16'
+const AMBER_DK = '#8a5a0c'
+
+export function MvpEditorShell({ title, subtitle, saving, dirty = true, onSave, saveLabel = 'Save & sync', result, onEditAgain, children }: {
+  title: string
+  subtitle?: string
+  saving: boolean
+  dirty?: boolean
+  onSave: () => void
+  saveLabel?: string
+  result?: SaveResult | null
+  onEditAgain?: () => void
+  children: React.ReactNode
+}) {
+  const saved = !!result?.synced.saved
+  return (
+    <MvpShell active="more" header={<MvpDetailHeader title={title} subtitle={subtitle} backHref="/dashboard/business-info" backLabel="Business info" />}>
+      {saved && result ? (
+        <MvpSavedView result={result} onEditAgain={onEditAgain} />
+      ) : (
+        <div style={{ background: C.bg, minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
+          <div style={{ flex: 1, padding: '16px 14px 14px' }}>{children}</div>
+          <MvpSaveBar onClick={onSave} label={saveLabel} disabled={!dirty} saving={saving} />
+        </div>
+      )}
+    </MvpShell>
+  )
+}
+
+function MvpSavedView({ result, onEditAgain }: { result: SaveResult; onEditAgain?: () => void }) {
+  const router = useRouter()
+  const g = result.synced.google
+  const w = result.synced.website
+  return (
+    <div style={{ background: C.bg, minHeight: '100%', padding: '28px 18px 28px', fontFamily: "'Inter',system-ui,sans-serif" }}>
+      <div style={{ width: 60, height: 60, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '6px auto 14px' }}>
+        <CheckCircle2 size={32} color={C.greenDk} />
+      </div>
+      <div style={{ textAlign: 'center', fontSize: 22, fontWeight: 600, color: C.ink, fontFamily: DISPLAY }}>Saved</div>
+      <div style={{ textAlign: 'center', fontSize: 13.5, color: C.mute, margin: '4px 0 18px' }}>Here&apos;s what updated</div>
+
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+        <MvpSyncRow state="ok" label="Your Apnosh records" detail="Saved" />
+        <div style={{ height: '0.5px', background: C.line, marginLeft: 48 }} />
+        <MvpSyncRow
+          state={g === 'ok' ? 'ok' : g === 'failed' ? 'warn' : 'skip'}
+          label="Google Business Profile"
+          detail={g === 'ok' ? 'Updated live' : g === 'failed' ? (result.googleError ?? 'Could not update') : 'Not connected'}
+        />
+        <div style={{ height: '0.5px', background: C.line, marginLeft: 48 }} />
+        <MvpSyncRow
+          state={(w === 'committed' || w === 'queued') ? 'ok' : w === 'failed' ? 'warn' : 'skip'}
+          label="Your website"
+          detail={w === 'committed' ? 'Rebuilding now' : w === 'queued' ? 'Updating shortly' : w === 'failed' ? (result.websiteError ?? 'Could not update') : 'No site connected'}
+        />
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
+        {onEditAgain && (
+          <button type="button" onClick={onEditAgain} style={{ flex: 1, height: 46, borderRadius: 13, border: `1px solid ${C.line}`, background: '#fff', color: C.ink, fontSize: 15, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>Edit again</button>
+        )}
+        <button type="button" onClick={() => router.push('/dashboard/business-info')} style={{ flex: 1, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>Done</button>
+      </div>
+    </div>
+  )
+}
+
+function MvpSyncRow({ state, label, detail }: { state: 'ok' | 'warn' | 'skip'; label: string; detail: string }) {
+  const icon = state === 'warn'
+    ? <AlertCircle size={20} color={AMBER} />
+    : state === 'skip'
+      ? <span style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${C.line}`, display: 'inline-block' }} />
+      : <CheckCircle2 size={20} color={C.greenDk} />
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px' }}>
+      <span style={{ flexShrink: 0, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{label}</div>
+        <div style={{ fontSize: 12.5, color: state === 'warn' ? AMBER_DK : C.mute, marginTop: 1 }}>{detail}</div>
+      </div>
+    </div>
+  )
+}
+
+export function EditorField({ label, value, onChange, type = 'text', placeholder, hint, inputMode }: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
+  placeholder?: string
+  hint?: string
+  inputMode?: 'text' | 'tel' | 'url' | 'email' | 'numeric'
+}) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: C.mute, marginBottom: 6 }}>{label}</label>
+      <input
+        type={type}
+        inputMode={inputMode}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="mvp-input"
+        style={{ width: '100%', boxSizing: 'border-box', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 14px', fontSize: 15.5, color: C.ink, fontFamily: 'inherit', outline: 'none' }}
+      />
+      {hint && <p style={{ fontSize: 11.5, color: C.faint, margin: '6px 2px 0', lineHeight: 1.45 }}>{hint}</p>}
+    </div>
+  )
+}
+
+export function EditorTextArea({ label, value, onChange, placeholder, rows = 5, hint }: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  rows?: number
+  hint?: string
+}) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: C.mute, marginBottom: 6 }}>{label}</label>
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        rows={rows}
+        placeholder={placeholder}
+        className="mvp-input"
+        style={{ width: '100%', boxSizing: 'border-box', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 14px', fontSize: 15.5, color: C.ink, fontFamily: 'inherit', outline: 'none', resize: 'none', lineHeight: 1.5 }}
+      />
+      {hint && <p style={{ fontSize: 11.5, color: C.faint, margin: '6px 2px 0', lineHeight: 1.45 }}>{hint}</p>}
     </div>
   )
 }

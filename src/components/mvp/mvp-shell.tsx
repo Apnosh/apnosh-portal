@@ -20,6 +20,8 @@ const SHELL_CSS = `
 @media (hover:hover){.mvp-row:hover{background:#f7faf9}}
 .mvp-spin{animation:mvpspin .8s linear infinite}
 @keyframes mvpspin{to{transform:rotate(360deg)}}
+.mvp-input{transition:border-color .12s ease}
+.mvp-input:focus{border-color:#4abd98}
 `
 
 // `header` replaces the default AppHeader — detail pages reached from a tab
