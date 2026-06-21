@@ -205,9 +205,9 @@ function Lead({ bold, rest, lines = 2 }: { bold: string; rest?: string; lines?: 
     </>
   )
 }
-// Subtle "there's more" affordance — the whole row taps through to the full text.
+// Subtle "there's more" affordance on its own line — the whole row taps through.
 function ReadMore() {
-  return <span style={{ display: 'inline-block', marginTop: 4, fontSize: 12.5, fontWeight: 700, color: C.greenDk }}>Read more</span>
+  return <div style={{ marginTop: 5, fontSize: 12.5, fontWeight: 700, color: C.greenDk }}>Read more</div>
 }
 // Outlined action button (visual span; the row's own Link carries the nav).
 function PillBtn({ label, danger }: { label: string; danger?: boolean }) {
@@ -217,8 +217,9 @@ function PillBtn({ label, danger }: { label: string; danger?: boolean }) {
 
 const matchItem = (i: Item, q: string) => !q || `${i.title} ${i.subtitle} ${i.review?.text ?? ''}`.toLowerCase().includes(q)
 
-/* ── Feed for the selected filter. "All" leads with "Needs you", then "The
- *  rest", then the quiet wins lane. A single category is a flat list. */
+/* ── Feed for the selected filter. "All" is one flat feed (urgent items first,
+ *  then everything else, then the quiet wins) — no section headers. A single
+ *  category is a flat list too. */
 function ListView({ filter, items, wins, q, onDismiss }: { filter: string; items: Item[]; wins: Win[]; q: string; onDismiss: (id: string) => void }) {
   const list = (filter === 'all' ? items : items.filter((i) => (CHIPS[filter] ?? []).includes(i.chip))).filter((i) => matchItem(i, q))
   const wq = q ? wins.filter((w) => `${w.title} ${w.body}`.toLowerCase().includes(q)) : wins
@@ -227,8 +228,8 @@ function ListView({ filter, items, wins, q, onDismiss }: { filter: string; items
   const pad: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 0 28px' }
 
   if (filter === 'all') {
-    const today = list.filter((i) => i.band === 'today')
-    const rest = list.filter((i) => i.band !== 'today')
+    // One flat feed, urgent first — no section headers.
+    const ordered = [...list].sort((a, b) => (a.band === 'today' ? 0 : 1) - (b.band === 'today' ? 0 : 1))
     return (
       <div style={pad}>
         {q && list.length === 0 && winList.length === 0 && <InboxEmpty icon={Search} title="No matches" sub="Nothing here matches that search." />}
@@ -238,9 +239,8 @@ function ListView({ filter, items, wins, q, onDismiss }: { filter: string; items
             <div><div style={{ fontWeight: 700, fontSize: 14.5, color: C.greenDk }}>You&apos;re all caught up</div><div style={{ fontSize: 12, color: C.greenDk, opacity: 0.85 }}>Nothing is waiting on you right now.</div></div>
           </div>
         )}
-        {today.length > 0 && <><Divider label="Needs you" count={today.length} />{today.map((i) => <Row key={i.id} item={i} onDismiss={onDismiss} />)}</>}
-        {rest.length > 0 && <><Divider label="The rest" count={rest.length} />{rest.map((i) => <Row key={i.id} item={i} onDismiss={onDismiss} />)}</>}
-        {winList.length > 0 && <><Divider label="Good to know" />{winList.map((w) => <WinLink key={w.id} w={w} />)}</>}
+        {ordered.map((i) => <Row key={i.id} item={i} onDismiss={onDismiss} />)}
+        {winList.map((w) => <WinLink key={w.id} w={w} />)}
       </div>
     )
   }
