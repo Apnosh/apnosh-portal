@@ -40,7 +40,7 @@ const GROUPS: { title: string; rows: Row[] }[] = [
     title: 'Your business',
     rows: [
       { label: 'Business info & hours', sub: 'Hours, menu, photos', href: '/dashboard/business-info', Icon: Store },
-      { label: 'Brand & audience', sub: 'Voice, audience, competitors', href: '/dashboard/profile', Icon: Palette },
+      { label: 'Brand & audience', sub: 'Voice, audience, competitors', href: '/dashboard/business-info/brand', Icon: Palette },
       { label: 'Connected accounts', sub: 'Instagram, Google, Yelp', href: '/dashboard/connected-accounts', Icon: Plug },
       { label: 'Photos & files', sub: 'Logo, photos, videos', href: '/dashboard/assets', Icon: ImageIcon },
       { label: 'Your goals', sub: 'What to focus on', href: '/dashboard/goals', Icon: Target },
