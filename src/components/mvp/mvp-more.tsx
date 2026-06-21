@@ -3,7 +3,7 @@
 /**
  * /dashboard/more — the owner "More" hub in the apnosh-mvp design. An
  * iOS-Settings-style grouped list: a business identity card on top, then the
- * surfaces that don't earn a primary tab (business records, help + tools, plan
+ * surfaces that don't earn a primary tab (business records, help, plan
  * + account), then sign out.
  *
  * Every row links to a page that already exists. "Contact support" deep-links
@@ -14,7 +14,7 @@
 import Link from 'next/link'
 import {
   Store, Palette, Plug, Image as ImageIcon, Target,
-  Headset, HelpCircle, Sparkles,
+  Headset, HelpCircle,
   CreditCard, FileText, Settings,
   ChevronRight, LogOut,
 } from 'lucide-react'
@@ -47,11 +47,10 @@ const GROUPS: { title: string; rows: Row[] }[] = [
     ],
   },
   {
-    title: 'Help & tools',
+    title: 'Help',
     rows: [
       { label: 'Contact support', sub: 'Talk to your team', href: '/dashboard/messages', Icon: Headset },
       { label: 'Help & FAQ', sub: 'Quick answers', href: '/dashboard/help', Icon: HelpCircle },
-      { label: 'AI helpers', sub: 'Captions & replies', href: '/dashboard/tools', Icon: Sparkles },
     ],
   },
   {

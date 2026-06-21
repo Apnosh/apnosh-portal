@@ -10,6 +10,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
+import { getClientContext } from '@/lib/ai/get-client-context'
 import type { CampaignBrief, LineItem } from '@/lib/campaigns/types'
 import { AUDIENCES } from '@/lib/campaigns/data/campaign-templates'
 
@@ -63,9 +64,18 @@ export async function POST(req: NextRequest) {
   const audienceText = (brief?.audienceIds ?? []).map((a) => AUDIENCES[a]?.label ?? a).join(', ') || 'your guests'
   const pieces = draftable.map((it) => `- id "${it.id}": ${it.plain} (${it.does})${it.when ? ` — lands ${it.when}` : ''}`).join('\n')
 
+  // Ground the copy in the owner's real brand voice, facts, top posts, and the
+  // patterns they've rejected before. Best-effort: if retrieval fails we still
+  // draft (just less tailored), matching this route's soft-failure contract.
+  const ctx = await getClientContext(clientId).catch(() => null)
+  const brandBlock = ctx?.promptSummary
+    ? `\nWrite in THIS restaurant's voice. Match the brand voice, honor the known facts, learn from what already works, and avoid anything this client rejects:\n\n${ctx.promptSummary}\n`
+    : ''
+
   const system = `You are a sharp restaurant marketing copywriter at Apnosh. You write short, appetizing, on-brand copy a busy owner would be proud to post.
 Rules:
 - No em dashes. Short, plain sentences. Concrete and specific.
+- Write in the restaurant's own brand voice when brand context is provided. Never sound generic.
 - Work the offer in naturally where it fits; never sound spammy.
 - Social/reel captions: a strong first line, then a tight follow. Add 2-4 relevant hashtags only where they help.
 - Emails: a short subject (title) + a skimmable body with one clear call to action.
@@ -74,11 +84,11 @@ Rules:
 Return copy for every id you are given.`
 
   const user = `Write the copy for this campaign.
-Restaurant: ${businessName || 'this restaurant'}
+Restaurant: ${businessName || ctx?.clientName || 'this restaurant'}
 Campaign: ${brief?.objective ?? 'a promotion'}${brief?.offer ? `\nOffer: ${brief.offer.label}` : ''}
 Who it's for: ${audienceText}
 Projected outcome: ${brief?.projected ?? ''}
-
+${brandBlock}
 Draft each of these pieces (use the exact id):
 ${pieces}`
 

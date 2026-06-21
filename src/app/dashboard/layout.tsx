@@ -72,7 +72,6 @@ interface NavSection {
 //   /dashboard/profile/strategy (advanced; revisit)
 //   /dashboard/reports (overlaps Weekly Briefs)
 //   /dashboard/approvals (rebuilding on real data; was mock)
-//   /dashboard/tools (coming-soon shells)
 //   /dashboard/calendar (becoming master calendar; rebuild)
 //   /dashboard/orders/* (off-path for v1 onboarding)
 //   /dashboard/goals (first-run only; surface as setup card)
