@@ -86,7 +86,7 @@ export default async function BusinessInfoPage() {
         </MvpGroup>
 
         <MvpGroup title="Menu & photos">
-          <MvpRow icon={<UtensilsCrossed size={18} />} label="Menu" sub="Items and prices" href="/dashboard/local-seo/menu" />
+          <MvpRow icon={<UtensilsCrossed size={18} />} label="Menu" sub="Dishes, prices, descriptions" href="/dashboard/business-info/menu" />
           <MvpRow icon={<ImageIcon size={18} />} label="Photos" sub="Logo and gallery" href="/dashboard/assets" />
         </MvpGroup>
 

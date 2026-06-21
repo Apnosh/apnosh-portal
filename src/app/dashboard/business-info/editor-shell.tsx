@@ -213,7 +213,7 @@ export function EditorField({ label, value, onChange, type = 'text', placeholder
   type?: string
   placeholder?: string
   hint?: string
-  inputMode?: 'text' | 'tel' | 'url' | 'email' | 'numeric'
+  inputMode?: 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal'
 }) {
   return (
     <div style={{ marginBottom: 16 }}>
