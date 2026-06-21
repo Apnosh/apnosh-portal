@@ -18,6 +18,7 @@ import { getWebsiteConnection } from './website-actions'
 import type { WeeklyHours, DayKey } from '@/lib/gbp-listing'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, MvpGroup, MvpRow } from '@/components/mvp/mvp-detail'
+import ResyncButton from './resync-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,6 +78,8 @@ export default async function BusinessInfoPage() {
           <StatusPill label="Google" on={loaded.gbpConnected} />
           <StatusPill label="Website" on={websiteConn.connected} />
         </div>
+
+        {(loaded.gbpConnected || websiteConn.connected) && <ResyncButton />}
 
         <MvpGroup title="Hours & contact">
           <MvpRow icon={<Clock size={18} />} label="Weekly hours" sub={hoursSummary(info?.hours)} href="/dashboard/business-info/hours" />

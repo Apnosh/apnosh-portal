@@ -257,3 +257,27 @@ export async function saveBusinessInfo(input: Partial<BusinessInfo>): Promise<Sa
     websiteError,
   }
 }
+
+/**
+ * Re-push the CURRENT saved business info to Google + the website, without
+ * changing anything. The "just in case" safety net: if an owner entered their
+ * info before connecting Google (so it reached our records + website but not
+ * Google), they can connect Google and push everything in one tap — no need to
+ * re-edit field by field. Also recovers from a transient sync failure.
+ */
+export async function resyncBusinessInfo(): Promise<SaveResult> {
+  const loaded = await loadBusinessInfo()
+  if (!loaded.ok || !loaded.info) {
+    return { ok: false, error: loaded.error ?? 'Could not load your info', synced: { saved: false, google: 'skipped', website: 'skipped' } }
+  }
+  const i = loaded.info
+  return saveBusinessInfo({
+    name: i.name,
+    phone: i.phone,
+    website: i.website,
+    description: i.description,
+    hours: i.hours,
+    specialHours: i.specialHours,
+    links: i.links,
+  })
+}
