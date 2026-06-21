@@ -10,7 +10,7 @@
 import { redirect } from 'next/navigation'
 import {
   Clock, CalendarDays, Phone, MapPin, UtensilsCrossed, Image as ImageIcon, Tag,
-  Globe, ShoppingBag, Share2,
+  Globe, ShoppingBag, Share2, ListChecks,
 } from 'lucide-react'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { loadBusinessInfo, type BusinessInfo } from './actions'
@@ -97,6 +97,7 @@ export default async function BusinessInfoPage() {
 
         <MvpGroup title="Listing & website">
           <MvpRow icon={<Tag size={18} />} label="Cuisine & category" sub="What you're found for on Google" href="/dashboard/business-info/category" />
+          <MvpRow icon={<ListChecks size={18} />} label="Service & amenities" sub="Dine-in, takeout, delivery, more" href="/dashboard/business-info/service-options" />
           <MvpRow icon={<Globe size={18} />} label="Your website" sub={websiteConn.connected ? (websiteConn.siteUrl ?? 'Connected, auto-publishes') : 'Connect to auto-publish'} href="/dashboard/business-info/connect-website" />
         </MvpGroup>
 
