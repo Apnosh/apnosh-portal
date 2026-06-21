@@ -20,9 +20,11 @@ import { markInboxRead } from '@/app/dashboard/inbox/actions'
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenBar: '#34c759',
   ink: '#1d1d1f', ink2: '#3a3a3c', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#f5f5f7',
-  coral: '#c0564f', coralSoft: '#fdeeee', preview: '#f4f5f6',
+  coral: '#c0564f', coralSoft: '#fdeeee',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
+// Bodies longer than this clamp to two lines and show a Read more affordance.
+const LONG_TEXT = 96
 
 type Chip = 'approvals' | 'reviews' | 'todos' | 'fix'
 interface Review { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string }
@@ -143,7 +145,7 @@ function InboxEmpty({ icon: Icon, title, sub }: { icon: typeof Check; title: str
 }
 function Divider({ label, count }: { label: string; count?: number }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '16px 16px 4px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '17px 18px 7px' }}>
       <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.faint }}>{label}</span>
       {count != null && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.faint, background: '#eef0ef', borderRadius: 99, padding: '1px 7px' }}>{count}</span>}
       <span style={{ flex: 1 }} />
@@ -151,11 +153,19 @@ function Divider({ label, count }: { label: string; count?: number }) {
   )
 }
 
-/* ── A single flat notification row (LinkedIn-style): avatar · body · time/⋯,
- *  with a full-width divider. Renders as a Link when it has a destination. */
+/* ── A single notification card box: avatar · body · time/⋯. Uniform across
+ *  every type (review, approval, fix, win). Renders as a Link when it has a
+ *  destination; long bodies clamp with a Read more affordance. */
 function NotifRow({ href, unread, time, onDismiss, onNav, avatar, children }: { href?: string; unread?: boolean; time?: string; onDismiss?: () => void; onNav?: () => void; avatar: React.ReactNode; children: React.ReactNode }) {
-  // Unread = highlighted (soft green tint + a green dot/timestamp); read = white.
-  const frame: React.CSSProperties = { display: 'flex', gap: 12, alignItems: 'flex-start', padding: '13px 16px', borderBottom: `0.5px solid ${C.line}`, background: unread ? 'rgba(74,189,152,0.09)' : '#fff' }
+  // Every notification is a uniform card box. Unread = soft green tint + ring
+  // and a green dot/timestamp; read = plain white with a hairline border.
+  const frame: React.CSSProperties = {
+    display: 'flex', gap: 12, alignItems: 'flex-start',
+    padding: '13px 14px', margin: '0 14px 9px', borderRadius: 16,
+    border: `0.5px solid ${unread ? 'rgba(74,189,152,0.34)' : C.line}`,
+    background: unread ? 'rgba(74,189,152,0.06)' : '#fff',
+    boxShadow: unread ? '0 1px 9px rgba(74,189,152,0.11)' : '0 1px 4px rgba(0,0,0,0.035)',
+  }
   const inner = (
     <>
       {avatar}
@@ -183,12 +193,21 @@ function IconAvatar({ emoji, danger }: { emoji: string; danger?: boolean }) {
 }
 const clampStyle = (lines: number): React.CSSProperties => ({ display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical', overflow: 'hidden' })
 
-function Lead({ bold, rest, lines = 3 }: { bold: string; rest?: string; lines?: number }) {
+function Lead({ bold, rest, lines = 2 }: { bold: string; rest?: string; lines?: number }) {
+  // Long bodies clamp to two lines (CSS "…") and offer an explicit Read more.
+  const long = (rest?.length ?? 0) > LONG_TEXT
   return (
-    <div style={{ fontSize: 14, lineHeight: 1.4, color: C.ink, ...clampStyle(lines) }}>
-      <b style={{ fontWeight: 700 }}>{bold}</b>{rest ? <span style={{ color: C.mute, fontWeight: 400 }}>{' '}{rest}</span> : null}
-    </div>
+    <>
+      <div style={{ fontSize: 14, lineHeight: 1.4, color: C.ink, ...clampStyle(lines) }}>
+        <b style={{ fontWeight: 700 }}>{bold}</b>{rest ? <span style={{ color: C.mute, fontWeight: 400 }}>{' '}{rest}</span> : null}
+      </div>
+      {long && <ReadMore />}
+    </>
   )
+}
+// Subtle "there's more" affordance — the whole row taps through to the full text.
+function ReadMore() {
+  return <span style={{ display: 'inline-block', marginTop: 4, fontSize: 12.5, fontWeight: 700, color: C.greenDk }}>Read more</span>
 }
 // Outlined action button (visual span; the row's own Link carries the nav).
 function PillBtn({ label, danger }: { label: string; danger?: boolean }) {
@@ -205,7 +224,7 @@ function ListView({ filter, items, wins, q, onDismiss }: { filter: string; items
   const wq = q ? wins.filter((w) => `${w.title} ${w.body}`.toLowerCase().includes(q)) : wins
   const winList = (filter === 'all' || filter === 'activity') ? wq : []
   const label = (FILTERS.find((s) => s.key === filter)?.label ?? '').toLowerCase()
-  const pad: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '2px 0 28px' }
+  const pad: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 0 28px' }
 
   if (filter === 'all') {
     const today = list.filter((i) => i.band === 'today')
@@ -214,7 +233,7 @@ function ListView({ filter, items, wins, q, onDismiss }: { filter: string; items
       <div style={pad}>
         {q && list.length === 0 && winList.length === 0 && <InboxEmpty icon={Search} title="No matches" sub="Nothing here matches that search." />}
         {!q && list.length === 0 && (
-          <div style={{ margin: '12px 16px 2px', background: C.greenSoft, borderRadius: 14, padding: '15px 16px', display: 'flex', alignItems: 'center', gap: 11 }}>
+          <div style={{ margin: '4px 14px 2px', background: C.greenSoft, borderRadius: 16, padding: '15px 16px', display: 'flex', alignItems: 'center', gap: 11 }}>
             <span style={{ fontSize: 22 }}>🎉</span>
             <div><div style={{ fontWeight: 700, fontSize: 14.5, color: C.greenDk }}>You&apos;re all caught up</div><div style={{ fontSize: 12, color: C.greenDk, opacity: 0.85 }}>Nothing is waiting on you right now.</div></div>
           </div>
@@ -273,13 +292,16 @@ function ReviewRow({ item, onDismiss }: { item: Item; onDismiss: (id: string) =>
   const tone = ['#4abd98', '#a85c3c', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b'][(r.author.charCodeAt(0) || 0) % 6]
   const source = r.source === 'instagram' ? 'Instagram' : r.source === 'yelp' ? 'Yelp' : 'Google'
   const avatar = <div style={{ width: 48, height: 48, borderRadius: '50%', background: tone, color: '#fff', fontWeight: 700, fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{r.author.charAt(0).toUpperCase()}</div>
+  const long = (r.text?.length ?? 0) > LONG_TEXT
   return (
     <NotifRow href={`/dashboard/reviews/${r.reviewId}`} unread={item.unread} time={item.time} onDismiss={() => onDismiss(item.id)} onNav={() => { void markInboxRead(item.id) }} avatar={avatar}>
-      <div style={{ fontSize: 14, lineHeight: 1.4, color: C.ink }}>
-        <b style={{ fontWeight: 700 }}>{r.author}</b><span style={{ color: C.mute }}> left a {r.rating}-star review on {source}.</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', fontSize: 14, lineHeight: 1.3, color: C.ink }}>
+        <b style={{ fontWeight: 700 }}>{r.author}</b>
+        <Stars n={r.rating} />
+        <span style={{ color: C.faint, fontSize: 12 }}>{source}</span>
       </div>
-      <div style={{ marginTop: 4 }}><Stars n={r.rating} /></div>
-      {r.text && <div style={{ marginTop: 9, background: C.preview, borderRadius: 12, padding: '10px 13px', fontSize: 13, color: C.ink2, lineHeight: 1.45, ...clampStyle(3) }}>{r.text}</div>}
+      {r.text && <div style={{ marginTop: 5, fontSize: 13.5, color: C.mute, lineHeight: 1.45, ...clampStyle(2) }}>&ldquo;{r.text}&rdquo;</div>}
+      {long && <ReadMore />}
       <PillBtn label="Reply" />
     </NotifRow>
   )
