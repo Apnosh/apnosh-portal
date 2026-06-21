@@ -21,7 +21,7 @@
 import { revalidatePath } from 'next/cache'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { updateClientListing, getClientListing, type WeeklyHours, type SpecialHours } from '@/lib/gbp-listing'
+import { updateClientListing, getClientListing, type WeeklyHours, type SpecialHours, type StorefrontAddress } from '@/lib/gbp-listing'
 import { EMPTY_LINKS } from './constants'
 
 export interface LinkEntry {
@@ -49,6 +49,19 @@ export interface BusinessInfo {
   hours: WeeklyHours
   specialHours: SpecialHours
   links: BusinessLinks
+  address: BusinessAddress
+}
+
+export interface BusinessAddress {
+  line1: string
+  city: string
+  state: string
+  zip: string
+}
+
+function formatAddress(a: BusinessAddress): string {
+  const cityState = [a.city, [a.state, a.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+  return [a.line1, cityState].filter(Boolean).join(', ')
 }
 
 export interface LoadResult {
@@ -79,12 +92,12 @@ export async function loadBusinessInfo(): Promise<LoadResult> {
       .maybeSingle() as unknown as Promise<{ data: { name: string | null; phone: string | null; website: string | null; has_apnosh_website: boolean | null } | null }>,
     admin
       .from('gbp_locations')
-      .select('location_name, phone, website, profile_description, hours, store_code, links')
+      .select('location_name, phone, website, profile_description, hours, store_code, links, address')
       .eq('client_id', clientId)
       .order('is_primary', { ascending: false })
       .order('created_at', { ascending: true })
       .limit(1)
-      .maybeSingle() as unknown as Promise<{ data: { location_name: string | null; phone: string | null; website: string | null; profile_description: string | null; hours: WeeklyHours | null; store_code: string | null; links: BusinessLinks | null } | null }>,
+      .maybeSingle() as unknown as Promise<{ data: { location_name: string | null; phone: string | null; website: string | null; profile_description: string | null; hours: WeeklyHours | null; store_code: string | null; links: BusinessLinks | null; address: string | null } | null }>,
   ])
 
   const c = clientRes.data
@@ -95,14 +108,22 @@ export async function loadBusinessInfo(): Promise<LoadResult> {
      save doesn't clobber existing holiday entries. If GBP is down or
      not connected, we fall back to empty + the UI notes it. */
   let specialHours: SpecialHours = []
+  let gbpAddress: StorefrontAddress | null = null
   if (loc?.store_code) {
     try {
       const listing = await getClientListing(clientId, null)
-      if (listing.ok && listing.fields.specialHours) {
-        specialHours = listing.fields.specialHours
+      if (listing.ok) {
+        if (listing.fields.specialHours) specialHours = listing.fields.specialHours
+        if (listing.fields.storefrontAddress) gbpAddress = listing.fields.storefrontAddress
       }
     } catch { /* best-effort */ }
   }
+
+  /* Prefer Google's structured address; otherwise fall back to the stored
+     text (best-effort into the street line). */
+  const address: BusinessAddress = gbpAddress
+    ? { line1: gbpAddress.addressLines[0] ?? '', city: gbpAddress.locality, state: gbpAddress.administrativeArea, zip: gbpAddress.postalCode }
+    : { line1: loc?.address ?? '', city: '', state: '', zip: '' }
 
   const info: BusinessInfo = {
     name: c?.name ?? loc?.location_name ?? '',
@@ -114,6 +135,7 @@ export async function loadBusinessInfo(): Promise<LoadResult> {
     links: (loc?.links && typeof loc.links === 'object')
       ? { ...EMPTY_LINKS, ...loc.links, social: { ...loc.links.social } }
       : EMPTY_LINKS,
+    address,
   }
 
   return {
@@ -157,6 +179,7 @@ export async function saveBusinessInfo(input: Partial<BusinessInfo>, opts?: { sy
   const hasHours = input.hours !== undefined
   const hasSpecial = input.specialHours !== undefined
   const hasLinks = input.links !== undefined
+  const hasAddress = input.address !== undefined
 
   const name = (input.name ?? '').trim()
   const phone = (input.phone ?? '').trim()
@@ -194,6 +217,15 @@ export async function saveBusinessInfo(input: Partial<BusinessInfo>, opts?: { sy
     if (hasDescription) patch.description = description || null
     if (hasHours && hours) patch.regularHours = hours
     if (hasSpecial && specialHours) patch.specialHours = specialHours
+    if (hasAddress && input.address && input.address.line1.trim()) {
+      patch.storefrontAddress = {
+        addressLines: [input.address.line1.trim()],
+        locality: input.address.city.trim(),
+        administrativeArea: input.address.state.trim(),
+        postalCode: input.address.zip.trim(),
+        regionCode: 'US',
+      }
+    }
     if (Object.keys(patch).length > 0) {
       const result = await updateClientListing(clientId, patch)
       if (result.ok) google = 'ok'
@@ -220,6 +252,8 @@ export async function saveBusinessInfo(input: Partial<BusinessInfo>, opts?: { sy
     if (hasSpecial && specialHours) locPatch.special_hours = specialHours
     /* Order/reserve/social links — served to the website too. */
     if (hasLinks && input.links) locPatch.links = input.links
+    /* Address — stored as a formatted string for our records + the website. */
+    if (hasAddress && input.address) locPatch.address = formatAddress(input.address)
     if (Object.keys(locPatch).length > 0) {
       await admin.from('gbp_locations').update(locPatch).eq('id', loc.id)
     }

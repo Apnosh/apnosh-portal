@@ -9,7 +9,7 @@
 
 import { redirect } from 'next/navigation'
 import {
-  Clock, CalendarDays, Phone, UtensilsCrossed, Image as ImageIcon, Tag,
+  Clock, CalendarDays, Phone, MapPin, UtensilsCrossed, Image as ImageIcon, Tag,
   Globe, ShoppingBag, Share2,
 } from 'lucide-react'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
@@ -82,6 +82,7 @@ export default async function BusinessInfoPage() {
           <MvpRow icon={<Clock size={18} />} label="Weekly hours" sub={hoursSummary(info?.hours)} href="/dashboard/business-info/hours" />
           <MvpRow icon={<CalendarDays size={18} />} label="Special hours" sub={specialCount > 0 ? `${specialCount} date${specialCount > 1 ? 's' : ''} set` : 'Holidays and closures'} href="/dashboard/business-info/special-hours" />
           <MvpRow icon={<Phone size={18} />} label="Contact details" sub={info?.phone || 'Name, phone, website'} href="/dashboard/business-info/contact" />
+          <MvpRow icon={<MapPin size={18} />} label="Address" sub={info?.address?.line1 ? [info.address.line1, info.address.city].filter(Boolean).join(', ') : 'Add your address'} href="/dashboard/business-info/address" />
         </MvpGroup>
 
         <MvpGroup title="Menu & photos">

@@ -203,7 +203,7 @@ export default function ListingEditor() {
       }
       setSavedAt(Date.now())
       setOriginal({
-        description, primaryPhone, websiteUri, regularHours: hours, specialHours, categories,
+        description, primaryPhone, websiteUri, regularHours: hours, specialHours, categories, storefrontAddress: null,
       })
       setOriginalAttributes(attributes)
       /* Clear "Saved" toast after 4 seconds. */

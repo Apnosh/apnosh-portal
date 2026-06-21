@@ -28,6 +28,16 @@ export interface ListingFields {
   regularHours?: WeeklyHours | null
   specialHours?: SpecialHours | null
   categories?: ListingCategories | null
+  storefrontAddress?: StorefrontAddress | null
+}
+
+/** GBP postal address (subset we manage). regionCode is the ISO country, e.g. 'US'. */
+export interface StorefrontAddress {
+  addressLines: string[]
+  locality: string            // city
+  administrativeArea: string  // state / region
+  postalCode: string          // zip
+  regionCode: string          // country code
 }
 
 export interface ListingCategory {
@@ -358,7 +368,7 @@ export async function getClientListing(clientId: string, locationId?: string | n
   if ('error' in tok) return { ok: false, error: tok.error }
   const { accessToken, resourceName } = tok
 
-  const readMask = 'title,profile,websiteUri,phoneNumbers,regularHours,specialHours,categories'
+  const readMask = 'title,profile,websiteUri,phoneNumbers,regularHours,specialHours,categories,storefrontAddress'
   const url = `${V1_BASE}/${resourceName}?readMask=${encodeURIComponent(readMask)}`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
   const body = await res.json().catch(() => ({}))
@@ -376,6 +386,7 @@ export async function getClientListing(clientId: string, locationId?: string | n
       primaryCategory?: ListingCategory
       additionalCategories?: ListingCategory[]
     }
+    storefrontAddress?: { addressLines?: string[]; locality?: string; administrativeArea?: string; postalCode?: string; regionCode?: string }
   }
   return {
     ok: true,
@@ -387,6 +398,13 @@ export async function getClientListing(clientId: string, locationId?: string | n
       websiteUri: data.websiteUri ?? null,
       regularHours: periodsToWeekly(data.regularHours?.periods),
       specialHours: specialPeriodsToList(data.specialHours?.specialHourPeriods),
+      storefrontAddress: data.storefrontAddress ? {
+        addressLines: data.storefrontAddress.addressLines ?? [],
+        locality: data.storefrontAddress.locality ?? '',
+        administrativeArea: data.storefrontAddress.administrativeArea ?? '',
+        postalCode: data.storefrontAddress.postalCode ?? '',
+        regionCode: data.storefrontAddress.regionCode ?? 'US',
+      } : null,
       categories: {
         primary: data.categories?.primaryCategory
           ? { name: data.categories.primaryCategory.name, displayName: data.categories.primaryCategory.displayName }
@@ -467,6 +485,18 @@ export async function updateClientListing(
       additionalCategories: patch.categories.additional.map(c => ({ name: c.name })),
     }
     updateMaskParts.push('categories')
+  }
+  if (patch.storefrontAddress !== undefined && patch.storefrontAddress) {
+    const a = patch.storefrontAddress
+    body.storefrontAddress = {
+      regionCode: a.regionCode || 'US',
+      languageCode: 'en',
+      addressLines: a.addressLines.filter(Boolean),
+      locality: a.locality,
+      administrativeArea: a.administrativeArea,
+      postalCode: a.postalCode,
+    }
+    updateMaskParts.push('storefrontAddress')
   }
 
   if (updateMaskParts.length === 0) {
