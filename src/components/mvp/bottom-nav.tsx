@@ -24,7 +24,7 @@ export default function BottomNav({ active }: { active: NavKey }) {
         <span style={{ fontSize: 10, fontWeight: 500, color: C.navOff }}>Create</span>
       </Link>
       <Item href="/dashboard/inbox" icon={<Inbox size={21} />} label="Alerts" on={active === 'inbox'} />
-      <Item href="/dashboard/profile" icon={<Menu size={21} />} label="More" on={active === 'more'} />
+      <Item href="/dashboard/more" icon={<Menu size={21} />} label="More" on={active === 'more'} />
     </nav>
   )
 }
