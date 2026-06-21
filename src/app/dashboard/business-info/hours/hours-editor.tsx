@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { saveBusinessInfo, type SaveResult } from '../actions'
-import { EditorHeader, SaveBar, SuccessScreen } from '../editor-shell'
+import { MvpEditorShell, MvpToggle, MvpTimeInput } from '../editor-shell'
+import { C } from '@/components/mvp/mvp-detail'
 import type { WeeklyHours, DayKey } from '@/lib/gbp-listing'
 
 const DAYS: { key: DayKey; short: string; label: string }[] = [
@@ -21,6 +22,9 @@ export default function HoursEditor({ initialHours }: { initialHours: WeeklyHour
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState<SaveResult | null>(null)
 
+  const initialStr = useMemo(() => JSON.stringify(initialHours ?? EMPTY), [initialHours])
+  const dirty = JSON.stringify(hours) !== initialStr
+
   const isOpen = (d: DayKey) => (hours[d]?.length ?? 0) > 0
   const open = (d: DayKey) => hours[d]?.[0]?.open ?? '09:00'
   const close = (d: DayKey) => hours[d]?.[0]?.close ?? '17:00'
@@ -34,39 +38,44 @@ export default function HoursEditor({ initialHours }: { initialHours: WeeklyHour
 
   const onSave = () => { setSaving(true); saveBusinessInfo({ hours }).then(setResult).finally(() => setSaving(false)) }
 
-  if (result?.synced.saved) return <SuccessScreen result={result} onEditAgain={() => setResult(null)} />
-
   return (
-    <div className="max-w-lg mx-auto pb-tabbar lg:pb-8 -mx-4 lg:mx-0 -mt-4 lg:mt-0 bg-bg-2 min-h-screen">
-      <EditorHeader title="Hours" subtitle="Your regular weekly hours" />
-      <div className="px-4 py-5">
-        <div className="bg-white border border-ink-6 rounded-2xl divide-y divide-ink-7 overflow-hidden">
-          {DAYS.map(d => {
-            const on = isOpen(d.key)
-            return (
-              <div key={d.key} className="flex items-center gap-2 px-3.5 py-2.5 min-h-[52px]">
-                <span className="w-9 text-[13px] font-semibold text-ink">{d.short}</span>
-                <button
-                  onClick={() => toggle(d.key)}
-                  className={['relative w-11 h-6 rounded-full transition-colors flex-shrink-0', on ? 'bg-brand' : 'bg-ink-6'].join(' ')}
-                  aria-pressed={on} aria-label={`${d.label} ${on ? 'open' : 'closed'}`}
-                >
-                  <span className={['absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform', on ? 'translate-x-5' : 'translate-x-0'].join(' ')} />
-                </button>
+    <MvpEditorShell
+      title="Weekly hours"
+      subtitle="Your regular open hours. Updates Google and your website."
+      saving={saving}
+      dirty={dirty}
+      onSave={onSave}
+      result={result}
+      onEditAgain={() => setResult(null)}
+    >
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+        {DAYS.map((d, i) => {
+          const on = isOpen(d.key)
+          return (
+            <div key={d.key}>
+              {i > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 14 }} />}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', minHeight: 56 }}>
+                <span style={{ width: 38, fontSize: 14, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{d.short}</span>
+                <MvpToggle on={on} onClick={() => toggle(d.key)} label={`${d.label} ${on ? 'open' : 'closed'}`} />
                 {on ? (
-                  <div className="flex items-center gap-1.5 flex-1 justify-end">
-                    <input type="time" value={open(d.key)} onChange={e => setTime(d.key, 'open', e.target.value)} className="bg-bg-2 border border-ink-6 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-brand" />
-                    <span className="text-ink-4 text-[12px]">to</span>
-                    <input type="time" value={close(d.key)} onChange={e => setTime(d.key, 'close', e.target.value)} className="bg-bg-2 border border-ink-6 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-brand" />
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
+                    <MvpTimeInput value={open(d.key)} onChange={v => setTime(d.key, 'open', v)} />
+                    <span style={{ fontSize: 12.5, color: C.faint }}>to</span>
+                    <MvpTimeInput value={close(d.key)} onChange={v => setTime(d.key, 'close', v)} />
                   </div>
-                ) : <span className="flex-1 text-right text-[13px] text-ink-4">Closed</span>}
+                ) : (
+                  <span style={{ flex: 1, textAlign: 'right', fontSize: 14, color: C.faint }}>Closed</span>
+                )}
               </div>
-            )
-          })}
-        </div>
-        {isOpen('mon') && <button onClick={copyMon} className="text-[12px] font-semibold text-brand-dark active:text-brand mt-2">Copy Monday to all weekdays</button>}
+            </div>
+          )
+        })}
       </div>
-      <SaveBar saving={saving} onSave={onSave} />
-    </div>
+      {isOpen('mon') && (
+        <button type="button" onClick={copyMon} style={{ marginTop: 12, marginLeft: 4, background: 'none', border: 'none', color: C.greenDk, fontSize: 13.5, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', padding: '4px 2px' }}>
+          Copy Monday to all weekdays
+        </button>
+      )}
+    </MvpEditorShell>
   )
 }

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { Plus, X, ShoppingBag, CalendarCheck, Share2, AtSign } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Plus, X, ShoppingBag, CalendarCheck, Share2 } from 'lucide-react'
 import { saveBusinessInfo, type SaveResult, type BusinessLinks, type LinkEntry } from '../actions'
-import { EditorHeader, SaveBar, SuccessScreen } from '../editor-shell'
+import { MvpEditorShell, EditorField } from '../editor-shell'
+import { C } from '@/components/mvp/mvp-detail'
 
 const SOCIAL_FIELDS: Array<{ key: keyof BusinessLinks['social']; label: string; placeholder: string }> = [
   { key: 'instagram', label: 'Instagram', placeholder: 'https://instagram.com/yourhandle' },
@@ -12,6 +13,11 @@ const SOCIAL_FIELDS: Array<{ key: keyof BusinessLinks['social']; label: string; 
   { key: 'youtube', label: 'YouTube', placeholder: 'https://youtube.com/@yourchannel' },
 ]
 
+const inputStyle: React.CSSProperties = {
+  boxSizing: 'border-box', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 9,
+  padding: '9px 11px', fontSize: 16, color: C.ink, fontFamily: 'inherit', outline: 'none',
+}
+
 export default function LinksEditor({ initial }: { initial: BusinessLinks }) {
   const [ordering, setOrdering] = useState<LinkEntry[]>(initial.ordering ?? [])
   const [reservations, setReservations] = useState<LinkEntry[]>(initial.reservations ?? [])
@@ -19,9 +25,11 @@ export default function LinksEditor({ initial }: { initial: BusinessLinks }) {
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState<SaveResult | null>(null)
 
+  const initialStr = useMemo(() => JSON.stringify({ ordering: initial.ordering ?? [], reservations: initial.reservations ?? [], social: initial.social ?? {} }), [initial])
+  const dirty = JSON.stringify({ ordering, reservations, social }) !== initialStr
+
   const onSave = () => {
     setSaving(true)
-    /* Drop empty rows before saving. */
     const clean = (rows: LinkEntry[]) => rows.filter(r => r.url.trim())
     saveBusinessInfo({
       links: {
@@ -32,76 +40,56 @@ export default function LinksEditor({ initial }: { initial: BusinessLinks }) {
     }).then(setResult).finally(() => setSaving(false))
   }
 
-  if (result?.synced.saved) return <SuccessScreen result={result} onEditAgain={() => setResult(null)} />
-
   return (
-    <div className="max-w-lg mx-auto pb-tabbar lg:pb-8 -mx-4 lg:mx-0 -mt-4 lg:mt-0 bg-bg-2 min-h-screen">
-      <EditorHeader title="Order, reserve & social" subtitle="Links shown on your website" />
-      <div className="px-4 py-5 space-y-6">
-        {/* Ordering */}
-        <LinkListSection
-          icon={ShoppingBag}
-          tint="bg-amber-50 text-amber-700"
-          title="Online ordering"
-          hint="DoorDash, Uber Eats, your own ordering page"
-          rows={ordering}
-          setRows={setOrdering}
-          labelPlaceholder="DoorDash"
-        />
-        {/* Reservations */}
-        <LinkListSection
-          icon={CalendarCheck}
-          tint="bg-rose-50 text-rose-700"
-          title="Reservations"
-          hint="OpenTable, Resy, your booking page"
-          rows={reservations}
-          setRows={setReservations}
-          labelPlaceholder="OpenTable"
-        />
-        {/* Social */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-purple-50 text-purple-700">
-              <Share2 className="w-4 h-4" />
-            </span>
-            <div>
-              <p className="text-[14px] font-semibold text-ink leading-tight">Social profiles</p>
-              <p className="text-[11.5px] text-ink-3">Your handles across platforms</p>
-            </div>
-          </div>
-          <div className="space-y-2.5">
-            {SOCIAL_FIELDS.map(f => (
-              <div key={f.key}>
-                <label className="block text-[12px] font-semibold text-ink-2 mb-1">{f.label}</label>
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white border border-ink-6 text-ink-3 flex-shrink-0">
-                    <AtSign className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="url"
-                    value={social[f.key] ?? ''}
-                    onChange={e => setSocial(s => ({ ...s, [f.key]: e.target.value }))}
-                    placeholder={f.placeholder}
-                    className="flex-1 bg-white border border-ink-6 rounded-xl px-3 py-2.5 text-[13.5px] focus:outline-none focus:border-brand touch-input"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+    <MvpEditorShell
+      title="Order, reserve & social"
+      subtitle="Shown on your website"
+      saving={saving}
+      dirty={dirty}
+      onSave={onSave}
+      saveLabel="Save"
+      result={result}
+      onEditAgain={() => setResult(null)}
+    >
+      <LinkSection icon={<ShoppingBag size={16} />} title="Online ordering" hint="DoorDash, Uber Eats, your own page" rows={ordering} setRows={setOrdering} labelPlaceholder="DoorDash" />
+      <LinkSection icon={<CalendarCheck size={16} />} title="Reservations" hint="OpenTable, Resy, your booking page" rows={reservations} setRows={setReservations} labelPlaceholder="OpenTable" />
 
-        <p className="text-[11.5px] text-ink-4 px-1">
-          These appear on your website. Order &amp; reserve buttons and social icons update on your next publish.
-        </p>
+      <div style={{ marginBottom: 8 }}>
+        <SectionHead icon={<Share2 size={16} />} title="Social profiles" hint="Your handles across platforms" />
+        {SOCIAL_FIELDS.map(f => (
+          <EditorField
+            key={f.key}
+            label={f.label}
+            type="url"
+            inputMode="url"
+            value={social[f.key] ?? ''}
+            onChange={v => setSocial(s => ({ ...s, [f.key]: v }))}
+            placeholder={f.placeholder}
+          />
+        ))}
       </div>
-      <SaveBar saving={saving} onSave={onSave} />
+
+      <p style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, margin: '4px 2px 0' }}>
+        These show on your website. We&apos;ll add order and reserve buttons to your Google listing in a later update.
+      </p>
+    </MvpEditorShell>
+  )
+}
+
+function SectionHead({ icon, title, hint }: { icon: React.ReactNode; title: string; hint: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 11, padding: '0 2px' }}>
+      <span style={{ width: 30, height: 30, borderRadius: 9, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>{title}</div>
+        <div style={{ fontSize: 11.5, color: C.mute, marginTop: 1 }}>{hint}</div>
+      </div>
     </div>
   )
 }
 
-function LinkListSection({ icon: Icon, tint, title, hint, rows, setRows, labelPlaceholder }: {
-  icon: React.ComponentType<{ className?: string }>
-  tint: string
+function LinkSection({ icon, title, hint, rows, setRows, labelPlaceholder }: {
+  icon: React.ReactNode
   title: string
   hint: string
   rows: LinkEntry[]
@@ -113,39 +101,22 @@ function LinkListSection({ icon: Icon, tint, title, hint, rows, setRows, labelPl
   const remove = (i: number) => setRows(p => p.filter((_, idx) => idx !== i))
 
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-3">
-        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-xl ${tint}`}>
-          <Icon className="w-4 h-4" />
-        </span>
-        <div>
-          <p className="text-[14px] font-semibold text-ink leading-tight">{title}</p>
-          <p className="text-[11.5px] text-ink-3">{hint}</p>
-        </div>
-      </div>
-      <div className="space-y-2.5">
+    <div style={{ marginBottom: 22 }}>
+      <SectionHead icon={icon} title={title} hint={hint} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         {rows.map((r, i) => (
-          <div key={i} className="bg-white border border-ink-6 rounded-2xl p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <input
-                value={r.label}
-                onChange={e => update(i, { label: e.target.value })}
-                placeholder={labelPlaceholder}
-                className="flex-1 bg-bg-2 border border-ink-6 rounded-lg px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-brand"
-              />
-              <button onClick={() => remove(i)} className="w-8 h-8 rounded-full bg-ink-7 text-ink-3 flex items-center justify-center active:bg-ink-6 flex-shrink-0" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
+          <div key={i} style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 12, padding: '10px 10px 11px' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+              <input className="mvp-input" value={r.label} onChange={e => update(i, { label: e.target.value })} placeholder={labelPlaceholder} style={{ ...inputStyle, flex: 1 }} />
+              <button type="button" onClick={() => remove(i)} aria-label="Remove" style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f3f5', color: C.mute, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                <X size={15} />
+              </button>
             </div>
-            <input
-              type="url"
-              value={r.url}
-              onChange={e => update(i, { url: e.target.value })}
-              placeholder="https://..."
-              className="w-full bg-bg-2 border border-ink-6 rounded-lg px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-brand touch-input"
-            />
+            <input className="mvp-input" type="url" inputMode="url" value={r.url} onChange={e => update(i, { url: e.target.value })} placeholder="https://..." style={{ ...inputStyle, width: '100%' }} />
           </div>
         ))}
-        <button onClick={add} className="w-full inline-flex items-center justify-center gap-1.5 bg-white border border-dashed border-ink-5 rounded-2xl py-2.5 text-[12.5px] font-semibold text-ink-2 active:bg-ink-7">
-          <Plus className="w-4 h-4" /> Add {title.toLowerCase()} link
+        <button type="button" onClick={add} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#fff', border: `1px dashed ${C.faint}`, borderRadius: 12, padding: '11px', fontSize: 13, fontWeight: 600, color: C.greenDk, fontFamily: 'inherit', cursor: 'pointer' }}>
+          <Plus size={16} /> Add {title.toLowerCase()} link
         </button>
       </div>
     </div>

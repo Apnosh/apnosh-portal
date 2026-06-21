@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Plus, X, CalendarDays } from 'lucide-react'
 import { saveBusinessInfo, type SaveResult } from '../actions'
-import { EditorHeader, SaveBar, SuccessScreen } from '../editor-shell'
+import { MvpEditorShell, MvpToggle, MvpTimeInput } from '../editor-shell'
+import { C } from '@/components/mvp/mvp-detail'
 import type { SpecialHours } from '@/lib/gbp-listing'
 
 export default function SpecialHoursEditor({ initial, gbpConnected }: { initial: SpecialHours; gbpConnected: boolean }) {
@@ -11,52 +12,70 @@ export default function SpecialHoursEditor({ initial, gbpConnected }: { initial:
   const [saving, setSaving] = useState(false)
   const [result, setResult] = useState<SaveResult | null>(null)
 
+  const initialStr = useMemo(() => JSON.stringify(initial), [initial])
+  const dirty = JSON.stringify(items) !== initialStr
+
   const add = () => setItems(p => [...p, { date: new Date().toISOString().slice(0, 10), closed: true }])
   const update = (i: number, patch: Partial<SpecialHours[number]>) => setItems(p => p.map((s, idx) => idx === i ? { ...s, ...patch } : s))
   const remove = (i: number) => setItems(p => p.filter((_, idx) => idx !== i))
 
   const onSave = () => { setSaving(true); saveBusinessInfo({ specialHours: items }).then(setResult).finally(() => setSaving(false)) }
 
-  if (result?.synced.saved) return <SuccessScreen result={result} onEditAgain={() => setResult(null)} />
-
   return (
-    <div className="max-w-lg mx-auto pb-tabbar lg:pb-8 -mx-4 lg:mx-0 -mt-4 lg:mt-0 bg-bg-2 min-h-screen">
-      <EditorHeader title="Special hours" subtitle="Holidays and one-off closures" />
-      <div className="px-4 py-5 space-y-2.5">
-        {!gbpConnected && (
-          <p className="text-[12px] text-ink-3 mb-1">Connect Google Business Profile to publish special hours.</p>
-        )}
-        {items.map((s, i) => (
-          <div key={i} className="bg-white border border-ink-6 rounded-2xl p-3">
-            <div className="flex items-center gap-2 mb-2.5">
-              <input type="date" value={s.date} onChange={e => update(i, { date: e.target.value })} className="flex-1 bg-bg-2 border border-ink-6 rounded-lg px-2.5 py-1.5 text-[13px] focus:outline-none focus:border-brand" />
-              <button onClick={() => remove(i)} className="w-8 h-8 rounded-full bg-ink-7 text-ink-3 flex items-center justify-center active:bg-ink-6" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => update(i, { closed: !s.closed })}
-                className={['relative w-11 h-6 rounded-full transition-colors flex-shrink-0', !s.closed ? 'bg-brand' : 'bg-ink-6'].join(' ')}
-                aria-pressed={!s.closed} aria-label={s.closed ? 'Closed' : 'Open'}
-              >
-                <span className={['absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform', !s.closed ? 'translate-x-5' : 'translate-x-0'].join(' ')} />
-              </button>
-              {s.closed ? (
-                <span className="flex-1 text-[13px] text-ink-4">Closed all day</span>
-              ) : (
-                <div className="flex items-center gap-1.5 flex-1 justify-end">
-                  <input type="time" value={s.open ?? '09:00'} onChange={e => update(i, { open: e.target.value })} className="bg-bg-2 border border-ink-6 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-brand" />
-                  <span className="text-ink-4 text-[12px]">to</span>
-                  <input type="time" value={s.close ?? '17:00'} onChange={e => update(i, { close: e.target.value })} className="bg-bg-2 border border-ink-6 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-brand" />
-                </div>
-              )}
-            </div>
+    <MvpEditorShell
+      title="Special hours"
+      subtitle="Holidays and one-off closures. Updates Google and your website."
+      saving={saving}
+      dirty={dirty}
+      onSave={onSave}
+      result={result}
+      onEditAgain={() => setResult(null)}
+    >
+      {!gbpConnected && (
+        <div style={{ background: '#fbf3e4', border: '0.5px solid #eed9b3', borderRadius: 12, padding: '10px 12px', marginBottom: 14, fontSize: 12.5, color: '#8a5a0c', lineHeight: 1.45 }}>
+          Connect Google Business Profile to publish special hours to Google.
+        </div>
+      )}
+
+      {items.length === 0 ? (
+        <div style={{ background: '#fff', border: '0.5px dashed rgba(74,189,152,0.32)', borderRadius: 16, padding: '26px 20px', textAlign: 'center' }}>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+            <CalendarDays size={20} color={C.green} />
           </div>
-        ))}
-        <button onClick={add} className="w-full inline-flex items-center justify-center gap-1.5 bg-white border border-dashed border-ink-5 rounded-2xl py-3 text-[13px] font-semibold text-ink-2 active:bg-ink-7">
-          <Plus className="w-4 h-4" /> Add a special date
-        </button>
-      </div>
-      <SaveBar saving={saving} onSave={onSave} />
-    </div>
+          <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>No special dates yet</div>
+          <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>Add holidays or one-off closures so customers know before they show up.</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {items.map((s, i) => (
+            <div key={i} style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '12px 12px 13px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 11 }}>
+                <MvpTimeInput type="date" value={s.date} onChange={v => update(i, { date: v })} />
+                <span style={{ flex: 1 }} />
+                <button type="button" onClick={() => remove(i)} aria-label="Remove" style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f3f5', color: C.mute, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                  <X size={15} />
+                </button>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <MvpToggle on={!s.closed} onClick={() => update(i, { closed: !s.closed })} label={s.closed ? 'Closed' : 'Open'} />
+                {s.closed ? (
+                  <span style={{ flex: 1, fontSize: 14, color: C.faint }}>Closed all day</span>
+                ) : (
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
+                    <MvpTimeInput value={s.open ?? '09:00'} onChange={v => update(i, { open: v })} />
+                    <span style={{ fontSize: 12.5, color: C.faint }}>to</span>
+                    <MvpTimeInput value={s.close ?? '17:00'} onChange={v => update(i, { close: v })} />
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button type="button" onClick={add} style={{ width: '100%', marginTop: 12, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: '#fff', border: `1px dashed ${C.faint}`, borderRadius: 14, padding: '13px', fontSize: 14, fontWeight: 600, color: C.greenDk, fontFamily: 'inherit', cursor: 'pointer' }}>
+        <Plus size={17} /> Add a special date
+      </button>
+    </MvpEditorShell>
   )
 }

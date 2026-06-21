@@ -215,7 +215,7 @@ export function EditorField({ label, value, onChange, type = 'text', placeholder
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         className="mvp-input"
-        style={{ width: '100%', boxSizing: 'border-box', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 14px', fontSize: 15.5, color: C.ink, fontFamily: 'inherit', outline: 'none' }}
+        style={{ width: '100%', boxSizing: 'border-box', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 14px', fontSize: 16, color: C.ink, fontFamily: 'inherit', outline: 'none' }}
       />
       {hint && <p style={{ fontSize: 11.5, color: C.faint, margin: '6px 2px 0', lineHeight: 1.45 }}>{hint}</p>}
     </div>
@@ -239,9 +239,32 @@ export function EditorTextArea({ label, value, onChange, placeholder, rows = 5, 
         rows={rows}
         placeholder={placeholder}
         className="mvp-input"
-        style={{ width: '100%', boxSizing: 'border-box', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 14px', fontSize: 15.5, color: C.ink, fontFamily: 'inherit', outline: 'none', resize: 'none', lineHeight: 1.5 }}
+        style={{ width: '100%', boxSizing: 'border-box', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 14px', fontSize: 16, color: C.ink, fontFamily: 'inherit', outline: 'none', resize: 'none', lineHeight: 1.5 }}
       />
       {hint && <p style={{ fontSize: 11.5, color: C.faint, margin: '6px 2px 0', lineHeight: 1.45 }}>{hint}</p>}
     </div>
+  )
+}
+
+// iOS-style toggle, green when on. Used by Hours, Special hours, and the
+// upcoming service-option editors.
+export function MvpToggle({ on, onClick, label }: { on: boolean; onClick: () => void; label?: string }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={on} aria-label={label} style={{ position: 'relative', width: 46, height: 28, borderRadius: 99, border: 'none', background: on ? C.green : '#d6d6db', flexShrink: 0, cursor: 'pointer', transition: 'background .15s', padding: 0 }}>
+      <span style={{ position: 'absolute', top: 2, left: 2, width: 24, height: 24, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'transform .15s', transform: on ? 'translateX(18px)' : 'translateX(0)' }} />
+    </button>
+  )
+}
+
+// Compact styled native time/date input for the mvp editors.
+export function MvpTimeInput({ value, onChange, type = 'time' }: { value: string; onChange: (v: string) => void; type?: 'time' | 'date' }) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="mvp-input"
+      style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 9, padding: '7px 9px', fontSize: 16, color: C.ink, fontFamily: 'inherit', outline: 'none' }}
+    />
   )
 }
