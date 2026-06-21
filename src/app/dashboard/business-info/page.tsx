@@ -96,7 +96,7 @@ export default async function BusinessInfoPage() {
         </MvpGroup>
 
         <MvpGroup title="Listing & website">
-          <MvpRow icon={<Tag size={18} />} label="Cuisine & amenities" sub="Categories, parking" href="/dashboard/local-seo/listing" />
+          <MvpRow icon={<Tag size={18} />} label="Cuisine & category" sub="What you're found for on Google" href="/dashboard/business-info/category" />
           <MvpRow icon={<Globe size={18} />} label="Your website" sub={websiteConn.connected ? (websiteConn.siteUrl ?? 'Connected, auto-publishes') : 'Connect to auto-publish'} href="/dashboard/business-info/connect-website" />
         </MvpGroup>
 
