@@ -23,8 +23,6 @@ const C = {
   coral: '#c0564f', coralSoft: '#fdeeee',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
-// Bodies longer than this clamp to two lines and show a Read more affordance.
-const LONG_TEXT = 96
 
 type Chip = 'approvals' | 'reviews' | 'todos' | 'fix'
 interface Review { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string }
@@ -143,28 +141,16 @@ function InboxEmpty({ icon: Icon, title, sub }: { icon: typeof Check; title: str
     </div>
   )
 }
-function Divider({ label, count }: { label: string; count?: number }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '17px 18px 7px' }}>
-      <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.faint }}>{label}</span>
-      {count != null && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.faint, background: '#eef0ef', borderRadius: 99, padding: '1px 7px' }}>{count}</span>}
-      <span style={{ flex: 1 }} />
-    </div>
-  )
-}
-
-/* ── A single notification card box: avatar · body · time/⋯. Uniform across
- *  every type (review, approval, fix, win). Renders as a Link when it has a
- *  destination; long bodies clamp with a Read more affordance. */
+/* ── A single notification row: avatar · body · time/⋯. Full-width and
+ *  uniform across every type (review, approval, fix, win), separated by a
+ *  hairline like a real notifications feed. Renders as a Link when it has a
+ *  destination; long bodies clamp to two lines with a trailing "…". */
 function NotifRow({ href, unread, time, onDismiss, onNav, avatar, children }: { href?: string; unread?: boolean; time?: string; onDismiss?: () => void; onNav?: () => void; avatar: React.ReactNode; children: React.ReactNode }) {
-  // Every notification is a uniform card box. Unread = soft green tint + ring
-  // and a green dot/timestamp; read = plain white with a hairline border.
+  // Unread = a soft green wash across the whole row + a green dot/timestamp.
   const frame: React.CSSProperties = {
     display: 'flex', gap: 12, alignItems: 'flex-start',
-    padding: '13px 14px', margin: '0 14px 9px', borderRadius: 16,
-    border: `0.5px solid ${unread ? 'rgba(74,189,152,0.34)' : C.line}`,
-    background: unread ? 'rgba(74,189,152,0.06)' : '#fff',
-    boxShadow: unread ? '0 1px 9px rgba(74,189,152,0.11)' : '0 1px 4px rgba(0,0,0,0.035)',
+    padding: '14px 16px', borderBottom: `0.5px solid ${C.line}`,
+    background: unread ? 'rgba(74,189,152,0.07)' : '#fff',
   }
   const inner = (
     <>
@@ -194,25 +180,13 @@ function IconAvatar({ emoji, danger }: { emoji: string; danger?: boolean }) {
 const clampStyle = (lines: number): React.CSSProperties => ({ display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical', overflow: 'hidden' })
 
 function Lead({ bold, rest, lines = 2 }: { bold: string; rest?: string; lines?: number }) {
-  // Long bodies clamp to two lines (CSS "…") and offer an explicit Read more.
-  const long = (rest?.length ?? 0) > LONG_TEXT
+  // Body clamps to two lines; the trailing "…" signals there's more and the
+  // whole row taps through to the full text.
   return (
-    <>
-      <div style={{ fontSize: 14, lineHeight: 1.4, color: C.ink, ...clampStyle(lines) }}>
-        <b style={{ fontWeight: 700 }}>{bold}</b>{rest ? <span style={{ color: C.mute, fontWeight: 400 }}>{' '}{rest}</span> : null}
-      </div>
-      {long && <ReadMore />}
-    </>
+    <div style={{ fontSize: 14, lineHeight: 1.4, color: C.ink, ...clampStyle(lines) }}>
+      <b style={{ fontWeight: 700 }}>{bold}</b>{rest ? <span style={{ color: C.mute, fontWeight: 400 }}>{' '}{rest}</span> : null}
+    </div>
   )
-}
-// Subtle "there's more" affordance on its own line — the whole row taps through.
-function ReadMore() {
-  return <div style={{ marginTop: 5, fontSize: 12.5, fontWeight: 700, color: C.greenDk }}>Read more</div>
-}
-// Outlined action button (visual span; the row's own Link carries the nav).
-function PillBtn({ label, danger }: { label: string; danger?: boolean }) {
-  const col = danger ? C.coral : C.greenDk
-  return <span style={{ display: 'inline-flex', alignItems: 'center', marginTop: 10, border: `1.5px solid ${col}`, color: col, borderRadius: 999, padding: '6px 16px', fontWeight: 700, fontSize: 13 }}>{label}</span>
 }
 
 const matchItem = (i: Item, q: string) => !q || `${i.title} ${i.subtitle} ${i.review?.text ?? ''}`.toLowerCase().includes(q)
@@ -225,7 +199,7 @@ function ListView({ filter, items, wins, q, onDismiss }: { filter: string; items
   const wq = q ? wins.filter((w) => `${w.title} ${w.body}`.toLowerCase().includes(q)) : wins
   const winList = (filter === 'all' || filter === 'activity') ? wq : []
   const label = (FILTERS.find((s) => s.key === filter)?.label ?? '').toLowerCase()
-  const pad: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 0 28px' }
+  const pad: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 0 28px' }
 
   if (filter === 'all') {
     // One flat feed, urgent first — no section headers.
@@ -260,7 +234,7 @@ function ListView({ filter, items, wins, q, onDismiss }: { filter: string; items
   return (
     <div style={pad}>
       {sorted.map((i) => <Row key={i.id} item={i} onDismiss={onDismiss} />)}
-      {winList.length > 0 && <><Divider label="Good to know" />{winList.map((w) => <WinLink key={w.id} w={w} />)}</>}
+      {winList.map((w) => <WinLink key={w.id} w={w} />)}
     </div>
   )
 }
@@ -278,11 +252,9 @@ function WinLink({ w }: { w: Win }) {
 function Row({ item, onDismiss }: { item: Item; onDismiss: (id: string) => void }) {
   if (item.review) return <ReviewRow item={item} onDismiss={onDismiss} />
   const isFix = item.kind === 'connection'
-  const cta = isFix ? 'Reconnect' : item.chip === 'approvals' ? 'Review' : null
   return (
     <NotifRow href={item.href} unread={item.unread} time={item.time} onDismiss={() => onDismiss(item.id)} onNav={() => { void markInboxRead(item.id) }} avatar={<IconAvatar emoji={item.icon} danger={isFix} />}>
       <Lead bold={item.title} rest={item.subtitle || undefined} />
-      {cta && <PillBtn label={cta} danger={isFix} />}
     </NotifRow>
   )
 }
@@ -292,7 +264,6 @@ function ReviewRow({ item, onDismiss }: { item: Item; onDismiss: (id: string) =>
   const tone = ['#4abd98', '#a85c3c', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b'][(r.author.charCodeAt(0) || 0) % 6]
   const source = r.source === 'instagram' ? 'Instagram' : r.source === 'yelp' ? 'Yelp' : 'Google'
   const avatar = <div style={{ width: 48, height: 48, borderRadius: '50%', background: tone, color: '#fff', fontWeight: 700, fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{r.author.charAt(0).toUpperCase()}</div>
-  const long = (r.text?.length ?? 0) > LONG_TEXT
   return (
     <NotifRow href={`/dashboard/reviews/${r.reviewId}`} unread={item.unread} time={item.time} onDismiss={() => onDismiss(item.id)} onNav={() => { void markInboxRead(item.id) }} avatar={avatar}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', fontSize: 14, lineHeight: 1.3, color: C.ink }}>
@@ -300,9 +271,7 @@ function ReviewRow({ item, onDismiss }: { item: Item; onDismiss: (id: string) =>
         <Stars n={r.rating} />
         <span style={{ color: C.faint, fontSize: 12 }}>{source}</span>
       </div>
-      {r.text && <div style={{ marginTop: 5, fontSize: 13.5, color: C.mute, lineHeight: 1.45, ...clampStyle(2) }}>&ldquo;{r.text}&rdquo;</div>}
-      {long && <ReadMore />}
-      <PillBtn label="Reply" />
+      {r.text && <div style={{ marginTop: 4, fontSize: 13.5, color: C.mute, lineHeight: 1.45, ...clampStyle(2) }}>&ldquo;{r.text}&rdquo;</div>}
     </NotifRow>
   )
 }
