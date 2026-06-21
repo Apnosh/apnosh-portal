@@ -8,9 +8,9 @@
  */
 
 import { useState } from 'react'
-import { Plus, ChevronRight, Loader2, Trash2 } from 'lucide-react'
+import { Plus, ChevronRight, Loader2, Trash2, Check, AlertCircle } from 'lucide-react'
 import {
-  createMyMenuItem, updateMyMenuItem, deleteMyMenuItem, type MenuItem,
+  createMyMenuItem, updateMyMenuItem, deleteMyMenuItem, pushMenuToGoogle, type MenuItem,
 } from '@/lib/dashboard/menu-actions'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, C, DISPLAY } from '@/components/mvp/mvp-detail'
@@ -36,6 +36,8 @@ export default function MvpMenuEditor({ initial }: { initial: MenuItem[] }) {
   const [editing, setEditing] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pushing, setPushing] = useState(false)
+  const [googleResult, setGoogleResult] = useState<{ ok: boolean; text: string } | null>(null)
 
   const categories = [...new Set(items.map(i => i.category))]
 
@@ -96,6 +98,20 @@ export default function MvpMenuEditor({ initial }: { initial: MenuItem[] }) {
     }
   }
 
+  async function pushGoogle() {
+    setPushing(true); setGoogleResult(null)
+    try {
+      const res = await pushMenuToGoogle()
+      setGoogleResult(res.success
+        ? { ok: true, text: `Google menu updated (${res.items} item${res.items === 1 ? '' : 's'})` }
+        : { ok: false, text: res.error })
+    } catch {
+      setGoogleResult({ ok: false, text: 'Could not update Google.' })
+    } finally {
+      setPushing(false)
+    }
+  }
+
   const canSave = !!editing && editing.name.trim().length > 0 && editing.category.trim().length > 0
 
   return (
@@ -108,7 +124,9 @@ export default function MvpMenuEditor({ initial }: { initial: MenuItem[] }) {
               <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4, lineHeight: 1.45 }}>Add your dishes so customers can browse them on your website.</div>
             </div>
           ) : (
-            categories.map(cat => (
+            <>
+              <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '0 6px 14px' }}>Edits publish to your website automatically. Tap &ldquo;Update Google&rdquo; to refresh your Google menu too.</p>
+              {categories.map(cat => (
               <div key={cat} style={{ marginBottom: 20 }}>
                 <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 6px 7px' }}>{cat}</div>
                 <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
@@ -127,14 +145,25 @@ export default function MvpMenuEditor({ initial }: { initial: MenuItem[] }) {
                   ))}
                 </div>
               </div>
-            ))
+              ))}
+            </>
           )}
         </div>
 
         <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: `0.5px solid ${C.line}`, padding: '10px 14px calc(12px + env(safe-area-inset-bottom))' }}>
-          <button type="button" onClick={openNew} style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', background: C.green, color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-            <Plus size={18} /> Add item
-          </button>
+          {googleResult && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, marginBottom: 9, fontSize: 12.5, color: googleResult.ok ? C.greenDk : '#8a5a0c', textAlign: 'center', lineHeight: 1.4 }}>
+              {googleResult.ok ? <Check size={15} /> : <AlertCircle size={15} />}<span>{googleResult.text}</span>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" onClick={pushGoogle} disabled={pushing || items.length === 0} style={{ flex: 1, height: 48, borderRadius: 14, border: `1px solid ${C.line}`, background: '#fff', color: (pushing || items.length === 0) ? C.faint : C.ink, fontSize: 15, fontWeight: 600, fontFamily: 'inherit', cursor: (pushing || items.length === 0) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+              {pushing && <Loader2 size={16} className="mvp-spin" />}Update Google
+            </button>
+            <button type="button" onClick={openNew} style={{ flex: 1, height: 48, borderRadius: 14, border: 'none', background: C.green, color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+              <Plus size={18} /> Add item
+            </button>
+          </div>
         </div>
       </div>
 

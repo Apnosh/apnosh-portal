@@ -19,6 +19,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient, SupabaseClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { updateClientMenus, type FoodMenu } from '@/lib/gbp-menu'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminDb = SupabaseClient<any, 'public', any>
@@ -236,4 +237,57 @@ export async function deleteMyMenuItem(id: string): Promise<
   await fireDeployHook(auth.clientId)
   revalidatePath('/dashboard/website/manage')
   return { success: true }
+}
+
+// ─── Push to Google's structured menu (v4 foodMenus) ───────────────
+
+/* Transform the menu_items rows into Google's FoodMenu shape: one menu,
+   a section per category (in the rows' existing order), visible items only. */
+function menuItemsToFoodMenus(items: MenuItem[]): FoodMenu[] {
+  const visible = items.filter(i => i.kind === 'item' && i.isAvailable && i.name.trim())
+  const byCat = new Map<string, MenuItem[]>()
+  for (const it of visible) {
+    const arr = byCat.get(it.category) ?? []
+    arr.push(it)
+    byCat.set(it.category, arr)
+  }
+  const sections = [...byCat.entries()].map(([cat, its]) => ({
+    name: cat || 'Menu',
+    items: its.map(it => ({
+      name: it.name,
+      description: it.description ?? undefined,
+      price: it.priceCents != null ? (it.priceCents / 100).toFixed(2) : undefined,
+    })),
+  }))
+  return [{ name: 'Menu', sections }]
+}
+
+/**
+ * Push the current menu_items to Google's structured menu (v4 foodMenus), from
+ * the same source the website renders. The website already updates on every
+ * item write; this refreshes Google's Menu tab too. Returns a clear error if
+ * v4 isn't enabled for the account.
+ */
+export async function pushMenuToGoogle(): Promise<
+  { success: true; items: number } | { success: false; error: string }
+> {
+  const auth = await requireClientUser()
+  if (!auth.ok) return { success: false, error: auth.error }
+  const db = adminDb()
+  const { data, error } = await db
+    .from('menu_items')
+    .select('*')
+    .eq('client_id', auth.clientId)
+    .order('category', { ascending: true })
+    .order('display_order', { ascending: true })
+    .order('name', { ascending: true })
+  if (error) return { success: false, error: error.message }
+
+  const items = (data ?? []).map(rowToItem)
+  const menus = menuItemsToFoodMenus(items)
+  const res = await updateClientMenus(auth.clientId, menus, null)
+  if (!res.ok) return { success: false, error: res.error }
+
+  const count = menus.reduce((a, m) => a + m.sections.reduce((s, sec) => s + sec.items.length, 0), 0)
+  return { success: true, items: count }
 }
