@@ -28,7 +28,7 @@ export default function LinksEditor({ initial }: { initial: BusinessLinks }) {
   const initialStr = useMemo(() => JSON.stringify({ ordering: initial.ordering ?? [], reservations: initial.reservations ?? [], social: initial.social ?? {} }), [initial])
   const dirty = JSON.stringify({ ordering, reservations, social }) !== initialStr
 
-  const onSave = () => {
+  const onSave = (sync: boolean) => {
     setSaving(true)
     const clean = (rows: LinkEntry[]) => rows.filter(r => r.url.trim())
     saveBusinessInfo({
@@ -37,7 +37,7 @@ export default function LinksEditor({ initial }: { initial: BusinessLinks }) {
         reservations: clean(reservations),
         social: Object.fromEntries(Object.entries(social).filter(([, v]) => v && v.trim())),
       },
-    }).then(setResult).finally(() => setSaving(false))
+    }, { sync }).then(setResult).finally(() => setSaving(false))
   }
 
   return (
@@ -48,6 +48,7 @@ export default function LinksEditor({ initial }: { initial: BusinessLinks }) {
       dirty={dirty}
       onSave={onSave}
       saveLabel="Save"
+      syncTargets="your website"
       result={result}
       onEditAgain={() => setResult(null)}
     >

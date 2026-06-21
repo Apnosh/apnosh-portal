@@ -7,13 +7,14 @@
  * everywhere.
  */
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, Loader2, CheckCircle2, AlertCircle,
 } from 'lucide-react'
 import type { SaveResult } from './actions'
 import MvpShell from '@/components/mvp/mvp-shell'
-import { MvpDetailHeader, MvpSaveBar, C, DISPLAY } from '@/components/mvp/mvp-detail'
+import { MvpDetailHeader, C, DISPLAY } from '@/components/mvp/mvp-detail'
 
 export function EditorHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   const router = useRouter()
@@ -115,58 +116,67 @@ export function ErrorBanner({ message }: { message: string }) {
 const AMBER = '#bd7e16'
 const AMBER_DK = '#8a5a0c'
 
-export function MvpEditorShell({ title, subtitle, saving, dirty = true, onSave, saveLabel = 'Save & sync', result, onEditAgain, children }: {
+export function MvpEditorShell({ title, subtitle, saving, dirty = true, onSave, saveLabel = 'Save', syncTargets = 'Google and your website', result, onEditAgain, children }: {
   title: string
   subtitle?: string
   saving: boolean
   dirty?: boolean
-  onSave: () => void
+  /** Receives whether the "Update ..." toggle was on when Save was tapped. */
+  onSave: (sync: boolean) => void
   saveLabel?: string
+  /** What the sync toggle says it updates (default "Google and your website"). */
+  syncTargets?: string
   result?: SaveResult | null
   onEditAgain?: () => void
   children: React.ReactNode
 }) {
+  const [sync, setSync] = useState(true)
   const saved = !!result?.synced.saved
+  const off = !dirty || saving
   return (
     <MvpShell active="more" header={<MvpDetailHeader title={title} subtitle={subtitle} backHref="/dashboard/business-info" backLabel="Business info" />}>
       {saved && result ? (
-        <MvpSavedView result={result} onEditAgain={onEditAgain} />
+        <MvpSavedView result={result} synced={sync} onEditAgain={onEditAgain} />
       ) : (
         <div style={{ background: C.bg, minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
           <div style={{ flex: 1, padding: '16px 14px 14px' }}>{children}</div>
-          <MvpSaveBar onClick={onSave} label={saveLabel} disabled={!dirty} saving={saving} />
+          <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: `0.5px solid ${C.line}`, padding: '10px 14px calc(12px + env(safe-area-inset-bottom))' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '2px 2px 11px' }}>
+              <span style={{ fontSize: 13.5, color: C.ink, fontWeight: 500 }}>Update {syncTargets}</span>
+              <MvpToggle on={sync} onClick={() => setSync(s => !s)} label="Sync on save" />
+            </div>
+            <button type="button" onClick={() => onSave(sync)} disabled={off} style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', background: off ? '#bfe7da' : C.green, color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: 'inherit', cursor: off ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              {saving && <Loader2 size={18} className="mvp-spin" />}{saveLabel}
+            </button>
+          </div>
         </div>
       )}
     </MvpShell>
   )
 }
 
-function MvpSavedView({ result, onEditAgain }: { result: SaveResult; onEditAgain?: () => void }) {
+function MvpSavedView({ result, synced, onEditAgain }: { result: SaveResult; synced: boolean; onEditAgain?: () => void }) {
   const router = useRouter()
   const g = result.synced.google
   const w = result.synced.website
+  const gState: 'ok' | 'warn' | 'skip' = !synced ? 'skip' : g === 'ok' ? 'ok' : g === 'failed' ? 'warn' : 'skip'
+  const gDetail = !synced ? 'Syncing was off' : g === 'ok' ? 'Updated live' : g === 'failed' ? (result.googleError ?? 'Could not update') : 'Not connected'
+  const wState: 'ok' | 'warn' | 'skip' = !synced ? 'skip' : (w === 'committed' || w === 'queued') ? 'ok' : w === 'failed' ? 'warn' : 'skip'
+  const wDetail = !synced ? 'Syncing was off' : w === 'committed' ? 'Rebuilding now' : w === 'queued' ? 'Updating shortly' : w === 'failed' ? (result.websiteError ?? 'Could not update') : 'No site connected'
   return (
     <div style={{ background: C.bg, minHeight: '100%', padding: '28px 18px 28px', fontFamily: "'Inter',system-ui,sans-serif" }}>
       <div style={{ width: 60, height: 60, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '6px auto 14px' }}>
         <CheckCircle2 size={32} color={C.greenDk} />
       </div>
       <div style={{ textAlign: 'center', fontSize: 22, fontWeight: 600, color: C.ink, fontFamily: DISPLAY }}>Saved</div>
-      <div style={{ textAlign: 'center', fontSize: 13.5, color: C.mute, margin: '4px 0 18px' }}>Here&apos;s what updated</div>
+      <div style={{ textAlign: 'center', fontSize: 13.5, color: C.mute, margin: '4px 0 18px' }}>{synced ? "Here's what updated" : 'Saved to your records only'}</div>
 
       <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
         <MvpSyncRow state="ok" label="Your Apnosh records" detail="Saved" />
         <div style={{ height: '0.5px', background: C.line, marginLeft: 48 }} />
-        <MvpSyncRow
-          state={g === 'ok' ? 'ok' : g === 'failed' ? 'warn' : 'skip'}
-          label="Google Business Profile"
-          detail={g === 'ok' ? 'Updated live' : g === 'failed' ? (result.googleError ?? 'Could not update') : 'Not connected'}
-        />
+        <MvpSyncRow state={gState} label="Google Business Profile" detail={gDetail} />
         <div style={{ height: '0.5px', background: C.line, marginLeft: 48 }} />
-        <MvpSyncRow
-          state={(w === 'committed' || w === 'queued') ? 'ok' : w === 'failed' ? 'warn' : 'skip'}
-          label="Your website"
-          detail={w === 'committed' ? 'Rebuilding now' : w === 'queued' ? 'Updating shortly' : w === 'failed' ? (result.websiteError ?? 'Could not update') : 'No site connected'}
-        />
+        <MvpSyncRow state={wState} label="Your website" detail={wDetail} />
       </div>
 
       <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>

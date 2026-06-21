@@ -137,7 +137,10 @@ export interface SaveResult {
   websiteError?: string
 }
 
-export async function saveBusinessInfo(input: Partial<BusinessInfo>): Promise<SaveResult> {
+export async function saveBusinessInfo(input: Partial<BusinessInfo>, opts?: { sync?: boolean }): Promise<SaveResult> {
+  /* sync defaults on. When off, write only our DB and skip the Google +
+     website push (the owner unchecked "update Google & your website"). */
+  const sync = opts?.sync !== false
   const { user, clientId } = await resolveCurrentClient(null)
   if (!user) return { ok: false, error: 'Not authenticated', synced: { saved: false, google: 'skipped', website: 'skipped' } }
   if (!clientId) return { ok: false, error: 'No client account linked', synced: { saved: false, google: 'skipped', website: 'skipped' } }
@@ -184,7 +187,7 @@ export async function saveBusinessInfo(input: Partial<BusinessInfo>): Promise<Sa
   /* ── 1. Google Business Profile (live) — only the provided fields ── */
   let google: SaveResult['synced']['google'] = 'skipped'
   let googleError: string | undefined
-  if (loc?.store_code) {
+  if (sync && loc?.store_code) {
     const patch: Parameters<typeof updateClientListing>[1] = {}
     if (hasPhone) patch.primaryPhone = phone || null
     if (hasWebsite) patch.websiteUri = website || null
@@ -228,7 +231,7 @@ export async function saveBusinessInfo(input: Partial<BusinessInfo>): Promise<Sa
      that rebuild. The data is already in our DB above. */
   let websiteStatus: SaveResult['synced']['website'] = 'skipped'
   let websiteError: string | undefined
-  if (settings?.external_deploy_hook_url) {
+  if (sync && settings?.external_deploy_hook_url) {
     try {
       const res = await fetch(settings.external_deploy_hook_url, { method: 'POST' })
       if (res.ok) {
@@ -256,28 +259,4 @@ export async function saveBusinessInfo(input: Partial<BusinessInfo>): Promise<Sa
     googleError,
     websiteError,
   }
-}
-
-/**
- * Re-push the CURRENT saved business info to Google + the website, without
- * changing anything. The "just in case" safety net: if an owner entered their
- * info before connecting Google (so it reached our records + website but not
- * Google), they can connect Google and push everything in one tap — no need to
- * re-edit field by field. Also recovers from a transient sync failure.
- */
-export async function resyncBusinessInfo(): Promise<SaveResult> {
-  const loaded = await loadBusinessInfo()
-  if (!loaded.ok || !loaded.info) {
-    return { ok: false, error: loaded.error ?? 'Could not load your info', synced: { saved: false, google: 'skipped', website: 'skipped' } }
-  }
-  const i = loaded.info
-  return saveBusinessInfo({
-    name: i.name,
-    phone: i.phone,
-    website: i.website,
-    description: i.description,
-    hours: i.hours,
-    specialHours: i.specialHours,
-    links: i.links,
-  })
 }

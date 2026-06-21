@@ -43,7 +43,7 @@ export default function HoursEditor({ initialHours }: { initialHours: WeeklyHour
     setHours(p => ({ ...p, tue: clone(), wed: clone(), thu: clone(), fri: clone() }))
   }
 
-  const onSave = () => { setSaving(true); saveBusinessInfo({ hours }).then(setResult).finally(() => setSaving(false)) }
+  const onSave = (sync: boolean) => { setSaving(true); saveBusinessInfo({ hours }, { sync }).then(setResult).finally(() => setSaving(false)) }
 
   return (
     <MvpEditorShell

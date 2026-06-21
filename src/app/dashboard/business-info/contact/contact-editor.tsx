@@ -27,9 +27,9 @@ export default function ContactEditor({ initial }: { initial: ContactFields | nu
 
   const dirty = name !== base.name || phone !== base.phone || website !== base.website || description !== base.description
 
-  function onSave() {
+  function onSave(sync: boolean) {
     setSaving(true)
-    saveBusinessInfo({ name, phone, website, description })
+    saveBusinessInfo({ name, phone, website, description }, { sync })
       .then(setResult)
       .finally(() => setSaving(false))
   }

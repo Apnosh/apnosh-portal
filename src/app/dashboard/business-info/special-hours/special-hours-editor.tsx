@@ -19,7 +19,7 @@ export default function SpecialHoursEditor({ initial, gbpConnected }: { initial:
   const update = (i: number, patch: Partial<SpecialHours[number]>) => setItems(p => p.map((s, idx) => idx === i ? { ...s, ...patch } : s))
   const remove = (i: number) => setItems(p => p.filter((_, idx) => idx !== i))
 
-  const onSave = () => { setSaving(true); saveBusinessInfo({ specialHours: items }).then(setResult).finally(() => setSaving(false)) }
+  const onSave = (sync: boolean) => { setSaving(true); saveBusinessInfo({ specialHours: items }, { sync }).then(setResult).finally(() => setSaving(false)) }
 
   return (
     <MvpEditorShell
