@@ -16,7 +16,7 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Loader2 } from 'lucide-react'
 
 export const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
@@ -70,4 +70,18 @@ export function MvpRow({ icon, label, sub, href, onClick, right, danger }: { ico
   if (href) return <Link href={href} className="mvp-row" style={base}>{inner}</Link>
   if (onClick) return <button type="button" onClick={onClick} className="mvp-row" style={{ ...base, background: 'none', border: 'none', textAlign: 'left', font: 'inherit', cursor: 'pointer' }}>{inner}</button>
   return <div style={base}>{inner}</div>
+}
+
+// Sticky bottom save bar — pins above the bottom nav inside the shell's scroll
+// frame. `hint` shows a small line above the button (e.g. "Saved", or a nudge).
+export function MvpSaveBar({ onClick, label = 'Save', disabled, saving, hint }: { onClick: () => void; label?: string; disabled?: boolean; saving?: boolean; hint?: string }) {
+  const off = disabled || saving
+  return (
+    <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: `0.5px solid ${C.line}`, padding: '10px 14px calc(12px + env(safe-area-inset-bottom))' }}>
+      {hint && <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginBottom: 8 }}>{hint}</div>}
+      <button type="button" onClick={onClick} disabled={off} style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', background: off ? '#bfe7da' : C.green, color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: 'inherit', cursor: off ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        {saving && <Loader2 size={18} className="mvp-spin" />}{label}
+      </button>
+    </div>
+  )
 }

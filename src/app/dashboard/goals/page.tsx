@@ -14,7 +14,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getGoalsCatalog, getActiveClientGoals } from '@/lib/goals/queries'
-import GoalsSelector from './goals-selector'
+import MvpGoals from './mvp-goals'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,5 +57,5 @@ export default async function GoalsPage() {
     getActiveClientGoals(clientId),
   ])
 
-  return <GoalsSelector clientId={clientId} catalog={catalog} activeGoals={activeGoals} />
+  return <MvpGoals clientId={clientId} catalog={catalog} activeGoals={activeGoals} />
 }
