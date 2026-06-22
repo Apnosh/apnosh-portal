@@ -3001,8 +3001,8 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, onCreate, onClose } = {}) {
-  const [route, setRoute] = useState({ name: "browse" });
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, onCreate, onClose } = {}) {
+  const [route, setRoute] = useState(() => (initialItem ? { name: "build", itemId: initialItem === "promoevent" ? "launch" : initialItem } : { name: "browse" }));
 
   const exit = () => { if (onClose) onClose(); };
 

@@ -18,13 +18,33 @@ import ApnoshCampaignRaw from './apnosh-campaign'
 
 type MenuOpt = { l: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; onCreate?: (p: CreatePayload) => void; onClose?: () => void }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; onCreate?: (p: CreatePayload) => void; onClose?: () => void }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
-export default function CampaignBuilderEntry() {
+// Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
+// Map the legacy 8 campaign-template ids onto the new catalog, and pass through
+// a real catalog id; anything unknown just lands on the catalog (browse).
+const TEMPLATE_MAP: Record<string, string> = {
+  'fill-shifts': 'nights', 'new-menu': 'launch', event: 'launch',
+  'recurring-night': 'nights', winback: 'winback', regulars: 'regulars',
+  discover: 'reach', reviews: 'reviewsplan',
+}
+const CATALOG_IDS = new Set([
+  'reach', 'nights', 'firstvisit', 'regulars', 'catering', 'reviewsplan', 'reel', 'story',
+  'carousel', 'graphic', 'dish', 'gpost', 'promoevent', 'launch', 'creator', 'welcome',
+  'second', 'news', 'slowoffer', 'birthday', 'earlyaccess', 'shoot', 'gbp', 'reviewsreply',
+  'qr', 'friction', 'giftcard', 'ticket', 'winback',
+])
+function resolveInitialItem(template?: string): string | undefined {
+  if (!template) return undefined
+  return TEMPLATE_MAP[template] ?? (CATALOG_IDS.has(template) ? template : undefined)
+}
+
+export default function CampaignBuilderEntry({ template }: { template?: string }) {
   const router = useRouter()
   const { client } = useClient()
   const [menu, setMenu] = useState<MenuOpt[] | undefined>(undefined)
+  const initialItem = resolveInitialItem(template)
 
   useEffect(() => {
     let cancelled = false
@@ -58,6 +78,7 @@ export default function CampaignBuilderEntry() {
     <ApnoshCampaign
       restaurant={client?.name || 'your restaurant'}
       menu={menu}
+      initialItem={initialItem}
       onCreate={onCreate}
       onClose={onClose}
     />
