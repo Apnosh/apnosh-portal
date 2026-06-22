@@ -1,10 +1,17 @@
 'use client'
 
+/**
+ * Owner Notification preferences — apnosh-mvp surface. Linked from Settings.
+ * Email on/off + digest frequency + per-category toggles, persisted to
+ * notification_preferences (upsert by user_id). Wiring unchanged from the
+ * legacy page; only the presentation is the mvp shell now.
+ */
+
 import { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
-import { ArrowLeft, Bell, Loader2, Save, Check } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { NotificationPreferences, EmailDigestFrequency } from '@/types/database'
+import MvpShell from '@/components/mvp/mvp-shell'
+import { MvpDetailHeader, MvpGroup, MvpToggle, MvpSaveBar, C } from '@/components/mvp/mvp-detail'
 
 const DEFAULT_PREFS: Omit<NotificationPreferences, 'user_id' | 'updated_at'> = {
   email_enabled: true,
@@ -22,22 +29,21 @@ const CATEGORIES: { key: keyof typeof DEFAULT_PREFS; label: string; description:
   { key: 'notify_approvals', label: 'Approvals needed', description: 'When content is ready for you to review' },
   { key: 'notify_content_ready', label: 'Content ready', description: 'When a post or campaign is delivered' },
   { key: 'notify_reviews', label: 'New reviews', description: 'When a customer leaves a review' },
-  { key: 'notify_messages', label: 'Messages', description: 'When your account manager sends a message' },
+  { key: 'notify_messages', label: 'Messages', description: 'When your team sends a message' },
   { key: 'notify_reports', label: 'Monthly reports', description: 'When your monthly report is ready' },
-  { key: 'notify_billing', label: 'Billing & invoices', description: 'Invoice due, payment success, plan changes' },
+  { key: 'notify_billing', label: 'Billing and invoices', description: 'Invoice due, payment success, plan changes' },
   { key: 'notify_system', label: 'System updates', description: 'Important account changes or announcements' },
 ]
 
 const FREQUENCIES: { value: EmailDigestFrequency; label: string; description: string }[] = [
-  { value: 'immediate', label: 'As they happen', description: 'Email me immediately for each notification' },
-  { value: 'daily', label: 'Daily digest', description: 'One email per day with everything new' },
-  { value: 'weekly', label: 'Weekly digest', description: 'One email per week with a summary' },
-  { value: 'off', label: 'Off', description: 'Don&apos;t send me any emails' },
+  { value: 'immediate', label: 'As they happen', description: 'Email me right away for each one' },
+  { value: 'daily', label: 'Daily digest', description: 'One email a day with everything new' },
+  { value: 'weekly', label: 'Weekly digest', description: 'One email a week with a summary' },
+  { value: 'off', label: 'Off', description: 'Do not send me any emails' },
 ]
 
 export default function NotificationPreferencesPage() {
   const supabase = createClient()
-
   const [prefs, setPrefs] = useState<Omit<NotificationPreferences, 'user_id' | 'updated_at'>>(DEFAULT_PREFS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -46,18 +52,13 @@ export default function NotificationPreferencesPage() {
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
-
-    const { data } = await supabase
-      .from('notification_preferences')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
+    const { data } = await supabase.from('notification_preferences').select('*').eq('user_id', user.id).maybeSingle()
     if (data) {
-      const { user_id, updated_at, ...rest } = data as NotificationPreferences
-      setPrefs(rest)
+      const rest = { ...(data as NotificationPreferences) } as Partial<NotificationPreferences>
+      delete rest.user_id
+      delete rest.updated_at
+      setPrefs(rest as Omit<NotificationPreferences, 'user_id' | 'updated_at'>)
     }
-
     setLoading(false)
   }, [supabase])
 
@@ -66,142 +67,77 @@ export default function NotificationPreferencesPage() {
   async function handleSave() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
-    setSaving(true)
-    setSaved(false)
-
-    const { error } = await supabase
-      .from('notification_preferences')
-      .upsert({ user_id: user.id, ...prefs })
-
+    setSaving(true); setSaved(false)
+    const { error } = await supabase.from('notification_preferences').upsert({ user_id: user.id, ...prefs })
     setSaving(false)
-    if (!error) {
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    }
+    if (!error) { setSaved(true); setTimeout(() => setSaved(false), 2500) }
   }
 
-  function toggle(key: keyof typeof DEFAULT_PREFS) {
-    setPrefs(prev => ({ ...prev, [key]: !prev[key] }))
-  }
-
-  if (loading) {
-    return (
-      <div className="max-w-3xl mx-auto space-y-6 animate-pulse">
-        <div className="h-8 w-48 bg-ink-6 rounded" />
-        <div className="bg-white rounded-xl border border-ink-6 h-64" />
-      </div>
-    )
-  }
+  const toggle = (key: keyof typeof DEFAULT_PREFS) => setPrefs((prev) => ({ ...prev, [key]: !prev[key] }))
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-start gap-3">
-        <Link href="/dashboard/settings" className="text-ink-4 hover:text-ink transition-colors mt-1">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink flex items-center gap-2">
-            <Bell className="w-6 h-6 text-ink-4" />
-            Notification Preferences
-          </h1>
-          <p className="text-ink-3 text-sm mt-0.5">Choose what to be notified about and how.</p>
-        </div>
-      </div>
-
-      {/* Email settings */}
-      <div className="bg-white rounded-xl border border-ink-6 p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-ink">Email notifications</h2>
-            <p className="text-xs text-ink-3 mt-0.5">Get notifications delivered to your inbox.</p>
+    <MvpShell active="more" header={<MvpDetailHeader title="Notifications" subtitle="What to be notified about, and how" backHref="/dashboard/settings" backLabel="Settings" />}>
+      <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+        {loading ? (
+          <div style={{ marginTop: 4 }}>
+            {[120, 220].map((h, i) => <div key={i} style={{ height: h, background: '#ececef', borderRadius: 16, marginBottom: 14, animation: 'mvpPulse 1.2s ease-in-out infinite' }} />)}
+            <style>{`@keyframes mvpPulse{0%,100%{opacity:1}50%{opacity:.55}}`}</style>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={prefs.email_enabled}
-              onChange={() => setPrefs(p => ({ ...p, email_enabled: !p.email_enabled }))}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-ink-6 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand/30 rounded-full peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-ink-5 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand" />
-          </label>
-        </div>
-
-        {prefs.email_enabled && (
-          <div className="pt-2 border-t border-ink-6 space-y-2">
-            <label className="text-[11px] text-ink-4 font-medium uppercase tracking-wide">Frequency</label>
-            <div className="space-y-1.5">
-              {FREQUENCIES.map(f => (
-                <label
-                  key={f.value}
-                  className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                    prefs.email_digest_frequency === f.value ? 'bg-brand-tint/30 border border-brand/30' : 'border border-ink-6 hover:bg-bg-2'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="frequency"
-                    value={f.value}
-                    checked={prefs.email_digest_frequency === f.value}
-                    onChange={() => setPrefs(p => ({ ...p, email_digest_frequency: f.value }))}
-                    className="mt-0.5"
-                  />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-ink">{f.label}</div>
-                    <div className="text-xs text-ink-3 mt-0.5">{f.description}</div>
+        ) : (
+          <>
+            {/* Email */}
+            <MvpGroup title="Email">
+              <div style={{ padding: 14 }}>
+                <Row label="Email notifications" desc="Get notifications in your inbox." on={prefs.email_enabled} onToggle={() => setPrefs((p) => ({ ...p, email_enabled: !p.email_enabled }))} />
+                {prefs.email_enabled && (
+                  <div style={{ marginTop: 8, borderTop: `0.5px solid ${C.line}`, paddingTop: 6 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, margin: '6px 0 2px' }}>Frequency</div>
+                    {FREQUENCIES.map((f) => {
+                      const on = prefs.email_digest_frequency === f.value
+                      return (
+                        <button key={f.value} type="button" onClick={() => setPrefs((p) => ({ ...p, email_digest_frequency: f.value }))}
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '10px 0', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
+                          <span style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${on ? C.green : C.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {on && <span style={{ width: 10, height: 10, borderRadius: '50%', background: C.green }} />}
+                          </span>
+                          <span style={{ flex: 1 }}>
+                            <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: C.ink }}>{f.label}</span>
+                            <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1 }}>{f.description}</span>
+                          </span>
+                        </button>
+                      )
+                    })}
                   </div>
-                </label>
-              ))}
-            </div>
-          </div>
+                )}
+              </div>
+            </MvpGroup>
+
+            {/* Categories */}
+            <MvpGroup title="What to notify me about">
+              <div style={{ padding: 14 }}>
+                {CATEGORIES.map((cat, i) => (
+                  <div key={cat.key} style={i > 0 ? { borderTop: `0.5px solid ${C.line}` } : undefined}>
+                    <Row label={cat.label} desc={cat.description} on={Boolean(prefs[cat.key])} onToggle={() => toggle(cat.key)} />
+                  </div>
+                ))}
+              </div>
+            </MvpGroup>
+          </>
         )}
       </div>
+      {!loading && <MvpSaveBar onClick={handleSave} saving={saving} label="Save preferences" hint={saved ? 'Saved' : undefined} />}
+    </MvpShell>
+  )
+}
 
-      {/* Categories */}
-      <div className="bg-white rounded-xl border border-ink-6 p-5 space-y-1">
-        <div className="mb-3">
-          <h2 className="text-sm font-semibold text-ink">What to notify me about</h2>
-          <p className="text-xs text-ink-3 mt-0.5">Applies to both email and in-portal notifications.</p>
-        </div>
-        {CATEGORIES.map(cat => (
-          <div
-            key={cat.key}
-            className="flex items-center justify-between gap-3 py-3 border-t border-ink-6 first:border-t-0"
-          >
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-ink">{cat.label}</div>
-              <div className="text-xs text-ink-3 mt-0.5">{cat.description}</div>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
-              <input
-                type="checkbox"
-                checked={Boolean(prefs[cat.key])}
-                onChange={() => toggle(cat.key)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-ink-6 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand/30 rounded-full peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-ink-5 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand" />
-            </label>
-          </div>
-        ))}
+function Row({ label, desc, on, onToggle }: { label: string; desc: string; on: boolean; onToggle: () => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 0' }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{label}</div>
+        <div style={{ fontSize: 12, color: C.mute, marginTop: 1 }}>{desc}</div>
       </div>
-
-      {/* Save */}
-      <div className="flex items-center justify-end gap-3">
-        {saved && (
-          <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
-            <Check className="w-3.5 h-3.5" /> Saved
-          </span>
-        )}
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="bg-brand hover:bg-brand-dark text-white text-sm font-medium rounded-lg px-5 py-2.5 flex items-center gap-2 transition-colors disabled:opacity-50"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          Save Preferences
-        </button>
-      </div>
+      <MvpToggle on={on} onClick={onToggle} label={label} />
     </div>
   )
 }

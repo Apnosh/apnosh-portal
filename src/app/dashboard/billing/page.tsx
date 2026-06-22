@@ -1,19 +1,24 @@
 'use client'
 
 /**
- * Client-facing billing page. Shows the client:
- *   - Their active retainer plan and next billing date
- *   - Invoice history with paid/open/failed status + Stripe hosted pay links
- *   - A button to manage their payment method via Stripe Customer Portal
+ * Owner Billing — apnosh-mvp mobile surface. Reached from More -> Plan & billing.
  *
- * Reads from billing v2 schema (migration 055) via the client_users bridge.
+ * A pure read-and-handoff money screen: it shows the active plan, the payment
+ * method on file, and invoice history, but NEVER collects card or bank details.
+ * Every payment action hands off to a Stripe-hosted page:
+ *   - Pay an open/failed invoice -> its Stripe hosted invoice URL
+ *   - Update payment method      -> Stripe Customer Portal (/api/billing/portal)
+ *   - Upgrade a plan             -> Stripe Checkout (/api/billing/checkout), auto
+ *                                   launched when arriving with ?upgrade=<tier>
+ *
+ * Reads from billing v2 schema via the client_users bridge (auth user -> client).
  */
 
 import { useEffect, useState, useCallback } from 'react'
-import {
-  Calendar, CheckCircle, Clock, XCircle, Zap, ExternalLink, CreditCard,
-} from 'lucide-react'
+import { Calendar, CreditCard, ExternalLink, Download, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import MvpShell from '@/components/mvp/mvp-shell'
+import { MvpDetailHeader, MvpGroup, MvpRow, MvpPill, C, DISPLAY, type PillTone } from '@/components/mvp/mvp-detail'
 
 interface BillingCustomerRow {
   stripe_customer_id: string
@@ -44,13 +49,25 @@ interface InvoiceRow {
   invoice_pdf_url: string | null
 }
 
-const statusConfig: Record<string, { label: string; className: string; icon: typeof CheckCircle }> = {
-  paid: { label: 'Paid', className: 'bg-emerald-50 text-emerald-700', icon: CheckCircle },
-  open: { label: 'Unpaid', className: 'bg-amber-50 text-amber-700', icon: Clock },
-  failed: { label: 'Payment failed', className: 'bg-red-50 text-red-700', icon: XCircle },
-  void: { label: 'Canceled', className: 'bg-gray-50 text-gray-500', icon: XCircle },
-  draft: { label: 'Draft', className: 'bg-gray-50 text-gray-500', icon: Clock },
-  uncollectible: { label: 'Written off', className: 'bg-red-50 text-red-700', icon: XCircle },
+function invoiceStatus(status: string): { label: string; tone: PillTone } {
+  switch (status) {
+    case 'paid': return { label: 'Paid', tone: 'good' }
+    case 'open': return { label: 'Unpaid', tone: 'warn' }
+    case 'failed': return { label: 'Payment failed', tone: 'bad' }
+    case 'void': return { label: 'Canceled', tone: 'neutral' }
+    case 'uncollectible': return { label: 'Written off', tone: 'bad' }
+    default: return { label: 'Draft', tone: 'neutral' }
+  }
+}
+
+function subStatus(status: string): { label: string; tone: PillTone } {
+  switch (status) {
+    case 'active': return { label: 'Active', tone: 'good' }
+    case 'trialing': return { label: 'Trial', tone: 'good' }
+    case 'past_due': return { label: 'Past due', tone: 'bad' }
+    case 'paused': return { label: 'Paused', tone: 'warn' }
+    default: return { label: status.charAt(0).toUpperCase() + status.slice(1), tone: 'warn' }
+  }
 }
 
 function formatCents(cents: number): string {
@@ -58,7 +75,7 @@ function formatCents(cents: number): string {
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '—'
+  if (!iso) return ''
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
@@ -69,6 +86,8 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true)
   const [portalLoading, setPortalLoading] = useState(false)
   const [portalError, setPortalError] = useState<string | null>(null)
+  const [upgradeStarting, setUpgradeStarting] = useState<string | null>(null)
+  const [upgradeError, setUpgradeError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const supabase = createClient()
@@ -96,17 +115,13 @@ export default function BillingPage() {
     setLoading(false)
   }, [])
 
-  const [upgradeStarting, setUpgradeStarting] = useState<string | null>(null)
-  const [upgradeError, setUpgradeError] = useState<string | null>(null)
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get('success') === 'true') {
       window.history.replaceState({}, '', '/dashboard/billing')
     }
-    // If we landed here from /dashboard/upgrade with ?upgrade=<tier>, kick
-    // off Stripe Checkout immediately. The user gets one fewer click and
-    // hands off to Stripe-hosted UI for the actual payment step.
+    // If we landed here from /dashboard/upgrade with ?upgrade=<tier>, kick off
+    // Stripe Checkout immediately. One fewer click; payment happens on Stripe.
     const tier = params.get('upgrade')
     if (tier && ['basic', 'standard', 'pro'].includes(tier.toLowerCase())) {
       setUpgradeStarting(tier)
@@ -138,7 +153,7 @@ export default function BillingPage() {
     setPortalLoading(true)
     setPortalError(null)
     try {
-      // Hit a server action that returns a Stripe Customer Portal URL.
+      // Server route returns a Stripe Customer Portal URL; redirect to it.
       const res = await fetch('/api/billing/portal', { method: 'POST' })
       const json = await res.json()
       if (json.url) {
@@ -153,201 +168,149 @@ export default function BillingPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="h-8 w-48 bg-ink-6 rounded animate-pulse" />
-        <div className="h-24 bg-ink-6 rounded-xl animate-pulse" />
-        <div className="h-48 bg-ink-6 rounded-xl animate-pulse" />
-      </div>
-    )
-  }
-
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">Billing</h1>
-          <p className="text-ink-3 text-sm mt-1">Your plan, invoices, and payment method.</p>
-        </div>
-        {billingCustomer && (
-          <button
-            onClick={handleManageBilling}
-            disabled={portalLoading}
-            className="px-4 py-2 rounded-lg bg-brand hover:bg-brand-dark text-white text-sm font-medium disabled:opacity-50 flex items-center gap-1.5"
-          >
-            {portalLoading
-              ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              : <CreditCard className="w-3.5 h-3.5" />}
-            Update payment method
-          </button>
+    <MvpShell active="more" header={<MvpDetailHeader title="Billing" subtitle="Your plan and invoices" />}>
+      <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+
+        {/* Banners */}
+        {portalError && <Banner tone="bad">{portalError}</Banner>}
+        {upgradeStarting && !upgradeError && (
+          <Banner tone="good"><Loader2 size={15} className="mvp-spin" /> Starting your {upgradeStarting} upgrade. Taking you to Stripe.</Banner>
+        )}
+        {upgradeError && <Banner tone="bad">Could not start upgrade: {upgradeError}</Banner>}
+
+        {loading ? (
+          <Skeleton />
+        ) : !billingCustomer ? (
+          <div style={{ background: '#fff', border: `1px dashed ${C.green}`, borderRadius: 16, padding: '30px 22px', textAlign: 'center', marginTop: 4 }}>
+            <CreditCard size={26} color={C.greenDk} style={{ margin: '0 auto 10px' }} />
+            <div style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>Billing not set up yet</div>
+            <div style={{ fontSize: 13, color: C.mute, marginTop: 5, lineHeight: 1.45 }}>Your Apnosh team manages billing. Once your first invoice is sent, it shows up here.</div>
+          </div>
+        ) : (
+          <>
+            {/* Plan */}
+            {subscription && (() => {
+              const s = subStatus(subscription.status)
+              return (
+                <MvpGroup title="Plan">
+                  <div style={{ padding: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      <span style={{ fontSize: 16.5, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, lineHeight: 1.2 }}>{subscription.plan_name}</span>
+                      <MvpPill tone={s.tone} label={s.label} />
+                    </div>
+                    <div style={{ fontSize: 14, color: C.mute, marginTop: 5 }}>
+                      <span style={{ fontWeight: 700, color: C.ink }}>{formatCents(subscription.amount_cents)}</span>/{subscription.interval === 'year' ? 'year' : 'month'}
+                    </div>
+                    {subscription.current_period_end && (
+                      <div style={{ fontSize: 12, color: C.faint, marginTop: 7, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <Calendar size={12} />
+                        {subscription.cancel_at_period_end
+                          ? `Cancels on ${formatDate(subscription.current_period_end)}`
+                          : `Next invoice ${formatDate(subscription.current_period_end)}`}
+                      </div>
+                    )}
+                  </div>
+                </MvpGroup>
+              )
+            })()}
+
+            {/* Payment method */}
+            <MvpGroup title="Payment method">
+              <MvpRow
+                icon={<CreditCard size={18} />}
+                label={billingCustomer.payment_method_brand && billingCustomer.payment_method_last4
+                  ? `${billingCustomer.payment_method_brand.toUpperCase()} ending in ${billingCustomer.payment_method_last4}`
+                  : 'No card on file'}
+                sub={billingCustomer.payment_method_brand && billingCustomer.payment_method_last4 ? 'On file' : 'Add one to pay invoices'}
+              />
+              <MvpRow
+                icon={<ExternalLink size={18} />}
+                label="Update payment method"
+                sub="Opens the Stripe secure portal"
+                onClick={portalLoading ? undefined : handleManageBilling}
+                right={portalLoading ? <Loader2 size={16} className="mvp-spin" color={C.faint} /> : undefined}
+              />
+            </MvpGroup>
+
+            {/* Invoices */}
+            {invoices.length > 0 && (
+              <div style={{ marginBottom: 22 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 6px 7px' }}>Invoices</div>
+                <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+                  {invoices.map((inv, i) => {
+                    const st = invoiceStatus(inv.status)
+                    const canPay = (inv.status === 'open' || inv.status === 'failed') && !!inv.hosted_invoice_url
+                    const canView = inv.status === 'paid' && !!inv.hosted_invoice_url
+                    return (
+                      <div key={inv.id}>
+                        {i > 0 && <div style={{ height: '0.5px', background: C.line }} />}
+                        <div style={{ padding: '12px 14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                                <span style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{inv.invoice_number}</span>
+                                {inv.type === 'subscription' && <span style={{ fontSize: 11, color: C.faint }}>retainer</span>}
+                              </div>
+                              <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>
+                                {formatCents(inv.total_cents)} · {formatDate(inv.issued_at ?? inv.due_at)}{inv.paid_at && ` · paid ${formatDate(inv.paid_at)}`}
+                              </div>
+                            </div>
+                            <MvpPill tone={st.tone} label={st.label} />
+                          </div>
+                          {(canPay || canView || inv.invoice_pdf_url) && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 11 }}>
+                              {canPay && (
+                                <a href={inv.hosted_invoice_url!} target="_blank" rel="noopener noreferrer"
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.green, color: '#fff', borderRadius: 10, padding: '7px 13px', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                                  <ExternalLink size={13} /> Pay now
+                                </a>
+                              )}
+                              {canView && (
+                                <a href={inv.hosted_invoice_url!} target="_blank" rel="noopener noreferrer"
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${C.line}`, color: C.ink, borderRadius: 10, padding: '7px 13px', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+                                  <ExternalLink size={13} /> View
+                                </a>
+                              )}
+                              {inv.invoice_pdf_url && (
+                                <a href={inv.invoice_pdf_url} target="_blank" rel="noopener noreferrer" title="Download PDF"
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${C.line}`, color: C.mute, borderRadius: 10, padding: '7px 11px', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+                                  <Download size={13} /> PDF
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
+    </MvpShell>
+  )
+}
 
-      {portalError && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
-          {portalError}
-        </div>
-      )}
-
-      {upgradeStarting && !upgradeError && (
-        <div className="bg-brand-tint border border-brand/30 rounded-xl p-4 text-sm text-ink flex items-center gap-3">
-          <span className="w-4 h-4 border-2 border-brand/30 border-t-brand rounded-full animate-spin" />
-          Starting your {upgradeStarting} upgrade — taking you to Stripe...
-        </div>
-      )}
-
-      {upgradeError && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
-          Could not start upgrade: {upgradeError}
-        </div>
-      )}
-
-      {/* No billing set up yet */}
-      {!billingCustomer && (
-        <div className="bg-white rounded-xl border border-ink-6 p-8 text-center">
-          <CreditCard className="w-8 h-8 text-ink-4 mx-auto mb-3" />
-          <p className="text-sm font-medium text-ink-2">Billing not set up yet</p>
-          <p className="text-xs text-ink-4 mt-1 max-w-sm mx-auto">
-            Your Apnosh team manages billing. Once your first invoice is sent,
-            it will show up here.
-          </p>
-        </div>
-      )}
-
-      {/* Active plan card */}
-      {subscription && (
-        <div className="bg-white rounded-xl border border-ink-6 p-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-brand-tint flex items-center justify-center">
-                <Zap className="w-6 h-6 text-brand-dark" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="font-[family-name:var(--font-display)] text-lg text-ink">{subscription.plan_name}</h2>
-                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full uppercase tracking-wide ${
-                    subscription.status === 'active' ? 'bg-emerald-50 text-emerald-700'
-                    : subscription.status === 'past_due' ? 'bg-red-50 text-red-700'
-                    : 'bg-amber-50 text-amber-700'
-                  }`}>
-                    {subscription.status}
-                  </span>
-                </div>
-                <p className="text-sm text-ink-3 mt-0.5">
-                  <span className="font-medium text-ink tabular-nums">{formatCents(subscription.amount_cents)}</span>
-                  <span>/{subscription.interval === 'year' ? 'year' : 'month'}</span>
-                </p>
-                {subscription.current_period_end && (
-                  <p className="text-[11px] text-ink-4 mt-1 flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {subscription.cancel_at_period_end
-                      ? `Cancels on ${formatDate(subscription.current_period_end)}`
-                      : `Next invoice: ${formatDate(subscription.current_period_end)}`}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Payment method on file */}
-      {billingCustomer && (
-        <div className="bg-white rounded-xl border border-ink-6 p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <CreditCard className="w-5 h-5 text-ink-4" />
-            <div>
-              <p className="text-sm font-medium text-ink">Payment method</p>
-              <p className="text-xs text-ink-3">
-                {billingCustomer.payment_method_brand && billingCustomer.payment_method_last4
-                  ? `${billingCustomer.payment_method_brand.toUpperCase()} ending in ${billingCustomer.payment_method_last4}`
-                  : 'None on file -- add one via Update payment method.'}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Invoice history */}
-      {invoices.length > 0 && (
-        <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
-          <div className="px-5 py-4 border-b border-ink-6">
-            <h2 className="text-sm font-semibold text-ink">Invoices</h2>
-          </div>
-          <div className="divide-y divide-ink-6">
-            {invoices.map(inv => {
-              const cfg = statusConfig[inv.status] ?? statusConfig.draft
-              const Icon = cfg.icon
-              return (
-                <div key={inv.id} className="px-5 py-3 flex items-center justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-ink">{inv.invoice_number}</span>
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${cfg.className}`}>
-                        <Icon className="w-2.5 h-2.5" />
-                        {cfg.label}
-                      </span>
-                      {inv.type === 'subscription' && (
-                        <span className="text-[10px] text-ink-4">retainer</span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-ink-4 mt-0.5 tabular-nums">
-                      {formatCents(inv.total_cents)} &middot; {formatDate(inv.issued_at ?? inv.due_at)}
-                      {inv.paid_at && ` · paid ${formatDate(inv.paid_at)}`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {inv.hosted_invoice_url && (inv.status === 'open' || inv.status === 'failed') && (
-                      <a
-                        href={inv.hosted_invoice_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1.5 rounded-lg bg-brand hover:bg-brand-dark text-white text-xs font-medium inline-flex items-center gap-1"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        Pay now
-                      </a>
-                    )}
-                    {inv.invoice_pdf_url && (
-                      <a
-                        href={inv.invoice_pdf_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1.5 text-ink-4 hover:text-ink"
-                        title="Download PDF"
-                      >
-                        <ArrowUpRight className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                    {inv.hosted_invoice_url && inv.status === 'paid' && (
-                      <a
-                        href={inv.hosted_invoice_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] text-ink-3 hover:text-ink"
-                      >
-                        View
-                      </a>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+function Banner({ tone, children }: { tone: 'good' | 'bad'; children: React.ReactNode }) {
+  const bg = tone === 'bad' ? C.coralSoft : C.greenSoft
+  const fg = tone === 'bad' ? C.coral : C.greenDk
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: bg, color: fg, border: `0.5px solid ${C.line}`, borderRadius: 12, padding: '11px 13px', fontSize: 13, fontWeight: 600, marginBottom: 14 }}>
+      {children}
     </div>
   )
 }
 
-// Minimal ArrowUpRight icon component (lucide already exports this, but keeping the import list tidy above)
-function ArrowUpRight({ className }: { className?: string }) {
+function Skeleton() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <line x1="7" y1="17" x2="17" y2="7"></line>
-      <polyline points="7 7 17 7 17 17"></polyline>
-    </svg>
+    <div style={{ marginTop: 4 }}>
+      {[64, 96, 140].map((h, i) => (
+        <div key={i} style={{ height: h, background: '#ececef', borderRadius: 16, marginBottom: 14, animation: 'mvpPulse 1.2s ease-in-out infinite' }} />
+      ))}
+      <style>{`@keyframes mvpPulse{0%,100%{opacity:1}50%{opacity:.55}}`}</style>
+    </div>
   )
 }

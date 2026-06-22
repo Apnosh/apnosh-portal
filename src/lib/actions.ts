@@ -726,9 +726,18 @@ export async function signAgreement(
 ): Promise<ActionResult> {
   const supabase = await createClient()
 
+  // Must be signed in. RLS already scopes agreements to the owner, but check
+  // explicitly so an unauthenticated call fails fast.
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'You must be signed in to sign.' }
+
   const now = new Date().toISOString()
 
-  const { error } = await supabase
+  // Status guard + confirm a row actually changed. Only an unsigned (sent or
+  // viewed) agreement can be signed, so an already-signed agreement cannot be
+  // re-signed or overwritten. `.select()` returns the affected rows (subject to
+  // RLS), so an empty result means it was blocked, already signed, or gone.
+  const { data: updated, error } = await supabase
     .from('agreements')
     .update({
       status: 'signed',
@@ -738,17 +747,16 @@ export async function signAgreement(
       signed_by_ip: signerIp,
     })
     .eq('id', agreementId)
+    .in('status', ['sent', 'viewed'])
+    .select('business_id')
 
   if (error) return { success: false, error: error.message }
+  if (!updated || updated.length === 0) {
+    return { success: false, error: 'This agreement cannot be signed. It may already be signed or no longer available.' }
+  }
 
-  // Get agreement to find business
-  const { data: agreement } = await supabase
-    .from('agreements')
-    .select('business_id')
-    .eq('id', agreementId)
-    .single()
-
-  if (agreement) {
+  const agreement = { business_id: updated[0].business_id as string }
+  {
     // Update client status
     await supabase
       .from('businesses')

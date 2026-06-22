@@ -25,6 +25,12 @@ export const C = {
 }
 export const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
+// Amber accent for "warning"/"due"/"pending" states (kept out of C so the core
+// token map stays the brand greens + coral). Soft bg + dark text for pills.
+export const AMBER = '#bd7e16'
+export const AMBER_DK = '#8a5a0c'
+export const AMBER_SOFT = '#fbf0da'
+
 export function MvpDetailHeader({ title, subtitle, backHref = '/dashboard/more', backLabel = 'More' }: { title: string; subtitle?: string; backHref?: string; backLabel?: string }) {
   return (
     <div style={{ flexShrink: 0, background: '#fff', borderBottom: `0.5px solid ${C.line}`, padding: '10px 14px 13px' }}>
@@ -83,5 +89,34 @@ export function MvpSaveBar({ onClick, label = 'Save', disabled, saving, hint }: 
         {saving && <Loader2 size={18} className="mvp-spin" />}{label}
       </button>
     </div>
+  )
+}
+
+// iOS-style toggle, green when on. The canonical kit copy — editor-shell.tsx
+// re-exports this so business-info editors and the new account screens share it.
+export function MvpToggle({ on, onClick, label }: { on: boolean; onClick: () => void; label?: string }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={on} aria-label={label} style={{ position: 'relative', width: 46, height: 28, borderRadius: 99, border: 'none', background: on ? C.green : '#d6d6db', flexShrink: 0, cursor: 'pointer', transition: 'background .15s', padding: 0 }}>
+      <span style={{ position: 'absolute', top: 2, left: 2, width: 24, height: 24, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'transform .15s', transform: on ? 'translateX(18px)' : 'translateX(0)' }} />
+    </button>
+  )
+}
+
+// Small status chip (billing/agreement/subscription statuses). One pill across
+// every account surface instead of per-page statusConfig maps.
+export type PillTone = 'good' | 'warn' | 'bad' | 'neutral'
+export function MvpPill({ tone = 'neutral', label, dot }: { tone?: PillTone; label: string; dot?: boolean }) {
+  const map: Record<PillTone, { bg: string; fg: string }> = {
+    good: { bg: C.greenSoft, fg: C.greenDk },
+    warn: { bg: AMBER_SOFT, fg: AMBER_DK },
+    bad: { bg: C.coralSoft, fg: C.coral },
+    neutral: { bg: '#eef0ef', fg: C.mute },
+  }
+  const t = map[tone]
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: t.bg, color: t.fg, borderRadius: 99, padding: '2px 8px', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap' }}>
+      {dot && <span style={{ width: 6, height: 6, borderRadius: 99, background: t.fg, display: 'inline-block' }} />}
+      {label}
+    </span>
   )
 }

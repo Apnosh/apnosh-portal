@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import type { SaveResult } from './actions'
 import MvpShell from '@/components/mvp/mvp-shell'
-import { MvpDetailHeader, C, DISPLAY } from '@/components/mvp/mvp-detail'
+import { MvpDetailHeader, C, DISPLAY, MvpToggle } from '@/components/mvp/mvp-detail'
 
 export function EditorHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   const router = useRouter()
@@ -256,15 +256,9 @@ export function EditorTextArea({ label, value, onChange, placeholder, rows = 5, 
   )
 }
 
-// iOS-style toggle, green when on. Used by Hours, Special hours, and the
-// upcoming service-option editors.
-export function MvpToggle({ on, onClick, label }: { on: boolean; onClick: () => void; label?: string }) {
-  return (
-    <button type="button" onClick={onClick} aria-pressed={on} aria-label={label} style={{ position: 'relative', width: 46, height: 28, borderRadius: 99, border: 'none', background: on ? C.green : '#d6d6db', flexShrink: 0, cursor: 'pointer', transition: 'background .15s', padding: 0 }}>
-      <span style={{ position: 'absolute', top: 2, left: 2, width: 24, height: 24, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'transform .15s', transform: on ? 'translateX(18px)' : 'translateX(0)' }} />
-    </button>
-  )
-}
+// iOS-style toggle, green when on. Single-sourced in the mvp kit now; re-export
+// keeps Hours / Special hours / service-option editors importing from here.
+export { MvpToggle }
 
 // Compact styled native time/date input for the mvp editors.
 export function MvpTimeInput({ value, onChange, type = 'time' }: { value: string; onChange: (v: string) => void; type?: 'time' | 'date' }) {
