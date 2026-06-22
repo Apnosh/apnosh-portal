@@ -11,6 +11,7 @@ import { useEffect, useState, type ComponentType } from 'react'
 import { useRouter } from 'next/navigation'
 import { useClient } from '@/lib/client-context'
 import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
+import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
 // apnosh-campaign is intentionally .jsx (untyped design code). TS infers a
 // narrow props type from its defaults, so re-type it to the real prop surface.
 import ApnoshCampaignRaw from './apnosh-campaign'
@@ -34,9 +35,23 @@ export default function CampaignBuilderEntry() {
   }, [])
 
   const onClose = () => router.push('/dashboard/campaigns')
-  const onCreate = (_payload: CreatePayload) => {
-    // Stage 4: map (itemId + vals) -> CampaignDraft -> createCampaign, then route
-    // to the saved campaign. For now this is a no-op so the flow is navigable.
+  const onCreate = async (payload: CreatePayload) => {
+    if (!client?.id) return
+    try {
+      const draft = draftFromBuilder(payload)
+      const res = await fetch('/api/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: client.id, draft }),
+      })
+      if (!res.ok) return
+      const { id } = (await res.json()) as { id?: string }
+      // The builder shows its own "added" confirm; navigate to the real saved
+      // campaign once it's persisted.
+      if (id) router.push(`/dashboard/campaigns/${id}`)
+    } catch {
+      /* leave the confirm screen up; the owner can retry */
+    }
   }
 
   return (
