@@ -13,6 +13,7 @@
 
 import Link from 'next/link'
 import {
+  Globe, Share2, MapPin, Mail,
   Store, Palette, Plug, Image as ImageIcon, Target,
   Headset, HelpCircle,
   CreditCard, FileText, Settings,
@@ -36,6 +37,15 @@ const MORE_CSS = `
 type Row = { label: string; sub: string; href: string; Icon: typeof Store }
 
 const GROUPS: { title: string; rows: Row[] }[] = [
+  {
+    title: 'Your channels',
+    rows: [
+      { label: 'Website', sub: 'Visitors, leads, site health', href: '/dashboard/website', Icon: Globe },
+      { label: 'Social media', sub: 'Posts, reach, approvals', href: '/dashboard/social', Icon: Share2 },
+      { label: 'Local SEO', sub: 'Google listing and visibility', href: '/dashboard/local-seo', Icon: MapPin },
+      { label: 'Email & SMS', sub: 'Campaigns and subscribers', href: '/dashboard/email-sms', Icon: Mail },
+    ],
+  },
   {
     title: 'Your business',
     rows: [

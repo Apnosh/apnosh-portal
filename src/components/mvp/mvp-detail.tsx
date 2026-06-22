@@ -120,3 +120,54 @@ export function MvpPill({ tone = 'neutral', label, dot }: { tone?: PillTone; lab
     </span>
   )
 }
+
+// Connection chip for hub headers (Site, Analytics, Google listing, ...). Green
+// dot when on. Sits in a flex row of one or more above the first group.
+export function StatusPill({ label, on, onText = 'Connected', offText = 'Not connected' }: { label: string; on: boolean; onText?: string; offText?: string }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 9, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '10px 12px', minWidth: 0 }}>
+      <span style={{ width: 8, height: 8, borderRadius: 99, background: on ? C.green : C.faint, flexShrink: 0 }} />
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <span style={{ display: 'block', fontSize: 11.5, color: C.mute }}>{on ? onText : offText}</span>
+      </span>
+    </div>
+  )
+}
+
+// Uppercase section caption above a snapshot or group.
+export function MvpSectionLabel({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, padding: '2px 6px 8px' }}>{children}</div>
+}
+
+// Snapshot stat tile: a number, a label, an optional up/down delta. Zero values
+// dim to 0.5 so an empty channel reads calm, not broken.
+export function MvpStat({ icon, value, label, delta }: { icon?: React.ReactNode; value: string; label: string; delta?: { dir: 'up' | 'down' | 'flat'; text: string } }) {
+  const zero = !value || value === '0' || value === '—' || value === '$0' || value === '0%'
+  const dColor = delta?.dir === 'up' ? C.greenDk : delta?.dir === 'down' ? C.coral : C.faint
+  return (
+    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '10px 6px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, opacity: zero ? 0.5 : 1, minWidth: 0 }}>
+      {icon && <span style={{ color: C.green, display: 'flex' }}>{icon}</span>}
+      <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 500, lineHeight: 1.05, color: C.ink }}>{value}</div>
+      <div style={{ fontSize: 10.5, color: C.faint, lineHeight: 1.2 }}>{label}</div>
+      {delta && <div style={{ fontSize: 10, fontWeight: 700, color: dColor }}>{delta.text}</div>}
+    </div>
+  )
+}
+
+// Grid wrapper for MvpStat tiles (caps at 4 across).
+export function MvpStatGrid({ children }: { children: React.ReactNode }) {
+  const n = React.Children.count(children)
+  return <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, n) || 1},1fr)`, gap: 8 }}>{children}</div>
+}
+
+// Not-connected / empty state. Dashed green halo card with an optional icon.
+export function MvpEmpty({ icon, title, text }: { icon?: React.ReactNode; title?: string; text: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'linear-gradient(180deg,#fbfdfc,#f5f9f7)', border: '1px dashed rgba(74,189,152,0.4)', borderRadius: 18, padding: '26px 20px', marginBottom: 14 }}>
+      {icon && <div style={{ width: 46, height: 46, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, boxShadow: '0 2px 10px rgba(74,189,152,0.18)' }}>{icon}</div>}
+      {title && <div style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink, marginBottom: 4 }}>{title}</div>}
+      <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, maxWidth: 240 }}>{text}</div>
+    </div>
+  )
+}
