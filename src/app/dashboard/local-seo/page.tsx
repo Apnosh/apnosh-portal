@@ -7,8 +7,14 @@
  * visibility snapshot, and the one unique action (Post to Google). Listing
  * FIELDS (hours, address, category, menu, contact) live in Business info, and
  * reviews live in the Alerts inbox, so neither is rebuilt here.
+ *
+ * Perf: only the connection state (one fast DB query) is awaited before the
+ * shell paints. Listing health blocks on a LIVE Google read and the impact
+ * analytics are heavier, so both stream in via Suspense instead of holding up
+ * the whole page.
  */
 
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import {
   MapPin, BarChart3, Megaphone, ListChecks, Star, Eye, Navigation, Phone,
@@ -20,7 +26,7 @@ import { getListingHealth } from '@/lib/dashboard/get-listing-health'
 import { getImpactSummary } from '@/lib/dashboard/get-impact-summary'
 import MvpShell from '@/components/mvp/mvp-shell'
 import {
-  MvpDetailHeader, MvpGroup, MvpRow, MvpPill, MvpStat, MvpStatGrid, MvpSectionLabel, MvpEmpty, StatusPill,
+  MvpDetailHeader, MvpGroup, MvpRow, MvpStat, MvpStatGrid, MvpSectionLabel, MvpEmpty, StatusPill,
   C, AMBER_DK, AMBER_SOFT,
 } from '@/components/mvp/mvp-detail'
 
@@ -39,22 +45,16 @@ export default async function LocalSeoPage() {
   const { user, clientId } = await resolveCurrentClient(null)
   if (!user) redirect('/login')
 
+  // Fast: connection state only (one indexed query). The slow listing-health
+  // (live Google) + impact analytics stream below.
   let connected = false, v4Enabled = false, verified = false, tokenRevoked = false
-  let health: Awaited<ReturnType<typeof getListingHealth>> | null = null
-  let impact: Awaited<ReturnType<typeof getImpactSummary>> | null = null
-
   if (clientId) {
     const admin = createAdminClient()
-    const [rowRes, h, im] = await Promise.all([
-      admin.from('channel_connections')
-        .select('status, sync_error, last_sync_at')
-        .eq('client_id', clientId).eq('channel', 'google_business_profile')
-        .neq('platform_account_id', 'pending')
-        .order('connected_at', { ascending: false }).limit(1).maybeSingle(),
-      getListingHealth(clientId),
-      getImpactSummary(clientId),
-    ])
-    health = h; impact = im
+    const rowRes = await admin.from('channel_connections')
+      .select('status, sync_error, last_sync_at')
+      .eq('client_id', clientId).eq('channel', 'google_business_profile')
+      .neq('platform_account_id', 'pending')
+      .order('connected_at', { ascending: false }).limit(1).maybeSingle()
     const row = rowRes.data as { status?: string; sync_error?: string | null; last_sync_at?: string | null } | null
     connected = !!row && row.status === 'active'
     const syncErr = (row?.sync_error ?? '').toLowerCase()
@@ -62,10 +62,6 @@ export default async function LocalSeoPage() {
     verified = connected && !/metrics .*?: requested entity was not found/i.test(syncErr)
     tokenRevoked = connected && /invalid_grant|unauthorized|401|token (?:has been )?(?:expired|revoked)/i.test(syncErr)
   }
-
-  // getListingHealth also computes its own `connected`; trust the channel row.
-  const fixes = (health?.checks ?? []).filter((c) => c.status === 'fail' && c.fixHref).slice(0, 3)
-  const metrics = (impact?.metrics ?? []).slice(0, 4)
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Local SEO" subtitle="How you show up on Google" />}>
@@ -79,67 +75,25 @@ export default async function LocalSeoPage() {
           </>
         ) : (
           <>
-            {/* Connection */}
+            {/* Connection (instant) */}
             <div style={{ display: 'flex', gap: 9, marginBottom: 12 }}>
-              <StatusPill label="Google listing" on={connected} onText={verified ? 'Connected' : 'Connected'} />
+              <StatusPill label="Google listing" on={connected} />
             </div>
             {!verified && (
               <div style={{ fontSize: 12.5, color: AMBER_DK, background: AMBER_SOFT, borderRadius: 12, padding: '9px 12px', marginBottom: 16 }}>Your listing is not verified yet, so some Google metrics are limited.</div>
             )}
 
-            {/* Listing health */}
-            {health && (
-              <>
-                <MvpSectionLabel>Your listing</MvpSectionLabel>
-                <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 14, marginBottom: fixes.length ? 10 : 18 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontSize: 13, color: C.mute, fontWeight: 600 }}>Listing health</div>
-                      <div style={{ fontSize: 13, color: C.faint, marginTop: 2 }}>{health.passed} of {health.total} checks passing</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: 26, fontWeight: 600, color: health.grade === 'needs-work' ? C.coral : C.greenDk, fontFamily: "'Cal Sans','Inter',sans-serif" }}>{health.score}</span>
-                      <span style={{ fontSize: 13, color: C.faint }}> / 100</span>
-                    </div>
-                  </div>
-                </div>
-                {fixes.length > 0 && (
-                  <MvpGroup title="Top fixes">
-                    {fixes.map((f) => <MvpRow key={f.key} icon={<Wrench size={18} />} label={f.label} sub={f.fixLabel || f.detail} href={f.fixHref} />)}
-                  </MvpGroup>
-                )}
-              </>
-            )}
+            {/* Listing health — streams (live Google read) */}
+            <Suspense fallback={<SectionSkeleton label="Your listing" height={64} />}>
+              <ListingHealthSection clientId={clientId!} />
+            </Suspense>
 
-            {/* Snapshot */}
-            {metrics.length > 0 && (
-              <>
-                <MvpSectionLabel>Last 30 days on Google</MvpSectionLabel>
-                <div style={{ marginBottom: 6 }}>
-                  <MvpStatGrid>
-                    {metrics.map((m) => {
-                      const Icon = METRIC_ICON[m.label] ?? BarChart3
-                      const delta = m.deltaPct == null ? undefined
-                        : { dir: m.deltaPct > 0 ? 'up' as const : m.deltaPct < 0 ? 'down' as const : 'flat' as const, text: `${m.deltaPct > 0 ? '+' : ''}${m.deltaPct}%` }
-                      return <MvpStat key={m.key} icon={<Icon size={14} />} value={fmtNum(m.value)} label={m.label} delta={delta} />
-                    })}
-                  </MvpStatGrid>
-                </div>
-                {impact?.throughLabel && <div style={{ fontSize: 11, color: C.faint, textAlign: 'center', marginBottom: 18 }}>{impact.throughLabel}. Google data lags about 3 days.</div>}
-              </>
-            )}
+            {/* 30-day visibility + reviews — streams (analytics) */}
+            <Suspense fallback={<SectionSkeleton label="Last 30 days on Google" height={74} />}>
+              <ImpactSection clientId={clientId!} />
+            </Suspense>
 
-            {/* Reviews recap (count + rating only; replies live in Alerts) */}
-            {impact && (impact.rating != null || impact.reviewsThisMonth > 0) && (
-              <MvpGroup title="Reviews">
-                <MvpRow icon={<Star size={18} />}
-                  label={impact.rating != null ? `${impact.rating.toFixed(1)} stars` : 'New reviews'}
-                  sub={[impact.ratingCount != null ? `${impact.ratingCount} total` : '', impact.reviewsThisMonth > 0 ? `${impact.reviewsThisMonth} this month` : ''].filter(Boolean).join(' · ') || 'Reply from Alerts'}
-                  href="/dashboard/inbox?tab=reviews" />
-              </MvpGroup>
-            )}
-
-            {/* Post to Google (unique action) */}
+            {/* Post to Google (instant) */}
             <MvpGroup title="Stay active">
               {v4Enabled ? (
                 <MvpRow icon={<Megaphone size={18} />} label="Post to Google" sub="Share an offer, event, or update" href="/dashboard/local-seo/posts" />
@@ -148,7 +102,7 @@ export default async function LocalSeoPage() {
               )}
             </MvpGroup>
 
-            {/* Dig deeper */}
+            {/* Dig deeper (instant) */}
             <MvpGroup title="Dig deeper">
               <MvpRow icon={<BarChart3 size={18} />} label="Full Google analytics" sub="Searches, views, actions" href="/dashboard/local-seo/analytics" />
               <MvpRow icon={<ListChecks size={18} />} label="Listing health detail" sub="Every check and fix" href="/dashboard/local-seo/health" />
@@ -157,5 +111,75 @@ export default async function LocalSeoPage() {
         )}
       </div>
     </MvpShell>
+  )
+}
+
+async function ListingHealthSection({ clientId }: { clientId: string }) {
+  const health = await getListingHealth(clientId)
+  const fixes = health.checks.filter((c) => c.status === 'fail' && c.fixHref).slice(0, 3)
+  return (
+    <>
+      <MvpSectionLabel>Your listing</MvpSectionLabel>
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 14, marginBottom: fixes.length ? 10 : 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 13, color: C.mute, fontWeight: 600 }}>Listing health</div>
+            <div style={{ fontSize: 13, color: C.faint, marginTop: 2 }}>{health.passed} of {health.total} checks passing</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <span style={{ fontSize: 26, fontWeight: 600, color: health.grade === 'needs-work' ? C.coral : C.greenDk, fontFamily: "'Cal Sans','Inter',sans-serif" }}>{health.score}</span>
+            <span style={{ fontSize: 13, color: C.faint }}> / 100</span>
+          </div>
+        </div>
+      </div>
+      {fixes.length > 0 && (
+        <MvpGroup title="Top fixes">
+          {fixes.map((f) => <MvpRow key={f.key} icon={<Wrench size={18} />} label={f.label} sub={f.fixLabel || f.detail} href={f.fixHref} />)}
+        </MvpGroup>
+      )}
+    </>
+  )
+}
+
+async function ImpactSection({ clientId }: { clientId: string }) {
+  const impact = await getImpactSummary(clientId)
+  const metrics = impact.metrics.slice(0, 4)
+  return (
+    <>
+      {metrics.length > 0 && (
+        <>
+          <MvpSectionLabel>Last 30 days on Google</MvpSectionLabel>
+          <div style={{ marginBottom: 6 }}>
+            <MvpStatGrid>
+              {metrics.map((m) => {
+                const Icon = METRIC_ICON[m.label] ?? BarChart3
+                const delta = m.deltaPct == null ? undefined
+                  : { dir: m.deltaPct > 0 ? 'up' as const : m.deltaPct < 0 ? 'down' as const : 'flat' as const, text: `${m.deltaPct > 0 ? '+' : ''}${m.deltaPct}%` }
+                return <MvpStat key={m.key} icon={<Icon size={14} />} value={fmtNum(m.value)} label={m.label} delta={delta} />
+              })}
+            </MvpStatGrid>
+          </div>
+          {impact.throughLabel && <div style={{ fontSize: 11, color: C.faint, textAlign: 'center', marginBottom: 18 }}>{impact.throughLabel}. Google data lags about 3 days.</div>}
+        </>
+      )}
+      {(impact.rating != null || impact.reviewsThisMonth > 0) && (
+        <MvpGroup title="Reviews">
+          <MvpRow icon={<Star size={18} />}
+            label={impact.rating != null ? `${impact.rating.toFixed(1)} stars` : 'New reviews'}
+            sub={[impact.ratingCount != null ? `${impact.ratingCount} total` : '', impact.reviewsThisMonth > 0 ? `${impact.reviewsThisMonth} this month` : ''].filter(Boolean).join(' · ') || 'Reply from Alerts'}
+            href="/dashboard/inbox?tab=reviews" />
+        </MvpGroup>
+      )}
+    </>
+  )
+}
+
+function SectionSkeleton({ label, height }: { label: string; height: number }) {
+  return (
+    <>
+      <MvpSectionLabel>{label}</MvpSectionLabel>
+      <div style={{ height, borderRadius: 16, background: '#ececef', marginBottom: 18, animation: 'lsskel 1.2s ease-in-out infinite' }} />
+      <style>{`@keyframes lsskel{0%,100%{opacity:1}50%{opacity:.5}}`}</style>
+    </>
   )
 }
