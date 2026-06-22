@@ -1,6 +1,8 @@
 "use client";
 /* eslint-disable */
 import React, { useState, useRef, useEffect } from "react";
+import BottomNav from "../bottom-nav";
+import AppHeader from "../app-header";
 
 /* ============================================================
    Apnosh Portal — Campaign builder
@@ -605,7 +607,6 @@ function Direct({ onBack, onPickPart }) {
 function Confirm({ title, body, meta, onBack }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-      <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ paddingTop: 4, marginBottom: 22 }}>
           <CircleBtn onClick={onBack}>
@@ -2301,7 +2302,6 @@ function CategoryAll({ rowId, onBack, onOpen }) {
   const items = row.ids.map(catGet).filter(Boolean);
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-      <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 24px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 18 }}>
           <CircleBtn onClick={onBack}>
@@ -2668,7 +2668,6 @@ function Builder({ itemId, menu, onBack, onGenerate }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: gType(p.type), position: "relative" }}>
-      <StatusBar dark />
       <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 22px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 24 }}>
           <CircleBtn onClick={onBack} dark>
@@ -2744,7 +2743,6 @@ function Generating({ itemId, onDone }) {
   }, []);
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: gType(p.type) }}>
-      <StatusBar dark />
       <style>{`@keyframes aspin{to{transform:rotate(360deg)}}`}</style>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 40px" }}>
         <div style={{ width: 58, height: 58, borderRadius: 29, border: "4px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", animation: "aspin 0.8s linear infinite", marginBottom: 26 }} />
@@ -2923,7 +2921,6 @@ function PlanSteps({ itemId, vals, onBack, onAdd, onMarketer }) {
   const remove = (id) => setSteps((arr) => arr.map((st) => st.id === id ? { ...st, on: false } : st));
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-      <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
           <CircleBtn onClick={onBack}>
@@ -3039,38 +3036,46 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           @keyframes aspin { to { transform: rotate(360deg); } }
         `}</style>
 
-        {route.name === "browse" && (
-          <>
-            <Header title="Create" />
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-              <PlanBrowse restaurant={restaurant} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
-            </div>
-          </>
-        )}
+        {/* Screen content sits above the persistent bottom nav, so the create
+            flow keeps the same chrome as the rest of the owner app (uniform).
+            Each screen renders its own contextual top bar; the browse landing
+            uses the standard AppHeader so it reads like a tab-level screen. */}
+        <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
+          {route.name === "browse" && (
+            <>
+              <AppHeader />
+              <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+                <PlanBrowse restaurant={restaurant} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
+              </div>
+            </>
+          )}
 
-        {route.name === "catall" && (
-          <CategoryAll rowId={route.rowId} onBack={backToBrowse} onOpen={(id) => openCard(id, "catall", route.rowId)} />
-        )}
+          {route.name === "catall" && (
+            <CategoryAll rowId={route.rowId} onBack={backToBrowse} onOpen={(id) => openCard(id, "catall", route.rowId)} />
+          )}
 
-        {route.name === "build" && (
-          <Builder itemId={route.itemId} menu={menu} onBack={backToSource} onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })} />
-        )}
+          {route.name === "build" && (
+            <Builder itemId={route.itemId} menu={menu} onBack={backToSource} onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })} />
+          )}
 
-        {route.name === "generating" && (
-          <Generating itemId={route.itemId} onDone={() => setRoute({ name: "plansteps", itemId: route.itemId, vals: route.vals, from: route.from, rowId: route.rowId })} />
-        )}
+          {route.name === "generating" && (
+            <Generating itemId={route.itemId} onDone={() => setRoute({ name: "plansteps", itemId: route.itemId, vals: route.vals, from: route.from, rowId: route.rowId })} />
+          )}
 
-        {route.name === "plansteps" && (
-          <PlanSteps
-            itemId={route.itemId}
-            vals={route.vals}
-            onBack={() => setRoute({ name: "build", itemId: route.itemId, from: route.from, rowId: route.rowId })}
-            onAdd={() => { addPlan(route.itemId, "approve", route.vals); setRoute({ name: "confirm", payload: { title: "Your plan is added", body: "We'll get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.", meta: "Saved to your campaigns" } }); }}
-            onMarketer={() => { addPlan(route.itemId, "marketer", route.vals); setRoute({ name: "confirm", payload: { title: "Your marketer is on it", body: "A marketer on our team will build and run this plan, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.", meta: "Saved, with your marketer" } }); }}
-          />
-        )}
+          {route.name === "plansteps" && (
+            <PlanSteps
+              itemId={route.itemId}
+              vals={route.vals}
+              onBack={() => setRoute({ name: "build", itemId: route.itemId, from: route.from, rowId: route.rowId })}
+              onAdd={() => { addPlan(route.itemId, "approve", route.vals); setRoute({ name: "confirm", payload: { title: "Your plan is added", body: "We'll get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.", meta: "Saved to your campaigns" } }); }}
+              onMarketer={() => { addPlan(route.itemId, "marketer", route.vals); setRoute({ name: "confirm", payload: { title: "Your marketer is on it", body: "A marketer on our team will build and run this plan, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.", meta: "Saved, with your marketer" } }); }}
+            />
+          )}
 
-        {route.name === "confirm" && <Confirm {...route.payload} onBack={exit} />}
+          {route.name === "confirm" && <Confirm {...route.payload} onBack={exit} />}
+        </div>
+
+        <BottomNav active="campaigns" />
       </div>
     </div>
   );
