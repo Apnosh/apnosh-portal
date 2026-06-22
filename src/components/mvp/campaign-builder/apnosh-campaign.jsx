@@ -2272,39 +2272,69 @@ function SearchBar({ value, onChange }) {
   );
 }
 
+const BROWSE_FILTERS = [
+  { id: "foryou", label: "For you" },
+  { id: "plan", label: "Plans" },
+  { id: "content", label: "Content" },
+  { id: "email", label: "Email & texts" },
+  { id: "task", label: "Quick tasks" },
+  { id: "automation", label: "Automatic" },
+];
 function PlanBrowse({ restaurant, onOpen, onSeeAll }) {
   const [q, setQ] = useState("");
+  const [filter, setFilter] = useState("foryou");
   const [featHidden, setFeatHidden] = useState(false);
   const query = q.trim().toLowerCase();
-  const results = query ? CATALOG.filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
+  const results = query ? CATALOG.filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : null;
+  const suggested = ROWS[0].ids.map(catGet).filter(Boolean);
+  const list = query ? results : (filter === "foryou" ? suggested : CATALOG.filter((p) => p.type === filter));
+  const showFeatured = !query && filter === "foryou" && !featHidden;
   return (
     <div style={{ paddingBottom: 26 }}>
-      <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
-      <div style={{ paddingTop: 6 }}><SearchBar value={q} onChange={setQ} /></div>
-      {query ? (
-        <div style={{ padding: "0 20px" }}>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 12 }}>{results.length} {results.length === 1 ? "plan" : "plans"} for "{q}"</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {results.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} full />)}
+      <style>{`.apnosh-chips::-webkit-scrollbar{display:none}`}</style>
+      <div style={{ position: "sticky", top: 0, zIndex: 4, background: "#fff", paddingTop: 6, boxShadow: `0 1px 0 ${TOKENS.line}` }}>
+        <SearchBar value={q} onChange={setQ} />
+        {!query && (
+          <div className="apnosh-chips" style={{ display: "flex", gap: 8, overflowX: "auto", padding: "0 20px 12px", scrollbarWidth: "none" }}>
+            {BROWSE_FILTERS.map((f) => {
+              const on = filter === f.id;
+              return (
+                <button key={f.id} onClick={() => setFilter(f.id)} style={{
+                  flexShrink: 0, cursor: "pointer", borderRadius: 20, padding: "8px 15px",
+                  border: on ? "none" : `1px solid ${TOKENS.line}`, background: on ? TOKENS.ink : "#fff",
+                  color: on ? "#fff" : TOKENS.sub, fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600,
+                  WebkitTapHighlightColor: "transparent", transition: "background 150ms ease, color 150ms ease",
+                }}>{f.label}</button>
+              );
+            })}
           </div>
-          {results.length === 0 && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.faint, padding: "10px 0" }}>Nothing matches yet. Try a word like video, email, or reviews, or describe it with Something else.</div>}
+        )}
+      </div>
+
+      {showFeatured && <div style={{ paddingTop: 14 }}><FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} /></div>}
+
+      <div style={{ padding: query ? "14px 20px 0" : "10px 20px 0" }}>
+        {query
+          ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 12 }}>{list.length} {list.length === 1 ? "result" : "results"} for "{q}"</div>
+          : filter === "foryou" && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, marginBottom: 12 }}>Picked from your menu and what's coming up</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {list.map((p) => <PlanCardH key={p.id} p={p} onOpen={onOpen} />)}
         </div>
-      ) : (
-        <>
-          {!featHidden && <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />}
-          {ROWS.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} />)}
-          <div style={{ padding: "4px 20px 0" }}>
-            <button onClick={() => onOpen("__else")} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, cursor: "pointer", background: TOKENS.surface, border: `1.5px dashed ${TOKENS.dash}`, borderRadius: 16, padding: "15px 16px", WebkitTapHighlightColor: "transparent", transition: "border-color 150ms ease" }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
-              <div style={{ flex: 1, textAlign: "left" }}>
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink }}>Don't see it? Describe your own</div>
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 1 }}>Tell us in your words and we'll draft it</div>
-              </div>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
-            </button>
+        {query && list.length === 0 && (
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.faint, padding: "8px 0 16px", lineHeight: 1.5 }}>Nothing matches yet. Try a word like video, email, or reviews — or describe your own below.</div>
+        )}
+      </div>
+
+      <div style={{ padding: "16px 20px 0" }}>
+        <button onClick={() => onOpen("__else")} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, cursor: "pointer", background: TOKENS.surface, border: `1.5px dashed ${TOKENS.dash}`, borderRadius: 16, padding: "15px 16px", WebkitTapHighlightColor: "transparent" }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+          <div style={{ flex: 1, textAlign: "left" }}>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink }}>Don't see it? Describe your own</div>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 1 }}>Tell us in your words and we'll draft it</div>
           </div>
-        </>
-      )}
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+        </button>
+      </div>
     </div>
   );
 }
@@ -2563,7 +2593,7 @@ function TimePick({ value, onChange, accent }) {
   );
 }
 
-function Builder({ itemId, menu, onBack, onGenerate }) {
+function Builder({ itemId, menu, restaurant, onBack, onGenerate }) {
   const p = catGet(itemId) || CATALOG[0];
   const cfg = QL[itemId] || { lead: "Set up {thing}.", slots: { thing: { k: "text", v: p.title.toLowerCase() } } };
   const c1 = (TYPE_G[p.type] || TYPE_G.plan)[1];
@@ -2678,68 +2708,211 @@ function Builder({ itemId, menu, onBack, onGenerate }) {
     return null;
   };
 
+  /* ---- live-preview model ("Watch it build" composer) ---- */
+  const SLOT_LABELS = {
+    radius: "Distance", days: "Which days", offer: "The offer", reward: "The reward", audience: "Who it's for",
+    how: "How we ask", which: "Which reviews", subject: "Featured", count: "How many", format: "Format",
+    purpose: "Purpose", headline: "Headline", where: "Where it runs", special: "The special", date: "Start date",
+    tier: "Creator size", message: "Message", cadence: "How often", content: "What's inside", channel: "Send by",
+    treat: "The treat", what: "What", timing: "Timing", angle: "The angle", assets: "Photos", kind: "Type",
+    amounts: "Amounts", occasion: "Occasion", action: "What it does", who: "Who it's for", event: "The event",
+    price: "Price", time: "Time", rsvp: "Entry", duration: "How long", when: "When",
+  };
+  const labelFor = (k, f) => (f && f.label) ? f.label : (SLOT_LABELS[k] || (k.charAt(0).toUpperCase() + k.slice(1)));
+  const briefText =
+    parts.map((part) => { const m = part.match(/^\{([a-z]+)\}$/); if (!m) return part; return filled(m[1]) ? fmt(m[1]) : "…"; }).join("")
+    + activeExtras.map((e) => e.clause(vals[e.id])).join("") + ".";
+  const subjectKey = ["subject", "menu", "headline", "event", "what"].find((k) => cfg.slots[k]);
+  const subjectVal = subjectKey ? vals[subjectKey] : null;
+  const headline = (subjectVal && String(subjectVal).trim()) || p.title;
+  const previewKind = (p.type === "email" || p.type === "automation") ? "email" : p.type === "content" ? "post" : "plan";
+  const rname = (restaurant || "Your spot").trim();
+  const initial = rname.charAt(0).toUpperCase();
+  const handle = "@" + rname.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 18);
+  const dayActive = (Array.isArray(vals.days) && vals.days.length) ? DAYS_FULL.map((nm) => vals.days.includes(nm)) : null;
+  const planTags = genSteps(p, cfg, vals).map((st) => st.tag).filter((t, i, a) => a.indexOf(t) === i).slice(0, 4);
+  const slotKeys = Object.keys(cfg.slots);
+  const pct = Math.round((slotKeys.filter(filled).length / Math.max(1, slotKeys.length)) * 100);
+
+  const rowStyle = (active, done) => ({
+    width: "100%", display: "flex", alignItems: "center", gap: 11, textAlign: "left", cursor: "pointer",
+    background: "#fff", border: active ? `1.5px solid ${c1}` : `1px solid ${TOKENS.line}`,
+    borderRadius: 14, padding: "12px 14px", WebkitTapHighlightColor: "transparent",
+    boxShadow: active ? `0 4px 14px ${c1}22` : "0 1px 2px rgba(20,30,26,0.03)",
+    transition: "border-color 150ms ease, box-shadow 150ms ease",
+  });
+  const ChevR = <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>;
+  const labelCss = { fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 0.3, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 3 };
+  const valueCss = (done) => ({ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: done ? TOKENS.ink : TOKENS.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" });
+
+  const igActions = (
+    <div style={{ display: "flex", alignItems: "center", gap: 15, marginBottom: 9 }}>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20s-7-4.7-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.3-7 10-7 10z" /></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-6A8.4 8.4 0 1 1 21 11.5z" /></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z" /></svg>
+    </div>
+  );
+
+  const previewHeader = (right) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 13px" }}>
+      <div style={{ width: 34, height: 34, borderRadius: 17, background: gType(p.type), color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 15, flexShrink: 0 }}>{initial}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 13, color: TOKENS.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{rname}</div>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>{right}</div>
+      </div>
+    </div>
+  );
+
+  let previewCard;
+  if (previewKind === "post") {
+    previewCard = (
+      <div style={{ background: "#fff", borderRadius: 20, overflow: "hidden", boxShadow: "0 10px 30px rgba(20,30,26,0.10), 0 0 0 1px rgba(20,30,26,0.05)" }}>
+        {previewHeader("Sponsored")}
+        <div style={{ height: 150, background: gType(p.type), position: "relative", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+          <div style={{ position: "absolute", width: 150, height: 150, borderRadius: 75, background: "rgba(255,255,255,0.1)", top: -52, right: -34 }} />
+          <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={92} /></div>
+        </div>
+        <div style={{ padding: "12px 14px 15px" }}>
+          {igActions}
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.5 }}><span style={{ fontWeight: 700 }}>{handle}</span> {briefText}</div>
+        </div>
+      </div>
+    );
+  } else if (previewKind === "email") {
+    previewCard = (
+      <div style={{ background: "#fff", borderRadius: 20, overflow: "hidden", boxShadow: "0 10px 30px rgba(20,30,26,0.10), 0 0 0 1px rgba(20,30,26,0.05)" }}>
+        <div style={{ borderBottom: `1px solid ${TOKENS.line}` }}>{previewHeader("to your list · now")}</div>
+        <div style={{ padding: "14px 16px 17px" }}>
+          <div style={{ ...labelCss, marginBottom: 5 }}>Subject</div>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 17, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.25, marginBottom: 9 }}>{headline}</div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.55 }}>{briefText}</div>
+          <div style={{ display: "inline-flex", alignItems: "center", height: 38, padding: "0 18px", borderRadius: 19, background: c1, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, marginTop: 14 }}>See what's new</div>
+        </div>
+      </div>
+    );
+  } else {
+    previewCard = (
+      <div style={{ background: "#fff", borderRadius: 20, overflow: "hidden", boxShadow: "0 10px 30px rgba(20,30,26,0.10), 0 0 0 1px rgba(20,30,26,0.05)" }}>
+        <div style={{ height: 116, background: gType(p.type), position: "relative", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+          <div style={{ position: "absolute", width: 140, height: 140, borderRadius: 70, background: "rgba(255,255,255,0.1)", bottom: -56, right: -30 }} />
+          <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={74} /></div>
+          <span style={{ position: "absolute", top: 12, left: 13, fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.22)", borderRadius: 20, padding: "4px 10px", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>{CADENCE_TAG[p.cad] || "Plan"}</span>
+        </div>
+        <div style={{ padding: "14px 16px 16px" }}>
+          <div style={labelCss}>Campaign</div>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, marginBottom: 6 }}>{p.title}</div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub, lineHeight: 1.5 }}>{briefText}</div>
+          {dayActive && (
+            <div style={{ display: "flex", gap: 5, margin: "13px 0 2px" }}>
+              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                <div key={i} style={{ flex: 1, height: 30, borderRadius: 8, background: dayActive[i] ? c1 : TOKENS.surface, border: dayActive[i] ? "none" : `1px solid ${TOKENS.line}`, color: dayActive[i] ? "#fff" : TOKENS.faint, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700 }}>{d}</div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 13 }}>
+            {planTags.map((t, i) => <span key={i} style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: c1, background: `${c1}14`, borderRadius: 20, padding: "4px 11px" }}>{t}</span>)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: gType(p.type), position: "relative" }}>
-      <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 22px 24px", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 24 }}>
-          <CircleBtn onClick={onBack} dark>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
-          </CircleBtn>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 600, color: "#fff" }}>{p.title}</div>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: TOKENS.pageBg, position: "relative" }}>
+      <style>{`@keyframes apnsheet{0%{transform:translateY(100%)}100%{transform:translateY(0)}}@keyframes apnscrim{0%{opacity:0}100%{opacity:1}}`}</style>
+
+      {/* header with progress */}
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "8px 14px 9px", background: "#fff", borderBottom: `1px solid ${TOKENS.line}` }}>
+        <CircleBtn onClick={onBack}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3a3a3a" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+        </CircleBtn>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16.5, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: ready ? c1 : TOKENS.faint }}>{ready ? "Ready to build" : `${pct}% set up`}</div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 16 }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 1.4, color: "rgba(255,255,255,0.92)", textTransform: "uppercase" }}>Here's a starting point</span>
+        <div style={{ width: 46, height: 6, borderRadius: 3, background: TOKENS.line, overflow: "hidden", flexShrink: 0 }}>
+          <div style={{ width: `${pct}%`, height: "100%", background: c1, borderRadius: 3, transition: "width 300ms ease" }} />
         </div>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 25, lineHeight: 1.42, letterSpacing: -0.3 }}>
-          {parts.map((part, i) => {
-            const m = part.match(/^\{([a-z]+)\}$/);
-            if (!m) return <span key={i} style={{ color: editing ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.92)", transition: "color 200ms ease" }}>{part}</span>;
-            const k = m[1], isActive = editing === k, isFilled = filled(k);
+      </div>
+
+      {/* preview stage + controls */}
+      <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 16px 22px" }}>
+        <div style={{ position: "relative", borderRadius: 24, padding: "15px 16px 18px", background: `radial-gradient(120% 90% at 50% 0%, ${c1}16 0%, rgba(255,255,255,0) 68%), ${TOKENS.surface}`, border: `1px solid ${TOKENS.line}`, marginBottom: 22 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, marginBottom: 13 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 3, background: c1, boxShadow: `0 0 0 3px ${c1}22` }} />
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: TOKENS.sub, textTransform: "uppercase" }}>Live preview</span>
+          </div>
+          {previewCard}
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, textAlign: "center", marginTop: 13, lineHeight: 1.4 }}>Updates as you choose. A mock-up — the real asset is made after you build.</div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 11 }}>
+          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: TOKENS.faint, textTransform: "uppercase" }}>Customize</span>
+          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint }}>Tap a card to change it</span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+          {slotKeys.map((k) => {
+            const f = cfg.slots[k]; const done = filled(k); const active = editing === k;
             return (
-              <span key={i} onClick={() => setEditing(isActive ? null : k)} style={{
-                cursor: "pointer", color: isActive ? "#fff" : editing ? "rgba(255,255,255,0.5)" : "#fff",
-                textDecoration: "underline", textDecorationStyle: isFilled ? "solid" : "dashed", textDecorationThickness: 2, textUnderlineOffset: 4,
-                textDecorationColor: isActive ? "#fff" : "rgba(255,255,255,0.7)", transition: "color 200ms ease",
-              }}>{fmt(k)}</span>
+              <button key={k} onClick={() => setEditing(active ? null : k)} style={rowStyle(active, done)}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={labelCss}>{labelFor(k, f)}</div>
+                  <div style={valueCss(done)}>{fmt(k)}</div>
+                </div>
+                {done && <span style={{ width: 18, height: 18, borderRadius: 9, background: `${c1}1f`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={c1} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg></span>}
+                {ChevR}
+              </button>
             );
           })}
-          {activeExtras.map((e) => (
-            <span key={e.id} onClick={() => setEditing(e.id)} style={{
-              cursor: "pointer", color: editing === e.id ? "#fff" : editing ? "rgba(255,255,255,0.5)" : "#fff",
-              textDecoration: "underline", textDecorationStyle: "solid", textDecorationThickness: 2, textUnderlineOffset: 4,
-              textDecorationColor: editing === e.id ? "#fff" : "rgba(255,255,255,0.7)", transition: "color 200ms ease",
-            }}>{e.clause(vals[e.id])}</span>
-          ))}
-          <span style={{ color: editing ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.92)", transition: "color 200ms ease" }}>.</span>
+          {activeExtras.map((e) => {
+            const ev = Array.isArray(vals[e.id]) ? joinList(vals[e.id]) : String(vals[e.id]);
+            return (
+              <button key={e.id} onClick={() => setEditing(e.id)} style={rowStyle(editing === e.id, true)}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={labelCss}>{e.label}</div>
+                  <div style={valueCss(true)}>{ev}</div>
+                </div>
+                {ChevR}
+              </button>
+            );
+          })}
         </div>
-        {s ? (
-          <div style={{ marginTop: 20, background: "#fff", borderRadius: 18, padding: 16, boxShadow: "0 12px 36px rgba(0,0,0,0.20), 0 4px 12px rgba(0,0,0,0.08)" }}>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 0.4, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 12 }}>{s.label ? s.label : s.k === "multi" ? "Pick any that fit" : "Change this"}</div>
-            {editor()}
-            {isExtra && <button onClick={() => { setV(Array.isArray(vals[editing]) ? [] : ""); close(); }} style={removeBtn}>Remove</button>}
+        {pendingExtras.length > 0 && (
+          <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {pendingExtras.map((e) => (
+              <button key={e.id} onClick={() => setEditing(e.id)} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", borderRadius: 20, padding: "8px 13px", border: `1.5px dashed ${TOKENS.dash}`, background: "#fff", color: TOKENS.sub, fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={c1} strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>{e.label}
+              </button>
+            ))}
           </div>
-        ) : (
-          <>
-            {pendingExtras.length > 0 && (
-              <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", gap: 9 }}>
-                {pendingExtras.map((e) => (
-                  <button key={e.id} onClick={() => setEditing(e.id)} style={addPillStyle}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>{e.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.8)", marginTop: 14 }}>Tap anything underlined to change it.</div>
-          </>
         )}
       </div>
-      <div style={{ flexShrink: 0, padding: "12px 22px 20px" }}>
-        <button onClick={() => ready && onGenerate(vals)} disabled={!ready} style={{ width: "100%", height: 56, borderRadius: 28, border: "none", cursor: ready ? "pointer" : "default", background: ready ? "#fff" : "rgba(255,255,255,0.45)", color: ready ? c1 : "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent", transition: "all 200ms cubic-bezier(.4,0,.2,1)", boxShadow: ready ? "0 6px 20px rgba(0,0,0,0.15)" : "none" }}>
-          Build my plan
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ready ? c1 : "#fff"} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+
+      {/* footer CTA */}
+      <div style={{ flexShrink: 0, padding: "12px 16px 18px", background: "#fff", borderTop: `1px solid ${TOKENS.line}` }}>
+        <button onClick={() => ready && onGenerate(vals)} disabled={!ready} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", cursor: ready ? "pointer" : "default", background: ready ? c1 : "#d8ddd9", color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent", transition: "background 200ms ease, box-shadow 200ms ease", boxShadow: ready ? `0 8px 22px ${c1}44` : "none" }}>
+          {ready ? "Build my plan" : "Finish the details above"}
+          {ready && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>}
         </button>
       </div>
+
+      {/* editor bottom sheet */}
+      {s && (
+        <>
+          <div onClick={close} style={{ position: "absolute", inset: 0, background: "rgba(16,22,19,0.4)", animation: "apnscrim 180ms ease", zIndex: 5 }} />
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 6, background: "#fff", borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: "10px 18px 22px", maxHeight: "76%", overflowY: "auto", boxShadow: "0 -8px 30px rgba(0,0,0,0.18)", animation: "apnsheet 260ms cubic-bezier(.2,.8,.4,1)" }}>
+            <div style={{ width: 38, height: 4, borderRadius: 2, background: TOKENS.line, margin: "0 auto 14px" }} />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, color: TOKENS.ink }}>{s.label ? s.label : s.k === "multi" ? "Pick any that fit" : labelFor(editing, s)}</div>
+              <button onClick={close} style={{ width: 30, height: 30, borderRadius: 15, border: "none", background: "#f1f3f2", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+              </button>
+            </div>
+            {editor()}
+            {isExtra && <button onClick={() => { setV(Array.isArray(vals[editing]) ? [] : ""); close(); }} style={removeBtn}>Remove this</button>}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -3078,7 +3251,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           )}
 
           {route.name === "build" && (
-            <Builder itemId={route.itemId} menu={menu} onBack={backToSource} onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })} />
+            <Builder itemId={route.itemId} menu={menu} restaurant={restaurant} onBack={backToSource} onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })} />
           )}
 
           {route.name === "generating" && (
