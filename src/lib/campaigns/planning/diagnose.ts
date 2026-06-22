@@ -10,19 +10,7 @@ import 'server-only'
  * a point of view always renders.
  */
 import type { PlanningContext, Diagnosis, DiagnoseResult } from './types'
-
-// env first, then a .env.local fallback (mirrors the other AI routes).
-function readApiKey(): string | null {
-  if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require('fs') as typeof import('fs')
-    const path = require('path') as typeof import('path')
-    const env = fs.readFileSync(path.join(process.cwd(), '.env.local'), 'utf8')
-    const m = env.match(/^ANTHROPIC_API_KEY=(.+)$/m)
-    return m ? m[1].trim() : null
-  } catch { return null }
-}
+import { callStructuredOutput } from './anthropic'
 
 const DIAGNOSIS_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -108,40 +96,14 @@ function coerce(parsed: Partial<Diagnosis> | null): Diagnosis | null {
 }
 
 export async function diagnose(ctx: PlanningContext): Promise<DiagnoseResult> {
-  const apiKey = readApiKey()
-  if (!apiKey) return { diagnosis: rulesDiagnosis(ctx), source: 'rules' }
-
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 18000)
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      // Structured output mirrors the proven suggestions route exactly. The spec
-      // also asks for thinking:{adaptive} + output_config.effort:'high'; those are
-      // a follow-up once verified against the deployed API, since a rejected field
-      // would silently force the rules path.
-      body: JSON.stringify({
-        model: 'claude-opus-4-8',
-        max_tokens: 1200,
-        output_config: { format: { type: 'json_schema', schema: DIAGNOSIS_SCHEMA } },
-        system: SYSTEM,
-        messages: [{ role: 'user', content: buildUserMessage(ctx) }],
-      }),
-      signal: ctrl.signal,
-    })
-    if (!res.ok) return { diagnosis: rulesDiagnosis(ctx), source: 'rules' }
-    const data = await res.json()
-    const text = data.content?.find((b: { type: string }) => b.type === 'text')?.text ?? ''
-    const parsed = text ? (JSON.parse(text) as Partial<Diagnosis>) : null
-    const diagnosis = coerce(parsed)
-    if (!diagnosis) return { diagnosis: rulesDiagnosis(ctx), source: 'rules' }
-    return { diagnosis, source: 'ai' }
-  } catch {
-    return { diagnosis: rulesDiagnosis(ctx), source: 'rules' }
-  } finally {
-    clearTimeout(timer)
-  }
+  const parsed = await callStructuredOutput<Partial<Diagnosis>>({
+    system: SYSTEM,
+    user: buildUserMessage(ctx),
+    schema: DIAGNOSIS_SCHEMA,
+    maxTokens: 1200,
+  })
+  const diagnosis = coerce(parsed)
+  return diagnosis ? { diagnosis, source: 'ai' } : { diagnosis: rulesDiagnosis(ctx), source: 'rules' }
 }
 
 /**

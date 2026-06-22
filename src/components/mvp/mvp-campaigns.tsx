@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { useClient } from '@/lib/client-context'
 import {
   Plus, Repeat, Check, TrendingUp, TrendingDown, Minus, ArrowRight, Clock,
-  CalendarDays, Eye, ChevronLeft, ChevronRight, Loader2,
+  CalendarDays, Eye, ChevronLeft, ChevronRight, Loader2, Sparkles,
 } from 'lucide-react'
 import { campaignCardVM, type CampCard, type SavedCampaign } from '@/lib/campaigns/view'
 
@@ -78,6 +78,15 @@ export default function MvpCampaigns() {
 
       <div style={{ padding: '16px 18px 0' }}>
         <p style={{ fontSize: 13.5, color: C.mute, margin: '0 0 16px' }}>Open any card to see what it costs, what it&apos;s driving, and how it&apos;s doing inside.</p>
+
+        <Link href="/dashboard/campaigns/plan" style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none', background: 'linear-gradient(135deg, #4abd98, #2e9a78)', color: '#fff', borderRadius: 14, padding: '13px 15px', marginBottom: 18 }}>
+          <span style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={18} /></span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontFamily: DISPLAY, fontWeight: 600, fontSize: 15 }}>Build a plan with AI</span>
+            <span style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 1 }}>Pick a goal and budget. We diagnose and price it.</span>
+          </span>
+          <ArrowRight size={18} />
+        </Link>
 
         {!empty && (
           <div style={{ display: 'inline-flex', background: '#f1f3f2', borderRadius: 10, padding: 3, marginBottom: 18 }}>
