@@ -2991,228 +2991,86 @@ function Phone({ children }) {
   );
 }
 
-export default function ApnoshCampaign() {
-  const [route, setRoute] = useState({ name: "create" });
-  const [planState, setPlanState] = useState("new");
-  const [camps, setCamps] = useState([]);
-  const restaurant = "Yellowbee Market & Cafe";
+/* ============================================================
+   Create-only controller (portal). Renders the canonical new
+   builder flow full-screen (no phone frame, no home/campaigns/nav,
+   no legacy intake path). Props:
+     restaurant : business name (string)
+     menu       : real menu items [{name, price}] (optional; falls back to seed)
+     onCreate   : ({ itemId, status, vals }) => void  — persist hook
+     onClose    : () => void                           — exit the builder
+   ============================================================ */
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, onCreate, onClose } = {}) {
+  const [route, setRoute] = useState({ name: "browse" });
 
-  const addPlan = (itemId, status) => {
-    const p = catGet(itemId);
-    if (!p) return;
-    setCamps((prev) => [{
-      id: "c" + Date.now(),
-      kind: p.type === "plan" ? "plan" : "campaign",
-      type: p.type,
-      itemId: p.id,
-      name: p.title,
-      status,
-      line: status === "approve" ? "Ready for your okay" : "Your marketer is on it",
-    }, ...prev]);
-  };
+  const exit = () => { if (onClose) onClose(); };
 
+  // Catalog card -> Builder. promoevent has no slot config yet; route it to
+  // launch until its bespoke config is added.
   const openCard = (id, from, rowId) => {
-    if (id === "promoevent") setRoute({ name: "intake", goalId: "event", from, rowId });
-    else setRoute({ name: "build", itemId: id, from, rowId });
+    const itemId = id === "promoevent" ? "launch" : id;
+    setRoute({ name: "build", itemId, from, rowId });
   };
-  const backToSource = () => route.from === "catall" ? setRoute({ name: "catall", rowId: route.rowId }) : setRoute({ name: "create", openSheet: true });
+  const backToBrowse = () => setRoute({ name: "browse" });
+  const backToSource = () => (route.from === "catall" ? setRoute({ name: "catall", rowId: route.rowId }) : backToBrowse());
+
+  const addPlan = (itemId, status, vals) => {
+    if (onCreate) onCreate({ itemId, status, vals: vals || {} });
+  };
+
+  const Header = ({ title }) => (
+    <div style={{ flexShrink: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", padding: "12px 16px", borderBottom: `1px solid ${TOKENS.line}`, background: "#fff" }}>
+      <button onClick={exit} aria-label="Close" style={{ position: "absolute", left: 12, width: 36, height: 36, borderRadius: 18, border: "none", background: "#f1f3f2", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+      <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 600, color: TOKENS.ink }}>{title}</span>
+    </div>
+  );
 
   return (
-    <div style={{ minHeight: "100vh", width: "100%", background: TOKENS.pageBg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 16px", boxSizing: "border-box" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        @font-face { font-family:'Cal Sans'; src:url('https://cdn.jsdelivr.net/gh/calcom/font/fonts/webfonts/CalSans-SemiBold.woff2') format('woff2'); font-weight:600; font-display:swap; }
-        * { -webkit-font-smoothing: antialiased; box-sizing: border-box; }
-        ::-webkit-scrollbar { width: 0; height: 0; }
-        textarea::placeholder { color: #b7bdb9; }
-        @keyframes apndot { 0%, 100% { opacity: 0.35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
-      `}</style>
+    <div style={{ position: "fixed", inset: 0, zIndex: 60, background: "#f0f0f3", display: "flex", justifyContent: "center" }}>
+      <div className="apncreate" style={{ width: "100%", maxWidth: 480, height: "100dvh", background: "#fff", position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 0 40px rgba(0,0,0,0.06)" }}>
+        <style>{`
+          .apncreate, .apncreate * { -webkit-font-smoothing: antialiased; box-sizing: border-box; }
+          .apncreate ::-webkit-scrollbar { width: 0; height: 0; }
+          .apncreate textarea::placeholder { color: #b7bdb9; }
+          @keyframes apndot { 0%, 100% { opacity: 0.35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+          @keyframes aspin { to { transform: rotate(360deg); } }
+        `}</style>
 
-      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 500, letterSpacing: 0.4, color: "rgba(255,255,255,0.42)", marginBottom: 12, textTransform: "uppercase" }}>
-        Apnosh · Campaign builder
-      </div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-        {[["new", "New owner"], ["running", "Plan running"]].map(([k, l]) => (
-          <button key={k} onClick={() => setPlanState(k)} style={{ cursor: "pointer", borderRadius: 16, padding: "6px 13px", border: "none", background: planState === k ? "#fff" : "rgba(255,255,255,0.12)", color: planState === k ? TOKENS.ink : "rgba(255,255,255,0.7)", fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>{l}</button>
-        ))}
-      </div>
+        {route.name === "browse" && (
+          <>
+            <Header title="Create" />
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              <PlanBrowse restaurant={restaurant} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
+            </div>
+          </>
+        )}
 
-      <Phone>
-        {route.name === "create" && (
-          <CreateHub
-            restaurant={restaurant}
-            openSheet={route.openSheet}
-            onCampaigns={() => setRoute({ name: "campaigns" })}
-            onSeeAll={(rowId) => setRoute({ name: "catall", rowId })}
-            onOpenPlan={(id) => id === "__else" ? setRoute({ name: "else" }) : id === "featured" ? setRoute({ name: "featured" }) : openCard(id, "sheet")}
-          />
-        )}
-        {route.name === "featured" && (
-          <FeaturedDetail
-            onClose={() => setRoute({ name: "create", openSheet: true })}
-            onEvent={() => setRoute({ name: "intake", goalId: "event", presets: { date: new Date(2026, 5, 21), time: { h: 10, m: "00", ap: "am" }, rec: "once", ans: { subject: "a Father's Day brunch", rsvp: "reserve a table" } } })}
-            onDeal={() => setRoute({ name: "intake", goalId: "deal", presets: { durStart: new Date(2026, 5, 19), durEnd: new Date(2026, 5, 21), ans: { subject: "a free dessert for dad" } } })}
-            onPost={() => setRoute({ name: "build", itemId: "graphic" })}
-          />
-        )}
         {route.name === "catall" && (
-          <CategoryAll
-            rowId={route.rowId}
-            onBack={() => setRoute({ name: "create", openSheet: true })}
-            onOpen={(id) => openCard(id, "catall", route.rowId)}
-          />
+          <CategoryAll rowId={route.rowId} onBack={backToBrowse} onOpen={(id) => openCard(id, "catall", route.rowId)} />
         )}
-        {route.name === "plandetail" && (
-          <PlanDetail
-            itemId={route.itemId}
-            onBack={() => setRoute({ name: "create", openSheet: true })}
-            onAdd={() => setRoute({ name: "confirm", payload: {
-              title: "Your plan is saved",
-              body: "We'll get it ready. You'll approve everything before it goes out, and nothing is charged until something ships.",
-              meta: "Saved to your campaigns",
-            } })}
-            onMarketer={() => setRoute({ name: "confirm", payload: {
-              title: "Your marketer is on it",
-              body: "They'll build it and send it back for you to approve, usually within a few hours. It's saved to your campaigns so you can check on it anytime.",
-              meta: "Saved, with your marketer",
-            } })}
-          />
-        )}
+
         {route.name === "build" && (
-          <Builder
-            itemId={route.itemId}
-            onBack={backToSource}
-            onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })}
-          />
+          <Builder itemId={route.itemId} menu={menu} onBack={backToSource} onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })} />
         )}
+
         {route.name === "generating" && (
-          <Generating
-            itemId={route.itemId}
-            onDone={() => setRoute({ name: "plansteps", itemId: route.itemId, vals: route.vals, from: route.from, rowId: route.rowId })}
-          />
+          <Generating itemId={route.itemId} onDone={() => setRoute({ name: "plansteps", itemId: route.itemId, vals: route.vals, from: route.from, rowId: route.rowId })} />
         )}
+
         {route.name === "plansteps" && (
           <PlanSteps
             itemId={route.itemId}
             vals={route.vals}
             onBack={() => setRoute({ name: "build", itemId: route.itemId, from: route.from, rowId: route.rowId })}
-            onAdd={() => { addPlan(route.itemId, "approve"); setRoute({ name: "confirm", payload: {
-              title: "Your plan is added",
-              body: "We'll get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.",
-              meta: "Saved to your campaigns",
-            } }); }}
-            onMarketer={() => { addPlan(route.itemId, "marketer"); setRoute({ name: "confirm", payload: {
-              title: "Your marketer is on it",
-              body: "A marketer on our team will build and run this plan, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.",
-              meta: "Saved, with your marketer",
-            } }); }}
+            onAdd={() => { addPlan(route.itemId, "approve", route.vals); setRoute({ name: "confirm", payload: { title: "Your plan is added", body: "We'll get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.", meta: "Saved to your campaigns" } }); }}
+            onMarketer={() => { addPlan(route.itemId, "marketer", route.vals); setRoute({ name: "confirm", payload: { title: "Your marketer is on it", body: "A marketer on our team will build and run this plan, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.", meta: "Saved, with your marketer" } }); }}
           />
         )}
-        {route.name === "campaigns" && (
-          <Campaigns
-            items={camps}
-            onHome={() => setRoute({ name: "create", openSheet: false })}
-            onCreate={() => setRoute({ name: "create", openSheet: true })}
-            onCampaigns={() => {}}
-            onOpen={(id) => setRoute({ name: "campdetail", campId: id })}
-          />
-        )}
-        {route.name === "campdetail" && (
-          <CampaignDetail camp={camps.find((c) => c.id === route.campId) || null} onBack={() => setRoute({ name: "campaigns" })} />
-        )}
-        {route.name === "plans" && (
-          <PlanPicker
-            onBack={() => setRoute({ name: "create" })}
-            onPick={(id) => setRoute(GOAL[id] ? { name: "goal", goalId: id } : { name: "planstub", goalId: id })}
-          />
-        )}
-        {route.name === "planstub" && (
-          <PlanStub goalId={route.goalId} onBack={() => setRoute({ name: "plans" })} />
-        )}
-        {route.name === "picker" && (
-          <Picker
-            onClose={() => {}}
-            onPick={(id) => setRoute(GOAL[id] ? { name: "goal", goalId: id } : { name: "intake", goalId: id })}
-            onSomethingElse={() => setRoute({ name: "else" })}
-            onDirect={() => setRoute({ name: "direct" })}
-          />
-        )}
-        {route.name === "goal" && (
-          <GoalNights
-            goalId={route.goalId}
-            restaurant={restaurant}
-            onBack={() => setRoute({ name: "plans" })}
-            onApprove={(budget, pieces) => setRoute({ name: "confirm", payload: {
-              title: "Your goal is set",
-              body: "We'll start setting it up. You'll approve each piece before it goes out, and nothing is charged until something ships.",
-              meta: `${pieces} pieces a week · ${money(budget)}/mo ceiling`,
-            } })}
-            onStrategist={() => setRoute({ name: "strategist", goalId: route.goalId, from: "goal" })}
-          />
-        )}
-        {route.name === "intake" && (
-          <Intake
-            goalId={route.goalId}
-            presets={route.presets}
-            onBack={() => route.from === "catall" ? setRoute({ name: "catall", rowId: route.rowId }) : route.from === "sheet" ? setRoute({ name: "create", openSheet: true }) : setRoute({ name: "create" })}
-            onStrategist={() => setRoute({ name: "strategist", goalId: route.goalId, from: "intake" })}
-          />
-        )}
-        {route.name === "plan" && (
-          <ProposedPlan
-            goalId={route.goalId}
-            restaurant={restaurant}
-            answers={route.answers}
-            onBack={() => setRoute({ name: "intake", goalId: route.goalId })}
-            onApprove={(budget, pieces) => setRoute({ name: "confirm", payload: {
-              title: "Your plan is set",
-              body: "We'll start setting it up. You'll approve each piece before it goes out, and nothing is charged until something ships.",
-              meta: `${pieces} pieces · ${money(budget)}/mo ceiling`,
-            } })}
-            onStrategist={() => setRoute({ name: "strategist", goalId: route.goalId, from: "plan" })}
-          />
-        )}
-        {route.name === "strategist" && (
-          <StrategistBrief
-            restaurant={restaurant}
-            onBack={() => setRoute({ name: route.from === "goal" ? "goal" : route.from === "plan" ? "plan" : "intake", goalId: route.goalId })}
-            onSent={() => setRoute({ name: "confirm", payload: {
-              title: "Your marketer is on it",
-              body: "They'll refine your draft and send it back for you to approve, usually within a few hours. It's saved to your campaigns so you can check on it anytime. Nothing is charged until you say go.",
-              meta: "Saved · with your marketer",
-            } })}
-          />
-        )}
-        {route.name === "else" && (
-          <SomethingElse
-            onBack={() => setRoute({ name: "create" })}
-            restaurant={restaurant}
-            onApprove={() => setRoute({ name: "confirm", payload: {
-              title: "Your campaign is saved",
-              body: "We'll set it up from your draft. You'll approve each piece before it goes out, and nothing is charged until something ships.",
-              meta: "Saved to your campaigns",
-            } })}
-            onMarketer={() => setRoute({ name: "confirm", payload: {
-              title: "Your marketer is on it",
-              body: "They'll build it from your draft and send it back for you to approve, usually within a few hours. It's saved to your campaigns so you can check on it anytime.",
-              meta: "Saved · with your marketer",
-            } })}
-          />
-        )}
-        {route.name === "direct" && <Direct onBack={() => setRoute({ name: "create" })} onPickPart={(id) => setRoute({ name: "order", partId: id })} />}
-        {route.name === "order" && (
-          <ExpressOrder
-            partId={route.partId}
-            onBack={() => setRoute({ name: "direct" })}
-            onOrder={(total) => setRoute({ name: "confirm", payload: {
-              title: "Order placed",
-              body: "We'll make it and send it to you to approve before anything goes out. You're only charged when it ships.",
-              meta: total === 0 ? "Included in your plan" : `${money(total)} · once, on delivery`,
-            } })}
-          />
-        )}
-        {route.name === "confirm" && <Confirm {...route.payload} onBack={() => setRoute({ name: "campaigns" })} />}
-      </Phone>
+
+        {route.name === "confirm" && <Confirm {...route.payload} onBack={exit} />}
+      </div>
     </div>
   );
 }
