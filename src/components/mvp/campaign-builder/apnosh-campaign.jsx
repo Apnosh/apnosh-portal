@@ -2551,13 +2551,13 @@ function TimePick({ value, onChange, accent }) {
   );
 }
 
-function Builder({ itemId, onBack, onGenerate }) {
+function Builder({ itemId, menu, onBack, onGenerate }) {
   const p = catGet(itemId) || CATALOG[0];
   const cfg = QL[itemId] || { lead: "Set up {thing}.", slots: { thing: { k: "text", v: p.title.toLowerCase() } } };
   const c1 = (TYPE_G[p.type] || TYPE_G.plan)[1];
   const [vals, setVals] = useState(() => {
     const o = {};
-    for (const k in cfg.slots) { const s = cfg.slots[k]; if (s.k === "date") { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + (s.v || 7)); o[k] = d; } else o[k] = s.v; }
+    for (const k in cfg.slots) { const s = cfg.slots[k]; if (s.k === "date") { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + (s.v || 7)); o[k] = d; } else if (s.k === "menu" && menu && menu.length) { o[k] = menu[0].l; } else o[k] = s.v; }
     (cfg.extras || []).forEach((e) => { o[e.id] = (e.k === "multi" || e.k === "days") ? [] : ""; });
     return o;
   });
@@ -2648,8 +2648,9 @@ function Builder({ itemId, onBack, onGenerate }) {
     if (s.k === "time") return <><TimePick value={vals[editing]} accent={c1} onChange={(v) => setV(v)} />{doneBtn}</>;
     if (s.k === "num") return <><div style={{ display: "flex", alignItems: "center", border: `1.5px solid ${TOKENS.line}`, borderRadius: 12, padding: "0 14px", height: 52 }}><span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 20, color: TOKENS.sub, marginRight: 2 }}>$</span><input value={(vals[editing] || "").replace(/^\$/, "")} onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ""); setV(n ? "$" + n : ""); }} inputMode="numeric" autoFocus placeholder="0" style={{ flex: 1, border: "none", outline: "none", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 20, color: TOKENS.ink, background: "transparent" }} /></div>{doneBtn}</>;
     if (s.k === "menu") {
-      const list = MENU.filter((it) => it.l.toLowerCase().includes(mq.toLowerCase()));
-      const custom = mq.trim() && !MENU.some((it) => it.l.toLowerCase() === mq.trim().toLowerCase());
+      const src = (menu && menu.length) ? menu : MENU;
+      const list = src.filter((it) => it.l.toLowerCase().includes(mq.toLowerCase()));
+      const custom = mq.trim() && !src.some((it) => it.l.toLowerCase() === mq.trim().toLowerCase());
       return <>
         <div style={{ display: "flex", alignItems: "center", gap: 9, border: `1.5px solid ${TOKENS.line}`, borderRadius: 12, padding: "0 12px", height: 46, marginBottom: 8 }}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#aab0ac" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
