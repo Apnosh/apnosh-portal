@@ -13,7 +13,6 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Loader2, Sparkles, Rocket } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
-import { summarize } from '@/lib/campaigns/types'
 import HonestBillBar from '@/components/campaigns/honest-bill-bar'
 import { C, DISPLAY, GRAD } from '@/components/campaigns/ui'
 import type { BuiltPlan } from '@/lib/campaigns/planning/build-plan'
@@ -161,7 +160,7 @@ function Review({ plan, err }: { plan: BuiltPlan; err: string | null }) {
   const items = plan.draft.items
   const included = items.filter((it) => it.included)
   const recommended = items.filter((it) => !it.included)
-  const bill = summarize(items)
+  const beats = plan.draft.brief?.contentBeats ?? []
 
   return (
     <div>
@@ -198,6 +197,22 @@ function Review({ plan, err }: { plan: BuiltPlan; err: string | null }) {
 
       {plan.unlock && (
         <p style={{ fontSize: 12.5, color: C.mute, marginTop: 14 }}>About ${plan.unlock.addlMonthly}/mo more would unlock {plan.unlock.name}.</p>
+      )}
+
+      {beats.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <h2 style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, margin: '0 0 4px' }}>Your first month</h2>
+          <p style={{ fontSize: 12.5, color: C.mute, margin: '0 0 10px' }}>The pieces that go out, week by week. You approve each one before it ships.</p>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {beats.map((b, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '6px 0', borderBottom: '1px solid #f3f6f4', fontSize: 13 }}>
+                <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 6, padding: '2px 7px' }}>Wk {b.week}</span>
+                <span style={{ flex: 1, minWidth: 0, color: C.ink }}>{b.label}</span>
+                <span style={{ flexShrink: 0, fontSize: 11, color: C.faint }}>{b.channel}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <div style={{ marginTop: 18 }}>
