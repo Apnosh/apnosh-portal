@@ -2,6 +2,12 @@ import type { NextConfig } from 'next'
 import { withSentryConfig } from '@sentry/nextjs'
 
 const nextConfig: NextConfig = {
+  // Rewrite barrel imports (lucide-react is a ~1700-icon re-export) to per-icon
+  // modules so each route ships only the icons it uses. Big first-load win
+  // across the ~400 lucide import sites.
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
   // Allow loading social post thumbnails from Meta's CDNs. We use
   // unoptimized={true} on <Image> for these so Next.js doesn't proxy them
   // (Meta URLs are signed + short-lived; proxying would cache stale URLs),

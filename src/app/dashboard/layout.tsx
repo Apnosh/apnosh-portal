@@ -1,254 +1,52 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+/**
+ * Owner dashboard layout.
+ *
+ * The owner experience is now fully mobile-mvp: each owner page renders its own
+ * full-screen MvpShell (header + bottom nav). So this layout adds NO chrome by
+ * default — it just mounts the providers and gets out of the way. The only
+ * exception is the handful of legacy desktop "deep tools" the mvp hubs link to
+ * (e.g. website/traffic, social/library, local-seo/analytics); those get a thin
+ * "back to <hub>" header instead of the old 260px sidebar.
+ *
+ * The previous desktop shell (sidebar nav, badge-count polling, connected-
+ * channel queries, breadcrumbs, mobile tab bar, quick-request FAB) is gone:
+ * nothing rendered it for owners anymore, and it was running its data effects +
+ * a 60s poll behind every full-screen overlay. Team (/work) and admin (/admin)
+ * have their own separate layouts and are unaffected.
+ */
+
+import { Suspense, useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import {
-  LayoutDashboard, CheckCircle, Calendar, ShoppingBag, BarChart3,
-  MessageSquare, Wrench, Building2, CreditCard, FileText, HelpCircle, Settings,
-  Menu, X, ChevronDown, BookOpen, FileBarChart, ListTodo,
-  Share2, Globe, MapPin, Mail, Image as ImageIcon, Link2, Newspaper,
-  CheckSquare, Star, Sparkles, Palette, Users, Target,
-} from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { ArrowLeft } from 'lucide-react'
 import { CartProvider } from '@/lib/cart-context'
 import { ToastProvider } from '@/components/ui/toast'
 import { RealtimeProvider } from '@/lib/realtime'
-import AgentChat from '@/components/dashboard/agent-chat'
 import { ClientProvider, useClient } from '@/lib/client-context'
 import SentryUserContext from '@/components/sentry-user-context'
 import { LocationProvider, useLocationContext } from '@/lib/dashboard/location-context'
-import { getClientLocations } from '@/lib/dashboard/get-client-locations'
 import LocationSelector from '@/components/dashboard/location-selector'
 import type { ClientLocation } from '@/lib/dashboard/location-helpers'
-import Notifications from '@/components/ui/notifications'
-import Breadcrumbs from '@/components/ui/breadcrumbs'
-import { ClientTabBar } from '@/components/ui/mobile-tab-bar'
-import QuickRequest from '@/components/ui/quick-request'
-import ActionSheet from '@/components/ui/action-sheet'
-import WorkspaceSwitcher from '@/components/dashboard/workspace-switcher'
-import { useUser, signOut } from '@/lib/supabase/hooks'
 
-import type { ServiceArea } from '@/types/database'
-
-interface NavChildItem {
-  label: string
-  href: string
-  exact?: boolean
-}
-
-interface NavItem {
-  label: string
-  href: string
-  icon: typeof LayoutDashboard
-  exact: boolean
-  serviceArea?: ServiceArea
-  children?: NavChildItem[]
-}
-
-interface NavSection {
-  label: string | null
-  items: NavItem[]
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Sidebar config (v1)
-//
-// Trimmed from ~30 visible items to ~13 for a typical client. We hide
-// surfaces that are: half-built (mock data, coming-soon shells), thin
-// hubs that just link to children, or duplicates. The pages themselves
-// stay in the codebase -- only the nav exposure is gated.
-//
-// See docs/CLIENT-DASHBOARD-AUDIT.md for the full classification.
-//
-// Hidden for v1 (re-add when the underlying surface is ready):
-//   /dashboard/website (Performance hub -- thin)
-//   /dashboard/local-seo (Performance hub -- thin)
-//   /dashboard/local-seo/locations (placeholder, no data)
-//   /dashboard/analytics (redundant with local-seo)
-//   /dashboard/social (use the children directly)
-//   /dashboard/social/performance (duplicate)
-//   /dashboard/email-sms/performance (low value vs Overview)
-//   /dashboard/profile/strategy (advanced; revisit)
-//   /dashboard/reports (overlaps Weekly Briefs)
-//   /dashboard/approvals (rebuilding on real data; was mock)
-//   /dashboard/calendar (becoming master calendar; rebuild)
-//   /dashboard/orders/* (off-path for v1 onboarding)
-//   /dashboard/goals (first-run only; surface as setup card)
-//   /dashboard/notifications (use the bell icon in header)
-// ─────────────────────────────────────────────────────────────────────
-// Sidebar reorganized around owner FREQUENCY, not service-area:
-//   Daily               — Today / Approvals / Reviews / Messages / Calendar
-//   Publish (group)     — channel performance: Social / Local SEO / Email / Web
-//   Team (group)        — workspace: Team / Marketplace
-//   Your business       — Restaurant / Brand / Weekly briefs
-// Settings + low-frequency items moved to bottomItems.
-const navSections: NavSection[] = [
-  {
-    /* Daily destinations — what an owner checks every time they
-       open the portal. Marketplace is not a daily thing; it lives
-       under Workspace with the rest of the team booking flow. */
-    label: null,
-    items: [
-      { label: 'Today', href: '/dashboard', icon: LayoutDashboard, exact: true },
-      { label: 'Audit', href: '/dashboard/audit', icon: Target, exact: false },
-      { label: 'Approvals', href: '/dashboard/approvals', icon: CheckSquare, exact: false },
-      { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, exact: false },
-      { label: 'Plan', href: '/dashboard/analytics', icon: Calendar, exact: false },
-    ],
-  },
-  {
-    /* Channels — how each marketing channel is doing. Owners
-       think in channel categories (social, local SEO, website,
-       email), so this group mirrors that mental model. */
-    label: 'Channels',
-    items: [
-      // Each channel routes to its analytics-overview page by default;
-      // operational sub-pages (calendar, drafts, etc.) are children.
-      // Default click answers "how is this channel doing?" first; the
-      // owner can then drill into the operational sub-pages.
-      {
-        label: 'Social media',
-        href: '/dashboard/social',  // the publisher's hub
-        icon: Sparkles,
-        exact: true,
-        serviceArea: 'social',
-        children: [
-          { label: 'Overview', href: '/dashboard/social', exact: true },
-          { label: 'Calendar', href: '/dashboard/social/calendar' },
-          { label: 'Ads', href: '/dashboard/social/ads' },
-          { label: 'Inbox', href: '/dashboard/social/inbox' },
-          { label: 'Performance', href: '/dashboard/social/performance' },
-          { label: 'Library', href: '/dashboard/social/library' },
-        ],
-      },
-      {
-        label: 'Local SEO',
-        href: '/dashboard/local-seo',
-        icon: MapPin,
-        exact: true,
-        serviceArea: 'local_seo',
-        children: [
-          { label: 'Overview', href: '/dashboard/local-seo', exact: true },
-          { label: 'Full analytics', href: '/dashboard/local-seo/analytics' },
-          { label: 'Reviews', href: '/dashboard/local-seo/reviews' },
-          { label: 'Your listing', href: '/dashboard/local-seo/listing' },
-          { label: 'Menu', href: '/dashboard/local-seo/menu' },
-          { label: 'Locations', href: '/dashboard/local-seo/locations' },
-        ],
-      },
-      {
-        label: 'Email & SMS',
-        href: '/dashboard/email-sms',  // overview = performance first
-        icon: Mail,
-        exact: true,
-        serviceArea: 'email_sms',
-        children: [
-          { label: 'Performance', href: '/dashboard/email-sms', exact: true },
-          { label: 'Campaigns', href: '/dashboard/email-sms/campaigns' },
-          { label: 'List & Audience', href: '/dashboard/email-sms/list' },
-        ],
-      },
-      {
-        /* Website is shown to every client -- every restaurant has a
-           website (or needs one), and the tab's empty state is the
-           entry point to the /dashboard/website/setup wizard. No
-           serviceArea gating here, unlike the other channels. */
-        label: 'Website',
-        href: '/dashboard/website',
-        icon: Globe,
-        exact: false,
-        children: [
-          { label: 'Overview', href: '/dashboard/website', exact: true },
-          { label: 'Full analytics', href: '/dashboard/website/traffic' },
-          { label: 'Your site', href: '/dashboard/website/manage' },
-          { label: 'Forms', href: '/dashboard/website/forms' },
-          { label: 'Requests', href: '/dashboard/website/requests' },
-        ],
-      },
-    ],
-  },
-  {
-    /* Workspace — everyone working on the business. Team =
-       the strategists assigned to this client; Marketplace =
-       one-off creator bookings. */
-    label: 'Workspace',
-    items: [
-      { label: 'Team', href: '/dashboard/team', icon: Users, exact: false },
-      { label: 'Marketplace', href: '/dashboard/marketplace', icon: Sparkles, exact: false },
-    ],
-  },
-  {
-    label: 'Your business',
-    items: [
-      {
-        label: 'Restaurant info',
-        href: '/dashboard/restaurant',
-        icon: Building2,
-        exact: false,
-        children: [
-          { label: 'Restaurant details', href: '/dashboard/restaurant' },
-          { label: 'Goals', href: '/dashboard/goals' },
-        ],
-      },
-      {
-        label: 'Brand & Assets',
-        href: '/dashboard/assets',
-        icon: Palette,
-        exact: false,
-        children: [
-          { label: 'Assets', href: '/dashboard/assets' },
-          { label: 'Brand guidelines', href: '/dashboard/profile/brand-guidelines' },
-        ],
-      },
-      {
-        label: 'Weekly briefs',
-        href: '/dashboard/briefs',
-        icon: Newspaper,
-        exact: false,
-      },
-      {
-        label: 'Business profile',
-        href: '/dashboard/profile',
-        icon: Building2,
-        exact: false,
-      },
-      {
-        label: 'Connections',
-        href: '/dashboard/connected-accounts',
-        icon: Link2,
-        exact: false,
-      },
-    ],
-  },
-]
-
-// Footer items — true settings only. Frequently-used connections
-// and business profile are promoted up into the main nav.
-const bottomItems = [
-  { label: 'Services', href: '/dashboard/services', icon: ShoppingBag },
-  { label: 'Billing', href: '/dashboard/billing', icon: CreditCard },
-  { label: 'Agreements', href: '/dashboard/agreements', icon: FileText },
-  { label: 'Settings', href: '/dashboard/settings', icon: Settings },
-  { label: 'Help', href: '/dashboard/help', icon: HelpCircle },
-]
+// Floating "Ask Apnosh" chat — lazy so its client JS stays off the critical
+// path for every owner route.
+const AgentChat = dynamic(() => import('@/components/dashboard/agent-chat'), { ssr: false })
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <CartProvider>
       <ToastProvider>
         <RealtimeProvider>
-          {/* ClientProvider reads useSearchParams (for the admin
-              ?clientId= picker handoff) so it has to live inside a
-              Suspense boundary or static generation rejects the build. */}
+          {/* ClientProvider reads useSearchParams (admin ?clientId= handoff),
+              so it must sit inside a Suspense boundary. */}
           <Suspense fallback={null}>
             <ClientProvider>
               <SentryUserContext />
               <LocationLoader>
                 <DashboardShell>{children}</DashboardShell>
-                {/* Floating "Ask Apnosh" chat panel. Always
-                    available on every dashboard page; opens as a
-                    side panel on click. */}
                 <AgentChat />
               </LocationLoader>
             </ClientProvider>
@@ -260,9 +58,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 }
 
 /**
- * Loads the client's locations once the client is resolved, then mounts the
- * LocationProvider so every page below can read the current location selection.
- * The LocationSelector itself lives in the header (see DashboardShell).
+ * Loads the client's locations once the client resolves, then mounts the
+ * LocationProvider so the legacy deep tools (and the back-header selector) can
+ * read/switch location. One fetch per session — the provider stays mounted
+ * across client-side navigation.
  */
 function LocationLoader({ children }: { children: React.ReactNode }) {
   const { client, loading: clientLoading } = useClient()
@@ -271,16 +70,9 @@ function LocationLoader({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (clientLoading || !client?.id) return
     let cancelled = false
-    // Fetch the client's locations via the public locations API. We use a
-    // plain GET endpoint instead of the getClientLocations server action
-    // because Next.js was caching the action's result aggressively across
-    // deploys, masking the gbp_locations fallback path.
     fetch(`/api/dashboard/locations?clientId=${client.id}`)
       .then(r => r.json())
-      .then(data => {
-        if (cancelled) return
-        setLocations(Array.isArray(data.locations) ? data.locations : [])
-      })
+      .then(data => { if (!cancelled) setLocations(Array.isArray(data.locations) ? data.locations : []) })
       .catch(() => { /* non-fatal: selector hides itself when N <= 1 */ })
     return () => { cancelled = true }
   }, [client?.id, clientLoading])
@@ -292,11 +84,6 @@ function LocationLoader({ children }: { children: React.ReactNode }) {
   )
 }
 
-/**
- * Header component reading from LocationContext. Only renders the selector
- * when the client has more than one location (the component itself returns
- * null in that case, so this is just a thin wrapper).
- */
 function HeaderLocationSelector() {
   const { locations, selectedLocationId, setSelectedLocationId } = useLocationContext()
   return (
@@ -308,406 +95,52 @@ function HeaderLocationSelector() {
   )
 }
 
+/* Routes that ARE the mvp owner experience — they render their own MvpShell,
+   so this layout adds nothing. Everything else under /dashboard is a legacy
+   desktop deep tool and gets the thin back-header. */
+const MVP_EXACT = new Set([
+  '/dashboard', '/dashboard/inbox', '/dashboard/messages', '/dashboard/insights',
+  '/dashboard/more', '/dashboard/billing',
+  '/dashboard/assets', '/dashboard/goals', '/dashboard/help',
+  '/dashboard/website', '/dashboard/social', '/dashboard/local-seo', '/dashboard/email-sms',
+])
+const MVP_PREFIX = [
+  '/dashboard/campaigns', '/dashboard/reviews', '/dashboard/business-info',
+  '/dashboard/agreements', '/dashboard/settings', '/dashboard/connected-accounts',
+]
+function isMvpRoute(path: string): boolean {
+  return MVP_EXACT.has(path) || MVP_PREFIX.some(p => path === p || path.startsWith(p + '/'))
+}
+
+/* Where a legacy deep tool's "back" goes: to its channel hub when it lives
+   under one, otherwise to the More hub. */
+function backTarget(path: string): { href: string; label: string } {
+  if (path.startsWith('/dashboard/website/')) return { href: '/dashboard/website', label: 'Website' }
+  if (path.startsWith('/dashboard/social/')) return { href: '/dashboard/social', label: 'Social media' }
+  if (path.startsWith('/dashboard/local-seo/')) return { href: '/dashboard/local-seo', label: 'Local SEO' }
+  if (path.startsWith('/dashboard/email-sms/')) return { href: '/dashboard/email-sms', label: 'Email & SMS' }
+  return { href: '/dashboard/more', label: 'More' }
+}
+
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [actionSheetOpen, setActionSheetOpen] = useState(false)
-  const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const { data: user, loading: userLoading } = useUser()
-  const { client, enrolledServices, loading: clientLoading } = useClient()
 
-  // Sidebar badge counts. Reads from the consolidated /api/dashboard/load
-  // endpoint so we get inbox, reviews (and later messages) in one shot
-  // and use the same auth path that handles all client linkage types
-  // (admin / profile / business owner / client_users magic-link portal).
-  const [navCounts, setNavCounts] = useState<{ reviews: number; approvals: number }>({
-    reviews: 0,
-    approvals: 0,
-  })
+  // mvp owner pages own their full-screen chrome; add nothing.
+  if (isMvpRoute(pathname)) return <>{children}</>
 
-  /* Channels in the sidebar unlock when EITHER:
-     - the client has a paid service in that area (enrolledServices), or
-     - the client has an actually-connected platform in that area.
-     This lets a free-tier owner connect Instagram and see Social
-     immediately, without forcing them to subscribe first. */
-  const [connectedChannels, setConnectedChannels] = useState<Set<ServiceArea>>(new Set())
-
-  useEffect(() => {
-    if (!client?.id) { setConnectedChannels(new Set()); return }
-    let cancelled = false
-    async function fetchConnections() {
-      try {
-        const supabase = (await import('@/lib/supabase/client')).createClient()
-        const [pcRes, ccRes, clientRes, gbpRes] = await Promise.all([
-          supabase
-            .from('platform_connections')
-            .select('platform, access_token')
-            .eq('client_id', client!.id)
-            .not('access_token', 'is', null),
-          supabase
-            .from('channel_connections')
-            .select('channel, access_token, status')
-            .eq('client_id', client!.id)
-            .not('access_token', 'is', null),
-          supabase
-            .from('clients')
-            .select('website, location')
-            .eq('id', client!.id)
-            .maybeSingle(),
-          /* Fallback unlock: any GBP location row means we have GBP
-             context, even if channel_connections is stale or blocked. */
-          supabase
-            .from('gbp_locations')
-            .select('id', { count: 'exact', head: true })
-            .eq('client_id', client!.id),
-        ])
-        if (cancelled) return
-
-        const set = new Set<ServiceArea>()
-        for (const r of (pcRes.data ?? []) as Array<{ platform: string }>) {
-          if (['instagram', 'facebook', 'tiktok', 'linkedin'].includes(r.platform)) set.add('social')
-        }
-        for (const r of (ccRes.data ?? []) as Array<{ channel: string; status: string }>) {
-          if (r.status !== 'active') continue
-          if (r.channel === 'google_business_profile') set.add('local_seo')
-          if (r.channel === 'google_analytics' || r.channel === 'google_search_console') set.add('website')
-        }
-        // Having a website URL on file is enough to unlock the Website
-        // tab -- the tab's empty state pulls the owner into the setup
-        // wizard, so we want them in there as soon as possible.
-        if (clientRes.data?.website) set.add('website')
-        /* Symmetric to Website: if we have ANY gbp_locations row OR the
-           client has a location on file, Local SEO is meaningful. The
-           tab's empty state guides them to claim/connect. */
-        if ((gbpRes.count ?? 0) > 0 || (clientRes.data as { location?: string } | null)?.location) {
-          set.add('local_seo')
-        }
-        setConnectedChannels(set)
-      } catch {
-        // Quiet fail; sidebar just stays as-is.
-      }
-    }
-    fetchConnections()
-    return () => { cancelled = true }
-  }, [client?.id])
-
-  useEffect(() => {
-    if (!client?.id) return
-    let cancelled = false
-    async function fetchCounts() {
-      try {
-        const r = await fetch(`/api/dashboard/counts?clientId=${encodeURIComponent(client!.id)}`)
-        if (!r.ok) return
-        const json = await r.json() as {
-          counts?: { unansweredReviews?: number; pendingApprovals?: number; inboxNeeds?: number }
-        }
-        if (cancelled) return
-        setNavCounts({
-          reviews: json.counts?.unansweredReviews ?? 0,
-          approvals: json.counts?.pendingApprovals ?? 0,
-        })
-      } catch { /* silent */ }
-    }
-    fetchCounts()
-    const interval = setInterval(fetchCounts, 60_000)  // 60s — was 30s, eases server load
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [client?.id])
-
-  // Map nav-item label/href to the right count.
-  function badgeFor(item: { label: string; href: string }): number {
-    if (item.href === '/dashboard/approvals') return navCounts.approvals
-    if (item.label === 'Reviews') return navCounts.reviews
-    return 0
-  }
-
-  // Display name preference: explicit user name -> restaurant name -> email
-  // local-part -> 'User'. Avoids the generic "User · Client" label when the
-  // auth user record has no full_name set.
-  const emailLocal = user?.email?.split('@')[0]
-  const displayName = user?.full_name || client?.name || emailLocal || 'User'
-  const initials = displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-  const roleLabel = user?.role === 'admin' ? 'Admin' : (client?.name ? client.name : 'Client')
-
-  const isActive = (href: string, exact?: boolean) => {
-    if (exact || href === '/dashboard') return pathname === href
-    return pathname === href || pathname.startsWith(href + '/')
-  }
-
-  // Track which expandable nav items are open. Auto-open based on current path.
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(() => {
-    const initial = new Set<string>()
-    for (const section of navSections) {
-      for (const item of section.items) {
-        if (item.children && pathname.startsWith(item.href)) {
-          initial.add(item.href)
-        }
-      }
-    }
-    return initial
-  })
-
-  // Auto-open when pathname changes to a sub-page
-  useEffect(() => {
-    setExpandedItems(prev => {
-      const next = new Set(prev)
-      for (const section of navSections) {
-        for (const item of section.items) {
-          if (item.children && pathname.startsWith(item.href)) {
-            next.add(item.href)
-          }
-        }
-      }
-      return next
-    })
-  }, [pathname])
-
-  function toggleExpanded(href: string) {
-    setExpandedItems(prev => {
-      const next = new Set(prev)
-      if (next.has(href)) next.delete(href)
-      else next.add(href)
-      return next
-    })
-  }
-
-  const NavLink = ({ item }: { item: NavItem | { label: string; href: string; icon: typeof LayoutDashboard; exact?: boolean; serviceArea?: ServiceArea; children?: NavChildItem[] } }) => {
-    const badgeCount = badgeFor(item)
-    const showBadge = badgeCount > 0
-    const hasChildren = 'children' in item && item.children && item.children.length > 0
-    const isExpanded = hasChildren && expandedItems.has(item.href)
-    const active = isActive(item.href, item.exact)
-
-    // For items with children, render an expandable dropdown
-    if (hasChildren) {
-      return (
-        <div>
-          <div className={`flex items-center rounded-lg transition-colors ${
-            active ? 'bg-brand-tint text-brand-dark' : 'text-ink-3 hover:bg-bg-2 hover:text-ink'
-          }`}>
-            <Link
-              href={item.href}
-              onClick={() => setSidebarOpen(false)}
-              className="flex items-center gap-3 px-3 py-2 flex-1 min-h-[44px] text-sm font-medium rounded-l-lg"
-            >
-              <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
-              <span className="flex-1">{item.label}</span>
-              {showBadge && (
-                <span className="min-w-[20px] h-5 flex items-center justify-center rounded-full bg-brand text-white text-[11px] font-bold px-1.5">
-                  {badgeCount > 99 ? '99+' : badgeCount}
-                </span>
-              )}
-            </Link>
-            <button
-              onClick={e => { e.preventDefault(); toggleExpanded(item.href) }}
-              className="px-2 py-2 min-h-[44px] flex items-center justify-center rounded-r-lg hover:bg-black/5 transition-colors"
-              aria-label={isExpanded ? 'Collapse' : 'Expand'}
-            >
-              <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-            </button>
-          </div>
-          {isExpanded && 'children' in item && item.children && (
-            <div className="ml-4 mt-0.5 space-y-0.5 border-l border-ink-6 pl-3">
-              {item.children.map(child => {
-                const childActive = isActive(child.href, child.exact)
-                return (
-                  <Link
-                    key={child.href}
-                    href={child.href}
-                    onClick={() => setSidebarOpen(false)}
-                    className={`block px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors min-h-[36px] flex items-center ${
-                      childActive
-                        ? 'bg-brand-tint/60 text-brand-dark'
-                        : 'text-ink-3 hover:bg-bg-2 hover:text-ink'
-                    }`}
-                  >
-                    {child.label}
-                  </Link>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )
-    }
-
-    return (
-      <Link
-        href={item.href}
-        onClick={() => setSidebarOpen(false)}
-        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${
-          active
-            ? 'bg-brand-tint text-brand-dark'
-            : 'text-ink-3 hover:bg-bg-2 hover:text-ink'
-        }`}
-      >
-        <item.icon className="w-[18px] h-[18px] flex-shrink-0" />
-        <span className="flex-1">{item.label}</span>
-        {showBadge && (
-          <span className="min-w-[20px] h-5 flex items-center justify-center rounded-full bg-brand text-white text-[11px] font-bold px-1.5">
-            {badgeCount > 99 ? '99+' : badgeCount}
-          </span>
-        )}
-      </Link>
-    )
-  }
-
-  // The dashboard home is a single full-bleed white surface, so the gray
-  // app-shell tint reads as clutter there. Paint that one route white;
-  // every other page keeps the gray that separates its white cards.
-  const isHome = pathname === '/dashboard'
-
-  // Redesigned owner surfaces (the apnosh-mvp home + campaigns) render their own
-  // full-screen chrome — header and bottom nav — over the whole viewport. Skip
-  // the portal shell entirely here. This also removes the client-gated sidebar
-  // nav from the tree, which was causing a hydration mismatch on these routes.
-  const isFullScreenOwner = pathname === '/dashboard' || pathname.startsWith('/dashboard/campaigns') || pathname === '/dashboard/inbox' || pathname === '/dashboard/messages' || pathname.startsWith('/dashboard/reviews') || pathname === '/dashboard/insights'
-  if (isFullScreenOwner) return <>{children}</>
-
+  // Legacy desktop deep tool: a thin back header (keeps the multi-location
+  // selector, which self-hides for single-location clients), then the page.
+  const back = backTarget(pathname)
   return (
-    <div className={`min-h-screen flex pb-tabbar lg:pb-0 ${isHome ? 'bg-white' : 'bg-bg-2'}`}>
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
-
-      {/* Sidebar */}
-      <aside className={`fixed top-0 left-0 h-full w-[260px] bg-white border-r border-ink-6 z-50 flex flex-col transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        {/* Logo */}
-        <div className="h-14 flex items-center justify-between px-5 border-b border-ink-6">
-          <Link href="/dashboard" className="font-[family-name:var(--font-display)] text-lg text-ink">
-            Apn<em className="text-brand-dark italic">osh</em>
-          </Link>
-          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-ink-4 hover:text-ink min-h-[44px] min-w-[44px] flex items-center justify-center">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-4 overflow-y-auto">
-          {navSections.map((section, idx) => {
-            // Filter service-gated items. A channel shows up when EITHER:
-            //   - the client subscribed to a service in that area, OR
-            //   - they actually connected a platform that maps to it.
-            // While the client + connections are loading, hide service-gated
-            // items to avoid flicker -- they appear once data resolves.
-            const visibleItems = section.items.filter(item =>
-              !item.serviceArea ||
-              (!clientLoading && (
-                enrolledServices.has(item.serviceArea) ||
-                connectedChannels.has(item.serviceArea)
-              ))
-            )
-            if (visibleItems.length === 0) return null
-            return (
-              <div key={idx} className={idx > 0 ? 'mt-4' : ''}>
-                {section.label && (
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-4 px-3 mb-1.5">
-                    {section.label}
-                  </div>
-                )}
-                <div className="space-y-0.5">
-                  {visibleItems.map((item) => <NavLink key={item.href} item={item} />)}
-                </div>
-              </div>
-            )
-          })}
-          <div className="h-px bg-ink-6 my-4" />
-          <div className="space-y-0.5">
-            {bottomItems.map((item) => <NavLink key={item.href} item={item} />)}
-          </div>
-        </nav>
-
-        {/* User */}
-        <div className="p-3 border-t border-ink-6 relative">
-          <button onClick={() => setUserMenuOpen(!userMenuOpen)} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-bg-2 transition-colors min-h-[44px]">
-            {userLoading ? (
-              <div className="w-8 h-8 rounded-full bg-ink-6 animate-pulse" />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-brand-tint border border-brand/20 flex items-center justify-center text-brand-dark text-xs font-bold">
-                {initials}
-              </div>
-            )}
-            <div className="flex-1 text-left">
-              {userLoading ? (
-                <div className="h-4 w-24 bg-ink-6 rounded animate-pulse" />
-              ) : (
-                <>
-                  <div className="text-sm font-medium text-ink truncate">{displayName}</div>
-                  <div className="text-[10px] text-ink-4">{roleLabel}</div>
-                </>
-              )}
-            </div>
-            <ChevronDown className={`w-4 h-4 text-ink-4 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
-          </button>
-          {userMenuOpen && (
-            <div className="absolute bottom-full left-3 right-3 mb-1 bg-white rounded-xl border border-ink-6 shadow-lg overflow-hidden z-50">
-              <a href="/dashboard/profile" className="block px-4 py-2.5 text-sm text-ink-2 hover:bg-bg-2 transition-colors">Profile</a>
-              <a href="/dashboard/settings" className="block px-4 py-2.5 text-sm text-ink-2 hover:bg-bg-2 transition-colors">Settings</a>
-              <div className="border-t border-ink-6" />
-              <button onClick={signOut} className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors">
-                Sign out
-              </button>
-            </div>
-          )}
-        </div>
-      </aside>
-
-      {/* Main */}
-      <div className="flex-1 min-w-0 lg:ml-[260px]">
-        {/* Top bar — mobile shows just hamburger + workspace label + bell.
-            Desktop keeps the full chrome (workspace switcher + location
-            selector + messages icon + notifications) since space allows it. */}
-        <header className="h-14 bg-white border-b border-ink-6 flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
-          {/* Hamburger removed on mobile — the Menu tab in the bottom
-              bar opens the drawer now. Kept hidden so the layout flex
-              spacing stays predictable. Desktop never showed this
-              button anyway (it had lg:hidden). */}
-          {/* WorkspaceSwitcher is admin-only on mobile to keep the bar
-              uncluttered for regular owners (they have one workspace). */}
-          <div className={user?.role === 'admin' ? 'flex items-center gap-2' : 'hidden lg:flex items-center gap-2'}>
-            <WorkspaceSwitcher />
-          </div>
-          {/* Mobile-only workspace label for regular owners. Just shows
-              their restaurant name, no switcher. */}
-          {user?.role !== 'admin' && (
-            <span className="lg:hidden text-[14px] font-semibold text-ink truncate max-w-[180px]">
-              {client?.name ?? 'Apnosh'}
-            </span>
-          )}
-          <div className="flex-1" />
-          <div className="flex items-center gap-3">
-            {/* Location selector hidden on mobile for single-loc clients;
-                multi-loc clients still see it on desktop. */}
-            <div className="hidden lg:block">
-              <HeaderLocationSelector />
-            </div>
-            {/* Messages icon removed on mobile (Inbox tab carries it). */}
-            <Link
-              href="/dashboard/messages"
-              className="hidden lg:flex text-ink-4 hover:text-ink transition-colors min-h-[44px] min-w-[44px] items-center justify-center"
-              aria-label="Messages"
-            >
-              <MessageSquare className="w-5 h-5" />
-            </Link>
-            <Notifications />
-          </div>
-        </header>
-
-        {/* Content */}
-        <main className="p-4 lg:p-6">
-          {!isHome && <Breadcrumbs />}
-          {children}
-        </main>
-      </div>
-      <QuickRequest />
-      <ActionSheet
-        open={actionSheetOpen}
-        onClose={() => setActionSheetOpen(false)}
-      />
-      <ClientTabBar
-        inboxBadge={navCounts.reviews + navCounts.approvals}
-        onPlusClick={() => setActionSheetOpen(true)}
-      />
+    <div className="min-h-screen bg-bg-2">
+      <header className="h-13 bg-white border-b border-ink-6 flex items-center gap-2 px-3 sticky top-0 z-30" style={{ height: 52 }}>
+        <Link href={back.href} className="inline-flex items-center gap-1.5 text-[14.5px] font-semibold text-brand-dark px-2 py-2 -ml-1 rounded-lg hover:bg-bg-2 transition-colors">
+          <ArrowLeft className="w-[18px] h-[18px]" /> {back.label}
+        </Link>
+        <div className="flex-1" />
+        <HeaderLocationSelector />
+      </header>
+      <main className="p-4 lg:p-6">{children}</main>
     </div>
   )
 }
