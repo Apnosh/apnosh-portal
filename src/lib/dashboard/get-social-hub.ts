@@ -121,7 +121,7 @@ export async function getSocialHub(clientId: string): Promise<SocialHubData> {
       .from('social_metrics')
       .select('reach')
       .eq('client_id', clientId)
-      .gte('metric_date', thirtyAgo.slice(0, 10))
+      .gte('date', thirtyAgo.slice(0, 10))
       .limit(2000),
     // Most recently completed boost (for the "Last boost result" card)
     getLatestCompletedCampaign(clientId),

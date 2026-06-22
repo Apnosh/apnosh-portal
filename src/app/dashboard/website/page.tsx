@@ -73,7 +73,9 @@ export default async function WebsitePage() {
   const unread = leads.filter((l) => l.status === 'new')
   const recent = unread.slice(0, 3)
   const topFixes = (health?.topFixes ?? []).slice(0, 2)
-  const notConnected = !view && !analyticsOn && !siteOn
+  // getWebsiteView never returns null on success, so the real "connected"
+  // signals are a website URL on file and/or analytics flowing.
+  const notConnected = !siteOn && !analyticsOn
 
   const subtitle = notConnected ? 'Connect analytics to see traffic'
     : siteOn && analyticsOn ? 'Your site is live and tracking'
