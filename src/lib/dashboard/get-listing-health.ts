@@ -81,7 +81,7 @@ export async function getListingHealth(clientId: string): Promise<ListingHealth>
     {
       key: 'category', label: 'Primary category chosen', weight: 10, status: live(hasCategory),
       detail: 'Pick the category that best fits (e.g. Korean restaurant) so Google ranks you for the right searches.',
-      fixLabel: 'Set category', fixHref: '/dashboard/local-seo/listing',
+      fixLabel: 'Set category', fixHref: '/dashboard/business-info/category',
     },
     {
       key: 'description', label: 'Business description written', weight: 10, status: live(hasDescription),
@@ -101,7 +101,7 @@ export async function getListingHealth(clientId: string): Promise<ListingHealth>
     {
       key: 'menu', label: 'Menu added to your listing', weight: 10, status: menuCount > 0 ? 'pass' : 'fail',
       detail: 'Add your menu so it shows on the Menu tab of your Google listing.',
-      fixLabel: 'Add menu', fixHref: '/dashboard/local-seo/menu',
+      fixLabel: 'Add menu', fixHref: '/dashboard/business-info/menu',
     },
     {
       key: 'has-reviews', label: 'You have Google reviews', weight: 10,
