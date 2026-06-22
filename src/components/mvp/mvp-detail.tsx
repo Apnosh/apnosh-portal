@@ -60,7 +60,7 @@ export function MvpGroup({ title, children }: { title?: string; children: React.
   )
 }
 
-export function MvpRow({ icon, label, sub, href, onClick, right, danger }: { icon?: React.ReactNode; label: string; sub?: string; href?: string; onClick?: () => void; right?: React.ReactNode; danger?: boolean }) {
+export function MvpRow({ icon, label, sub, href, onClick, right, danger, external }: { icon?: React.ReactNode; label: string; sub?: string; href?: string; onClick?: () => void; right?: React.ReactNode; danger?: boolean; external?: boolean }) {
   const inner = (
     <>
       {icon && <span style={{ width: 34, height: 34, borderRadius: 9, background: danger ? C.coralSoft : C.greenSoft, color: danger ? C.coral : C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>}
@@ -73,6 +73,7 @@ export function MvpRow({ icon, label, sub, href, onClick, right, danger }: { ico
     </>
   )
   const base: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 13, padding: '12px 14px', textDecoration: 'none', color: 'inherit', width: '100%' }
+  if (href && external) return <a href={href} target="_blank" rel="noopener noreferrer" className="mvp-row" style={base}>{inner}</a>
   if (href) return <Link href={href} className="mvp-row" style={base}>{inner}</Link>
   if (onClick) return <button type="button" onClick={onClick} className="mvp-row" style={{ ...base, background: 'none', border: 'none', textAlign: 'left', font: 'inherit', cursor: 'pointer' }}>{inner}</button>
   return <div style={base}>{inner}</div>

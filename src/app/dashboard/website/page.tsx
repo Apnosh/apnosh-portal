@@ -1,258 +1,155 @@
-'use client'
-
 /**
- * Website overview.
+ * Owner Website hub — apnosh-mvp surface. Reached from More -> Your channels.
  *
- * Reading order optimized for restaurant owners:
- *   1. Status strip — "is it working?" in one glance
- *   2. Live preview — "what visitors see right now"
- *   3. Open requests + recent team work — accountability + activity
- *   4. Performance — hero number, trend, metric breakdown
- *   5. AM note (only when present)
- *
- * The legacy StatusBanner + standalone "What we noticed" insights
- * were dropped — both repeated information that the status strip
- * + performance section already cover.
+ * A focused glance: is the site live + tracking, new form leads waiting (the one
+ * time-sensitive owner action), visitors this month, and what needs the owner
+ * (health fixes). The heavy tools (request builder, full analytics, setup
+ * wizard, heatmaps, forms inbox) stay as link-outs. Content editing (menu,
+ * photos, hours) lives in Business info, so it is never rebuilt here.
  */
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
-import { Plus, Globe, Plug, RefreshCw } from 'lucide-react'
-import { refreshWebsiteData } from '@/lib/dashboard/website-setup'
-import type { TimeRange, DashboardView } from '@/types/dashboard'
+import { redirect } from 'next/navigation'
+import {
+  Globe, BarChart3, Inbox, ClipboardList, MousePointerClick, Eye, TrendingUp,
+  Wrench, ExternalLink,
+} from 'lucide-react'
+import { resolveCurrentClient } from '@/lib/auth/resolve-client'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getWebsiteView } from '@/lib/dashboard/get-website-view'
-import { useClient } from '@/lib/client-context'
-import HeroMetric from '@/components/dashboard/hero-metric'
-import TrendChart from '@/components/dashboard/trend-chart'
-import MetricGrid from '@/components/dashboard/metric-grid'
-import AMNote from '@/components/dashboard/am-note'
-import SiteStatusStrip from '@/components/dashboard/site-status-strip'
-import WebsitePreview from '@/components/dashboard/website-preview'
-import HandledByTeamPanel from '@/components/dashboard/handled-by-team-panel'
-import RequestStatusFeed from '@/components/dashboard/request-status-feed'
-import FormInboxCard from '@/components/dashboard/form-inbox-card'
-import SiteAuditCard from '@/components/dashboard/site-audit-card'
+import { getWebsiteHealth } from '@/lib/website-health-score'
+import { listFormSubmissions, type FormSubmission } from '@/lib/form-submissions'
+import MvpShell from '@/components/mvp/mvp-shell'
+import {
+  MvpDetailHeader, MvpGroup, MvpRow, MvpPill, MvpStat, MvpStatGrid, MvpSectionLabel, MvpEmpty, StatusPill, C,
+} from '@/components/mvp/mvp-detail'
 
-export default function WebsiteOverviewPage() {
-  const { client, loading: clientLoading } = useClient()
-  const [timeRange, setTimeRange] = useState<TimeRange>('1M')
-  const [view, setView] = useState<DashboardView | null>(null)
-  const [businessName, setBusinessName] = useState<string>('')
-  const [loading, setLoading] = useState(true)
-  const [analyticsConnected, setAnalyticsConnected] = useState<boolean | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-  const [refreshMsg, setRefreshMsg] = useState<string | null>(null)
+export const dynamic = 'force-dynamic'
 
-  useEffect(() => {
-    async function loadData() {
-      if (clientLoading) return
-      if (!client?.id) { setLoading(false); return }
+const METRIC_ICON: Record<string, typeof Eye> = {
+  'Website visitors': Eye,
+  'Website visits': MousePointerClick,
+  'Shown on Google': TrendingUp,
+  'Actions taken': BarChart3,
+}
 
-      try {
-        const v = await getWebsiteView(client.id)
-        setView(v)
-        setBusinessName(client.name ?? '')
-      } catch (err) {
-        console.error('Failed to load website view', err)
-        setView(null)
-      }
-      setLoading(false)
-    }
-    loadData()
-  }, [client?.id, client?.name, clientLoading])
+function hostOf(url: string): string {
+  try { return new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '') } catch { return url }
+}
+function ensureHttp(url: string): string {
+  return url.startsWith('http') ? url : `https://${url}`
+}
+function rel(iso: string | null): string {
+  if (!iso) return ''
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+  if (d <= 0) return 'today'
+  if (d === 1) return 'yesterday'
+  if (d < 7) return `${d}d ago`
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
-  /* Probe whether analytics is connected so the empty-state branch
-     can distinguish "connect now" from "connected, no data yet". */
-  useEffect(() => {
-    if (!client?.id) return
-    import('@/lib/website-health-score')
-      .then(({ getWebsiteHealth }) => getWebsiteHealth(client.id))
-      .then(h => {
-        const analytics = h?.checks.find(c => c.id === 'analytics')
-        setAnalyticsConnected(analytics?.status === 'pass')
-      })
-      .catch(() => setAnalyticsConnected(null))
-  }, [client?.id])
+export default async function WebsitePage() {
+  const { user, clientId } = await resolveCurrentClient(null)
+  if (!user) redirect('/login')
 
-  if (loading) {
-    return (
-      <div className="max-w-[840px] mx-auto px-8 max-sm:px-4 pt-12">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-ink-6 rounded w-48" />
-          <div className="h-12 bg-ink-6 rounded" />
-          <div className="h-64 bg-ink-6 rounded" />
-        </div>
-      </div>
-    )
+  let view: Awaited<ReturnType<typeof getWebsiteView>> = null
+  let health: Awaited<ReturnType<typeof getWebsiteHealth>> = null
+  let leads: FormSubmission[] = []
+  let websiteUrl: string | null = null
+
+  if (clientId) {
+    const admin = createAdminClient()
+    const [v, h, l, c] = await Promise.all([
+      getWebsiteView(clientId),
+      getWebsiteHealth(clientId),
+      listFormSubmissions(),
+      admin.from('clients').select('website_url').eq('id', clientId).maybeSingle(),
+    ])
+    view = v; health = h; leads = l
+    websiteUrl = (c.data?.website_url as string | null) ?? null
   }
 
-  /* Empty state — only when analytics genuinely not connected.
-     If the view is empty but GA is connected, render the dashboard
-     with zeros (handled later in the normal render path). */
-  if (!view || (view.num === '---' && analyticsConnected === false)) {
-    return (
-      <div
-        className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20"
-        style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
-      >
-        <div className="text-center py-20">
-          <div
-            className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center"
-            style={{ background: 'rgba(74, 189, 152, 0.1)' }}
-          >
-            <Globe className="w-7 h-7" style={{ color: '#4abd98' }} />
-          </div>
-          <h2 className="text-[20px] font-bold mb-2" style={{ color: 'var(--db-black, #111)' }}>
-            Connect your website
-          </h2>
-          <p className="text-[14px] max-w-sm mx-auto mb-8" style={{ color: 'var(--db-ink-3, #888)' }}>
-            A quick 5-step wizard hooks up Google Analytics, Search Console, and Clarity so your website numbers land here.
-          </p>
-          <Link
-            href="/dashboard/website/setup"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
-            style={{ background: '#4abd98' }}
-          >
-            Start setup
-          </Link>
-        </div>
-      </div>
-    )
-  }
+  const analyticsOn = health?.checks.find((c) => c.id === 'analytics')?.status === 'pass'
+  const siteOn = !!websiteUrl
+  const unread = leads.filter((l) => l.status === 'new')
+  const recent = unread.slice(0, 3)
+  const topFixes = (health?.topFixes ?? []).slice(0, 2)
+  const notConnected = !view && !analyticsOn && !siteOn
+
+  const subtitle = notConnected ? 'Connect analytics to see traffic'
+    : siteOn && analyticsOn ? 'Your site is live and tracking'
+    : 'Your website at a glance'
 
   return (
-    <div
-      className="max-w-[1100px] mx-auto px-8 max-sm:px-4 pb-20 max-sm:pb-16 space-y-5"
-      style={{ fontFamily: "var(--font-dm-sans, 'DM Sans'), var(--font-inter, 'Inter'), -apple-system, system-ui, sans-serif" }}
-    >
-      {/* Header + primary action — Request a change is the most
-         common task on this page, so it sits in the page title row. */}
-      <div className="pt-6 flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">
-            Website
-          </p>
-          <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1">
-            {businessName || 'Your website'}
-          </h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={async () => {
-              if (refreshing) return
-              setRefreshing(true)
-              setRefreshMsg(null)
-              const res = await refreshWebsiteData()
-              setRefreshing(false)
-              if (res.success) {
-                const parts: string[] = []
-                if (res.ga.synced) parts.push(`GA ${res.ga.days}d`)
-                else if (res.ga.error && res.ga.error !== 'not connected') parts.push(`GA: ${res.ga.error}`)
-                if (res.gsc.synced) parts.push(`GSC ${res.gsc.days}d`)
-                else if (res.gsc.error && res.gsc.error !== 'not connected') parts.push(`GSC: ${res.gsc.error}`)
-                setRefreshMsg(parts.length ? parts.join(' · ') : 'No new data yet — try again later')
-                setTimeout(() => setRefreshMsg(null), 6000)
-                /* Force a fresh fetch of the website view. */
-                if (client?.id) {
-                  const v = await getWebsiteView(client.id).catch(() => null)
-                  if (v) setView(v)
-                }
-              } else {
-                setRefreshMsg(res.error)
-                setTimeout(() => setRefreshMsg(null), 6000)
-              }
-            }}
-            disabled={refreshing}
-            title="Pull the latest Google Analytics + Search Console data"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-ink-2 bg-ink-7 hover:bg-ink-6 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Syncing...' : 'Refresh data'}
-          </button>
-          <Link
-            href="/dashboard/website/setup"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-ink-2 bg-ink-7 hover:bg-ink-6"
-          >
-            <Plug className="w-3.5 h-3.5" />
-            Setup
-          </Link>
-          <Link
-            href="/dashboard/website/requests/new"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white bg-brand hover:bg-brand-dark shadow-sm shadow-brand/20"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Request a change
-          </Link>
-        </div>
-        {refreshMsg && (
-          <div className="w-full mt-1 text-[12px] text-ink-3 text-right">{refreshMsg}</div>
+    <MvpShell active="more" header={<MvpDetailHeader title="Website" subtitle={subtitle} />}>
+      <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+        {notConnected ? (
+          <>
+            <MvpEmpty icon={<Globe size={20} color={C.green} />} title="Connect your website" text="See traffic and leads once your analytics are on." />
+            <MvpGroup>
+              <MvpRow icon={<Globe size={18} />} label="Start setup" sub="Connect analytics and search" href="/dashboard/website/setup" />
+            </MvpGroup>
+          </>
+        ) : (
+          <>
+            {/* Connection */}
+            <div style={{ display: 'flex', gap: 9, marginBottom: 18 }}>
+              <StatusPill label="Website" on={siteOn} onText={websiteUrl ? hostOf(websiteUrl) : 'Live'} offText="No URL on file" />
+              <StatusPill label="Analytics" on={!!analyticsOn} offText="Not connected" />
+            </div>
+
+            {/* Needs you: new leads */}
+            {unread.length > 0 && (
+              <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 14, marginBottom: 18 }}>
+                <MvpPill tone="warn" label={`${unread.length} new lead${unread.length > 1 ? 's' : ''}`} />
+                <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, margin: '9px 0 4px' }}>Someone reached out</div>
+                {recent.map((l) => (
+                  <a key={l.id} href="/dashboard/website/forms" className="mvp-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 0', textDecoration: 'none', color: 'inherit' }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.display_name || 'New lead'}</span>
+                    <span style={{ fontSize: 12, color: C.faint, flexShrink: 0 }}>{l.kind} · {rel(l.submitted_at)}</span>
+                  </a>
+                ))}
+                <a href="/dashboard/website/forms" className="mvp-row" style={{ display: 'block', textAlign: 'center', marginTop: 10, height: 42, lineHeight: '42px', borderRadius: 12, background: C.green, color: '#fff', fontSize: 14.5, fontWeight: 700, textDecoration: 'none' }}>See all leads</a>
+              </div>
+            )}
+
+            {/* Needs you: health fixes */}
+            {topFixes.length > 0 && (
+              <MvpGroup title="Needs your attention">
+                {topFixes.map((f) => <MvpRow key={f.id} icon={<Wrench size={18} />} label={f.label} sub={f.message} href={f.fixLink} />)}
+              </MvpGroup>
+            )}
+
+            {/* Snapshot */}
+            {view?.metrics && view.metrics.length > 0 && (
+              <>
+                <MvpSectionLabel>This month</MvpSectionLabel>
+                <div style={{ marginBottom: 18 }}>
+                  <MvpStatGrid>
+                    {view.metrics.slice(0, 4).map((m, i) => {
+                      const Icon = METRIC_ICON[m.label] ?? BarChart3
+                      return <MvpStat key={i} icon={<Icon size={14} />} value={m.value} label={m.label} />
+                    })}
+                  </MvpStatGrid>
+                </div>
+              </>
+            )}
+
+            {/* Take action */}
+            <MvpGroup title="Take action">
+              <MvpRow icon={<Wrench size={18} />} label="Request a change" sub="We make the edit for you" href="/dashboard/website/requests/new" />
+              {websiteUrl && <MvpRow icon={<ExternalLink size={18} />} label="Open your site" sub={hostOf(websiteUrl)} href={ensureHttp(websiteUrl)} external />}
+            </MvpGroup>
+
+            {/* Dig deeper */}
+            <MvpGroup title="Dig deeper">
+              <MvpRow icon={<BarChart3 size={18} />} label="Full traffic report" sub="Sources, pages, search" href="/dashboard/website/traffic" />
+              <MvpRow icon={<Inbox size={18} />} label="All leads" sub={`${leads.length} total`} href="/dashboard/website/forms" />
+              <MvpRow icon={<ClipboardList size={18} />} label="Change requests" sub="History and status" href="/dashboard/website/requests" />
+              <MvpRow icon={<MousePointerClick size={18} />} label="Heatmaps" sub="See where visitors click" href="/dashboard/website/heatmaps" />
+            </MvpGroup>
+          </>
         )}
       </div>
-
-      {/* 1. Status strip — answers "is my site working?" in one line.
-         The first thing owners need on every visit. */}
-      {client?.id && (
-        <div className="db-fade db-d1">
-          <SiteStatusStrip clientId={client.id} />
-        </div>
-      )}
-
-      {/* 2. Live preview — full width on mobile, takes the larger
-         column on desktop. Visceral "this is what visitors see". */}
-      <div className="db-fade db-d2 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <WebsitePreview websiteUrl={client?.website ?? null} />
-        </div>
-        <div className="space-y-3">
-          <FormInboxCard />
-          <RequestStatusFeed />
-          {client?.id && <SiteAuditCard clientId={client.id} />}
-          <HandledByTeamPanel />
-        </div>
-      </div>
-
-      {/* 3. Performance section — grouped together so the chart +
-         hero + breakdown read as one "how is this doing" answer.
-         Hero number + metric cards now react to the time-range
-         selector via view.byRange (was previously chart-only). */}
-      <section className="db-fade db-d3 pt-4 mt-2" style={{ borderTop: '1px solid var(--db-border)' }}>
-        <h2 className="text-[15px] font-bold mb-3 text-ink">How your website is doing</h2>
-        {(() => {
-          const r = view.byRange?.[timeRange]
-          const num = r?.num ?? view.num
-          const pct = r?.pct ?? view.pct
-          const pctFull = r?.pctFull ?? view.pctFull
-          const up = r?.up ?? view.up
-          const metrics = r?.metrics ?? view.metrics
-          void pct  /* used by the strip elsewhere */
-          return (
-            <div className="space-y-4">
-              <HeroMetric ctx={view.ctx} num={num} pctFull={pctFull} up={up} />
-              <TrendChart
-                data={view.chartData}
-                timeRange={timeRange}
-                onTimeRangeChange={setTimeRange}
-                up={up}
-                unit={view.unit}
-              />
-              <MetricGrid title={view.bdtitle} metrics={metrics} />
-            </div>
-          )
-        })()}
-      </section>
-
-      {/* 4. AM note — only shows when there's an actual note. */}
-      {view.am.note && (
-        <div className="db-fade db-d4 pt-4 mt-2" style={{ borderTop: '1px solid var(--db-border)' }}>
-          <AMNote
-            name={view.am.name}
-            initials={view.am.initials}
-            role={view.am.role}
-            note={view.am.note}
-          />
-        </div>
-      )}
-    </div>
+    </MvpShell>
   )
 }
