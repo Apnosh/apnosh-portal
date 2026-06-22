@@ -2,19 +2,19 @@
 
 /**
  * Persistent app top bar (DoorDash-style). Left: the current location as a
- * dropdown — tap to switch between locations an owner manages. Right: profile,
- * notifications (→ Notifications), and messages (→ Messages). Rendered by MvpShell so
- * it stays put across the owner app screens with the bottom nav — one app.
+ * dropdown — tap to switch between locations an owner manages. Right: settings
+ * and messages. Alerts live in the bottom nav, so there's no header bell.
+ * Rendered by MvpShell so it stays put across the owner app screens.
  */
 import { useState } from 'react'
 import Link from 'next/link'
-import { Bell, MessageCircle, User, ChevronDown, Check } from 'lucide-react'
+import { MessageCircle, Settings, ChevronDown, Check } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 
 const C = { green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)', ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea' }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
-export default function AppHeader({ unread }: { unread?: boolean }) {
+export default function AppHeader(_props: { unread?: boolean }) {
   const { client, availableClients, switchClient } = useClient()
   const name = client?.name?.trim() || 'Your restaurant'
   const initial = (name[0] ?? '🍽').toUpperCase()
@@ -30,10 +30,9 @@ export default function AppHeader({ unread }: { unread?: boolean }) {
         <ChevronDown size={16} color={C.mute} style={{ flexShrink: 0, transition: 'transform .15s', transform: open ? 'rotate(180deg)' : 'none' }} />
       </button>
 
-      {/* right: profile · notifications · messages */}
+      {/* right: settings · messages */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-        <IconLink href="/dashboard/profile" label="Profile"><User size={19} /></IconLink>
-        <IconLink href="/dashboard/inbox" label="Notifications" dot={unread}><Bell size={19} /></IconLink>
+        <IconLink href="/dashboard/settings" label="Settings"><Settings size={19} /></IconLink>
         <IconLink href="/dashboard/messages" label="Messages"><MessageCircle size={19} /></IconLink>
       </div>
 
