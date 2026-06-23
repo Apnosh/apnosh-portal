@@ -2131,6 +2131,10 @@ const CATALOG = [
   { id: "winback", type: "automation", icon: "heart", title: "Win back quiet guests", sub: "Reach people who haven't been in a while", cad: "auto", hot: true },
 ];
 const catGet = (id) => CATALOG.find((x) => x.id === id);
+// promoevent has no bespoke builder yet, so it opens (and is priced + billed)
+// as "launch". Single source of truth so the card price can never drift from
+// the plan that actually opens.
+const buildIdFor = (id) => (id === "promoevent" ? "launch" : id);
 
 /* ---- Plan art: detailed scene illustrations (white + accents on the type gradient) ---- */
 const STAR = "M0 -5 1.5 -1.6 5 -1.6 2.2 0.7 3.1 4 0 2 -3.1 4 -2.2 0.7 -5 -1.6 -1.5 -1.6Z";
@@ -2195,7 +2199,7 @@ const ROWS = [
 
 function planTags(p) {
   const t = [];
-  const price = priceLabel(p.id);
+  const price = priceLabel(buildIdFor(p.id));
   if (price) t.push({ label: price, accent: true });
   t.push({ label: CADENCE_TAG[p.cad] || "Plan" });
   if (p.season) t.push({ label: "Seasonal", accent: true });
@@ -2346,7 +2350,7 @@ function SearchBar({ value, onChange }) {
   );
 }
 
-function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended }) {
+function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading }) {
   const [q, setQ] = useState("");
   const [featHidden, setFeatHidden] = useState(false);
   const query = q.trim().toLowerCase();
@@ -2364,6 +2368,14 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended }) {
       <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
       <div style={{ paddingTop: 6 }}><SearchBar value={q} onChange={setQ} /></div>
       <div style={{ padding: "0 20px 14px" }}><div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, lineHeight: 1.4 }}>Prices are estimates. You approve before anything runs, and you only pay when each piece ships.</div></div>
+      {!query && recsLoading && !recFeatured && (
+        <div style={{ padding: "0 20px 14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, background: TOKENS.mintTint, border: `1px solid ${TOKENS.line}`, borderRadius: 12, padding: "9px 13px" }}>
+            <div style={{ width: 14, height: 14, borderRadius: 7, border: `2px solid rgba(0,0,0,0.12)`, borderTopColor: TOKENS.mintDark, animation: "aspin 0.8s linear infinite", flexShrink: 0 }} />
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub }}>Finding your best picks from your goals and reviews</span>
+          </div>
+        </div>
+      )}
       {query ? (
         <div style={{ padding: "0 20px" }}>
           <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 12 }}>{results.length} {results.length === 1 ? "plan" : "plans"} for "{q}"</div>
@@ -2820,6 +2832,7 @@ function Builder({ itemId, menu, onBack, onGenerate }) {
         )}
       </div>
       <div style={{ flexShrink: 0, padding: "12px 22px 20px" }}>
+        {priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You approve before anything runs, and only pay when each piece ships.</div>}
         <button onClick={() => ready && onGenerate(vals)} disabled={!ready} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", cursor: ready ? "pointer" : "default", background: ready ? "#fff" : "rgba(255,255,255,0.45)", color: ready ? c1 : "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent", transition: "background 150ms ease" }}>
           Build my plan
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ready ? c1 : "#fff"} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
@@ -3097,16 +3110,16 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, onCreate, onClose } = {}) {
-  const [route, setRoute] = useState(() => (initialItem ? { name: "build", itemId: initialItem === "promoevent" ? "launch" : initialItem } : { name: "browse" }));
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, onCreate, onClose } = {}) {
+  const [route, setRoute] = useState(() => (initialItem ? { name: "build", itemId: buildIdFor(initialItem) } : { name: "browse" }));
 
   const exit = () => { if (onClose) onClose(); };
 
-  // Catalog card -> Builder. promoevent has no slot config yet; route it to
-  // launch until its bespoke config is added.
+  // Catalog card -> Builder. promoevent has no slot config yet; buildIdFor
+  // routes it to launch (and prices it as launch on the card, so the number
+  // never drifts from the plan that opens).
   const openCard = (id, from, rowId) => {
-    const itemId = id === "promoevent" ? "launch" : id;
-    setRoute({ name: "build", itemId, from, rowId });
+    setRoute({ name: "build", itemId: buildIdFor(id), from, rowId });
   };
   const backToBrowse = () => setRoute({ name: "browse" });
   const backToSource = () => (route.from === "catall" ? setRoute({ name: "catall", rowId: route.rowId }) : backToBrowse());
@@ -3159,7 +3172,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <>
               <AppHeader />
               <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-                <PlanBrowse restaurant={restaurant} recommended={recommended} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
+                <PlanBrowse restaurant={restaurant} recommended={recommended} recsLoading={recsLoading} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
               </div>
             </>
           )}
