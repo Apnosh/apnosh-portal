@@ -49,8 +49,9 @@ export default function CampaignDetailPage() {
   async function ship() {
     if (!camp) return
     setBusy(true)
-    await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: new Date().toISOString() } }) }).catch(() => {})
-    setCamp({ ...camp, status: 'shipped', phase: 'monitor' })
+    const shippedAt = new Date().toISOString()
+    await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: shippedAt } }) }).catch(() => {})
+    setCamp({ ...camp, status: 'shipped', phase: 'monitor', shippedAt })
     setBusy(false)
   }
   async function del() {
@@ -81,7 +82,7 @@ export default function CampaignDetailPage() {
             {!shipped && <HonestBillBar items={camp.draft.items} note={path === 'strategist' ? 'Approving is free. Each piece bills only when it ships.' : 'Nothing is charged until a piece ships.'} />}
             <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, padding: '12px 16px calc(12px + env(safe-area-inset-bottom))', background: '#fff' }}>
               {shipped ? (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, color: C.greenDk, fontWeight: 700, fontSize: 14, background: C.greenSoft, borderRadius: 12, padding: 13 }}><Check size={16} /> Shipped — your team’s on it</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, color: C.greenDk, fontWeight: 700, fontSize: 14, background: C.greenSoft, borderRadius: 12, padding: 13 }}><Check size={16} /> {path === 'diy' ? 'Scheduled and live' : 'Live, and your team is on it'}</div>
               ) : (
                 <button onClick={ship} disabled={busy} style={{ width: '100%', background: GRAD, color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: busy ? 0.7 : 1 }}>
                   {busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />}
@@ -111,11 +112,13 @@ function Detail({ camp, onToggleOptOut, onToggleInclude, onRemove, onSetQty }: {
   const bill = summarize(items)
   const shipped = camp.status === 'shipped'
   const inReview = !shipped && camp.phase === 'review'
+  const liveSince = shipped && camp.shippedAt ? fmtShipped(camp.shippedAt) : ''
+  const diy = camp.draft.path === 'diy'
 
   return (
     <div>
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: shipped ? C.greenSoft : '#eef0ef', color: shipped ? C.greenDk : C.mute, borderRadius: 99, padding: '4px 11px', fontWeight: 700, fontSize: 11.5, marginBottom: 10 }}>
-        <span style={{ width: 6, height: 6, borderRadius: 99, background: shipped ? C.green : C.faint }} />{shipped ? 'Live' : inReview ? 'In review' : 'Draft'}
+        <span style={{ width: 6, height: 6, borderRadius: 99, background: shipped ? C.green : C.faint }} />{shipped ? (liveSince ? `Live since ${liveSince}` : 'Live') : inReview ? 'In review' : 'Draft'}
       </div>
       <h1 style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 24, margin: '0 0 4px', lineHeight: 1.15 }}>{camp.draft.name}</h1>
       {brief && <p style={{ fontSize: 13, color: C.mute, margin: '0 0 14px' }}>{brief.objective}{brief.projected ? ` · ${brief.projected}` : ''}</p>}
@@ -127,8 +130,14 @@ function Detail({ camp, onToggleOptOut, onToggleInclude, onRemove, onSetQty }: {
         </div>
       )}
       {shipped && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.greenSoft, color: C.greenDk, borderRadius: 12, padding: '11px 12px', marginBottom: 14, fontSize: 12.5, fontWeight: 600 }}>
-          <Check size={15} /> Shipped. Each piece bills only as it’s delivered.
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: C.greenSoft, color: C.greenDk, borderRadius: 12, padding: '11px 12px', marginBottom: 14, fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>
+          <Check size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>
+            <b>{liveSince ? `Live since ${liveSince}.` : 'Live.'}</b>{' '}
+            {diy
+              ? 'Each piece is scheduled to go out as planned. You are only billed for a piece when it ships.'
+              : 'Your team is preparing each piece now. You are only billed for a piece when it ships.'}
+          </span>
         </div>
       )}
 
@@ -178,6 +187,13 @@ function Detail({ camp, onToggleOptOut, onToggleInclude, onRemove, onSetQty }: {
       )}
     </div>
   )
+}
+
+function fmtShipped(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const now = new Date()
+  return d.toLocaleDateString('en-US', d.getFullYear() === now.getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function Row({ k, v }: { k: string; v: string }) {
