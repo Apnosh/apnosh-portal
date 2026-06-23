@@ -11,35 +11,33 @@ import AppHeader from "../app-header";
    ============================================================ */
 
 const TOKENS = {
-  ink: "#141716",
-  sub: "#7a837f",
-  faint: "#a8b0ab",
-  line: "#e8eae9",
+  ink: "#181b1a",
+  sub: "#9aa19d",
+  faint: "#b8beba",
+  line: "#ededec",
   card: "#ffffff",
-  mint: "#3dba8f",
-  mintDark: "#269670",
-  mintTint: "#e6f6ef",
-  dash: "#cdd3cf",
-  pageBg: "#f5f7f6",
-  surface: "#f8faf9",
-  glow: "rgba(61,186,143,0.12)",
+  mint: "#4abd98",
+  mintDark: "#2e9a78",
+  mintTint: "#eaf7f3",
+  dash: "#d8ddda",
+  pageBg: "#2b2d31",
 };
 
-/* Per-goal gradients (145deg, vibrant -> deep) */
+/* Per-goal gradients (135deg, light -> deep) */
 const G = {
-  launch: ["#ff9f43", "#e55039"],
-  event: ["#38c9b8", "#2667b5"],
-  deal: ["#a8e063", "#43a047"],
-  nearby: ["#a87cf7", "#5f27cd"],
-  loyalty: ["#ffc312", "#ee8c1b"],
-  nights: ["#74b9ff", "#2e6dba"],
-  orders: ["#55efc4", "#2e9968"],
-  reviews: ["#7c8cf8", "#4834d4"],
-  catering: ["#e66886", "#8e3254"],
-  winback: ["#fd79a8", "#d63449"],
-  firstvisit: ["#00d2d3", "#0a8f96"],
+  launch: ["#f6a23a", "#ee4c2c"],
+  event: ["#34b6ae", "#2e73b6"],
+  deal: ["#c6d24f", "#5fae3e"],
+  nearby: ["#9a5bf0", "#6a39de"],
+  loyalty: ["#f7c948", "#f0922f"],
+  nights: ["#5ba8e8", "#3b6fd4"],
+  orders: ["#6fd06a", "#34a76a"],
+  reviews: ["#8089ff", "#5b53d6"],
+  catering: ["#c85b7c", "#9c3a6a"],
+  winback: ["#f57f97", "#e85f7c"],
+  firstvisit: ["#23c0b6", "#0f97a8"],
 };
-const grad = (k) => `linear-gradient(145deg, ${G[k][0]} 0%, ${G[k][1]} 100%)`;
+const grad = (k) => `linear-gradient(135deg, ${G[k][0]} 0%, ${G[k][1]} 100%)`;
 
 /* ---------- Illustrations (white-on-gradient, hand-drawn) ---------- */
 const Ill = {
@@ -361,25 +359,19 @@ function GoalCard({ goal, onClick }) {
       onPointerUp={() => setPress(false)}
       onPointerLeave={() => setPress(false)}
       style={{
-        textAlign: "left", border: "none", background: TOKENS.card,
-        borderRadius: 20, padding: 0, cursor: "pointer", width: "100%", overflow: "hidden",
-        boxShadow: press ? "0 2px 8px rgba(0,0,0,0.08)" : "0 2px 12px rgba(20,30,26,0.06), 0 0 0 1px rgba(20,30,26,0.04)",
-        transform: press ? "scale(0.97)" : "scale(1)", transition: "transform 180ms cubic-bezier(.2,.8,.4,1), box-shadow 180ms ease",
+        textAlign: "left", border: `1px solid ${TOKENS.line}`, background: TOKENS.card,
+        borderRadius: 18, padding: 12, cursor: "pointer", width: "100%",
+        boxShadow: press ? "0 1px 3px rgba(0,0,0,0.05)" : "0 1px 2px rgba(20,30,26,0.04), 0 10px 22px rgba(20,30,26,0.05)",
+        transform: press ? "scale(0.975)" : "scale(1)", transition: "transform 140ms ease, box-shadow 140ms ease",
         display: "flex", flexDirection: "column", WebkitTapHighlightColor: "transparent",
       }}>
       <div style={{
-        height: 96, background: grad(goal.id), position: "relative",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        overflow: "hidden",
-      }}>
-        <div style={{ position: "absolute", width: 120, height: 120, borderRadius: 60, background: "rgba(255,255,255,0.1)", top: -40, right: -30 }} />
-        <div style={{ position: "absolute", width: 60, height: 60, borderRadius: 30, background: "rgba(0,0,0,0.06)", bottom: -20, left: -10 }} />
-        <div style={{ position: "relative" }}>{Ill[goal.id]}</div>
-      </div>
-      <div style={{ padding: "11px 12px 13px" }}>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 15, color: TOKENS.ink, lineHeight: 1.2, marginBottom: 4 }}>{goal.title}</div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, lineHeight: 1.35 }}>{goal.sub}</div>
-      </div>
+        height: 92, borderRadius: 13, background: grad(goal.id),
+        display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 11,
+        boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.08)`,
+      }}>{Ill[goal.id]}</div>
+      <div style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 15.5, color: TOKENS.ink, lineHeight: 1.15, marginBottom: 5 }}>{goal.title}</div>
+      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.32 }}>{goal.sub}</div>
     </button>
   );
 }
@@ -615,7 +607,6 @@ function Direct({ onBack, onPickPart }) {
 function Confirm({ title, body, meta, onBack }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-      <style>{`@keyframes confpop{0%{opacity:0;transform:scale(0.7)}100%{opacity:1;transform:scale(1)}} @keyframes confcheck{0%{stroke-dashoffset:24}100%{stroke-dashoffset:0}}`}</style>
       <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ paddingTop: 4, marginBottom: 22 }}>
           <CircleBtn onClick={onBack}>
@@ -623,17 +614,16 @@ function Confirm({ title, body, meta, onBack }) {
           </CircleBtn>
         </div>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 8px 30px" }}>
-          <div style={{ width: 80, height: 80, borderRadius: 40, background: `linear-gradient(145deg, ${TOKENS.mintTint}, ${TOKENS.glow})`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 24, animation: "confpop 0.4s cubic-bezier(.2,.8,.4,1)", boxShadow: `0 8px 24px ${TOKENS.glow}` }}>
-            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" style={{ strokeDasharray: 24, animation: "confcheck 0.5s ease 0.3s both" }} /></svg>
+          <div style={{ width: 74, height: 74, borderRadius: 37, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 22 }}>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
           </div>
-          <h1 style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 25, color: TOKENS.ink, margin: "0 0 12px", letterSpacing: -0.3 }}>{title}</h1>
-          <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14.5, color: TOKENS.sub, lineHeight: 1.55, margin: 0, maxWidth: 290 }}>{body}</p>
-          {meta && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, marginTop: 20, background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 14, padding: "11px 18px", boxShadow: "0 2px 8px rgba(20,30,26,0.04)" }}>{meta}</div>}
+          <h1 style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 24, color: TOKENS.ink, margin: "0 0 11px", letterSpacing: -0.2 }}>{title}</h1>
+          <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14.5, color: TOKENS.sub, lineHeight: 1.5, margin: 0, maxWidth: 290 }}>{body}</p>
+          {meta && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, marginTop: 18, background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 12, padding: "10px 16px" }}>{meta}</div>}
           <button onClick={onBack} style={{
-            width: "100%", maxWidth: 320, height: 54, borderRadius: 27, border: "none",
-            background: TOKENS.mint, color: "#fff", cursor: "pointer", marginTop: 30,
+            width: "100%", maxWidth: 320, height: 52, borderRadius: 26, border: `1.5px solid ${TOKENS.mint}`,
+            background: "#fff", color: TOKENS.mintDark, cursor: "pointer", marginTop: 28,
             fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16, WebkitTapHighlightColor: "transparent",
-            boxShadow: `0 6px 18px ${TOKENS.glow}`,
           }}>See it in Campaigns</button>
         </div>
       </div>
@@ -2162,15 +2152,15 @@ function planTags(p) {
 
 function PlanCardV({ p, onOpen, full }) {
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 160, textAlign: "left", background: "#fff", border: "none", borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 2px 8px rgba(20,30,26,0.06), 0 0 0 1px rgba(20,30,26,0.04)", transition: "transform 180ms cubic-bezier(.2,.8,.4,1), box-shadow 180ms ease" }}>
-      <div style={{ position: "relative", height: 94, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
-        <div style={{ position: "absolute", width: 120, height: 120, borderRadius: 60, background: "rgba(255,255,255,0.1)", bottom: -40, right: -28 }} />
-        <div style={{ position: "absolute", width: 64, height: 64, borderRadius: 32, background: "rgba(0,0,0,0.05)", bottom: -24, left: -18 }} />
+    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 156, textAlign: "left", background: "#fff", border: "none", borderRadius: 16, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 1px 3px rgba(20,30,26,0.06), 0 0 0 1px rgba(20,30,26,0.05)" }}>
+      <div style={{ position: "relative", height: 90, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+        <div style={{ position: "absolute", width: 110, height: 110, borderRadius: 55, background: "rgba(255,255,255,0.12)", bottom: -36, right: -24 }} />
+        <div style={{ position: "absolute", width: 60, height: 60, borderRadius: 30, background: "rgba(0,0,0,0.05)", bottom: -22, left: -16 }} />
         <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={62} /></div>
       </div>
-      <div style={{ padding: "11px 12px 13px" }}>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, marginBottom: 4, minHeight: 33 }}>{p.title}</div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.sub, lineHeight: 1.38, marginBottom: 9, minHeight: 30, overflow: "hidden" }}>{p.sub}</div>
+      <div style={{ padding: "10px 11px 12px" }}>
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, marginBottom: 3, minHeight: 33 }}>{p.title}</div>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.sub, lineHeight: 1.35, marginBottom: 8, minHeight: 30, overflow: "hidden" }}>{p.sub}</div>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
       </div>
     </button>
@@ -2192,15 +2182,15 @@ function PlanCardH({ p, onOpen }) {
 
 function PlanCardBig({ p, onOpen, full }) {
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 274, textAlign: "left", background: "#fff", border: "none", borderRadius: 20, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 4px 16px rgba(20,30,26,0.07), 0 0 0 1px rgba(20,30,26,0.04)", transition: "transform 180ms cubic-bezier(.2,.8,.4,1)" }}>
-      <div style={{ position: "relative", height: 126, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
-        <div style={{ position: "absolute", width: 180, height: 180, borderRadius: 90, background: "rgba(255,255,255,0.1)", bottom: -60, right: -36 }} />
-        <div style={{ position: "absolute", width: 100, height: 100, borderRadius: 50, background: "rgba(0,0,0,0.05)", bottom: -34, left: -28 }} />
-        <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={88} /></div>
+    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 270, textAlign: "left", background: "#fff", border: "none", borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 3px 10px rgba(20,30,26,0.07), 0 0 0 1px rgba(20,30,26,0.05)" }}>
+      <div style={{ position: "relative", height: 120, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
+        <div style={{ position: "absolute", width: 150, height: 150, borderRadius: 75, background: "rgba(255,255,255,0.12)", bottom: -50, right: -30 }} />
+        <div style={{ position: "absolute", width: 92, height: 92, borderRadius: 46, background: "rgba(0,0,0,0.05)", bottom: -30, left: -26 }} />
+        <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={86} /></div>
       </div>
-      <div style={{ padding: "14px 16px 16px" }}>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 17, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.18, marginBottom: 5, minHeight: 40 }}>{p.title}</div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.42, marginBottom: 11, minHeight: 35 }}>{p.sub}</div>
+      <div style={{ padding: "13px 15px 15px" }}>
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 17, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.15, marginBottom: 4, minHeight: 40 }}>{p.title}</div>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.4, marginBottom: 10, minHeight: 35 }}>{p.sub}</div>
         <div style={{ display: "flex", gap: 6 }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
       </div>
     </button>
@@ -2222,10 +2212,10 @@ function CategoryRow({ row, onOpen, onSeeAll }) {
       <div className="apnosh-row" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "2px 20px", scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}>
         {items.map((p) => big ? <PlanCardBig key={p.id} p={p} onOpen={onOpen} /> : <PlanCardV key={p.id} p={p} onOpen={onOpen} />)}
         <button onClick={() => onSeeAll(row.id)} style={{ flexShrink: 0, width: big ? 110 : 92, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
-          <div style={{ width: 48, height: 48, borderRadius: 24, background: TOKENS.surface, border: `1.5px solid ${TOKENS.line}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "background 150ms ease" }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mint} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+          <div style={{ width: 46, height: 46, borderRadius: 23, background: "#eef1ef", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
           </div>
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: TOKENS.mint }}>View all</span>
+          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: TOKENS.ink }}>View all</span>
         </button>
       </div>
     </div>
@@ -2233,24 +2223,22 @@ function CategoryRow({ row, onOpen, onSeeAll }) {
 }
 
 function FeaturedCard({ onOpen, onDismiss }) {
-  const GRAD = "linear-gradient(150deg, #1db894 0%, #2672d4 60%, #4834d4 100%)";
+  const GRAD = "linear-gradient(135deg, #25c2a0, #2f72d6)";
   const INK = "#2660c4";
   return (
-    <div style={{ padding: "0 20px 22px" }}>
-      <div style={{ position: "relative", borderRadius: 22, overflow: "hidden", background: GRAD, boxShadow: "0 12px 32px rgba(38,114,212,0.28), 0 4px 12px rgba(38,114,212,0.12)" }}>
-        <div style={{ position: "absolute", width: 200, height: 200, borderRadius: 100, background: "rgba(255,255,255,0.08)", top: -80, right: -40 }} />
-        <div style={{ position: "absolute", width: 100, height: 100, borderRadius: 50, background: "rgba(0,0,0,0.06)", bottom: -30, left: -20 }} />
-        <button onClick={onDismiss} aria-label="Dismiss" style={{ position: "absolute", top: 12, right: 12, width: 30, height: 30, borderRadius: 15, border: "none", background: "rgba(255,255,255,0.18)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2, WebkitTapHighlightColor: "transparent", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+    <div style={{ padding: "0 20px 20px" }}>
+      <div style={{ position: "relative", borderRadius: 18, overflow: "hidden", background: GRAD, boxShadow: "0 10px 24px rgba(47,114,214,0.3)" }}>
+        <button onClick={onDismiss} aria-label="Dismiss" style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: 14, border: "none", background: "rgba(255,255,255,0.22)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2, WebkitTapHighlightColor: "transparent" }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
-        <button onClick={() => onOpen("featured")} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "18px 18px 20px", background: "none", WebkitTapHighlightColor: "transparent", position: "relative" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.18)", borderRadius: 20, padding: "5px 12px 5px 8px", marginBottom: 12, backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>
-            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, color: "#fff", letterSpacing: 0.2 }}>{FEATURED.hook}</span>
+        <button onClick={() => onOpen("featured")} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "15px 16px 16px", background: "none", WebkitTapHighlightColor: "transparent" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 700, color: "#fff" }}>{FEATURED.hook}</span>
           </div>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 23, fontWeight: 600, color: "#fff", lineHeight: 1.12, marginBottom: 7, paddingRight: 28 }}>{FEATURED.title}</div>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: "rgba(255,255,255,0.88)", lineHeight: 1.45, marginBottom: 18 }}>{FEATURED.sub}</div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 42, padding: "0 18px", borderRadius: 21, background: "#fff", color: INK, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, boxShadow: "0 4px 14px rgba(0,0,0,0.12)" }}>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 600, color: "#fff", lineHeight: 1.15, marginBottom: 6, paddingRight: 24 }}>{FEATURED.title}</div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.92)", lineHeight: 1.4, marginBottom: 14 }}>{FEATURED.sub}</div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, background: "#fff", color: INK, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600 }}>
             Get ready for Father's Day
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
           </div>
@@ -2263,8 +2251,8 @@ function FeaturedCard({ onOpen, onDismiss }) {
 function SearchBar({ value, onChange }) {
   return (
     <div style={{ padding: "0 20px 16px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, height: 48, borderRadius: 16, background: TOKENS.surface, border: `1px solid ${TOKENS.line}`, padding: "0 15px", transition: "border-color 150ms ease, box-shadow 150ms ease" }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.2-3.2" /></svg>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, height: 46, borderRadius: 14, background: "#f1f3f2", padding: "0 14px" }}>
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.2-3.2" /></svg>
         <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Search plans, like reel or win back" style={{ flex: 1, border: "none", background: "none", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14.5, color: TOKENS.ink }} />
         {value && <button onClick={() => onChange("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>}
       </div>
@@ -2272,69 +2260,39 @@ function SearchBar({ value, onChange }) {
   );
 }
 
-const BROWSE_FILTERS = [
-  { id: "foryou", label: "For you" },
-  { id: "plan", label: "Plans" },
-  { id: "content", label: "Content" },
-  { id: "email", label: "Email & texts" },
-  { id: "task", label: "Quick tasks" },
-  { id: "automation", label: "Automatic" },
-];
 function PlanBrowse({ restaurant, onOpen, onSeeAll }) {
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState("foryou");
   const [featHidden, setFeatHidden] = useState(false);
   const query = q.trim().toLowerCase();
-  const results = query ? CATALOG.filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : null;
-  const suggested = ROWS[0].ids.map(catGet).filter(Boolean);
-  const list = query ? results : (filter === "foryou" ? suggested : CATALOG.filter((p) => p.type === filter));
-  const showFeatured = !query && filter === "foryou" && !featHidden;
+  const results = query ? CATALOG.filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
   return (
     <div style={{ paddingBottom: 26 }}>
-      <style>{`.apnosh-chips::-webkit-scrollbar{display:none}`}</style>
-      <div style={{ position: "sticky", top: 0, zIndex: 4, background: "#fff", paddingTop: 6, boxShadow: `0 1px 0 ${TOKENS.line}` }}>
-        <SearchBar value={q} onChange={setQ} />
-        {!query && (
-          <div className="apnosh-chips" style={{ display: "flex", gap: 8, overflowX: "auto", padding: "0 20px 12px", scrollbarWidth: "none" }}>
-            {BROWSE_FILTERS.map((f) => {
-              const on = filter === f.id;
-              return (
-                <button key={f.id} onClick={() => setFilter(f.id)} style={{
-                  flexShrink: 0, cursor: "pointer", borderRadius: 20, padding: "8px 15px",
-                  border: on ? "none" : `1px solid ${TOKENS.line}`, background: on ? TOKENS.ink : "#fff",
-                  color: on ? "#fff" : TOKENS.sub, fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600,
-                  WebkitTapHighlightColor: "transparent", transition: "background 150ms ease, color 150ms ease",
-                }}>{f.label}</button>
-              );
-            })}
+      <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
+      <div style={{ paddingTop: 6 }}><SearchBar value={q} onChange={setQ} /></div>
+      {query ? (
+        <div style={{ padding: "0 20px" }}>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 12 }}>{results.length} {results.length === 1 ? "plan" : "plans"} for "{q}"</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {results.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} full />)}
           </div>
-        )}
-      </div>
-
-      {showFeatured && <div style={{ paddingTop: 14 }}><FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} /></div>}
-
-      <div style={{ padding: query ? "14px 20px 0" : "10px 20px 0" }}>
-        {query
-          ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 12 }}>{list.length} {list.length === 1 ? "result" : "results"} for "{q}"</div>
-          : filter === "foryou" && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, marginBottom: 12 }}>Picked from your menu and what's coming up</div>}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {list.map((p) => <PlanCardH key={p.id} p={p} onOpen={onOpen} />)}
+          {results.length === 0 && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.faint, padding: "10px 0" }}>Nothing matches yet. Try a word like video, email, or reviews, or describe it with Something else.</div>}
         </div>
-        {query && list.length === 0 && (
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.faint, padding: "8px 0 16px", lineHeight: 1.5 }}>Nothing matches yet. Try a word like video, email, or reviews — or describe your own below.</div>
-        )}
-      </div>
-
-      <div style={{ padding: "16px 20px 0" }}>
-        <button onClick={() => onOpen("__else")} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, cursor: "pointer", background: TOKENS.surface, border: `1.5px dashed ${TOKENS.dash}`, borderRadius: 16, padding: "15px 16px", WebkitTapHighlightColor: "transparent" }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
-          <div style={{ flex: 1, textAlign: "left" }}>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink }}>Don't see it? Describe your own</div>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 1 }}>Tell us in your words and we'll draft it</div>
+      ) : (
+        <>
+          {!featHidden && <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />}
+          {ROWS.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} />)}
+          <div style={{ padding: "4px 20px 0" }}>
+            <button onClick={() => onOpen("__else")} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, cursor: "pointer", background: "#fff", border: `1.5px dashed ${TOKENS.dash}`, borderRadius: 14, padding: "14px 15px", WebkitTapHighlightColor: "transparent" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+              <div style={{ flex: 1, textAlign: "left" }}>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink }}>Don't see it? Describe your own</div>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 1 }}>Tell us in your words and we'll draft it</div>
+              </div>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+            </button>
           </div>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
-        </button>
-      </div>
+        </>
+      )}
     </div>
   );
 }
@@ -2396,16 +2354,16 @@ function PlanDetail({ itemId, onBack, onAdd, onMarketer }) {
           {p.hook && <div style={{ marginTop: 14, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 700, color: "rgba(255,255,255,0.92)" }}>{p.hook}</div>}
           <div style={{ marginTop: p.hook ? 3 : 14, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 25, fontWeight: 600, color: "#fff", lineHeight: 1.12 }}>{p.title}</div>
           <div style={{ marginTop: 7, fontFamily: "Inter, sans-serif", fontSize: 13.5, color: "rgba(255,255,255,0.92)", lineHeight: 1.45 }}>{p.sub}</div>
-          <div style={{ display: "flex", gap: 6, marginTop: 13 }}>{planTags(p).map((t, i) => <span key={i} style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.22)", borderRadius: 20, padding: "4px 10px", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>{t.label}</span>)}</div>
+          <div style={{ display: "flex", gap: 6, marginTop: 13 }}>{planTags(p).map((t, i) => <span key={i} style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.22)", borderRadius: 7, padding: "3px 8px" }}>{t.label}</span>)}</div>
         </div>
-        <div style={{ padding: "22px 20px 10px" }}>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.ink, marginBottom: 8, letterSpacing: 0.2 }}>How it works</div>
-          <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.sub, lineHeight: 1.55, margin: "0 0 24px" }}>{how}</p>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.ink, marginBottom: 12, letterSpacing: 0.2 }}>What you get</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ padding: "20px 20px 10px" }}>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.ink, marginBottom: 8 }}>How it works</div>
+          <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.sub, lineHeight: 1.5, margin: "0 0 22px" }}>{how}</p>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.ink, marginBottom: 11 }}>What you get</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {get.map((g, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ width: 24, height: 24, borderRadius: 12, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 2px 6px ${TOKENS.glow}` }}>
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
                 </span>
                 <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink }}>{g}</span>
@@ -2415,8 +2373,8 @@ function PlanDetail({ itemId, onBack, onAdd, onMarketer }) {
         </div>
       </div>
       <div style={{ flexShrink: 0, padding: "12px 20px 22px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-        <button onClick={onAdd} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: `0 6px 18px ${TOKENS.glow}` }}>Add this plan</button>
-        <button onClick={onMarketer} style={{ width: "100%", height: 48, marginTop: 10, borderRadius: 24, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Hand it to a marketer</button>
+        <button onClick={onAdd} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Add this plan</button>
+        <button onClick={onMarketer} style={{ width: "100%", height: 48, marginTop: 9, borderRadius: 24, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Hand it to a marketer</button>
       </div>
     </div>
   );
@@ -2593,7 +2551,7 @@ function TimePick({ value, onChange, accent }) {
   );
 }
 
-function Builder({ itemId, menu, restaurant, onBack, onGenerate }) {
+function Builder({ itemId, menu, onBack, onGenerate }) {
   const p = catGet(itemId) || CATALOG[0];
   const cfg = QL[itemId] || { lead: "Set up {thing}.", slots: { thing: { k: "text", v: p.title.toLowerCase() } } };
   const c1 = (TYPE_G[p.type] || TYPE_G.plan)[1];
@@ -2708,211 +2666,68 @@ function Builder({ itemId, menu, restaurant, onBack, onGenerate }) {
     return null;
   };
 
-  /* ---- live-preview model ("Watch it build" composer) ---- */
-  const SLOT_LABELS = {
-    radius: "Distance", days: "Which days", offer: "The offer", reward: "The reward", audience: "Who it's for",
-    how: "How we ask", which: "Which reviews", subject: "Featured", count: "How many", format: "Format",
-    purpose: "Purpose", headline: "Headline", where: "Where it runs", special: "The special", date: "Start date",
-    tier: "Creator size", message: "Message", cadence: "How often", content: "What's inside", channel: "Send by",
-    treat: "The treat", what: "What", timing: "Timing", angle: "The angle", assets: "Photos", kind: "Type",
-    amounts: "Amounts", occasion: "Occasion", action: "What it does", who: "Who it's for", event: "The event",
-    price: "Price", time: "Time", rsvp: "Entry", duration: "How long", when: "When",
-  };
-  const labelFor = (k, f) => (f && f.label) ? f.label : (SLOT_LABELS[k] || (k.charAt(0).toUpperCase() + k.slice(1)));
-  const briefText =
-    parts.map((part) => { const m = part.match(/^\{([a-z]+)\}$/); if (!m) return part; return filled(m[1]) ? fmt(m[1]) : "…"; }).join("")
-    + activeExtras.map((e) => e.clause(vals[e.id])).join("") + ".";
-  const subjectKey = ["subject", "menu", "headline", "event", "what"].find((k) => cfg.slots[k]);
-  const subjectVal = subjectKey ? vals[subjectKey] : null;
-  const headline = (subjectVal && String(subjectVal).trim()) || p.title;
-  const previewKind = (p.type === "email" || p.type === "automation") ? "email" : p.type === "content" ? "post" : "plan";
-  const rname = (restaurant || "Your spot").trim();
-  const initial = rname.charAt(0).toUpperCase();
-  const handle = "@" + rname.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 18);
-  const dayActive = (Array.isArray(vals.days) && vals.days.length) ? DAYS_FULL.map((nm) => vals.days.includes(nm)) : null;
-  const planTags = genSteps(p, cfg, vals).map((st) => st.tag).filter((t, i, a) => a.indexOf(t) === i).slice(0, 4);
-  const slotKeys = Object.keys(cfg.slots);
-  const pct = Math.round((slotKeys.filter(filled).length / Math.max(1, slotKeys.length)) * 100);
-
-  const rowStyle = (active, done) => ({
-    width: "100%", display: "flex", alignItems: "center", gap: 11, textAlign: "left", cursor: "pointer",
-    background: "#fff", border: active ? `1.5px solid ${c1}` : `1px solid ${TOKENS.line}`,
-    borderRadius: 14, padding: "12px 14px", WebkitTapHighlightColor: "transparent",
-    boxShadow: active ? `0 4px 14px ${c1}22` : "0 1px 2px rgba(20,30,26,0.03)",
-    transition: "border-color 150ms ease, box-shadow 150ms ease",
-  });
-  const ChevR = <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>;
-  const labelCss = { fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 0.3, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 3 };
-  const valueCss = (done) => ({ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: done ? TOKENS.ink : TOKENS.faint, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" });
-
-  const igActions = (
-    <div style={{ display: "flex", alignItems: "center", gap: 15, marginBottom: 9 }}>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20s-7-4.7-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.3-7 10-7 10z" /></svg>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-6A8.4 8.4 0 1 1 21 11.5z" /></svg>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z" /></svg>
-    </div>
-  );
-
-  const previewHeader = (right) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 13px" }}>
-      <div style={{ width: 34, height: 34, borderRadius: 17, background: gType(p.type), color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 15, flexShrink: 0 }}>{initial}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: "Inter, sans-serif", fontWeight: 700, fontSize: 13, color: TOKENS.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{rname}</div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>{right}</div>
-      </div>
-    </div>
-  );
-
-  let previewCard;
-  if (previewKind === "post") {
-    previewCard = (
-      <div style={{ background: "#fff", borderRadius: 20, overflow: "hidden", boxShadow: "0 10px 30px rgba(20,30,26,0.10), 0 0 0 1px rgba(20,30,26,0.05)" }}>
-        {previewHeader("Sponsored")}
-        <div style={{ height: 150, background: gType(p.type), position: "relative", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-          <div style={{ position: "absolute", width: 150, height: 150, borderRadius: 75, background: "rgba(255,255,255,0.1)", top: -52, right: -34 }} />
-          <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={92} /></div>
-        </div>
-        <div style={{ padding: "12px 14px 15px" }}>
-          {igActions}
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.5 }}><span style={{ fontWeight: 700 }}>{handle}</span> {briefText}</div>
-        </div>
-      </div>
-    );
-  } else if (previewKind === "email") {
-    previewCard = (
-      <div style={{ background: "#fff", borderRadius: 20, overflow: "hidden", boxShadow: "0 10px 30px rgba(20,30,26,0.10), 0 0 0 1px rgba(20,30,26,0.05)" }}>
-        <div style={{ borderBottom: `1px solid ${TOKENS.line}` }}>{previewHeader("to your list · now")}</div>
-        <div style={{ padding: "14px 16px 17px" }}>
-          <div style={{ ...labelCss, marginBottom: 5 }}>Subject</div>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 17, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.25, marginBottom: 9 }}>{headline}</div>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.55 }}>{briefText}</div>
-          <div style={{ display: "inline-flex", alignItems: "center", height: 38, padding: "0 18px", borderRadius: 19, background: c1, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, marginTop: 14 }}>See what's new</div>
-        </div>
-      </div>
-    );
-  } else {
-    previewCard = (
-      <div style={{ background: "#fff", borderRadius: 20, overflow: "hidden", boxShadow: "0 10px 30px rgba(20,30,26,0.10), 0 0 0 1px rgba(20,30,26,0.05)" }}>
-        <div style={{ height: 116, background: gType(p.type), position: "relative", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-          <div style={{ position: "absolute", width: 140, height: 140, borderRadius: 70, background: "rgba(255,255,255,0.1)", bottom: -56, right: -30 }} />
-          <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={74} /></div>
-          <span style={{ position: "absolute", top: 12, left: 13, fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.22)", borderRadius: 20, padding: "4px 10px", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>{CADENCE_TAG[p.cad] || "Plan"}</span>
-        </div>
-        <div style={{ padding: "14px 16px 16px" }}>
-          <div style={labelCss}>Campaign</div>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, marginBottom: 6 }}>{p.title}</div>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub, lineHeight: 1.5 }}>{briefText}</div>
-          {dayActive && (
-            <div style={{ display: "flex", gap: 5, margin: "13px 0 2px" }}>
-              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-                <div key={i} style={{ flex: 1, height: 30, borderRadius: 8, background: dayActive[i] ? c1 : TOKENS.surface, border: dayActive[i] ? "none" : `1px solid ${TOKENS.line}`, color: dayActive[i] ? "#fff" : TOKENS.faint, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700 }}>{d}</div>
-              ))}
-            </div>
-          )}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 13 }}>
-            {planTags.map((t, i) => <span key={i} style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: c1, background: `${c1}14`, borderRadius: 20, padding: "4px 11px" }}>{t}</span>)}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: TOKENS.pageBg, position: "relative" }}>
-      <style>{`@keyframes apnsheet{0%{transform:translateY(100%)}100%{transform:translateY(0)}}@keyframes apnscrim{0%{opacity:0}100%{opacity:1}}`}</style>
-
-      {/* header with progress */}
-      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "8px 14px 9px", background: "#fff", borderBottom: `1px solid ${TOKENS.line}` }}>
-        <CircleBtn onClick={onBack}>
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3a3a3a" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
-        </CircleBtn>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16.5, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</div>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: ready ? c1 : TOKENS.faint }}>{ready ? "Ready to build" : `${pct}% set up`}</div>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: gType(p.type), position: "relative" }}>
+      <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 22px 24px", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 24 }}>
+          <CircleBtn onClick={onBack} dark>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+          </CircleBtn>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 600, color: "#fff" }}>{p.title}</div>
         </div>
-        <div style={{ width: 46, height: 6, borderRadius: 3, background: TOKENS.line, overflow: "hidden", flexShrink: 0 }}>
-          <div style={{ width: `${pct}%`, height: "100%", background: c1, borderRadius: 3, transition: "width 300ms ease" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 16 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
+          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 1.4, color: "rgba(255,255,255,0.92)", textTransform: "uppercase" }}>Here's a starting point</span>
         </div>
-      </div>
-
-      {/* preview stage + controls */}
-      <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "16px 16px 22px" }}>
-        <div style={{ position: "relative", borderRadius: 24, padding: "15px 16px 18px", background: `radial-gradient(120% 90% at 50% 0%, ${c1}16 0%, rgba(255,255,255,0) 68%), ${TOKENS.surface}`, border: `1px solid ${TOKENS.line}`, marginBottom: 22 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, marginBottom: 13 }}>
-            <span style={{ width: 6, height: 6, borderRadius: 3, background: c1, boxShadow: `0 0 0 3px ${c1}22` }} />
-            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: TOKENS.sub, textTransform: "uppercase" }}>Live preview</span>
-          </div>
-          {previewCard}
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, textAlign: "center", marginTop: 13, lineHeight: 1.4 }}>Updates as you choose. A mock-up — the real asset is made after you build.</div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 11 }}>
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1.2, color: TOKENS.faint, textTransform: "uppercase" }}>Customize</span>
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint }}>Tap a card to change it</span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-          {slotKeys.map((k) => {
-            const f = cfg.slots[k]; const done = filled(k); const active = editing === k;
+        <div style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 25, lineHeight: 1.42, letterSpacing: -0.3 }}>
+          {parts.map((part, i) => {
+            const m = part.match(/^\{([a-z]+)\}$/);
+            if (!m) return <span key={i} style={{ color: editing ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.92)", transition: "color 200ms ease" }}>{part}</span>;
+            const k = m[1], isActive = editing === k, isFilled = filled(k);
             return (
-              <button key={k} onClick={() => setEditing(active ? null : k)} style={rowStyle(active, done)}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={labelCss}>{labelFor(k, f)}</div>
-                  <div style={valueCss(done)}>{fmt(k)}</div>
-                </div>
-                {done && <span style={{ width: 18, height: 18, borderRadius: 9, background: `${c1}1f`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={c1} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg></span>}
-                {ChevR}
-              </button>
+              <span key={i} onClick={() => setEditing(isActive ? null : k)} style={{
+                cursor: "pointer", color: isActive ? "#fff" : editing ? "rgba(255,255,255,0.5)" : "#fff",
+                textDecoration: "underline", textDecorationStyle: isFilled ? "solid" : "dashed", textDecorationThickness: 2, textUnderlineOffset: 4,
+                textDecorationColor: isActive ? "#fff" : "rgba(255,255,255,0.7)", transition: "color 200ms ease",
+              }}>{fmt(k)}</span>
             );
           })}
-          {activeExtras.map((e) => {
-            const ev = Array.isArray(vals[e.id]) ? joinList(vals[e.id]) : String(vals[e.id]);
-            return (
-              <button key={e.id} onClick={() => setEditing(e.id)} style={rowStyle(editing === e.id, true)}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={labelCss}>{e.label}</div>
-                  <div style={valueCss(true)}>{ev}</div>
-                </div>
-                {ChevR}
-              </button>
-            );
-          })}
+          {activeExtras.map((e) => (
+            <span key={e.id} onClick={() => setEditing(e.id)} style={{
+              cursor: "pointer", color: editing === e.id ? "#fff" : editing ? "rgba(255,255,255,0.5)" : "#fff",
+              textDecoration: "underline", textDecorationStyle: "solid", textDecorationThickness: 2, textUnderlineOffset: 4,
+              textDecorationColor: editing === e.id ? "#fff" : "rgba(255,255,255,0.7)", transition: "color 200ms ease",
+            }}>{e.clause(vals[e.id])}</span>
+          ))}
+          <span style={{ color: editing ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.92)", transition: "color 200ms ease" }}>.</span>
         </div>
-        {pendingExtras.length > 0 && (
-          <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {pendingExtras.map((e) => (
-              <button key={e.id} onClick={() => setEditing(e.id)} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", borderRadius: 20, padding: "8px 13px", border: `1.5px dashed ${TOKENS.dash}`, background: "#fff", color: TOKENS.sub, fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={c1} strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>{e.label}
-              </button>
-            ))}
+        {s ? (
+          <div style={{ marginTop: 20, background: "#fff", borderRadius: 16, padding: 14, boxShadow: "0 12px 30px rgba(0,0,0,0.18)" }}>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 0.4, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 12 }}>{s.label ? s.label : s.k === "multi" ? "Pick any that fit" : "Change this"}</div>
+            {editor()}
+            {isExtra && <button onClick={() => { setV(Array.isArray(vals[editing]) ? [] : ""); close(); }} style={removeBtn}>Remove</button>}
           </div>
+        ) : (
+          <>
+            {pendingExtras.length > 0 && (
+              <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", gap: 9 }}>
+                {pendingExtras.map((e) => (
+                  <button key={e.id} onClick={() => setEditing(e.id)} style={addPillStyle}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>{e.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.8)", marginTop: 14 }}>Tap anything underlined to change it.</div>
+          </>
         )}
       </div>
-
-      {/* footer CTA */}
-      <div style={{ flexShrink: 0, padding: "12px 16px 18px", background: "#fff", borderTop: `1px solid ${TOKENS.line}` }}>
-        <button onClick={() => ready && onGenerate(vals)} disabled={!ready} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", cursor: ready ? "pointer" : "default", background: ready ? c1 : "#d8ddd9", color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent", transition: "background 200ms ease, box-shadow 200ms ease", boxShadow: ready ? `0 8px 22px ${c1}44` : "none" }}>
-          {ready ? "Build my plan" : "Finish the details above"}
-          {ready && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>}
+      <div style={{ flexShrink: 0, padding: "12px 22px 20px" }}>
+        <button onClick={() => ready && onGenerate(vals)} disabled={!ready} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", cursor: ready ? "pointer" : "default", background: ready ? "#fff" : "rgba(255,255,255,0.45)", color: ready ? c1 : "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent", transition: "background 150ms ease" }}>
+          Build my plan
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ready ? c1 : "#fff"} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
         </button>
       </div>
-
-      {/* editor bottom sheet */}
-      {s && (
-        <>
-          <div onClick={close} style={{ position: "absolute", inset: 0, background: "rgba(16,22,19,0.4)", animation: "apnscrim 180ms ease", zIndex: 5 }} />
-          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 6, background: "#fff", borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: "10px 18px 22px", maxHeight: "76%", overflowY: "auto", boxShadow: "0 -8px 30px rgba(0,0,0,0.18)", animation: "apnsheet 260ms cubic-bezier(.2,.8,.4,1)" }}>
-            <div style={{ width: 38, height: 4, borderRadius: 2, background: TOKENS.line, margin: "0 auto 14px" }} />
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, color: TOKENS.ink }}>{s.label ? s.label : s.k === "multi" ? "Pick any that fit" : labelFor(editing, s)}</div>
-              <button onClick={close} style={{ width: 30, height: 30, borderRadius: 15, border: "none", background: "#f1f3f2", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-              </button>
-            </div>
-            {editor()}
-            {isExtra && <button onClick={() => { setV(Array.isArray(vals[editing]) ? [] : ""); close(); }} style={removeBtn}>Remove this</button>}
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -2927,21 +2742,12 @@ function Generating({ itemId, onDone }) {
     return () => { clearInterval(iv); clearTimeout(t); };
   }, []);
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: gType(p.type), position: "relative", overflow: "hidden" }}>
-      <style>{`
-        @keyframes aspin{to{transform:rotate(360deg)}}
-        @keyframes genpulse{0%,100%{opacity:0.06;transform:scale(1)}50%{opacity:0.12;transform:scale(1.05)}}
-        @keyframes genfade{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:none}}
-      `}</style>
-      <div style={{ position: "absolute", width: 300, height: 300, borderRadius: 150, background: "rgba(255,255,255,0.08)", top: "20%", left: "-20%", animation: "genpulse 3s ease-in-out infinite" }} />
-      <div style={{ position: "absolute", width: 200, height: 200, borderRadius: 100, background: "rgba(255,255,255,0.06)", bottom: "10%", right: "-10%", animation: "genpulse 3s ease-in-out infinite 1s" }} />
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 40px", position: "relative" }}>
-        <div style={{ width: 62, height: 62, borderRadius: 31, border: "3px solid rgba(255,255,255,0.2)", borderTopColor: "#fff", animation: "aspin 0.7s linear infinite", marginBottom: 28 }} />
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 23, fontWeight: 600, color: "#fff", marginBottom: 12, textAlign: "center", letterSpacing: -0.3 }}>Building your plan</div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14.5, color: "rgba(255,255,255,0.88)", textAlign: "center", minHeight: 20, animation: "genfade 0.3s ease" }} key={li}>{lines[li]}</div>
-        <div style={{ display: "flex", gap: 6, marginTop: 28 }}>
-          {lines.map((_, i) => <div key={i} style={{ width: i <= li ? 20 : 6, height: 6, borderRadius: 3, background: i <= li ? "#fff" : "rgba(255,255,255,0.3)", transition: "width 300ms ease, background 300ms ease" }} />)}
-        </div>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: gType(p.type) }}>
+      <style>{`@keyframes aspin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 40px" }}>
+        <div style={{ width: 58, height: 58, borderRadius: 29, border: "4px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", animation: "aspin 0.8s linear infinite", marginBottom: 26 }} />
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 600, color: "#fff", marginBottom: 10, textAlign: "center" }}>Building your plan</div>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14.5, color: "rgba(255,255,255,0.9)", textAlign: "center", minHeight: 20 }}>{lines[li]}</div>
       </div>
     </div>
   );
@@ -3125,14 +2931,12 @@ function PlanSteps({ itemId, vals, onBack, onAdd, onMarketer }) {
             <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16.5, fontWeight: 600, color: TOKENS.ink }}>{p.title}</div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "16px 0 8px" }}>
-          <div style={{ width: 28, height: 28, borderRadius: 14, background: TOKENS.glow, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill={TOKENS.mintDark}><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
-          </div>
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 0.6, color: TOKENS.mintDark, textTransform: "uppercase" }}>Your plan is ready</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "16px 0 7px" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill={TOKENS.mintDark}><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
+          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.mintDark, textTransform: "uppercase" }}>Your plan is ready</span>
         </div>
-        <h2 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 23, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.18, margin: "0 0 7px", letterSpacing: -0.3 }}>Here's how it'll work</h2>
-        <p style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.5, margin: "0 0 22px" }}>Adjust any step, or remove what you don't need. Then add it and we'll get it going.</p>
+        <h2 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, margin: "0 0 6px", letterSpacing: -0.3 }}>Here's how it'll work</h2>
+        <p style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.5, margin: "0 0 20px" }}>Adjust any step, or remove what you don't need. Then add it and we'll get it going.</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {onSteps.map((st, idx) => (
             <div key={st.id} style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 16, padding: "14px 15px", boxShadow: "0 1px 2px rgba(20,30,26,0.03)" }}>
@@ -3251,7 +3055,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           )}
 
           {route.name === "build" && (
-            <Builder itemId={route.itemId} menu={menu} restaurant={restaurant} onBack={backToSource} onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })} />
+            <Builder itemId={route.itemId} menu={menu} onBack={backToSource} onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })} />
           )}
 
           {route.name === "generating" && (
