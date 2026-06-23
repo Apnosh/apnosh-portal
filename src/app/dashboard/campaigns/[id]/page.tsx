@@ -82,7 +82,7 @@ export default function CampaignDetailPage() {
             {!shipped && <HonestBillBar items={camp.draft.items} note={path === 'strategist' ? 'Approving is free. Each piece bills only when it ships.' : 'Nothing is charged until a piece ships.'} />}
             <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, padding: '12px 16px calc(12px + env(safe-area-inset-bottom))', background: '#fff' }}>
               {shipped ? (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, color: C.greenDk, fontWeight: 700, fontSize: 14, background: C.greenSoft, borderRadius: 12, padding: 13 }}><Check size={16} /> {path === 'diy' ? 'Scheduled and live' : 'Live, and your team is on it'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, color: C.greenDk, fontWeight: 700, fontSize: 14, background: C.greenSoft, borderRadius: 12, padding: 13 }}><Check size={16} /> {path === 'diy' ? 'Live in your plan' : 'Live, and your team is on it'}</div>
               ) : (
                 <button onClick={ship} disabled={busy} style={{ width: '100%', background: GRAD, color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: busy ? 0.7 : 1 }}>
                   {busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />}
@@ -135,7 +135,7 @@ function Detail({ camp, onToggleOptOut, onToggleInclude, onRemove, onSetQty }: {
           <span>
             <b>{liveSince ? `Live since ${liveSince}.` : 'Live.'}</b>{' '}
             {diy
-              ? 'Each piece is scheduled to go out as planned. You are only billed for a piece when it ships.'
+              ? 'This plan is yours to run. Post each piece when you are ready, and you are only billed for a piece when it ships.'
               : 'Your team is preparing each piece now. You are only billed for a piece when it ships.'}
           </span>
         </div>
