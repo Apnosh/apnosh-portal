@@ -2214,6 +2214,18 @@ const ROWS = [
   { id: "tasks", title: "Quick tasks", ids: ["gbp", "reviewsreply", "qr", "friction", "shoot"] },
 ];
 
+// Goal-first lenses: let the owner filter the catalog by the job they came to do
+// (the UX study's ask). Each maps to a ROW id; "all" is the full browse.
+const LENS_CHIPS = [
+  { id: "all", label: "All" },
+  { id: "bring", label: "Bring people in" },
+  { id: "keep", label: "Keep regulars" },
+  { id: "online", label: "Online orders" },
+  { id: "bigorders", label: "Catering" },
+  { id: "brandnew", label: "New or relaunch" },
+  { id: "auto", label: "Autopilot" },
+];
+
 function planTags(p) {
   const t = [];
   const price = priceLabel(buildIdFor(p.id));
@@ -2370,6 +2382,7 @@ function SearchBar({ value, onChange }) {
 function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading }) {
   const [q, setQ] = useState("");
   const [featHidden, setFeatHidden] = useState(false);
+  const [lens, setLens] = useState("all");
   const query = q.trim().toLowerCase();
   const results = query ? CATALOG.filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
   // AI recommendations (fetched by the wrapper): drive the featured card + the
@@ -2403,10 +2416,31 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading }) 
         </div>
       ) : (
         <>
-          {!featHidden && (recFeatured
-            ? <RecFeatured item={recFeatured.item} reason={recFeatured.reason} onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />
-            : <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />)}
-          {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} />)}
+          <div className="apnosh-row" style={{ display: "flex", gap: 8, overflowX: "auto", padding: "0 20px 16px" }}>
+            {LENS_CHIPS.map((c) => { const on = lens === c.id; return (
+              <button key={c.id} onClick={() => setLens(c.id)} style={{ flexShrink: 0, height: 34, padding: "0 14px", borderRadius: 17, border: on ? "none" : `1px solid ${TOKENS.line}`, background: on ? TOKENS.ink : "#fff", color: on ? "#fff" : TOKENS.sub, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>{c.label}</button>
+            ); })}
+          </div>
+          {lens === "all" ? (
+            <>
+              {!featHidden && (recFeatured
+                ? <RecFeatured item={recFeatured.item} reason={recFeatured.reason} onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />
+                : <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />)}
+              {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} />)}
+            </>
+          ) : (() => {
+            const row = ROWS.find((r) => r.id === lens);
+            const items = row ? row.ids.map(catGet).filter(Boolean) : [];
+            return (
+              <div style={{ padding: "0 20px 6px" }}>
+                <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, color: TOKENS.ink, marginBottom: 3 }}>{row ? row.title : ""}</div>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 14 }}>{items.length} {items.length === 1 ? "play" : "plays"} for this goal</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {items.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} full />)}
+                </div>
+              </div>
+            );
+          })()}
           <div style={{ padding: "4px 20px 0" }}>
             <button onClick={() => onOpen("__else")} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, cursor: "pointer", background: "#fff", border: `1.5px dashed ${TOKENS.dash}`, borderRadius: 14, padding: "14px 15px", WebkitTapHighlightColor: "transparent" }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
