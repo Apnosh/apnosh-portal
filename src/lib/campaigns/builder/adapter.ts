@@ -10,9 +10,10 @@
  */
 
 import type { CampaignTemplate, CampaignCategory, ContentBeatSpec } from '../data/campaign-templates'
-import type { CampaignDraft, GoalKey, BuildPath } from '../types'
+import type { CampaignDraft, GoalKey, BuildPath, LineItem } from '../types'
 import { composeCampaign } from '../campaign-composer'
 import { summarize } from '../types'
+import { serviceById, serviceToLine } from '../catalog'
 
 type Goal = 'acquire' | 'capacity' | 'retain' | 'reviews'
 type Dur = 'ongoing' | 'once' | 'short' | 'setup'
@@ -27,6 +28,8 @@ interface ItemPlan {
   ads?: boolean
   /** override default audience ids */
   audiences?: string[]
+  /** priced-catalog service ids to add as line items (website / SEO / GBP work) */
+  services?: string[]
 }
 
 const GOAL_META: Record<Goal, { goalKey: GoalKey; category: CampaignCategory; kpi: string; objective: string; audiences: string[] }> = {
@@ -67,8 +70,12 @@ const PLANS: Record<string, ItemPlan> = {
   earlyaccess: { title: 'Early access for regulars', goal: 'retain', dur: 'once', beats: [['email', 'email', 'Early-access email']] },
 
   // Tasks / setup
-  shoot: { title: 'Book a shoot', goal: 'acquire', dur: 'setup', beats: [['photo', 'social', 'Photo + video shoot'], ['reel', 'reels', 'Reel from the shoot']] },
-  gbp: { title: 'Polish your Google profile', goal: 'reviews', dur: 'setup', beats: [['post', 'gbp', 'Profile refresh + Google post']] },
+  shoot: { title: 'Photo & video shoot', goal: 'acquire', dur: 'setup', beats: [['photo', 'social', 'Photo + video shoot'], ['reel', 'reels', 'Reel from the shoot']] },
+  gbp: { title: 'Google Business Profile', goal: 'reviews', dur: 'setup', services: ['gbp-setup'], beats: [['post', 'gbp', 'Profile refresh + Google post']] },
+
+  // Web & SEO (priced services, real "stuff we can do")
+  website: { title: 'Website build & tune-up', goal: 'acquire', dur: 'setup', services: ['site-menu'], beats: [] },
+  seo: { title: 'Local SEO', goal: 'acquire', dur: 'ongoing', services: ['local-seo'], beats: [['post', 'gbp', 'Local SEO content & citations']] },
   reviewsreply: { title: 'Reply to reviews', goal: 'reviews', dur: 'ongoing', beats: [['post', 'social', 'Drafted review replies']] },
   qr: { title: 'Add a table QR', goal: 'retain', dur: 'setup', beats: [['post', 'social', 'QR table card design']] },
   friction: { title: 'Smooth out ordering', goal: 'acquire', dur: 'setup', beats: [['post', 'social', 'Order-now post + links']] },
@@ -137,7 +144,15 @@ export function draftFromBuilder({ itemId, vals }: BuilderInput): CampaignDraft 
   }
 
   const composed = composeCampaign(tpl, spec)
-  const bill = summarize(composed.items)
+
+  // Append any priced-catalog services this plan calls for (website / SEO / GBP),
+  // so the saved campaign carries real, billable work — not just content beats.
+  const serviceLines: LineItem[] = (plan.services ?? [])
+    .map((sid, i) => { const s = serviceById(sid); return s ? serviceToLine(s, `li-s-${sid}-${i}`) : null })
+    .filter((l): l is LineItem => l !== null)
+  const items = [...composed.items, ...serviceLines]
+
+  const bill = summarize(items)
   const path: BuildPath = 'strategist'  // owner approves, Apnosh builds
 
   return {
@@ -147,7 +162,7 @@ export function draftFromBuilder({ itemId, vals }: BuilderInput): CampaignDraft 
     path,
     phase: 'review',
     budgetMonthly: bill.perMonth,
-    items: composed.items,
+    items,
     planned: true,
     goalKey: meta.goalKey,
     targetDate: spec.date || undefined,

@@ -10,22 +10,26 @@ import AppHeader from "../app-header";
    Self-contained, clickable mobile preview.
    ============================================================ */
 
+/* Palette aligned to the rest of the portal (components/campaigns/ui.ts): cool
+   neutrals, the Apnosh green, one green gradient for primary actions. */
 const TOKENS = {
-  ink: "#14181a",
-  ink2: "#404a45",
-  sub: "#7f8c86",
-  faint: "#a9b3ae",
-  line: "#e8ebe7",
-  hair: "#eef1ed",
+  ink: "#1d1d1f",
+  ink2: "#3a3a3c",
+  sub: "#6e6e73",
+  faint: "#aeaeb2",
+  line: "#e6e6ea",
+  hair: "#ededf1",
   card: "#ffffff",
-  canvas: "#f6f5f0",     // warm paper canvas
-  canvas2: "#fbfaf6",
-  mint: "#4abd98",       // brand (per brand guidelines)
-  mintDark: "#1f8d6b",   // deepened for text/contrast
-  mintTint: "#e7f5ef",
-  dash: "#d3dcd6",
+  canvas: "#f5f5f7",     // cool grey app canvas
+  canvas2: "#fafafc",
+  mint: "#4abd98",       // brand
+  mintDark: "#2e9a78",
+  mintTint: "#eaf7f3",
+  dash: "#d3d6dc",
   pageBg: "#1b1e1c",
 };
+const GREEN_GRAD = "linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)";
+const BUILDER_GRAD = "linear-gradient(150deg,#46c098 0%,#23845f 100%)";  // immersive brand green
 
 /* Structured shadow + radius scale for a consistent, premium depth language */
 const SHADOW = {
@@ -633,7 +637,7 @@ function Confirm({ title, body, meta, onBack }) {
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 8px 30px" }}>
           <div style={{ position: "relative", width: 80, height: 80, marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: TOKENS.mintTint, animation: "apnring 1.4s ease-out infinite" }} />
-            <div style={{ position: "relative", width: 76, height: 76, borderRadius: 38, background: `linear-gradient(135deg, ${TOKENS.mint}, ${TOKENS.mintDark})`, display: "flex", alignItems: "center", justifyContent: "center", animation: "apnpop2 420ms cubic-bezier(.2,.8,.2,1) both", boxShadow: "0 12px 26px -8px rgba(31,141,107,0.6)" }}>
+            <div style={{ position: "relative", width: 76, height: 76, borderRadius: 38, background: `${GREEN_GRAD}`, display: "flex", alignItems: "center", justifyContent: "center", animation: "apnpop2 420ms cubic-bezier(.2,.8,.2,1) both", boxShadow: "0 12px 26px -8px rgba(31,141,107,0.6)" }}>
               <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
             </div>
           </div>
@@ -643,7 +647,7 @@ function Confirm({ title, body, meta, onBack }) {
             <span style={{ width: 6, height: 6, borderRadius: 3, background: TOKENS.mint }} />{meta}</div>}
           <button onClick={onBack} className="apnpop" style={{
             width: "100%", maxWidth: 320, height: 53, borderRadius: RADIUS.xl, border: "none",
-            background: `linear-gradient(135deg, ${TOKENS.mint}, ${TOKENS.mintDark})`, color: "#fff", cursor: "pointer", marginTop: 28,
+            background: `${GREEN_GRAD}`, color: "#fff", cursor: "pointer", marginTop: 28,
             fontFamily: FONT_D, fontWeight: 600, fontSize: 16, WebkitTapHighlightColor: "transparent", boxShadow: "0 10px 24px -10px rgba(31,141,107,0.7)",
           }}>See it in Campaigns</button>
         </div>
@@ -2062,6 +2066,8 @@ const ICONS = {
   people: <><circle cx="9" cy="8.5" r="3.2" /><circle cx="16.5" cy="9.5" r="2.5" /><path d="M3.5 19c0-3.3 2.5-5.4 5.5-5.4 1.7 0 3.2.7 4.2 1.9" /><path d="M14 19c.4-2.4 1.9-3.9 4-3.9" /></>,
   moon: <><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" /></>,
   camera: <><rect x="3.5" y="7" width="17" height="12" rx="2.5" /><circle cx="12" cy="13" r="3.3" /><path d="M8.5 7l1.5-2.5h4L15.5 7" /></>,
+  globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c2.6 2.4 2.6 15.6 0 18M12 3c-2.6 2.4-2.6 15.6 0 18" /></>,
+  search: <><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.4-3.4" /></>,
 };
 function IconG({ name, size = 26 }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{ICONS[name] || ICONS.tag}</svg>;
@@ -2073,40 +2079,18 @@ function TagPill({ children, accent }) {
     <span style={{ width: 4, height: 4, borderRadius: 2, background: accent ? "#e0a52e" : "#b6bdb7", flexShrink: 0 }} />{children}</span>;
 }
 
+/* The catalog is scoped to the services we actually deliver: short video,
+   graphic design, a photo/video shoot, websites, local SEO, and Google
+   Business Profile work. */
 const CATALOG = [
-  { id: "reach", type: "plan", icon: "pin", title: "Reach new locals", sub: "Get in front of nearby people who haven't been", cad: "recurring" },
-  { id: "nights", type: "plan", icon: "moon", title: "Fill your slow nights", sub: "Drive guests on your quiet days", cad: "recurring" },
-  { id: "firstvisit", type: "plan", icon: "people", title: "Win first-time visits", sub: "Give new people a reason to come in", cad: "recurring" },
-  { id: "regulars", type: "plan", icon: "heart", title: "Turn first-timers into regulars", sub: "Win the all-important second visit", cad: "recurring", hot: true },
-  { id: "catering", type: "plan", icon: "people", title: "Catering and big orders", sub: "Land group and office orders", cad: "recurring" },
-  { id: "reviewsplan", type: "plan", icon: "chat", title: "Boost reviews and rating", sub: "More fresh reviews, a higher star", cad: "recurring" },
-
   { id: "reel", type: "content", icon: "video", title: "A short video", sub: "A reel for Instagram and TikTok", cad: "once", hot: true },
-  { id: "story", type: "content", icon: "story", title: "A story", sub: "A quick post to stay top of mind", cad: "once" },
-  { id: "carousel", type: "content", icon: "image", title: "A carousel post", sub: "A swipeable set of photos or tips", cad: "once" },
   { id: "graphic", type: "content", icon: "image", title: "A designed graphic", sub: "A custom graphic for a post, story, or flyer", cad: "once" },
-  { id: "dish", type: "content", icon: "image", title: "Feature a dish", sub: "Show off one of your best plates", cad: "once", hot: true },
-  { id: "gpost", type: "content", icon: "store", title: "A Google Business post", sub: "An update on your listing, seen in Search and Maps", cad: "once" },
-  { id: "promoevent", type: "content", icon: "ticket", title: "Promote an event", sub: "Fill seats for a night, a holiday, a tasting", cad: "group" },
-  { id: "launch", type: "content", icon: "tag", title: "Launch a special", sub: "Roll out a limited-time or seasonal item", cad: "group", season: true },
-  { id: "creator", type: "content", icon: "people", title: "Work with a creator", sub: "Get a local creator to post about you", cad: "once" },
+  { id: "carousel", type: "content", icon: "image", title: "A carousel post", sub: "A swipeable set of photos or tips", cad: "once" },
+  { id: "shoot", type: "content", icon: "camera", title: "Photo & video shoot", sub: "Fresh photos and video of your food and space", cad: "setup", hot: true },
 
-  { id: "welcome", type: "email", icon: "mail", title: "Welcome new subscribers", sub: "Greet people the moment they join", cad: "auto" },
-  { id: "second", type: "email", icon: "mail", title: "Nudge a second visit", sub: "Bring first-timers back for round two", cad: "auto" },
-  { id: "news", type: "email", icon: "mail", title: "Monthly newsletter", sub: "A regular update to your regulars", cad: "recurring", hot: true },
-  { id: "slowoffer", type: "email", icon: "tag", title: "Slow-night offer", sub: "An email and text to fill quiet days", cad: "recurring", hot: true },
-  { id: "birthday", type: "email", icon: "gift", title: "Birthday treat", sub: "Send a little something on their birthday", cad: "auto" },
-  { id: "earlyaccess", type: "email", icon: "mail", title: "Early access for regulars", sub: "Let your list get first dibs", cad: "once" },
-
-  { id: "shoot", type: "task", icon: "camera", title: "Book a shoot", sub: "Get fresh photos and video of your food and space", cad: "setup" },
-  { id: "gbp", type: "task", icon: "store", title: "Polish your Google profile", sub: "Fix the hours, photos, and info people see", cad: "setup" },
-  { id: "reviewsreply", type: "task", icon: "chat", title: "Reply to reviews", sub: "We draft replies, you approve them", cad: "recurring" },
-  { id: "qr", type: "task", icon: "qr", title: "Add a table QR", sub: "Turn diners into followers and subscribers", cad: "setup" },
-  { id: "friction", type: "task", icon: "cart", title: "Smooth out ordering", sub: "Make it easier to order or book online", cad: "setup" },
-  { id: "giftcard", type: "task", icon: "gift", title: "Push gift cards", sub: "Sell gift cards for gifts and slow seasons", cad: "once", season: true },
-  { id: "ticket", type: "task", icon: "ticket", title: "Run a ticketed event", sub: "Sell spots to a dinner or class", cad: "group" },
-
-  { id: "winback", type: "automation", icon: "heart", title: "Win back quiet guests", sub: "Reach people who haven't been in a while", cad: "auto", hot: true },
+  { id: "gbp", type: "task", icon: "store", title: "Google Business Profile", sub: "Optimize the listing people see in Search and Maps", cad: "setup" },
+  { id: "seo", type: "task", icon: "search", title: "Local SEO", sub: "Get found in nearby Google searches", cad: "recurring", hot: true },
+  { id: "website", type: "task", icon: "globe", title: "Website build & tune-up", sub: "A clean, fast site and menu people trust", cad: "setup" },
 ];
 const catGet = (id) => CATALOG.find((x) => x.id === id);
 
@@ -2134,17 +2118,12 @@ const PIC = {
   tray: (<><ellipse cx="28" cy="41" rx="20" ry="3.5" fill="rgba(255,255,255,0.3)" /><path d="M10 39a18 10.5 0 0 1 36 0z" fill="#fff" /><rect x="26" y="12" width="4" height="5" rx="2" fill="#fff" /><circle cx="28" cy="11.5" r="2.4" fill="#fff" /><path d="M16.5 33.5a12 7 0 0 1 23 0" fill="none" stroke="rgba(18,26,24,0.1)" strokeWidth="1.6" /></>),
   people: (<><circle cx="26" cy="19" r="8" fill="#fff" /><path d="M12 42c0-8 6.4-13 14-13s14 5 14 13z" fill="#fff" /><circle cx="40" cy="16" r="6.5" fill="#6fcf97" /><path d="M40 12.6v6.8M36.6 16h6.8" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" /></>),
   camera: (<><rect x="8" y="18" width="40" height="24" rx="5" fill="#fff" /><rect x="20" y="12" width="14" height="7" rx="2" fill="#fff" /><circle cx="28" cy="30" r="7.5" fill="rgba(18,26,24,0.16)" /><circle cx="28" cy="30" r="3.6" fill="rgba(18,26,24,0.42)" /><circle cx="41" cy="24" r="1.9" fill="#ffce5b" /></>),
+  web: (<><rect x="9" y="12" width="38" height="30" rx="4.5" fill="#fff" /><path d="M9 20.5h38" stroke="rgba(18,26,24,0.12)" strokeWidth="1.6" /><circle cx="14.5" cy="16.2" r="1.4" fill="#ff9166" /><circle cx="19.5" cy="16.2" r="1.4" fill="#ffce5b" /><circle cx="24.5" cy="16.2" r="1.4" fill="#6fcf97" /><rect x="14" y="26" width="15" height="3" rx="1.5" fill="rgba(18,26,24,0.18)" /><rect x="14" y="32" width="22" height="3" rx="1.5" fill="rgba(18,26,24,0.1)" /><rect x="14" y="37.5" width="11" height="3.4" rx="1.7" fill="#6fcf97" /></>),
+  seo: (<><circle cx="24" cy="24" r="12.5" fill="#fff" /><circle cx="24" cy="24" r="7.5" fill="none" stroke="rgba(18,26,24,0.14)" strokeWidth="2" /><path d="M33.5 33.5l8.5 8.5" stroke="#fff" strokeWidth="4.5" strokeLinecap="round" /><path d="M20 24.2l2.8 2.8 5.4-5.6" stroke="#6fcf97" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></>),
 };
 const PICK = {
-  reach: "map", nights: "night", firstvisit: "people", creator: "people", regulars: "loyalty", catering: "tray",
-  reviewsplan: "reviews", reviewsreply: "reviews", reviewreq: "reviews",
-  launch: "offer", slowoffer: "offer", giftcard: "offer",
-  reel: "reel", videoplan: "reel", story: "story", carousel: "carousel", dish: "dish",
-  gpost: "listing", gbp: "listing",
-  welcome: "mail", second: "mail", news: "mail", referral: "mail", earlyaccess: "mail",
-  birthday: "birthday", shoot: "camera", qr: "qr", friction: "ordering", ticket: "ticket",
-  listgrow: "auto", segment: "auto", utm: "chart", winback: "winback",
-  graphic: "carousel", promoevent: "ticket",
+  reel: "reel", graphic: "carousel", carousel: "carousel", shoot: "camera",
+  gbp: "listing", seo: "seo", website: "web",
 };
 function Art({ id, size = 62 }) {
   const key = PICK[id] || "offer";
@@ -2154,21 +2133,17 @@ function Art({ id, size = 62 }) {
 
 
 const FEATURED = {
-  id: "featured", type: "content", icon: "tag", eyebrow: "Tailored for you",
-  hook: "Father's Day is this Sunday",
-  title: "Bring in more families",
-  sub: "Feature your brunch and fill your tables.",
-  cad: "group", season: true,
+  id: "reel", type: "content", icon: "video", eyebrow: "Tailored for you",
+  hook: "Most-booked this month",
+  title: "Turn one dish into a scroll-stopping reel",
+  sub: "We shoot, edit, and post a short video for you.",
+  cad: "once",
 };
 
 const ROWS = [
-  { id: "suggested", title: "Suggested for you", note: "Based on your menu and what's coming up", big: true, ids: ["nights", "reach", "gpost", "reviewsreply", "dish", "winback", "slowoffer"] },
-  { id: "popular", title: "Popular with spots like yours", ids: ["reel", "dish", "slowoffer", "news", "winback", "regulars"] },
-  { id: "oneoff", title: "One-off content", ids: ["reel", "story", "carousel", "graphic", "dish", "gpost", "creator"] },
-  { id: "bring", title: "Bring people in", ids: ["reach", "nights", "firstvisit", "promoevent", "ticket", "catering", "slowoffer"] },
-  { id: "keep", title: "Keep them coming back", ids: ["second", "welcome", "birthday", "winback", "earlyaccess", "regulars"] },
-  { id: "auto", title: "Runs on its own", ids: ["winback", "welcome", "second", "birthday"] },
-  { id: "tasks", title: "Quick tasks", ids: ["gbp", "reviewsreply", "qr", "friction", "shoot"] },
+  { id: "suggested", title: "Suggested for you", note: "Based on your goals and what you can run now", big: true, ids: ["reel", "gbp", "graphic", "seo", "website"] },
+  { id: "content", title: "Content we'll make", ids: ["reel", "graphic", "carousel", "shoot"] },
+  { id: "found", title: "Get found online", ids: ["gbp", "seo", "website"] },
 ];
 
 function planTags(p) {
@@ -2178,40 +2153,41 @@ function planTags(p) {
 }
 
 /* Soft top sheen + floating illustration medallion shared by the gradient cards */
-function CardArt({ p, h, size }) {
+function IconTile({ p, tile = 52, art = 34 }) {
   return (
-    <div style={{ position: "relative", height: h, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: "inherit", borderTopRightRadius: "inherit" }}>
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 80% at 18% 0%, rgba(255,255,255,0.30), rgba(255,255,255,0) 60%)" }} />
-      <div style={{ position: "absolute", width: h * 1.5, height: h * 1.5, borderRadius: "50%", background: "rgba(255,255,255,0.10)", bottom: -h * 0.5, right: -h * 0.32 }} />
-      <div style={{ position: "absolute", width: h * 0.7, height: h * 0.7, borderRadius: "50%", background: "rgba(0,0,0,0.06)", bottom: -h * 0.28, left: -h * 0.2 }} />
-      <div style={{ position: "relative", display: "flex", filter: "drop-shadow(0 4px 8px rgba(0,0,0,0.16))" }}><Art id={p.id} size={size} /></div>
-      {p.hot && <span style={{ position: "absolute", top: 9, left: 10, fontFamily: FONT_B, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.6, color: "#fff", background: "rgba(0,0,0,0.22)", backdropFilter: "blur(4px)", borderRadius: 99, padding: "3px 8px", textTransform: "uppercase" }}>Popular</span>}
+    <div style={{ position: "relative", width: tile, height: tile, borderRadius: Math.round(tile * 0.28), background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", boxShadow: `0 4px 10px -3px ${gTypeMid(p.type)}55` }}>
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(110% 80% at 20% 0%, rgba(255,255,255,0.32), rgba(255,255,255,0) 62%)" }} />
+      <Art id={p.id} size={art} />
     </div>
   );
+}
+function HotPill() {
+  return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: FONT_B, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.5, color: TOKENS.mintDark, background: TOKENS.mintTint, borderRadius: 99, padding: "3px 8px 3px 7px", textTransform: "uppercase" }}><span style={{ width: 4, height: 4, borderRadius: 2, background: TOKENS.mint }} />Popular</span>;
 }
 
 function PlanCardV({ p, onOpen, full }) {
   return (
-    <button className="apncard" onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 158, textAlign: "left", background: TOKENS.card, border: `1px solid ${TOKENS.hair}`, borderRadius: RADIUS.md, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: SHADOW.card, overflow: "hidden" }}>
-      <CardArt p={p} h={94} size={62} />
-      <div style={{ padding: "11px 12px 13px" }}>
-        <div style={{ fontFamily: FONT_D, fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.22, marginBottom: 4, minHeight: 33, letterSpacing: -0.1 }}>{p.title}</div>
-        <div style={{ fontFamily: FONT_B, fontSize: 11, color: TOKENS.sub, lineHeight: 1.38, marginBottom: 9, minHeight: 30, overflow: "hidden" }}>{p.sub}</div>
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
+    <button className="apncard" onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 158, textAlign: "left", background: TOKENS.card, border: `1px solid ${TOKENS.line}`, borderRadius: RADIUS.md, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: "13px 13px 14px", boxShadow: SHADOW.card, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
+        <IconTile p={p} tile={46} art={30} />
+        {p.hot && <HotPill />}
       </div>
+      <div style={{ fontFamily: FONT_D, fontSize: 14, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.22, marginBottom: 4, minHeight: 34, letterSpacing: -0.1 }}>{p.title}</div>
+      <div style={{ fontFamily: FONT_B, fontSize: 11.5, color: TOKENS.sub, lineHeight: 1.38, marginBottom: 10, minHeight: 32, overflow: "hidden" }}>{p.sub}</div>
+      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: "auto" }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
     </button>
   );
 }
 
 function PlanCardH({ p, onOpen }) {
   return (
-    <button className="apncard" onClick={() => onOpen(p.id)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 13, background: TOKENS.card, border: `1px solid ${TOKENS.hair}`, borderRadius: RADIUS.md, padding: "11px 13px", cursor: "pointer", WebkitTapHighlightColor: "transparent", boxShadow: SHADOW.card }}>
-      <div style={{ position: "relative", width: 52, height: 52, borderRadius: 14, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", boxShadow: `0 4px 10px -3px ${gTypeMid(p.type)}66` }}>
-        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(110% 80% at 20% 0%, rgba(255,255,255,0.32), rgba(255,255,255,0) 62%)" }} />
-        <Art id={p.id} size={34} />
-      </div>
+    <button className="apncard" onClick={() => onOpen(p.id)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 13, background: TOKENS.card, border: `1px solid ${TOKENS.line}`, borderRadius: RADIUS.md, padding: "11px 13px", cursor: "pointer", WebkitTapHighlightColor: "transparent", boxShadow: SHADOW.card }}>
+      <IconTile p={p} tile={52} art={34} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, color: TOKENS.ink, marginBottom: 2, letterSpacing: -0.1 }}>{p.title}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 2 }}>
+          <div style={{ fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.1 }}>{p.title}</div>
+          {p.hot && <HotPill />}
+        </div>
         <div style={{ fontFamily: FONT_B, fontSize: 12, color: TOKENS.sub, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.sub}</div>
         <div style={{ display: "flex", gap: 5 }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
       </div>
@@ -2222,13 +2198,14 @@ function PlanCardH({ p, onOpen }) {
 
 function PlanCardBig({ p, onOpen, full }) {
   return (
-    <button className="apncard" onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 272, textAlign: "left", background: TOKENS.card, border: `1px solid ${TOKENS.hair}`, borderRadius: RADIUS.lg, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: SHADOW.card, overflow: "hidden" }}>
-      <CardArt p={p} h={124} size={86} />
-      <div style={{ padding: "14px 16px 16px" }}>
-        <div style={{ fontFamily: FONT_D, fontSize: 17, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.16, marginBottom: 5, minHeight: 40, letterSpacing: -0.2 }}>{p.title}</div>
-        <div style={{ fontFamily: FONT_B, fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.42, marginBottom: 11, minHeight: 35 }}>{p.sub}</div>
-        <div style={{ display: "flex", gap: 6 }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
+    <button className="apncard" onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 272, textAlign: "left", background: TOKENS.card, border: `1px solid ${TOKENS.line}`, borderRadius: RADIUS.lg, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: "16px 16px 17px", boxShadow: SHADOW.card, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 13 }}>
+        <IconTile p={p} tile={56} art={38} />
+        {p.hot && <HotPill />}
       </div>
+      <div style={{ fontFamily: FONT_D, fontSize: 17.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.16, marginBottom: 5, letterSpacing: -0.2 }}>{p.title}</div>
+      <div style={{ fontFamily: FONT_B, fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.42, marginBottom: 12 }}>{p.sub}</div>
+      <div style={{ display: "flex", gap: 6 }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
     </button>
   );
 }
@@ -2262,8 +2239,8 @@ function CategoryRow({ row, onOpen, onSeeAll }) {
 
 /* Shared premium hero shell: layered aurora gradient, soft glow, dismiss, CTA */
 function HeroShell({ eyebrowIcon, eyebrow, title, body, cta, onOpen, onDismiss }) {
-  const GRAD = "linear-gradient(145deg, #28c6a4 0%, #2b8fd0 58%, #2f72d6 100%)";
-  const INK = "#2660c4";
+  const GRAD = "linear-gradient(145deg, #54c6a2 0%, #2e9a78 70%, #25845f 100%)";
+  const INK = TOKENS.mintDark;
   return (
     <div style={{ padding: "2px 20px 22px" }}>
       <div style={{ position: "relative", borderRadius: RADIUS.lg, overflow: "hidden", background: GRAD, boxShadow: SHADOW.hero }}>
@@ -2298,7 +2275,7 @@ function RecFeatured({ item, reason, onOpen, onDismiss }) {
 
 function FeaturedCard({ onOpen, onDismiss }) {
   const cal = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>;
-  return <HeroShell eyebrowIcon={cal} eyebrow={FEATURED.hook} title={FEATURED.title} body={FEATURED.sub} cta="Get ready for Father's Day" onOpen={() => onOpen("featured")} onDismiss={onDismiss} />;
+  return <HeroShell eyebrowIcon={cal} eyebrow={FEATURED.hook} title={FEATURED.title} body={FEATURED.sub} cta="Start a reel" onOpen={() => onOpen(FEATURED.id)} onDismiss={onDismiss} />;
 }
 
 function SearchBar({ value, onChange }) {
@@ -2444,7 +2421,7 @@ function PlanDetail({ itemId, onBack, onAdd, onMarketer }) {
         </div>
       </div>
       <div style={{ flexShrink: 0, padding: "13px 20px 22px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-        <button onClick={onAdd} className="apnpop" style={{ width: "100%", height: 53, borderRadius: RADIUS.xl, border: "none", cursor: "pointer", background: `linear-gradient(135deg, ${TOKENS.mint}, ${TOKENS.mintDark})`, color: "#fff", fontFamily: FONT_D, fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 10px 24px -10px rgba(31,141,107,0.7)" }}>Add this plan</button>
+        <button onClick={onAdd} className="apnpop" style={{ width: "100%", height: 53, borderRadius: RADIUS.xl, border: "none", cursor: "pointer", background: `${GREEN_GRAD}`, color: "#fff", fontFamily: FONT_D, fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 10px 24px -10px rgba(31,141,107,0.7)" }}>Add this plan</button>
         <button onClick={onMarketer} className="apnpop" style={{ width: "100%", height: 48, marginTop: 9, borderRadius: RADIUS.lg, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Hand it to a marketer</button>
       </div>
     </div>
@@ -2533,7 +2510,9 @@ const QL = {
   birthday: { lead: "Send {treat} on a guest's birthday, by {channel}.", slots: { treat: { k: "pick", v: "a free dessert", o: ["a free dessert", "a free drink", "a free appetizer", "10% off the table", "a free birthday combo"], custom: true }, channel: { k: "multi", v: ["email", "text"], o: ["email", "text"] } }, extras: [{ id: "limits", k: "text", label: "Add any limits", ph: "dine-in only, valid that week", clause: (v) => `, ${v}` }, { id: "code", k: "text", label: "Add a code", ph: "like BDAY", clause: (v) => `, code ${v}` }] },
   earlyaccess: { lead: "Give subscribers early access to {what}, {timing} before everyone.", slots: { what: { k: "multi", v: ["new menu items"], o: ["new menu items", "events", "specials", "reservations"] }, timing: { k: "pick", v: "a few days", o: ["a day", "a few days", "a week"] } } },
   shoot: { lead: "Book a {kind} shoot of {what}, on {date}.", slots: { kind: { k: "pick", v: "photo and video", o: ["photo", "video", "photo and video"] }, what: { k: "pick", v: "a few key dishes", o: ["your whole menu", "a few key dishes", "one dish", "your space inside", "your storefront", "your team"], custom: true }, date: { k: "date", v: 14 } }, extras: [{ id: "notes", k: "text", label: "Add a note", ph: "must-have shots, the vibe, props, parking", clause: (v) => `, plus ${v}` }] },
-  gbp: { lead: "Update your Google profile: {what}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] } } },
+  gbp: { lead: "Optimize your Google Business Profile: {what}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "categories", "attributes", "Q&A"] } } },
+  website: { lead: "Build or refresh your website, focused on {focus}.", slots: { focus: { k: "multi", v: ["menu", "hours & location"], o: ["menu", "hours & location", "online ordering", "reservations", "photos & story", "mobile speed"], custom: true } }, extras: [{ id: "current", k: "text", label: "Add your current site", ph: "yoursite.com, or 'none yet'", clause: (v) => `, starting from ${v}` }] },
+  seo: { lead: "Help you get found for {terms}, within {radius}.", slots: { terms: { k: "multi", v: ["best brunch", "coffee near me"], o: ["best brunch", "coffee near me", "tacos near me", "date-night dinner", "catering near me", "your cuisine + your city"], custom: true }, radius: { k: "slider", v: 5, min: 1, max: 25, unit: "mile" } } },
   reviewsreply: { lead: "Reply to {which} reviews.", slots: { which: { k: "pick", v: "all", o: ["all", "just critical ones", "4 stars and below", "unanswered ones"] } } },
   qr: { lead: "Add a table QR that {action}.", slots: { action: { k: "pick", v: "grows your list", o: ["grows your list", "collects reviews", "links your menu", "links your socials", "takes orders"] } } },
   friction: { lead: "Make {channel} easier for guests.", slots: { channel: { k: "pick", v: "online ordering", o: ["online ordering", "booking a table", "finding your menu", "joining your list"] } } },
@@ -2622,10 +2601,12 @@ function TimePick({ value, onChange, accent }) {
   );
 }
 
-function Builder({ itemId, menu, onBack, onGenerate }) {
+function Builder({ itemId, menu, onBack, onGenerate, onSaveDraft }) {
   const p = catGet(itemId) || CATALOG[0];
   const cfg = QL[itemId] || { lead: "Set up {thing}.", slots: { thing: { k: "text", v: p.title.toLowerCase() } } };
-  const c1 = (TYPE_G[p.type] || TYPE_G.plan)[1];
+  const c1 = TOKENS.mintDark;
+  const [dirty, setDirty] = useState(false);
+  const [exitAsk, setExitAsk] = useState(false);
   const [vals, setVals] = useState(() => {
     const o = {};
     for (const k in cfg.slots) { const s = cfg.slots[k]; if (s.k === "date") { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + (s.v || 7)); o[k] = d; } else if (s.k === "menu" && menu && menu.length) { o[k] = menu[0].l; } else o[k] = s.v; }
@@ -2655,9 +2636,11 @@ function Builder({ itemId, menu, onBack, onGenerate }) {
   const parts = leadBody.split(/(\{[a-z]+\})/g);
   const activeExtras = (cfg.extras || []).filter((e) => has(e.id));
   const pendingExtras = (cfg.extras || []).filter((e) => !has(e.id) && editing !== e.id);
-  const toggleDay = (name) => setVals((o) => { const cur = o[editing] || []; const next = cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name]; next.sort((a, b) => DAYS_FULL.indexOf(a) - DAYS_FULL.indexOf(b)); return { ...o, [editing]: next }; });
-  const setV = (v) => setVals((o) => ({ ...o, [editing]: v }));
+  const toggleDay = (name) => { setDirty(true); setVals((o) => { const cur = o[editing] || []; const next = cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name]; next.sort((a, b) => DAYS_FULL.indexOf(a) - DAYS_FULL.indexOf(b)); return { ...o, [editing]: next }; }); };
+  const setV = (v) => { setDirty(true); setVals((o) => ({ ...o, [editing]: v })); };
   const close = () => { setEditing(null); setMq(""); setCq(""); };
+  const tryBack = () => { if (dirty) setExitAsk(true); else onBack(); };
+  const saveDraft = () => { if (onSaveDraft) onSaveDraft(vals); else onBack(); };
   const s = editing ? getField(editing) : null;
   const isExtra = !!(editing && cfg.extras && cfg.extras.some((e) => e.id === editing));
   const doneBtn = (<button onClick={close} style={{ marginTop: 14, height: 44, width: "100%", borderRadius: 22, border: "none", cursor: "pointer", background: c1, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Done</button>);
@@ -2740,13 +2723,17 @@ function Builder({ itemId, menu, onBack, onGenerate }) {
   const slotKeys = Object.keys(cfg.slots);
   const filledCount = slotKeys.filter(filled).length;
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: `radial-gradient(95% 55% at 12% 0%, rgba(255,255,255,0.20), rgba(255,255,255,0) 52%), ${gType(p.type)}`, position: "relative" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: `radial-gradient(95% 55% at 12% 0%, rgba(255,255,255,0.18), rgba(255,255,255,0) 52%), ${BUILDER_GRAD}`, position: "relative" }}>
       <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 22px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 6, marginBottom: 22 }}>
-          <CircleBtn onClick={onBack} dark>
+          <CircleBtn onClick={tryBack} dark>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
           </CircleBtn>
-          <div style={{ fontFamily: FONT_D, fontSize: 18, fontWeight: 600, color: "#fff", letterSpacing: -0.2 }}>{p.title}</div>
+          <div style={{ flex: 1, fontFamily: FONT_D, fontSize: 18, fontWeight: 600, color: "#fff", letterSpacing: -0.2 }}>{p.title}</div>
+          <button onClick={saveDraft} className="apnpop" style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 13px", borderRadius: 17, border: "1.5px solid rgba(255,255,255,0.45)", background: "rgba(255,255,255,0.12)", color: "#fff", fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><path d="M17 21v-8H7v8M7 3v5h8" /></svg>
+            Save draft
+          </button>
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(255,255,255,0.15)", borderRadius: 99, padding: "5px 12px 5px 10px" }}>
@@ -2812,6 +2799,18 @@ function Builder({ itemId, menu, onBack, onGenerate }) {
           {ready && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c1} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>}
         </button>
       </div>
+
+      {exitAsk && (
+        <div onClick={() => setExitAsk(false)} style={{ position: "absolute", inset: 0, zIndex: 20, background: "rgba(10,15,13,0.45)", display: "flex", alignItems: "flex-end", animation: "apnrise 200ms ease both" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: "#fff", borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: "20px 20px calc(20px + env(safe-area-inset-bottom))", boxShadow: SHADOW.sheet }}>
+            <div style={{ fontFamily: FONT_D, fontSize: 19, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.2 }}>Save this as a draft?</div>
+            <p style={{ fontFamily: FONT_B, fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.45, margin: "6px 0 18px" }}>Keep what you've set up so you can finish it later, or discard it.</p>
+            <button onClick={saveDraft} className="apnpop" style={{ width: "100%", height: 50, borderRadius: RADIUS.lg, border: "none", cursor: "pointer", background: `${GREEN_GRAD}`, color: "#fff", fontFamily: FONT_D, fontSize: 15.5, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 8px 20px -8px rgba(31,141,107,0.7)" }}>Save as draft</button>
+            <button onClick={onBack} className="apnpop" style={{ width: "100%", height: 48, marginTop: 9, borderRadius: RADIUS.lg, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Discard</button>
+            <button onClick={() => setExitAsk(false)} style={{ width: "100%", height: 42, marginTop: 4, border: "none", background: "none", cursor: "pointer", color: TOKENS.sub, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Keep editing</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2826,7 +2825,7 @@ function Generating({ itemId, onDone }) {
     return () => { clearInterval(iv); clearTimeout(t); };
   }, []);
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: `radial-gradient(90% 55% at 15% 5%, rgba(255,255,255,0.20), rgba(255,255,255,0) 52%), ${gType(p.type)}` }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: `radial-gradient(90% 55% at 15% 5%, rgba(255,255,255,0.18), rgba(255,255,255,0) 52%), ${BUILDER_GRAD}` }}>
       <style>{`@keyframes aspin{to{transform:rotate(360deg)}}@keyframes apnpulse{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.12);opacity:0}}`}</style>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 40px" }}>
         <div style={{ position: "relative", width: 96, height: 96, marginBottom: 30, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2954,9 +2953,19 @@ const PLAYBOOK = {
     { tag: "Deliver", what: "Edit and hand over the final files for you to use" },
   ],
   gbp: (r) => [
-    { tag: "Review", what: `Review your Google profile: ${r("what")}` },
-    { tag: "Update", what: "Fix and update each one" },
-    { tag: "Check", what: "Make sure it looks right on search and maps" },
+    { tag: "Optimize", what: `Optimize your Google Business Profile: ${r("what")}` },
+    { tag: "Update", what: "Fix and fill out each one, with fresh photos" },
+    { tag: "Check", what: "Make sure it looks right on Search and Maps" },
+  ],
+  website: (r) => [
+    { tag: "Build", what: `Build or refresh your site, focused on ${r("focus")}` },
+    { tag: "Polish", what: "Make it fast and clean on phones, with clear menu and hours" },
+    { tag: "Launch", what: "Publish it and connect your domain" },
+  ],
+  seo: (r) => [
+    { tag: "Optimize", what: `Tune your site and listings to rank for ${r("terms")}` },
+    { tag: "Citations", what: `Build and fix your local citations within ${r("radius")}` },
+    { tag: "Track", what: "Watch your local rankings and search traffic climb" },
   ],
   reviewsreply: (r) => [
     { tag: "Draft", what: `Draft replies to ${r("which")} reviews` },
@@ -3056,7 +3065,7 @@ function PlanSteps({ itemId, vals, onBack, onAdd, onMarketer }) {
         </div>
       </div>
       <div style={{ flexShrink: 0, padding: "13px 20px 20px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-        <button onClick={() => onAdd(onSteps)} className="apnpop" style={{ width: "100%", height: 53, borderRadius: RADIUS.xl, border: "none", cursor: "pointer", background: `linear-gradient(135deg, ${TOKENS.mint}, ${TOKENS.mintDark})`, color: "#fff", fontFamily: FONT_D, fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 10px 24px -10px rgba(31,141,107,0.7)" }}>Add this plan</button>
+        <button onClick={() => onAdd(onSteps)} className="apnpop" style={{ width: "100%", height: 53, borderRadius: RADIUS.xl, border: "none", cursor: "pointer", background: `${GREEN_GRAD}`, color: "#fff", fontFamily: FONT_D, fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 10px 24px -10px rgba(31,141,107,0.7)" }}>Add this plan</button>
         <button onClick={onMarketer} className="apnpop" style={{ width: "100%", height: 48, marginTop: 9, borderRadius: RADIUS.lg, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>
           Hand it to a marketer
@@ -3089,23 +3098,20 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, onCreate, onClose } = {}) {
-  const [route, setRoute] = useState(() => (initialItem ? { name: "build", itemId: initialItem === "promoevent" ? "launch" : initialItem } : { name: "browse" }));
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, onCreate, onSaveDraft, onClose } = {}) {
+  const [route, setRoute] = useState(() => (initialItem ? { name: "build", itemId: initialItem } : { name: "browse" }));
 
   const exit = () => { if (onClose) onClose(); };
 
-  // Catalog card -> Builder. promoevent has no slot config yet; route it to
-  // launch until its bespoke config is added.
-  const openCard = (id, from, rowId) => {
-    const itemId = id === "promoevent" ? "launch" : id;
-    setRoute({ name: "build", itemId, from, rowId });
-  };
+  const openCard = (id, from, rowId) => setRoute({ name: "build", itemId: id, from, rowId });
   const backToBrowse = () => setRoute({ name: "browse" });
   const backToSource = () => (route.from === "catall" ? setRoute({ name: "catall", rowId: route.rowId }) : backToBrowse());
 
-  const addPlan = (itemId, status, vals) => {
-    if (onCreate) onCreate({ itemId, status, vals: vals || {} });
-  };
+  // Build my plan -> persist; the wrapper navigates to the campaign detail page
+  // (the merged review + Approve & ship screen). Confirm is the fallback shown
+  // only if there's no persistence hook (e.g. standalone preview).
+  const addPlan = (itemId, vals) => { if (onCreate) onCreate({ itemId, status: "approve", vals: vals || {} }); };
+  const saveDraft = (itemId, vals) => { if (onSaveDraft) onSaveDraft({ itemId, status: "draft", vals: vals || {} }); };
 
   const Header = ({ title }) => (
     <div style={{ flexShrink: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", padding: "12px 16px", borderBottom: `1px solid ${TOKENS.line}`, background: "#fff" }}>
@@ -3153,21 +3159,16 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           )}
 
           {route.name === "build" && (
-            <Builder itemId={route.itemId} menu={menu} onBack={backToSource} onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })} />
+            <Builder itemId={route.itemId} menu={menu} onBack={backToSource}
+              onSaveDraft={(vals) => saveDraft(route.itemId, vals)}
+              onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })} />
           )}
 
           {route.name === "generating" && (
-            <Generating itemId={route.itemId} onDone={() => setRoute({ name: "plansteps", itemId: route.itemId, vals: route.vals, from: route.from, rowId: route.rowId })} />
-          )}
-
-          {route.name === "plansteps" && (
-            <PlanSteps
-              itemId={route.itemId}
-              vals={route.vals}
-              onBack={() => setRoute({ name: "build", itemId: route.itemId, from: route.from, rowId: route.rowId })}
-              onAdd={() => { addPlan(route.itemId, "approve", route.vals); setRoute({ name: "confirm", payload: { title: "Your plan is added", body: "We'll get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.", meta: "Saved to your campaigns" } }); }}
-              onMarketer={() => { addPlan(route.itemId, "marketer", route.vals); setRoute({ name: "confirm", payload: { title: "Your marketer is on it", body: "A marketer on our team will build and run this plan, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.", meta: "Saved, with your marketer" } }); }}
-            />
+            <Generating itemId={route.itemId} onDone={() => {
+              addPlan(route.itemId, route.vals);
+              setRoute({ name: "confirm", payload: { title: "Your plan is ready", body: "Opening it so you can review every piece, then approve & ship when it looks right. Nothing is charged until a piece ships.", meta: "Saved to your campaigns" } });
+            }} />
           )}
 
           {route.name === "confirm" && <Confirm {...route.payload} onBack={exit} />}

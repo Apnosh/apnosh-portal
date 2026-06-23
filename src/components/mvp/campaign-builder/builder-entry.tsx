@@ -19,22 +19,17 @@ import ApnoshCampaignRaw from './apnosh-campaign'
 type MenuOpt = { l: string }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; onCreate?: (p: CreatePayload) => void; onClose?: () => void }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; onCreate?: (p: CreatePayload) => void; onSaveDraft?: (p: CreatePayload) => void; onClose?: () => void }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
-// Map the legacy 8 campaign-template ids onto the new catalog, and pass through
-// a real catalog id; anything unknown just lands on the catalog (browse).
+// The catalog is scoped to the services we actually deliver; map legacy deep-links
+// onto the nearest one, and let anything unknown land on the catalog (browse).
 const TEMPLATE_MAP: Record<string, string> = {
-  'fill-shifts': 'nights', 'new-menu': 'launch', event: 'launch',
-  'recurring-night': 'nights', winback: 'winback', regulars: 'regulars',
-  discover: 'reach', reviews: 'reviewsplan',
+  'new-menu': 'reel', event: 'reel', discover: 'gbp', reviews: 'gbp',
 }
 const CATALOG_IDS = new Set([
-  'reach', 'nights', 'firstvisit', 'regulars', 'catering', 'reviewsplan', 'reel', 'story',
-  'carousel', 'graphic', 'dish', 'gpost', 'promoevent', 'launch', 'creator', 'welcome',
-  'second', 'news', 'slowoffer', 'birthday', 'earlyaccess', 'shoot', 'gbp', 'reviewsreply',
-  'qr', 'friction', 'giftcard', 'ticket', 'winback',
+  'reel', 'graphic', 'carousel', 'website', 'seo', 'gbp', 'shoot',
 ])
 function resolveInitialItem(template?: string): string | undefined {
   if (!template) return undefined
@@ -69,22 +64,36 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
   }, [client?.id])
 
   const onClose = () => router.push('/dashboard/campaigns')
+
+  async function persist(payload: CreatePayload, phase: 'review' | 'build'): Promise<string | undefined> {
+    if (!client?.id) return undefined
+    const draft = { ...draftFromBuilder(payload), phase }
+    const res = await fetch('/api/campaigns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: client.id, draft }),
+    })
+    if (!res.ok) return undefined
+    const { id } = (await res.json()) as { id?: string }
+    return id
+  }
+
+  // Build my plan → persist, then land on the campaign detail page where the
+  // owner reviews the plan and taps Approve & ship (the merged review+ship page).
   const onCreate = async (payload: CreatePayload) => {
-    if (!client?.id) return
     try {
-      const draft = draftFromBuilder(payload)
-      const res = await fetch('/api/campaigns', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: client.id, draft }),
-      })
-      if (!res.ok) return
-      const { id } = (await res.json()) as { id?: string }
-      // The builder shows its own "added" confirm; navigate to the real saved
-      // campaign once it's persisted.
+      const id = await persist(payload, 'review')
       if (id) router.push(`/dashboard/campaigns/${id}`)
-    } catch {
-      /* leave the confirm screen up; the owner can retry */
+    } catch { /* builder keeps its confirm up; owner can retry */ }
+  }
+
+  // Save as draft → persist in the 'build' phase (reads as "Draft") and return
+  // to the campaigns list so the owner can finish it later.
+  const onSaveDraft = async (payload: CreatePayload) => {
+    try {
+      await persist(payload, 'build')
+    } finally {
+      router.push('/dashboard/campaigns')
     }
   }
 
@@ -95,6 +104,7 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
       initialItem={initialItem}
       recommended={recommended}
       onCreate={onCreate}
+      onSaveDraft={onSaveDraft}
       onClose={onClose}
     />
   )
