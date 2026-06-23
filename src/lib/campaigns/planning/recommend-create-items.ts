@@ -8,9 +8,8 @@ import 'server-only'
  * goal-anchored rules ranker is the fallback.
  */
 import type { GoalKey } from '@/lib/campaigns/types'
-import type { PlanningContext } from './types'
+import type { PlanningContext, UpcomingMoment } from './types'
 import { callStructuredOutput } from './anthropic'
-import type { UpcomingMoment } from './recommend-plays'
 
 /** The create-page catalog (mirrors CATALOG in apnosh-campaign.jsx). id + a goal
  *  it serves; unknown ids returned by the model are dropped by the client. */

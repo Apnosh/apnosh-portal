@@ -10,8 +10,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getMarketingCalendar, daysUntil } from '@/lib/dashboard/marketing-calendar'
 import { assemblePlanningContext, fallbackPlanningContext } from '@/lib/campaigns/planning/context'
 import { recommendCreateItems, rulesRecommend } from '@/lib/campaigns/planning/recommend-create-items'
-import type { UpcomingMoment } from '@/lib/campaigns/planning/recommend-plays'
-import type { PlanRequest } from '@/lib/campaigns/planning/types'
+import type { PlanRequest, UpcomingMoment } from '@/lib/campaigns/planning/types'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30

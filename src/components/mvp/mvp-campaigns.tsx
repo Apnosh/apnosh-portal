@@ -77,13 +77,13 @@ export default function MvpCampaigns() {
       </div>
 
       <div style={{ padding: '16px 18px 0' }}>
-        <p style={{ fontSize: 13.5, color: C.mute, margin: '0 0 16px' }}>Open any card to see what it costs, what it&apos;s driving, and how it&apos;s doing inside.</p>
+        <p style={{ fontSize: 13.5, color: C.mute, margin: '0 0 16px' }}>Build a full plan from your goal, or pick a single play to run. Open any card to see what it costs and how it&apos;s doing.</p>
 
         <Link href="/dashboard/campaigns/plan" style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none', background: 'linear-gradient(135deg, #4abd98, #2e9a78)', color: '#fff', borderRadius: 14, padding: '13px 15px', marginBottom: 18 }}>
           <span style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={18} /></span>
           <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: 'block', fontFamily: DISPLAY, fontWeight: 600, fontSize: 15 }}>Build a plan with AI</span>
-            <span style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 1 }}>Pick a goal and budget. We diagnose and price it.</span>
+            <span style={{ display: 'block', fontFamily: DISPLAY, fontWeight: 600, fontSize: 15 }}>Build a full plan with AI</span>
+            <span style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 1 }}>Set a goal and budget. We diagnose, build, and price the whole plan.</span>
           </span>
           <ArrowRight size={18} />
         </Link>

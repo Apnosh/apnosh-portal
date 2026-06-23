@@ -84,3 +84,9 @@ export interface DiagnoseResult {
   diagnosis: Diagnosis
   source: 'ai' | 'rules'
 }
+
+/** A near-term calendar moment (e.g. Independence Day) passed to the recommenders. */
+export interface UpcomingMoment {
+  label: string
+  daysLabel: string
+}
