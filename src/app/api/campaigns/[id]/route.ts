@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
-import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign } from '@/lib/campaigns/server'
+import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts } from '@/lib/campaigns/server'
 import { notifyStaffForClient } from '@/lib/notifications'
 import type { LineItem } from '@/lib/campaigns/types'
 
@@ -38,6 +38,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // assigned to this client so the "your team is preparing each piece" promise is
   // real. DIY ships are owner-run, so no handoff. Best-effort; never blocks save.
   if (justShipped && campaign.draft.path !== 'diy') {
+    // Turn the campaign's content calendar into real production work items, and
+    // tell the team. Both best-effort: a successful ship must never 500 here.
+    const shipISO = typeof body.fields?.shipped_at === 'string' ? body.fields.shipped_at : new Date().toISOString()
+    await materializeCampaignDrafts(id, campaign.clientId, campaign.draft.brief ?? null, shipISO).catch(() => 0)
     await notifyStaffForClient(
       campaign.clientId,
       ['strategist', 'community_mgr'],

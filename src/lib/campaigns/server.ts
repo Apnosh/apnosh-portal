@@ -213,3 +213,64 @@ export async function deleteCampaign(id: string): Promise<void> {
   const admin = createAdminClient()
   await admin.from('campaigns').delete().eq('id', id)
 }
+
+/* ── Publish bridge: ship → production queue ──────────────────────────────────
+   When an owner ships a team-run campaign, turn its content calendar into real
+   work items for the production team (so "your team is preparing each piece" has
+   substance). The team then produces + schedules them; the publish-scheduled
+   cron sends them. Nothing here can auto-publish (drafts are created 'idea'). */
+
+const DRAFT_SERVICE_LINE: Record<string, string> = {
+  reel: 'social', photo: 'social', post: 'social', story: 'social', email: 'email', sms: 'email',
+}
+function draftServiceLine(beat: { type?: string; channel?: string }): string {
+  const ch = (beat.channel || '').toLowerCase()
+  if (ch.includes('google') || ch.includes('gbp') || ch.includes('maps')) return 'local'
+  return DRAFT_SERVICE_LINE[beat.type ?? ''] ?? 'social'
+}
+function draftTargetDate(shipISO: string, week: number): string | null {
+  const base = new Date(shipISO)
+  if (isNaN(base.getTime())) return null
+  base.setUTCDate(base.getUTCDate() + Math.max(0, (week || 1) - 1) * 7)
+  return base.toISOString().slice(0, 10)
+}
+
+/**
+ * Materialize a shipped campaign's content beats as content_drafts (status
+ * 'idea') for the production team. Idempotent: skips if drafts already exist for
+ * this campaign. Status is ALWAYS 'idea' so the publish-scheduled cron (which
+ * only acts on status='scheduled') can never auto-send them. Returns the count
+ * created (0 if no beats or already materialized).
+ */
+export async function materializeCampaignDrafts(
+  campaignId: string,
+  clientId: string,
+  brief: CampaignBrief | null,
+  shipISO: string,
+): Promise<number> {
+  const beats = brief?.contentBeats ?? []
+  if (!beats.length) return 0
+  const admin = createAdminClient()
+  const { data: existing, error: existErr } = await admin
+    .from('content_drafts')
+    .select('id')
+    .eq('campaign_id', campaignId)
+    .limit(1)
+  // Bail on a read error (e.g. the campaign_id column not present yet) instead of
+  // falling through to an insert that would throw — keeps a pre-migration ship a
+  // clean no-op rather than logging a failed insert.
+  if (existErr) return 0
+  if (existing && existing.length) return 0
+  const rows = beats.map((b) => ({
+    client_id: clientId,
+    campaign_id: campaignId,
+    idea: (b.label || 'Campaign piece').slice(0, 280),
+    status: 'idea',
+    service_line: draftServiceLine(b),
+    proposed_via: 'strategist',
+    target_publish_date: draftTargetDate(shipISO, b.week),
+  }))
+  const { error } = await admin.from('content_drafts').insert(rows)
+  if (error) throw new Error(`materialize campaign drafts: ${error.message}`)
+  return rows.length
+}
