@@ -55,9 +55,16 @@ export default function MvpCampaignsDiscovery() {
     return () => { live = false }
   }, [client?.id])
 
-  const recList = (recs ?? DEFAULT_RECS)
-    .map((r) => ({ tpl: TEMPLATE_BY_ID[r.id] as CampaignTemplate | undefined, reason: r.reason }))
-    .filter((x): x is { tpl: CampaignTemplate; reason: string } => !!x.tpl)
+  const mapRecs = (list: { id: string; reason: string }[]) =>
+    list
+      .map((r) => ({ tpl: TEMPLATE_BY_ID[r.id] as CampaignTemplate | undefined, reason: r.reason }))
+      .filter((x): x is { tpl: CampaignTemplate; reason: string } => !!x.tpl)
+  // Fall back to defaults AFTER mapping, so an id the client bundle doesn't know
+  // (e.g. a cross-deploy skew) can never empty out the recommended row.
+  const mapped = mapRecs(recs ?? DEFAULT_RECS)
+  const recList = mapped.length ? mapped : mapRecs(DEFAULT_RECS)
+  const hero = recList[0]
+  const rest = recList.slice(1)
 
   const close = () => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard/campaigns') }
 
@@ -75,9 +82,23 @@ export default function MvpCampaignsDiscovery() {
             <div style={{ fontSize: 13.5, color: C.mute }}>Pick one to run. We build it, you approve before anything ships.</div>
           </div>
 
-          <Section title="Recommended for you" sub="Based on your numbers, reviews, and what's coming up">
-            <Rail>{recList.map(({ tpl, reason }) => <RecCard key={tpl.id} tpl={tpl} reason={reason} />)}</Rail>
-          </Section>
+          <div style={{ padding: '14px 18px 0' }}>
+            <Link href="/dashboard/campaigns/plan" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', background: 'linear-gradient(135deg, #4abd98, #2e9a78)', color: '#fff', borderRadius: 14, padding: '12px 14px' }}>
+              <Sparkles size={17} style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontFamily: DISPLAY, fontWeight: 600, fontSize: 14.5 }}>Build a full plan with AI</span>
+                <span style={{ display: 'block', fontSize: 12, color: 'rgba(255,255,255,0.9)' }}>Set a goal and budget. We diagnose and price the whole plan.</span>
+              </span>
+              <ArrowRight size={17} />
+            </Link>
+          </div>
+
+          {hero && (
+            <Section title="Recommended for you" sub="Ranked by your goal, reviews, and what's coming up">
+              <div style={{ padding: '0 18px' }}><HeroCard tpl={hero.tpl} reason={hero.reason} /></div>
+              {rest.length > 0 && <div style={{ marginTop: 12 }}><Rail>{rest.map(({ tpl, reason }) => <RecCard key={tpl.id} tpl={tpl} reason={reason} />)}</Rail></div>}
+            </Section>
+          )}
 
           {CAT_ORDER.map((cat) => {
             const tpls = CAMPAIGN_TEMPLATES.filter((t) => t.category === cat)
@@ -113,6 +134,28 @@ function IconTile({ emoji, cat, size = 46 }: { emoji: string; cat: CampaignCateg
 }
 function durationLabel(t: CampaignTemplate) { return t.durationWeeks ? `${t.durationWeeks} weeks` : 'Ongoing' }
 
+function HeroCard({ tpl, reason }: { tpl: CampaignTemplate; reason: string }) {
+  return (
+    <Link href={`/dashboard/campaigns/preview/${tpl.id}`} style={{ display: 'block', textDecoration: 'none', color: 'inherit', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 20, padding: 17, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <IconTile emoji={tpl.icon} cat={tpl.category} size={52} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 3 }}><Sparkles size={11} /> Best fit</div>
+          <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 19, lineHeight: 1.15 }}>{tpl.name}</div>
+          <div style={{ fontSize: 12.5, color: C.mute, marginTop: 1 }}>{tpl.tagline}</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, background: C.greenSoft, borderRadius: 11, padding: '10px 12px', marginBottom: 12 }}>
+        <Sparkles size={14} color={C.greenDk} style={{ flexShrink: 0, marginTop: 1 }} />
+        <span style={{ fontSize: 13, color: C.greenDk, fontWeight: 600, lineHeight: 1.4 }}>{reason}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 12, color: C.faint }}>{tpl.projected} · {durationLabel(tpl)}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.green, color: '#fff', borderRadius: 11, padding: '8px 14px', fontWeight: 700, fontSize: 13 }}>Build this <ArrowRight size={14} /></span>
+      </div>
+    </Link>
+  )
+}
 function RecCard({ tpl, reason }: { tpl: CampaignTemplate; reason: string }) {
   return (
     <Link href={`/dashboard/campaigns/preview/${tpl.id}`} style={{ scrollSnapAlign: 'start', flex: '0 0 78%', maxWidth: 290, minWidth: 0, textDecoration: 'none', color: 'inherit', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: 15, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
