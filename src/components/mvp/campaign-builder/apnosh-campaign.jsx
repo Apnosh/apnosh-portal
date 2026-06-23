@@ -2105,8 +2105,8 @@ const PRICE = {
   seo: { amt: 150, kind: "mo" },
   website: { amt: 575, kind: "once" },
 };
-/* First-campaign launch offer. One knob — flip to 0.3 for 30% off. */
-const FIRST_OFF = 0.5;
+/* First-campaign launch offer. One knob — flip to 0.5 for 50% off. */
+const FIRST_OFF = 0.3;
 const FIRST_OFF_LABEL = `${Math.round(FIRST_OFF * 100)}% off`;
 function priceLabel(id, off = 0) {
   const p = PRICE[id];
