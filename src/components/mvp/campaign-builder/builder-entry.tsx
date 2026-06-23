@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation'
 import { useClient } from '@/lib/client-context'
 import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
 import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
+import { summarize, type LineItem } from '@/lib/campaigns/types'
 // apnosh-campaign is intentionally .jsx (untyped design code). TS infers a
 // narrow props type from its defaults, so re-type it to the real prop surface.
 import ApnoshCampaignRaw from './apnosh-campaign'
@@ -19,7 +20,7 @@ import ApnoshCampaignRaw from './apnosh-campaign'
 type MenuOpt = { l: string }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; monthlyCommitment?: number; liveCount?: number; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -47,6 +48,7 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
   const [menu, setMenu] = useState<MenuOpt[] | undefined>(undefined)
   const [recommended, setRecommended] = useState<RecItem[] | undefined>(undefined)
   const [recsLoading, setRecsLoading] = useState(false)
+  const [commitment, setCommitment] = useState<{ perMonth: number; count: number }>({ perMonth: 0, count: 0 })
   const initialItem = resolveInitialItem(template)
 
   useEffect(() => {
@@ -68,6 +70,30 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
       .then((j) => { if (!cancelled && j?.recommended?.length) setRecommended(j.recommended as RecItem[]) })
       .catch(() => { /* keep the static suggested row */ })
       .finally(() => { if (!cancelled) setRecsLoading(false) })
+    return () => { cancelled = true }
+  }, [client?.id])
+
+  // The owner's current recurring monthly commitment across LIVE plans, so the
+  // builder can show a running total and recurring charges never pile up silently.
+  // Reuses the same summarize() the bill bar uses, so the number is consistent.
+  useEffect(() => {
+    if (!client?.id) return
+    let cancelled = false
+    fetch(`/api/campaigns?clientId=${client.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled || !j?.campaigns) return
+        const live = (j.campaigns as Array<{ status: string; draft: { items: LineItem[] } }>).filter((c) => c.status === 'shipped')
+        // Count only the plans that actually drive the monthly total, so "across
+        // N monthly plans" matches the $/mo figure (one-off plans add $0/mo).
+        let perMonth = 0, recurring = 0
+        for (const c of live) {
+          try { const pm = summarize(c.draft.items).perMonth; if (pm > 0) { perMonth += pm; recurring++ } }
+          catch { /* skip a malformed campaign */ }
+        }
+        setCommitment({ perMonth: Math.round(perMonth), count: recurring })
+      })
+      .catch(() => { /* no running total; per-plan price still shows */ })
     return () => { cancelled = true }
   }, [client?.id])
 
@@ -100,6 +126,8 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
       initialItem={initialItem}
       recommended={recommended}
       recsLoading={recsLoading}
+      monthlyCommitment={commitment.perMonth}
+      liveCount={commitment.count}
       onCreate={onCreate}
       onClose={onClose}
     />

@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import BottomNav from "../bottom-nav";
 import AppHeader from "../app-header";
-import { priceLabel } from "@/lib/campaigns/builder/item-prices";
+import { priceLabel, ITEM_PRICES } from "@/lib/campaigns/builder/item-prices";
 import { getMarketingCalendar, daysUntil } from "@/lib/dashboard/marketing-calendar";
 
 /* ============================================================
@@ -2136,6 +2136,18 @@ const catGet = (id) => CATALOG.find((x) => x.id === id);
 // the plan that actually opens.
 const buildIdFor = (id) => (id === "promoevent" ? "launch" : id);
 
+// Running monthly total across the owner's live plans, surfaced while building so
+// recurring commitments never pile up silently (the budget owners' #1 fear). Only
+// shows when THIS plan is recurring AND the owner already has live recurring plans;
+// otherwise the per-plan price line already says it.
+function monthlyTotalLine(itemId, commitment, count) {
+  const p = ITEM_PRICES[buildIdFor(itemId)];
+  const add = p ? p.perMonth : 0;
+  if (add <= 0 || !commitment || commitment <= 0) return null;
+  const plans = count === 1 ? "plan" : "plans";
+  return `You're at $${commitment}/mo across ${count} monthly ${plans}. This adds $${add}/mo, for $${commitment + add}/mo total.`;
+}
+
 /* ---- Plan art: detailed scene illustrations (white + accents on the type gradient) ---- */
 const STAR = "M0 -5 1.5 -1.6 5 -1.6 2.2 0.7 3.1 4 0 2 -3.1 4 -2.2 0.7 -5 -1.6 -1.5 -1.6Z";
 const PIC = {
@@ -2660,7 +2672,7 @@ function TimePick({ value, onChange, accent }) {
   );
 }
 
-function Builder({ itemId, menu, onBack, onGenerate }) {
+function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, onBack, onGenerate }) {
   const p = catGet(itemId) || CATALOG[0];
   const cfg = QL[itemId] || { lead: "Set up {thing}.", slots: { thing: { k: "text", v: p.title.toLowerCase() } } };
   const c1 = (TYPE_G[p.type] || TYPE_G.plan)[1];
@@ -2833,6 +2845,7 @@ function Builder({ itemId, menu, onBack, onGenerate }) {
       </div>
       <div style={{ flexShrink: 0, padding: "12px 22px 20px" }}>
         {priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You approve before anything runs, and only pay when each piece ships.</div>}
+        {monthlyTotalLine(itemId, monthlyCommitment, liveCount) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "rgba(255,255,255,0.85)", textAlign: "center", marginBottom: 10 }}>{monthlyTotalLine(itemId, monthlyCommitment, liveCount)}</div>}
         <button onClick={() => ready && onGenerate(vals)} disabled={!ready} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", cursor: ready ? "pointer" : "default", background: ready ? "#fff" : "rgba(255,255,255,0.45)", color: ready ? c1 : "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent", transition: "background 150ms ease" }}>
           Build my plan
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ready ? c1 : "#fff"} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
@@ -3019,7 +3032,7 @@ function genSteps(p, cfg, vals) {
   ];
 }
 
-function PlanSteps({ itemId, vals, onBack, onAdd, onMarketer }) {
+function PlanSteps({ itemId, vals, monthlyCommitment = 0, liveCount = 0, onBack, onAdd, onMarketer }) {
   const p = catGet(itemId) || CATALOG[0];
   const cfg = QL[itemId] || { slots: {} };
   const c1 = (TYPE_G[p.type] || TYPE_G.plan)[1];
@@ -3076,6 +3089,7 @@ function PlanSteps({ itemId, vals, onBack, onAdd, onMarketer }) {
       </div>
       <div style={{ flexShrink: 0, padding: "12px 20px 20px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
         {priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You only pay when each piece ships, after you approve it.</div>}
+        {monthlyTotalLine(itemId, monthlyCommitment, liveCount) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginBottom: 10 }}>{monthlyTotalLine(itemId, monthlyCommitment, liveCount)}</div>}
         <button onClick={() => onAdd(onSteps)} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Add this plan</button>
         <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, textAlign: "center", marginTop: 7 }}>We get each piece ready. You approve before it goes out.</div>
         <button onClick={onMarketer} style={{ width: "100%", height: 48, marginTop: 9, borderRadius: 24, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
@@ -3110,7 +3124,7 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, onCreate, onClose } = {}) {
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, monthlyCommitment = 0, liveCount = 0, onCreate, onClose } = {}) {
   const [route, setRoute] = useState(() => (initialItem ? { name: "build", itemId: buildIdFor(initialItem) } : { name: "browse" }));
 
   const exit = () => { if (onClose) onClose(); };
@@ -3182,7 +3196,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           )}
 
           {route.name === "build" && (
-            <Builder itemId={route.itemId} menu={menu} onBack={backToSource} onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })} />
+            <Builder itemId={route.itemId} menu={menu} monthlyCommitment={monthlyCommitment} liveCount={liveCount} onBack={backToSource} onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })} />
           )}
 
           {route.name === "generating" && (
@@ -3193,6 +3207,8 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <PlanSteps
               itemId={route.itemId}
               vals={route.vals}
+              monthlyCommitment={monthlyCommitment}
+              liveCount={liveCount}
               onBack={() => setRoute({ name: "build", itemId: route.itemId, from: route.from, rowId: route.rowId })}
               onAdd={() => { const pl = priceLabel(route.itemId); runSave({ itemId: route.itemId, status: "approve", vals: route.vals, from: route.from, rowId: route.rowId }, { title: "Your plan is added", body: "We'll get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.", meta: pl ? `Saved. About ${pl}, charged only as each piece ships.` : "Saved to your campaigns. Nothing charged yet." }); }}
               onMarketer={() => { const pl = priceLabel(route.itemId); runSave({ itemId: route.itemId, status: "marketer", vals: route.vals, from: route.from, rowId: route.rowId }, { title: "Your marketer is on it", body: "A marketer on our team will build and run this plan, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.", meta: pl ? `Saved with your marketer. About ${pl}, charged only as each piece ships.` : "Saved, with your marketer" }); }}
