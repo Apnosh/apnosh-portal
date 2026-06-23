@@ -19,7 +19,7 @@ import ApnoshCampaignRaw from './apnosh-campaign'
 type MenuOpt = { l: string }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; onCreate?: (p: CreatePayload) => void; onClose?: () => void }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -69,8 +69,11 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
   }, [client?.id])
 
   const onClose = () => router.push('/dashboard/campaigns')
-  const onCreate = async (payload: CreatePayload) => {
-    if (!client?.id) return
+  // Returns true only when the campaign actually persisted, so the builder can
+  // show a real confirm on success and an error+retry on failure instead of a
+  // false "added". On success it deep-links to the saved campaign.
+  const onCreate = async (payload: CreatePayload): Promise<boolean> => {
+    if (!client?.id) return false
     try {
       const draft = draftFromBuilder(payload)
       const res = await fetch('/api/campaigns', {
@@ -78,13 +81,12 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId: client.id, draft }),
       })
-      if (!res.ok) return
+      if (!res.ok) return false
       const { id } = (await res.json()) as { id?: string }
-      // The builder shows its own "added" confirm; navigate to the real saved
-      // campaign once it's persisted.
       if (id) router.push(`/dashboard/campaigns/${id}`)
+      return true
     } catch {
-      /* leave the confirm screen up; the owner can retry */
+      return false
     }
   }
 

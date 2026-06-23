@@ -633,6 +633,53 @@ function Confirm({ title, body, meta, onBack }) {
   );
 }
 
+/* While the plan is being saved to the owner's account. Replaces the old
+   fire-and-forget save that showed "added" before the write confirmed. */
+function SavingScreen() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 40px" }}>
+        <div style={{ width: 52, height: 52, borderRadius: 26, border: `4px solid ${TOKENS.mintTint}`, borderTopColor: TOKENS.mintDark, animation: "aspin 0.8s linear infinite", marginBottom: 22 }} />
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 600, color: TOKENS.ink }}>Saving your plan</div>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.sub, marginTop: 6 }}>Just a moment.</div>
+      </div>
+    </div>
+  );
+}
+
+/* Shown only when the save actually fails, so the owner never sees a false
+   "added". Nothing was charged; they can retry or go back to the plan. */
+function SaveError({ onRetry, onBack }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 24px", display: "flex", flexDirection: "column" }}>
+        <div style={{ paddingTop: 4, marginBottom: 22 }}>
+          <CircleBtn onClick={onBack}>
+            <svg width="15" height="15" viewBox="0 0 24 24" stroke="#3a3a3a" strokeWidth="2.4" strokeLinecap="round" fill="none"><path d="M15 18l-6-6 6-6" /></svg>
+          </CircleBtn>
+        </div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 8px 30px" }}>
+          <div style={{ width: 74, height: 74, borderRadius: 37, background: "#fdecec", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 22 }}>
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#d6453f" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v4.5M12 16h.01" /></svg>
+          </div>
+          <h1 style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 23, color: TOKENS.ink, margin: "0 0 11px", letterSpacing: -0.2 }}>We could not save that</h1>
+          <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14.5, color: TOKENS.sub, lineHeight: 1.5, margin: 0, maxWidth: 290 }}>Something went wrong on our end and your plan was not saved. Nothing was charged. Please try again.</p>
+          <button onClick={onRetry} style={{
+            width: "100%", maxWidth: 320, height: 52, borderRadius: 26, border: "none",
+            background: TOKENS.mint, color: "#fff", cursor: "pointer", marginTop: 28,
+            fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16, WebkitTapHighlightColor: "transparent",
+          }}>Try again</button>
+          <button onClick={onBack} style={{
+            width: "100%", maxWidth: 320, height: 48, marginTop: 10, borderRadius: 24, border: `1.5px solid ${TOKENS.line}`,
+            background: "#fff", color: TOKENS.ink, cursor: "pointer",
+            fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 14.5, WebkitTapHighlightColor: "transparent",
+          }}>Back to plan</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============================================================
    Scroll wheel column (Apple clock style) + toggle switch
    ============================================================ */
@@ -3064,8 +3111,23 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
   const backToBrowse = () => setRoute({ name: "browse" });
   const backToSource = () => (route.from === "catall" ? setRoute({ name: "catall", rowId: route.rowId }) : backToBrowse());
 
-  const addPlan = (itemId, status, vals) => {
-    if (onCreate) onCreate({ itemId, status, vals: vals || {} });
+  // Save for real, then route on the outcome: confirm on success, a retry
+  // screen on failure. The old code showed "added" before the write landed,
+  // so a failed save still read as success and nothing was actually saved.
+  const [saving, setSaving] = useState(false);
+  const runSave = async (ctx, success) => {
+    if (saving) return;
+    setSaving(true);
+    setRoute({ name: "saving" });
+    let ok = true;
+    try {
+      if (onCreate) ok = await onCreate({ itemId: ctx.itemId, status: ctx.status, vals: ctx.vals || {} });
+    } catch {
+      ok = false;
+    }
+    setSaving(false);
+    if (ok === false) setRoute({ name: "saveerror", ctx, success });
+    else setRoute({ name: "confirm", payload: success });
   };
 
   const Header = ({ title }) => (
@@ -3119,8 +3181,17 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
               itemId={route.itemId}
               vals={route.vals}
               onBack={() => setRoute({ name: "build", itemId: route.itemId, from: route.from, rowId: route.rowId })}
-              onAdd={() => { addPlan(route.itemId, "approve", route.vals); const pl = priceLabel(route.itemId); setRoute({ name: "confirm", payload: { title: "Your plan is added", body: "We'll get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.", meta: pl ? `Saved. About ${pl}, charged only as each piece ships.` : "Saved to your campaigns. Nothing charged yet." } }); }}
-              onMarketer={() => { addPlan(route.itemId, "marketer", route.vals); const pl = priceLabel(route.itemId); setRoute({ name: "confirm", payload: { title: "Your marketer is on it", body: "A marketer on our team will build and run this plan, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.", meta: pl ? `Saved with your marketer. About ${pl}, charged only as each piece ships.` : "Saved, with your marketer" } }); }}
+              onAdd={() => { const pl = priceLabel(route.itemId); runSave({ itemId: route.itemId, status: "approve", vals: route.vals, from: route.from, rowId: route.rowId }, { title: "Your plan is added", body: "We'll get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.", meta: pl ? `Saved. About ${pl}, charged only as each piece ships.` : "Saved to your campaigns. Nothing charged yet." }); }}
+              onMarketer={() => { const pl = priceLabel(route.itemId); runSave({ itemId: route.itemId, status: "marketer", vals: route.vals, from: route.from, rowId: route.rowId }, { title: "Your marketer is on it", body: "A marketer on our team will build and run this plan, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.", meta: pl ? `Saved with your marketer. About ${pl}, charged only as each piece ships.` : "Saved, with your marketer" }); }}
+            />
+          )}
+
+          {route.name === "saving" && <SavingScreen />}
+
+          {route.name === "saveerror" && (
+            <SaveError
+              onRetry={() => runSave(route.ctx, route.success)}
+              onBack={() => setRoute({ name: "plansteps", itemId: route.ctx.itemId, vals: route.ctx.vals, from: route.ctx.from, rowId: route.ctx.rowId })}
             />
           )}
 
