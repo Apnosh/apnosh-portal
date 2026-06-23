@@ -2222,6 +2222,33 @@ function CategoryRow({ row, onOpen, onSeeAll }) {
   );
 }
 
+function RecFeatured({ item, reason, onOpen, onDismiss }) {
+  const GRAD = "linear-gradient(135deg, #25c2a0, #2f72d6)";
+  const INK = "#2660c4";
+  if (!item) return null;
+  return (
+    <div style={{ padding: "0 20px 20px" }}>
+      <div style={{ position: "relative", borderRadius: 18, overflow: "hidden", background: GRAD, boxShadow: "0 10px 24px rgba(47,114,214,0.3)" }}>
+        <button onClick={onDismiss} aria-label="Dismiss" style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: 14, border: "none", background: "rgba(255,255,255,0.22)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2, WebkitTapHighlightColor: "transparent" }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+        <button onClick={() => onOpen(item.id)} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "15px 16px 16px", background: "none", WebkitTapHighlightColor: "transparent" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 700, color: "#fff" }}>Recommended for you</span>
+          </div>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 600, color: "#fff", lineHeight: 1.15, marginBottom: 6, paddingRight: 24 }}>{item.title}</div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.92)", lineHeight: 1.4, marginBottom: 14 }}>{reason || item.sub}</div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, background: "#fff", color: INK, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600 }}>
+            Start this
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function FeaturedCard({ onOpen, onDismiss }) {
   const GRAD = "linear-gradient(135deg, #25c2a0, #2f72d6)";
   const INK = "#2660c4";
@@ -2260,11 +2287,19 @@ function SearchBar({ value, onChange }) {
   );
 }
 
-function PlanBrowse({ restaurant, onOpen, onSeeAll }) {
+function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended }) {
   const [q, setQ] = useState("");
   const [featHidden, setFeatHidden] = useState(false);
   const query = q.trim().toLowerCase();
   const results = query ? CATALOG.filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
+  // AI recommendations (fetched by the wrapper): drive the featured card + the
+  // "Suggested for you" row when present; otherwise the static defaults show.
+  const recList = (recommended || []).filter((r) => r && catGet(r.id));
+  const recFeatured = recList[0] ? { item: catGet(recList[0].id), reason: recList[0].reason } : null;
+  const recRowIds = recList.slice(recFeatured ? 1 : 0).map((r) => r.id);
+  const rows = recRowIds.length
+    ? ROWS.map((row) => (row.id === "suggested" ? { ...row, ids: recRowIds, note: "Picked for your goals and reviews" } : row))
+    : ROWS;
   return (
     <div style={{ paddingBottom: 26 }}>
       <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
@@ -2279,8 +2314,10 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll }) {
         </div>
       ) : (
         <>
-          {!featHidden && <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />}
-          {ROWS.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} />)}
+          {!featHidden && (recFeatured
+            ? <RecFeatured item={recFeatured.item} reason={recFeatured.reason} onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />
+            : <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />)}
+          {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} />)}
           <div style={{ padding: "4px 20px 0" }}>
             <button onClick={() => onOpen("__else")} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, cursor: "pointer", background: "#fff", border: `1.5px dashed ${TOKENS.dash}`, borderRadius: 14, padding: "14px 15px", WebkitTapHighlightColor: "transparent" }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
@@ -2998,7 +3035,7 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, onCreate, onClose } = {}) {
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, onCreate, onClose } = {}) {
   const [route, setRoute] = useState(() => (initialItem ? { name: "build", itemId: initialItem === "promoevent" ? "launch" : initialItem } : { name: "browse" }));
 
   const exit = () => { if (onClose) onClose(); };
@@ -3045,7 +3082,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <>
               <AppHeader />
               <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-                <PlanBrowse restaurant={restaurant} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
+                <PlanBrowse restaurant={restaurant} recommended={recommended} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
               </div>
             </>
           )}

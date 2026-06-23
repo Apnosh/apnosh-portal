@@ -17,8 +17,9 @@ import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
 import ApnoshCampaignRaw from './apnosh-campaign'
 
 type MenuOpt = { l: string }
+type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; onCreate?: (p: CreatePayload) => void; onClose?: () => void }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; onCreate?: (p: CreatePayload) => void; onClose?: () => void }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -44,6 +45,7 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
   const router = useRouter()
   const { client } = useClient()
   const [menu, setMenu] = useState<MenuOpt[] | undefined>(undefined)
+  const [recommended, setRecommended] = useState<RecItem[] | undefined>(undefined)
   const initialItem = resolveInitialItem(template)
 
   useEffect(() => {
@@ -53,6 +55,18 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
       .catch(() => { if (!cancelled) setMenu([]) })
     return () => { cancelled = true }
   }, [])
+
+  // AI recommendations for the catalog (the "Suggested for you" row + featured).
+  // Best-effort: the builder falls back to its static suggested row if this fails.
+  useEffect(() => {
+    if (!client?.id) return
+    let cancelled = false
+    fetch(`/api/campaigns/recommend-items?clientId=${client.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelled && j?.recommended?.length) setRecommended(j.recommended as RecItem[]) })
+      .catch(() => { /* keep the static suggested row */ })
+    return () => { cancelled = true }
+  }, [client?.id])
 
   const onClose = () => router.push('/dashboard/campaigns')
   const onCreate = async (payload: CreatePayload) => {
@@ -79,6 +93,7 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
       restaurant={client?.name || 'your restaurant'}
       menu={menu}
       initialItem={initialItem}
+      recommended={recommended}
       onCreate={onCreate}
       onClose={onClose}
     />
