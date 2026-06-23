@@ -202,7 +202,11 @@ export async function replaceLineItems(campaignId: string, clientId: string, ite
 
 export async function updateCampaignFields(id: string, patch: Partial<{ name: string; budget_monthly: number; planned: boolean; phase: string; status: string; shipped_at: string; occasion: string; target_date: string; context: string }>): Promise<void> {
   const admin = createAdminClient()
-  await admin.from('campaigns').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+  // Throw on error like createCampaign/replaceLineItems do, so a failed write
+  // (e.g. a failed ship) surfaces as a 500 instead of silently succeeding and,
+  // for a ship, firing a phantom "ready to build" staff notification.
+  const { error } = await admin.from('campaigns').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+  if (error) throw new Error(`update campaign: ${error.message}`)
 }
 
 export async function deleteCampaign(id: string): Promise<void> {
