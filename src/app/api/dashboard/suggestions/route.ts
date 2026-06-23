@@ -16,8 +16,9 @@ import { getInbox } from '@/lib/dashboard/get-inbox'
 import { getHomeMetrics } from '@/lib/dashboard/get-home-metrics'
 import { getMarketingCalendar, daysUntil } from '@/lib/dashboard/marketing-calendar'
 import { buildCandidates, markLead, type Suggestion, type SuggestionFacts } from '@/lib/dashboard/suggestions'
+import { assembleSignals } from '@/lib/campaigns/planning/signals'
 
-export const maxDuration = 20
+export const maxDuration = 30
 
 const METRIC_TAB: Record<string, string> = { interactions: 'Customers', reach: 'Reach', bookings: 'Bookings', reputation: 'Reviews', loyalty: 'Email' }
 const ORDER = ['interactions', 'reach', 'bookings', 'reputation', 'loyalty']
@@ -155,12 +156,13 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient()
   const social = ['instagram', 'facebook', 'tiktok']
 
-  const [inbox, reviewRes, pcRes, hm, bizRes] = await Promise.all([
+  const [inbox, reviewRes, pcRes, hm, bizRes, sig] = await Promise.all([
     getInbox(clientId, access.userId).catch(() => []),
     admin.from('reviews').select('author_name, rating, response_text').eq('client_id', clientId).is('response_text', null).order('rating', { ascending: true }).limit(50),
     admin.from('platform_connections').select('platform, access_token').eq('client_id', clientId),
     getHomeMetrics(clientId).catch(() => null),
     admin.from('clients').select('name').eq('id', clientId).maybeSingle(),
+    assembleSignals(clientId).catch(() => null),
   ])
 
   // approvals / tasks from the inbox
@@ -194,6 +196,20 @@ export async function GET(req: NextRequest) {
     .slice(0, 3)
     .map((m) => ({ label: m.label, daysLabel: planLabel(daysUntil(m.date)), hook: m.hook }))
 
+  // Marketing quick-wins from the live planning signals: the weakest found-ness
+  // channel, plus what guests praise / gripe about most. Code owns the facts +
+  // the fix link; the AI pass only rewords.
+  const worstChannel = (sig?.presence ?? []).filter((p) => p.completeness < 70 && p.gaps.length).sort((a, b) => a.completeness - b.completeness)[0]
+  const shortCh = (n: string) => (/google/i.test(n) ? 'Google' : n)
+  const themes = sig?.reputation.themes ?? []
+  const praised = themes.filter((t) => t.good).sort((a, b) => b.mentions - a.mentions)[0]
+  const gripe = themes.filter((t) => !t.good).sort((a, b) => b.mentions - a.mentions)[0]
+  const quickWins = {
+    listingFix: worstChannel ? { channel: shortCh(worstChannel.name), gap: worstChannel.gaps[0] } : undefined,
+    feature: praised?.label,
+    fixTheme: gripe?.label,
+  }
+
   const facts: SuggestionFacts = {
     approvalsCount,
     tasksCount,
@@ -201,6 +217,7 @@ export async function GET(req: NextRequest) {
     reviews,
     connections,
     plans,
+    quickWins,
   }
 
   const candidates = buildCandidates(facts)

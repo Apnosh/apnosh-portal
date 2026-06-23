@@ -42,6 +42,14 @@ export interface SuggestionFacts {
   plan?: { label: string; daysLabel: string; hook: string } | null
   /** The nearest few upcoming moments worth a post. Preferred over `plan`. */
   plans?: { label: string; daysLabel: string; hook: string }[]
+  /** Marketing quick-wins derived from the live planning signals (listing gaps,
+   *  review themes). Code supplies the facts + the real fix link; the AI pass
+   *  only rewords. */
+  quickWins?: {
+    listingFix?: { channel: string; gap: string }
+    feature?: string
+    fixTheme?: string
+  }
 }
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
@@ -72,11 +80,27 @@ export function buildCandidates(f: SuggestionFacts): Suggestion[] {
       title: 'Review what is waiting', body: `${n} ${n === 1 ? 'thing is' : 'things are'} ready for your OK before they go live.`,
       cta: 'Review', href: '/dashboard/inbox?tab=approvals' })
   }
+  if (f.quickWins?.listingFix) {
+    const { channel, gap } = f.quickWins.listingFix
+    out.push({ id: 'fix-listing', eyebrow: 'QUICK WIN', accent: 'amber', icon: 'mapPin', priority: 64,
+      title: `Tidy up your ${channel} listing`, body: `${gap}. A two minute fix so guests find the right info.`,
+      cta: 'Fix it', href: '/dashboard/local-seo/listing' })
+  }
+  if (f.quickWins?.fixTheme) {
+    out.push({ id: 'fix-theme', eyebrow: 'WORTH A LOOK', accent: 'coral', icon: 'message', priority: 58,
+      title: `Guests keep mentioning ${f.quickWins.fixTheme}`, body: 'It comes up in your reviews. Worth a look before it costs you stars.',
+      cta: 'See reviews', href: '/dashboard/inbox?tab=reviews' })
+  }
+  if (f.quickWins?.feature) {
+    out.push({ id: 'feature-strength', eyebrow: 'QUICK WIN', accent: 'green', icon: 'sparkles', priority: 49,
+      title: `Show off your ${f.quickWins.feature}`, body: 'Guests keep praising it. A quick post puts it in front of more of them.',
+      cta: 'Plan a post', href: '/dashboard/campaigns/discover' })
+  }
   if (f.metric && f.metric.weekPct < 0) {
     const m = f.metric
     out.push({ id: `metric-down-${slug(m.label)}`, eyebrow: 'HEADS UP', accent: 'coral', icon: 'trendingDown', priority: 62,
       title: `${cap(m.label)} dipped ${Math.abs(m.weekPct)}% this week`, body: 'A fresh post usually brings it back up within a few days.',
-      cta: 'Plan a post', href: '/dashboard/campaigns/new' })
+      cta: 'Plan a post', href: '/dashboard/campaigns/discover' })
   }
   if ((f.reviews?.unanswered ?? 0) > 0) {
     const n = f.reviews!.unanswered
@@ -93,7 +117,7 @@ export function buildCandidates(f: SuggestionFacts): Suggestion[] {
   const planMoments = (f.plans && f.plans.length ? f.plans : (f.plan ? [f.plan] : [])).slice(0, 3)
   planMoments.forEach((p, i) => {
     out.push({ id: `plan-${slug(p.label)}`, eyebrow: 'WORTH PLANNING', accent: 'violet', icon: 'calendar', priority: 50 - i,
-      title: `${p.label} is ${p.daysLabel.toLowerCase()}`, body: p.hook, cta: 'Plan it', href: '/dashboard/campaigns/new' })
+      title: `${p.label} is ${p.daysLabel.toLowerCase()}`, body: p.hook, cta: 'Plan it', href: '/dashboard/campaigns/discover' })
   })
   if (f.connections?.missingSocial) {
     out.push({ id: 'connect-instagram', eyebrow: 'OPPORTUNITY', accent: 'green', icon: 'plus', priority: 46,

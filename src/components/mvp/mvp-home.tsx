@@ -15,7 +15,7 @@
 import {
   Bell, Sparkles, Check, Plus, TrendingUp, TrendingDown, Minus,
   ChevronRight, ChevronLeft, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
-  Heart, Star, MessageCircle, Mail, Eye, Users, Plug, Store, HelpCircle, Camera, Pencil, Send,
+  Heart, Star, MessageCircle, Mail, Eye, Users, Plug, Store, HelpCircle, Camera, Pencil, Send, MapPin,
 } from 'lucide-react'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import Link from 'next/link'
@@ -349,7 +349,7 @@ const ACCENT: Record<string, { bg: string; border: string; fg: string }> = {
 }
 const SUG_ICON: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
   plug: Plug, star: Star, sparkles: Sparkles, message: MessageCircle, bell: Bell,
-  calendar: CalendarDays, plus: Plus, trendingDown: TrendingDown, trendingUp: TrendingUp,
+  calendar: CalendarDays, plus: Plus, trendingDown: TrendingDown, trendingUp: TrendingUp, mapPin: MapPin,
 }
 const DISMISS_TTL = 3 * 24 * 60 * 60 * 1000 // 3 days
 
