@@ -11,17 +11,33 @@ import AppHeader from "../app-header";
    ============================================================ */
 
 const TOKENS = {
-  ink: "#181b1a",
-  sub: "#9aa19d",
-  faint: "#b8beba",
-  line: "#ededec",
+  ink: "#14181a",
+  ink2: "#404a45",
+  sub: "#7f8c86",
+  faint: "#a9b3ae",
+  line: "#e8ebe7",
+  hair: "#eef1ed",
   card: "#ffffff",
-  mint: "#4abd98",
-  mintDark: "#2e9a78",
-  mintTint: "#eaf7f3",
-  dash: "#d8ddda",
-  pageBg: "#2b2d31",
+  canvas: "#f6f5f0",     // warm paper canvas
+  canvas2: "#fbfaf6",
+  mint: "#4abd98",       // brand (per brand guidelines)
+  mintDark: "#1f8d6b",   // deepened for text/contrast
+  mintTint: "#e7f5ef",
+  dash: "#d3dcd6",
+  pageBg: "#1b1e1c",
 };
+
+/* Structured shadow + radius scale for a consistent, premium depth language */
+const SHADOW = {
+  card: "0 1px 2px rgba(20,33,28,0.05), 0 8px 22px -10px rgba(20,33,28,0.10)",
+  cardLift: "0 2px 4px rgba(20,33,28,0.06), 0 18px 36px -14px rgba(20,33,28,0.20)",
+  hero: "0 14px 34px -12px rgba(18,58,46,0.42)",
+  sheet: "0 18px 44px -12px rgba(0,0,0,0.32)",
+  pill: "0 1px 2px rgba(20,33,28,0.05)",
+};
+const RADIUS = { sm: 12, md: 16, lg: 20, xl: 26 };
+const FONT_D = "'Cal Sans', Poppins, system-ui, sans-serif";
+const FONT_B = "'Inter', system-ui, sans-serif";
 
 /* Per-goal gradients (135deg, light -> deep) */
 const G = {
@@ -606,24 +622,29 @@ function Direct({ onBack, onPickPart }) {
    ============================================================ */
 function Confirm({ title, body, meta, onBack }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-      <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 24px", display: "flex", flexDirection: "column" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: TOKENS.canvas }}>
+      <style>{`@keyframes apnpop2{0%{transform:scale(0.6);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}@keyframes apnring{0%{transform:scale(0.8);opacity:.6}100%{transform:scale(1.5);opacity:0}}`}</style>
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ paddingTop: 4, marginBottom: 22 }}>
           <CircleBtn onClick={onBack}>
             <svg width="15" height="15" viewBox="0 0 24 24" stroke="#3a3a3a" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </CircleBtn>
         </div>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 8px 30px" }}>
-          <div style={{ width: 74, height: 74, borderRadius: 37, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 22 }}>
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+          <div style={{ position: "relative", width: 80, height: 80, marginBottom: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: TOKENS.mintTint, animation: "apnring 1.4s ease-out infinite" }} />
+            <div style={{ position: "relative", width: 76, height: 76, borderRadius: 38, background: `linear-gradient(135deg, ${TOKENS.mint}, ${TOKENS.mintDark})`, display: "flex", alignItems: "center", justifyContent: "center", animation: "apnpop2 420ms cubic-bezier(.2,.8,.2,1) both", boxShadow: "0 12px 26px -8px rgba(31,141,107,0.6)" }}>
+              <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+            </div>
           </div>
-          <h1 style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 24, color: TOKENS.ink, margin: "0 0 11px", letterSpacing: -0.2 }}>{title}</h1>
-          <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14.5, color: TOKENS.sub, lineHeight: 1.5, margin: 0, maxWidth: 290 }}>{body}</p>
-          {meta && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, marginTop: 18, background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 12, padding: "10px 16px" }}>{meta}</div>}
-          <button onClick={onBack} style={{
-            width: "100%", maxWidth: 320, height: 52, borderRadius: 26, border: `1.5px solid ${TOKENS.mint}`,
-            background: "#fff", color: TOKENS.mintDark, cursor: "pointer", marginTop: 28,
-            fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16, WebkitTapHighlightColor: "transparent",
+          <h1 style={{ fontFamily: FONT_D, fontWeight: 600, fontSize: 24.5, color: TOKENS.ink, margin: "0 0 11px", letterSpacing: -0.3 }}>{title}</h1>
+          <p style={{ fontFamily: FONT_B, fontSize: 14.5, color: TOKENS.sub, lineHeight: 1.5, margin: 0, maxWidth: 290 }}>{body}</p>
+          {meta && <div style={{ display: "inline-flex", alignItems: "center", gap: 8, fontFamily: FONT_B, fontSize: 13, fontWeight: 600, color: TOKENS.ink, marginTop: 18, background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 99, padding: "9px 16px", boxShadow: SHADOW.pill }}>
+            <span style={{ width: 6, height: 6, borderRadius: 3, background: TOKENS.mint }} />{meta}</div>}
+          <button onClick={onBack} className="apnpop" style={{
+            width: "100%", maxWidth: 320, height: 53, borderRadius: RADIUS.xl, border: "none",
+            background: `linear-gradient(135deg, ${TOKENS.mint}, ${TOKENS.mintDark})`, color: "#fff", cursor: "pointer", marginTop: 28,
+            fontFamily: FONT_D, fontWeight: 600, fontSize: 16, WebkitTapHighlightColor: "transparent", boxShadow: "0 10px 24px -10px rgba(31,141,107,0.7)",
           }}>See it in Campaigns</button>
         </div>
       </div>
@@ -2008,13 +2029,18 @@ function CampaignDetail({ camp, onBack }) {
    PLAN CATALOG  (DoorDash-style browse)
    ============================================================ */
 const TYPE_G = {
-  plan: ["#3ec79a", "#2e9a78"],
-  content: ["#fb7a4a", "#ef5a2c"],
-  email: ["#4a9bf0", "#2f6fd0"],
-  task: ["#28b3a6", "#149088"],
-  automation: ["#8a5cf0", "#6a39de"],
+  plan: ["#37c7a0", "#1c8c69"],
+  content: ["#ff8a52", "#ec4f2f"],
+  email: ["#5aa7f5", "#2f63cf"],
+  task: ["#2cc1ad", "#0f8f86"],
+  automation: ["#9b6bf2", "#6a35dd"],
 };
-const gType = (t) => `linear-gradient(135deg, ${(TYPE_G[t] || TYPE_G.plan)[0]}, ${(TYPE_G[t] || TYPE_G.plan)[1]})`;
+/* Three-stop gradient with a soft top sheen for richer, more premium depth */
+const gType = (t) => {
+  const [a, b] = TYPE_G[t] || TYPE_G.plan;
+  return `linear-gradient(150deg, ${a} 0%, ${b} 78%, ${b} 100%)`;
+};
+const gTypeMid = (t) => (TYPE_G[t] || TYPE_G.plan)[1];
 
 const ICONS = {
   video: <><rect x="3.5" y="4.5" width="17" height="15" rx="3" /><path d="M10 9l5 3-5 3z" /></>,
@@ -2043,7 +2069,8 @@ function IconG({ name, size = 26 }) {
 
 const CADENCE_TAG = { once: "One-time", recurring: "Recurring", auto: "Automatic", setup: "Setup", group: "Multi-step" };
 function TagPill({ children, accent }) {
-  return <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10, fontWeight: 600, color: accent ? "#b06a16" : "#7c837e", background: accent ? "#fbf0db" : "#f0f2f0", borderRadius: 6, padding: "2.5px 6px", whiteSpace: "nowrap" }}>{children}</span>;
+  return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: FONT_B, fontSize: 10, fontWeight: 600, color: accent ? "#b06a16" : "#6c736e", background: accent ? "#fbefd6" : "#f1f3f0", borderRadius: 7, padding: "3px 7px", whiteSpace: "nowrap", letterSpacing: 0.1 }}>
+    <span style={{ width: 4, height: 4, borderRadius: 2, background: accent ? "#e0a52e" : "#b6bdb7", flexShrink: 0 }} />{children}</span>;
 }
 
 const CATALOG = [
@@ -2150,17 +2177,26 @@ function planTags(p) {
   return t;
 }
 
+/* Soft top sheen + floating illustration medallion shared by the gradient cards */
+function CardArt({ p, h, size }) {
+  return (
+    <div style={{ position: "relative", height: h, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: "inherit", borderTopRightRadius: "inherit" }}>
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 80% at 18% 0%, rgba(255,255,255,0.30), rgba(255,255,255,0) 60%)" }} />
+      <div style={{ position: "absolute", width: h * 1.5, height: h * 1.5, borderRadius: "50%", background: "rgba(255,255,255,0.10)", bottom: -h * 0.5, right: -h * 0.32 }} />
+      <div style={{ position: "absolute", width: h * 0.7, height: h * 0.7, borderRadius: "50%", background: "rgba(0,0,0,0.06)", bottom: -h * 0.28, left: -h * 0.2 }} />
+      <div style={{ position: "relative", display: "flex", filter: "drop-shadow(0 4px 8px rgba(0,0,0,0.16))" }}><Art id={p.id} size={size} /></div>
+      {p.hot && <span style={{ position: "absolute", top: 9, left: 10, fontFamily: FONT_B, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.6, color: "#fff", background: "rgba(0,0,0,0.22)", backdropFilter: "blur(4px)", borderRadius: 99, padding: "3px 8px", textTransform: "uppercase" }}>Popular</span>}
+    </div>
+  );
+}
+
 function PlanCardV({ p, onOpen, full }) {
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 156, textAlign: "left", background: "#fff", border: "none", borderRadius: 16, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 1px 3px rgba(20,30,26,0.06), 0 0 0 1px rgba(20,30,26,0.05)" }}>
-      <div style={{ position: "relative", height: 90, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
-        <div style={{ position: "absolute", width: 110, height: 110, borderRadius: 55, background: "rgba(255,255,255,0.12)", bottom: -36, right: -24 }} />
-        <div style={{ position: "absolute", width: 60, height: 60, borderRadius: 30, background: "rgba(0,0,0,0.05)", bottom: -22, left: -16 }} />
-        <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={62} /></div>
-      </div>
-      <div style={{ padding: "10px 11px 12px" }}>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, marginBottom: 3, minHeight: 33 }}>{p.title}</div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.sub, lineHeight: 1.35, marginBottom: 8, minHeight: 30, overflow: "hidden" }}>{p.sub}</div>
+    <button className="apncard" onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 158, textAlign: "left", background: TOKENS.card, border: `1px solid ${TOKENS.hair}`, borderRadius: RADIUS.md, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: SHADOW.card, overflow: "hidden" }}>
+      <CardArt p={p} h={94} size={62} />
+      <div style={{ padding: "11px 12px 13px" }}>
+        <div style={{ fontFamily: FONT_D, fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.22, marginBottom: 4, minHeight: 33, letterSpacing: -0.1 }}>{p.title}</div>
+        <div style={{ fontFamily: FONT_B, fontSize: 11, color: TOKENS.sub, lineHeight: 1.38, marginBottom: 9, minHeight: 30, overflow: "hidden" }}>{p.sub}</div>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
       </div>
     </button>
@@ -2169,28 +2205,28 @@ function PlanCardV({ p, onOpen, full }) {
 
 function PlanCardH({ p, onOpen }) {
   return (
-    <button onClick={() => onOpen(p.id)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 13, background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 15, padding: "11px 13px", cursor: "pointer", WebkitTapHighlightColor: "transparent", boxShadow: "0 1px 2px rgba(20,30,26,0.03)" }}>
-      <div style={{ width: 50, height: 50, borderRadius: 13, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Art id={p.id} size={34} /></div>
+    <button className="apncard" onClick={() => onOpen(p.id)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 13, background: TOKENS.card, border: `1px solid ${TOKENS.hair}`, borderRadius: RADIUS.md, padding: "11px 13px", cursor: "pointer", WebkitTapHighlightColor: "transparent", boxShadow: SHADOW.card }}>
+      <div style={{ position: "relative", width: 52, height: 52, borderRadius: 14, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", boxShadow: `0 4px 10px -3px ${gTypeMid(p.type)}66` }}>
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(110% 80% at 20% 0%, rgba(255,255,255,0.32), rgba(255,255,255,0) 62%)" }} />
+        <Art id={p.id} size={34} />
+      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink, marginBottom: 2 }}>{p.title}</div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.sub}</div>
+        <div style={{ fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, color: TOKENS.ink, marginBottom: 2, letterSpacing: -0.1 }}>{p.title}</div>
+        <div style={{ fontFamily: FONT_B, fontSize: 12, color: TOKENS.sub, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.sub}</div>
         <div style={{ display: "flex", gap: 5 }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
       </div>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 6l6 6-6 6" /></svg>
     </button>
   );
 }
 
 function PlanCardBig({ p, onOpen, full }) {
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 270, textAlign: "left", background: "#fff", border: "none", borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 3px 10px rgba(20,30,26,0.07), 0 0 0 1px rgba(20,30,26,0.05)" }}>
-      <div style={{ position: "relative", height: 120, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
-        <div style={{ position: "absolute", width: 150, height: 150, borderRadius: 75, background: "rgba(255,255,255,0.12)", bottom: -50, right: -30 }} />
-        <div style={{ position: "absolute", width: 92, height: 92, borderRadius: 46, background: "rgba(0,0,0,0.05)", bottom: -30, left: -26 }} />
-        <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={86} /></div>
-      </div>
-      <div style={{ padding: "13px 15px 15px" }}>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 17, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.15, marginBottom: 4, minHeight: 40 }}>{p.title}</div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.4, marginBottom: 10, minHeight: 35 }}>{p.sub}</div>
+    <button className="apncard" onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 272, textAlign: "left", background: TOKENS.card, border: `1px solid ${TOKENS.hair}`, borderRadius: RADIUS.lg, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: SHADOW.card, overflow: "hidden" }}>
+      <CardArt p={p} h={124} size={86} />
+      <div style={{ padding: "14px 16px 16px" }}>
+        <div style={{ fontFamily: FONT_D, fontSize: 17, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.16, marginBottom: 5, minHeight: 40, letterSpacing: -0.2 }}>{p.title}</div>
+        <div style={{ fontFamily: FONT_B, fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.42, marginBottom: 11, minHeight: 35 }}>{p.sub}</div>
         <div style={{ display: "flex", gap: 6 }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
       </div>
     </button>
@@ -2201,13 +2237,15 @@ function CategoryRow({ row, onOpen, onSeeAll }) {
   const items = row.ids.map(catGet).filter(Boolean);
   const big = row.big;
   return (
-    <div style={{ marginBottom: big ? 26 : 22 }}>
-      <button onClick={() => onSeeAll(row.id)} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "0 20px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", WebkitTapHighlightColor: "transparent" }}>
+    <div style={{ marginBottom: big ? 28 : 24 }}>
+      <button onClick={() => onSeeAll(row.id)} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "0 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", WebkitTapHighlightColor: "transparent" }}>
         <div style={{ textAlign: "left" }}>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: big ? 21 : 18.5, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.3 }}>{row.title}</div>
-          {row.note && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, marginTop: 1 }}>{row.note}</div>}
+          <div style={{ fontFamily: FONT_D, fontSize: big ? 21.5 : 18.5, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.4, lineHeight: 1.1 }}>{row.title}</div>
+          {row.note && <div style={{ fontFamily: FONT_B, fontSize: 11.5, color: TOKENS.faint, marginTop: 3 }}>{row.note}</div>}
         </div>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+        <span className="apnpop" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 15, background: TOKENS.canvas2, border: `1px solid ${TOKENS.hair}`, flexShrink: 0 }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink2} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+        </span>
       </button>
       <div className="apnosh-row" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "2px 20px", scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}>
         {items.map((p) => big ? <PlanCardBig key={p.id} p={p} onOpen={onOpen} /> : <PlanCardV key={p.id} p={p} onOpen={onOpen} />)}
@@ -2222,25 +2260,27 @@ function CategoryRow({ row, onOpen, onSeeAll }) {
   );
 }
 
-function RecFeatured({ item, reason, onOpen, onDismiss }) {
-  const GRAD = "linear-gradient(135deg, #25c2a0, #2f72d6)";
+/* Shared premium hero shell: layered aurora gradient, soft glow, dismiss, CTA */
+function HeroShell({ eyebrowIcon, eyebrow, title, body, cta, onOpen, onDismiss }) {
+  const GRAD = "linear-gradient(145deg, #28c6a4 0%, #2b8fd0 58%, #2f72d6 100%)";
   const INK = "#2660c4";
-  if (!item) return null;
   return (
-    <div style={{ padding: "0 20px 20px" }}>
-      <div style={{ position: "relative", borderRadius: 18, overflow: "hidden", background: GRAD, boxShadow: "0 10px 24px rgba(47,114,214,0.3)" }}>
-        <button onClick={onDismiss} aria-label="Dismiss" style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: 14, border: "none", background: "rgba(255,255,255,0.22)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2, WebkitTapHighlightColor: "transparent" }}>
+    <div style={{ padding: "2px 20px 22px" }}>
+      <div style={{ position: "relative", borderRadius: RADIUS.lg, overflow: "hidden", background: GRAD, boxShadow: SHADOW.hero }}>
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(80% 120% at 88% -10%, rgba(255,255,255,0.30), rgba(255,255,255,0) 55%)" }} />
+        <div style={{ position: "absolute", width: 150, height: 150, borderRadius: "50%", background: "rgba(255,255,255,0.10)", top: -60, right: -30 }} />
+        <button onClick={onDismiss} aria-label="Dismiss" className="apnpop" style={{ position: "absolute", top: 11, right: 11, width: 28, height: 28, borderRadius: 14, border: "none", background: "rgba(255,255,255,0.22)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2, WebkitTapHighlightColor: "transparent" }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
-        <button onClick={() => onOpen(item.id)} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "15px 16px 16px", background: "none", WebkitTapHighlightColor: "transparent" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
-            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 700, color: "#fff" }}>Recommended for you</span>
+        <button onClick={onOpen} style={{ position: "relative", width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "16px 17px 17px", background: "none", WebkitTapHighlightColor: "transparent" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 7, marginBottom: 10, background: "rgba(255,255,255,0.16)", borderRadius: 99, padding: "4px 10px 4px 8px" }}>
+            {eyebrowIcon}
+            <span style={{ fontFamily: FONT_B, fontSize: 11.5, fontWeight: 700, color: "#fff", letterSpacing: 0.2 }}>{eyebrow}</span>
           </div>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 600, color: "#fff", lineHeight: 1.15, marginBottom: 6, paddingRight: 24 }}>{item.title}</div>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.92)", lineHeight: 1.4, marginBottom: 14 }}>{reason || item.sub}</div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, background: "#fff", color: INK, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600 }}>
-            Start this
+          <div style={{ fontFamily: FONT_D, fontSize: 22, fontWeight: 600, color: "#fff", lineHeight: 1.14, marginBottom: 7, paddingRight: 20, letterSpacing: -0.3 }}>{title}</div>
+          <div style={{ fontFamily: FONT_B, fontSize: 13, color: "rgba(255,255,255,0.94)", lineHeight: 1.45, marginBottom: 15, maxWidth: 280 }}>{body}</div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 40, padding: "0 17px", borderRadius: 20, background: "#fff", color: INK, fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, boxShadow: "0 6px 16px -6px rgba(0,0,0,0.3)" }}>
+            {cta}
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
           </div>
         </button>
@@ -2249,39 +2289,25 @@ function RecFeatured({ item, reason, onOpen, onDismiss }) {
   );
 }
 
+const STAR_ICON = <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>;
+
+function RecFeatured({ item, reason, onOpen, onDismiss }) {
+  if (!item) return null;
+  return <HeroShell eyebrowIcon={STAR_ICON} eyebrow="Recommended for you" title={item.title} body={reason || item.sub} cta="Start this" onOpen={() => onOpen(item.id)} onDismiss={onDismiss} />;
+}
+
 function FeaturedCard({ onOpen, onDismiss }) {
-  const GRAD = "linear-gradient(135deg, #25c2a0, #2f72d6)";
-  const INK = "#2660c4";
-  return (
-    <div style={{ padding: "0 20px 20px" }}>
-      <div style={{ position: "relative", borderRadius: 18, overflow: "hidden", background: GRAD, boxShadow: "0 10px 24px rgba(47,114,214,0.3)" }}>
-        <button onClick={onDismiss} aria-label="Dismiss" style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: 14, border: "none", background: "rgba(255,255,255,0.22)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2, WebkitTapHighlightColor: "transparent" }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
-        <button onClick={() => onOpen("featured")} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "15px 16px 16px", background: "none", WebkitTapHighlightColor: "transparent" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>
-            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 700, color: "#fff" }}>{FEATURED.hook}</span>
-          </div>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 600, color: "#fff", lineHeight: 1.15, marginBottom: 6, paddingRight: 24 }}>{FEATURED.title}</div>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.92)", lineHeight: 1.4, marginBottom: 14 }}>{FEATURED.sub}</div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, background: "#fff", color: INK, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600 }}>
-            Get ready for Father's Day
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
-          </div>
-        </button>
-      </div>
-    </div>
-  );
+  const cal = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>;
+  return <HeroShell eyebrowIcon={cal} eyebrow={FEATURED.hook} title={FEATURED.title} body={FEATURED.sub} cta="Get ready for Father's Day" onOpen={() => onOpen("featured")} onDismiss={onDismiss} />;
 }
 
 function SearchBar({ value, onChange }) {
   return (
-    <div style={{ padding: "0 20px 16px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, height: 46, borderRadius: 14, background: "#f1f3f2", padding: "0 14px" }}>
+    <div style={{ padding: "0 20px 18px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, height: 48, borderRadius: 15, background: TOKENS.card, border: `1px solid ${TOKENS.line}`, padding: "0 14px", boxShadow: SHADOW.pill }}>
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.2-3.2" /></svg>
-        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Search plans, like reel or win back" style={{ flex: 1, border: "none", background: "none", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14.5, color: TOKENS.ink }} />
-        {value && <button onClick={() => onChange("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>}
+        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Search plans, like reel or win back" style={{ flex: 1, border: "none", background: "none", outline: "none", fontFamily: FONT_B, fontSize: 14.5, color: TOKENS.ink }} />
+        {value && <button onClick={() => onChange("")} className="apnpop" style={{ background: TOKENS.canvas, border: "none", cursor: "pointer", padding: 0, width: 22, height: 22, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center" }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>}
       </div>
     </div>
   );
@@ -2301,9 +2327,14 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended }) {
     ? ROWS.map((row) => (row.id === "suggested" ? { ...row, ids: recRowIds, note: "Picked for your goals and reviews" } : row))
     : ROWS;
   return (
-    <div style={{ paddingBottom: 26 }}>
+    <div style={{ paddingBottom: 26, background: TOKENS.canvas, minHeight: "100%" }}>
       <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
-      <div style={{ paddingTop: 6 }}><SearchBar value={q} onChange={setQ} /></div>
+      <div className="apnrise" style={{ padding: "16px 20px 14px" }}>
+        <div style={{ fontFamily: FONT_B, fontSize: 11.5, fontWeight: 700, letterSpacing: 1.4, color: TOKENS.mintDark, textTransform: "uppercase", marginBottom: 5 }}>New campaign</div>
+        <h1 style={{ fontFamily: FONT_D, fontSize: 27, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.6, lineHeight: 1.08, margin: 0 }}>What should we work on?</h1>
+        <p style={{ fontFamily: FONT_B, fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.45, margin: "6px 0 0" }}>Pick a plan and we'll draft the whole thing — ready for you to approve.</p>
+      </div>
+      <div style={{ paddingTop: 2 }}><SearchBar value={q} onChange={setQ} /></div>
       {query ? (
         <div style={{ padding: "0 20px" }}>
           <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 12 }}>{results.length} {results.length === 1 ? "plan" : "plans"} for "{q}"</div>
@@ -2319,11 +2350,13 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended }) {
             : <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />)}
           {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} />)}
           <div style={{ padding: "4px 20px 0" }}>
-            <button onClick={() => onOpen("__else")} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, cursor: "pointer", background: "#fff", border: `1.5px dashed ${TOKENS.dash}`, borderRadius: 14, padding: "14px 15px", WebkitTapHighlightColor: "transparent" }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+            <button onClick={() => onOpen("__else")} className="apncard" style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", background: TOKENS.card, border: `1.5px dashed ${TOKENS.dash}`, borderRadius: RADIUS.md, padding: "14px 15px", WebkitTapHighlightColor: "transparent" }}>
+              <span style={{ width: 38, height: 38, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+              </span>
               <div style={{ flex: 1, textAlign: "left" }}>
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink }}>Don't see it? Describe your own</div>
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 1 }}>Tell us in your words and we'll draft it</div>
+                <div style={{ fontFamily: FONT_D, fontSize: 14, fontWeight: 600, color: TOKENS.ink }}>Don't see it? Describe your own</div>
+                <div style={{ fontFamily: FONT_B, fontSize: 11.5, color: TOKENS.sub, marginTop: 1 }}>Tell us in your words and we'll draft it</div>
               </div>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
             </button>
@@ -2338,13 +2371,13 @@ function CategoryAll({ rowId, onBack, onOpen }) {
   const row = ROWS.find((r) => r.id === rowId) || { title: "Plans", ids: [] };
   const items = row.ids.map(catGet).filter(Boolean);
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-      <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 24px" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: TOKENS.canvas }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px 24px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 18 }}>
           <CircleBtn onClick={onBack}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3a3a3a" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
           </CircleBtn>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 600, color: TOKENS.ink }}>{row.title}</div>
+          <div style={{ fontFamily: FONT_D, fontSize: 19.5, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.3 }}>{row.title}</div>
         </div>
         {row.big ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -2380,14 +2413,15 @@ function PlanDetail({ itemId, onBack, onAdd, onMarketer }) {
   const how = DETAIL_HOW[p.type] || DETAIL_HOW.plan;
   const get = DETAIL_GET[p.type] || DETAIL_GET.plan;
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: TOKENS.canvas }}>
       <StatusBar />
       <div style={{ flex: 1, overflowY: "auto" }}>
-        <div style={{ position: "relative", background: gType(p.type), padding: "16px 20px 26px" }}>
-          <button onClick={onBack} style={{ width: 36, height: 36, borderRadius: 18, border: "none", background: "rgba(255,255,255,0.25)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+        <div style={{ position: "relative", background: `radial-gradient(85% 60% at 12% 0%, rgba(255,255,255,0.22), rgba(255,255,255,0) 55%), ${gType(p.type)}`, padding: "16px 20px 28px", overflow: "hidden" }}>
+          <div style={{ position: "absolute", width: 170, height: 170, borderRadius: "50%", background: "rgba(255,255,255,0.08)", top: -70, right: -40 }} />
+          <button onClick={onBack} className="apnpop" style={{ position: "relative", width: 36, height: 36, borderRadius: 18, border: "none", background: "rgba(255,255,255,0.25)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
           </button>
-          <div style={{ marginTop: 16, width: 56, height: 56, borderRadius: 16, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}><Art id={p.id} size={40} /></div>
+          <div style={{ position: "relative", marginTop: 16, width: 60, height: 60, borderRadius: 18, background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.22)", display: "flex", alignItems: "center", justifyContent: "center", filter: "drop-shadow(0 4px 8px rgba(0,0,0,0.14))" }}><Art id={p.id} size={42} /></div>
           {p.hook && <div style={{ marginTop: 14, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 700, color: "rgba(255,255,255,0.92)" }}>{p.hook}</div>}
           <div style={{ marginTop: p.hook ? 3 : 14, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 25, fontWeight: 600, color: "#fff", lineHeight: 1.12 }}>{p.title}</div>
           <div style={{ marginTop: 7, fontFamily: "Inter, sans-serif", fontSize: 13.5, color: "rgba(255,255,255,0.92)", lineHeight: 1.45 }}>{p.sub}</div>
@@ -2409,9 +2443,9 @@ function PlanDetail({ itemId, onBack, onAdd, onMarketer }) {
           </div>
         </div>
       </div>
-      <div style={{ flexShrink: 0, padding: "12px 20px 22px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-        <button onClick={onAdd} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Add this plan</button>
-        <button onClick={onMarketer} style={{ width: "100%", height: 48, marginTop: 9, borderRadius: 24, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Hand it to a marketer</button>
+      <div style={{ flexShrink: 0, padding: "13px 20px 22px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
+        <button onClick={onAdd} className="apnpop" style={{ width: "100%", height: 53, borderRadius: RADIUS.xl, border: "none", cursor: "pointer", background: `linear-gradient(135deg, ${TOKENS.mint}, ${TOKENS.mintDark})`, color: "#fff", fontFamily: FONT_D, fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 10px 24px -10px rgba(31,141,107,0.7)" }}>Add this plan</button>
+        <button onClick={onMarketer} className="apnpop" style={{ width: "100%", height: 48, marginTop: 9, borderRadius: RADIUS.lg, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Hand it to a marketer</button>
       </div>
     </div>
   );
@@ -2528,7 +2562,7 @@ function fmtSched(v) {
 }
 
 /* ---- shared input styles ---- */
-const pillStyle = (sel, c1) => ({ display: "inline-flex", alignItems: "center", padding: "9px 14px", borderRadius: 20, border: sel ? `1.5px solid ${c1}` : `1.5px solid ${TOKENS.line}`, background: sel ? `${c1}12` : "#fff", color: sel ? c1 : TOKENS.ink, fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, cursor: "pointer", WebkitTapHighlightColor: "transparent" });
+const pillStyle = (sel, c1) => ({ display: "inline-flex", alignItems: "center", padding: "9px 15px", borderRadius: 20, border: sel ? `1.5px solid ${c1}` : `1.5px solid ${TOKENS.line}`, background: sel ? `${c1}14` : "#fff", color: sel ? c1 : TOKENS.ink2, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 600, cursor: "pointer", WebkitTapHighlightColor: "transparent", transition: "background 130ms ease, border-color 130ms ease, color 130ms ease", boxShadow: sel ? `0 2px 8px -3px ${c1}55` : "none" });
 const dayStyle = (on, c1) => ({ flex: 1, height: 44, borderRadius: 12, border: on ? "none" : `1.5px solid ${TOKENS.line}`, background: on ? c1 : "#fff", color: on ? "#fff" : TOKENS.sub, fontFamily: "Inter, sans-serif", fontSize: 14, fontWeight: 700, cursor: "pointer", WebkitTapHighlightColor: "transparent" });
 const roundBtn = { width: 46, height: 46, borderRadius: 23, border: `1.5px solid ${TOKENS.line}`, background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" };
 const tickStyle = { fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint };
@@ -2703,20 +2737,30 @@ function Builder({ itemId, menu, onBack, onGenerate }) {
     return null;
   };
 
+  const slotKeys = Object.keys(cfg.slots);
+  const filledCount = slotKeys.filter(filled).length;
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: gType(p.type), position: "relative" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: `radial-gradient(95% 55% at 12% 0%, rgba(255,255,255,0.20), rgba(255,255,255,0) 52%), ${gType(p.type)}`, position: "relative" }}>
       <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 22px 24px", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 6, marginBottom: 22 }}>
           <CircleBtn onClick={onBack} dark>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
           </CircleBtn>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 600, color: "#fff" }}>{p.title}</div>
+          <div style={{ fontFamily: FONT_D, fontSize: 18, fontWeight: 600, color: "#fff", letterSpacing: -0.2 }}>{p.title}</div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 16 }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 1.4, color: "rgba(255,255,255,0.92)", textTransform: "uppercase" }}>Here's a starting point</span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(255,255,255,0.15)", borderRadius: 99, padding: "5px 12px 5px 10px" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
+            <span style={{ fontFamily: FONT_B, fontSize: 11.5, fontWeight: 700, letterSpacing: 0.6, color: "#fff", textTransform: "uppercase" }}>A starting point</span>
+          </div>
+          {slotKeys.length > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              {slotKeys.map((k, i) => <span key={i} style={{ width: filled(k) ? 16 : 7, height: 7, borderRadius: 4, background: filled(k) ? "#fff" : "rgba(255,255,255,0.4)", transition: "all 200ms ease" }} />)}
+              <span style={{ fontFamily: FONT_B, fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.9)", marginLeft: 3 }}>{filledCount}/{slotKeys.length}</span>
+            </div>
+          )}
         </div>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 25, lineHeight: 1.42, letterSpacing: -0.3 }}>
+        <div style={{ fontFamily: FONT_D, fontWeight: 600, fontSize: 25, lineHeight: 1.42, letterSpacing: -0.3 }}>
           {parts.map((part, i) => {
             const m = part.match(/^\{([a-z]+)\}$/);
             if (!m) return <span key={i} style={{ color: editing ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.92)", transition: "color 200ms ease" }}>{part}</span>;
@@ -2739,8 +2783,8 @@ function Builder({ itemId, menu, onBack, onGenerate }) {
           <span style={{ color: editing ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.92)", transition: "color 200ms ease" }}>.</span>
         </div>
         {s ? (
-          <div style={{ marginTop: 20, background: "#fff", borderRadius: 16, padding: 14, boxShadow: "0 12px 30px rgba(0,0,0,0.18)" }}>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 0.4, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 12 }}>{s.label ? s.label : s.k === "multi" ? "Pick any that fit" : "Change this"}</div>
+          <div className="apnrise" style={{ marginTop: 20, background: "#fff", borderRadius: RADIUS.lg, padding: 16, boxShadow: SHADOW.sheet }}>
+            <div style={{ fontFamily: FONT_B, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 13 }}>{s.label ? s.label : s.k === "multi" ? "Pick any that fit" : "Change this"}</div>
             {editor()}
             {isExtra && <button onClick={() => { setV(Array.isArray(vals[editing]) ? [] : ""); close(); }} style={removeBtn}>Remove</button>}
           </div>
@@ -2755,14 +2799,17 @@ function Builder({ itemId, menu, onBack, onGenerate }) {
                 ))}
               </div>
             )}
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.8)", marginTop: 14 }}>Tap anything underlined to change it.</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 16 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+              <span style={{ fontFamily: FONT_B, fontSize: 12.5, color: "rgba(255,255,255,0.85)" }}>Tap anything underlined to change it.</span>
+            </div>
           </>
         )}
       </div>
-      <div style={{ flexShrink: 0, padding: "12px 22px 20px" }}>
-        <button onClick={() => ready && onGenerate(vals)} disabled={!ready} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", cursor: ready ? "pointer" : "default", background: ready ? "#fff" : "rgba(255,255,255,0.45)", color: ready ? c1 : "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent", transition: "background 150ms ease" }}>
-          Build my plan
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ready ? c1 : "#fff"} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+      <div style={{ flexShrink: 0, padding: "12px 22px 20px", background: "linear-gradient(to top, rgba(0,0,0,0.10), rgba(0,0,0,0))" }}>
+        <button onClick={() => ready && onGenerate(vals)} disabled={!ready} style={{ width: "100%", height: 54, borderRadius: RADIUS.xl, border: "none", cursor: ready ? "pointer" : "default", background: ready ? "#fff" : "rgba(255,255,255,0.40)", color: ready ? c1 : "rgba(255,255,255,0.85)", fontFamily: FONT_D, fontWeight: 600, fontSize: 16.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent", transition: "background 150ms ease, color 150ms ease", boxShadow: ready ? "0 10px 26px -8px rgba(0,0,0,0.4)" : "none" }}>
+          {ready ? "Build my plan" : "Finish the blanks above"}
+          {ready && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c1} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>}
         </button>
       </div>
     </div>
@@ -2779,12 +2826,16 @@ function Generating({ itemId, onDone }) {
     return () => { clearInterval(iv); clearTimeout(t); };
   }, []);
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: gType(p.type) }}>
-      <style>{`@keyframes aspin{to{transform:rotate(360deg)}}`}</style>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: `radial-gradient(90% 55% at 15% 5%, rgba(255,255,255,0.20), rgba(255,255,255,0) 52%), ${gType(p.type)}` }}>
+      <style>{`@keyframes aspin{to{transform:rotate(360deg)}}@keyframes apnpulse{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.12);opacity:0}}`}</style>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 40px" }}>
-        <div style={{ width: 58, height: 58, borderRadius: 29, border: "4px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", animation: "aspin 0.8s linear infinite", marginBottom: 26 }} />
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 600, color: "#fff", marginBottom: 10, textAlign: "center" }}>Building your plan</div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14.5, color: "rgba(255,255,255,0.9)", textAlign: "center", minHeight: 20 }}>{lines[li]}</div>
+        <div style={{ position: "relative", width: 96, height: 96, marginBottom: 30, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.4)", animation: "apnpulse 1.6s ease-out infinite" }} />
+          <div style={{ position: "absolute", inset: 6, borderRadius: "50%", border: "3px solid rgba(255,255,255,0.25)", borderTopColor: "#fff", animation: "aspin 0.9s linear infinite" }} />
+          <div style={{ width: 66, height: 66, borderRadius: "50%", background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}><Art id={p.id} size={42} /></div>
+        </div>
+        <div style={{ fontFamily: FONT_D, fontSize: 23, fontWeight: 600, color: "#fff", marginBottom: 10, textAlign: "center", letterSpacing: -0.3 }}>Building your plan</div>
+        <div style={{ fontFamily: FONT_B, fontSize: 14.5, color: "rgba(255,255,255,0.92)", textAlign: "center", minHeight: 20 }}>{lines[li]}</div>
       </div>
     </div>
   );
@@ -2957,26 +3008,29 @@ function PlanSteps({ itemId, vals, onBack, onAdd, onMarketer }) {
   const setWhat = (id, t) => setSteps((arr) => arr.map((st) => st.id === id ? { ...st, what: t } : st));
   const remove = (id) => setSteps((arr) => arr.map((st) => st.id === id ? { ...st, on: false } : st));
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-      <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 16px" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: TOKENS.canvas }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
           <CircleBtn onClick={onBack}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3a3a3a" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
           </CircleBtn>
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center" }}><Art id={p.id} size={22} /></div>
-            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16.5, fontWeight: 600, color: TOKENS.ink }}>{p.title}</div>
+            <div style={{ position: "relative", width: 34, height: 34, borderRadius: 11, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", boxShadow: `0 4px 10px -3px ${gTypeMid(p.type)}66` }}>
+              <div style={{ position: "absolute", inset: 0, background: "radial-gradient(110% 80% at 20% 0%, rgba(255,255,255,0.32), rgba(255,255,255,0) 62%)" }} />
+              <Art id={p.id} size={22} />
+            </div>
+            <div style={{ fontFamily: FONT_D, fontSize: 16.5, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.2 }}>{p.title}</div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "16px 0 7px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "18px 0 7px" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill={TOKENS.mintDark}><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.mintDark, textTransform: "uppercase" }}>Your plan is ready</span>
+          <span style={{ fontFamily: FONT_B, fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.mintDark, textTransform: "uppercase" }}>Your plan is ready</span>
         </div>
-        <h2 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, margin: "0 0 6px", letterSpacing: -0.3 }}>Here's how it'll work</h2>
-        <p style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.5, margin: "0 0 20px" }}>Adjust any step, or remove what you don't need. Then add it and we'll get it going.</p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <h2 style={{ fontFamily: FONT_D, fontSize: 22.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.18, margin: "0 0 6px", letterSpacing: -0.4 }}>Here's how it'll work</h2>
+        <p style={{ fontFamily: FONT_B, fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.5, margin: "0 0 20px" }}>Adjust any step, or remove what you don't need. Then add it and we'll get it going.</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
           {onSteps.map((st, idx) => (
-            <div key={st.id} style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 16, padding: "14px 15px", boxShadow: "0 1px 2px rgba(20,30,26,0.03)" }}>
+            <div key={st.id} className="apnrise" style={{ background: "#fff", border: `1px solid ${TOKENS.hair}`, borderRadius: RADIUS.md, padding: "14px 15px", boxShadow: SHADOW.card, animationDelay: `${idx * 55}ms` }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                 <div style={{ width: 26, height: 26, borderRadius: 13, background: gType(p.type), color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{idx + 1}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -3001,9 +3055,9 @@ function PlanSteps({ itemId, vals, onBack, onAdd, onMarketer }) {
           ))}
         </div>
       </div>
-      <div style={{ flexShrink: 0, padding: "12px 20px 20px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-        <button onClick={() => onAdd(onSteps)} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Add this plan</button>
-        <button onClick={onMarketer} style={{ width: "100%", height: 48, marginTop: 9, borderRadius: 24, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+      <div style={{ flexShrink: 0, padding: "13px 20px 20px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
+        <button onClick={() => onAdd(onSteps)} className="apnpop" style={{ width: "100%", height: 53, borderRadius: RADIUS.xl, border: "none", cursor: "pointer", background: `linear-gradient(135deg, ${TOKENS.mint}, ${TOKENS.mintDark})`, color: "#fff", fontFamily: FONT_D, fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 10px 24px -10px rgba(31,141,107,0.7)" }}>Add this plan</button>
+        <button onClick={onMarketer} className="apnpop" style={{ width: "100%", height: 48, marginTop: 9, borderRadius: RADIUS.lg, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>
           Hand it to a marketer
         </button>
@@ -3071,6 +3125,13 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           .apncreate textarea::placeholder { color: #b7bdb9; }
           @keyframes apndot { 0%, 100% { opacity: 0.35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
           @keyframes aspin { to { transform: rotate(360deg); } }
+          @keyframes apnrise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+          .apncard { transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms ease; }
+          .apncard:active { transform: scale(0.975); }
+          @media (hover: hover) { .apncard:hover { transform: translateY(-2px); box-shadow: ${SHADOW.cardLift}; } }
+          .apnpop { transition: transform 140ms ease, background 140ms ease, border-color 140ms ease; }
+          .apnpop:active { transform: scale(0.94); }
+          .apnrise { animation: apnrise 360ms cubic-bezier(.2,.8,.2,1) both; }
         `}</style>
 
         {/* Screen content sits above the persistent bottom nav, so the create
@@ -3081,7 +3142,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           {route.name === "browse" && (
             <>
               <AppHeader />
-              <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              <div style={{ flex: 1, minHeight: 0, overflowY: "auto", background: TOKENS.canvas }}>
                 <PlanBrowse restaurant={restaurant} recommended={recommended} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
               </div>
             </>
