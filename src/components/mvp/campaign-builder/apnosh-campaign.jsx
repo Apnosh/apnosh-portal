@@ -2094,6 +2094,39 @@ const CATALOG = [
 ];
 const catGet = (id) => CATALOG.find((x) => x.id === id);
 
+/* Transparent starting price per service — mirrors the priced line items the
+   builder actually saves (content meta + priced-catalog services). */
+const PRICE = {
+  reel: { amt: 120, kind: "once" },
+  graphic: { amt: 70, kind: "once" },
+  carousel: { amt: 70, kind: "once" },
+  shoot: { amt: 185, kind: "from" },
+  gbp: { amt: 365, kind: "from" },
+  seo: { amt: 150, kind: "mo" },
+  website: { amt: 575, kind: "once" },
+};
+/* First-campaign launch offer. One knob — flip to 0.3 for 30% off. */
+const FIRST_OFF = 0.5;
+const FIRST_OFF_LABEL = `${Math.round(FIRST_OFF * 100)}% off`;
+function priceLabel(id, off = 0) {
+  const p = PRICE[id];
+  if (!p) return null;
+  const suffix = p.kind === "mo" ? "/mo" : "";
+  const pre = p.kind === "from" ? "from " : "";
+  const now = Math.round(p.amt * (1 - off));
+  return { now: `${pre}${money(now)}${suffix}`, was: off ? `${pre}${money(p.amt)}${suffix}` : null };
+}
+function PriceTag({ id, off = 0, big }) {
+  const pl = priceLabel(id, off);
+  if (!pl) return null;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 5 }}>
+      {pl.was && <span style={{ fontFamily: FONT_B, fontSize: big ? 12 : 10.5, color: TOKENS.faint, textDecoration: "line-through" }}>{pl.was}</span>}
+      <span style={{ fontFamily: FONT_D, fontSize: big ? 15 : 13.5, fontWeight: 600, color: pl.was ? TOKENS.mintDark : TOKENS.ink }}>{pl.now}</span>
+    </span>
+  );
+}
+
 /* ---- Plan art: detailed scene illustrations (white + accents on the type gradient) ---- */
 const STAR = "M0 -5 1.5 -1.6 5 -1.6 2.2 0.7 3.1 4 0 2 -3.1 4 -2.2 0.7 -5 -1.6 -1.5 -1.6Z";
 const PIC = {
@@ -2165,7 +2198,7 @@ function HotPill() {
   return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: FONT_B, fontSize: 9.5, fontWeight: 800, letterSpacing: 0.5, color: TOKENS.mintDark, background: TOKENS.mintTint, borderRadius: 99, padding: "3px 8px 3px 7px", textTransform: "uppercase" }}><span style={{ width: 4, height: 4, borderRadius: 2, background: TOKENS.mint }} />Popular</span>;
 }
 
-function PlanCardV({ p, onOpen, full }) {
+function PlanCardV({ p, onOpen, full, off = 0 }) {
   return (
     <button className="apncard" onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 158, textAlign: "left", background: TOKENS.card, border: `1px solid ${TOKENS.line}`, borderRadius: RADIUS.md, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: "13px 13px 14px", boxShadow: SHADOW.card, display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
@@ -2174,12 +2207,15 @@ function PlanCardV({ p, onOpen, full }) {
       </div>
       <div style={{ fontFamily: FONT_D, fontSize: 14, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.22, marginBottom: 4, minHeight: 34, letterSpacing: -0.1 }}>{p.title}</div>
       <div style={{ fontFamily: FONT_B, fontSize: 11.5, color: TOKENS.sub, lineHeight: 1.38, marginBottom: 10, minHeight: 32, overflow: "hidden" }}>{p.sub}</div>
-      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: "auto" }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginTop: "auto" }}>
+        <PriceTag id={p.id} off={off} />
+        {planTags(p).slice(0, 1).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}
+      </div>
     </button>
   );
 }
 
-function PlanCardH({ p, onOpen }) {
+function PlanCardH({ p, onOpen, off = 0 }) {
   return (
     <button className="apncard" onClick={() => onOpen(p.id)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 13, background: TOKENS.card, border: `1px solid ${TOKENS.line}`, borderRadius: RADIUS.md, padding: "11px 13px", cursor: "pointer", WebkitTapHighlightColor: "transparent", boxShadow: SHADOW.card }}>
       <IconTile p={p} tile={52} art={34} />
@@ -2189,14 +2225,14 @@ function PlanCardH({ p, onOpen }) {
           {p.hot && <HotPill />}
         </div>
         <div style={{ fontFamily: FONT_B, fontSize: 12, color: TOKENS.sub, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.sub}</div>
-        <div style={{ display: "flex", gap: 5 }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}><PriceTag id={p.id} off={off} />{planTags(p).slice(0, 1).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
       </div>
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 6l6 6-6 6" /></svg>
     </button>
   );
 }
 
-function PlanCardBig({ p, onOpen, full }) {
+function PlanCardBig({ p, onOpen, full, off = 0 }) {
   return (
     <button className="apncard" onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 272, textAlign: "left", background: TOKENS.card, border: `1px solid ${TOKENS.line}`, borderRadius: RADIUS.lg, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: "16px 16px 17px", boxShadow: SHADOW.card, display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 13 }}>
@@ -2205,34 +2241,44 @@ function PlanCardBig({ p, onOpen, full }) {
       </div>
       <div style={{ fontFamily: FONT_D, fontSize: 17.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.16, marginBottom: 5, letterSpacing: -0.2 }}>{p.title}</div>
       <div style={{ fontFamily: FONT_B, fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.42, marginBottom: 12 }}>{p.sub}</div>
-      <div style={{ display: "flex", gap: 6 }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: "auto" }}>
+        <PriceTag id={p.id} off={off} big />
+        {planTags(p).slice(0, 1).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}
+      </div>
     </button>
   );
 }
 
-function CategoryRow({ row, onOpen, onSeeAll }) {
+function CategoryRow({ row, onOpen, onSeeAll, off = 0 }) {
   const items = row.ids.map(catGet).filter(Boolean);
   const big = row.big;
   return (
-    <div style={{ marginBottom: big ? 28 : 24 }}>
+    <div style={{ marginBottom: big ? 26 : 24 }}>
       <button onClick={() => onSeeAll(row.id)} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "0 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", WebkitTapHighlightColor: "transparent" }}>
         <div style={{ textAlign: "left" }}>
-          <div style={{ fontFamily: FONT_D, fontSize: big ? 21.5 : 18.5, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.4, lineHeight: 1.1 }}>{row.title}</div>
+          <div style={{ fontFamily: FONT_D, fontSize: big ? 20.5 : 18.5, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.4, lineHeight: 1.1 }}>{row.title}</div>
           {row.note && <div style={{ fontFamily: FONT_B, fontSize: 11.5, color: TOKENS.faint, marginTop: 3 }}>{row.note}</div>}
         </div>
         <span className="apnpop" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 15, background: TOKENS.canvas2, border: `1px solid ${TOKENS.hair}`, flexShrink: 0 }}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink2} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
         </span>
       </button>
-      <div className="apnosh-row" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "2px 20px", scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}>
-        {items.map((p) => big ? <PlanCardBig key={p.id} p={p} onOpen={onOpen} /> : <PlanCardV key={p.id} p={p} onOpen={onOpen} />)}
-        <button onClick={() => onSeeAll(row.id)} style={{ flexShrink: 0, width: big ? 110 : 92, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
-          <div style={{ width: 46, height: 46, borderRadius: 23, background: "#eef1ef", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
-          </div>
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: TOKENS.ink }}>View all</span>
-        </button>
-      </div>
+      {big ? (
+        /* Suggested: a 2-up grid so at least two cards show on a phone. */
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: "2px 20px" }}>
+          {items.slice(0, 6).map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} off={off} full />)}
+        </div>
+      ) : (
+        <div className="apnosh-row" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "2px 20px", scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}>
+          {items.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} off={off} />)}
+          <button onClick={() => onSeeAll(row.id)} style={{ flexShrink: 0, width: 92, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
+            <div style={{ width: 46, height: 46, borderRadius: 23, background: "#eef1ef", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+            </div>
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: TOKENS.ink }}>View all</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -2290,7 +2336,7 @@ function SearchBar({ value, onChange }) {
   );
 }
 
-function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended }) {
+function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, off = 0 }) {
   const [q, setQ] = useState("");
   const [featHidden, setFeatHidden] = useState(false);
   const query = q.trim().toLowerCase();
@@ -2312,20 +2358,33 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended }) {
         <p style={{ fontFamily: FONT_B, fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.45, margin: "6px 0 0" }}>Pick a plan and we'll draft the whole thing — ready for you to approve.</p>
       </div>
       <div style={{ paddingTop: 2 }}><SearchBar value={q} onChange={setQ} /></div>
+      {off > 0 && !query && (
+        <div style={{ padding: "0 20px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 11, background: TOKENS.mintTint, border: `1px solid ${TOKENS.mint}55`, borderRadius: RADIUS.md, padding: "11px 13px" }}>
+            <span style={{ width: 34, height: 34, borderRadius: 10, background: `linear-gradient(135deg, ${TOKENS.mint}, ${TOKENS.mintDark})`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-6.2-6.2a2 2 0 0 1-.58-1.6L4.2 5.4a2 2 0 0 1 1.8-1.8l7.4-.4a2 2 0 0 1 1.6.58l5.6 5.6a2 2 0 0 1 0 2.8z" /><circle cx="8.5" cy="8.5" r="1.4" fill="#fff" /></svg>
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: FONT_D, fontSize: 14, fontWeight: 600, color: TOKENS.ink }}>{FIRST_OFF_LABEL} your first campaign</div>
+              <div style={{ fontFamily: FONT_B, fontSize: 11.5, color: TOKENS.mintDark, marginTop: 1 }}>Launch offer — already in every price below</div>
+            </div>
+          </div>
+        </div>
+      )}
       {query ? (
         <div style={{ padding: "0 20px" }}>
           <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 12 }}>{results.length} {results.length === 1 ? "plan" : "plans"} for "{q}"</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {results.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} full />)}
+            {results.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} off={off} full />)}
           </div>
-          {results.length === 0 && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.faint, padding: "10px 0" }}>Nothing matches yet. Try a word like video, email, or reviews, or describe it with Something else.</div>}
+          {results.length === 0 && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.faint, padding: "10px 0" }}>Nothing matches yet. Try a word like reel, website, or SEO, or describe it with Something else.</div>}
         </div>
       ) : (
         <>
           {!featHidden && (recFeatured
             ? <RecFeatured item={recFeatured.item} reason={recFeatured.reason} onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />
             : <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />)}
-          {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} />)}
+          {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} off={off} />)}
           <div style={{ padding: "4px 20px 0" }}>
             <button onClick={() => onOpen("__else")} className="apncard" style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", background: TOKENS.card, border: `1.5px dashed ${TOKENS.dash}`, borderRadius: RADIUS.md, padding: "14px 15px", WebkitTapHighlightColor: "transparent" }}>
               <span style={{ width: 38, height: 38, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -2344,7 +2403,7 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended }) {
   );
 }
 
-function CategoryAll({ rowId, onBack, onOpen }) {
+function CategoryAll({ rowId, onBack, onOpen, off = 0 }) {
   const row = ROWS.find((r) => r.id === rowId) || { title: "Plans", ids: [] };
   const items = row.ids.map(catGet).filter(Boolean);
   return (
@@ -2358,11 +2417,11 @@ function CategoryAll({ rowId, onBack, onOpen }) {
         </div>
         {row.big ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {items.map((p) => <PlanCardBig key={p.id} p={p} onOpen={onOpen} full />)}
+            {items.map((p) => <PlanCardBig key={p.id} p={p} onOpen={onOpen} off={off} full />)}
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {items.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} full />)}
+            {items.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} off={off} full />)}
           </div>
         )}
       </div>
@@ -3098,8 +3157,9 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, onCreate, onSaveDraft, onClose } = {}) {
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, firstLaunch = false, onCreate, onSaveDraft, onClose } = {}) {
   const [route, setRoute] = useState(() => (initialItem ? { name: "build", itemId: initialItem } : { name: "browse" }));
+  const off = firstLaunch ? FIRST_OFF : 0;
 
   const exit = () => { if (onClose) onClose(); };
 
@@ -3149,13 +3209,13 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <>
               <AppHeader />
               <div style={{ flex: 1, minHeight: 0, overflowY: "auto", background: TOKENS.canvas }}>
-                <PlanBrowse restaurant={restaurant} recommended={recommended} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
+                <PlanBrowse restaurant={restaurant} recommended={recommended} off={off} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
               </div>
             </>
           )}
 
           {route.name === "catall" && (
-            <CategoryAll rowId={route.rowId} onBack={backToBrowse} onOpen={(id) => openCard(id, "catall", route.rowId)} />
+            <CategoryAll rowId={route.rowId} off={off} onBack={backToBrowse} onOpen={(id) => openCard(id, "catall", route.rowId)} />
           )}
 
           {route.name === "build" && (

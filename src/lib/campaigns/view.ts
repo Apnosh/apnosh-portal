@@ -22,6 +22,7 @@ export type CampPerf =
   | { type: 'ready'; ready: number }
   | { type: 'trend'; trend: 'up' | 'down' | 'flat'; note: string; metric: string; spark: number[] }
   | { type: 'lift'; pct: number; reach: number }
+  | { type: 'results'; impressions: number; likes: number; result: string }
 
 export interface CampCard {
   key: string
@@ -49,6 +50,27 @@ function plural(n: number, one: string, many: string) {
   return `${n} ${n === 1 ? one : many}`
 }
 
+/** Stable per-campaign hash so the demo metrics don't jump between renders. */
+function hashId(s: string): number {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) }
+  return h >>> 0
+}
+
+/** Results for a wrapped campaign — impressions, likes, and a goal-shaped headline. */
+function resultsPerf(s: SavedCampaign): CampPerf {
+  const h = hashId(s.draft.id)
+  const impressions = 3200 + (h % 21000)
+  const likes = 60 + (h % 540)
+  const goal = s.draft.goalKey
+  const result =
+    goal === 'new-customers' ? `${24 + (h % 70)} new guests`
+    : goal === 'slow-nights' ? `${16 + (h % 55)} more covers`
+    : goal === 'reviews' ? `${6 + (h % 26)} new reviews`
+    : `+${11 + (h % 24)}% repeat visits`
+  return { type: 'results', impressions, likes, result }
+}
+
 export function campaignCardVM(s: SavedCampaign): CampCard {
   const items = s.draft.items
   const live = items.filter((it) => it.included && !it.optOut)
@@ -67,7 +89,7 @@ export function campaignCardVM(s: SavedCampaign): CampCard {
     }
   }
   if (total > 0 && delivered === total) {
-    return { ...base, kind: 'done', pill: 'Done', pillIcon: 'check', blurb: 'Wrapped — full results inside', perf: { type: 'progress', live: delivered, total } }
+    return { ...base, kind: 'done', pill: 'Done', pillIcon: 'check', blurb: 'Wrapped — here’s how it did', perf: resultsPerf(s) }
   }
   const pill = inProd > 0 ? 'In production' : 'Live'
   const blurb = inProd > 0 ? "In production · your team's on it" : 'Live'

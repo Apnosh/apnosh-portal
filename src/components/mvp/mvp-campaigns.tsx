@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { useClient } from '@/lib/client-context'
 import {
   Plus, Repeat, Check, TrendingUp, TrendingDown, Minus, ArrowRight, Clock,
-  CalendarDays, Eye, ChevronLeft, ChevronRight, Loader2, Sparkles,
+  CalendarDays, Eye, Heart, ChevronLeft, ChevronRight, Loader2, Sparkles,
 } from 'lucide-react'
 import { campaignCardVM, type CampCard, type SavedCampaign } from '@/lib/campaigns/view'
 
@@ -68,6 +68,11 @@ export default function MvpCampaigns() {
   const loading = clientLoading || saved === null
   const empty = !loading && cards.length === 0 && !error
 
+  // Re-run the most recent campaign: re-open the builder on the same service.
+  const last = (saved ?? []).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]
+  const lastTpl = last?.draft.brief?.templateId
+  const lastItemId = lastTpl?.startsWith('builder-') ? lastTpl.slice('builder-'.length) : undefined
+
   return (
     <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{ANIM}</style>
@@ -87,6 +92,17 @@ export default function MvpCampaigns() {
           </span>
           <ArrowRight size={18} />
         </Link>
+
+        {!empty && lastItemId && (
+          <Link href={`/dashboard/campaigns/new?template=${lastItemId}`} style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, padding: '12px 14px', marginBottom: 18, color: 'inherit', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+            <span style={{ width: 34, height: 34, borderRadius: 10, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Repeat size={17} color={C.greenDk} /></span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontFamily: DISPLAY, fontWeight: 600, fontSize: 14.5, color: C.ink }}>Re-run last campaign</span>
+              <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{last?.draft.name} · set it to repeat</span>
+            </span>
+            <ArrowRight size={18} color={C.mute} />
+          </Link>
+        )}
 
         {!empty && (
           <div style={{ display: 'inline-flex', background: '#f1f3f2', borderRadius: 10, padding: 3, marginBottom: 18 }}>
@@ -198,6 +214,20 @@ function CampaignCard({ c }: { c: CampCard }) {
       )}
       {c.perf?.type === 'lift' && (
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.greenSoft, color: C.greenDk, borderRadius: 7, padding: '3px 8px', fontWeight: 700, fontSize: 11.5, marginBottom: 8 }}><TrendingUp size={12} /> +{c.perf.pct}% actions · {fmtReach(c.perf.reach)} reached</div>
+      )}
+      {c.perf?.type === 'results' && (
+        <div style={{ display: 'flex', gap: 7, marginBottom: 9 }}>
+          {[
+            { I: Eye, v: fmtReach(c.perf.impressions), l: 'impressions' },
+            { I: Heart, v: fmtReach(c.perf.likes), l: 'likes' },
+            { I: TrendingUp, v: c.perf.result, l: 'result' },
+          ].map((m, i) => (
+            <div key={i} style={{ flex: 1, minWidth: 0, background: '#f7f8f7', borderRadius: 9, padding: '7px 9px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}><m.I size={11} color={C.greenDk} /><span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.v}</span></div>
+              <div style={{ fontSize: 9.5, color: C.faint, fontWeight: 600 }}>{m.l}</div>
+            </div>
+          ))}
+        </div>
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>

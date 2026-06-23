@@ -9,7 +9,7 @@
  */
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, Loader2, Trash2, Rocket, Check, CalendarDays } from 'lucide-react'
+import { ChevronLeft, Loader2, Trash2, Rocket, Check, CalendarDays, Play, Film, Image as ImageIcon } from 'lucide-react'
 import { playsFrom } from '@/lib/campaigns/plays'
 import { summarize, type LineItem, type OptOutReason } from '@/lib/campaigns/types'
 import type { SavedCampaign } from '@/lib/campaigns/view'
@@ -139,6 +139,8 @@ function Detail({ camp, onToggleOptOut, onToggleInclude, onRemove, onSetQty }: {
         ))}
       </div>
 
+      <ContentPreview items={core} shipped={shipped} />
+
       {recommended.length > 0 && !shipped && (
         <div style={{ marginTop: 18 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, marginBottom: 8 }}>Go further</div>
@@ -176,6 +178,50 @@ function Detail({ camp, onToggleOptOut, onToggleInclude, onRemove, onSetQty }: {
           {bill.oneTimeOnDelivery > 0 ? `$${bill.oneTimeOnDelivery} on delivery` : ''}{bill.oneTimeOnDelivery > 0 && bill.perMonth > 0 ? ' · ' : ''}{bill.perMonth > 0 ? `$${bill.perMonth}/mo` : ''}
         </div>
       )}
+    </div>
+  )
+}
+
+/* Preview the actual content pieces. Each is watchable/viewable once it's
+   produced; before that it shows as in-production. */
+const PIECE: Record<string, { label: string; Icon: typeof Play; verb: string }> = {
+  'content-reel':  { label: 'Reel',          Icon: Play,      verb: 'Watch reel' },
+  'content-photo': { label: 'Photo',         Icon: ImageIcon, verb: 'View photo' },
+  'content-post':  { label: 'Post / graphic', Icon: ImageIcon, verb: 'Preview' },
+  'content-story': { label: 'Story',         Icon: Film,      verb: 'View story' },
+}
+
+function ContentPreview({ items, shipped }: { items: LineItem[]; shipped: boolean }) {
+  const pieces = items.filter((it) => it.serviceId?.startsWith('content-'))
+  if (pieces.length === 0) return null
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, marginBottom: 8 }}>Your content</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {pieces.map((it) => {
+          const meta = PIECE[it.serviceId ?? ''] ?? { label: it.name, Icon: ImageIcon, verb: 'Preview' }
+          const ready = shipped || it.lock === 'delivered'
+          const Icon = meta.Icon
+          return (
+            <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, padding: '10px 12px' }}>
+              <div style={{ position: 'relative', width: 46, height: 46, borderRadius: 11, background: GRAD, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
+                <Icon size={20} fill={meta.verb === 'Watch reel' ? '#fff' : 'none'} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</div>
+                <div style={{ fontSize: 11.5, color: ready ? C.greenDk : C.faint, marginTop: 1 }}>{ready ? 'Ready to preview' : 'In production · preview when it’s ready'}</div>
+              </div>
+              {ready ? (
+                <a href={`#preview-${it.id}`} onClick={(e) => e.preventDefault()} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.greenSoft, color: C.greenDk, borderRadius: 99, padding: '7px 12px', fontSize: 12, fontWeight: 700, textDecoration: 'none', flexShrink: 0 }}>
+                  <Play size={12} fill={C.greenDk} /> {meta.verb}
+                </a>
+              ) : (
+                <span style={{ flexShrink: 0, fontSize: 11.5, fontWeight: 700, color: C.faint, background: '#f1f3f2', borderRadius: 99, padding: '6px 11px' }}>Soon</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

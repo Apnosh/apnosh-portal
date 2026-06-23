@@ -19,7 +19,7 @@ import ApnoshCampaignRaw from './apnosh-campaign'
 type MenuOpt = { l: string }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; onCreate?: (p: CreatePayload) => void; onSaveDraft?: (p: CreatePayload) => void; onClose?: () => void }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; firstLaunch?: boolean; onCreate?: (p: CreatePayload) => void; onSaveDraft?: (p: CreatePayload) => void; onClose?: () => void }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -41,6 +41,7 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
   const { client } = useClient()
   const [menu, setMenu] = useState<MenuOpt[] | undefined>(undefined)
   const [recommended, setRecommended] = useState<RecItem[] | undefined>(undefined)
+  const [firstLaunch, setFirstLaunch] = useState(false)
   const initialItem = resolveInitialItem(template)
 
   useEffect(() => {
@@ -60,6 +61,17 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => { if (!cancelled && j?.recommended?.length) setRecommended(j.recommended as RecItem[]) })
       .catch(() => { /* keep the static suggested row */ })
+    return () => { cancelled = true }
+  }, [client?.id])
+
+  // First-campaign launch offer: on if this client has no campaigns yet.
+  useEffect(() => {
+    if (!client?.id) return
+    let cancelled = false
+    fetch(`/api/campaigns?clientId=${client.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelled && Array.isArray(j?.campaigns)) setFirstLaunch(j.campaigns.length === 0) })
+      .catch(() => { /* default: no launch offer */ })
     return () => { cancelled = true }
   }, [client?.id])
 
@@ -103,6 +115,7 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
       menu={menu}
       initialItem={initialItem}
       recommended={recommended}
+      firstLaunch={firstLaunch}
       onCreate={onCreate}
       onSaveDraft={onSaveDraft}
       onClose={onClose}
