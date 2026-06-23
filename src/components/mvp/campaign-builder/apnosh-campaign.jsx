@@ -3,6 +3,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import BottomNav from "../bottom-nav";
 import AppHeader from "../app-header";
+import { priceLabel } from "@/lib/campaigns/builder/item-prices";
+import { getMarketingCalendar, daysUntil } from "@/lib/dashboard/marketing-calendar";
 
 /* ============================================================
    Apnosh Portal — Campaign builder
@@ -2145,7 +2147,10 @@ const ROWS = [
 ];
 
 function planTags(p) {
-  const t = [{ label: CADENCE_TAG[p.cad] || "Plan" }];
+  const t = [];
+  const price = priceLabel(p.id);
+  if (price) t.push({ label: price, accent: true });
+  t.push({ label: CADENCE_TAG[p.cad] || "Plan" });
   if (p.season) t.push({ label: "Seasonal", accent: true });
   return t;
 }
@@ -2252,21 +2257,28 @@ function RecFeatured({ item, reason, onOpen, onDismiss }) {
 function FeaturedCard({ onOpen, onDismiss }) {
   const GRAD = "linear-gradient(135deg, #25c2a0, #2f72d6)";
   const INK = "#2660c4";
+  // Drive off the real calendar so it never shows a holiday that already passed.
+  const moment = getMarketingCalendar(new Date(), 75).find((m) => daysUntil(m.date) >= 0 && m.weight >= 3);
+  const days = moment ? daysUntil(moment.date) : 0;
+  const hook = moment ? (days <= 1 ? `${moment.label} is here` : `${moment.label} is in ${days} days`) : "A timely idea for you";
+  const title = moment ? `Make the most of ${moment.label}` : "Promote your next big moment";
+  const sub = moment ? moment.hook : "Fill seats for a night, a holiday, or a tasting.";
+  const cta = moment ? `Plan for ${moment.label}` : "Plan an event";
   return (
     <div style={{ padding: "0 20px 20px" }}>
       <div style={{ position: "relative", borderRadius: 18, overflow: "hidden", background: GRAD, boxShadow: "0 10px 24px rgba(47,114,214,0.3)" }}>
         <button onClick={onDismiss} aria-label="Dismiss" style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: 14, border: "none", background: "rgba(255,255,255,0.22)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2, WebkitTapHighlightColor: "transparent" }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
-        <button onClick={() => onOpen("featured")} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "15px 16px 16px", background: "none", WebkitTapHighlightColor: "transparent" }}>
+        <button onClick={() => onOpen("promoevent")} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "15px 16px 16px", background: "none", WebkitTapHighlightColor: "transparent" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>
-            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 700, color: "#fff" }}>{FEATURED.hook}</span>
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 700, color: "#fff" }}>{hook}</span>
           </div>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 600, color: "#fff", lineHeight: 1.15, marginBottom: 6, paddingRight: 24 }}>{FEATURED.title}</div>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.92)", lineHeight: 1.4, marginBottom: 14 }}>{FEATURED.sub}</div>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 600, color: "#fff", lineHeight: 1.15, marginBottom: 6, paddingRight: 24 }}>{title}</div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.92)", lineHeight: 1.4, marginBottom: 14 }}>{sub}</div>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, background: "#fff", color: INK, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600 }}>
-            Get ready for Father's Day
+            {cta}
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
           </div>
         </button>
@@ -2304,6 +2316,7 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended }) {
     <div style={{ paddingBottom: 26 }}>
       <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
       <div style={{ paddingTop: 6 }}><SearchBar value={q} onChange={setQ} /></div>
+      <div style={{ padding: "0 20px 14px" }}><div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, lineHeight: 1.4 }}>Prices are estimates. You approve before anything runs, and you only pay when each piece ships.</div></div>
       {query ? (
         <div style={{ padding: "0 20px" }}>
           <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 12 }}>{results.length} {results.length === 1 ? "plan" : "plans"} for "{q}"</div>
@@ -2771,7 +2784,7 @@ function Builder({ itemId, menu, onBack, onGenerate }) {
 
 function Generating({ itemId, onDone }) {
   const p = catGet(itemId) || CATALOG[0];
-  const lines = ["Looking at your menu and brand", "Checking what's worked before", "Drafting the pieces", "Setting the schedule"];
+  const lines = ["Looking at your menu", "Choosing the right pieces", "Drafting your plan", "Setting the schedule"];
   const [li, setLi] = useState(0);
   useEffect(() => {
     const iv = setInterval(() => setLi((x) => Math.min(x + 1, lines.length - 1)), 460);
@@ -3002,7 +3015,9 @@ function PlanSteps({ itemId, vals, onBack, onAdd, onMarketer }) {
         </div>
       </div>
       <div style={{ flexShrink: 0, padding: "12px 20px 20px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
+        {priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You only pay when each piece ships, after you approve it.</div>}
         <button onClick={() => onAdd(onSteps)} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Add this plan</button>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, textAlign: "center", marginTop: 7 }}>We build it, you approve every piece before it goes out.</div>
         <button onClick={onMarketer} style={{ width: "100%", height: 48, marginTop: 9, borderRadius: 24, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>
           Hand it to a marketer
@@ -3104,8 +3119,8 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
               itemId={route.itemId}
               vals={route.vals}
               onBack={() => setRoute({ name: "build", itemId: route.itemId, from: route.from, rowId: route.rowId })}
-              onAdd={() => { addPlan(route.itemId, "approve", route.vals); setRoute({ name: "confirm", payload: { title: "Your plan is added", body: "We'll get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.", meta: "Saved to your campaigns" } }); }}
-              onMarketer={() => { addPlan(route.itemId, "marketer", route.vals); setRoute({ name: "confirm", payload: { title: "Your marketer is on it", body: "A marketer on our team will build and run this plan, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.", meta: "Saved, with your marketer" } }); }}
+              onAdd={() => { addPlan(route.itemId, "approve", route.vals); const pl = priceLabel(route.itemId); setRoute({ name: "confirm", payload: { title: "Your plan is added", body: "We'll get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.", meta: pl ? `Saved. About ${pl}, charged only as each piece ships.` : "Saved to your campaigns. Nothing charged yet." } }); }}
+              onMarketer={() => { addPlan(route.itemId, "marketer", route.vals); const pl = priceLabel(route.itemId); setRoute({ name: "confirm", payload: { title: "Your marketer is on it", body: "A marketer on our team will build and run this plan, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.", meta: pl ? `Saved with your marketer. About ${pl}, charged only as each piece ships.` : "Saved, with your marketer" } }); }}
             />
           )}
 
