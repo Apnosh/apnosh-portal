@@ -2205,6 +2205,11 @@ const ROWS = [
   { id: "oneoff", title: "One-off content", ids: ["reel", "story", "carousel", "graphic", "dish", "gpost", "creator"] },
   { id: "bring", title: "Bring people in", ids: ["reach", "nights", "firstvisit", "promoevent", "ticket", "catering", "slowoffer"] },
   { id: "keep", title: "Keep them coming back", ids: ["second", "welcome", "birthday", "winback", "earlyaccess", "regulars"] },
+  // Goal lenses for jobs beyond foot traffic, so goal-mismatched owners see their
+  // core job (the UX study's lowest-momentum segment), reusing existing plays.
+  { id: "online", title: "Drive online orders", ids: ["friction", "qr", "gpost", "giftcard"] },
+  { id: "bigorders", title: "Land catering and big orders", ids: ["catering", "ticket", "earlyaccess", "news"] },
+  { id: "brandnew", title: "Just opened or relaunching", ids: ["launch", "gbp", "shoot", "reach", "reviewsplan"] },
   { id: "auto", title: "Runs on its own", ids: ["winback", "welcome", "second", "birthday"] },
   { id: "tasks", title: "Quick tasks", ids: ["gbp", "reviewsreply", "qr", "friction", "shoot"] },
 ];
