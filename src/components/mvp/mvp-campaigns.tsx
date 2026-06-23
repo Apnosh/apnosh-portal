@@ -73,7 +73,7 @@ export default function MvpCampaigns() {
       <style>{ANIM}</style>
       <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', padding: '14px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 15, color: C.ink, fontWeight: 600 }}>Campaigns</div>
-        <Link href="/dashboard/campaigns/discover" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 99, padding: '8px 14px', fontWeight: 700, fontSize: 13.5 }}><Plus size={16} strokeWidth={2.5} /> New</Link>
+        <Link href="/dashboard/campaigns/new" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 99, padding: '8px 14px', fontWeight: 700, fontSize: 13.5 }}><Plus size={16} strokeWidth={2.5} /> New</Link>
       </div>
 
       <div style={{ padding: '16px 18px 0' }}>
@@ -137,7 +137,7 @@ function EmptyState() {
       <div style={{ width: 48, height: 48, borderRadius: 14, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} color={C.greenDk} /></div>
       <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600 }}>No campaigns yet</div>
       <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, maxWidth: 280 }}>Start one and your strategist runs it — you just approve. Pick a goal and we build the plan.</div>
-      <Link href="/dashboard/campaigns/discover" style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 12, padding: '11px 18px', fontWeight: 700, fontSize: 14 }}><Plus size={16} strokeWidth={2.5} /> New campaign</Link>
+      <Link href="/dashboard/campaigns/new" style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 12, padding: '11px 18px', fontWeight: 700, fontSize: 14 }}><Plus size={16} strokeWidth={2.5} /> New campaign</Link>
     </div>
   )
 }

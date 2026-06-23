@@ -155,7 +155,7 @@ export default async function SocialPage() {
             {/* Take action */}
             <MvpGroup title="Take action">
               <MvpRow icon={<Plus size={18} />} label="Request content" sub="Graphic, video, or post" href="/dashboard/social/request" />
-              <MvpRow icon={<Megaphone size={18} />} label="Run an ad" sub="Boost a post or start a campaign" href="/dashboard/campaigns/discover" />
+              <MvpRow icon={<Megaphone size={18} />} label="Run an ad" sub="Boost a post or start a campaign" href="/dashboard/campaigns/new" />
             </MvpGroup>
 
             {/* Dig deeper */}

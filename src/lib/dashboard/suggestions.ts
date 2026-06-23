@@ -94,13 +94,13 @@ export function buildCandidates(f: SuggestionFacts): Suggestion[] {
   if (f.quickWins?.feature) {
     out.push({ id: 'feature-strength', eyebrow: 'QUICK WIN', accent: 'green', icon: 'sparkles', priority: 49,
       title: `Show off your ${f.quickWins.feature}`, body: 'Guests keep praising it. A quick post puts it in front of more of them.',
-      cta: 'Plan a post', href: '/dashboard/campaigns/discover' })
+      cta: 'Plan a post', href: '/dashboard/campaigns/new' })
   }
   if (f.metric && f.metric.weekPct < 0) {
     const m = f.metric
     out.push({ id: `metric-down-${slug(m.label)}`, eyebrow: 'HEADS UP', accent: 'coral', icon: 'trendingDown', priority: 62,
       title: `${cap(m.label)} dipped ${Math.abs(m.weekPct)}% this week`, body: 'A fresh post usually brings it back up within a few days.',
-      cta: 'Plan a post', href: '/dashboard/campaigns/discover' })
+      cta: 'Plan a post', href: '/dashboard/campaigns/new' })
   }
   if ((f.reviews?.unanswered ?? 0) > 0) {
     const n = f.reviews!.unanswered
@@ -117,7 +117,7 @@ export function buildCandidates(f: SuggestionFacts): Suggestion[] {
   const planMoments = (f.plans && f.plans.length ? f.plans : (f.plan ? [f.plan] : [])).slice(0, 3)
   planMoments.forEach((p, i) => {
     out.push({ id: `plan-${slug(p.label)}`, eyebrow: 'WORTH PLANNING', accent: 'violet', icon: 'calendar', priority: 50 - i,
-      title: `${p.label} is ${p.daysLabel.toLowerCase()}`, body: p.hook, cta: 'Plan it', href: '/dashboard/campaigns/discover' })
+      title: `${p.label} is ${p.daysLabel.toLowerCase()}`, body: p.hook, cta: 'Plan it', href: '/dashboard/campaigns/new' })
   })
   if (f.connections?.missingSocial) {
     out.push({ id: 'connect-instagram', eyebrow: 'OPPORTUNITY', accent: 'green', icon: 'plus', priority: 46,
