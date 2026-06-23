@@ -20,7 +20,7 @@ import ApnoshCampaignRaw from './apnosh-campaign'
 type MenuOpt = { l: string }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; monthlyCommitment?: number; liveCount?: number; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -49,7 +49,19 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
   const [recommended, setRecommended] = useState<RecItem[] | undefined>(undefined)
   const [recsLoading, setRecsLoading] = useState(false)
   const [commitment, setCommitment] = useState<{ perMonth: number; count: number }>({ perMonth: 0, count: 0 })
+  const [monthlyCap, setMonthlyCap] = useState(0)
   const initialItem = resolveInitialItem(template)
+
+  // The owner's monthly marketing budget (from their profile), used as a soft
+  // spend cap: the builder warns when the running total would go over it.
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/dashboard/marketing-budget')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelled && typeof j?.monthlyBudget === 'number') setMonthlyCap(j.monthlyBudget) })
+      .catch(() => { /* no cap; running total still shows */ })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -128,6 +140,7 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
       recsLoading={recsLoading}
       monthlyCommitment={commitment.perMonth}
       liveCount={commitment.count}
+      monthlyCap={monthlyCap}
       onCreate={onCreate}
       onClose={onClose}
     />
