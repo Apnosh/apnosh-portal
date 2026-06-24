@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Users, ShoppingBag, Kanban, UserCog, FileBarChart,
   FileText, CreditCard, MessageSquare, Settings, Menu, X, ChevronDown, Shield, Plus,
   BarChart3, Calendar, ListTodo, Send, MessageCircle, Sparkles, CheckSquare,
-  Plug, Gauge, BookOpen, Megaphone, Inbox,
+  Plug, Gauge, BookOpen, Megaphone, Inbox, FlaskConical,
 } from 'lucide-react'
 import { useUser, signOut } from '@/lib/supabase/hooks'
 import { ToastProvider } from '@/components/ui/toast'
@@ -61,6 +61,7 @@ const navSections = [
     items: [
       { label: 'Team', href: '/admin/team', icon: UserCog },
       { label: 'Settings', href: '/admin/settings', icon: Settings },
+      { label: 'Sim', href: '/admin/sim', icon: FlaskConical },
     ],
   },
 ]
