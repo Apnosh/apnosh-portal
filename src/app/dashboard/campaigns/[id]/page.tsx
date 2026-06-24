@@ -9,7 +9,7 @@
  */
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, Loader2, Trash2, Rocket, Check, CalendarDays, Play, Film, Image as ImageIcon } from 'lucide-react'
+import { ChevronLeft, Loader2, Trash2, Rocket, Check, CalendarDays, Play, Film, Image as ImageIcon, Hammer } from 'lucide-react'
 import { playsFrom } from '@/lib/campaigns/plays'
 import { summarize, type LineItem, type OptOutReason } from '@/lib/campaigns/types'
 import type { SavedCampaign } from '@/lib/campaigns/view'
@@ -123,7 +123,7 @@ function Detail({ camp, onToggleOptOut, onToggleInclude, onRemove, onSetQty }: {
       {/* path/lifecycle banner */}
       {inReview && camp.draft.path === 'strategist' && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: C.greenSoft, color: C.greenDk, borderRadius: 12, padding: '11px 12px', marginBottom: 14, fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>
-          <span style={{ fontSize: 14 }}>◆</span><span>Apnosh is building every piece you kept. Review the plan below, then tap <b>Approve &amp; ship</b> when it looks right. Approving doesn’t charge you.</span>
+          <Hammer size={15} style={{ flexShrink: 0, marginTop: 1 }} /><span>Apnosh is building every piece you kept. Review the plan below, then tap <b>Approve &amp; ship</b> when it looks right. Approving doesn’t charge you.</span>
         </div>
       )}
       {shipped && (

@@ -2186,11 +2186,13 @@ function planTags(p) {
 }
 
 /* Soft top sheen + floating illustration medallion shared by the gradient cards */
-function IconTile({ p, tile = 52, art = 34 }) {
+/* Flat green-tinted tile + a green line icon — matches the icon tiles used
+   across the rest of the portal (home quick-links, etc.). */
+function IconTile({ p, tile = 52 }) {
+  const isz = Math.round(tile * 0.46);
   return (
-    <div style={{ position: "relative", width: tile, height: tile, borderRadius: Math.round(tile * 0.28), background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden", boxShadow: `0 4px 10px -3px ${gTypeMid(p.type)}55` }}>
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(110% 80% at 20% 0%, rgba(255,255,255,0.32), rgba(255,255,255,0) 62%)" }} />
-      <Art id={p.id} size={art} />
+    <div style={{ width: tile, height: tile, borderRadius: Math.round(tile * 0.26), background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <svg width={isz} height={isz} viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{ICONS[p.icon] || ICONS.tag}</svg>
     </div>
   );
 }

@@ -9,6 +9,7 @@
  * render ghosted with a single Add toggle.
  */
 import { useState } from 'react'
+import { ChevronRight, Plus, Check } from 'lucide-react'
 import { lineTotal, type LineItem, type OptOutReason } from '@/lib/campaigns/types'
 import { BREAKDOWNS, STEP_WHO } from '@/lib/campaigns/data/service-breakdowns'
 import { C, money, stageHex, handlerMeta, cadenceLabel, cadenceSub } from './ui'
@@ -45,7 +46,7 @@ export default function LineCard({
         <button type="button" onClick={() => setOpen((o) => !o)} style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.2, color: off ? C.faint : C.ink, textDecoration: off ? 'line-through' : 'none' }}>{item.plain}</span>
-            <span title={h.label} style={{ flex: 'none', fontSize: 9.5, fontWeight: 700, color: h.hex, background: `${h.hex}18`, borderRadius: 5, padding: '1px 5px' }}>{h.icon} {h.label}</span>
+            <span title={h.label} style={{ flex: 'none', fontSize: 9.5, fontWeight: 700, color: h.hex, background: `${h.hex}18`, borderRadius: 5, padding: '1px 5px' }}>{h.label}</span>
           </div>
           <div style={{ fontSize: 11, color: C.faint, lineHeight: 1.35, marginTop: 1 }}>
             {item.does}{item.when ? ` · ${item.when}` : ''}
@@ -55,14 +56,14 @@ export default function LineCard({
           <div style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: off ? C.faint : C.ink }}>{off ? '$0' : cadenceLabel(item)}</div>
           <div style={{ fontSize: 9.5, color: C.faint }}>{off ? OPT_LABEL[item.optOut!] : cadenceSub(item)}</div>
         </div>
-        <span aria-hidden style={{ flex: 'none', fontSize: 15, color: C.faint, transition: 'transform .15s', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
+        <ChevronRight aria-hidden size={16} color={C.faint} style={{ flex: 'none', transition: 'transform .15s', transform: open ? 'rotate(90deg)' : 'none' }} />
       </div>
 
       {/* drawer */}
       {open && (
         <div style={{ padding: '10px 12px 12px 27px', borderTop: `1px solid ${C.line}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {item.metric && (
-            <p style={{ margin: 0, fontSize: 11.5, color: C.greenDk, lineHeight: 1.4 }}>📈 <b>We measure:</b> {item.metric.label} — {item.metric.expect}</p>
+            <p style={{ margin: 0, fontSize: 11.5, color: C.greenDk, lineHeight: 1.4 }}><b>We measure:</b> {item.metric.label} — {item.metric.expect}</p>
           )}
           {item.why && (
             <p style={{ margin: 0, fontSize: 11.5, color: C.ink2, lineHeight: 1.4 }}><b>Why this:</b> {item.why}</p>
@@ -72,7 +73,7 @@ export default function LineCard({
           )}
           {item.draft && (
             <div style={{ background: '#f4f0ff', border: '1px solid #e6dcff', borderRadius: 10, padding: '8px 10px' }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: '#6b46c1', marginBottom: 4 }}>✨ AI draft</div>
+              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: '#6b46c1', marginBottom: 4 }}>AI draft</div>
               {item.draft.title && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, marginBottom: 3 }}>{item.draft.title}</div>}
               <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{item.draft.body}</div>
             </div>
@@ -85,7 +86,7 @@ export default function LineCard({
                   const w = STEP_WHO[s.who]
                   return (
                     <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                      <span title={w.label} style={{ flex: 'none', fontSize: 9.5, fontWeight: 700, color: w.hex, background: `${w.hex}18`, borderRadius: 4, padding: '1px 5px', marginTop: 1 }}>{w.icon} {w.label}</span>
+                      <span title={w.label} style={{ flex: 'none', fontSize: 9.5, fontWeight: 700, color: w.hex, background: `${w.hex}18`, borderRadius: 4, padding: '1px 5px', marginTop: 1 }}>{w.label}</span>
                       <span style={{ fontSize: 11, lineHeight: 1.35, color: C.ink2 }}><b>{s.step}</b> — {s.detail}</span>
                     </div>
                   )
@@ -110,7 +111,7 @@ export default function LineCard({
           {/* actions */}
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingTop: 2 }}>
             {recommended ? (
-              <button type="button" onClick={onToggleInclude} style={{ ...pill, background: C.greenSoft, color: C.greenDk, borderColor: C.greenLine, fontWeight: 700 }}>＋ Add to plan · {cadenceLabel(item)}</button>
+              <button type="button" onClick={onToggleInclude} style={{ ...pill, background: C.greenSoft, color: C.greenDk, borderColor: C.greenLine, fontWeight: 700 }}><Plus size={12} strokeWidth={2.6} /> Add to plan · {cadenceLabel(item)}</button>
             ) : (
               <>
                 {(['have-it', 'diy'] as OptOutReason[]).map((r) => {
@@ -120,7 +121,7 @@ export default function LineCard({
                       ...pill,
                       background: on ? C.ink : '#fff', color: on ? '#fff' : C.mute,
                       borderColor: on ? C.ink : C.line,
-                    }}>{on ? '✓ ' : ''}{OPT_LABEL[r]}{!on ? ` · save ${cadenceLabel(item)}` : ''}</button>
+                    }}>{on && <Check size={11} strokeWidth={3} style={{ marginRight: 3 }} />}{OPT_LABEL[r]}{!on ? ` · save ${cadenceLabel(item)}` : ''}</button>
                   )
                 })}
                 {onRemove && <button type="button" onClick={onRemove} style={{ ...pill, marginLeft: 'auto', color: C.red, border: 'none', background: 'none' }}>Remove</button>}
