@@ -481,7 +481,6 @@ function SomethingElse({ onBack, restaurant, onApprove, onMarketer }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-      <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 22 }}>
           <CircleBtn onClick={onBack}>
@@ -604,7 +603,68 @@ function Direct({ onBack, onPickPart }) {
 /* ============================================================
    Shared confirmation
    ============================================================ */
-function Confirm({ title, body, meta, onBack }) {
+function Confirm({ title, body, meta, onBack, name, type, itemId, pieces, total, mode }) {
+  // Rich create-flow confirm when a mode is passed; otherwise the generic
+  // title/body/meta screen so other callers keep working unchanged.
+  const rich = mode === "added" || mode === "draft";
+  if (rich) {
+    const draft = mode === "draft";
+    const header = draft ? "Saved as a draft" : "Your plan is on its way";
+    const piecesLine = `${pieces} ${pieces === 1 ? "piece" : "pieces"}, ${total > 0 ? money(total) : "all included"}`;
+    const NEXT = [
+      "We start building each piece.",
+      "We bring you anything that needs your okay.",
+      "It goes live once you approve. Nothing goes out before then.",
+    ];
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 24px", display: "flex", flexDirection: "column" }}>
+          <div style={{ paddingTop: 4, marginBottom: 18 }}>
+            <CircleBtn onClick={onBack}>
+              <svg width="15" height="15" viewBox="0 0 24 24" stroke="#3a3a3a" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </CircleBtn>
+          </div>
+          {/* Success mark + header, true to the mode */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: 22 }}>
+            <div style={{ width: 70, height: 70, borderRadius: 35, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}>
+              {draft
+                ? <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.5L5 21V4a1 1 0 0 1 1-1z" /></svg>
+                : <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
+            </div>
+            <h1 style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 24, color: TOKENS.ink, margin: 0, letterSpacing: -0.2 }}>{header}</h1>
+          </div>
+          {/* Summary: the plan's own art tile + name + what's in it */}
+          <div style={{ display: "flex", alignItems: "center", gap: 13, background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 16, padding: "13px 14px", marginBottom: 22 }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: gType(type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Art id={itemId} size={30} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginTop: 2 }}>{piecesLine}</div>
+            </div>
+          </div>
+          {/* What happens next */}
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1.1, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 12 }}>What happens next</div>
+          {draft ? (
+            <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.sub, lineHeight: 1.55, margin: 0 }}>Nothing has started yet. It is waiting in Campaigns whenever you want to start it.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {NEXT.map((line, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                  <div style={{ width: 24, height: 24, borderRadius: 12, background: TOKENS.mintTint, color: TOKENS.mintDark, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 12.5, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{i + 1}</div>
+                  <div style={{ flex: 1, fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{line}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ flex: 1, minHeight: 18 }} />
+          <button onClick={onBack} style={{
+            width: "100%", height: 54, borderRadius: 27, border: "none",
+            background: TOKENS.mint, color: "#fff", cursor: "pointer", marginTop: 24,
+            fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16.5, WebkitTapHighlightColor: "transparent",
+          }}>{draft ? "See it in Campaigns" : "Track your plan"}</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 24px", display: "flex", flexDirection: "column" }}>
@@ -1929,7 +1989,16 @@ const STATUS_META = {
   draft: { label: "Draft", bg: "#eef0ee", fg: "#8a908c" },
 };
 const STATUS_ORDER = { approve: 0, marketer: 1, live: 2, draft: 3 };
-const CAMP_SEED = [];
+/* Demo campaigns for designing the Campaigns list + CampaignDetail screens.
+   Display-only seed data: itemIds come from the real CATALOG so Art renders,
+   and each type matches its catalog item's type so the card gradient agrees.
+   One per status (approve / live / draft / marketer). Not wired to saving. */
+const CAMP_SEED = [
+  { id: "seed-reel-latte", kind: "campaign", type: "content", itemId: "reel", name: "Maple oat latte reel", line: "A short video to post this week", status: "approve" },
+  { id: "seed-slow-nights", kind: "plan", type: "plan", itemId: "nights", name: "Slow-night regulars", line: "Bringing guests in on Mondays and Tuesdays", status: "live" },
+  { id: "seed-june-news", kind: "campaign", type: "email", itemId: "news", name: "June newsletter", line: "This month's update to your list", status: "draft" },
+  { id: "seed-summer-shoot", kind: "campaign", type: "task", itemId: "shoot", name: "Summer menu photoshoot", line: "Fresh photos of the new dishes", status: "marketer" },
+];
 const campById = (id) => CAMP_SEED.find((x) => x.id === id);
 
 function StatusChip({ status }) {
@@ -2394,7 +2463,6 @@ function FeaturedDetail({ onClose, onEvent, onDeal, onPost }) {
   );
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-      <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 28px" }}>
         <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 2, marginBottom: 6 }}>
           <button onClick={onClose} aria-label="Close" style={{ width: 36, height: 36, borderRadius: 18, border: "none", background: "#eef1ef", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
@@ -2764,163 +2832,429 @@ function readSlot(s, v) {
 }
 const PLAYBOOK = {
   reach: (r) => [
-    { tag: "Get found", what: "Tune up your Google profile so you show up in nearby searches" },
-    { tag: "Post", what: `Share local posts and a short video to people within ${r("radius")}` },
-    { tag: "Boost", what: "Put a small paid boost behind the best post to reach more nearby" },
-    { tag: "Reply", what: "Reply to every new review to build trust with new guests" },
+    { id: "reach-google", tag: "Get found", what: "Tune up your Google profile so you show up in nearby searches", detail: "We update your hours, photos, and description so you turn up when nearby people search for somewhere to eat.", price: null },
+    { id: "reach-post", tag: "Post", what: `Share local posts and a short video to people within ${r("radius")}`, detail: "We write and schedule local posts and produce one short video. The price covers filming and editing the video into a finished post.", price: 90 },
+    { id: "reach-boost", tag: "Boost", what: "Put a small paid boost behind the best post to reach more nearby", detail: "We put a paid budget behind your best post and manage it. You choose the budget, and that ad spend is billed separately.", price: null },
+    { id: "reach-reply", tag: "Reply", what: "Reply to every new review to build trust with new guests", detail: "We reply to every new review in your voice so new guests see you care. You approve each reply first.", price: null },
   ],
   nights: (r) => [
-    { tag: "Offer", what: `Set up ${r("offer")} for your slow nights` },
-    { tag: "Post", what: `Post a reminder the day before, every ${r("days")}` },
-    { tag: "Text", what: "Text your nearby regulars a heads-up" },
-    { tag: "Reply", what: "Auto-reply to questions about the offer" },
+    { id: "nights-offer", tag: "Offer", what: `Set up ${r("offer")} for your slow nights`, detail: "We set up the offer and its rules so it is ready to run on your slow nights.", price: null },
+    { id: "nights-post", tag: "Post", what: `Post a reminder the day before, every ${r("days")}`, detail: "We write and schedule a reminder post the day before each slow night.", price: null },
+    { id: "nights-text", tag: "Text", what: "Text your nearby regulars a heads-up", detail: "We send a short heads-up text to your nearby regulars so they think of you that night.", price: null },
+    { id: "nights-reply", tag: "Reply", what: "Auto-reply to questions about the offer", detail: "We answer common questions about the offer automatically, so you do not have to.", price: null },
   ],
   firstvisit: (r) => [
-    { tag: "Offer", what: `Set up ${r("offer")} for first-time guests` },
-    { tag: "Reach", what: "Show it to nearby people who haven't visited yet" },
-    { tag: "Track", what: "Track how many redeem it and come in" },
+    { id: "firstvisit-offer", tag: "Offer", what: `Set up ${r("offer")} for first-time guests`, detail: "We set up a first-visit offer and the rules around it, ready to share.", price: null },
+    { id: "firstvisit-reach", tag: "Reach", what: "Show it to nearby people who haven't visited yet", detail: "We show the offer to nearby people who have not been in yet.", price: null },
+    { id: "firstvisit-track", tag: "Track", what: "Track how many redeem it and come in", detail: "We track how many people use the offer and come in, so you can see what it brought.", price: null },
   ],
   regulars: (r) => [
-    { tag: "Set up", what: `Set up ${r("reward")} to bring guests back` },
-    { tag: "Text", what: "Send a thank-you and the reward to past guests" },
-    { tag: "Remind", what: "Nudge guests who haven't been in a while" },
+    { id: "regulars-setup", tag: "Set up", what: `Set up ${r("reward")} to bring guests back`, detail: "We set up a simple reward that gives guests a reason to come back.", price: null },
+    { id: "regulars-text", tag: "Text", what: "Send a thank-you and the reward to past guests", detail: "We send a thank-you and the reward to your past guests by text.", price: null },
+    { id: "regulars-remind", tag: "Remind", what: "Nudge guests who haven't been in a while", detail: "We nudge guests who have not been in for a while to bring them back.", price: null },
   ],
   catering: (r) => [
-    { tag: "Reach", what: `Promote catering to ${r("audience")}` },
-    { tag: "Make", what: "Create a simple catering post and an easy quote link" },
-    { tag: "Follow up", what: "Follow up with anyone who asks for a quote" },
+    { id: "catering-reach", tag: "Reach", what: `Promote catering to ${r("audience")}`, detail: "We promote your catering to the audience you choose so the right people see it.", price: null },
+    { id: "catering-make", tag: "Make", what: "Create a simple catering post and an easy quote link", detail: "We create a catering post and an easy link people can use to ask for a quote.", price: null },
+    { id: "catering-follow", tag: "Follow up", what: "Follow up with anyone who asks for a quote", detail: "We follow up with anyone who asks for a quote so leads do not go cold.", price: null },
   ],
   reviewsplan: (r) => [
-    { tag: "Ask", what: `Ask happy guests for a review, ${r("how")}` },
-    { tag: "Reply", what: `Reply to ${r("which")}, you approve each one` },
-    { tag: "Track", what: "Watch your rating and review count climb" },
+    { id: "reviewsplan-ask", tag: "Ask", what: `Ask happy guests for a review, ${r("how")}`, detail: "We ask happy guests for a review the way you choose, at the right moment.", price: null },
+    { id: "reviewsplan-reply", tag: "Reply", what: `Reply to ${r("which")}, you approve each one`, detail: "We draft a reply to each review, and you approve it before it posts.", price: null },
+    { id: "reviewsplan-track", tag: "Track", what: "Watch your rating and review count climb", detail: "We watch your rating and review count so you can see it grow over time.", price: null },
   ],
   reel: (r) => [
-    { tag: "Film", what: `Shoot and edit a short video of ${r("subject")}` },
-    { tag: "Caption", what: "Write a caption and hashtags in your voice" },
-    { tag: "Post", what: "Post it once, after you approve it" },
-    { tag: "Boost", what: "Optionally boost it to nearby people" },
+    { id: "reel-film", tag: "Film", what: `Shoot and edit a short video of ${r("subject")}`, detail: "We film and edit one short video. The price covers the shoot and editing it into a finished post.", price: 90 },
+    { id: "reel-caption", tag: "Caption", what: "Write a caption and hashtags in your voice", detail: "We write a caption and hashtags in your voice to go with the video.", price: null },
+    { id: "reel-post", tag: "Post", what: "Post it once, after you approve it", detail: "We post the video once, after you approve it.", price: null },
+    { id: "reel-boost", tag: "Boost", what: "Optionally boost it to nearby people", detail: "If you want, we put a paid budget behind it to reach more nearby people. That ad spend is billed separately.", price: null },
   ],
   story: (r) => [
-    { tag: "Make", what: `Create ${r("count")} about ${r("subject")}` },
-    { tag: "Post", what: "Post it once, after you approve" },
+    { id: "story-make", tag: "Make", what: `Create ${r("count")} about ${r("subject")}`, detail: "We create the stories you asked for, ready to post.", price: null },
+    { id: "story-post", tag: "Post", what: "Post it once, after you approve", detail: "We post them once, after you approve.", price: null },
   ],
   carousel: (r) => [
-    { tag: "Design", what: `Build a carousel of ${r("subject")} as ${r("format")}` },
-    { tag: "Caption", what: "Write a caption in your voice" },
-    { tag: "Post", what: "Post it once, after you approve" },
+    { id: "carousel-design", tag: "Design", what: `Build a carousel of ${r("subject")} as ${r("format")}`, detail: "We design a multi-slide carousel in your brand look. The price covers the design work.", price: 60 },
+    { id: "carousel-caption", tag: "Caption", what: "Write a caption in your voice", detail: "We write a caption in your voice to go with it.", price: null },
+    { id: "carousel-post", tag: "Post", what: "Post it once, after you approve", detail: "We post it once, after you approve.", price: null },
   ],
   graphic: (r) => [
-    { tag: "Design", what: `Design a graphic for ${r("purpose")}${r("headline") ? ` that reads "${r("headline")}"` : ""}` },
-    { tag: "Size", what: `Set it up for ${r("where")}` },
-    { tag: "Review", what: "Send you a draft to approve, with one round of changes" },
+    { id: "graphic-design", tag: "Design", what: `Design a graphic for ${r("purpose")}${r("headline") ? ` that reads "${r("headline")}"` : ""}`, detail: "We design a custom graphic for your purpose. The price covers the design and one round of changes.", price: 60 },
+    { id: "graphic-size", tag: "Size", what: `Set it up for ${r("where")}`, detail: "We set the graphic up at the right size for where you plan to use it.", price: null },
+    { id: "graphic-review", tag: "Review", what: "Send you a draft to approve, with one round of changes", detail: "We send you a draft to approve, with one round of changes included.", price: null },
   ],
   dish: (r) => [
-    { tag: "Create", what: `Make ${r("format")} of ${r("subject")}` },
-    { tag: "Caption", what: "Write a caption in your voice" },
-    { tag: "Post", what: "Post it once, after you approve" },
+    { id: "dish-create", tag: "Create", what: `Make ${r("format")} of ${r("subject")}`, detail: "We create a photo or short video of the dish. The price covers the shoot and editing.", price: 90 },
+    { id: "dish-caption", tag: "Caption", what: "Write a caption in your voice", detail: "We write a caption in your voice.", price: null },
+    { id: "dish-post", tag: "Post", what: "Post it once, after you approve", detail: "We post it once, after you approve.", price: null },
   ],
   gpost: (r) => [
-    { tag: "Write", what: `Write a Google post about ${r("subject")}` },
-    { tag: "Publish", what: "Publish it to your Google listing after you approve" },
+    { id: "gpost-write", tag: "Write", what: `Write a Google post about ${r("subject")}`, detail: "We write a Google post about your subject so it shows on your listing.", price: null },
+    { id: "gpost-publish", tag: "Publish", what: "Publish it to your Google listing after you approve", detail: "We publish it to your Google listing after you approve.", price: null },
   ],
   launch: (r) => [
-    { tag: "Tease", what: `Tease ${r("subject")} a few days before ${r("date")}` },
-    { tag: "Launch", what: `Announce it with ${r("special")} on ${r("date")}, across posts and stories` },
-    { tag: "Email", what: "Email and text your list the day it drops" },
-    { tag: "Follow up", what: "Post a follow-up mid-week to keep it going" },
+    { id: "launch-tease", tag: "Tease", what: `Tease ${r("subject")} a few days before ${r("date")}`, detail: "We build interest with a teaser post a few days before launch day.", price: null },
+    { id: "launch-launch", tag: "Launch", what: `Announce it with ${r("special")} on ${r("date")}, across posts and stories`, detail: "We announce it across posts and stories on the day, with everything ready to go.", price: null },
+    { id: "launch-email", tag: "Email", what: "Email and text your list the day it drops", detail: "We email and text your list the day it drops so your regulars hear first.", price: null },
+    { id: "launch-follow", tag: "Follow up", what: "Post a follow-up mid-week to keep it going", detail: "We post a mid-week follow-up to keep interest going after launch.", price: null },
   ],
   creator: (r) => [
-    { tag: "Find", what: `Find ${r("tier")} who fits your spot` },
-    { tag: "Brief", what: `Brief them to feature ${r("subject")}` },
-    { tag: "Share", what: "Reshare their post to your followers" },
+    { id: "creator-find", tag: "Find", what: `Find ${r("tier")} who fits your spot`, detail: "We find a local creator whose followers match your guests.", price: null },
+    { id: "creator-brief", tag: "Brief", what: `Brief them to feature ${r("subject")}`, detail: "We brief them on what to feature and how to talk about you.", price: null },
+    { id: "creator-share", tag: "Share", what: "Reshare their post to your followers", detail: "We reshare their post to your own followers for more reach.", price: null },
   ],
   welcome: (r) => [
-    { tag: "Write", what: `Write a welcome email with ${r("message")}` },
-    { tag: "Automate", what: "Send it automatically when someone joins" },
+    { id: "welcome-write", tag: "Write", what: `Write a welcome email with ${r("message")}`, detail: "We write a welcome email with your message for new subscribers.", price: null },
+    { id: "welcome-automate", tag: "Automate", what: "Send it automatically when someone joins", detail: "We set it to send automatically the moment someone joins your list.", price: null },
   ],
   second: (r) => [
-    { tag: "Write", what: `Write a come-back email with ${r("offer")}` },
-    { tag: "Automate", what: "Send it a few days after a first visit" },
+    { id: "second-write", tag: "Write", what: `Write a come-back email with ${r("offer")}`, detail: "We write a come-back email with your offer for first-time guests.", price: null },
+    { id: "second-automate", tag: "Automate", what: "Send it a few days after a first visit", detail: "We set it to send a few days after someone's first visit.", price: null },
   ],
   news: (r) => [
-    { tag: "Write", what: `Write the newsletter (${r("cadence")}), sharing ${r("content")}` },
-    { tag: "Design", what: "Lay it out to match your brand" },
-    { tag: "Send", what: "Send it and track who opens and clicks" },
+    { id: "news-write", tag: "Write", what: `Write the newsletter (${r("cadence")}), sharing ${r("content")}`, detail: "We write your newsletter on your schedule, using the content you choose.", price: null },
+    { id: "news-design", tag: "Design", what: "Lay it out to match your brand", detail: "We lay it out to match your brand so it looks like you.", price: null },
+    { id: "news-send", tag: "Send", what: "Send it and track who opens and clicks", detail: "We send it and track who opens and clicks so you see what worked.", price: null },
   ],
   slowoffer: (r) => [
-    { tag: "Make", what: `Set up ${r("offer")}, good on ${r("days")}` },
-    { tag: "Send", what: `Send it by ${r("channel")} before those days` },
+    { id: "slowoffer-make", tag: "Make", what: `Set up ${r("offer")}, good on ${r("days")}`, detail: "We set up the offer so it is valid only on your slow days.", price: null },
+    { id: "slowoffer-send", tag: "Send", what: `Send it by ${r("channel")} before those days`, detail: "We send it through your chosen channel before those days come around.", price: null },
   ],
   birthday: (r) => [
-    { tag: "Set up", what: `Set up ${r("treat")} for birthdays` },
-    { tag: "Automate", what: `Send it by ${r("channel")} the morning of their birthday` },
+    { id: "birthday-setup", tag: "Set up", what: `Set up ${r("treat")} for birthdays`, detail: "We set up a birthday treat guests get on their special day.", price: null },
+    { id: "birthday-automate", tag: "Automate", what: `Send it by ${r("channel")} the morning of their birthday`, detail: "We send it automatically the morning of each guest's birthday.", price: null },
   ],
   earlyaccess: (r) => [
-    { tag: "Set up", what: `Give subscribers early access to ${r("what")}` },
-    { tag: "Send", what: `Email your list ${r("timing")} before everyone else` },
+    { id: "earlyaccess-setup", tag: "Set up", what: `Give subscribers early access to ${r("what")}`, detail: "We give your subscribers first access to whatever you choose.", price: null },
+    { id: "earlyaccess-send", tag: "Send", what: `Email your list ${r("timing")} before everyone else`, detail: "We email your list ahead of everyone else so being on it feels worth it.", price: null },
   ],
   shoot: (r) => [
-    { tag: "Plan", what: `Plan a ${r("kind")} shoot of ${r("what")} for ${r("date")}` },
-    { tag: "Shoot", what: "Capture everything in one session" },
-    { tag: "Deliver", what: "Edit and hand over the final files for you to use" },
+    { id: "shoot-plan", tag: "Plan", what: `Plan a ${r("kind")} shoot of ${r("what")} for ${r("date")}`, detail: "We plan the shoot and a shot list so the session covers everything you need.", price: null },
+    { id: "shoot-shoot", tag: "Shoot", what: "Capture everything in one session", detail: "We capture everything in one session at your place. The price covers the session and the edited files.", price: 250 },
+    { id: "shoot-deliver", tag: "Deliver", what: "Edit and hand over the final files for you to use", detail: "We edit and hand over the final files for you to keep and use anywhere.", price: null },
   ],
   gbp: (r) => [
-    { tag: "Review", what: `Review your Google profile: ${r("what")}` },
-    { tag: "Update", what: "Fix and update each one" },
-    { tag: "Check", what: "Make sure it looks right on search and maps" },
+    { id: "gbp-review", tag: "Review", what: `Review your Google profile: ${r("what")}`, detail: "We review your Google profile and flag what is missing or out of date.", price: null },
+    { id: "gbp-update", tag: "Update", what: "Fix and update each one", detail: "We fix and update each item so your profile is complete.", price: null },
+    { id: "gbp-check", tag: "Check", what: "Make sure it looks right on search and maps", detail: "We make sure it looks right on both search and maps.", price: null },
   ],
   reviewsreply: (r) => [
-    { tag: "Draft", what: `Draft replies to ${r("which")} reviews` },
-    { tag: "Approve", what: "You approve each reply before it posts" },
+    { id: "reviewsreply-draft", tag: "Draft", what: `Draft replies to ${r("which")} reviews`, detail: "We draft a reply to each review in your voice.", price: null },
+    { id: "reviewsreply-approve", tag: "Approve", what: "You approve each reply before it posts", detail: "You approve each reply before it posts. Nothing goes out without your okay.", price: null },
   ],
   qr: (r) => [
-    { tag: "Make", what: `Create a QR and a page that ${r("action")}` },
-    { tag: "Print", what: "Give you a table sign to print" },
+    { id: "qr-make", tag: "Make", what: `Create a QR and a page that ${r("action")}`, detail: "We create a QR code and a simple page it opens to.", price: null },
+    { id: "qr-print", tag: "Print", what: "Give you a table sign to print", detail: "We give you a table sign to print and place.", price: null },
   ],
   friction: (r) => [
-    { tag: "Review", what: `Walk through ${r("channel")} as a guest would` },
-    { tag: "Fix", what: "Cut the steps that lose people" },
-    { tag: "Test", what: "Test it and confirm it's faster" },
+    { id: "friction-review", tag: "Review", what: `Walk through ${r("channel")} as a guest would`, detail: "We walk through your ordering the way a guest would and note where people drop off.", price: null },
+    { id: "friction-fix", tag: "Fix", what: "Cut the steps that lose people", detail: "We cut the extra steps that cost you orders.", price: null },
+    { id: "friction-test", tag: "Test", what: "Test it and confirm it's faster", detail: "We test it again and confirm it is faster to order.", price: null },
   ],
   giftcard: (r) => [
-    { tag: "Set up", what: `Set up ${r("kind")} gift cards in ${r("amounts")}${r("bonus") ? `, with ${r("bonus")}` : ""}` },
-    { tag: "Make", what: `Create a post and buy link for ${r("occasion")}` },
-    { tag: "Send", what: "Share it with your list and on social" },
+    { id: "giftcard-setup", tag: "Set up", what: `Set up ${r("kind")} gift cards in ${r("amounts")}${r("bonus") ? `, with ${r("bonus")}` : ""}`, detail: "We set up your gift cards in the amounts you choose.", price: null },
+    { id: "giftcard-make", tag: "Make", what: `Create a post and buy link for ${r("occasion")}`, detail: "We create a post and a buy link for the occasion.", price: null },
+    { id: "giftcard-send", tag: "Send", what: "Share it with your list and on social", detail: "We share it with your list and on social so people can buy.", price: null },
   ],
   ticket: (r) => [
-    { tag: "Set up", what: `Set up ticket sales for ${r("event")} at ${r("price")}${r("cap") ? `, room for ${r("cap")}` : ""}` },
-    { tag: "Promote", what: `Promote it for ${r("date")} at ${r("time")}, across posts and email` },
-    { tag: "Remind", what: "Send a reminder the day before" },
+    { id: "ticket-setup", tag: "Set up", what: `Set up ticket sales for ${r("event")} at ${r("price")}${r("cap") ? `, room for ${r("cap")}` : ""}`, detail: "We set up ticket sales for your event at the price you set.", price: null },
+    { id: "ticket-promote", tag: "Promote", what: `Promote it for ${r("date")} at ${r("time")}, across posts and email`, detail: "We promote it across posts and email in the run-up to the date.", price: null },
+    { id: "ticket-remind", tag: "Remind", what: "Send a reminder the day before", detail: "We send a reminder the day before so people show up.", price: null },
   ],
   winback: (r) => [
-    { tag: "Watch", what: `Spot guests who haven't visited in ${r("time")}` },
-    { tag: "Send", what: `Automatically send ${r("offer")}` },
+    { id: "winback-watch", tag: "Watch", what: `Spot guests who haven't visited in ${r("time")}`, detail: "We spot guests who have not visited in a while so you can win them back.", price: null },
+    { id: "winback-send", tag: "Send", what: `Automatically send ${r("offer")}`, detail: "We automatically send them an offer to bring them in again.", price: null },
   ],
 };
+
+/* Optional extras the owner can add to any plan. Same shape as a step.
+   Demo prices fit the file's existing data (a short video runs $90, a
+   shoot $250). Display-only for now; nothing here changes what onCreate saves. */
+const ADDONS = [
+  { id: "addon-photoshoot", tag: "Photoshoot", what: "A professional photoshoot of your food and space", detail: "A photographer shoots your food and space and gives you the edited photos to use anywhere.", price: 250 },
+  { id: "addon-graphic", tag: "Graphic", what: "A custom graphic or flyer", detail: "A custom graphic for a promo, event, or print, with one round of changes.", price: 60 },
+  { id: "addon-video", tag: "Video", what: "An extra short video", detail: "One more short video, filmed and edited into a finished post.", price: 90 },
+  { id: "addon-boost", tag: "Boost", what: "A paid boost to reach more nearby people", detail: "We put a paid budget behind your best post to reach more people near you.", price: 75 },
+];
+
+/* Add-on quick-config options (one choice per add-on, captured in the sheet).
+   Graphic purposes mirror QL.graphic's purpose slot, kept to the noun-phrase
+   options so they read after "for". */
+const GRAPHIC_FOR = (() => {
+  const o = ((QL.graphic && QL.graphic.slots && QL.graphic.slots.purpose && QL.graphic.slots.purpose.o) || []).filter((x) => /^an? /.test(x));
+  return o.length ? o : ["a promotion", "an announcement", "an event", "a new menu item", "a holiday"];
+})();
+const VIDEO_OF = ["a dish", "your space", "your team", "an event"];
+const BOOST_TIERS = [25, 50, 75, 150];
+const BOOST_DEFAULT = 75;
 function genSteps(p, cfg, vals) {
   const read = (k) => { const f = cfg.slots[k] || (cfg.extras && cfg.extras.find((e) => e.id === k)); return f ? readSlot(f, vals[k]) : ""; };
   const fn = PLAYBOOK[p.id];
   if (fn) return fn(read);
   return [
-    { tag: "Set up", what: `Set up ${p.title.toLowerCase()}` },
-    { tag: "Review", what: "Get it ready for you to check" },
-    { tag: "Go live", what: "Put it live once you approve" },
+    { id: "fallback-setup", tag: "Set up", what: `Set up ${p.title.toLowerCase()}`, detail: "We set this up and get it ready for you.", price: null },
+    { id: "fallback-review", tag: "Review", what: "Get it ready for you to check", detail: "We prepare a draft for you to review before anything goes out.", price: null },
+    { id: "fallback-live", tag: "Go live", what: "Put it live once you approve", detail: "Once you approve, we put it live for you.", price: null },
   ];
 }
 
-function PlanSteps({ itemId, vals, onBack, onAdd, onMarketer }) {
+/* Per-plan goal line: what this plan is for, in plain Apnosh voice. Qualitative
+   only for now (no numbers, no promises). Falls back to the catalog item's sub. */
+const GOAL_LINE = {
+  reach: "Get in front of nearby people who haven't tried you yet.",
+  nights: "Bring more guests in on your quiet nights.",
+  firstvisit: "Give first-time guests a reason to walk in.",
+  regulars: "Turn first-timers into regulars who come back.",
+  catering: "Win more group orders and catering jobs.",
+  reviewsplan: "Earn more fresh reviews and a stronger rating.",
+  reel: "Show off your food in a short video people share.",
+  story: "Stay top of mind with a quick, timely post.",
+  carousel: "Tell a fuller story in one post people can swipe through.",
+  graphic: "Get a clean, on-brand graphic to share or print.",
+  dish: "Make one of your dishes look worth coming in for.",
+  gpost: "Reach people who find you on Google.",
+  promoevent: "Fill seats for your event.",
+  launch: "Get people excited about something new.",
+  creator: "Reach new people through a local creator's followers.",
+  welcome: "Make new subscribers feel welcome from the start.",
+  second: "Bring first-time guests back for a second visit.",
+  news: "Keep your regulars in the loop and coming back.",
+  slowoffer: "Fill your slow days with a timely offer.",
+  birthday: "Reach guests on their birthday with a small treat.",
+  earlyaccess: "Reward your list with first access.",
+  shoot: "Build a fresh set of photos and video to use everywhere.",
+  gbp: "Make your Google listing accurate and inviting.",
+  reviewsreply: "Show guests you read and reply to every review.",
+  qr: "Turn guests at the table into followers and subscribers.",
+  friction: "Make it easier for people to order or book.",
+  giftcard: "Sell more gift cards through the year.",
+  ticket: "Sell spots to your event.",
+  winback: "Bring back guests who haven't been in for a while.",
+};
+
+/* How long the plan runs, from the catalog item's cad (and a date in vals for
+   short-run event plans). Informational text, not an editable control. */
+function durationLine(p, vals) {
+  if (p.cad === "recurring") return "Runs every week until you pause it.";
+  if (p.cad === "auto") return "Runs on its own until you pause it.";
+  if (p.cad === "once") return "A one-time piece.";
+  if (p.cad === "setup") return "A one-time setup.";
+  if (p.cad === "group" || p.cad === "season" || p.season) {
+    const d = vals && vals.date;
+    if (d instanceof Date && !isNaN(d.getTime())) {
+      return `Runs in the lead-up to ${d.toLocaleDateString("en-US", { month: "long", day: "numeric" })}.`;
+    }
+    return "A short run leading up to your event.";
+  }
+  return "Runs until you pause it.";
+}
+
+// Add-on instances carry a "-N" suffix; strip it to get the base step id.
+const baseId = (id) => id.replace(/-\d+$/, "");
+
+/* Why each piece is in the plan: one short, plain reason per step, in Apnosh
+   voice. Qualitative only (no numbers or promises). Keyed by PLAYBOOK step id;
+   add-on instances (id like "addon-video-0") fall back to their base id. */
+const REASON = {
+  // reach
+  "reach-google": "Most people check Google before they pick a place, so a clean profile is where being found starts.",
+  "reach-post": "Fresh local posts and a short video give nearby people a reason to notice you.",
+  "reach-boost": "A small paid push puts your best post in front of more nearby people than reach alone.",
+  "reach-reply": "Replying to reviews shows new guests you care, which builds trust before they visit.",
+  // nights
+  "nights-offer": "A reason to come gives your quiet nights a pull they don't have on their own.",
+  "nights-post": "A reminder the day before lands while people are deciding where to go.",
+  "nights-text": "Your regulars are the most likely to come on a slow night, so a direct text reaches them best.",
+  "nights-reply": "Quick answers to questions keep interested guests from drifting away.",
+  // firstvisit
+  "firstvisit-offer": "A first-visit offer lowers the risk of trying somewhere new.",
+  "firstvisit-reach": "Showing it to people who haven't been yet puts it where it can do the most good.",
+  "firstvisit-track": "Tracking who redeems it tells you whether the offer is pulling people in.",
+  // regulars
+  "regulars-setup": "A simple reward gives guests a reason to come back, not just once but again.",
+  "regulars-text": "A thank-you with the reward reaches past guests where they will see it.",
+  "regulars-remind": "A gentle nudge brings back people who would have come, but forgot.",
+  // catering
+  "catering-reach": "Catering buyers are a specific crowd, so it pays to put it in front of the right people.",
+  "catering-make": "A clear post and an easy quote link make it simple for someone to ask.",
+  "catering-follow": "Most catering jobs are won in the follow-up, not the first message.",
+  // reviewsplan
+  "reviewsplan-ask": "Most happy guests will leave a review if you ask at the right moment.",
+  "reviewsplan-reply": "Replying to reviews shows future guests you are paying attention.",
+  "reviewsplan-track": "Watching your rating tells you the effort is working over time.",
+  // reel
+  "reel-film": "A short video shows your food in motion, which catches more eyes than a photo.",
+  "reel-caption": "A caption in your voice gives the video context and a reason to act.",
+  "reel-post": "Posting once, after you approve, keeps it on your terms.",
+  "reel-boost": "A small paid push helps the video reach beyond your current followers.",
+  // story
+  "story-make": "A quick story keeps you in front of people without much effort.",
+  "story-post": "Posting after you approve keeps you in control of what goes out.",
+  // carousel
+  "carousel-design": "A carousel lets you tell a fuller story in one post people can swipe through.",
+  "carousel-caption": "A caption in your voice ties the slides together.",
+  "carousel-post": "Posting once, after you approve, keeps it on your terms.",
+  // graphic
+  "graphic-design": "A clean, on-brand graphic makes your message easy to share or print.",
+  "graphic-size": "Sizing it for where you will use it means it looks right wherever it lands.",
+  "graphic-review": "A draft to approve, with one round of changes, makes sure it is right before it is final.",
+  // dish
+  "dish-create": "A strong photo or video of one dish can be the thing that makes someone come in.",
+  "dish-caption": "A caption in your voice gives the dish a reason and a story.",
+  "dish-post": "Posting after you approve keeps it on your terms.",
+  // gpost
+  "gpost-write": "A Google post reaches people right when they are searching for somewhere to eat.",
+  "gpost-publish": "Publishing after you approve keeps your listing in your control.",
+  // launch
+  "launch-tease": "A teaser builds interest before the day, so the launch does not start cold.",
+  "launch-launch": "Posting across your channels on the day puts it where your guests already are.",
+  "launch-email": "Your list is your warmest audience, so they should hear it first.",
+  "launch-follow": "A mid-week follow-up keeps the launch going after the first push fades.",
+  // creator
+  "creator-find": "A local creator brings an audience that already trusts their taste.",
+  "creator-brief": "A clear brief makes sure they feature you the way you would want.",
+  "creator-share": "Resharing their post brings that reach back to your own followers.",
+  // welcome
+  "welcome-write": "A warm welcome sets the tone the moment someone joins your list.",
+  "welcome-automate": "Sending it automatically means every new subscriber gets it, without you lifting a finger.",
+  // second
+  "second-write": "A first visit is only worth so much; the second visit is where regulars start.",
+  "second-automate": "Sending it a few days after the first visit reaches people while you are still fresh in mind.",
+  // news
+  "news-write": "A regular note keeps you in mind with the people most likely to come back.",
+  "news-design": "A layout that matches your brand makes it feel like you, not a generic email.",
+  "news-send": "Tracking opens and clicks shows you what your guests actually care about.",
+  // slowoffer
+  "slowoffer-make": "An offer tied to your slow days gives people a reason to come when you need them.",
+  "slowoffer-send": "Sending it before those days reaches people while they are still planning.",
+  // birthday
+  "birthday-setup": "A birthday treat is an easy reason for someone to choose you that week.",
+  "birthday-automate": "Sending it the morning of means it lands right when they are deciding.",
+  // earlyaccess
+  "earlyaccess-setup": "First access makes being on your list feel worth it.",
+  "earlyaccess-send": "Reaching them ahead of everyone rewards the people who signed up.",
+  // shoot
+  "shoot-plan": "A planned shot list makes sure one session covers everything you need.",
+  "shoot-shoot": "Capturing it all at once is the most efficient way to get fresh content.",
+  "shoot-deliver": "Edited files you keep can carry your posts, menu, and listings for months.",
+  // gbp
+  "gbp-review": "Wrong hours or old photos quietly cost you guests, so it is worth a careful look.",
+  "gbp-update": "Fixing each item makes sure people see the right thing when they find you.",
+  "gbp-check": "Checking search and maps confirms it looks right where guests actually look.",
+  // reviewsreply
+  "reviewsreply-draft": "A reply to every review shows future guests you are listening.",
+  "reviewsreply-approve": "You approve each reply so it always sounds like you.",
+  // qr
+  "qr-make": "A table QR turns a one-time diner into a follower or subscriber you can reach again.",
+  "qr-print": "A printed table sign puts it where guests are already sitting.",
+  // friction
+  "friction-review": "Walking through ordering as a guest shows where people give up.",
+  "friction-fix": "Cutting the extra steps means fewer people abandon their order.",
+  "friction-test": "Testing it again confirms the fix actually made it easier.",
+  // giftcard
+  "giftcard-setup": "Gift cards bring in money now and a new guest later, when the card is used.",
+  "giftcard-make": "A post and a buy link make it easy for someone to buy on the spot.",
+  "giftcard-send": "Sharing it with your list and on social puts it in front of people who already like you.",
+  // ticket
+  "ticket-setup": "Selling tickets locks in attendance and covers your costs up front.",
+  "ticket-promote": "Steady promotion in the run-up fills the room before the day.",
+  "ticket-remind": "A day-before reminder cuts down on no-shows.",
+  // winback
+  "winback-watch": "Spotting guests who have gone quiet is the first step to bringing them back.",
+  "winback-send": "An automatic offer reaches them at the right moment, without you tracking it by hand.",
+  // add-ons
+  "addon-photoshoot": "Fresh photos give every part of your marketing better material to work with.",
+  "addon-graphic": "A custom graphic gives your message a clean, on-brand look.",
+  "addon-video": "An extra video gives you more to post and more chances to be seen.",
+  "addon-boost": "A paid boost extends your reach beyond the people who already follow you.",
+  // generic fallback steps
+  "fallback-setup": "Getting the setup right is what everything else builds on.",
+  "fallback-review": "A draft to review means nothing goes out before you have seen it.",
+  "fallback-live": "It goes live only once you approve, so it is always on your terms.",
+};
+// Add-on instances fall back to their base id for the reason.
+function reasonFor(id) { return REASON[id] || REASON[baseId(id)] || ""; }
+
+/* What a paid step's price covers, as a short phrase for its own line (e.g.
+   "$90 covers the shoot and the edit"). Keyed by step id; add-on instances fall
+   back to their base id. Only paid steps render a price line. */
+const PRICE_COVERS = {
+  "reach-post": "filming and editing the video",
+  "reel-film": "the shoot and the edit",
+  "carousel-design": "the design work",
+  "graphic-design": "the design and one round of changes",
+  "dish-create": "the shoot and the edit",
+  "shoot-shoot": "the full session and the edited files",
+  "addon-photoshoot": "the session and the edited photos",
+  "addon-graphic": "the design and one round of changes",
+  "addon-video": "the shoot and the edit",
+  "addon-boost": "the boost budget and setup",
+};
+function coversFor(id) { return PRICE_COVERS[id] || PRICE_COVERS[baseId(id)] || "the work on this piece"; }
+
+function PlanSteps({ itemId, vals: valsProp, onBack, onAdd, onMarketer }) {
   const p = catGet(itemId) || CATALOG[0];
   const cfg = QL[itemId] || { slots: {} };
   const c1 = (TYPE_G[p.type] || TYPE_G.plan)[1];
+
+  // The mad-libs choices were made on the build step. This screen READS them
+  // (the step text reflects what was chosen) but does not re-edit them. The only
+  // editing here is which steps are in the plan: remove/restore and add-ons.
+  const vals = valsProp || {};
+  const [onMap, setOnMap] = useState({});   // step id -> false when removed
+  const [extras, setExtras] = useState([]); // add-ons the owner appended
+  const [open, setOpen] = useState({});     // step id -> expanded
+  const [addOpen, setAddOpen] = useState(false);
+  const [config, setConfig] = useState(null); // add-on id being configured in the sheet
+  const seq = useRef(0);
+
+  // Base steps read live from the playbook + the chosen vals; add-ons append after.
   const base = genSteps(p, cfg, vals);
-  const [steps, setSteps] = useState(() => base.map((st, i) => ({ id: i, tag: st.tag, what: st.what, on: true })));
-  const [editId, setEditId] = useState(null);
+  const steps = [...base, ...extras].map((st) => ({ ...st, on: onMap[st.id] !== false }));
   const onSteps = steps.filter((st) => st.on);
-  const setWhat = (id, t) => setSteps((arr) => arr.map((st) => st.id === id ? { ...st, what: t } : st));
-  const remove = (id) => setSteps((arr) => arr.map((st) => st.id === id ? { ...st, on: false } : st));
+  const total = onSteps.reduce((sum, st) => sum + (st.price || 0), 0);
+  // Number only the active steps; removed ones stay listed but unnumbered.
+  let activeNo = 0;
+  const rows = steps.map((st) => ({ st, num: st.on ? (activeNo += 1) : null }));
+
+  const toggleOpen = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
+  const remove = (id) => setOnMap((m) => ({ ...m, [id]: false }));
+  // Un-trap remove: removed steps stay visible (dimmed) and can be switched back on.
+  const restore = (id) => setOnMap((m) => ({ ...m, [id]: true }));
+  const hasPhotoshoot = extras.some((e) => baseId(e.id) === "addon-photoshoot");
+  const boostStep = extras.find((e) => baseId(e.id) === "addon-boost");
+  const closeSheet = () => { setAddOpen(false); setConfig(null); };
+  // Append an add-on as a new step, with optional overrides (a chosen "what" or price).
+  const appendExtra = (a, overrides) => {
+    const id = `${a.id}-${seq.current++}`;
+    setExtras((arr) => [...arr, { ...a, id, ...(overrides || {}) }]);
+    setOpen((o) => ({ ...o, [id]: true }));
+    closeSheet();
+  };
+  // A boost is single-instance and adjustable: change the amount in place rather
+  // than stacking a second boost (and bring it back on if it was removed).
+  const chooseBoost = (a, amount) => {
+    if (boostStep) {
+      setExtras((arr) => arr.map((e) => e.id === boostStep.id ? { ...e, price: amount } : e));
+      setOnMap((m) => ({ ...m, [boostStep.id]: true }));
+      setOpen((o) => ({ ...o, [boostStep.id]: true }));
+      closeSheet();
+    } else {
+      appendExtra(a, { price: amount });
+    }
+  };
+
+  const pricePill = (n) => (
+    <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 12.5, fontWeight: 600, color: c1, background: `${c1}14`, borderRadius: 11, padding: "3px 9px", whiteSpace: "nowrap", flexShrink: 0 }}>{money(n)}</span>
+  );
+  const includedTag = (
+    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 600, color: TOKENS.faint, whiteSpace: "nowrap", flexShrink: 0 }}>Included</span>
+  );
+  const ctrlBtn = { display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 13px", borderRadius: 17, border: `1px solid ${TOKENS.line}`, background: "#fff", color: TOKENS.sub, fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer", WebkitTapHighlightColor: "transparent" };
+  const addBackBtn = { display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 13px", borderRadius: 17, border: `1px solid ${TOKENS.mint}`, background: "#fff", color: TOKENS.mintDark, fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer", flexShrink: 0, WebkitTapHighlightColor: "transparent" };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb", position: "relative" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
           <CircleBtn onClick={onBack}>
@@ -2931,47 +3265,180 @@ function PlanSteps({ itemId, vals, onBack, onAdd, onMarketer }) {
             <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16.5, fontWeight: 600, color: TOKENS.ink }}>{p.title}</div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "16px 0 7px" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill={TOKENS.mintDark}><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.mintDark, textTransform: "uppercase" }}>Your plan is ready</span>
+        {/* Plan summary: what this plan is for, and how long it runs. A calm block,
+            kept visually separate from the step list below. */}
+        <div style={{ marginTop: 16, background: `${c1}0d`, borderRadius: 16, padding: "14px 16px" }}>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14.5, fontWeight: 500, color: TOKENS.ink, lineHeight: 1.45 }}>
+            {GOAL_LINE[p.id] || p.sub}
+            {/* Later: a data-driven target can be appended here (e.g. an estimated
+                reach or guest count) once we have a real number. Do not invent one. */}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 9 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={c1} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.4 }}>{durationLine(p, vals)}</span>
+          </div>
         </div>
-        <h2 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, margin: "0 0 6px", letterSpacing: -0.3 }}>Here's how it'll work</h2>
-        <p style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.5, margin: "0 0 20px" }}>Adjust any step, or remove what you don't need. Then add it and we'll get it going.</p>
+
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 1.1, color: TOKENS.faint, textTransform: "uppercase", margin: "22px 0 4px" }}>What we'll do</div>
+        <p style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub, lineHeight: 1.5, margin: "0 0 14px" }}>Tap a step to see why it's there and what it costs. Remove what you don't need, or add an extra.</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {onSteps.map((st, idx) => (
-            <div key={st.id} style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 16, padding: "14px 15px", boxShadow: "0 1px 2px rgba(20,30,26,0.03)" }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                <div style={{ width: 26, height: 26, borderRadius: 13, background: gType(p.type), color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{idx + 1}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, color: c1, textTransform: "uppercase", marginBottom: 3 }}>{st.tag}</div>
-                  {editId === st.id ? (
-                    <>
-                      <textarea value={st.what} onChange={(e) => setWhat(st.id, e.target.value)} autoFocus rows={2} style={{ width: "100%", border: `1.5px solid ${TOKENS.line}`, borderRadius: 10, padding: "8px 10px", fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, outline: "none", boxSizing: "border-box", resize: "none", lineHeight: 1.4 }} />
-                      <button onClick={() => setEditId(null)} style={{ marginTop: 8, height: 34, padding: "0 16px", borderRadius: 17, border: "none", background: c1, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>Done</button>
-                    </>
-                  ) : (
-                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{st.what}</div>
-                  )}
+          {rows.map(({ st, num }) => {
+            if (!st.on) {
+              return (
+                <div key={st.id} style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 16, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, opacity: 0.7 }}>
+                  <div style={{ width: 26, height: 26, borderRadius: 13, background: "#eef1f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.4" strokeLinecap="round"><path d="M5 12h14" /></svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 3 }}>{st.tag}</div>
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.faint, lineHeight: 1.45, textDecoration: "line-through" }}>{st.what}</div>
+                  </div>
+                  <button onClick={() => restore(st.id)} style={addBackBtn}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                    Add back
+                  </button>
                 </div>
-                {editId !== st.id && (
-                  <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
-                    <button onClick={() => setEditId(st.id)} style={iconBtn} aria-label="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 5l5 5M4 20l1-4L16 5l4 4L9 20z" /></svg></button>
-                    {onSteps.length > 1 && <button onClick={() => remove(st.id)} style={iconBtn} aria-label="Remove"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>}
+              );
+            }
+            const isOpen = !!open[st.id];
+            const paid = st.price != null;
+            const why = reasonFor(st.id);
+            return (
+              <div key={st.id} style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 16, boxShadow: "0 1px 2px rgba(20,30,26,0.03)", overflow: "hidden" }}>
+                <button onClick={() => toggleOpen(st.id)} style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "14px 15px", display: "flex", alignItems: "flex-start", gap: 12, WebkitTapHighlightColor: "transparent" }}>
+                  <div style={{ width: 26, height: 26, borderRadius: 13, background: gType(p.type), color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{num}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, color: c1, textTransform: "uppercase", marginBottom: 3 }}>{st.tag}</div>
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{st.what}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0, marginTop: 1 }}>
+                    {paid ? pricePill(st.price) : includedTag}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: "transform 180ms ease", transform: isOpen ? "rotate(180deg)" : "none" }}><path d="M6 9l6 6 6-6" /></svg>
+                  </div>
+                </button>
+                {isOpen && (
+                  <div style={{ padding: "0 15px 14px 53px" }}>
+                    {/* No reworded-title description here; the card title already says
+                        what the step is. Priced steps keep only the cost line. */}
+                    {paid && (
+                      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub, lineHeight: 1.5 }}>
+                        <span style={{ fontWeight: 600, color: c1 }}>{money(st.price)}</span> covers {coversFor(st.id)}.
+                      </div>
+                    )}
+                    {/* Why it's here: the reasoning, one short sentence */}
+                    {why && (
+                      <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${TOKENS.line}` }}>
+                        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 5 }}>Why it's here</div>
+                        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink, lineHeight: 1.5 }}>
+                          {why}
+                          {/* Later: a data-driven detail can be appended here (e.g. how this
+                              piece tends to perform for similar plans). Do not invent one now. */}
+                        </div>
+                      </div>
+                    )}
+                    {/* Remove (Add back lives on the greyed removed row) */}
+                    {onSteps.length > 1 && (
+                      <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${TOKENS.line}` }}>
+                        <button onClick={() => remove(st.id)} style={ctrlBtn}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                          Remove
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
+            );
+          })}
+
+          <button onClick={() => setAddOpen(true)} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: "#fcfdfc", border: `1.5px dashed ${TOKENS.dash}`, borderRadius: 16, padding: "14px 15px", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+            <div style={{ width: 26, height: 26, borderRadius: 13, background: "#eef1f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
             </div>
-          ))}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink }}>Add to your plan</div>
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginTop: 1 }}>Photos, a graphic, an extra video, or a paid boost</div>
+            </div>
+          </button>
         </div>
       </div>
-      <div style={{ flexShrink: 0, padding: "12px 20px 20px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-        <button onClick={() => onAdd(onSteps)} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Add this plan</button>
-        <button onClick={onMarketer} style={{ width: "100%", height: 48, marginTop: 9, borderRadius: 24, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>
-          Hand it to a marketer
-        </button>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, textAlign: "center", marginTop: 9, lineHeight: 1.4 }}>A marketer on our team builds and runs it for you. You still approve before anything goes out.</div>
+      <div style={{ flexShrink: 0, padding: "12px 20px 18px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: total > 0 ? 6 : 12 }}>
+          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink }}>Your plan total</span>
+          <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 600, color: TOKENS.ink }}>{money(total)}</span>
+        </div>
+        {total > 0 && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, lineHeight: 1.45, marginBottom: 12 }}>Included work is free.</div>}
+        {/* Add this plan is the dominant commit action; Save as draft is a quiet
+            secondary. Both pass intent + the live, edited vals through the existing
+            onAdd/onCreate path; the draft status, edited vals, and a draft confirm
+            message still need backend wiring. Don't add new persistence here. */}
+        <button onClick={() => onAdd(onSteps, "approve", vals)} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Add this plan</button>
+        <button onClick={() => onAdd(onSteps, "draft", vals)} style={{ width: "100%", height: 40, marginTop: 6, borderRadius: 20, border: "none", cursor: "pointer", background: "none", color: TOKENS.sub, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Save as draft</button>
       </div>
+
+      {addOpen && (
+        <div onClick={closeSheet} style={{ position: "absolute", inset: 0, background: "rgba(20,27,24,0.45)", display: "flex", alignItems: "flex-end", zIndex: 30 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: "#fff", borderRadius: "24px 24px 0 0", padding: "10px 18px 24px", maxHeight: "82%", overflowY: "auto" }}>
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: TOKENS.line, margin: "0 auto 16px" }} />
+            <h3 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 600, color: TOKENS.ink, margin: "0 0 4px" }}>Add to your plan</h3>
+            <p style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub, lineHeight: 1.5, margin: "0 0 16px" }}>Optional extras. Add what you want now, and remove it anytime.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {ADDONS.map((a) => {
+                const isGraphic = a.id === "addon-graphic";
+                const isVideo = a.id === "addon-video";
+                const isBoost = a.id === "addon-boost";
+                const hasConfig = isGraphic || isVideo || isBoost;
+                const photoUsed = a.id === "addon-photoshoot" && hasPhotoshoot;
+                const configuring = config === a.id;
+                const rowPrice = isBoost && boostStep ? boostStep.price : a.price;
+                const onRow = () => {
+                  if (photoUsed) return;
+                  if (!hasConfig) { appendExtra(a); return; } // photoshoot: one choice-free add
+                  setConfig(configuring ? null : a.id);
+                };
+                return (
+                  <div key={a.id} style={{ border: `1px solid ${configuring ? c1 : TOKENS.line}`, borderRadius: 14, overflow: "hidden", transition: "border-color 150ms ease" }}>
+                    <button onClick={onRow} disabled={photoUsed} style={{ display: "flex", alignItems: "flex-start", gap: 12, width: "100%", textAlign: "left", background: "none", border: "none", padding: "13px 14px", cursor: photoUsed ? "default" : "pointer", opacity: photoUsed ? 0.55 : 1, WebkitTapHighlightColor: "transparent" }}>
+                      <div style={{ width: 26, height: 26, borderRadius: 13, background: `${c1}14`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                        {photoUsed
+                          ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={c1} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                          : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={c1} strokeWidth="2.4" strokeLinecap="round" style={{ transition: "transform 150ms ease", transform: configuring ? "rotate(45deg)" : "none" }}><path d="M12 5v14M5 12h14" /></svg>}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.35 }}>{a.what}</div>
+                        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.45, marginTop: 3 }}>{a.detail}</div>
+                      </div>
+                      {photoUsed
+                        ? <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: TOKENS.faint, whiteSpace: "nowrap", flexShrink: 0, marginTop: 1 }}>Added</span>
+                        : pricePill(rowPrice)}
+                    </button>
+                    {configuring && (
+                      <div style={{ padding: "0 14px 14px 52px" }}>
+                        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 8 }}>
+                          {isGraphic ? "What is it for?" : isVideo ? "What is it of?" : "How much do you want to spend?"}
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                          {isGraphic && GRAPHIC_FOR.map((o) => (
+                            <button key={o} onClick={() => appendExtra(a, { what: `A custom graphic for ${o}` })} style={pillStyle(false, c1)}>{o}</button>
+                          ))}
+                          {isVideo && VIDEO_OF.map((o) => (
+                            <button key={o} onClick={() => appendExtra(a, { what: `A short video of ${o}` })} style={pillStyle(false, c1)}>{o}</button>
+                          ))}
+                          {isBoost && BOOST_TIERS.map((amt) => {
+                            const cur = boostStep ? boostStep.price : BOOST_DEFAULT;
+                            return <button key={amt} onClick={() => chooseBoost(a, amt)} style={pillStyle(amt === cur, c1)}>{money(amt)}</button>;
+                          })}
+                        </div>
+                        {isBoost && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, lineHeight: 1.45, marginTop: 9 }}>More spend reaches more nearby people.</div>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3003,9 +3470,14 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
 
   const exit = () => { if (onClose) onClose(); };
 
-  // Catalog card -> Builder. promoevent has no slot config yet; route it to
+  // Catalog card -> Builder. Two browse buttons pass sentinel ids that are not
+  // catalog items: "featured" (the Father's Day card) opens its own chooser,
+  // "__else" ("describe your own") opens the free-text request screen. Everything
+  // else routes to the Builder. promoevent has no slot config yet; route it to
   // launch until its bespoke config is added.
   const openCard = (id, from, rowId) => {
+    if (id === "featured") { setRoute({ name: "featured", from }); return; }
+    if (id === "__else") { setRoute({ name: "else", from }); return; }
     const itemId = id === "promoevent" ? "launch" : id;
     setRoute({ name: "build", itemId, from, rowId });
   };
@@ -3054,6 +3526,24 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <CategoryAll rowId={route.rowId} onBack={backToBrowse} onOpen={(id) => openCard(id, "catall", route.rowId)} />
           )}
 
+          {route.name === "featured" && (
+            <FeaturedDetail
+              onClose={backToBrowse}
+              onEvent={() => openCard("promoevent", "browse")}
+              onDeal={() => openCard("launch", "browse")}
+              onPost={() => openCard("graphic", "browse")}
+            />
+          )}
+
+          {route.name === "else" && (
+            <SomethingElse
+              restaurant={restaurant}
+              onBack={backToBrowse}
+              onApprove={() => setRoute({ name: "confirm", payload: { title: "Your request is in", body: "We'll turn what you described into a first draft and get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.", meta: "Saved to your campaigns" } })}
+              onMarketer={() => setRoute({ name: "confirm", payload: { title: "Your marketer is on it", body: "A marketer on our team will build this from your description, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.", meta: "Saved, with your marketer" } })}
+            />
+          )}
+
           {route.name === "build" && (
             <Builder itemId={route.itemId} menu={menu} onBack={backToSource} onGenerate={(vals) => setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId })} />
           )}
@@ -3067,7 +3557,24 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
               itemId={route.itemId}
               vals={route.vals}
               onBack={() => setRoute({ name: "build", itemId: route.itemId, from: route.from, rowId: route.rowId })}
-              onAdd={() => { addPlan(route.itemId, "approve", route.vals); setRoute({ name: "confirm", payload: { title: "Your plan is added", body: "We'll get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.", meta: "Saved to your campaigns" } }); }}
+              onAdd={(steps, addMode) => {
+                const draft = addMode === "draft";
+                const cat = catGet(route.itemId);
+                const active = (steps || []).filter(Boolean);
+                const total = active.reduce((s, st) => s + (st.price || 0), 0);
+                addPlan(route.itemId, draft ? "draft" : "approve", route.vals);
+                setRoute({ name: "confirm", payload: {
+                  mode: draft ? "draft" : "added",
+                  name: cat ? cat.title : "Your plan",
+                  type: cat ? cat.type : "plan",
+                  itemId: route.itemId,
+                  pieces: active.length,
+                  total,
+                } });
+              }}
+              /* Intentionally retained: the PlanSteps "hand to a marketer" button is
+                 hidden for now, but this handoff is the planned marketer/marketplace
+                 direction. Keep this seam wired; do not remove as dead code. */
               onMarketer={() => { addPlan(route.itemId, "marketer", route.vals); setRoute({ name: "confirm", payload: { title: "Your marketer is on it", body: "A marketer on our team will build and run this plan, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.", meta: "Saved, with your marketer" } }); }}
             />
           )}
@@ -3080,3 +3587,8 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
     </div>
   );
 }
+
+/* Named exports for temporary preview pages (e.g. preview-all).
+   Exposes existing components/data/lookup and the create controller only; the
+   components and the default export above are unchanged. */
+export { Campaigns, CampaignDetail, CAMP_SEED, Phone, catGet, ApnoshCampaign };
