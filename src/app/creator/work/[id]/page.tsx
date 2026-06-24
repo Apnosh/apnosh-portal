@@ -2,16 +2,19 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import type { CreatorBrief, BriefOrder } from '@/lib/campaigns/creator-brief'
+import type { CreatorBrief, BriefOrder, CreativeDirection } from '@/lib/campaigns/creator-brief'
 import { safeHref } from '@/lib/campaigns/work-orders-core'
 
 export default function OrderBriefPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const [data, setData] = useState<{ order: BriefOrder; brief: CreatorBrief } | null>(null)
+  const [data, setData] = useState<{ order: BriefOrder; brief: CreatorBrief; viewer?: string } | null>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [busy, setBusy] = useState(false)
   const [url, setUrl] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<CreativeDirection | null>(null)
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/creator/work/${id}`, { cache: 'no-store' })
@@ -29,11 +32,21 @@ export default function OrderBriefPage() {
     } finally { setBusy(false) }
   }, [id, load])
 
+  const briefAction = useCallback(async (body: object) => {
+    setAiBusy(true)
+    try {
+      const r = await fetch(`/api/creator/work/${id}/brief`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      if (r.ok) setData(await r.json())
+    } finally { setAiBusy(false) }
+  }, [id])
+
   if (state === 'loading') return <Center>Pulling your brief together…</Center>
   if (state === 'error' || !data) return <Center>Couldn’t load this brief.</Center>
 
   const { order, brief } = data
   const c = brief.creative
+  const isOwner = data.viewer === 'owner'
+  const canTweak = !['delivered', 'approved', 'declined'].includes(order.status)  // don't change a brief already executed
   const conceptHeld = order.conceptStatus !== 'approved'  // 'pending' or 'changes' both hold production
 
   return (
@@ -68,24 +81,48 @@ export default function OrderBriefPage() {
 
         {/* the idea */}
         <Section title="The idea" badge={brief.creativeSource === 'ai' ? 'AI-written' : brief.creativeSource === 'owner' ? 'From the owner' : 'Starter'}>
-          <p className="text-[14px] leading-relaxed text-neutral-800">{c.concept}</p>
-          <Field label="Hook">{c.hook}</Field>
-          <div className="mt-3">
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">{brief.stepsLabel}</p>
-            <ol className="space-y-1.5">
-              {c.steps.map((s, i) => (
-                <li key={i} className="flex gap-2 text-[13px] text-neutral-700"><span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-neutral-200 text-[10px] font-bold text-neutral-600">{i + 1}</span>{s}</li>
-              ))}
-            </ol>
-          </div>
-          <div className="mt-3">
-            <div className="mb-1 flex items-center justify-between">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Caption</p>
-              <button onClick={() => navigator.clipboard?.writeText(c.caption)} className="text-[11px] font-medium text-neutral-500">Copy</button>
+          {canTweak && (
+            <div className="mb-2 flex items-center gap-2">
+              {!editing && <button onClick={() => briefAction({ action: 'regenerate' })} disabled={aiBusy} className="rounded-lg border border-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-600 disabled:opacity-40">{aiBusy ? 'Thinking…' : '↻ Regenerate'}</button>}
+              {isOwner && !editing && <button onClick={() => { setDraft({ ...c }); setEditing(true) }} className="rounded-lg border border-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-600">✎ Edit</button>}
+              {editing && (
+                <>
+                  <button onClick={() => { if (draft) briefAction({ creative: draft }); setEditing(false) }} disabled={aiBusy} className="rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40">Save</button>
+                  <button onClick={() => { setEditing(false); setDraft(null) }} className="rounded-lg border border-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-600">Cancel</button>
+                </>
+              )}
             </div>
-            <p className="rounded-lg bg-neutral-100 px-3 py-2 text-[13px] text-neutral-700">{c.caption}</p>
-            {c.hashtags.length > 0 && <p className="mt-1.5 text-[12px] text-blue-600">{c.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ')}</p>}
-          </div>
+          )}
+          {editing && draft ? (
+            <div className="space-y-2">
+              <EditField label="Concept" value={draft.concept} onChange={(v) => setDraft({ ...draft, concept: v })} />
+              <EditField label="Hook" value={draft.hook} onChange={(v) => setDraft({ ...draft, hook: v })} />
+              <EditField label={`${brief.stepsLabel} (one per line)`} value={draft.steps.join('\n')} rows={5} onChange={(v) => setDraft({ ...draft, steps: v.split('\n').map((s) => s.trim()).filter(Boolean) })} />
+              <EditField label="Caption" value={draft.caption} rows={3} onChange={(v) => setDraft({ ...draft, caption: v })} />
+              <EditField label="Hashtags (space-separated)" value={draft.hashtags.join(' ')} onChange={(v) => setDraft({ ...draft, hashtags: v.split(/\s+/).filter(Boolean) })} />
+            </div>
+          ) : (
+            <>
+              <p className="text-[14px] leading-relaxed text-neutral-800">{c.concept}</p>
+              <Field label="Hook">{c.hook}</Field>
+              <div className="mt-3">
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">{brief.stepsLabel}</p>
+                <ol className="space-y-1.5">
+                  {c.steps.map((s, i) => (
+                    <li key={i} className="flex gap-2 text-[13px] text-neutral-700"><span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-neutral-200 text-[10px] font-bold text-neutral-600">{i + 1}</span>{s}</li>
+                  ))}
+                </ol>
+              </div>
+              <div className="mt-3">
+                <div className="mb-1 flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Caption</p>
+                  <button onClick={() => navigator.clipboard?.writeText(c.caption)} className="text-[11px] font-medium text-neutral-500">Copy</button>
+                </div>
+                <p className="rounded-lg bg-neutral-100 px-3 py-2 text-[13px] text-neutral-700">{c.caption}</p>
+                {c.hashtags.length > 0 && <p className="mt-1.5 text-[12px] text-blue-600">{c.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ')}</p>}
+              </div>
+            </>
+          )}
         </Section>
 
         {/* what to feature */}
@@ -166,6 +203,14 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="mt-2"><span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">{label}: </span><span className="text-[13px] text-neutral-700">{children}</span></div>
+}
+function EditField({ label, value, onChange, rows = 2 }: { label: string; value: string; onChange: (v: string) => void; rows?: number }) {
+  return (
+    <div>
+      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">{label}</p>
+      <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={rows} className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-[13px] text-neutral-800 outline-none focus:border-neutral-400" />
+    </div>
+  )
 }
 function Row({ k, v }: { k: string; v: string }) { return <div className="flex justify-between gap-3 py-1 text-[13px]"><span className="text-neutral-500">{k}</span><span className="text-right font-medium text-neutral-800">{v}</span></div> }
 function Btn({ children, onClick, primary, busy, disabled }: { children: React.ReactNode; onClick: () => void; primary?: boolean; busy?: boolean; disabled?: boolean }) {

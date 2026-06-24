@@ -249,6 +249,28 @@ export async function getCreatorBrief(orderId: string): Promise<{ order: BriefOr
   }
 }
 
+/** Length-clamp owner-submitted creative so an edit can't smuggle an oversized
+ *  or instruction-injected blob into storage / a later AI regeneration. */
+function sanitizeCreative(c: Partial<CreativeDirection>): CreativeDirection {
+  const str = (v: unknown, max = 2000): string => (typeof v === 'string' ? v.slice(0, max) : '')
+  const arr = (v: unknown, max: number, each: number): string[] => (Array.isArray(v) ? v.slice(0, max).map((x) => str(x, each)).filter(Boolean) : [])
+  return { concept: str(c.concept), hook: str(c.hook), steps: arr(c.steps, 12, 280), caption: str(c.caption), hashtags: arr(c.hashtags, 20, 60) }
+}
+
+/** Re-run the AI creative for one order (clears the cache, regenerates). */
+export async function regenerateCreatorBrief(orderId: string): Promise<{ order: BriefOrder; brief: CreatorBrief } | null> {
+  const admin = createAdminClient()
+  await admin.from('creator_work_orders').update({ brief_details: null }).eq('id', orderId)
+  return getCreatorBrief(orderId)
+}
+
+/** Save the owner's hand-written creative direction (owner_directs / an edit). */
+export async function setOwnerCreative(orderId: string, creative: Partial<CreativeDirection>): Promise<{ order: BriefOrder; brief: CreatorBrief } | null> {
+  const admin = createAdminClient()
+  await admin.from('creator_work_orders').update({ brief_details: { creative: sanitizeCreative(creative), source: 'owner', generatedAt: new Date().toISOString() } }).eq('id', orderId)
+  return getCreatorBrief(orderId)
+}
+
 export interface BriefOrder {
   id: string
   creatorId: string

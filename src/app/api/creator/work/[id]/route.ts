@@ -21,5 +21,5 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const result = await getCreatorBrief(id)
   if (!result) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return NextResponse.json(result)
+  return NextResponse.json({ ...result, viewer: access.authorized ? 'owner' : 'creator' })
 }
