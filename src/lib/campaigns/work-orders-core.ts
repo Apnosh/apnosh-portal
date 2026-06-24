@@ -31,11 +31,15 @@ export class IllegalTransition extends Error {
   constructor(message: string) { super(message); this.name = 'IllegalTransition' }
 }
 
-/** Validate a status move + the deliver-needs-a-link rule. Pure → unit-testable. */
-export function validateTransition(from: WorkOrderStatus, to: WorkOrderStatus, effectiveUrl?: string | null): { ok: true } | { ok: false; reason: string } {
+/** Validate a status move + the deliver-needs-a-link + concept-approved rules.
+ *  Pure → unit-testable. conceptStatus gates production: a creator cannot begin
+ *  (->in_progress) until the owner has approved the idea ('approved'); 'pending'
+ *  and 'changes' both hold. */
+export function validateTransition(from: WorkOrderStatus, to: WorkOrderStatus, effectiveUrl?: string | null, conceptStatus?: string | null): { ok: true } | { ok: false; reason: string } {
   if (from === to) return { ok: false, reason: `order is already ${from}` }
   if (!ALLOWED_TRANSITIONS[from]?.includes(to)) return { ok: false, reason: `cannot move an order from ${from} to ${to}` }
   if (to === 'delivered' && !effectiveUrl?.trim()) return { ok: false, reason: 'a delivery link is required to deliver' }
+  if (to === 'in_progress' && conceptStatus && conceptStatus !== 'approved') return { ok: false, reason: 'the owner needs to approve the concept before you start' }
   return { ok: true }
 }
 

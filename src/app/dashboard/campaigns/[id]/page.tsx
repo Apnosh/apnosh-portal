@@ -70,10 +70,15 @@ export default function CampaignDetailPage() {
       if (typeof window !== 'undefined') window.alert('Could not save your creator pick. Check your connection and try again.')
     }
   }
-  function setCreativeControl(mode: string) {
+  async function setCreativeControl(mode: string) {
     if (!camp) return
+    const prev = camp.creativeControl
     setCamp({ ...camp, creativeControl: mode as SavedCampaign['creativeControl'] })  // optimistic
-    fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { creative_control: mode } }) }).catch(() => {})
+    const r = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { creative_control: mode } }) }).catch(() => null)
+    if (!r || !r.ok) {
+      setCamp((c) => (c ? { ...c, creativeControl: prev } : c))
+      if (typeof window !== 'undefined') window.alert('Could not save that. Check your connection and try again.')
+    }
   }
 
   async function ship() {

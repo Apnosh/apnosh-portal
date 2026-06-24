@@ -57,11 +57,15 @@ function beatForOrder(campaign: SavedCampaign, discipline: string, slot: number,
   const beats = reconcileBeatsToLines(items, campaign.draft.brief?.contentBeats ?? [])
   const sched = deriveSchedule({ targetDate: campaign.draft.targetDate, occasion: campaign.draft.occasion, contentBeats: beats }, fromISO)
   const ofDiscipline = sched.beats.filter((b) => disciplineForType(b.type) === discipline)
-  return ofDiscipline[slot] ?? ofDiscipline[0] ?? sched.beats[0] ?? null
+  // Fail closed: if the slot no longer exists (line items edited post-ship), use
+  // the order's own due_date downstream rather than borrowing beat 0's dates.
+  return ofDiscipline[slot] ?? null
 }
 
 function contentType(beat: DatedBeat | null, discipline: string): string {
-  if (beat?.type && SPECS[beat.type]) return beat.type
+  // Only trust the beat's type if it actually belongs to this order's discipline,
+  // so a Design order never inherits a borrowed reel beat's video specs.
+  if (beat?.type && SPECS[beat.type] && disciplineForType(beat.type) === discipline) return beat.type
   return discipline === 'Video' ? 'reel' : discipline === 'Photo' ? 'photo' : discipline === 'Social' ? 'story' : 'post'
 }
 
@@ -174,22 +178,22 @@ export async function getCreatorBrief(orderId: string): Promise<{ order: BriefOr
   const spec = SPECS[type] ?? FALLBACK_SPEC
   const featuring = campaign ? featuringFor(campaign, business) : `${business.name}'s standout dish`
 
-  // Resolve the creative direction (cache → owner → AI → template).
+  // Resolve the creative direction. The cache holds whatever was written last —
+  // AI (handoff/approve_concept) OR the owner's own text (owner_directs, source
+  // 'owner') once the owner-editor saves it. With no cache, generate via AI and
+  // fall back to the template. A claim-guarded write (.is null) prevents a
+  // double-charge clobber if two opens race the first generation.
   const cached = (row.brief_details as { creative?: CreativeDirection; source?: CreativeSource } | null) ?? null
   let creative: CreativeDirection
   let creativeSource: CreativeSource
   if (cached?.creative) {
     creative = cached.creative
     creativeSource = cached.source ?? 'ai'
-  } else if (campaign?.draft.path && campaign && (await creativeControl(admin, row.campaign_id as string)) === 'owner_directs') {
-    // owner_directs but no cached owner text yet → template placeholder for them to edit
-    creative = templateCreative(type, featuring, business)
-    creativeSource = 'template'
   } else if (campaign) {
     const ai = await generateCreative(type, featuring, spec.stepsLabel, business, campaign)
     creative = ai ?? templateCreative(type, featuring, business)
     creativeSource = ai ? 'ai' : 'template'
-    await admin.from('creator_work_orders').update({ brief_details: { creative, source: creativeSource, generatedAt: new Date().toISOString() } }).eq('id', orderId)
+    await admin.from('creator_work_orders').update({ brief_details: { creative, source: creativeSource, generatedAt: new Date().toISOString() } }).eq('id', orderId).is('brief_details', null)
   } else {
     creative = templateCreative(type, featuring, business)
     creativeSource = 'template'
@@ -197,8 +201,12 @@ export async function getCreatorBrief(orderId: string): Promise<{ order: BriefOr
 
   const offerLabel = campaign?.draft.brief?.offer?.label ?? null
   const vibe = campaign?.draft.occasion || campaign?.draft.brief?.objective || 'campaign'
-  const postsISO = beat?.postISO ?? (row.due_date as string | null) ?? null
-  const draftDueISO = beat?.draftReadyISO ?? minusDays(postsISO, 3)
+  // Clamp the schedule forward so a brief opened after its planned dates (estimate
+  // mode, or a past target) never shows shoot/draft/post dates in the past.
+  const todayISO = new Date().toISOString().slice(0, 10)
+  const clampFwd = (iso: string | null): string | null => (iso && iso < todayISO ? todayISO : iso)
+  const postsISO = clampFwd(beat?.postISO ?? (row.due_date as string | null) ?? null)
+  const draftDueISO = clampFwd(beat?.draftReadyISO ?? minusDays(postsISO, 3))
 
   const brief: CreatorBrief = {
     headline: `${cap(type)} for ${business.name}${featuring ? ` — featuring ${featuring}` : ''}`,
@@ -249,11 +257,6 @@ export interface BriefOrder {
   note: string | null
   campaignName: string | null
   goal: string
-}
-
-async function creativeControl(admin: ReturnType<typeof createAdminClient>, campaignId: string): Promise<string> {
-  const { data } = await admin.from('campaigns').select('creative_control').eq('id', campaignId).maybeSingle()
-  return (data?.creative_control as string) ?? 'handoff'
 }
 
 function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1) }

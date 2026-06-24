@@ -196,6 +196,10 @@ s.check('deliver with no link REJECTED', !validateTransition('in_progress', 'del
 s.check('approved → in_progress REJECTED (terminal reopen)', !validateTransition('approved', 'in_progress').ok)
 s.check('declined → accepted REJECTED', !validateTransition('declined', 'accepted').ok)
 s.check('same-state no-op REJECTED', !validateTransition('offered', 'offered').ok)
+s.check('start BLOCKED while concept pending', !validateTransition('accepted', 'in_progress', null, 'pending').ok)
+s.check('start BLOCKED while concept changes', !validateTransition('accepted', 'in_progress', null, 'changes').ok)
+s.check('start OK once concept approved', validateTransition('accepted', 'in_progress', null, 'approved').ok)
+s.check('start OK when concept not gated (undefined)', validateTransition('accepted', 'in_progress').ok)
 
 // ── I. delivered_url safety (guards #6) ─────────────────────────────────
 s.group('safeHref — only http(s) becomes a clickable link')

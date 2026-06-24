@@ -34,7 +34,7 @@ export default function OrderBriefPage() {
 
   const { order, brief } = data
   const c = brief.creative
-  const conceptPending = order.conceptStatus === 'pending'
+  const conceptHeld = order.conceptStatus !== 'approved'  // 'pending' or 'changes' both hold production
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-28">
@@ -55,8 +55,12 @@ export default function OrderBriefPage() {
           <p className="mt-2 text-center text-[11px] text-neutral-400">Send the owner your draft by <b>{brief.schedule.draftDueLabel}</b> so it can be approved before it posts.</p>
         </Card>
 
-        {conceptPending && (
-          <div className="rounded-xl bg-amber-50 px-4 py-3 text-[13px] text-amber-800">⏳ Waiting on the owner to approve the concept below before you produce. You can review everything now.</div>
+        {conceptHeld && (
+          <div className="rounded-xl bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+            {order.conceptStatus === 'changes'
+              ? '✏️ The owner asked to rework the idea. Hold off producing until they approve the updated concept.'
+              : '⏳ Waiting on the owner to approve the concept below before you produce. You can review everything now.'}
+          </div>
         )}
         {order.note && (
           <div className="rounded-xl bg-rose-50 px-4 py-3 text-[13px] text-rose-700">Owner note: {order.note}</div>
@@ -127,8 +131,8 @@ export default function OrderBriefPage() {
               <Btn busy={busy} onClick={() => act({ status: 'declined' })}>Decline</Btn>
             </div>
           )}
-          {order.status === 'accepted' && (conceptPending
-            ? <p className="text-center text-[13px] text-amber-700">Concept pending the owner’s OK — you’ll be able to start once they approve.</p>
+          {order.status === 'accepted' && (conceptHeld
+            ? <p className="text-center text-[13px] text-amber-700">{order.conceptStatus === 'changes' ? 'Owner asked to rework the idea — start once they approve it.' : 'Concept pending the owner’s OK — you’ll be able to start once they approve.'}</p>
             : <Btn primary busy={busy} onClick={() => act({ status: 'in_progress' })}>Start work</Btn>)}
           {(order.status === 'in_progress' || order.status === 'revision') && (
             <div className="flex gap-2">

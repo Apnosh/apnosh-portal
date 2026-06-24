@@ -71,12 +71,12 @@ export default function DeliveriesCard({ campaignId }: { campaignId: string }) {
               {o.note && (
                 <div style={{ fontSize: 11.5, color: C.mute }}>Your note: {o.note}</div>
               )}
-              {o.conceptStatus === 'pending' && (
+              {(o.conceptStatus === 'pending' || o.conceptStatus === 'changes') && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '8px 10px' }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#b45309' }}>Concept ready for your OK</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#b45309' }}>{o.conceptStatus === 'changes' ? 'You asked to tweak this — approve when ready' : 'Concept ready for your OK'}</span>
                   <a href={`/creator/work/${o.id}`} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: C.greenDk, textDecoration: 'underline' }}>Read it</a>
                   <button disabled={busy === o.id} onClick={() => act(o.id, { concept_status: 'approved' })} style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: '#fff', background: C.ink, border: 'none', borderRadius: 9, padding: '6px 12px', cursor: 'pointer' }}>Approve concept</button>
-                  <button disabled={busy === o.id} onClick={() => { const note = window.prompt('What should change about the idea?'); if (note) act(o.id, { concept_status: 'changes', note }) }} style={{ fontSize: 12, fontWeight: 600, color: C.ink2, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 9, padding: '6px 12px', cursor: 'pointer' }}>Tweak it</button>
+                  {o.conceptStatus === 'pending' && <button disabled={busy === o.id} onClick={() => { const note = window.prompt('What should change about the idea?'); if (note) act(o.id, { concept_status: 'changes', note }) }} style={{ fontSize: 12, fontWeight: 600, color: C.ink2, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 9, padding: '6px 12px', cursor: 'pointer' }}>Tweak it</button>}
                 </div>
               )}
               {o.status === 'delivered' && (

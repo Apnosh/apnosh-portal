@@ -124,7 +124,7 @@ function OrderCard({ o, busy, onAct }: { o: WorkOrder; busy: boolean; onAct: (id
       </div>
 
       {o.brief && <p className="mt-3 text-[13px] leading-relaxed text-neutral-600">{o.brief}</p>}
-      {o.note && (o.status === 'revision' || o.status === 'delivered') && (
+      {o.note && (o.status === 'revision' || o.status === 'delivered' || o.conceptStatus === 'changes') && (
         <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] text-rose-700">Owner: {o.note}</p>
       )}
       {due && <p className="mt-2 text-[12px] text-neutral-400">Due {due}</p>}
@@ -139,7 +139,9 @@ function OrderCard({ o, busy, onAct }: { o: WorkOrder; busy: boolean; onAct: (id
         </div>
       )}
       {o.status === 'accepted' && (
-        <div className="mt-3"><Btn primary busy={busy} onClick={() => onAct(o.id, { status: 'in_progress' })}>Start work</Btn></div>
+        <div className="mt-3">{o.conceptStatus !== 'approved'
+          ? <p className="text-[12px] text-amber-700">{o.conceptStatus === 'changes' ? 'Owner asked to rework the idea — start once they approve.' : 'Waiting on the owner to approve the concept.'}</p>
+          : <Btn primary busy={busy} onClick={() => onAct(o.id, { status: 'in_progress' })}>Start work</Btn>}</div>
       )}
       {(o.status === 'in_progress' || o.status === 'revision') && (
         <div className="mt-3 space-y-2">

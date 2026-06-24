@@ -130,12 +130,8 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
       .single()
     if (readErr || !cur) throw new IllegalTransition('work order not found')
     const effectiveUrl = patch.delivered_url ?? (cur.delivered_url as string | null)
-    const v = validateTransition(cur.status as WorkOrderStatus, patch.status, effectiveUrl)
+    const v = validateTransition(cur.status as WorkOrderStatus, patch.status, effectiveUrl, cur.concept_status as string | null)
     if (!v.ok) throw new IllegalTransition(v.reason)
-    // approve_concept gate: can't begin production until the owner OKs the idea.
-    if (patch.status === 'in_progress' && (cur.concept_status as string) === 'pending') {
-      throw new IllegalTransition('the owner needs to approve the concept before you start')
-    }
   }
   const { error } = await admin
     .from('creator_work_orders')

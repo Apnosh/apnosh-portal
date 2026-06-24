@@ -34,6 +34,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { campaign, res } = await authorize(id)
   if (res || !campaign) return res ?? NextResponse.json({ error: 'not found' }, { status: 404 })
   const body = await req.json().catch(() => ({}))
+  // Validate the enum'd field so a bad value is a clean 400, not a DB-check 500.
+  if (body.fields?.creative_control && !['handoff', 'approve_concept', 'owner_directs'].includes(body.fields.creative_control)) {
+    return NextResponse.json({ error: 'invalid creative_control' }, { status: 400 })
+  }
   // Detect the ship transition BEFORE the write (campaign holds the pre-update state).
   const justShipped = body.fields?.status === 'shipped' && campaign.status !== 'shipped'
   try {
