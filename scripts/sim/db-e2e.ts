@@ -10,6 +10,10 @@
  */
 import { config } from 'dotenv'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { buildContentLine } from '@/lib/campaigns/catalog'
+import { buildWorkOrderRows } from '@/lib/campaigns/work-orders-core'
+import type { CampaignBrief, CampaignDraft, ContentBeat, LineItem } from '@/lib/campaigns/types'
+import type { SavedCampaign } from '@/lib/campaigns/view'
 import { Suite } from './lib'
 
 config({ path: '.env.local' })
@@ -97,6 +101,37 @@ async function main() {
     const { error: revErr } = await a.from('creator_work_orders').update({ status: 'revision', note: 'brighter please' }).eq('id', photoId)
     const { data: revRow } = await a.from('creator_work_orders').select('status, note').eq('id', photoId).single()
     s.check('delivered → revision with note', !revErr && revRow?.status === 'revision' && revRow?.note === 'brighter please', revErr?.message)
+
+    // ── ship mint path: buildWorkOrderRows → live insert (the exact DB work
+    //    mintWorkOrders does), on its own sub-campaign so it stays isolated ──
+    s.group('ship mint path (buildWorkOrderRows → table)')
+    const { data: c2 } = await a.from('campaigns').insert({ client_id: TEST_CLIENT, name: TEST_NAME, path: 'strategist', status: 'draft', phase: 'build' }).select('id').single()
+    const mintCampaignId = c2?.id as string
+    if (mintCampaignId) {
+      const now = new Date().toISOString()
+      const targetDate = new Date(Date.now() + 21 * 86_400_000).toISOString().slice(0, 10)
+      const items: LineItem[] = [buildContentLine('reel', 'li-r', { qty: 2 })!, buildContentLine('post', 'li-g')!]
+      const beats: ContentBeat[] = [
+        { week: 1, type: 'reel', label: 'Reel one', channel: 'instagram' },
+        { week: 2, type: 'reel', label: 'Reel two', channel: 'instagram' },
+        { week: 3, type: 'post', label: 'Promo post', channel: 'instagram' },
+      ]
+      const brief = { templateId: 'sim', objective: 'Launch', contentBeats: beats } as unknown as CampaignBrief
+      const draft = { id: mintCampaignId, name: 'mint', path: 'strategist', items, goalKey: 'launch', targetDate, brief } as unknown as CampaignDraft
+      const saved: SavedCampaign = { clientId: TEST_CLIENT, draft, phase: 'build', status: 'draft', shippedAt: null, createdAt: now, updatedAt: now, creatorChoices: {} }
+      const rows = buildWorkOrderRows(saved, now)
+      s.eq('buildWorkOrderRows → 3 pieces (2 reel + 1 post)', rows.length, 3)
+      const { data: pre } = await a.from('creator_work_orders').select('id').eq('campaign_id', mintCampaignId).limit(1)
+      s.check('mint guard: no orders before ship', !(pre && pre.length))
+      const { error: insErr } = await a.from('creator_work_orders').insert(rows)
+      s.check('mint inserts the rows cleanly', !insErr, insErr?.message)
+      const { data: landed } = await a.from('creator_work_orders').select('id, discipline, slot').eq('campaign_id', mintCampaignId)
+      s.eq('orders landed in the table', landed?.length ?? 0, 3)
+      s.check('two Video pieces with distinct slots', new Set((landed ?? []).filter((o) => o.discipline === 'Video').map((o) => o.slot)).size === 2)
+      const { data: again } = await a.from('creator_work_orders').select('id').eq('campaign_id', mintCampaignId).limit(1)
+      s.check('re-mint guard sees existing rows → would skip', !!(again && again.length))
+      await a.from('campaigns').delete().eq('id', mintCampaignId)
+    }
   } finally {
     // ── teardown: cascade removes the orders ───────────────────────────
     await a.from('campaigns').delete().eq('id', campaignId)
