@@ -10,6 +10,8 @@
     "lint:migrations": "tsx scripts/check-migrations.ts",
     "sim": "tsx scripts/sim/lifecycle.ts",
     "sim:db": "tsx scripts/sim/db-e2e.ts",
+    "sim:http": "tsx scripts/sim/http-e2e.ts",
+    "sim:seed-creator": "tsx scripts/sim/seed-test-creator.ts",
     "sim:all": "tsx scripts/sim/lifecycle.ts && tsx scripts/sim/db-e2e.ts"
   },
   "dependencies": {
