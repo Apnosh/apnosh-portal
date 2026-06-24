@@ -97,6 +97,9 @@ s.eq('email+sms → no creative work', disciplines(creativeRolesForCampaign(line
   const its = lines(['reel', 'photo', 'post']); its[0].included = false
   s.eq('excluded item drops its discipline', disciplines(creativeRolesForCampaign(its, {}, vibe)), ['Photo', 'Design'])
 }
+s.eq('story → Social discipline (not Video)', disciplines(creativeRolesForCampaign(lines(['story']), {}, vibe)), ['Social'])
+s.eq('reel+story+post → Video, Social, Design', disciplines(creativeRolesForCampaign(lines(['reel', 'story', 'post']), {}, vibe)), ['Video', 'Social', 'Design'])
+s.check('story creator comes from the Social pool', creatorPool('Social').some((c) => c.id === creativeRolesForCampaign(lines(['story']), {}, vibe)[0].creator.id))
 
 // ── C. bill = calendar = production (every template) ────────────────────
 s.group('composeCampaign — bill = calendar = production')
@@ -214,6 +217,18 @@ s.group('creator override is discipline-scoped')
   s.check('every order creator belongs to its discipline', crossed.every((r) => creatorPool(r.discipline as Disc).some((c) => c.id === r.creator.id)))
   const goodId = creatorPool('Video')[1]?.id ?? creatorPool('Video')[0].id
   s.check('valid same-discipline override honored', creativeRolesForCampaign(its, { Video: goodId }, v2).find((r) => r.discipline === 'Video')!.creator.id === goodId)
+}
+
+// ── K. estimate-mode anchor stability (guards #11) ──────────────────────
+s.group('estimate anchor: locking target_date removes preview→ship drift')
+{
+  const beats = beatsN(2)
+  const preview = deriveSchedule({ contentBeats: beats } as Parameters<typeof deriveSchedule>[0], '2026-06-22T12:00:00Z').firstPostISO
+  const ship = deriveSchedule({ contentBeats: beats } as Parameters<typeof deriveSchedule>[0], '2026-06-25T12:00:00Z').firstPostISO
+  s.check('estimate mode DOES drift without an anchor (the bug)', preview !== ship, `${preview} vs ${ship}`)
+  const a1 = deriveSchedule({ targetDate: ship!, contentBeats: beats } as Parameters<typeof deriveSchedule>[0], '2026-06-25T12:00:00Z').firstPostISO
+  const a2 = deriveSchedule({ targetDate: ship!, contentBeats: beats } as Parameters<typeof deriveSchedule>[0], '2026-06-28T12:00:00Z').firstPostISO
+  s.eq('anchored (start mode) is stable across ship timing', a1, a2)
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')

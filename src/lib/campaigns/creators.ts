@@ -8,7 +8,7 @@
  * vibe). The LLM brand-fit layer (reading real brand guidelines + reviews) slots
  * in later when there is real supply — model proposes, code disposes.
  */
-export type Disc = 'Video' | 'Photo' | 'Design'
+export type Disc = 'Video' | 'Photo' | 'Social' | 'Design'
 export type Style = 'warm' | 'clean' | 'bold'
 
 export interface Creator {
@@ -36,6 +36,11 @@ const POOL: Record<Disc, Creator[]> = {
     { id: 'p_theo', name: 'Theo M.', rating: 4.9, jobs: 72, specialty: 'Bright, clean dishes', style: 'clean', tones: ['#e7eef5', '#9fc0e8'], based: 'Local' },
     { id: 'p_lena', name: 'Lena P.', rating: 4.8, jobs: 61, specialty: 'Natural-light food', style: 'warm', tones: ['#d8a06a', '#a8763f'], based: 'Local' },
     { id: 'p_kira', name: 'Kira W.', rating: 4.7, jobs: 44, specialty: 'Moody, rich plating', style: 'bold', tones: ['#6b5b4a', '#2e2620'], based: 'Remote' },
+  ],
+  Social: [
+    { id: 's_ivy', name: 'Ivy C.', rating: 4.9, jobs: 52, specialty: 'Clean daily stories', style: 'clean', tones: ['#cfe0f2', '#7099d0'], based: 'Local' },
+    { id: 's_nina', name: 'Nina F.', rating: 4.8, jobs: 45, specialty: 'Warm day-of stories', style: 'warm', tones: ['#f5a93f', '#b56b42'], based: 'Local' },
+    { id: 's_omar', name: 'Omar D.', rating: 4.7, jobs: 38, specialty: 'Punchy story sets', style: 'bold', tones: ['#ef6aa0', '#8a63e0'], based: 'Remote' },
   ],
   Design: [
     { id: 'd_jordan', name: 'Jordan L.', rating: 4.7, jobs: 40, specialty: 'Clean menu graphics', style: 'clean', tones: ['#cfe0f2', '#7099d0'], based: 'Remote' },
@@ -85,7 +90,8 @@ export function rankCreators(d: Disc, vibe?: Style | null): RankedCreator[] {
 // Which catalog content reads as which discipline. Order matters: specific
 // creative cues win before the generic "post".
 const MATCHERS: Array<[RegExp, Disc]> = [
-  [/reel|video|tiktok|short[- ]?form|teaser|story/i, 'Video'],
+  [/story|stories|ig[- ]?story|day[- ]?of/i, 'Social'],
+  [/reel|video|tiktok|short[- ]?form|teaser/i, 'Video'],
   [/photo|shoot|styled|dish/i, 'Photo'],
   [/graphic|design|carousel|poster|flyer|post/i, 'Design'],
 ]
@@ -110,7 +116,7 @@ export function creativeRolesForCampaign(
     const d = discFor(`${it.plain ?? ''} ${it.name ?? ''} ${it.serviceId ?? ''}`)
     if (d) seen.add(d)
   }
-  return (['Video', 'Photo', 'Design'] as Disc[])
+  return (['Video', 'Photo', 'Social', 'Design'] as Disc[])
     .filter((d) => seen.has(d))
     .map((d): CreativeRole | null => {
       const overrideId = overrides?.[d]

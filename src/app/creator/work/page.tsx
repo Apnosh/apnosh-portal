@@ -95,7 +95,7 @@ const STATUS_META: Record<WorkOrderStatus, { label: string; cls: string }> = {
   declined: { label: 'Declined', cls: 'bg-neutral-100 text-neutral-500' },
 }
 
-const DISC_ICON: Record<string, string> = { Video: '🎬', Photo: '📷', Design: '🎨' }
+const DISC_ICON: Record<string, string> = { Video: '🎬', Photo: '📷', Social: '📱', Design: '🎨' }
 
 function OrderCard({ o, busy, onAct }: { o: WorkOrder; busy: boolean; onAct: (id: string, p: { status?: WorkOrderStatus; delivered_url?: string }) => void }) {
   const [url, setUrl] = useState(o.deliveredUrl ?? '')

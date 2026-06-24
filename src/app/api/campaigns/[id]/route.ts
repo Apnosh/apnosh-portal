@@ -3,6 +3,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
 import { mintWorkOrders } from '@/lib/campaigns/work-orders'
 import { buildWorkOrderRows } from '@/lib/campaigns/work-orders-core'
+import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
 import type { LineItem } from '@/lib/campaigns/types'
 
@@ -41,6 +42,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'update failed' }, { status: 500 })
   }
+  // Keep the in-memory campaign authoritative for materialize + mint: the ship
+  // re-sends the owner's last-seen creator picks, covering a swallowed save.
+  if (body.fields?.creator_choices && typeof body.fields.creator_choices === 'object') {
+    campaign.creatorChoices = body.fields.creator_choices as Record<string, string>
+  }
   // The owner shipping a team-run campaign is the handoff signal: tell the staff
   // assigned to this client so the "your team is preparing each piece" promise is
   // real. DIY ships are owner-run, so no handoff. Best-effort; never blocks save.
@@ -48,6 +54,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Turn the campaign's content calendar into real production work items, and
     // tell the team. Both best-effort: a successful ship must never 500 here.
     const shipISO = typeof body.fields?.shipped_at === 'string' ? body.fields.shipped_at : new Date().toISOString()
+    // Lock estimate-mode dates at ship: with no target date or occasion,
+    // deriveSchedule re-anchors to "now" on every call, so the dates the owner
+    // approved would drift forward by the review→ship gap. Persist the anchor as
+    // target_date so calendar, drafts, and orders all agree from here on.
+    if (!campaign.draft.targetDate && !campaign.draft.occasion && (campaign.draft.brief?.contentBeats?.length ?? 0) > 0) {
+      const anchor = deriveSchedule({ contentBeats: campaign.draft.brief?.contentBeats }, shipISO).firstPostISO
+      if (anchor) {
+        await updateCampaignFields(id, { target_date: anchor }).catch(() => {})
+        campaign.draft.targetDate = anchor
+      }
+    }
     const made = await materializeCampaignDrafts(id, campaign.clientId, campaign.draft, shipISO).catch(() => 0)
     // Dispatch the creative work to the chosen creators' inboxes (the supply
     // side). Best-effort; never blocks the ship. We compare what SHOULD have

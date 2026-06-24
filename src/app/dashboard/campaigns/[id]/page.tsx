@@ -56,18 +56,27 @@ export default function CampaignDetailPage() {
     setCamp({ ...camp, draft: { ...camp.draft, targetDate: iso || undefined } })  // optimistic
     fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { target_date: iso } }) }).catch(() => {})
   }
-  function chooseCreator(discipline: string, creatorId: string) {
+  async function chooseCreator(discipline: string, creatorId: string) {
     if (!camp) return
-    const next = { ...(camp.creatorChoices ?? {}), [discipline]: creatorId }
+    const prev = camp.creatorChoices ?? {}
+    const next = { ...prev, [discipline]: creatorId }
     setCamp({ ...camp, creatorChoices: next })  // optimistic
-    fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { creator_choices: next } }) }).catch(() => {})
+    const r = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { creator_choices: next } }) }).catch(() => null)
+    if (!r || !r.ok) {
+      // Don't lie about a saved pick: roll back so the card shows the real
+      // state. Ship also re-sends choices, so the last-seen pick still wins.
+      setCamp((c) => (c ? { ...c, creatorChoices: prev } : c))
+      if (typeof window !== 'undefined') window.alert('Could not save your creator pick. Check your connection and try again.')
+    }
   }
 
   async function ship() {
     if (!camp) return
     setBusy(true)
     const shippedAt = new Date().toISOString()
-    await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: shippedAt } }) }).catch(() => {})
+    // Re-send the owner's last-seen creator picks so mint dispatches to exactly
+    // who they chose, even if an incremental save earlier failed.
+    await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: shippedAt, creator_choices: camp.creatorChoices ?? {} } }) }).catch(() => {})
     setCamp({ ...camp, status: 'shipped', phase: 'monitor', shippedAt })
     setBusy(false)
     // The ship just materialized the pieces; pull live progress so the mirror

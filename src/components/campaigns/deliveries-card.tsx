@@ -11,7 +11,7 @@ import type { WorkOrder } from '@/lib/campaigns/work-orders'
 import { safeHref } from '@/lib/campaigns/work-orders-core'
 import { C } from '@/components/campaigns/ui'
 
-const DISC_ICON: Record<string, string> = { Video: '🎬', Photo: '📷', Design: '🎨' }
+const DISC_ICON: Record<string, string> = { Video: '🎬', Photo: '📷', Social: '📱', Design: '🎨' }
 
 const STATUS: Record<string, { label: string; fg: string; bg: string }> = {
   offered: { label: 'Sent to creator', fg: '#2563eb', bg: '#eff6ff' },
