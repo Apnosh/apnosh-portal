@@ -92,7 +92,13 @@ export async function listWorkOrdersForCreator(creatorId: string): Promise<WorkO
  *  regenerates it (e.g. after the owner edits the "Get it ready" inputs). */
 export async function clearCampaignBriefCache(campaignId: string): Promise<void> {
   const admin = createAdminClient()
-  await admin.from('creator_work_orders').update({ brief_details: null }).eq('campaign_id', campaignId)
+  // Only refresh work that hasn't shipped yet, and never wipe an owner-authored
+  // brief — so a delivered/approved piece keeps the brief the creator executed.
+  await admin.from('creator_work_orders')
+    .update({ brief_details: null })
+    .eq('campaign_id', campaignId)
+    .in('status', ['offered', 'accepted', 'in_progress', 'revision'])
+    .not('brief_details->>source', 'eq', 'owner')
 }
 
 /** The pool creator id this auth user signs in as (test-creator login), or null. */

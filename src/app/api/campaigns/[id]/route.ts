@@ -38,6 +38,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.fields?.creative_control && !['handoff', 'approve_concept', 'owner_directs'].includes(body.fields.creative_control)) {
     return NextResponse.json({ error: 'invalid creative_control' }, { status: 400 })
   }
+  // Sanitize execution: only the known string keys, length-capped — so unbounded
+  // or instruction-injected text can never reach the creative-brief AI prompt.
+  if (body.fields?.execution !== undefined) {
+    const e = body.fields.execution
+    if (typeof e !== 'object' || e === null || Array.isArray(e)) return NextResponse.json({ error: 'invalid execution' }, { status: 400 })
+    const clean: Record<string, string> = {}
+    for (const k of ['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes']) {
+      const v = (e as Record<string, unknown>)[k]
+      if (v === undefined) continue
+      if (typeof v !== 'string') return NextResponse.json({ error: `execution.${k} must be a string` }, { status: 400 })
+      if (v.length > 2000) return NextResponse.json({ error: `execution.${k} is too long (2000 max)` }, { status: 400 })
+      clean[k] = v
+    }
+    body.fields.execution = clean
+  }
   // Detect the ship transition BEFORE the write (campaign holds the pre-update state).
   const justShipped = body.fields?.status === 'shipped' && campaign.status !== 'shipped'
   try {
@@ -51,8 +66,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.fields?.creator_choices && typeof body.fields.creator_choices === 'object') {
     campaign.creatorChoices = body.fields.creator_choices as Record<string, string>
   }
-  // The owner changed the "Get it ready" inputs → regenerate the briefs with them.
-  if (body.fields?.execution) await clearCampaignBriefCache(id).catch(() => {})
+  // Regenerate the briefs only when a brief-relevant input actually changed
+  // (vs the pre-update execution), so an unrelated/no-op save costs nothing.
+  if (body.fields?.execution) {
+    const delta = body.fields.execution as Record<string, string>
+    const cur = (campaign.execution ?? {}) as Record<string, string>
+    const changed = ['featuring', 'offerText', 'mustSay', 'avoid'].some((k) => k in delta && (delta[k] ?? '') !== (cur[k] ?? ''))
+    if (changed) await clearCampaignBriefCache(id).catch(() => {})
+  }
   // The owner shipping a team-run campaign is the handoff signal: tell the staff
   // assigned to this client so the "your team is preparing each piece" promise is
   // real. DIY ships are owner-run, so no handoff. Best-effort; never blocks save.

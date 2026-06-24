@@ -69,12 +69,17 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   const items: ReadinessItem[] = []
 
   // ── inputs (persist to campaigns.execution, feed the brief) ──────────
-  items.push({ id: 'featuring', kind: 'input', field: 'featuring', inputType: 'text', title: 'What should we feature?', why: 'The exact dish or item the content should show off.', placeholder: 'e.g. our birria tacos', value: exec.featuring ?? '', done: !!exec.featuring })
-  if (offerLabel) {
-    items.push({ id: 'offerText', kind: 'input', field: 'offerText', inputType: 'text', title: 'Confirm the offer wording', why: 'The exact text + any terms, so the copy is right.', placeholder: offerLabel, value: exec.offerText ?? '', done: !!exec.offerText })
+  // DIY campaigns mint no creator orders/brief, so these inputs would be dead
+  // data — DIY readiness is action-only (schedule, channels, brand/contact).
+  const isDiy = campaign.draft.path === 'diy'
+  if (!isDiy) {
+    items.push({ id: 'featuring', kind: 'input', field: 'featuring', inputType: 'text', title: 'What should we feature?', why: 'The exact dish or item the content should show off.', placeholder: 'e.g. our birria tacos', value: exec.featuring ?? '', done: !!exec.featuring })
+    if (offerLabel) {
+      items.push({ id: 'offerText', kind: 'input', field: 'offerText', inputType: 'text', title: 'Confirm the offer wording', why: 'The exact text + any terms, so the copy is right.', placeholder: offerLabel, value: exec.offerText ?? '', done: !!exec.offerText })
+    }
+    items.push({ id: 'mustSay', kind: 'input', field: 'mustSay', inputType: 'textarea', title: 'Anything we must include?', why: 'A tagline, a hashtag, a date — anything that has to be in it.', placeholder: 'Optional', value: exec.mustSay ?? '', done: !!exec.mustSay, optional: true })
+    items.push({ id: 'avoid', kind: 'input', field: 'avoid', inputType: 'textarea', title: 'Anything to avoid?', why: 'Words, claims, or looks to keep out.', placeholder: 'Optional', value: exec.avoid ?? '', done: !!exec.avoid, optional: true })
   }
-  items.push({ id: 'mustSay', kind: 'input', field: 'mustSay', inputType: 'textarea', title: 'Anything we must include?', why: 'A tagline, a hashtag, a date — anything that has to be in it.', placeholder: 'Optional', value: exec.mustSay ?? '', done: !!exec.mustSay, optional: true })
-  items.push({ id: 'avoid', kind: 'input', field: 'avoid', inputType: 'textarea', title: 'Anything to avoid?', why: 'Words, claims, or looks to keep out.', placeholder: 'Optional', value: exec.avoid ?? '', done: !!exec.avoid, optional: true })
 
   // ── actions (only when needed) ───────────────────────────────────────
   if (!scheduleSet) items.push({ id: 'schedule', kind: 'action', title: 'Lock the schedule', why: 'Pick a start date so the team has runway to produce.', actionLabel: 'Set a date', href: detailHref, done: false })

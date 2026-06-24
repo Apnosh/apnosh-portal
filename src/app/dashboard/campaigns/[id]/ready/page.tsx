@@ -5,7 +5,7 @@
  * a focused checklist of what's left for the campaign to execute — inputs that
  * persist on the campaign and feed the creator brief, plus computed action items.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ChevronLeft, Check } from 'lucide-react'
 import { C } from '@/components/campaigns/ui'
@@ -18,6 +18,7 @@ export default function ReadyPage() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
   const [exec, setExec] = useState<Record<string, string>>({})
   const [savingField, setSavingField] = useState<string | null>(null)
+  const seededRef = useRef(false)
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/campaigns/${id}/readiness`, { cache: 'no-store' })
@@ -26,22 +27,27 @@ export default function ReadyPage() {
     const rep = j.report as ReadinessReport | null
     if (!rep) { setState('error'); return }
     setReport(rep)
-    // seed local input state from the report's values
-    const seed: Record<string, string> = {}
-    for (const it of rep.items) if (it.kind === 'input' && it.field) seed[it.field] = it.value ?? ''
-    setExec(seed)
+    // Seed the local input state ONCE; never reseed over the owner's in-progress
+    // edits (a save reloads the report but the inputs stay locally authoritative).
+    if (!seededRef.current) {
+      const seed: Record<string, string> = {}
+      for (const it of rep.items) if (it.kind === 'input' && it.field) seed[it.field] = it.value ?? ''
+      setExec(seed)
+      seededRef.current = true
+    }
     setState('ready')
   }, [id])
   useEffect(() => { load() }, [load])
 
   const saveField = useCallback(async (field: string, value: string) => {
     setSavingField(field)
-    const next = { ...exec, [field]: value }
     try {
-      await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { execution: next } }) })
-      await load() // refresh done/progress
+      // Send ONLY the changed key — the server merges it into the stored jsonb,
+      // so a save never clobbers fields it didn't load.
+      await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { execution: { [field]: value } } }) })
+      await load() // refresh done/progress (does not reseed inputs)
     } finally { setSavingField(null) }
-  }, [exec, id, load])
+  }, [id, load])
 
   if (state === 'loading') return <Center>Loading…</Center>
   if (state === 'error' || !report) return <Center>Couldn’t load this.</Center>
@@ -56,7 +62,7 @@ export default function ReadyPage() {
       <header style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(8px)', borderBottom: `1px solid ${C.line}`, padding: '12px 16px' }}>
         <button onClick={() => router.push(`/dashboard/campaigns/${id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'none', border: 'none', color: C.mute, fontSize: 13, cursor: 'pointer', padding: 0 }}><ChevronLeft size={15} /> Campaign</button>
         <h1 style={{ marginTop: 4, fontSize: 19, fontWeight: 800, color: C.ink }}>Get it ready</h1>
-        <p style={{ marginTop: 2, fontSize: 12.5, color: C.mute }}>A few things from you so the team can make this great.</p>
+        <p style={{ marginTop: 2, fontSize: 12.5, color: C.mute }}>A few things from you so this comes out great.</p>
         <div style={{ marginTop: 10, height: 6, borderRadius: 99, background: C.line, overflow: 'hidden' }}>
           <div style={{ width: `${pct}%`, height: '100%', background: C.green, transition: 'width .3s' }} />
         </div>
@@ -65,7 +71,7 @@ export default function ReadyPage() {
 
       <main style={{ maxWidth: 600, margin: '0 auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {allDone && (
-          <div style={{ background: C.greenSoft, border: `1px solid ${C.green}`, borderRadius: 14, padding: 16, textAlign: 'center', color: C.greenDk, fontWeight: 700, fontSize: 14 }}>✓ You’re all set. The team has what it needs.</div>
+          <div style={{ background: C.greenSoft, border: `1px solid ${C.green}`, borderRadius: 14, padding: 16, textAlign: 'center', color: C.greenDk, fontWeight: 700, fontSize: 14 }}>✓ You’re all set — nothing else needed right now.</div>
         )}
 
         {inputs.length > 0 && (

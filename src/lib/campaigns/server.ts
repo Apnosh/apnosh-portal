@@ -207,6 +207,12 @@ export async function replaceLineItems(campaignId: string, clientId: string, ite
 
 export async function updateCampaignFields(id: string, patch: Partial<{ name: string; budget_monthly: number; planned: boolean; phase: string; status: string; shipped_at: string; occasion: string; target_date: string; context: string; creator_choices: Record<string, string>; creative_control: string; execution: Record<string, unknown> }>): Promise<void> {
   const admin = createAdminClient()
+  // execution is a partial delta — merge into the stored jsonb so a save of one
+  // field never clobbers the others (concurrent edits, unsurfaced keys).
+  if (patch.execution) {
+    const { data } = await admin.from('campaigns').select('execution').eq('id', id).maybeSingle()
+    patch = { ...patch, execution: { ...((data?.execution as Record<string, unknown>) ?? {}), ...patch.execution } }
+  }
   // Throw on error like createCampaign/replaceLineItems do, so a failed write
   // (e.g. a failed ship) surfaces as a 500 instead of silently succeeding and,
   // for a ship, firing a phantom "ready to build" staff notification.
