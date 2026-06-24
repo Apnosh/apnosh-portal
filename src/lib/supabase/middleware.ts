@@ -37,6 +37,7 @@ export async function updateSession(request: NextRequest) {
   const isOnboarding = path.startsWith('/onboarding')
   const isClientRoute = path.startsWith('/client')
   const isWorkRoute = path.startsWith('/work') || path.startsWith('/marketplace')
+  const isCreatorRoute = path.startsWith('/creator')
 
   // A non-admin strategist's allow-list under /admin/*. They can drill
   // into a single client's detail (/admin/clients/[slug]/...) because
@@ -47,7 +48,7 @@ export async function updateSession(request: NextRequest) {
   const isAdminClientDetail = /^\/admin\/clients\/[^\/]+(\/|$)/.test(path)
 
   // ── Unauthenticated: redirect to login ──
-  if (!user && (isDashboard || isAdminRoute || isOnboarding || isClientRoute || isWorkRoute)) {
+  if (!user && (isDashboard || isAdminRoute || isOnboarding || isClientRoute || isWorkRoute || isCreatorRoute)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.searchParams.set('redirect', path)
@@ -56,6 +57,18 @@ export async function updateSession(request: NextRequest) {
 
   // ── Authenticated user on /onboarding: redirect to dashboard if already completed ──
   if (user && isOnboarding) {
+    // A creator should never be in client onboarding — send them to their workspace.
+    const { data: creatorLogin } = await supabase
+      .from('creator_logins')
+      .select('person_id')
+      .eq('person_id', user.id)
+      .maybeSingle()
+    if (creatorLogin) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/creator/work'
+      return NextResponse.redirect(url)
+    }
+
     const { data: business } = await supabase
       .from('businesses')
       .select('onboarding_completed')
@@ -234,10 +247,16 @@ export async function updateSession(request: NextRequest) {
           .maybeSingle()
 
         // If no businesses row exists at all, redirect to onboarding
-        // (new signup that hasn't started onboarding yet)
+        // (new signup that hasn't started onboarding yet) — unless this is a
+        // creator, who belongs in the creator workspace, not client onboarding.
         if (!business) {
+          const { data: creatorLogin } = await supabase
+            .from('creator_logins')
+            .select('person_id')
+            .eq('person_id', user.id)
+            .maybeSingle()
           const url = request.nextUrl.clone()
-          url.pathname = '/onboarding/full'
+          url.pathname = creatorLogin ? '/creator/work' : '/onboarding/full'
           return NextResponse.redirect(url)
         }
 
@@ -282,6 +301,20 @@ export async function updateSession(request: NextRequest) {
     if (clientUser) {
       const url = request.nextUrl.clone()
       url.pathname = '/dashboard'
+      url.search = ''
+      return NextResponse.redirect(url)
+    }
+
+    // Creators (a creator_logins mapping) belong in the creator workspace,
+    // not the client portal or client onboarding.
+    const { data: creatorLogin } = await supabase
+      .from('creator_logins')
+      .select('person_id')
+      .eq('person_id', user.id)
+      .maybeSingle()
+    if (creatorLogin) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/creator/work'
       url.search = ''
       return NextResponse.redirect(url)
     }
