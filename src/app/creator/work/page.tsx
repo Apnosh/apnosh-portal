@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import type { WorkOrder, WorkOrderStatus } from '@/lib/campaigns/work-orders'
 import { safeHref } from '@/lib/campaigns/work-orders-core'
 
@@ -127,6 +128,8 @@ function OrderCard({ o, busy, onAct }: { o: WorkOrder; busy: boolean; onAct: (id
         <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] text-rose-700">Owner: {o.note}</p>
       )}
       {due && <p className="mt-2 text-[12px] text-neutral-400">Due {due}</p>}
+
+      <Link href={`/creator/work/${o.id}`} className="mt-2 inline-block text-[12px] font-semibold text-neutral-900 underline">Open full brief →</Link>
 
       {/* Actions by state */}
       {o.status === 'offered' && (
