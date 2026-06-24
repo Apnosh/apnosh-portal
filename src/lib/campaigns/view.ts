@@ -20,6 +20,16 @@ export interface SavedCampaign {
   creatorChoices: Record<string, string>
   /** How hands-on the owner is with the creative direction. */
   creativeControl: 'handoff' | 'approve_concept' | 'owner_directs'
+  /** Owner execution inputs from the "Get it ready" screen; feed the brief. */
+  execution: CampaignExecution
+}
+
+export interface CampaignExecution {
+  featuring?: string   // the exact dish/item to feature
+  offerText?: string   // the exact offer wording + terms
+  mustSay?: string     // anything that must be included
+  avoid?: string       // anything to keep out
+  postNotes?: string   // timing / posting preferences
 }
 
 /** Owner-facing rollup of a shipped campaign's pieces (content_drafts), so the

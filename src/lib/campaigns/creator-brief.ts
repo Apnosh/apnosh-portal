@@ -70,6 +70,7 @@ function contentType(beat: DatedBeat | null, discipline: string): string {
 }
 
 function featuringFor(campaign: SavedCampaign, business: { name: string }): string {
+  if (campaign.execution?.featuring?.trim()) return campaign.execution.featuring.trim()  // owner's "Get it ready" input wins
   const offer = campaign.draft.brief?.offer?.label
   if (offer) return offer
   if (campaign.draft.occasion) return campaign.draft.occasion
@@ -121,7 +122,8 @@ const CREATIVE_SCHEMA = {
 /** AI-written creative direction tailored to the real restaurant + campaign. */
 async function generateCreative(type: string, featuring: string, stepsLabel: string, business: { name: string; category: string; brand_tone: string | null; brand_do_nots: string | null; brand_voice_words: string[] }, campaign: SavedCampaign): Promise<CreativeDirection | null> {
   const objective = campaign.draft.brief?.objective ?? campaign.draft.name
-  const offer = campaign.draft.brief?.offer?.label ?? 'none'
+  const offer = campaign.execution?.offerText?.trim() || campaign.draft.brief?.offer?.label || 'none'
+  const ownerAvoid = [business.brand_do_nots, campaign.execution?.avoid].filter(Boolean).join('; ')
   const spec = SPECS[type] ?? FALLBACK_SPEC
   const out = await callStructuredOutput<CreativeDirection>({
     system: 'You are an expert short-form content director for restaurants. Write ONE concrete, executable creative direction for a single content piece a freelance creator will shoot/make. Be specific to THIS restaurant and dish — no generic filler. The caption must be ready to post in the brand voice. Steps are a numbered, doable list.',
@@ -130,7 +132,8 @@ async function generateCreative(type: string, featuring: string, stepsLabel: str
       cuisine: business.category,
       brandVoice: business.brand_voice_words,
       brandTone: business.brand_tone,
-      avoid: business.brand_do_nots,
+      avoid: ownerAvoid || undefined,
+      mustInclude: campaign.execution?.mustSay?.trim() || undefined,
       campaignGoal: objective,
       offer,
       pieceType: `${type} (${spec.format}, ${spec.platform}, ${spec.aspectRatio})`,
@@ -199,7 +202,7 @@ export async function getCreatorBrief(orderId: string): Promise<{ order: BriefOr
     creativeSource = 'template'
   }
 
-  const offerLabel = campaign?.draft.brief?.offer?.label ?? null
+  const offerLabel = campaign?.execution?.offerText?.trim() || campaign?.draft.brief?.offer?.label || null
   const vibe = campaign?.draft.occasion || campaign?.draft.brief?.objective || 'campaign'
   // Clamp the schedule forward so a brief opened after its planned dates (estimate
   // mode, or a past target) never shows shoot/draft/post dates in the past.

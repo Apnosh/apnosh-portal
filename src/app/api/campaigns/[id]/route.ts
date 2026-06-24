@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
-import { mintWorkOrders } from '@/lib/campaigns/work-orders'
+import { mintWorkOrders, clearCampaignBriefCache } from '@/lib/campaigns/work-orders'
 import { buildWorkOrderRows } from '@/lib/campaigns/work-orders-core'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
@@ -51,6 +51,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.fields?.creator_choices && typeof body.fields.creator_choices === 'object') {
     campaign.creatorChoices = body.fields.creator_choices as Record<string, string>
   }
+  // The owner changed the "Get it ready" inputs → regenerate the briefs with them.
+  if (body.fields?.execution) await clearCampaignBriefCache(id).catch(() => {})
   // The owner shipping a team-run campaign is the handoff signal: tell the staff
   // assigned to this client so the "your team is preparing each piece" promise is
   // real. DIY ships are owner-run, so no handoff. Best-effort; never blocks save.

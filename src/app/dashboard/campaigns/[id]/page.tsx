@@ -90,9 +90,9 @@ export default function CampaignDetailPage() {
     await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: shippedAt, creator_choices: camp.creatorChoices ?? {} } }) }).catch(() => {})
     setCamp({ ...camp, status: 'shipped', phase: 'monitor', shippedAt })
     setBusy(false)
-    // The ship just materialized the pieces; pull live progress so the mirror
-    // replaces the static banner without a manual reload.
-    fetch(`/api/campaigns/${id}`).then((r) => r.json()).then((j) => setProgress((j.progress as CampaignProgress) ?? null)).catch(() => {})
+    // Land on the "Get it ready" checklist: the few inputs + actions the team
+    // needs from the owner before this can actually run.
+    router.push(`/dashboard/campaigns/${id}/ready`)
   }
   async function del() {
     setBusy(true)
@@ -218,6 +218,13 @@ function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onS
       {!shipped && <CreativeControl value={camp.creativeControl} onChange={onSetCreativeControl} />}
 
       <CreatorsCard items={core} overrides={camp.creatorChoices ?? {}} vibe={vibeForCampaign(camp.draft.goalKey, camp.draft.occasion)} onChoose={onChooseCreator} />
+
+      {shipped && (
+        <a href={`/dashboard/campaigns/${camp.draft.id}/ready`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: GRAD, color: '#fff', borderRadius: 14, padding: '13px 16px', textDecoration: 'none', marginTop: 14 }}>
+          <span><span style={{ fontWeight: 800, fontSize: 14 }}>Finish setup</span><span style={{ display: 'block', fontSize: 11.5, opacity: 0.9, marginTop: 1 }}>A few quick things so we can nail this</span></span>
+          <span style={{ fontWeight: 800, fontSize: 18 }}>→</span>
+        </a>
+      )}
 
       {shipped && !diy && <DeliveriesCard campaignId={camp.draft.id} />}
 

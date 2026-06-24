@@ -88,6 +88,13 @@ export async function listWorkOrdersForCreator(creatorId: string): Promise<WorkO
   return data.map((r) => ({ ...rowToWO(r), campaignName: ((r as { campaigns?: { name?: string } }).campaigns?.name) ?? undefined }))
 }
 
+/** Clear the cached creative brief for a campaign's orders so the next open
+ *  regenerates it (e.g. after the owner edits the "Get it ready" inputs). */
+export async function clearCampaignBriefCache(campaignId: string): Promise<void> {
+  const admin = createAdminClient()
+  await admin.from('creator_work_orders').update({ brief_details: null }).eq('campaign_id', campaignId)
+}
+
 /** The pool creator id this auth user signs in as (test-creator login), or null. */
 export async function getCreatorIdForUser(userId: string): Promise<string | null> {
   const admin = createAdminClient()
