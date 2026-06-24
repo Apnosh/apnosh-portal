@@ -100,6 +100,10 @@ function discFor(text: string): Disc | null {
   return null
 }
 
+/** Map a content type key ('reel' | 'story' | 'post' | 'photo' | …) to the
+ *  creative discipline that makes it. Null for non-creative types (email/sms). */
+export function disciplineForType(type: string): Disc | null { return discFor(type) }
+
 /**
  * The creative roles a campaign needs, each with its creator: the owner's chosen
  * override when set, otherwise the top-ranked match for the campaign's vibe.

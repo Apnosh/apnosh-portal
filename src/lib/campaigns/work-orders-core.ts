@@ -5,7 +5,7 @@
  * mint logic without pulling in the admin DB client.
  */
 import type { SavedCampaign } from './view'
-import { creativeRolesForCampaign, vibeForCampaign } from './creators'
+import { creativeRolesForCampaign, vibeForCampaign, disciplineForType } from './creators'
 import { reconcileBeatsToLines } from './catalog'
 import { deriveSchedule } from './schedule'
 
@@ -55,6 +55,7 @@ export interface WorkOrderRow {
   client_id: string
   creator_id: string
   discipline: string
+  slot: number          // 0-based piece index within its discipline
   title: string
   brief: string
   due_date: string | null
@@ -62,40 +63,52 @@ export interface WorkOrderRow {
 }
 
 /**
- * Build the work-order rows a ship should mint: one per creative discipline
- * present in the included items, assigned to the owner's chosen creator
- * (creator_choices) or the auto-matched best fit. Returns [] when there is no
- * creative work. Pure — the DB write + idempotency check live in mintWorkOrders.
+ * Build the work-order rows a ship should mint: ONE PER CONTENT PIECE (dated
+ * beat), each assigned to its discipline's chosen creator (creator_choices) or
+ * the auto-matched best fit, with that piece's own due date. So two videos of
+ * one campaign are two separately-tracked, separately-scheduled orders rather
+ * than one slot that silently owns both. Returns [] when there is no creative
+ * work. Pure — the DB write + idempotency check live in mintWorkOrders.
  */
 export function buildWorkOrderRows(campaign: SavedCampaign, shipISO: string): WorkOrderRow[] {
   const items = (campaign.draft.items ?? []).filter((it) => it.included)
   const vibe = vibeForCampaign(campaign.draft.goalKey, campaign.draft.occasion)
   const roles = creativeRolesForCampaign(items, campaign.creatorChoices, vibe)
   if (!roles.length) return []
+  const creatorByDiscipline = new Map(roles.map((r) => [r.discipline, r.creator]))
 
-  // Same reconciled calendar materialize uses, so the order's due date agrees
-  // with the matching content_draft's publish date.
+  // Same reconciled calendar materialize uses, so each order's due date agrees
+  // with its content_draft's publish date.
   const beats = reconcileBeatsToLines(items, campaign.draft.brief?.contentBeats ?? [])
   const sched = deriveSchedule(
     { targetDate: campaign.draft.targetDate, occasion: campaign.draft.occasion, contentBeats: beats },
     shipISO,
   )
-  // Clamp the due date to the ship day so a backward-anchored (event) or
-  // too-soon campaign never mints an order that's born overdue — matching how
-  // materializeCampaignDrafts clamps the content_draft publish date.
   const shipDay = (shipISO || '').slice(0, 10)
-  const fp = sched.firstPostISO
-  const due = fp && shipDay && fp < shipDay ? shipDay : fp
   const objective = campaign.draft.brief?.objective ?? ''
+  const name = campaign.draft.name
 
-  return roles.map((r) => ({
-    campaign_id: campaign.draft.id,
-    client_id: campaign.clientId,
-    creator_id: r.creator.id,
-    discipline: r.discipline,
-    title: `${r.discipline} for ${campaign.draft.name}`,
-    brief: `Make the ${r.discipline.toLowerCase()} pieces for "${campaign.draft.name}".${objective ? ` Goal: ${objective}.` : ''} You approve nothing yet — deliver, then the owner reviews.`,
-    due_date: due,
-    status: 'offered' as const,
-  }))
+  const slotByDiscipline: Record<string, number> = {}
+  const rows: WorkOrderRow[] = []
+  for (const b of sched.beats) {
+    const discipline = disciplineForType(b.type)
+    const creator = discipline ? creatorByDiscipline.get(discipline) : undefined
+    if (!discipline || !creator) continue
+    const slot = (slotByDiscipline[discipline] = (slotByDiscipline[discipline] ?? -1) + 1)
+    // Clamp each piece's due to the ship day so a backward-anchored (event) or
+    // too-soon campaign never mints an order born overdue.
+    const due = b.postISO && shipDay && b.postISO < shipDay ? shipDay : b.postISO
+    rows.push({
+      campaign_id: campaign.draft.id,
+      client_id: campaign.clientId,
+      creator_id: creator.id,
+      discipline,
+      slot,
+      title: b.label?.trim() ? b.label.trim() : `${discipline} for ${name}`,
+      brief: `Make this ${discipline.toLowerCase()} piece for "${name}".${objective ? ` Goal: ${objective}.` : ''} You approve nothing yet — deliver, then the owner reviews.`,
+      due_date: due,
+      status: 'offered' as const,
+    })
+  }
+  return rows
 }

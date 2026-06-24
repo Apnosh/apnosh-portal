@@ -120,7 +120,7 @@ s.group('buildWorkOrderRows — ship dispatches honest orders')
   s.eq('3 disciplines → 3 orders', rows.length, 3)
   s.check('every order starts offered', rows.every((r) => r.status === 'offered'))
   s.check('every due date is not in past', rows.every((r) => notPast(r.due_date)), rows.map((r) => r.due_date).join(','))
-  s.check('due date == schedule firstPost', rows.every((r) => r.due_date === deriveSchedule({ targetDate: '2026-08-15', occasion: 'event', contentBeats: beatsN(3) } as Parameters<typeof deriveSchedule>[0], SHIP).firstPostISO))
+  s.check('earliest order due == schedule firstPost', [...rows.map((r) => r.due_date)].filter(Boolean).sort()[0] === deriveSchedule({ targetDate: '2026-08-15', occasion: 'event', contentBeats: beatsN(3) } as Parameters<typeof deriveSchedule>[0], SHIP).firstPostISO)
   s.check('build is deterministic (idempotent shape)', JSON.stringify(rows) === JSON.stringify(buildWorkOrderRows(camp, SHIP)))
 }
 {
@@ -217,6 +217,25 @@ s.group('creator override is discipline-scoped')
   s.check('every order creator belongs to its discipline', crossed.every((r) => creatorPool(r.discipline as Disc).some((c) => c.id === r.creator.id)))
   const goodId = creatorPool('Video')[1]?.id ?? creatorPool('Video')[0].id
   s.check('valid same-discipline override honored', creativeRolesForCampaign(its, { Video: goodId }, v2).find((r) => r.discipline === 'Video')!.creator.id === goodId)
+}
+
+// ── L. per-piece minting (guards #8) ────────────────────────────────────
+s.group('per-piece minting — each billed piece is its own order')
+{
+  const camp = campaignFor({ name: 'Two reels', content: ['reel', 'post'], beats: 2, targetDate: '2026-08-15', occasion: 'event' })
+  camp.draft.items.find((it) => it.serviceId === 'content-reel')!.qty = 2 // owner bumped reels to 2
+  const rows = buildWorkOrderRows(camp, SHIP)
+  s.eq('2 reels + 1 post → 3 orders', rows.length, 3)
+  const video = rows.filter((r) => r.discipline === 'Video')
+  s.eq('two Video orders, one per reel', video.length, 2)
+  s.check('the two reel orders have distinct slots', new Set(video.map((r) => r.slot)).size === 2)
+  s.check('the two reel orders have distinct due dates', new Set(video.map((r) => r.due_date)).size === 2)
+}
+{
+  const camp = campaignFor({ name: 'Reel + story', content: ['reel', 'story'], beats: 2, targetDate: '2026-08-15', occasion: 'event' })
+  const rows = buildWorkOrderRows(camp, SHIP)
+  s.eq('reel + story → 2 orders (not collapsed to 1)', rows.length, 2)
+  s.eq('reel + story → two disciplines (Video + Social)', new Set(rows.map((r) => r.discipline)).size, 2)
 }
 
 // ── K. estimate-mode anchor stability (guards #11) ──────────────────────
