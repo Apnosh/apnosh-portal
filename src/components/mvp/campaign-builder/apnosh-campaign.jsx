@@ -2354,10 +2354,9 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, off = 0 }) {
   return (
     <div style={{ paddingBottom: 26, background: TOKENS.canvas, minHeight: "100%" }}>
       <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
-      <div className="apnrise" style={{ padding: "16px 20px 14px" }}>
-        <div style={{ fontFamily: FONT_B, fontSize: 11.5, fontWeight: 700, letterSpacing: 1.4, color: TOKENS.mintDark, textTransform: "uppercase", marginBottom: 5 }}>New campaign</div>
-        <h1 style={{ fontFamily: FONT_D, fontSize: 27, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.6, lineHeight: 1.08, margin: 0 }}>What should we work on?</h1>
-        <p style={{ fontFamily: FONT_B, fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.45, margin: "6px 0 0" }}>Pick a plan and we'll draft the whole thing — ready for you to approve.</p>
+      <div style={{ padding: "18px 20px 12px" }}>
+        <h1 style={{ fontFamily: FONT_D, fontSize: 25, fontWeight: 600, color: TOKENS.ink, lineHeight: 1, margin: 0 }}>What should we work on?</h1>
+        <p style={{ fontFamily: FONT_B, fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.4, margin: "6px 0 0" }}>Pick a plan and we'll draft the whole thing — ready for you to approve.</p>
       </div>
       <div style={{ paddingTop: 2 }}><SearchBar value={q} onChange={setQ} /></div>
       {off > 0 && !query && (

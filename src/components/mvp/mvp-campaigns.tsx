@@ -77,7 +77,7 @@ export default function MvpCampaigns() {
     <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{ANIM}</style>
       <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', padding: '14px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}` }}>
-        <div style={{ fontSize: 15, color: C.ink, fontWeight: 600 }}>Campaigns</div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 25, color: C.ink, fontWeight: 600, lineHeight: 1 }}>Campaigns</div>
         <Link href="/dashboard/campaigns/new" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 99, padding: '8px 14px', fontWeight: 700, fontSize: 13.5 }}><Plus size={16} strokeWidth={2.5} /> New</Link>
       </div>
 
