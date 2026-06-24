@@ -4,7 +4,7 @@
  * Add-service picker.
  */
 import { PRICED_CATALOG, type PricedService } from '@/lib/campaigns/data/priced-catalog'
-import type { BillingCadence, LineItem } from '@/lib/campaigns/types'
+import type { BillingCadence, ContentBeat, LineItem } from '@/lib/campaigns/types'
 
 export function cadenceOf(s: PricedService): { price: number; cadence: BillingCadence } {
   const p = s.prices[0]
@@ -99,6 +99,41 @@ export function buildContentLine(type: string, id: string, opts?: { qty?: number
     metric: m.metric, why: opts?.why ?? m.why, market: m.market, handler: m.handler,
     included: true, lock: 'editable',
   }
+}
+
+/**
+ * Reconcile the content calendar (beats) with the owner's edited line items so
+ * bill == calendar == production. Keeps only beats whose content type still has
+ * an included, non-opted-out per-occurrence line, and makes each type's beat
+ * count equal that line's quantity (trim extras; clone forward weekly to grow).
+ * For an unedited campaign this is the identity (composeCampaign already sets
+ * qty == beats-per-type); it only diverges once the owner bumps a qty or opts a
+ * line out — exactly the cases where the three counts used to disagree.
+ */
+export function reconcileBeatsToLines(items: LineItem[], beats: ContentBeat[]): ContentBeat[] {
+  const want = new Map<string, number>()
+  for (const it of items) {
+    if (!it.included || it.optOut) continue
+    if (!it.serviceId?.startsWith('content-')) continue
+    const type = it.serviceId.slice('content-'.length)
+    if (!CONTENT_META[type]) continue
+    want.set(type, (want.get(type) ?? 0) + Math.max(1, it.qty ?? 1))
+  }
+  const byType = new Map<string, ContentBeat[]>()
+  for (const b of beats) {
+    if (!want.has(b.type)) continue // type dropped (opted out / removed)
+    ;(byType.get(b.type) ?? byType.set(b.type, []).get(b.type)!).push(b)
+  }
+  const out: ContentBeat[] = []
+  for (const [type, qty] of want) {
+    const existing = byType.get(type) ?? []
+    if (existing.length >= qty) { out.push(...existing.slice(0, qty)); continue }
+    out.push(...existing)
+    const template = existing[existing.length - 1] ?? { type, label: CONTENT_META[type].label, channel: 'instagram', week: 0 }
+    let week = existing.length ? existing[existing.length - 1].week : 0
+    for (let i = existing.length; i < qty; i++) { week += 1; out.push({ ...template, type, week }) }
+  }
+  return out.sort((a, b) => a.week - b.week)
 }
 
 export function serviceById(id: string): PricedService | undefined {

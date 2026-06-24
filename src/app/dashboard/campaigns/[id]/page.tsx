@@ -13,12 +13,14 @@ import { ChevronLeft, Loader2, Trash2, Rocket, Check, CalendarDays } from 'lucid
 import { playsFrom } from '@/lib/campaigns/plays'
 import { summarize, type LineItem, type OptOutReason } from '@/lib/campaigns/types'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
+import { reconcileBeatsToLines } from '@/lib/campaigns/catalog'
 import { vibeForCampaign } from '@/lib/campaigns/creators'
 import type { SavedCampaign, CampaignProgress } from '@/lib/campaigns/view'
 import { AUDIENCES, CHANNELS } from '@/lib/campaigns/data/campaign-templates'
 import PlayCard from '@/components/campaigns/play-card'
 import LineCard from '@/components/campaigns/line-card'
 import CreatorsCard from '@/components/campaigns/creators-card'
+import DeliveriesCard from '@/components/campaigns/deliveries-card'
 import HonestBillBar from '@/components/campaigns/honest-bill-bar'
 import { C, DISPLAY, GRAD } from '@/components/campaigns/ui'
 
@@ -194,6 +196,8 @@ function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onS
 
       <CreatorsCard items={core} overrides={camp.creatorChoices ?? {}} vibe={vibeForCampaign(camp.draft.goalKey, camp.draft.occasion)} onChoose={onChooseCreator} />
 
+      {shipped && !diy && <DeliveriesCard campaignId={camp.draft.id} />}
+
       {recommended.length > 0 && !shipped && (
         <div style={{ marginTop: 18 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, marginBottom: 8 }}>Go further</div>
@@ -211,10 +215,12 @@ function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onS
           <Row k="Goal" v={brief.kpi} />
           <Row k="Who" v={brief.audienceIds.map((a) => AUDIENCES[a]?.label ?? a).join(', ') || '—'} />
           <Row k="Where" v={brief.channelIds.map((c) => CHANNELS[c]?.label ?? c).join(', ') || '—'} />
-          {brief.contentBeats.length > 0 && (() => {
+          {(() => {
+            const planBeats = reconcileBeatsToLines(camp.draft.items, brief.contentBeats)
+            if (!planBeats.length) return null
             const now = new Date()
             const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-            const sched = deriveSchedule({ targetDate: camp.draft.targetDate, occasion: camp.draft.occasion, contentBeats: brief.contentBeats }, todayISO)
+            const sched = deriveSchedule({ targetDate: camp.draft.targetDate, occasion: camp.draft.occasion, contentBeats: planBeats }, todayISO)
             return (
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>

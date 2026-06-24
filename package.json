@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "lint:migrations": "tsx scripts/check-migrations.ts"
+    "lint:migrations": "tsx scripts/check-migrations.ts",
+    "sim": "tsx scripts/sim/lifecycle.ts",
+    "sim:db": "tsx scripts/sim/db-e2e.ts",
+    "sim:all": "tsx scripts/sim/lifecycle.ts && tsx scripts/sim/db-e2e.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",

@@ -11,6 +11,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { CampaignDraft, LineItem, CampaignBrief, BillingCadence } from './types'
 import { deriveSchedule } from './schedule'
+import { reconcileBeatsToLines } from './catalog'
 import type { StageId } from './stages'
 import type { SavedCampaign, CampaignProgress } from './view'
 
@@ -248,7 +249,10 @@ export async function materializeCampaignDrafts(
   draft: CampaignDraft | null,
   shipISO: string,
 ): Promise<number> {
-  const beats = draft?.brief?.contentBeats ?? []
+  // Production follows the owner's edited line items, not the static template
+  // calendar: opted-out types drop and qty edits change the count, so produced
+  // pieces == billed pieces == the calendar the owner saw.
+  const beats = reconcileBeatsToLines(draft?.items ?? [], draft?.brief?.contentBeats ?? [])
   if (!beats.length) return 0
   const sched = deriveSchedule({ targetDate: draft?.targetDate, occasion: draft?.occasion, contentBeats: beats }, shipISO)
   const admin = createAdminClient()

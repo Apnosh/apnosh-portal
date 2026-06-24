@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
+import { mintWorkOrders } from '@/lib/campaigns/work-orders'
+import { buildWorkOrderRows } from '@/lib/campaigns/work-orders-core'
 import { notifyStaffForClient } from '@/lib/notifications'
 import type { LineItem } from '@/lib/campaigns/types'
 
@@ -47,6 +49,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // tell the team. Both best-effort: a successful ship must never 500 here.
     const shipISO = typeof body.fields?.shipped_at === 'string' ? body.fields.shipped_at : new Date().toISOString()
     const made = await materializeCampaignDrafts(id, campaign.clientId, campaign.draft, shipISO).catch(() => 0)
+    // Dispatch the creative work to the chosen creators' inboxes (the supply
+    // side). Best-effort; never blocks the ship. We compare what SHOULD have
+    // been minted against what was, so a silent mint failure is caught below.
+    const expectedOrders = buildWorkOrderRows(campaign, shipISO).length
+    const minted = await mintWorkOrders(campaign, shipISO).catch(() => 0)
     await notifyStaffForClient(
       campaign.clientId,
       ['strategist', 'community_mgr'],
@@ -64,6 +71,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         kind: 'client_signoff',
         title: 'Campaign shipped but produced no work items',
         body: `${campaign.draft.name} shipped, but no content pieces were created. Set it up manually.`,
+        link: `/work/campaigns?focus=${id}`,
+      }).catch(() => ({ notified: 0 }))
+    }
+    // Dead-letter: the campaign had creative work to dispatch but no creator
+    // order was minted (transient insert error / missing table) — never let the
+    // supply side silently strand. Re-mint is safe (idempotent) once fixed.
+    if (expectedOrders > 0 && minted === 0) {
+      await notifyStaffForClient(campaign.clientId, ['strategist'], {
+        kind: 'client_signoff',
+        title: 'Campaign shipped but creators were not dispatched',
+        body: `${campaign.draft.name} shipped with ${expectedOrders} creative ${expectedOrders === 1 ? 'order' : 'orders'} to assign, but none reached a creator. Assign manually.`,
         link: `/work/campaigns?focus=${id}`,
       }).catch(() => ({ notified: 0 }))
     }

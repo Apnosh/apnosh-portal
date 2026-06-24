@@ -115,7 +115,10 @@ export function creativeRolesForCampaign(
     .map((d): CreativeRole | null => {
       const overrideId = overrides?.[d]
       if (overrideId) {
-        const c = creatorById(overrideId)
+        // Only honor a pick that actually belongs to THIS discipline's pool, so
+        // a stale/cross-craft override (e.g. a Photo creator on a Video slot)
+        // falls through to the ranked match instead of minting the wrong craft.
+        const c = creatorPool(d).find((x) => x.id === overrideId)
         if (c) return { discipline: d, creator: c, reason: 'Your pick', recommended: false }
       }
       const top = rankCreators(d, vibe)[0]
