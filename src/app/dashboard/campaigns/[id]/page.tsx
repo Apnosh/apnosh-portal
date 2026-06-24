@@ -20,6 +20,7 @@ import { AUDIENCES, CHANNELS } from '@/lib/campaigns/data/campaign-templates'
 import PlayCard from '@/components/campaigns/play-card'
 import LineCard from '@/components/campaigns/line-card'
 import CreatorsCard from '@/components/campaigns/creators-card'
+import CreativeControl from '@/components/campaigns/creative-control'
 import DeliveriesCard from '@/components/campaigns/deliveries-card'
 import HonestBillBar from '@/components/campaigns/honest-bill-bar'
 import { C, DISPLAY, GRAD } from '@/components/campaigns/ui'
@@ -69,6 +70,11 @@ export default function CampaignDetailPage() {
       if (typeof window !== 'undefined') window.alert('Could not save your creator pick. Check your connection and try again.')
     }
   }
+  function setCreativeControl(mode: string) {
+    if (!camp) return
+    setCamp({ ...camp, creativeControl: mode as SavedCampaign['creativeControl'] })  // optimistic
+    fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { creative_control: mode } }) }).catch(() => {})
+  }
 
   async function ship() {
     if (!camp) return
@@ -103,7 +109,7 @@ export default function CampaignDetailPage() {
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '18px 16px 28px' }}>
           {error ? <div style={{ color: '#c0392b', fontSize: 13.5, padding: '20px 0', textAlign: 'center' }}>{error}</div>
             : !camp ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: C.faint }}><Loader2 size={16} className="animate-spin" /> Loading…</div>
-            : <Detail camp={camp} progress={progress} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} />}
+            : <Detail camp={camp} progress={progress} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} />}
         </div>
 
         {camp && (
@@ -130,7 +136,7 @@ export default function CampaignDetailPage() {
   )
 }
 
-function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator }: {
+function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl }: {
   camp: SavedCampaign
   progress: CampaignProgress | null
   onToggleOptOut: (id: string, r: OptOutReason) => void
@@ -139,6 +145,7 @@ function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onS
   onSetQty: (id: string, qty: number) => void
   onSetStart: (iso: string) => void
   onChooseCreator: (discipline: string, creatorId: string) => void
+  onSetCreativeControl: (mode: string) => void
 }) {
   const items = camp.draft.items
   const core = items.filter((i) => i.included)
@@ -202,6 +209,8 @@ function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onS
           <PlayCard key={p.key} play={p} defaultOpen={false} onToggleOptOut={onToggleOptOut} onToggleInclude={onToggleInclude} onRemove={onRemove} onSetQty={onSetQty} />
         ))}
       </div>
+
+      {!shipped && <CreativeControl value={camp.creativeControl} onChange={onSetCreativeControl} />}
 
       <CreatorsCard items={core} overrides={camp.creatorChoices ?? {}} vibe={vibeForCampaign(camp.draft.goalKey, camp.draft.occasion)} onChoose={onChooseCreator} />
 

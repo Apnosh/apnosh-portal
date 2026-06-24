@@ -25,6 +25,7 @@ export interface WorkOrder {
   brief: string | null
   dueDate: string | null
   status: WorkOrderStatus
+  conceptStatus: 'approved' | 'pending' | 'changes'
   deliveredUrl: string | null
   note: string | null
   createdAt: string
@@ -44,6 +45,7 @@ function rowToWO(r: Record<string, unknown>): WorkOrder {
     brief: (r.brief as string) ?? null,
     dueDate: (r.due_date as string) ?? null,
     status: ((r.status as WorkOrderStatus) ?? 'offered'),
+    conceptStatus: ((r.concept_status as WorkOrder['conceptStatus']) ?? 'approved'),
     deliveredUrl: (r.delivered_url as string) ?? null,
     note: (r.note as string) ?? null,
     createdAt: r.created_at as string,
@@ -118,18 +120,22 @@ export async function listWorkOrdersForCampaign(campaignId: string): Promise<Wor
  *  Enforces the legal-transition set + the deliver-needs-a-link rule at this
  *  single write chokepoint, so the API cannot hijack an order (offered→approved)
  *  or resurrect a terminal one. Throws IllegalTransition on a bad move. */
-export async function updateWorkOrder(id: string, patch: { status?: WorkOrderStatus; delivered_url?: string; note?: string }): Promise<void> {
+export async function updateWorkOrder(id: string, patch: { status?: WorkOrderStatus; delivered_url?: string; note?: string; concept_status?: 'approved' | 'pending' | 'changes' }): Promise<void> {
   const admin = createAdminClient()
   if (patch.status) {
     const { data: cur, error: readErr } = await admin
       .from('creator_work_orders')
-      .select('status, delivered_url')
+      .select('status, delivered_url, concept_status')
       .eq('id', id)
       .single()
     if (readErr || !cur) throw new IllegalTransition('work order not found')
     const effectiveUrl = patch.delivered_url ?? (cur.delivered_url as string | null)
     const v = validateTransition(cur.status as WorkOrderStatus, patch.status, effectiveUrl)
     if (!v.ok) throw new IllegalTransition(v.reason)
+    // approve_concept gate: can't begin production until the owner OKs the idea.
+    if (patch.status === 'in_progress' && (cur.concept_status as string) === 'pending') {
+      throw new IllegalTransition('the owner needs to approve the concept before you start')
+    }
   }
   const { error } = await admin
     .from('creator_work_orders')

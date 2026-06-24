@@ -18,6 +18,8 @@ export interface SavedCampaign {
   /** Owner's chosen creators per discipline, e.g. { Video: 'v_maya' }. Empty
    *  disciplines fall back to the auto-matched default at render time. */
   creatorChoices: Record<string, string>
+  /** How hands-on the owner is with the creative direction. */
+  creativeControl: 'handoff' | 'approve_concept' | 'owner_directs'
 }
 
 /** Owner-facing rollup of a shipped campaign's pieces (content_drafts), so the

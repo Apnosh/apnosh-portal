@@ -81,6 +81,7 @@ function rowToSaved(c: Record<string, unknown>, items: LineItem[], brief: Campai
     createdAt: c.created_at as string,
     updatedAt: c.updated_at as string,
     creatorChoices: (c.creator_choices as Record<string, string> | null) ?? {},
+    creativeControl: (c.creative_control as SavedCampaign['creativeControl']) ?? 'handoff',
   }
 }
 
@@ -203,7 +204,7 @@ export async function replaceLineItems(campaignId: string, clientId: string, ite
   await admin.from('campaigns').update({ updated_at: new Date().toISOString() }).eq('id', campaignId)
 }
 
-export async function updateCampaignFields(id: string, patch: Partial<{ name: string; budget_monthly: number; planned: boolean; phase: string; status: string; shipped_at: string; occasion: string; target_date: string; context: string; creator_choices: Record<string, string> }>): Promise<void> {
+export async function updateCampaignFields(id: string, patch: Partial<{ name: string; budget_monthly: number; planned: boolean; phase: string; status: string; shipped_at: string; occasion: string; target_date: string; context: string; creator_choices: Record<string, string>; creative_control: string }>): Promise<void> {
   const admin = createAdminClient()
   // Throw on error like createCampaign/replaceLineItems do, so a failed write
   // (e.g. a failed ship) surfaces as a 500 instead of silently succeeding and,

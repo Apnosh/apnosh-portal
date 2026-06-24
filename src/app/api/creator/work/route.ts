@@ -49,10 +49,13 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const userId = await currentUserId()
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  const body = (await req.json().catch(() => ({}))) as { id?: string; status?: string; delivered_url?: string; note?: string }
+  const body = (await req.json().catch(() => ({}))) as { id?: string; status?: string; delivered_url?: string; note?: string; concept_status?: 'approved' | 'pending' | 'changes' }
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   if (body.status && !VALID.includes(body.status as WorkOrderStatus)) {
     return NextResponse.json({ error: 'bad status' }, { status: 400 })
+  }
+  if (body.concept_status && !['approved', 'pending', 'changes'].includes(body.concept_status)) {
+    return NextResponse.json({ error: 'bad concept status' }, { status: 400 })
   }
   if (body.delivered_url && !safeHref(body.delivered_url)) {
     return NextResponse.json({ error: 'delivery link must be a valid http(s) URL' }, { status: 400 })
@@ -64,12 +67,15 @@ export async function PATCH(req: NextRequest) {
   const access = await checkClientAccess(order.clientId)
   const isAssignedCreator = (await getCreatorIdForUser(userId)) === order.creatorId
   if (!access.authorized && !isAssignedCreator) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  // Approving/changing the concept is the owner's call, not the creator's.
+  if (body.concept_status !== undefined && !access.authorized) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   try {
     await updateWorkOrder(body.id, {
       ...(body.status ? { status: body.status as WorkOrderStatus } : {}),
       ...(body.delivered_url !== undefined ? { delivered_url: body.delivered_url } : {}),
       ...(body.note !== undefined ? { note: body.note } : {}),
+      ...(body.concept_status ? { concept_status: body.concept_status } : {}),
     })
     return NextResponse.json({ ok: true })
   } catch (e) {

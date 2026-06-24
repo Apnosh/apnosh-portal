@@ -28,6 +28,7 @@ interface Spec {
   occasion?: string
   targetDate?: string
   creatorChoices?: Record<string, string>
+  creativeControl?: string
   excludeIdx?: number[]      // indices to mark included:false
 }
 
@@ -51,7 +52,7 @@ function campaignFor(s: Spec): SavedCampaign {
     goalKey: s.goalKey as CampaignDraft['goalKey'], occasion: s.occasion, targetDate: s.targetDate, brief,
   } as CampaignDraft
 
-  return { clientId: 'sim-client', draft, phase: 'build', status: 'draft', shippedAt: null, createdAt: SHIP, updatedAt: SHIP, creatorChoices: s.creatorChoices ?? {} }
+  return { clientId: 'sim-client', draft, phase: 'build', status: 'draft', shippedAt: null, createdAt: SHIP, updatedAt: SHIP, creatorChoices: s.creatorChoices ?? {}, creativeControl: (s.creativeControl as SavedCampaign['creativeControl']) ?? 'handoff' }
 }
 
 const s = new Suite()

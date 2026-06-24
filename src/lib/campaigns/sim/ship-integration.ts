@@ -48,7 +48,7 @@ export async function runShipIntegrationSim(): Promise<ShipSimReport> {
 
     const saved: SavedCampaign = {
       clientId: TEST_CLIENT, draft: { ...draft, id: campaignId }, phase: 'build', status: 'draft',
-      shippedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), creatorChoices: {},
+      shippedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), creatorChoices: {}, creativeControl: 'handoff',
     }
     const shipISO = new Date().toISOString()
     const shipDay = shipISO.slice(0, 10)

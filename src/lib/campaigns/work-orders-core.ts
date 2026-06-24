@@ -60,6 +60,7 @@ export interface WorkOrderRow {
   brief: string
   due_date: string | null
   status: WorkOrderStatus
+  concept_status: 'approved' | 'pending'  // 'pending' when the owner wants to OK the idea first
 }
 
 /**
@@ -88,6 +89,8 @@ export function buildWorkOrderRows(campaign: SavedCampaign, shipISO: string): Wo
   const objective = campaign.draft.brief?.objective ?? ''
   const name = campaign.draft.name
 
+  // approve_concept holds production until the owner OKs the idea.
+  const conceptStatus: 'approved' | 'pending' = campaign.creativeControl === 'approve_concept' ? 'pending' : 'approved'
   const slotByDiscipline: Record<string, number> = {}
   const rows: WorkOrderRow[] = []
   for (const b of sched.beats) {
@@ -108,6 +111,7 @@ export function buildWorkOrderRows(campaign: SavedCampaign, shipISO: string): Wo
       brief: `Make this ${discipline.toLowerCase()} piece for "${name}".${objective ? ` Goal: ${objective}.` : ''} You approve nothing yet — deliver, then the owner reviews.`,
       due_date: due,
       status: 'offered' as const,
+      concept_status: conceptStatus,
     })
   }
   return rows
