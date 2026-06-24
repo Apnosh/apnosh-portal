@@ -56,13 +56,18 @@ async function main() {
     const { data: byCreator } = await a.from('creator_work_orders').select('*').eq('creator_id', 'sim_video')
     s.eq('creator inbox returns only their order', byCreator?.length ?? 0, 1)
 
-    // ── idempotency: the unique (campaign_id, discipline) index ─────────
-    s.group('idempotency (unique index)')
+    // ── idempotency + per-piece slots: unique (campaign,discipline,slot) ─
+    s.group('idempotency + per-piece slots (migration 172)')
     const { error: dupErr } = await a.from('creator_work_orders').insert({
       campaign_id: campaignId, client_id: TEST_CLIENT, creator_id: 'sim_dup',
-      discipline: 'Video', title: 'dup', status: 'offered',
+      discipline: 'Video', slot: 0, title: 'dup', status: 'offered',
     })
-    s.check('duplicate (campaign,discipline) rejected', !!dupErr, dupErr ? `correctly blocked: ${dupErr.code}` : 'NO ERROR — re-ship would duplicate!')
+    s.check('duplicate (campaign,discipline,slot) rejected', !!dupErr, dupErr ? `correctly blocked: ${dupErr.code}` : 'NO ERROR — re-ship would duplicate!')
+    // a second Video PIECE (slot 1) is allowed — the whole point of #8
+    const { error: pieceErr } = await a.from('creator_work_orders').insert({
+      campaign_id: campaignId, client_id: TEST_CLIENT, creator_id: 'sim_video', discipline: 'Video', slot: 1, title: 'video #2', status: 'offered',
+    })
+    s.check('second piece same discipline (slot 1) allowed', !pieceErr, pieceErr?.message ?? 'migration 172 applied')
 
     // ── status machine walk ────────────────────────────────────────────
     s.group('status machine')
