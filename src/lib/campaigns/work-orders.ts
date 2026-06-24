@@ -86,6 +86,14 @@ export async function listWorkOrdersForCreator(creatorId: string): Promise<WorkO
   return data.map((r) => ({ ...rowToWO(r), campaignName: ((r as { campaigns?: { name?: string } }).campaigns?.name) ?? undefined }))
 }
 
+/** The pool creator id this auth user signs in as (test-creator login), or null. */
+export async function getCreatorIdForUser(userId: string): Promise<string | null> {
+  const admin = createAdminClient()
+  const { data, error } = await admin.from('creator_logins').select('creator_id').eq('person_id', userId).maybeSingle()
+  if (error || !data) return null
+  return (data.creator_id as string) ?? null
+}
+
 /** One order by id (for authorization scoping at the route). */
 export async function getWorkOrder(id: string): Promise<WorkOrder | null> {
   const admin = createAdminClient()

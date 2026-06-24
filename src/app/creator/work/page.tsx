@@ -19,15 +19,22 @@ function Centered({ children }: { children: React.ReactNode }) {
 
 function Inbox() {
   const params = useSearchParams()
-  const creator = params.get('creator') ?? ''
+  const creator = params.get('creator') ?? '' // admin preview of any creator
   const [orders, setOrders] = useState<WorkOrder[] | null>(null)
+  const [resolvedId, setResolvedId] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!creator) { setOrders([]); return }
-    const r = await fetch(`/api/creator/work?creator=${encodeURIComponent(creator)}`, { cache: 'no-store' })
-    const j = await r.json().catch(() => ({ orders: [] }))
-    setOrders(j.orders ?? [])
+    if (creator) {
+      const r = await fetch(`/api/creator/work?creator=${encodeURIComponent(creator)}`, { cache: 'no-store' })
+      const j = await r.json().catch(() => ({ orders: [] }))
+      setOrders(j.orders ?? []); setResolvedId(creator)
+      return
+    }
+    // No param: resolve the logged-in creator (creator_logins).
+    const r = await fetch('/api/creator/me', { cache: 'no-store' })
+    const j = await r.json().catch(() => ({ orders: [], creatorId: null }))
+    setOrders(j.orders ?? []); setResolvedId(j.creatorId ?? null)
   }, [creator])
 
   useEffect(() => { load() }, [load])
@@ -40,12 +47,12 @@ function Inbox() {
     } finally { setBusy(null) }
   }, [load])
 
-  if (!creator) {
-    return <Centered>Add <code className="mx-1 rounded bg-neutral-100 px-1.5 py-0.5">?creator=&lt;id&gt;</code> to preview an inbox.</Centered>
-  }
   if (orders === null) return <Centered>Loading your work…</Centered>
+  if (!resolvedId) {
+    return <Centered>You are not signed in as a creator. (Admins can preview with <code className="mx-1 rounded bg-neutral-100 px-1.5 py-0.5">?creator=&lt;id&gt;</code>.)</Centered>
+  }
 
-  const name = orders[0]?.creatorName ?? creator
+  const name = orders[0]?.creatorName ?? resolvedId
   const live = orders.filter((o) => o.status !== 'approved' && o.status !== 'declined')
   const done = orders.filter((o) => o.status === 'approved' || o.status === 'declined')
 

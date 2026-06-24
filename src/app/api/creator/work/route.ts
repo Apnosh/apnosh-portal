@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
-import { listWorkOrdersForCreator, listWorkOrdersForCampaign, getWorkOrder, updateWorkOrder, type WorkOrderStatus } from '@/lib/campaigns/work-orders'
+import { listWorkOrdersForCreator, listWorkOrdersForCampaign, getWorkOrder, getCreatorIdForUser, updateWorkOrder, type WorkOrderStatus } from '@/lib/campaigns/work-orders'
 import { safeHref, IllegalTransition } from '@/lib/campaigns/work-orders-core'
 
 // Every read/write is scoped to the caller's tenant: a campaign's or order's
@@ -47,7 +47,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!(await currentUserId())) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const userId = await currentUserId()
+  if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const body = (await req.json().catch(() => ({}))) as { id?: string; status?: string; delivered_url?: string; note?: string }
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   if (body.status && !VALID.includes(body.status as WorkOrderStatus)) {
@@ -59,8 +60,10 @@ export async function PATCH(req: NextRequest) {
 
   const order = await getWorkOrder(body.id)
   if (!order) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Owner/team/admin (client access) OR the assigned creator may act on it.
   const access = await checkClientAccess(order.clientId)
-  if (!access.authorized) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  const isAssignedCreator = (await getCreatorIdForUser(userId)) === order.creatorId
+  if (!access.authorized && !isAssignedCreator) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   try {
     await updateWorkOrder(body.id, {
