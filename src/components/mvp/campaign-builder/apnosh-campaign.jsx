@@ -606,33 +606,6 @@ function Direct({ onBack, onPickPart }) {
 /* ============================================================
    Shared confirmation
    ============================================================ */
-function Confirm({ title, body, meta, onBack }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-      <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 24px", display: "flex", flexDirection: "column" }}>
-        <div style={{ paddingTop: 4, marginBottom: 22 }}>
-          <CircleBtn onClick={onBack}>
-            <svg width="15" height="15" viewBox="0 0 24 24" stroke="#3a3a3a" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-          </CircleBtn>
-        </div>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "0 8px 30px" }}>
-          <div style={{ width: 74, height: 74, borderRadius: 37, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 22 }}>
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-          </div>
-          <h1 style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 24, color: TOKENS.ink, margin: "0 0 11px", letterSpacing: -0.2 }}>{title}</h1>
-          <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14.5, color: TOKENS.sub, lineHeight: 1.5, margin: 0, maxWidth: 290 }}>{body}</p>
-          {meta && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, marginTop: 18, background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 12, padding: "10px 16px" }}>{meta}</div>}
-          <button onClick={onBack} style={{
-            width: "100%", maxWidth: 320, height: 52, borderRadius: 26, border: `1.5px solid ${TOKENS.mint}`,
-            background: "#fff", color: TOKENS.mintDark, cursor: "pointer", marginTop: 28,
-            fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16, WebkitTapHighlightColor: "transparent",
-          }}>See it in Campaigns</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* While the plan is being saved to the owner's account. Replaces the old
    fire-and-forget save that showed "added" before the write confirmed. */
 function SavingScreen() {
@@ -3082,75 +3055,134 @@ function genSteps(p, cfg, vals) {
   ];
 }
 
-function PlanSteps({ itemId, vals, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, onBack, onAdd, onMarketer }) {
-  const p = catGet(itemId) || CATALOG[0];
-  const cfg = QL[itemId] || { slots: {} };
-  const c1 = (TYPE_G[p.type] || TYPE_G.plan)[1];
-  const base = genSteps(p, cfg, vals);
-  const [steps, setSteps] = useState(() => base.map((st, i) => ({ id: i, tag: st.tag, what: st.what, on: true })));
-  const [editId, setEditId] = useState(null);
-  const onSteps = steps.filter((st) => st.on);
-  const setWhat = (id, t) => setSteps((arr) => arr.map((st) => st.id === id ? { ...st, what: t } : st));
-  const remove = (id) => setSteps((arr) => arr.map((st) => st.id === id ? { ...st, on: false } : st));
+/* ============================================================
+   Quick check — the AI-led clarifier. A few straightforward,
+   pre-answered questions (objective, budget, timing, who, offer)
+   the owner can tap OR type, plus an open box the AI reads. The
+   answers feed the plan build. Replaces the per-piece Mad Libs.
+   ============================================================ */
+const QC_GOALS = [
+  { id: "new", label: "More new faces" },
+  { id: "regulars", label: "Bring regulars back" },
+  { id: "slow", label: "Fill slow nights" },
+  { id: "reviews", label: "More reviews" },
+  { id: "event", label: "Promote an event" },
+  { id: "catering", label: "Grow catering" },
+  { id: "online", label: "More online orders" },
+  { id: "brand", label: "Get our name out" },
+];
+const QC_PLAY_GOAL = { reach: "new", firstvisit: "new", nights: "slow", slowoffer: "slow", regulars: "regulars", second: "regulars", winback: "regulars", welcome: "regulars", birthday: "regulars", earlyaccess: "regulars", news: "regulars", reviewsplan: "reviews", reviewsreply: "reviews", promoevent: "event", launch: "event", ticket: "event", catering: "catering", friction: "online", qr: "online", gbp: "online", giftcard: "brand", shoot: "brand", creator: "brand", reel: "brand", dish: "brand", story: "brand", carousel: "brand", graphic: "brand", gpost: "brand" };
+const QC_AUD = {
+  new: ["People nearby", "Folks searching for us"],
+  slow: ["People nearby", "Guests who came before"],
+  regulars: ["Guests who came before", "Came once, never back"],
+  event: ["People nearby", "Our regulars"],
+  catering: ["Offices nearby", "Event planners", "Past big orders"],
+  online: ["People nearby", "Past online orders"],
+  reviews: [],
+  brand: [],
+};
+
+function QcSection({ q, hint, children }) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 9 }}>
+        <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink }}>{q}</span>
+        {hint && <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>{hint}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function QuickCheck({ itemId, restaurant, menu, budgetDefault = 0, onBuild, onBack }) {
+  const c1 = TOKENS.mintDark;
+  const [goal, setGoal] = useState(() => QC_PLAY_GOAL[itemId] || "new");
+  const [goalText, setGoalText] = useState("");
+  const [showGoalText, setShowGoalText] = useState(false);
+  const [budget, setBudget] = useState(() => (budgetDefault > 0 ? "$" + budgetDefault : ""));
+  const [timing, setTiming] = useState("Start this week");
+  const [date, setDate] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 14); return d; });
+  const audOpts = QC_AUD[goal] || [];
+  const [audience, setAudience] = useState(audOpts[0] || "");
+  const [offer, setOffer] = useState(() => (["reviews", "brand"].includes(goal) ? "No offer" : "A small deal, you pick"));
+  const [offerText, setOfferText] = useState("");
+  const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    const o = QC_AUD[goal] || [];
+    setAudience(o[0] || "");
+    setOffer(["reviews", "brand"].includes(goal) ? "No offer" : "A small deal, you pick");
+  }, [goal]);
+
+  const build = () => onBuild({
+    goal, goalLabel: QC_GOALS.find((g) => g.id === goal)?.label, goalText: goalText.trim(),
+    budget: budget.trim(), timing, date: timing === "Around a date" ? date : null,
+    audience: audOpts.length ? audience : "", offer, offerText: offerText.trim(), notes: notes.trim(),
+  });
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-          <CircleBtn onClick={onBack}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3a3a3a" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
-          </CircleBtn>
-          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center" }}><Art id={p.id} size={22} /></div>
-            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16.5, fontWeight: 600, color: TOKENS.ink }}>{p.title}</div>
-          </div>
+        <div style={{ paddingTop: 4, marginBottom: 2 }}>
+          <CircleBtn onClick={onBack}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3a3a3a" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg></CircleBtn>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "16px 0 7px" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill={TOKENS.mintDark}><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.mintDark, textTransform: "uppercase" }}>Your plan is ready</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, margin: "12px 0 6px" }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill={TOKENS.mintDark}><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
+          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.mintDark, textTransform: "uppercase" }}>Quick check</span>
         </div>
-        <h2 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, margin: "0 0 6px", letterSpacing: -0.3 }}>Here's how it'll work</h2>
-        <p style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.5, margin: "0 0 20px" }}>Adjust any step, or remove what you don't need. Then add it and we'll get it going.</p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {onSteps.map((st, idx) => (
-            <div key={st.id} style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 16, padding: "14px 15px", boxShadow: "0 1px 2px rgba(20,30,26,0.03)" }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                <div style={{ width: 26, height: 26, borderRadius: 13, background: gType(p.type), color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{idx + 1}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, color: c1, textTransform: "uppercase", marginBottom: 3 }}>{st.tag}</div>
-                  {editId === st.id ? (
-                    <>
-                      <textarea value={st.what} onChange={(e) => setWhat(st.id, e.target.value)} autoFocus rows={2} style={{ width: "100%", border: `1.5px solid ${TOKENS.line}`, borderRadius: 10, padding: "8px 10px", fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, outline: "none", boxSizing: "border-box", resize: "none", lineHeight: 1.4 }} />
-                      <button onClick={() => setEditId(null)} style={{ marginTop: 8, height: 34, padding: "0 16px", borderRadius: 17, border: "none", background: c1, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>Done</button>
-                    </>
-                  ) : (
-                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{st.what}</div>
-                  )}
-                </div>
-                {editId !== st.id && (
-                  <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
-                    <button onClick={() => setEditId(st.id)} style={iconBtn} aria-label="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 5l5 5M4 20l1-4L16 5l4 4L9 20z" /></svg></button>
-                    {onSteps.length > 1 && <button onClick={() => remove(st.id)} style={iconBtn} aria-label="Remove"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>}
-                  </div>
-                )}
-              </div>
-            </div>
+        <h2 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, margin: "0 0 6px", letterSpacing: -0.3 }}>A few quick taps</h2>
+        <p style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.5, margin: "0 0 14px" }}>So our AI builds the right plan. Most is set from your account. Tap to change, or type your own.</p>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 22 }}>
+          {[restaurant, (menu && menu.length ? `${menu.length} menu items` : null), (budgetDefault > 0 ? `$${budgetDefault}/mo budget` : null)].filter(Boolean).map((t, i) => (
+            <span key={i} style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, padding: "5px 10px", borderRadius: 999, background: "#eef1ef", color: TOKENS.sub }}>{t}</span>
           ))}
         </div>
+
+        <QcSection q="What do you want this to do?" hint="from your account">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {QC_GOALS.map((g) => <button key={g.id} onClick={() => { setGoal(g.id); setShowGoalText(false); }} style={pillStyle(goal === g.id && !showGoalText, c1)}>{g.label}</button>)}
+            <button onClick={() => setShowGoalText((s) => !s)} style={pillStyle(showGoalText, c1)}>Tell us in your words</button>
+          </div>
+          {showGoalText && <div style={{ marginTop: 10 }}><input value={goalText} onChange={(e) => setGoalText(e.target.value)} placeholder="Like: I want my Tuesdays full again" style={customInput} /></div>}
+        </QcSection>
+
+        <QcSection q="What can you spend a month?" hint="you only pay as pieces ship">
+          <div style={{ display: "flex", alignItems: "center", border: `1.5px solid ${TOKENS.line}`, borderRadius: 12, padding: "0 14px", height: 50, background: "#fff", marginBottom: 9 }}>
+            <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, color: TOKENS.sub, marginRight: 2 }}>$</span>
+            <input value={budget.replace(/^\$/, "")} onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ""); setBudget(n ? "$" + n : ""); }} inputMode="numeric" placeholder="0" style={{ flex: 1, border: "none", outline: "none", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, color: TOKENS.ink, background: "transparent" }} />
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.faint }}>/ month</span>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>{["$150", "$300", "$500"].map((a) => <button key={a} onClick={() => setBudget(a)} style={pillStyle(budget === a, c1)}>{a}</button>)}</div>
+        </QcSection>
+
+        <QcSection q="When should this run?">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{["Start this week", "Around a date", "No rush"].map((t) => <button key={t} onClick={() => setTiming(t)} style={pillStyle(timing === t, c1)}>{t}</button>)}</div>
+          {timing === "Around a date" && <div style={{ marginTop: 12, background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 14, padding: 12 }}><MiniCal value={date} accent={c1} onPick={(d) => setDate(d)} /></div>}
+        </QcSection>
+
+        {audOpts.length > 0 && (
+          <QcSection q="Who is this for?">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{audOpts.map((a) => <button key={a} onClick={() => setAudience(a)} style={pillStyle(audience === a, c1)}>{a}</button>)}</div>
+          </QcSection>
+        )}
+
+        <QcSection q="Want an offer behind this?">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{["A small deal, you pick", "No offer", "I have one"].map((o) => <button key={o} onClick={() => setOffer(o)} style={pillStyle(offer === o, c1)}>{o}</button>)}</div>
+          {offer === "I have one" && <div style={{ marginTop: 10 }}><input value={offerText} onChange={(e) => setOfferText(e.target.value)} placeholder="Like: free side with any entree" style={customInput} /></div>}
+        </QcSection>
+
+        <QcSection q="Anything else we should know?" hint="optional">
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Tell our AI anything: what makes you special, or what to avoid" style={{ width: "100%", border: `1.5px solid ${TOKENS.line}`, borderRadius: 12, padding: "11px 13px", fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, outline: "none", boxSizing: "border-box", resize: "none", lineHeight: 1.45 }} />
+        </QcSection>
       </div>
       <div style={{ flexShrink: 0, padding: "12px 20px 20px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-        {priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You only pay when each piece ships, after you approve it.</div>}
-        {(() => { const m = monthlyTotalLine(itemId, monthlyCommitment, liveCount, monthlyCap); if (!m) return null;
-          return m.warn
-            ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: "#9a5a00", background: "rgba(245,170,70,0.16)", borderRadius: 10, padding: "8px 12px", textAlign: "center", marginBottom: 10 }}>{m.text}</div>
-            : <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginBottom: 10 }}>{m.text}</div>;
-        })()}
-        <button onClick={() => onAdd(onSteps)} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Add this plan</button>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, textAlign: "center", marginTop: 7 }}>We get each piece ready. You approve before it goes out.</div>
-        <button onClick={onMarketer} style={{ width: "100%", height: 48, marginTop: 9, borderRadius: 24, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>
-          Hand it to a marketer
+        <button onClick={build} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
+          Build my plan
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
         </button>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, textAlign: "center", marginTop: 9, lineHeight: 1.4 }}>A marketer builds and runs the whole thing for you. You still approve each piece.</div>
+        <div onClick={build} style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginTop: 11, cursor: "pointer" }}>Skip, just build it</div>
       </div>
     </div>
   );
@@ -3208,17 +3240,9 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
     }
     setSaving(false);
     if (ok === false) setRoute({ name: "saveerror", ctx, success });
-    else setRoute({ name: "confirm", payload: success });
+    // On success, onCreate navigates to the campaign's detail page; the saving
+    // screen stays until that route change unmounts the builder.
   };
-
-  const Header = ({ title }) => (
-    <div style={{ flexShrink: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", padding: "12px 16px", borderBottom: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-      <button onClick={exit} aria-label="Close" style={{ position: "absolute", left: 12, width: 36, height: 36, borderRadius: 18, border: "none", background: "#f1f3f2", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-      </button>
-      <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 600, color: TOKENS.ink }}>{title}</span>
-    </div>
-  );
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 60, background: "#f0f0f3", display: "flex", justifyContent: "center" }}>
@@ -3254,20 +3278,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           )}
 
           {route.name === "generating" && (
-            <Generating itemId={route.itemId} onDone={() => setRoute({ name: "plansteps", itemId: route.itemId, vals: route.vals, from: route.from, rowId: route.rowId })} />
-          )}
-
-          {route.name === "plansteps" && (
-            <PlanSteps
-              itemId={route.itemId}
-              vals={route.vals}
-              monthlyCommitment={monthlyCommitment}
-              liveCount={liveCount}
-              monthlyCap={monthlyCap}
-              onBack={() => setRoute({ name: "build", itemId: route.itemId, from: route.from, rowId: route.rowId })}
-              onAdd={() => { const pl = priceLabel(route.itemId); runSave({ itemId: route.itemId, status: "approve", vals: route.vals, from: route.from, rowId: route.rowId }, { title: "Your plan is added", body: "We'll get the pieces ready. You'll approve everything before it goes out, and nothing is charged until something ships.", meta: pl ? `Saved. About ${pl}, charged only as each piece ships.` : "Saved to your campaigns. Nothing charged yet." }); }}
-              onMarketer={() => { const pl = priceLabel(route.itemId); runSave({ itemId: route.itemId, status: "marketer", vals: route.vals, from: route.from, rowId: route.rowId }, { title: "Your marketer is on it", body: "A marketer on our team will build and run this plan, then send it back for you to approve. It's saved to your campaigns so you can check on it anytime.", meta: pl ? `Saved with your marketer. About ${pl}, charged only as each piece ships.` : "Saved, with your marketer" }); }}
-            />
+            <Generating itemId={route.itemId} onDone={() => runSave({ itemId: route.itemId, status: "approve", vals: route.vals, from: route.from, rowId: route.rowId }, {})} />
           )}
 
           {route.name === "saving" && <SavingScreen />}
@@ -3275,11 +3286,10 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           {route.name === "saveerror" && (
             <SaveError
               onRetry={() => runSave(route.ctx, route.success)}
-              onBack={() => setRoute({ name: "plansteps", itemId: route.ctx.itemId, vals: route.ctx.vals, from: route.ctx.from, rowId: route.ctx.rowId })}
+              onBack={() => setRoute({ name: "build", itemId: route.ctx.itemId, from: route.ctx.from, rowId: route.ctx.rowId })}
             />
           )}
 
-          {route.name === "confirm" && <Confirm {...route.payload} onBack={exit} />}
         </div>
 
         <BottomNav active="campaigns" />

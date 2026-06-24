@@ -10,8 +10,9 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { CampaignDraft, LineItem, CampaignBrief, BillingCadence } from './types'
+import { deriveSchedule } from './schedule'
 import type { StageId } from './stages'
-import type { SavedCampaign } from './view'
+import type { SavedCampaign, CampaignProgress } from './view'
 
 export type { SavedCampaign } from './view'
 
@@ -78,6 +79,7 @@ function rowToSaved(c: Record<string, unknown>, items: LineItem[], brief: Campai
     shippedAt: (c.shipped_at as string) ?? null,
     createdAt: c.created_at as string,
     updatedAt: c.updated_at as string,
+    creatorChoices: (c.creator_choices as Record<string, string> | null) ?? {},
   }
 }
 
@@ -200,7 +202,7 @@ export async function replaceLineItems(campaignId: string, clientId: string, ite
   await admin.from('campaigns').update({ updated_at: new Date().toISOString() }).eq('id', campaignId)
 }
 
-export async function updateCampaignFields(id: string, patch: Partial<{ name: string; budget_monthly: number; planned: boolean; phase: string; status: string; shipped_at: string; occasion: string; target_date: string; context: string }>): Promise<void> {
+export async function updateCampaignFields(id: string, patch: Partial<{ name: string; budget_monthly: number; planned: boolean; phase: string; status: string; shipped_at: string; occasion: string; target_date: string; context: string; creator_choices: Record<string, string> }>): Promise<void> {
   const admin = createAdminClient()
   // Throw on error like createCampaign/replaceLineItems do, so a failed write
   // (e.g. a failed ship) surfaces as a 500 instead of silently succeeding and,
@@ -228,28 +230,27 @@ function draftServiceLine(beat: { type?: string; channel?: string }): string {
   if (ch.includes('google') || ch.includes('gbp') || ch.includes('maps')) return 'local'
   return DRAFT_SERVICE_LINE[beat.type ?? ''] ?? 'social'
 }
-function draftTargetDate(shipISO: string, week: number): string | null {
-  const base = new Date(shipISO)
-  if (isNaN(base.getTime())) return null
-  base.setUTCDate(base.getUTCDate() + Math.max(0, (week || 1) - 1) * 7)
-  return base.toISOString().slice(0, 10)
-}
-
 /**
  * Materialize a shipped campaign's content beats as content_drafts (status
  * 'idea') for the production team. Idempotent: skips if drafts already exist for
  * this campaign. Status is ALWAYS 'idea' so the publish-scheduled cron (which
  * only acts on status='scheduled') can never auto-send them. Returns the count
  * created (0 if no beats or already materialized).
+ *
+ * Dates come from deriveSchedule — the SAME engine the owner saw pre-ship,
+ * anchored to the campaign's target date / occasion — so the dates produced for
+ * the team match the dates the owner approved (an event campaign's day-of beat
+ * lands on the event, not on whatever afternoon they shipped).
  */
 export async function materializeCampaignDrafts(
   campaignId: string,
   clientId: string,
-  brief: CampaignBrief | null,
+  draft: CampaignDraft | null,
   shipISO: string,
 ): Promise<number> {
-  const beats = brief?.contentBeats ?? []
+  const beats = draft?.brief?.contentBeats ?? []
   if (!beats.length) return 0
+  const sched = deriveSchedule({ targetDate: draft?.targetDate, occasion: draft?.occasion, contentBeats: beats }, shipISO)
   const admin = createAdminClient()
   const { data: existing, error: existErr } = await admin
     .from('content_drafts')
@@ -261,16 +262,52 @@ export async function materializeCampaignDrafts(
   // clean no-op rather than logging a failed insert.
   if (existErr) return 0
   if (existing && existing.length) return 0
-  const rows = beats.map((b) => ({
+  // Clamp to >= ship day: an event anchored too soon can compute past post dates,
+  // and the team should never receive a piece dated before it was even ordered.
+  const shipDay = (shipISO || '').slice(0, 10)
+  const rows = sched.beats.map((b) => ({
     client_id: clientId,
     campaign_id: campaignId,
     idea: (b.label || 'Campaign piece').slice(0, 280),
     status: 'idea',
     service_line: draftServiceLine(b),
     proposed_via: 'strategist',
-    target_publish_date: draftTargetDate(shipISO, b.week),
+    target_publish_date: b.postISO < shipDay ? shipDay : b.postISO,
   }))
   const { error } = await admin.from('content_drafts').insert(rows)
   if (error) throw new Error(`materialize campaign drafts: ${error.message}`)
   return rows.length
+}
+
+/**
+ * Owner-facing progress rollup of a shipped campaign's pieces (content_drafts).
+ * Lets the detail page mirror real status ("3 of 6 ready · next goes out Tue")
+ * instead of a static "preparing" banner. Returns null when nothing is
+ * materialized yet (a draft, or pre-migration), so callers degrade cleanly.
+ */
+export async function getCampaignProgress(campaignId: string): Promise<CampaignProgress | null> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('content_drafts')
+    .select('status, target_publish_date')
+    .eq('campaign_id', campaignId)
+  if (error || !data || !data.length) return null
+  const DEAD = new Set(['rejected', 'failed', 'archived'])     // terminal: not real work
+  const QUEUED = new Set(['scheduled', 'approved'])            // committed to go out
+  const NEEDS_YOU = new Set(['client_review', 'revision_requested'])
+  let total = 0, live = 0, queued = 0, awaitingYou = 0, inProgress = 0
+  let nextDueISO: string | null = null
+  for (const d of data) {
+    const s = (d.status as string) ?? ''
+    if (DEAD.has(s)) continue
+    total++
+    if (s === 'published') { live++; continue }
+    if (QUEUED.has(s)) queued++
+    else if (NEEDS_YOU.has(s)) awaitingYou++
+    else inProgress++
+    const dt = ((d.target_publish_date as string | null) ?? '').slice(0, 10)
+    if (dt && (!nextDueISO || dt < nextDueISO)) nextDueISO = dt
+  }
+  if (!total) return null
+  return { total, live, queued, awaitingYou, inProgress, nextDueISO }
 }

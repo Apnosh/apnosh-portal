@@ -30,7 +30,14 @@ export default function PlanPage() {
   const router = useRouter()
   const { client } = useClient()
   const [goalKey, setGoalKey] = useState<string | null>(null)
+  const [goalText, setGoalText] = useState('')
   const [budget, setBudget] = useState(800)
+  const [timing, setTiming] = useState('Start this week')
+  const [eventDate, setEventDate] = useState('')
+  const [audience, setAudience] = useState('')
+  const [offer, setOffer] = useState('A small deal, you pick')
+  const [offerText, setOfferText] = useState('')
+  const [notes, setNotes] = useState('')
   const [phase, setPhase] = useState<'setup' | 'building' | 'review'>('setup')
   const [plan, setPlan] = useState<BuiltPlan | null>(null)
   const [busy, setBusy] = useState(false)
@@ -42,7 +49,15 @@ export default function PlanPage() {
     try {
       const res = await fetch('/api/campaigns/plan', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: client.id, goalKey, budgetMonthly: budget }),
+        body: JSON.stringify({
+          clientId: client.id, goalKey, budgetMonthly: budget,
+          objective: goalText.trim() || undefined,
+          timing,
+          targetDate: timing === 'Around a date' && eventDate ? eventDate : undefined,
+          audience: audience || undefined,
+          offer: offer === 'I have one' ? (offerText.trim() || 'I have one') : offer,
+          notes: notes.trim() || undefined,
+        }),
       })
       if (!res.ok) throw new Error('Could not build the plan. Try again.')
       setPlan((await res.json()) as BuiltPlan)
@@ -80,7 +95,13 @@ export default function PlanPage() {
 
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '18px 16px 28px' }}>
           {phase === 'setup' && (
-            <Setup goalKey={goalKey} setGoalKey={setGoalKey} budget={budget} setBudget={setBudget} err={err} />
+            <Setup
+              goalKey={goalKey} setGoalKey={setGoalKey} goalText={goalText} setGoalText={setGoalText}
+              budget={budget} setBudget={setBudget} timing={timing} setTiming={setTiming}
+              eventDate={eventDate} setEventDate={setEventDate} audience={audience} setAudience={setAudience}
+              offer={offer} setOffer={setOffer} offerText={offerText} setOfferText={setOfferText}
+              notes={notes} setNotes={setNotes} err={err}
+            />
           )}
           {phase === 'building' && <Building />}
           {phase === 'review' && plan && <Review plan={plan} err={err} />}
@@ -110,31 +131,88 @@ function ctaStyle(enabled: boolean): React.CSSProperties {
   return { width: '100%', background: enabled ? GRAD : '#c9cdcb', color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontWeight: 700, fontSize: 15, cursor: enabled ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }
 }
 
-function Setup({ goalKey, setGoalKey, budget, setBudget, err }: { goalKey: string | null; setGoalKey: (k: string | null) => void; budget: number; setBudget: (n: number) => void; err: string | null }) {
+const TIMINGS = ['Start this week', 'Around a date', 'No rush']
+const AUD_BY_GOAL: Record<string, string[]> = {
+  'new-customers': ['People nearby', 'Folks searching for us'],
+  'slow-nights': ['People nearby', 'Guests who came before'],
+  regulars: ['Guests who came before', 'Came once, never back'],
+  reviews: [],
+}
+const OFFER_OPTS = ['A small deal, you pick', 'No offer', 'I have one']
+
+function chipStyle(on: boolean): React.CSSProperties {
+  return { cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.ink, borderRadius: 22, padding: '9px 15px', fontSize: 13.5, fontWeight: 600 }
+}
+function fieldStyle(): React.CSSProperties {
+  return { width: '100%', border: `1.5px solid ${C.line}`, borderRadius: 12, padding: '11px 13px', fontSize: 14, color: C.ink, outline: 'none', boxSizing: 'border-box', background: '#fff' }
+}
+function labelStyle(): React.CSSProperties {
+  return { fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, margin: '22px 0 9px' }
+}
+
+function Setup(props: {
+  goalKey: string | null; setGoalKey: (k: string | null) => void; goalText: string; setGoalText: (s: string) => void
+  budget: number; setBudget: (n: number) => void; timing: string; setTiming: (s: string) => void
+  eventDate: string; setEventDate: (s: string) => void; audience: string; setAudience: (s: string) => void
+  offer: string; setOffer: (s: string) => void; offerText: string; setOfferText: (s: string) => void
+  notes: string; setNotes: (s: string) => void; err: string | null
+}) {
+  const { goalKey, setGoalKey, goalText, setGoalText, budget, setBudget, timing, setTiming, eventDate, setEventDate, audience, setAudience, offer, setOffer, offerText, setOfferText, notes, setNotes, err } = props
+  const [typeGoal, setTypeGoal] = useState(false)
+  const audOpts = goalKey ? AUD_BY_GOAL[goalKey] ?? [] : []
   return (
     <div>
       <h1 style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 24, margin: '0 0 4px' }}>What should we focus on?</h1>
-      <p style={{ fontSize: 13, color: C.mute, margin: '0 0 16px' }}>Pick a goal and a monthly budget. We do the rest, and you approve before anything ships.</p>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 22 }}>
+      <p style={{ fontSize: 13, color: C.mute, margin: '0 0 16px' }}>A few quick taps and our AI builds your plan. Change anything, or tell us in your own words.</p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {GOALS.map((g) => {
-          const on = goalKey === g.key
+          const on = goalKey === g.key && !typeGoal
           return (
-            <button key={g.key} onClick={() => setGoalKey(on ? null : g.key)} style={{ textAlign: 'left', cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', borderRadius: 14, padding: '12px 12px' }}>
+            <button key={g.key} onClick={() => { setGoalKey(on ? null : g.key); setTypeGoal(false) }} style={{ textAlign: 'left', cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', borderRadius: 14, padding: '12px 12px' }}>
               <div style={{ fontSize: 20, marginBottom: 6 }}>{g.icon}</div>
               <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, lineHeight: 1.25 }}>{g.label}</div>
             </button>
           )
         })}
       </div>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, marginBottom: 8 }}>Monthly budget</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {BUDGETS.map((b) => {
-          const on = budget === b
-          return (
-            <button key={b} onClick={() => setBudget(b)} style={{ cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.ink, borderRadius: 22, padding: '9px 16px', fontSize: 14, fontWeight: 700 }}>${b}/mo</button>
-          )
-        })}
+      <button onClick={() => setTypeGoal((t) => !t)} style={{ background: 'none', border: 'none', color: C.green, fontWeight: 600, fontSize: 13, cursor: 'pointer', padding: '10px 0 0' }}>{typeGoal ? 'Pick from the list' : 'Or tell us in your own words'}</button>
+      {typeGoal && <input value={goalText} onChange={(e) => setGoalText(e.target.value)} placeholder="Like: I want my Tuesdays full again" style={{ ...fieldStyle(), marginTop: 8 }} />}
+
+      <div style={labelStyle()}>Monthly budget</div>
+      <div style={{ display: 'flex', alignItems: 'center', border: `1.5px solid ${C.line}`, borderRadius: 12, padding: '0 14px', height: 48, background: '#fff', marginBottom: 9 }}>
+        <span style={{ fontSize: 18, color: C.mute, marginRight: 3 }}>$</span>
+        <input inputMode="numeric" value={budget ? String(budget) : ''} onChange={(e) => setBudget(parseInt(e.target.value.replace(/[^0-9]/g, ''), 10) || 0)} placeholder="0" style={{ flex: 1, border: 'none', outline: 'none', fontSize: 18, fontWeight: 700, color: C.ink, background: 'transparent' }} />
+        <span style={{ fontSize: 13, color: C.faint }}>/ month</span>
       </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {BUDGETS.map((b) => <button key={b} onClick={() => setBudget(b)} style={chipStyle(budget === b)}>${b}</button>)}
+      </div>
+
+      <div style={labelStyle()}>When should this run?</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {TIMINGS.map((t) => <button key={t} onClick={() => setTiming(t)} style={chipStyle(timing === t)}>{t}</button>)}
+      </div>
+      {timing === 'Around a date' && <input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} style={{ ...fieldStyle(), marginTop: 10 }} />}
+
+      {audOpts.length > 0 && (
+        <>
+          <div style={labelStyle()}>Who is this for?</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {audOpts.map((a) => <button key={a} onClick={() => setAudience(audience === a ? '' : a)} style={chipStyle(audience === a)}>{a}</button>)}
+          </div>
+        </>
+      )}
+
+      <div style={labelStyle()}>Want an offer behind this?</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {OFFER_OPTS.map((o) => <button key={o} onClick={() => setOffer(o)} style={chipStyle(offer === o)}>{o}</button>)}
+      </div>
+      {offer === 'I have one' && <input value={offerText} onChange={(e) => setOfferText(e.target.value)} placeholder="Like: free side with any entree" style={{ ...fieldStyle(), marginTop: 10 }} />}
+
+      <div style={labelStyle()}>Anything else? (optional)</div>
+      <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Tell our AI anything: what makes you special, or what to avoid" style={{ ...fieldStyle(), resize: 'none', lineHeight: 1.45 }} />
+
       {err && <p style={{ color: '#c0392b', fontSize: 13, marginTop: 16 }}>{err}</p>}
     </div>
   )

@@ -145,7 +145,10 @@ export function draftFromBuilder({ itemId, vals }: BuilderInput): CampaignDraft 
     name: composed.name,
     intent: tpl.durationWeeks === null ? 'ongoing' : 'one-off',
     path,
-    phase: 'review',
+    // Land as a Draft the owner reviews/edits. They explicitly Save (keep as
+    // draft) or Approve & ship (hands it to the Apnosh team). The 'review'
+    // phase + "Apnosh is building this" banner is for after they ship.
+    phase: 'build',
     budgetMonthly: bill.perMonth,
     items: composed.items,
     planned: true,

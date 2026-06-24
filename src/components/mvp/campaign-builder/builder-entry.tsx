@@ -123,8 +123,14 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
         body: JSON.stringify({ clientId: client.id, draft }),
       })
       if (!res.ok) return false
+      // Land straight on the campaign's detail page: it is the combined
+      // plan + in-review + edit + approve surface (editable pieces, live bill,
+      // Approve & ship), so the owner reviews/edits/approves in one place
+      // instead of a separate in-builder confirmation step.
       const { id } = (await res.json()) as { id?: string }
-      if (id) router.push(`/dashboard/campaigns/${id}`)
+      // Always navigate away so the builder's saving screen can't hang: the new
+      // campaign's detail page when we have its id, the Campaigns list otherwise.
+      router.push(id ? `/dashboard/campaigns/${id}` : '/dashboard/campaigns')
       return true
     } catch {
       return false

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
-import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts } from '@/lib/campaigns/server'
+import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
 import { notifyStaffForClient } from '@/lib/notifications'
 import type { LineItem } from '@/lib/campaigns/types'
 
@@ -17,7 +17,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params
   const { campaign, res } = await authorize(id)
   if (res) return res
-  return NextResponse.json({ campaign })
+  // Only shipped, team-run campaigns have materialized pieces; skip the query
+  // for drafts and DIY (they can never have content_drafts to roll up).
+  const progress = campaign && campaign.status === 'shipped' && campaign.draft.path !== 'diy'
+    ? await getCampaignProgress(id).catch(() => null)
+    : null
+  return NextResponse.json({ campaign, progress })
 }
 
 // PATCH /api/campaigns/:id — { items?: LineItem[], fields?: {...} }.
@@ -41,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Turn the campaign's content calendar into real production work items, and
     // tell the team. Both best-effort: a successful ship must never 500 here.
     const shipISO = typeof body.fields?.shipped_at === 'string' ? body.fields.shipped_at : new Date().toISOString()
-    await materializeCampaignDrafts(id, campaign.clientId, campaign.draft.brief ?? null, shipISO).catch(() => 0)
+    const made = await materializeCampaignDrafts(id, campaign.clientId, campaign.draft, shipISO).catch(() => 0)
     await notifyStaffForClient(
       campaign.clientId,
       ['strategist', 'community_mgr'],
@@ -52,6 +57,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         link: `/work/campaigns?focus=${id}`,
       },
     ).catch(() => ({ notified: 0 }))
+    // Dead-letter: a team-run campaign that should have produced pieces but made
+    // none (the silent-drop bug) gets flagged for manual setup, never vanishes.
+    if (made === 0 && (campaign.draft.brief?.contentBeats?.length ?? 0) > 0) {
+      await notifyStaffForClient(campaign.clientId, ['strategist'], {
+        kind: 'client_signoff',
+        title: 'Campaign shipped but produced no work items',
+        body: `${campaign.draft.name} shipped, but no content pieces were created. Set it up manually.`,
+        link: `/work/campaigns?focus=${id}`,
+      }).catch(() => ({ notified: 0 }))
+    }
   }
   return NextResponse.json({ campaign: await getCampaign(id) })
 }

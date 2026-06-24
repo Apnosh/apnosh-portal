@@ -15,6 +15,21 @@ export interface SavedCampaign {
   shippedAt: string | null
   createdAt: string
   updatedAt: string
+  /** Owner's chosen creators per discipline, e.g. { Video: 'v_maya' }. Empty
+   *  disciplines fall back to the auto-matched default at render time. */
+  creatorChoices: Record<string, string>
+}
+
+/** Owner-facing rollup of a shipped campaign's pieces (content_drafts), so the
+ *  detail page can mirror real progress instead of a static "preparing" banner.
+ *  Dead states (rejected/failed) are excluded from total. */
+export interface CampaignProgress {
+  total: number
+  live: number          // published
+  queued: number        // scheduled or approved, committed to go out
+  awaitingYou: number   // client_review / revision_requested — needs the owner
+  inProgress: number    // being made (idea/draft/produced/etc.)
+  nextDueISO: string | null
 }
 
 export type CampPerf =
