@@ -49,9 +49,10 @@ export async function runShipIntegrationSim(): Promise<ShipSimReport> {
     const saved: SavedCampaign = {
       clientId: TEST_CLIENT, draft: { ...draft, id: campaignId }, phase: 'build', status: 'draft',
       shippedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-      // Keep the hero photo in-house, the rest go to creators — so the ship splits
-      // across BOTH lanes and we can prove a piece lands in exactly one.
-      creatorChoices: {}, producerChoices: { 'Photo:0': 'team' }, creativeControl: 'handoff', execution: {},
+      // Team is the default; opt the 2 reels + the post INTO creators and leave the
+      // hero photo in-house, so the ship splits across BOTH lanes and we can prove a
+      // piece lands in exactly one.
+      creatorChoices: {}, producerChoices: { 'Video:0': 'creator', 'Video:1': 'creator', 'Design:0': 'creator' }, creativeControl: 'handoff', execution: {},
     }
     const shipISO = new Date().toISOString()
     const shipDay = shipISO.slice(0, 10)

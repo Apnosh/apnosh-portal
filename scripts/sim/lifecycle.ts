@@ -5,7 +5,7 @@
  * browser, runs in milliseconds. Run:  npx tsx scripts/sim/lifecycle.ts
  */
 import { deriveSchedule } from '@/lib/campaigns/schedule'
-import { creativeRolesForCampaign, vibeForCampaign, creatorPool, type Disc } from '@/lib/campaigns/creators'
+import { creativeRolesForCampaign, vibeForCampaign, creatorPool, disciplineForType, type Disc } from '@/lib/campaigns/creators'
 import { buildWorkOrderRows, planCampaignPieces, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
 import { composeCampaign } from '@/lib/campaigns/campaign-composer'
 import { buildContentLine, CONTENT_META, reconcileBeatsToLines } from '@/lib/campaigns/catalog'
@@ -29,6 +29,7 @@ interface Spec {
   targetDate?: string
   creatorChoices?: Record<string, string>
   producerChoices?: Record<string, 'team' | 'creator'>   // per-piece team|creator routing
+  creatorAll?: boolean       // route every creative piece to a creator (mint-path tests)
   creativeControl?: string
   excludeIdx?: number[]      // indices to mark included:false
 }
@@ -53,7 +54,15 @@ function campaignFor(s: Spec): SavedCampaign {
     goalKey: s.goalKey as CampaignDraft['goalKey'], occasion: s.occasion, targetDate: s.targetDate, brief,
   } as CampaignDraft
 
-  return { clientId: 'sim-client', draft, phase: 'build', status: 'draft', shippedAt: null, createdAt: SHIP, updatedAt: SHIP, creatorChoices: s.creatorChoices ?? {}, producerChoices: s.producerChoices ?? {}, creativeControl: (s.creativeControl as SavedCampaign['creativeControl']) ?? 'handoff', execution: {} }
+  const camp: SavedCampaign = { clientId: 'sim-client', draft, phase: 'build', status: 'draft', shippedAt: null, createdAt: SHIP, updatedAt: SHIP, creatorChoices: s.creatorChoices ?? {}, producerChoices: s.producerChoices ?? {}, creativeControl: (s.creativeControl as SavedCampaign['creativeControl']) ?? 'handoff', execution: {} }
+  // Team is the default producer, so the mint-path tests opt every creative piece
+  // into a creator explicitly (what the Phase 1b toggle will do per piece).
+  if (s.creatorAll) {
+    const choices: Record<string, 'team' | 'creator'> = { ...camp.producerChoices }
+    for (const p of planCampaignPieces(camp, SHIP)) if (p.key) choices[p.key] = 'creator'
+    camp.producerChoices = choices
+  }
+  return camp
 }
 
 const s = new Suite()
@@ -117,7 +126,7 @@ for (const t of CAMPAIGN_TEMPLATES) {
 // ── D. buildWorkOrderRows — the real mint logic ────────────────────────
 s.group('buildWorkOrderRows — ship dispatches honest orders')
 {
-  const camp = campaignFor({ name: 'Full mix', content: ['reel', 'photo', 'post'], beats: 3, targetDate: '2026-08-15', occasion: 'event' })
+  const camp = campaignFor({ name: 'Full mix', content: ['reel', 'photo', 'post'], beats: 3, targetDate: '2026-08-15', occasion: 'event', creatorAll: true })
   const rows = buildWorkOrderRows(camp, SHIP)
   s.eq('3 disciplines → 3 orders', rows.length, 3)
   s.check('every order starts offered', rows.every((r) => r.status === 'offered'))
@@ -131,7 +140,7 @@ s.group('buildWorkOrderRows — ship dispatches honest orders')
   s.eq('email/sms campaign → 0 orders (route dead-letter guard territory)', rows.length, 0)
 }
 {
-  const camp = campaignFor({ name: 'Owner pick', content: ['reel', 'photo'], creatorChoices: { Video: 'v_maya' } })
+  const camp = campaignFor({ name: 'Owner pick', content: ['reel', 'photo'], creatorChoices: { Video: 'v_maya' }, creatorAll: true })
   const rows = buildWorkOrderRows(camp, SHIP)
   s.check('owner pick reaches the order', rows.find((r) => r.discipline === 'Video')?.creator_id === 'v_maya')
 }
@@ -139,30 +148,43 @@ s.group('buildWorkOrderRows — ship dispatches honest orders')
 // ── D2. planCampaignPieces — one producer per piece (kills double-production) ──
 s.group('planCampaignPieces — hybrid routing, no piece made twice')
 {
-  const camp = campaignFor({ name: 'All creative', content: ['reel', 'photo', 'post'], beats: 3 })
+  // Team is the default: an untouched creative campaign stays fully in-house, so
+  // nothing strands in the (still seeded) creator pool.
+  const camp = campaignFor({ name: 'All creative, default', content: ['reel', 'photo', 'post'], beats: 3 })
   const pieces = planCampaignPieces(camp, SHIP)
   const team = pieces.filter((p) => p.producer === 'team')
   const creator = pieces.filter((p) => p.producer === 'creator')
   s.check('every piece resolves to exactly one producer', pieces.length > 0 && pieces.every((p) => p.producer === 'team' || p.producer === 'creator'))
   s.eq('team + creator partition the calendar (no double, no drop)', team.length + creator.length, pieces.length)
-  s.check('creator pieces carry creator + discipline + slot', creator.every((p) => !!p.creatorId && !!p.discipline && p.slot !== null))
+  s.check('default keeps creative pieces in-house (team)', team.length === pieces.length && creator.length === 0)
+  s.eq('mint lane is empty by default (nothing stranded in the pool)', buildWorkOrderRows(camp, SHIP).length, 0)
+}
+{
+  // The same campaign with every creative piece opted INTO a creator: now the whole
+  // calendar is the creator lane, and the mint lane equals it exactly.
+  const camp = campaignFor({ name: 'All creative, opted-in', content: ['reel', 'photo', 'post'], beats: 3, creatorAll: true })
+  const pieces = planCampaignPieces(camp, SHIP)
+  const creator = pieces.filter((p) => p.producer === 'creator')
+  s.check('opted-in pieces carry creator + discipline + slot', creator.every((p) => !!p.creatorId && !!p.discipline && p.slot !== null))
   s.eq('mint lane == creator slice exactly (materialize + mint cannot overlap)', buildWorkOrderRows(camp, SHIP).length, creator.length)
-  s.check('default routes creative pieces to creators', creator.length === pieces.length)
+  s.eq('every creative piece is now a creator order', creator.length, pieces.length)
 }
 {
   const camp = campaignFor({ name: 'Mixed creative + email', content: ['reel', 'email'], beats: 2 })
   const pieces = planCampaignPieces(camp, SHIP)
   const reel = pieces.find((p) => p.type === 'reel')
-  s.check('the reel is creator-run by default', reel?.producer === 'creator' && !!reel.creatorId)
+  s.check('the reel is team-run by default (in-house)', reel?.producer === 'team' && !reel.creatorId)
   s.check('any non-creative (email) piece is team-run, no creator', pieces.filter((p) => p.type === 'email').every((p) => p.producer === 'team' && !p.creatorId))
 }
 {
-  // Flipping one piece to the team must move it across the line — and the mint lane follows.
-  const flipped = campaignFor({ name: 'One to team', content: ['reel', 'reel'], beats: 2, producerChoices: { 'Video:1': 'team' } })
+  // Opting one piece INTO a creator must move it across the line — and the mint lane follows.
+  const flipped = campaignFor({ name: 'One to creator', content: ['reel', 'reel'], beats: 2, producerChoices: { 'Video:1': 'creator' } })
   const fp = planCampaignPieces(flipped, SHIP)
-  s.eq('Video:1 → team leaves one creator order', fp.filter((p) => p.producer === 'creator').length, 1)
-  s.check('the flipped piece is the 2nd video, now team', fp.find((p) => p.key === 'Video:1')?.producer === 'team')
-  s.eq('mint follows the flip (1 order, not 2)', buildWorkOrderRows(flipped, SHIP).length, 1)
+  s.eq('Video:1 → creator makes exactly one order', fp.filter((p) => p.producer === 'creator').length, 1)
+  const flippedPiece = fp.find((p) => p.key === 'Video:1')
+  s.check('the flipped piece is the 2nd video, now creator', flippedPiece?.producer === 'creator' && !!flippedPiece.creatorId)
+  s.check('the untouched 1st video stays team', fp.find((p) => p.key === 'Video:0')?.producer === 'team')
+  s.eq('mint follows the flip (1 order, not 0 or 2)', buildWorkOrderRows(flipped, SHIP).length, 1)
 }
 {
   // A stray choice for a piece that doesn't exist is harmless; non-creative stays team.
@@ -181,7 +203,8 @@ for (let i = 0; i < 60; i++) {
   const k = 1 + (i % 4)
   const content = Array.from({ length: k }, (_, j) => pick(TYPES, i * 3 + j))
   const targetDate = i % 3 === 0 ? undefined : addDays(TODAY, 14 + (i % 40))
-  const camp = campaignFor({ name: `fuzz-${i}`, content, beats: k, goalKey: pick(GOALS, i), occasion: i % 2 ? 'event' : undefined, targetDate })
+  // Opt creative pieces into creators so the mint invariants run on real orders.
+  const camp = campaignFor({ name: `fuzz-${i}`, content, beats: k, goalKey: pick(GOALS, i), occasion: i % 2 ? 'event' : undefined, targetDate, creatorAll: true })
   const rows = buildWorkOrderRows(camp, SHIP)
   const pieces = planCampaignPieces(camp, SHIP)
   const creatorPieces = pieces.filter((p) => p.producer === 'creator')
@@ -195,6 +218,40 @@ for (let i = 0; i < 60; i++) {
   if (!ok) { fuzzFails++; if (fuzzFails <= 3) s.check(`fuzz-${i} invariant`, false, JSON.stringify({ content, rows: rows.map((r) => [r.discipline, r.due_date]) })) }
 }
 s.check(`60 random campaigns all hold invariants`, fuzzFails === 0, fuzzFails ? `${fuzzFails} failed` : undefined)
+
+// ── E2. producer_choices is actually applied (a planner that ignored it fails) ──
+s.group('planCampaignPieces — producer_choices re-routes, not ignored')
+{
+  const CREATIVE = ['reel', 'photo', 'post', 'story']
+  let flipFails = 0, flipsRun = 0
+  for (let i = 0; i < 40; i++) {
+    const k = 1 + (i % 4)
+    const content = Array.from({ length: k }, (_, j) => pick(CREATIVE, i * 2 + j))
+    const targetDate = addDays(TODAY, 10 + (i % 30))
+    const base = campaignFor({ name: `flip-${i}`, content, beats: k, goalKey: pick(GOALS, i), targetDate })
+    const target = planCampaignPieces(base, SHIP).find((p) => p.key && p.producer === 'team')   // a team piece (the default)
+    if (!target?.key) continue
+    flipsRun++
+    const before = buildWorkOrderRows(base, SHIP).length
+    const camp2 = campaignFor({ name: `flip-${i}`, content, beats: k, goalKey: pick(GOALS, i), targetDate, producerChoices: { [target.key]: 'creator' } })
+    const after = buildWorkOrderRows(camp2, SHIP).length
+    const moved = planCampaignPieces(camp2, SHIP).find((p) => p.key === target.key)
+    // A planner that ignored producer_choices would leave it team → after === before.
+    if (!(moved?.producer === 'creator' && !!moved.creatorId && after === before + 1)) flipFails++
+  }
+  s.check(`opting one piece into a creator adds exactly one order (${flipsRun} shapes)`, flipFails === 0 && flipsRun > 0, `fails=${flipFails} run=${flipsRun}`)
+}
+
+// ── E3. per-beat discipline (planner) == per-line discipline (creator seeding) ──
+s.group('disciplineForType == role discipline (planner and seeding agree)')
+{
+  for (const t of Object.keys(CONTENT_META)) {
+    const line = buildContentLine(t, `li-${t}`)
+    const roleDisc = line ? (creativeRolesForCampaign([line], {}, null)[0]?.discipline ?? null) : null
+    const beatDisc = disciplineForType(t)
+    s.check(`${t}: planner discipline (${beatDisc ?? 'none'}) == seeding discipline (${roleDisc ?? 'none'})`, beatDisc === roleDisc)
+  }
+}
 
 // ── F. bill = calendar = production after owner edits (guards #3, #4) ────
 s.group('reconcileBeatsToLines — bill = calendar = production after edits')
@@ -220,7 +277,7 @@ s.group('reconcileBeatsToLines — bill = calendar = production after edits')
 // ── G. no order is born overdue (guards #7) ─────────────────────────────
 s.group('buildWorkOrderRows — due date clamped to ship day')
 {
-  const camp = campaignFor({ name: 'Event past', content: ['reel'], beats: 3, occasion: 'July 4', targetDate: '2026-07-04' })
+  const camp = campaignFor({ name: 'Event past', content: ['reel'], beats: 3, occasion: 'July 4', targetDate: '2026-07-04', creatorAll: true })
   const rows = buildWorkOrderRows(camp, '2026-07-06T15:00:00Z') // ship AFTER target → backward anchor would be in the past
   s.check('event anchored before ship: due >= ship day', rows.length > 0 && rows.every((r) => (r.due_date ?? '9999-99-99') >= '2026-07-06'), rows.map((r) => r.due_date).join(','))
 }
@@ -270,6 +327,9 @@ s.group('per-piece minting — each billed piece is its own order')
 {
   const camp = campaignFor({ name: 'Two reels', content: ['reel', 'post'], beats: 2, targetDate: '2026-08-15', occasion: 'event' })
   camp.draft.items.find((it) => it.serviceId === 'content-reel')!.qty = 2 // owner bumped reels to 2
+  // Opt the (now 2) reels + the post into creators — set after the qty bump so the
+  // 2nd reel's slot (Video:1) is covered.
+  camp.producerChoices = { 'Video:0': 'creator', 'Video:1': 'creator', 'Design:0': 'creator' }
   const rows = buildWorkOrderRows(camp, SHIP)
   s.eq('2 reels + 1 post → 3 orders', rows.length, 3)
   const video = rows.filter((r) => r.discipline === 'Video')
@@ -278,7 +338,7 @@ s.group('per-piece minting — each billed piece is its own order')
   s.check('the two reel orders have distinct due dates', new Set(video.map((r) => r.due_date)).size === 2)
 }
 {
-  const camp = campaignFor({ name: 'Reel + story', content: ['reel', 'story'], beats: 2, targetDate: '2026-08-15', occasion: 'event' })
+  const camp = campaignFor({ name: 'Reel + story', content: ['reel', 'story'], beats: 2, targetDate: '2026-08-15', occasion: 'event', creatorAll: true })
   const rows = buildWorkOrderRows(camp, SHIP)
   s.eq('reel + story → 2 orders (not collapsed to 1)', rows.length, 2)
   s.eq('reel + story → two disciplines (Video + Social)', new Set(rows.map((r) => r.discipline)).size, 2)

@@ -306,17 +306,19 @@ export async function getCampaignProgress(campaignId: string): Promise<CampaignP
     if (dt && (!nextDueISO || dt < nextDueISO)) nextDueISO = dt
   }
 
-  // Team lane: content_drafts.
+  // Team lane: content_drafts. A campaign draft can reach idea/draft/revising/
+  // produced (in progress), approved/scheduled (queued), published (live), or
+  // rejected (dead) — there is NO owner-review status on this table, so team
+  // pieces never contribute to awaitingYou. Owner sign-off on team work is wired
+  // in Phase 2 (the publish bridge); only the creator lane drives awaitingYou today.
   const DEAD = new Set(['rejected', 'failed', 'archived'])     // terminal: not real work
   const QUEUED = new Set(['scheduled', 'approved'])            // committed to go out
-  const NEEDS_YOU = new Set(['client_review', 'revision_requested'])
   for (const d of drafts ?? []) {
     const s = (d.status as string) ?? ''
     if (DEAD.has(s)) continue
     total++
     if (s === 'published') { live++; continue }
     if (QUEUED.has(s)) queued++
-    else if (NEEDS_YOU.has(s)) awaitingYou++
     else inProgress++
     bumpDue(d.target_publish_date as string | null)
   }

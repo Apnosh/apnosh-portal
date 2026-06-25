@@ -118,7 +118,10 @@ async function main() {
       ]
       const brief = { templateId: 'sim', objective: 'Launch', contentBeats: beats } as unknown as CampaignBrief
       const draft = { id: mintCampaignId, name: 'mint', path: 'strategist', items, goalKey: 'launch', targetDate, brief } as unknown as CampaignDraft
-      const saved: SavedCampaign = { clientId: TEST_CLIENT, draft, phase: 'build', status: 'draft', shippedAt: null, createdAt: now, updatedAt: now, creatorChoices: {}, producerChoices: {}, creativeControl: 'handoff', execution: {} }
+      // Team is the default producer, so opt the 3 creative pieces (2 reel + 1 post)
+      // into creators to exercise the mint path.
+      const producerChoices = { 'Video:0': 'creator', 'Video:1': 'creator', 'Design:0': 'creator' } as Record<string, 'team' | 'creator'>
+      const saved: SavedCampaign = { clientId: TEST_CLIENT, draft, phase: 'build', status: 'draft', shippedAt: null, createdAt: now, updatedAt: now, creatorChoices: {}, producerChoices, creativeControl: 'handoff', execution: {} }
       const rows = buildWorkOrderRows(saved, now)
       s.eq('buildWorkOrderRows → 3 pieces (2 reel + 1 post)', rows.length, 3)
       const { data: pre } = await a.from('creator_work_orders').select('id').eq('campaign_id', mintCampaignId).limit(1)

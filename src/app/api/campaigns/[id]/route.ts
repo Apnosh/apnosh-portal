@@ -53,14 +53,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     body.fields.execution = clean
   }
-  // Validate producer_choices: a map of pieceKey → 'team' | 'creator'. Reject
-  // any other value so a bad payload can't mis-route a piece or persist junk that
-  // planCampaignPieces would ignore anyway.
+  // Validate producer_choices: a bounded map of pieceKey ("Discipline:slot") →
+  // 'team' | 'creator'. Cap the count + pin the key shape (mirroring execution's
+  // hardening) so a bad/oversized payload can't mis-route a piece or accrete junk
+  // jsonb that planCampaignPieces would ignore anyway.
+  const PIECE_KEY = /^(Video|Photo|Social|Design):\d{1,3}$/
   if (body.fields?.producer_choices !== undefined) {
+    // The mint is one-shot at ship, so a post-ship change would silently no-op —
+    // fail loudly instead of round-tripping a choice that changes no production.
+    if (campaign.status === 'shipped') return NextResponse.json({ error: 'producer choices are locked once the campaign has shipped' }, { status: 409 })
     const pc = body.fields.producer_choices
     if (typeof pc !== 'object' || pc === null || Array.isArray(pc)) return NextResponse.json({ error: 'invalid producer_choices' }, { status: 400 })
+    const entries = Object.entries(pc as Record<string, unknown>)
+    if (entries.length > 64) return NextResponse.json({ error: 'too many producer_choices (64 max)' }, { status: 400 })
     const clean: Record<string, 'team' | 'creator'> = {}
-    for (const [k, v] of Object.entries(pc as Record<string, unknown>)) {
+    for (const [k, v] of entries) {
+      if (!PIECE_KEY.test(k)) return NextResponse.json({ error: `producer_choices key '${k}' is not a valid piece key` }, { status: 400 })
       if (v !== 'team' && v !== 'creator') return NextResponse.json({ error: `producer_choices.${k} must be 'team' or 'creator'` }, { status: 400 })
       clean[k] = v
     }

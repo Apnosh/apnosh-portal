@@ -71,10 +71,13 @@ export interface WorkOrderRow {
  *  in /work) or a marketplace creator (→ a creator_work_order + brief). */
 export type Producer = 'team' | 'creator'
 
-/** Default producer for a creative piece that HAS an available creator and no
- *  explicit owner choice. Marketplace-first: the creator path is the one the
- *  brief + execution system is built around; the owner flips any piece to 'team'. */
-export const DEFAULT_PRODUCER: Producer = 'creator'
+/** Default producer for a creative piece with an available creator and no explicit
+ *  owner choice. TEAM by default: real creator supply is still a seeded test pool
+ *  (no logins, no dispatch), so an untouched piece must stay with the in-house team
+ *  that actually fulfills it. The owner opts a piece INTO a creator per-piece via
+ *  producer_choices. Flip to 'creator' only once real creators + dispatch + the
+ *  opt-back toggle exist, else real production strands behind a masked regression. */
+export const DEFAULT_PRODUCER: Producer = 'team'
 
 /** Stable per-piece key the owner's producer_choices map is addressed by. A
  *  piece is its discipline + its 0-based slot within that discipline (the 2nd
