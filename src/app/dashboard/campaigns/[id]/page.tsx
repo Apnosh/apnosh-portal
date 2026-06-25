@@ -16,7 +16,7 @@ import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { reconcileBeatsToLines } from '@/lib/campaigns/catalog'
 import { vibeForCampaign, creativeRolesForCampaign, creatorById } from '@/lib/campaigns/creators'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
-import type { SavedCampaign, CampaignProgress } from '@/lib/campaigns/view'
+import type { SavedCampaign, CampaignProgress, CampaignCharges } from '@/lib/campaigns/view'
 import { AUDIENCES, CHANNELS } from '@/lib/campaigns/data/campaign-templates'
 import PlayCard from '@/components/campaigns/play-card'
 import LineCard from '@/components/campaigns/line-card'
@@ -31,6 +31,7 @@ export default function CampaignDetailPage() {
   const router = useRouter()
   const [camp, setCamp] = useState<SavedCampaign | null>(null)
   const [progress, setProgress] = useState<CampaignProgress | null>(null)
+  const [charges, setCharges] = useState<CampaignCharges | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -38,7 +39,7 @@ export default function CampaignDetailPage() {
     let live = true
     fetch(`/api/campaigns/${id}`)
       .then(async (r) => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Load failed (${r.status})`); return r.json() })
-      .then((j) => { if (live) { setCamp(j.campaign as SavedCampaign); setProgress((j.progress as CampaignProgress) ?? null) } })
+      .then((j) => { if (live) { setCamp(j.campaign as SavedCampaign); setProgress((j.progress as CampaignProgress) ?? null); setCharges((j.charges as CampaignCharges) ?? null) } })
       .catch((e) => { if (live) setError(e.message) })
     return () => { live = false }
   }, [id])
@@ -107,7 +108,7 @@ export default function CampaignDetailPage() {
     // Land on the "Get it ready" checklist (team-run campaigns only — DIY mints
     // no orders, so there's nothing for the team to need from the owner).
     if (camp.draft.path !== 'diy') router.push(`/dashboard/campaigns/${id}/ready`)
-    else fetch(`/api/campaigns/${id}`).then((r) => r.json()).then((j) => setProgress((j.progress as CampaignProgress) ?? null)).catch(() => {})
+    else fetch(`/api/campaigns/${id}`).then((r) => r.json()).then((j) => { setProgress((j.progress as CampaignProgress) ?? null); setCharges((j.charges as CampaignCharges) ?? null) }).catch(() => {})
   }
   async function del() {
     setBusy(true)
@@ -129,7 +130,7 @@ export default function CampaignDetailPage() {
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '18px 16px 28px' }}>
           {error ? <div style={{ color: '#c0392b', fontSize: 13.5, padding: '20px 0', textAlign: 'center' }}>{error}</div>
             : !camp ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: C.faint }}><Loader2 size={16} className="animate-spin" /> Loading…</div>
-            : <Detail camp={camp} progress={progress} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} />}
+            : <Detail camp={camp} progress={progress} charges={charges} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} />}
         </div>
 
         {camp && (
@@ -156,9 +157,10 @@ export default function CampaignDetailPage() {
   )
 }
 
-function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer }: {
+function Detail({ camp, progress, charges, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer }: {
   camp: SavedCampaign
   progress: CampaignProgress | null
+  charges: CampaignCharges | null
   onToggleOptOut: (id: string, r: OptOutReason) => void
   onToggleInclude: (id: string) => void
   onRemove: (id: string) => void
@@ -221,6 +223,14 @@ function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onS
           {(progress.awaitingYou > 0 || progress.queued > 0 || progress.inProgress > 0) && (
             <div style={{ fontSize: 11, color: C.mute, marginTop: 7 }}>{[progress.awaitingYou > 0 ? `${progress.awaitingYou} need your OK` : '', progress.queued > 0 ? `${progress.queued} scheduled` : '', progress.inProgress > 0 ? `${progress.inProgress} in production` : ''].filter(Boolean).join(' · ')}</div>
           )}
+        </div>
+      )}
+
+      {/* money-in: what's accrued to bill so far (one charge per accepted piece) */}
+      {shipped && !diy && charges && charges.count > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 13px', marginBottom: 14 }}>
+          <span style={{ fontSize: 12.5, color: C.mute }}>Billable so far<span style={{ display: 'block', fontSize: 11, color: C.faint, marginTop: 1 }}>One charge per delivered piece · not charged yet</span></span>
+          <span style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>${Math.round(charges.accruedCents / 100)}<span style={{ fontSize: 11.5, fontWeight: 600, color: C.faint }}> · {charges.count} {charges.count === 1 ? 'piece' : 'pieces'}</span></span>
         </div>
       )}
 

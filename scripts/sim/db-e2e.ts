@@ -11,7 +11,7 @@
 import { config } from 'dotenv'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildContentLine } from '@/lib/campaigns/catalog'
-import { buildWorkOrderRows, buildBridgeDraftRow } from '@/lib/campaigns/work-orders-core'
+import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow } from '@/lib/campaigns/work-orders-core'
 import type { CampaignBrief, CampaignDraft, ContentBeat, LineItem } from '@/lib/campaigns/types'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 import { Suite } from './lib'
@@ -126,7 +126,11 @@ async function main() {
       s.eq('buildWorkOrderRows → 3 pieces (2 reel + 1 post)', rows.length, 3)
       const { data: pre } = await a.from('creator_work_orders').select('id').eq('campaign_id', mintCampaignId).limit(1)
       s.check('mint guard: no orders before ship', !(pre && pre.length))
-      const { error: insErr } = await a.from('creator_work_orders').insert(rows)
+      // amount_cents is stamped on every row; strip it pre-180 so the insert stays green.
+      const { error: amtColErr } = await a.from('creator_work_orders').select('amount_cents').limit(1)
+      const stripAmount = (r: typeof rows[number]) => { const copy = { ...r } as Record<string, unknown>; delete copy.amount_cents; return copy }
+      const insertRows = amtColErr ? rows.map(stripAmount) : rows
+      const { error: insErr } = await a.from('creator_work_orders').insert(insertRows)
       s.check('mint inserts the rows cleanly', !insErr, insErr?.message)
       const { data: landed } = await a.from('creator_work_orders').select('id, discipline, slot').eq('campaign_id', mintCampaignId)
       s.eq('orders landed in the table', landed?.length ?? 0, 3)
@@ -195,6 +199,34 @@ async function main() {
 
       if (bridgedDraftId) await a.from('content_drafts').delete().eq('id', bridgedDraftId)  // campaign_id set-null on delete, so remove explicitly
       await a.from('campaigns').delete().eq('id', bridgeCampaignId)
+    }
+
+    // ── money-in: accrue an owner charge on approval (idempotent, counted once) ──
+    s.group('money-in: accrue an owner charge on approval')
+    const { error: chColErr } = await a.from('campaign_charges').select('id').limit(1)
+    if (chColErr) {
+      s.check('charges: skipped — apply migration 180 then re-run', true, 'campaign_charges absent (pre-180)')
+    } else {
+      const { data: c4 } = await a.from('campaigns').insert({ client_id: TEST_CLIENT, name: TEST_NAME, path: 'strategist', status: 'shipped', phase: 'monitor' }).select('id').single()
+      const chCampaignId = c4?.id as string
+      if (chCampaignId) {
+        const { data: ord } = await a.from('creator_work_orders').insert({
+          campaign_id: chCampaignId, client_id: TEST_CLIENT, creator_id: 'v_maya', discipline: 'Video', slot: 0,
+          title: 'Charge reel', brief: 'x', status: 'approved', concept_status: 'approved', amount_cents: 12000,
+        }).select('*').single()
+        const orderId = ord?.id as string
+        // Mirror accrueChargeForApprovedOrder: pure builder → insert (idempotent).
+        const row = buildChargeRow({ id: orderId, client_id: TEST_CLIENT, campaign_id: chCampaignId, amount_cents: ord!.amount_cents as number })
+        s.check('charge row: $120 accrued, creator-sourced, linked to the order', row.amount_cents === 12000 && row.status === 'accrued' && row.source === 'creator')
+        const { error: chInsErr } = await a.from('campaign_charges').insert(row)
+        s.check('charge inserts cleanly', !chInsErr, chInsErr?.message)
+        const { error: dupErr } = await a.from('campaign_charges').insert(row)
+        s.check('re-accrual is a no-op (unique on work_order_id)', dupErr?.code === '23505')
+        const { data: ch } = await a.from('campaign_charges').select('amount_cents, status').eq('campaign_id', chCampaignId).in('status', ['accrued', 'invoiced', 'paid'])
+        s.eq('exactly one charge accrued (no double)', ch?.length ?? 0, 1)
+        s.eq('campaign accrued total == one piece price', (ch ?? []).reduce((s2, c) => s2 + ((c.amount_cents as number) ?? 0), 0), 12000)
+        await a.from('campaigns').delete().eq('id', chCampaignId)  // cascades: removes the order + the charge
+      }
     }
   } finally {
     // ── teardown: cascade removes the orders ───────────────────────────

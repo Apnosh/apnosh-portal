@@ -6,7 +6,7 @@
  */
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { creativeRolesForCampaign, vibeForCampaign, creatorPool, disciplineForType, type Disc } from '@/lib/campaigns/creators'
-import { buildWorkOrderRows, planCampaignPieces, buildBridgeDraftRow, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
+import { buildWorkOrderRows, planCampaignPieces, buildBridgeDraftRow, buildChargeRow, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
 import { composeCampaign } from '@/lib/campaigns/campaign-composer'
 import { buildContentLine, CONTENT_META, reconcileBeatsToLines } from '@/lib/campaigns/catalog'
 import { CAMPAIGN_TEMPLATES } from '@/lib/campaigns/data/campaign-templates'
@@ -276,6 +276,28 @@ s.group('buildBridgeDraftRow — approved piece becomes a team draft (not auto-p
   s.check('an unsafe delivery link is dropped, not stored', !row.media_brief.source_delivery_url)
   s.eq('no title → fallback idea', row.idea, 'Creator piece')
   s.check('null campaign + no due tolerated', row.campaign_id === null && row.target_publish_date === null)
+}
+
+// ── E5. owner pricing — amount stamped at ship, accrued on approval ──
+s.group('owner pricing — per-piece amount + accrued charge')
+{
+  const camp = campaignFor({ name: 'Priced', content: ['reel', 'photo', 'post'], beats: 3, creatorAll: true })
+  const rows = buildWorkOrderRows(camp, SHIP)
+  const amt = (d: string) => rows.find((r) => r.discipline === d)?.amount_cents
+  s.eq('reel piece priced at $120 (CONTENT_META)', amt('Video'), 12000)
+  s.eq('photo piece priced at $65', amt('Photo'), 6500)
+  s.eq('post piece priced at $70', amt('Design'), 7000)
+  s.check('every creator order carries a positive price', rows.length > 0 && rows.every((r) => r.amount_cents > 0))
+  const creatorPieces = planCampaignPieces(camp, SHIP).filter((p) => p.producer === 'creator')
+  s.check('planned creator pieces carry the same priceCents', creatorPieces.every((p) => p.priceCents > 0))
+}
+{
+  const charge = buildChargeRow({ id: 'wo1', client_id: 'c1', campaign_id: 'camp1', amount_cents: 12000 })
+  s.eq('charge accrues the order amount', charge.amount_cents, 12000)
+  s.check('charge starts accrued, creator-sourced, linked to its order', charge.status === 'accrued' && charge.source === 'creator' && charge.work_order_id === 'wo1')
+  const z = buildChargeRow({ id: 'wo2', client_id: 'c1', campaign_id: null, amount_cents: -5 })
+  s.eq('a negative/garbage amount floors to 0', z.amount_cents, 0)
+  s.check('null campaign tolerated on a charge', z.campaign_id === null)
 }
 
 // ── F. bill = calendar = production after owner edits (guards #3, #4) ────

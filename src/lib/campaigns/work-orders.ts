@@ -7,8 +7,8 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { creatorById } from './creators'
-import { buildWorkOrderRows, buildBridgeDraftRow, validateTransition, IllegalTransition, type WorkOrderStatus } from './work-orders-core'
-import type { SavedCampaign } from './view'
+import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, validateTransition, IllegalTransition, type WorkOrderStatus } from './work-orders-core'
+import type { SavedCampaign, CampaignCharges } from './view'
 
 export type { WorkOrderStatus }
 export { IllegalTransition } from './work-orders-core'
@@ -28,6 +28,7 @@ export interface WorkOrder {
   conceptStatus: 'approved' | 'pending' | 'changes'
   deliveredUrl: string | null
   note: string | null
+  amountCents: number
   createdAt: string
   updatedAt: string
 }
@@ -48,6 +49,7 @@ function rowToWO(r: Record<string, unknown>): WorkOrder {
     conceptStatus: ((r.concept_status as WorkOrder['conceptStatus']) ?? 'approved'),
     deliveredUrl: (r.delivered_url as string) ?? null,
     note: (r.note as string) ?? null,
+    amountCents: (r.amount_cents as number) ?? 0,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
   }
@@ -151,9 +153,52 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', id)
   if (error) throw new Error(`update work order: ${error.message}`)
-  // On owner-approval, drop the finished piece into the team's publish pipeline.
-  // Best-effort: a failed bridge must never undo a valid approval.
-  if (patch.status === 'approved') await bridgeApprovedOrderToDraft(id).catch(() => null)
+  // On owner-approval: drop the finished piece into the team's publish pipeline AND
+  // accrue the owner charge. Both best-effort — a failure here must never undo a
+  // valid approval, and each is independently idempotent.
+  if (patch.status === 'approved') {
+    await bridgeApprovedOrderToDraft(id).catch(() => null)
+    await accrueChargeForApprovedOrder(id).catch(() => null)
+  }
+}
+
+/**
+ * Money-in: when the owner approves a delivered creator piece, accrue the owner
+ * charge for it (the price locked on the order at ship). Accrual ONLY — nothing is
+ * charged via Stripe here; a later owner-triggered step turns accrued charges into
+ * a real invoice. Idempotent (the unique index on work_order_id makes a re-accrual
+ * a no-op) + best-effort + degrades to a no-op pre-migration 180. Returns whether a
+ * charge now exists for the order.
+ */
+export async function accrueChargeForApprovedOrder(orderId: string): Promise<boolean> {
+  const admin = createAdminClient()
+  // select('*') so a missing amount_cents column (pre-180) doesn't error the read.
+  const { data: o, error } = await admin.from('creator_work_orders').select('*').eq('id', orderId).single()
+  if (error || !o || o.status !== 'approved') return false
+  const row = buildChargeRow({
+    id: o.id as string,
+    client_id: o.client_id as string,
+    campaign_id: (o.campaign_id as string | null) ?? null,
+    amount_cents: (o.amount_cents as number) ?? 0,
+  })
+  const { error: insErr } = await admin.from('campaign_charges').insert(row)
+  // 23505 = unique violation → already accrued (idempotent success). Any other
+  // error (e.g. table absent pre-180) → not accrued.
+  if (insErr) return insErr.code === '23505'
+  return true
+}
+
+/** Owner-facing rollup: what a campaign has accrued to bill (accrued + invoiced +
+ *  paid count toward the total; voided does not). Degrades to zero pre-180. */
+export async function getCampaignCharges(campaignId: string): Promise<CampaignCharges> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('campaign_charges')
+    .select('amount_cents, status')
+    .eq('campaign_id', campaignId)
+    .in('status', ['accrued', 'invoiced', 'paid'])
+  if (error || !data) return { accruedCents: 0, count: 0 }
+  return { accruedCents: data.reduce((s, c) => s + ((c.amount_cents as number) ?? 0), 0), count: data.length }
 }
 
 /**

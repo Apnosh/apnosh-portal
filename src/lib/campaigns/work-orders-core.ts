@@ -6,7 +6,7 @@
  */
 import type { SavedCampaign } from './view'
 import { creativeRolesForCampaign, vibeForCampaign, disciplineForType, type Disc } from './creators'
-import { reconcileBeatsToLines } from './catalog'
+import { reconcileBeatsToLines, CONTENT_META } from './catalog'
 import { deriveSchedule } from './schedule'
 
 export type WorkOrderStatus = 'offered' | 'accepted' | 'in_progress' | 'delivered' | 'approved' | 'revision' | 'declined'
@@ -65,6 +65,7 @@ export interface WorkOrderRow {
   due_date: string | null
   status: WorkOrderStatus
   concept_status: 'approved' | 'pending'  // 'pending' when the owner wants to OK the idea first
+  amount_cents: number  // the owner's price for this piece, locked at ship (feeds charge + payout)
 }
 
 /** Who makes a given piece: the owner's in-house team (→ content_drafts, worked
@@ -102,6 +103,7 @@ export interface PlannedPiece {
   key: string | null          // discipline:slot — the producer_choices key
   producer: Producer          // the ONE lane that makes it
   creatorId: string | null    // the assigned creator when producer === 'creator'
+  priceCents: number          // the owner's price for this one piece (CONTENT_META)
 }
 
 /**
@@ -144,7 +146,8 @@ export function planCampaignPieces(campaign: SavedCampaign, shipISO: string): Pl
       producer = choice === 'team' || choice === 'creator' ? choice : DEFAULT_PRODUCER
       creatorId = producer === 'creator' ? creator.id : null
     }
-    return { index, type: b.type, label: b.label ?? '', channel: b.channel ?? '', postISO, discipline: discipline ?? null, slot, key, producer, creatorId }
+    const priceCents = Math.round((CONTENT_META[b.type]?.price ?? 0) * 100)
+    return { index, type: b.type, label: b.label ?? '', channel: b.channel ?? '', postISO, discipline: discipline ?? null, slot, key, producer, creatorId, priceCents }
   })
 }
 
@@ -173,9 +176,36 @@ export function buildWorkOrderRows(campaign: SavedCampaign, shipISO: string): Wo
       due_date: p.postISO,
       status: 'offered' as const,
       concept_status: conceptStatus,
+      amount_cents: p.priceCents,
     })
   }
   return rows
+}
+
+/** The campaign_charges insert payload for an accepted creator piece. Pure so the
+ *  pricing/shape is unit-testable; the DB insert + idempotency live in
+ *  accrueChargeForApprovedOrder. */
+export interface ChargeRow {
+  client_id: string
+  campaign_id: string | null
+  work_order_id: string
+  source: 'creator'
+  amount_cents: number
+  status: 'accrued'
+}
+
+/** Map an approved creator order to the owner charge it accrues. The amount is the
+ *  price locked on the order at ship (never recomputed, so a later catalog price
+ *  change can't move what the owner was quoted). */
+export function buildChargeRow(o: { id: string; client_id: string; campaign_id: string | null; amount_cents: number }): ChargeRow {
+  return {
+    client_id: o.client_id,
+    campaign_id: o.campaign_id ?? null,
+    work_order_id: o.id,
+    source: 'creator',
+    amount_cents: Math.max(0, Math.round(o.amount_cents || 0)),
+    status: 'accrued',
+  }
 }
 
 /** The fields the publish bridge reads off an approved creator order. */

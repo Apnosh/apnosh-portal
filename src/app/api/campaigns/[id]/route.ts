@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
-import { mintWorkOrders, clearCampaignBriefCache } from '@/lib/campaigns/work-orders'
+import { mintWorkOrders, clearCampaignBriefCache, getCampaignCharges } from '@/lib/campaigns/work-orders'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
@@ -20,12 +20,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params
   const { campaign, res } = await authorize(id)
   if (res) return res
-  // Only shipped, team-run campaigns have materialized pieces; skip the query
-  // for drafts and DIY (they can never have content_drafts to roll up).
-  const progress = campaign && campaign.status === 'shipped' && campaign.draft.path !== 'diy'
-    ? await getCampaignProgress(id).catch(() => null)
-    : null
-  return NextResponse.json({ campaign, progress })
+  // Only shipped, team-run campaigns have materialized pieces / accrued charges;
+  // skip the queries for drafts and DIY.
+  const shippedTeamRun = !!campaign && campaign.status === 'shipped' && campaign.draft.path !== 'diy'
+  const [progress, charges] = shippedTeamRun
+    ? await Promise.all([getCampaignProgress(id).catch(() => null), getCampaignCharges(id).catch(() => null)])
+    : [null, null]
+  return NextResponse.json({ campaign, progress, charges })
 }
 
 // PATCH /api/campaigns/:id — { items?: LineItem[], fields?: {...} }.

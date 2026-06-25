@@ -28,6 +28,13 @@ export interface SavedCampaign {
   execution: CampaignExecution
 }
 
+/** Owner-facing rollup of what a campaign has accrued to bill — one charge per
+ *  delivered-and-accepted piece. Accrual only; nothing is charged via Stripe yet. */
+export interface CampaignCharges {
+  accruedCents: number
+  count: number
+}
+
 export interface CampaignExecution {
   featuring?: string   // the exact dish/item to feature
   offerText?: string   // the exact offer wording + terms
