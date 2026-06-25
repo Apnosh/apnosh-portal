@@ -249,25 +249,42 @@ export async function getCreatorBrief(orderId: string): Promise<{ order: BriefOr
   }
 }
 
+// Brief mutations only touch work that hasn't shipped — never a delivered/
+// approved piece the creator already executed against.
+const NON_TERMINAL = ['offered', 'accepted', 'in_progress', 'revision']
+
 /** Length-clamp owner-submitted creative so an edit can't smuggle an oversized
  *  or instruction-injected blob into storage / a later AI regeneration. */
-function sanitizeCreative(c: Partial<CreativeDirection>): CreativeDirection {
+function sanitizeCreative(c: Record<string, unknown>): CreativeDirection {
   const str = (v: unknown, max = 2000): string => (typeof v === 'string' ? v.slice(0, max) : '')
   const arr = (v: unknown, max: number, each: number): string[] => (Array.isArray(v) ? v.slice(0, max).map((x) => str(x, each)).filter(Boolean) : [])
   return { concept: str(c.concept), hook: str(c.hook), steps: arr(c.steps, 12, 280), caption: str(c.caption), hashtags: arr(c.hashtags, 20, 60) }
 }
 
-/** Re-run the AI creative for one order (clears the cache, regenerates). */
+/** The source of an order's cached brief ('ai' | 'template' | 'owner'), or null. */
+export async function getBriefSource(orderId: string): Promise<string | null> {
+  const admin = createAdminClient()
+  const { data } = await admin.from('creator_work_orders').select('brief_details').eq('id', orderId).maybeSingle()
+  return ((data?.brief_details as { source?: string } | null)?.source) ?? null
+}
+
+/** Re-run the AI creative for one order (clears the cache, regenerates). Scoped
+ *  to unshipped work; the route blocks a creator from wiping owner direction. */
 export async function regenerateCreatorBrief(orderId: string): Promise<{ order: BriefOrder; brief: CreatorBrief } | null> {
   const admin = createAdminClient()
-  await admin.from('creator_work_orders').update({ brief_details: null }).eq('id', orderId)
+  await admin.from('creator_work_orders').update({ brief_details: null }).eq('id', orderId).in('status', NON_TERMINAL)
   return getCreatorBrief(orderId)
 }
 
-/** Save the owner's hand-written creative direction (owner_directs / an edit). */
-export async function setOwnerCreative(orderId: string, creative: Partial<CreativeDirection>): Promise<{ order: BriefOrder; brief: CreatorBrief } | null> {
+/** Save the owner's hand-written creative direction. Merges into the existing
+ *  brief (absent fields preserved) and refuses an all-empty write. */
+export async function setOwnerCreative(orderId: string, creative: Record<string, unknown>): Promise<{ order: BriefOrder; brief: CreatorBrief } | null> {
   const admin = createAdminClient()
-  await admin.from('creator_work_orders').update({ brief_details: { creative: sanitizeCreative(creative), source: 'owner', generatedAt: new Date().toISOString() } }).eq('id', orderId)
+  const { data: cur } = await admin.from('creator_work_orders').select('brief_details').eq('id', orderId).maybeSingle()
+  const base = ((cur?.brief_details as { creative?: CreativeDirection } | null)?.creative) ?? { concept: '', hook: '', steps: [], caption: '', hashtags: [] }
+  const merged = sanitizeCreative({ ...base, ...creative })
+  if (!merged.concept && !merged.hook && !merged.steps.length && !merged.caption && !merged.hashtags.length) return null
+  await admin.from('creator_work_orders').update({ brief_details: { creative: merged, source: 'owner', generatedAt: new Date().toISOString() } }).eq('id', orderId).in('status', NON_TERMINAL)
   return getCreatorBrief(orderId)
 }
 

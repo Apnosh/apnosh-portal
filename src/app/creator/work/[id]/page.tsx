@@ -2,8 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import type { CreatorBrief, BriefOrder, CreativeDirection } from '@/lib/campaigns/creator-brief'
+import type { CreatorBrief, BriefOrder } from '@/lib/campaigns/creator-brief'
 import { safeHref } from '@/lib/campaigns/work-orders-core'
+
+// The editor holds steps + hashtags as RAW text so typing (Enter, spaces) isn't
+// fought by per-keystroke normalization; it's split once on Save.
+type EditDraft = { concept: string; hook: string; caption: string; stepsText: string; hashtagsText: string }
 
 export default function OrderBriefPage() {
   const { id } = useParams<{ id: string }>()
@@ -14,7 +18,8 @@ export default function OrderBriefPage() {
   const [url, setUrl] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState<CreativeDirection | null>(null)
+  const [draft, setDraft] = useState<EditDraft | null>(null)
+  const [saveErr, setSaveErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/creator/work/${id}`, { cache: 'no-store' })
@@ -32,12 +37,18 @@ export default function OrderBriefPage() {
     } finally { setBusy(false) }
   }, [id, load])
 
-  const briefAction = useCallback(async (body: object) => {
-    setAiBusy(true)
+  // Returns true only on success; merges so the viewer flag (omitted by the POST
+  // before the fix, defensive here too) is never lost.
+  const briefAction = useCallback(async (body: object): Promise<boolean> => {
+    setAiBusy(true); setSaveErr(null)
     try {
       const r = await fetch(`/api/creator/work/${id}/brief`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-      if (r.ok) setData(await r.json())
-    } finally { setAiBusy(false) }
+      if (!r.ok) { setSaveErr(r.status === 409 ? 'This brief is locked — reload.' : 'Couldn’t save — try again.'); return false }
+      const j = await r.json()
+      setData((prev) => ({ ...prev, ...j, viewer: j.viewer ?? prev?.viewer }))
+      return true
+    } catch { setSaveErr('Couldn’t save — check your connection.'); return false }
+    finally { setAiBusy(false) }
   }, [id])
 
   if (state === 'loading') return <Center>Pulling your brief together…</Center>
@@ -82,24 +93,25 @@ export default function OrderBriefPage() {
         {/* the idea */}
         <Section title="The idea" badge={brief.creativeSource === 'ai' ? 'AI-written' : brief.creativeSource === 'owner' ? 'From the owner' : 'Starter'}>
           {canTweak && (
-            <div className="mb-2 flex items-center gap-2">
-              {!editing && <button onClick={() => briefAction({ action: 'regenerate' })} disabled={aiBusy} className="rounded-lg border border-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-600 disabled:opacity-40">{aiBusy ? 'Thinking…' : '↻ Regenerate'}</button>}
-              {isOwner && !editing && <button onClick={() => { setDraft({ ...c }); setEditing(true) }} className="rounded-lg border border-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-600">✎ Edit</button>}
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              {!editing && <button onClick={() => { if (brief.creativeSource !== 'owner' || (typeof window !== 'undefined' && window.confirm('This replaces the written direction with a fresh AI version. Continue?'))) briefAction({ action: 'regenerate' }) }} disabled={aiBusy} className="rounded-lg border border-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-600 disabled:opacity-40">{aiBusy ? 'Thinking…' : '↻ Regenerate'}</button>}
+              {isOwner && !editing && <button onClick={() => { setSaveErr(null); setDraft({ concept: c.concept, hook: c.hook, caption: c.caption, stepsText: c.steps.join('\n'), hashtagsText: c.hashtags.join(' ') }); setEditing(true) }} className="rounded-lg border border-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-600">✎ Edit</button>}
               {editing && (
                 <>
-                  <button onClick={() => { if (draft) briefAction({ creative: draft }); setEditing(false) }} disabled={aiBusy} className="rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40">Save</button>
-                  <button onClick={() => { setEditing(false); setDraft(null) }} className="rounded-lg border border-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-600">Cancel</button>
+                  <button onClick={async () => { if (!draft) return; const ok = await briefAction({ creative: { concept: draft.concept, hook: draft.hook, caption: draft.caption, steps: draft.stepsText.split('\n').map((s) => s.trim()).filter(Boolean), hashtags: draft.hashtagsText.split(/\s+/).filter(Boolean) } }); if (ok) setEditing(false) }} disabled={aiBusy} className="rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40">{aiBusy ? 'Saving…' : 'Save'}</button>
+                  <button onClick={() => { setEditing(false); setDraft(null); setSaveErr(null) }} className="rounded-lg border border-neutral-200 px-2.5 py-1 text-[11px] font-medium text-neutral-600">Cancel</button>
                 </>
               )}
+              {saveErr && <span className="text-[11px] text-rose-600">{saveErr}</span>}
             </div>
           )}
           {editing && draft ? (
             <div className="space-y-2">
               <EditField label="Concept" value={draft.concept} onChange={(v) => setDraft({ ...draft, concept: v })} />
               <EditField label="Hook" value={draft.hook} onChange={(v) => setDraft({ ...draft, hook: v })} />
-              <EditField label={`${brief.stepsLabel} (one per line)`} value={draft.steps.join('\n')} rows={5} onChange={(v) => setDraft({ ...draft, steps: v.split('\n').map((s) => s.trim()).filter(Boolean) })} />
+              <EditField label={`${brief.stepsLabel} (one per line)`} value={draft.stepsText} rows={5} onChange={(v) => setDraft({ ...draft, stepsText: v })} />
               <EditField label="Caption" value={draft.caption} rows={3} onChange={(v) => setDraft({ ...draft, caption: v })} />
-              <EditField label="Hashtags (space-separated)" value={draft.hashtags.join(' ')} onChange={(v) => setDraft({ ...draft, hashtags: v.split(/\s+/).filter(Boolean) })} />
+              <EditField label="Hashtags (space-separated)" value={draft.hashtagsText} onChange={(v) => setDraft({ ...draft, hashtagsText: v })} />
             </div>
           ) : (
             <>
