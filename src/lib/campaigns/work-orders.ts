@@ -7,7 +7,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { creatorById } from './creators'
-import { buildWorkOrderRows, validateTransition, IllegalTransition, type WorkOrderStatus } from './work-orders-core'
+import { buildWorkOrderRows, buildBridgeDraftRow, validateTransition, IllegalTransition, type WorkOrderStatus } from './work-orders-core'
 import type { SavedCampaign } from './view'
 
 export type { WorkOrderStatus }
@@ -151,4 +151,46 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', id)
   if (error) throw new Error(`update work order: ${error.message}`)
+  // On owner-approval, drop the finished piece into the team's publish pipeline.
+  // Best-effort: a failed bridge must never undo a valid approval.
+  if (patch.status === 'approved') await bridgeApprovedOrderToDraft(id).catch(() => null)
+}
+
+/**
+ * Publish bridge: when the owner approves a creator delivery, materialize the
+ * piece as a content_draft (status 'approved') carrying the delivered link + the
+ * brief's caption/hashtags, linked back via content_draft_id. This drops the
+ * approved creator work into the SAME team publish queue + scheduled-publish cron
+ * the team uses, instead of dead-ending at 'approved'. Idempotent + best-effort:
+ * never blocks the approval, never makes a 2nd draft for an already-linked order,
+ * and cleans up its draft if it loses the link race or the FK column is absent
+ * (pre-migration 179). Returns the new content_draft id, or null if not bridged.
+ */
+export async function bridgeApprovedOrderToDraft(orderId: string): Promise<string | null> {
+  const admin = createAdminClient()
+  // select('*') so a missing content_draft_id column (pre-179) does not error the read.
+  const { data: o, error } = await admin.from('creator_work_orders').select('*').eq('id', orderId).single()
+  if (error || !o || o.status !== 'approved' || o.content_draft_id) return null
+  const row = buildBridgeDraftRow({
+    client_id: o.client_id as string,
+    campaign_id: (o.campaign_id as string | null) ?? null,
+    title: o.title as string | null,
+    due_date: o.due_date as string | null,
+    delivered_url: o.delivered_url as string | null,
+    brief_details: o.brief_details as { creative?: { caption?: unknown; hashtags?: unknown } } | null,
+  })
+  const { data: draft, error: insErr } = await admin
+    .from('content_drafts')
+    .insert({ ...row, approved_at: new Date().toISOString() })
+    .select('id').single()
+  if (insErr || !draft) return null
+  // Link only if still unlinked; if the link fails (lost race, or the FK column is
+  // absent pre-179), delete the orphan draft so we never double-produce the piece.
+  const { data: linked, error: linkErr } = await admin.from('creator_work_orders')
+    .update({ content_draft_id: draft.id }).eq('id', orderId).is('content_draft_id', null).select('id').maybeSingle()
+  if (linkErr || !linked) {
+    await admin.from('content_drafts').delete().eq('id', draft.id as string)
+    return null
+  }
+  return draft.id as string
 }

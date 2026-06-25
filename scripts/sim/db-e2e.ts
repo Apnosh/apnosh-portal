@@ -11,7 +11,7 @@
 import { config } from 'dotenv'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildContentLine } from '@/lib/campaigns/catalog'
-import { buildWorkOrderRows } from '@/lib/campaigns/work-orders-core'
+import { buildWorkOrderRows, buildBridgeDraftRow } from '@/lib/campaigns/work-orders-core'
 import type { CampaignBrief, CampaignDraft, ContentBeat, LineItem } from '@/lib/campaigns/types'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 import { Suite } from './lib'
@@ -134,6 +134,55 @@ async function main() {
       const { data: again } = await a.from('creator_work_orders').select('id').eq('campaign_id', mintCampaignId).limit(1)
       s.check('re-mint guard sees existing rows → would skip', !!(again && again.length))
       await a.from('campaigns').delete().eq('id', mintCampaignId)
+    }
+
+    // ── publish bridge: approve → linked content_draft + progress dedup ──
+    s.group('publish bridge (approve → content_draft, counted once)')
+    // The bridge needs migration 179 (creator_work_orders.content_draft_id). Probe
+    // for it so the suite stays green pre-migration and really runs once applied.
+    const { error: fkColErr } = await a.from('creator_work_orders').select('content_draft_id').limit(1)
+    const { data: c3 } = fkColErr ? { data: null } : await a.from('campaigns').insert({ client_id: TEST_CLIENT, name: TEST_NAME, path: 'strategist', status: 'shipped', phase: 'monitor' }).select('id').single()
+    const bridgeCampaignId = c3?.id as string
+    let bridgedDraftId: string | null = null
+    if (fkColErr) {
+      s.check('publish bridge: skipped — apply migration 179 then re-run', true, 'content_draft_id column absent (pre-179)')
+    } else if (bridgeCampaignId) {
+      const due = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10)
+      const { data: ord } = await a.from('creator_work_orders').insert({
+        campaign_id: bridgeCampaignId, client_id: TEST_CLIENT, creator_id: 'v_maya', discipline: 'Video', slot: 0,
+        title: 'Bridge reel', brief: 'x', due_date: due, status: 'delivered', concept_status: 'approved',
+        delivered_url: 'https://example.com/reel.mp4', brief_details: { creative: { caption: 'Yum', hashtags: ['#food'] } },
+      }).select('id').single()
+      const orderId = ord?.id as string
+
+      // The exact DB work the server-only bridge does on owner-approval (which can't
+      // import here under tsx): approve, materialize the linked draft from the PURE
+      // row-builder, then link it.
+      await a.from('creator_work_orders').update({ status: 'approved' }).eq('id', orderId)
+      const row = buildBridgeDraftRow({ client_id: TEST_CLIENT, campaign_id: bridgeCampaignId, title: 'Bridge reel', due_date: due, delivered_url: 'https://example.com/reel.mp4', brief_details: { creative: { caption: 'Yum', hashtags: ['#food'] } } })
+      s.check('bridge row: approved + carries delivered link + brief caption', row.status === 'approved' && row.media_urls[0] === 'https://example.com/reel.mp4' && row.caption === 'Yum')
+      const { data: cd, error: cdErr } = await a.from('content_drafts').insert({ ...row, approved_at: new Date().toISOString() }).select('id, campaign_id').single()
+      bridgedDraftId = cd?.id as string
+      s.check('bridge draft inserts cleanly into content_drafts', !cdErr && !!bridgedDraftId, cdErr?.message)
+      s.eq('draft inherits the campaign', cd?.campaign_id, bridgeCampaignId)
+      const { error: linkErr } = await a.from('creator_work_orders').update({ content_draft_id: bridgedDraftId }).eq('id', orderId).is('content_draft_id', null)
+      s.check('order links to its draft (content_draft_id)', !linkErr, linkErr?.message)
+      const { data: lo } = await a.from('creator_work_orders').select('content_draft_id').eq('id', orderId).single()
+      s.check('link persisted', lo?.content_draft_id === bridgedDraftId)
+
+      // Progress dedup: mirror getCampaignProgress's union — a bridged order
+      // (content_draft_id set) is counted via its content_draft, never twice.
+      const [{ data: cds }, { data: ords }] = await Promise.all([
+        a.from('content_drafts').select('status').eq('campaign_id', bridgeCampaignId),
+        a.from('creator_work_orders').select('status, content_draft_id').eq('campaign_id', bridgeCampaignId),
+      ])
+      const liveDrafts = (cds ?? []).filter((d) => !['rejected', 'failed', 'archived'].includes(d.status as string)).length
+      const unbridgedOrders = (ords ?? []).filter((o) => (o.status as string) !== 'declined' && !o.content_draft_id).length
+      s.eq('the bridged order is skipped in the order lane', unbridgedOrders, 0)
+      s.eq('progress counts the piece exactly once (via the draft)', liveDrafts + unbridgedOrders, 1)
+
+      if (bridgedDraftId) await a.from('content_drafts').delete().eq('id', bridgedDraftId)  // campaign_id set-null on delete, so remove explicitly
+      await a.from('campaigns').delete().eq('id', bridgeCampaignId)
     }
   } finally {
     // ── teardown: cascade removes the orders ───────────────────────────

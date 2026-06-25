@@ -177,3 +177,54 @@ export function buildWorkOrderRows(campaign: SavedCampaign, shipISO: string): Wo
   }
   return rows
 }
+
+/** The fields the publish bridge reads off an approved creator order. */
+export interface BridgeOrderRow {
+  client_id: string
+  campaign_id: string | null
+  title?: string | null
+  due_date?: string | null
+  delivered_url?: string | null
+  brief_details?: { creative?: { caption?: unknown; hashtags?: unknown } } | null
+}
+
+/** The content_drafts insert payload (minus the non-pure approved_at stamp). */
+export interface BridgeDraftRow {
+  client_id: string
+  campaign_id: string | null
+  idea: string
+  caption: string | null
+  hashtags: string[]
+  media_urls: string[]
+  status: 'approved'
+  service_line: 'social'
+  proposed_via: 'strategist'
+  target_publish_date: string | null
+}
+
+/**
+ * Map an approved creator order to the content_draft that carries it into the team
+ * publish queue: the delivered link becomes the draft's media, the brief's creative
+ * caption/hashtags carry over, the order's due date becomes the publish date, and
+ * the draft lands 'approved' (ready for the team to schedule + publish, NOT
+ * auto-posted — the link still needs a human to turn into platform-ready media).
+ * Pure so the mapping is unit-testable; the DB insert + link + dedup live in
+ * bridgeApprovedOrderToDraft.
+ */
+export function buildBridgeDraftRow(o: BridgeOrderRow): BridgeDraftRow {
+  const creative = o.brief_details?.creative ?? {}
+  const caption = typeof creative.caption === 'string' ? creative.caption : null
+  const hashtags = Array.isArray(creative.hashtags) ? creative.hashtags.filter((h): h is string => typeof h === 'string') : []
+  return {
+    client_id: o.client_id,
+    campaign_id: o.campaign_id ?? null,
+    idea: ((o.title ?? '') || 'Creator piece').slice(0, 280),
+    caption,
+    hashtags,
+    media_urls: o.delivered_url ? [o.delivered_url] : [],
+    status: 'approved',
+    service_line: 'social',
+    proposed_via: 'strategist',
+    target_publish_date: o.due_date ?? null,
+  }
+}

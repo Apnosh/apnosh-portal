@@ -297,7 +297,8 @@ export async function getCampaignProgress(campaignId: string): Promise<CampaignP
   const admin = createAdminClient()
   const [{ data: drafts }, { data: orders }] = await Promise.all([
     admin.from('content_drafts').select('status, target_publish_date').eq('campaign_id', campaignId),
-    admin.from('creator_work_orders').select('status, due_date').eq('campaign_id', campaignId),
+    // select('*') so a missing content_draft_id column (pre-179) doesn't error.
+    admin.from('creator_work_orders').select('*').eq('campaign_id', campaignId),
   ])
   let total = 0, live = 0, queued = 0, awaitingYou = 0, inProgress = 0
   let nextDueISO: string | null = null
@@ -329,6 +330,9 @@ export async function getCampaignProgress(campaignId: string): Promise<CampaignP
   for (const o of orders ?? []) {
     const s = (o.status as string) ?? ''
     if (s === 'declined') continue
+    // Bridged on approval → its content_draft now represents it in the team lane;
+    // skip here so an approved-and-bridged piece is counted once, not twice.
+    if (o.content_draft_id) continue
     total++
     if (s === 'approved') queued++
     else if (s === 'delivered') awaitingYou++

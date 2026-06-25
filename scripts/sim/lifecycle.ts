@@ -6,7 +6,7 @@
  */
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { creativeRolesForCampaign, vibeForCampaign, creatorPool, disciplineForType, type Disc } from '@/lib/campaigns/creators'
-import { buildWorkOrderRows, planCampaignPieces, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
+import { buildWorkOrderRows, planCampaignPieces, buildBridgeDraftRow, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
 import { composeCampaign } from '@/lib/campaigns/campaign-composer'
 import { buildContentLine, CONTENT_META, reconcileBeatsToLines } from '@/lib/campaigns/catalog'
 import { CAMPAIGN_TEMPLATES } from '@/lib/campaigns/data/campaign-templates'
@@ -251,6 +251,28 @@ s.group('disciplineForType == role discipline (planner and seeding agree)')
     const beatDisc = disciplineForType(t)
     s.check(`${t}: planner discipline (${beatDisc ?? 'none'}) == seeding discipline (${roleDisc ?? 'none'})`, beatDisc === roleDisc)
   }
+}
+
+// ── E4. publish bridge row — approved creator piece → team publish draft ──
+s.group('buildBridgeDraftRow — approved piece carries into the publish queue')
+{
+  const row = buildBridgeDraftRow({ client_id: 'c1', campaign_id: 'camp1', title: 'Hero reel', due_date: '2026-07-10', delivered_url: 'https://x.com/a.mp4', brief_details: { creative: { caption: 'Taste it', hashtags: ['#a', '#b'] } } })
+  s.check('lands approved (team schedules + publishes, not auto-posted)', row.status === 'approved')
+  s.eq('delivered link becomes the draft media', row.media_urls.join(','), 'https://x.com/a.mp4')
+  s.eq('brief caption carries over', row.caption, 'Taste it')
+  s.eq('brief hashtags carry over', row.hashtags.join(','), '#a,#b')
+  s.eq('due date becomes the publish date', row.target_publish_date, '2026-07-10')
+  s.eq('idea from the order title', row.idea, 'Hero reel')
+  s.check('routed to the social service line', row.service_line === 'social')
+}
+{
+  // Garbage creative + no link + no title degrade safely (no crash, sane defaults).
+  const row = buildBridgeDraftRow({ client_id: 'c1', campaign_id: null, brief_details: { creative: { caption: 42 as unknown as string, hashtags: 'nope' as unknown as string[] } } })
+  s.check('non-string caption → null', row.caption === null)
+  s.eq('non-array hashtags → empty', row.hashtags.length, 0)
+  s.eq('no delivered link → empty media', row.media_urls.length, 0)
+  s.eq('no title → fallback idea', row.idea, 'Creator piece')
+  s.check('null campaign + no due tolerated', row.campaign_id === null && row.target_publish_date === null)
 }
 
 // ── F. bill = calendar = production after owner edits (guards #3, #4) ────
