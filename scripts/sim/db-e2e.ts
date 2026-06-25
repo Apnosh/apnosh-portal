@@ -225,7 +225,25 @@ async function main() {
         const { data: ch } = await a.from('campaign_charges').select('amount_cents, status').eq('campaign_id', chCampaignId).in('status', ['accrued', 'invoiced', 'paid'])
         s.eq('exactly one charge accrued (no double)', ch?.length ?? 0, 1)
         s.eq('campaign accrued total == one piece price', (ch ?? []).reduce((s2, c) => s2 + ((c.amount_cents as number) ?? 0), 0), 12000)
-        await a.from('campaigns').delete().eq('id', chCampaignId)  // cascades: removes the order + the charge
+
+        // $0-skip: an unpriced approved order accrues NOTHING (mirrors the guard
+        // row.amount_cents <= 0 → no insert), so no phantom charge ever lands.
+        const zeroRow = buildChargeRow({ id: orderId, client_id: TEST_CLIENT, campaign_id: chCampaignId, amount_cents: 0 })
+        if (zeroRow.amount_cents > 0) await a.from('campaign_charges').insert(zeroRow)
+        const { data: afterZero } = await a.from('campaign_charges').select('id').eq('campaign_id', chCampaignId)
+        s.eq('an unpriced ($0) piece accrues nothing (still 1 charge)', afterZero?.length ?? 0, 1)
+
+        // Multi-status rollup: accrued + invoiced + paid count; void does NOT (mirrors
+        // getCampaignCharges' .in('status', ['accrued','invoiced','paid'])).
+        await a.from('campaign_charges').insert([
+          { client_id: TEST_CLIENT, campaign_id: chCampaignId, source: 'creator', amount_cents: 3000, status: 'invoiced' },
+          { client_id: TEST_CLIENT, campaign_id: chCampaignId, source: 'creator', amount_cents: 2000, status: 'paid' },
+          { client_id: TEST_CLIENT, campaign_id: chCampaignId, source: 'creator', amount_cents: 9900, status: 'void' },
+        ])
+        const { data: roll } = await a.from('campaign_charges').select('amount_cents').eq('campaign_id', chCampaignId).in('status', ['accrued', 'invoiced', 'paid'])
+        s.eq('rollup counts accrued+invoiced+paid, excludes void', (roll ?? []).reduce((s2, c) => s2 + ((c.amount_cents as number) ?? 0), 0), 12000 + 3000 + 2000)
+
+        await a.from('campaigns').delete().eq('id', chCampaignId)  // cascades: removes the order + the charges
       }
     }
   } finally {

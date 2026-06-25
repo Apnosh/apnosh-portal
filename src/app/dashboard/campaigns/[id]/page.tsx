@@ -230,7 +230,7 @@ function Detail({ camp, progress, charges, onToggleOptOut, onToggleInclude, onRe
       {shipped && !diy && charges && charges.count > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 13px', marginBottom: 14 }}>
           <span style={{ fontSize: 12.5, color: C.mute }}>Billable so far<span style={{ display: 'block', fontSize: 11, color: C.faint, marginTop: 1 }}>One charge per delivered piece · not charged yet</span></span>
-          <span style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>${Math.round(charges.accruedCents / 100)}<span style={{ fontSize: 11.5, fontWeight: 600, color: C.faint }}> · {charges.count} {charges.count === 1 ? 'piece' : 'pieces'}</span></span>
+          <span style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>${(charges.accruedCents / 100).toFixed(charges.accruedCents % 100 === 0 ? 0 : 2)}<span style={{ fontSize: 11.5, fontWeight: 600, color: C.faint }}> · {charges.count} {charges.count === 1 ? 'piece' : 'pieces'}</span></span>
         </div>
       )}
 

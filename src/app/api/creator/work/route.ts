@@ -69,6 +69,13 @@ export async function PATCH(req: NextRequest) {
   if (!access.authorized && !isAssignedCreator) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   // Approving/changing the concept is the owner's call, not the creator's.
   if (body.concept_status !== undefined && !access.authorized) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  // Approving a delivery or sending it back for changes are the OWNER's verdicts on
+  // the creator's work — not the creator's. Approval also fires the owner charge +
+  // publish bridge, so a creator must never reach it. (offered/accepted→declined
+  // stays open so a creator can decline a job they don't want.)
+  if ((body.status === 'approved' || body.status === 'revision') && !access.authorized) {
+    return NextResponse.json({ error: 'only the owner can approve a delivery or request changes' }, { status: 403 })
+  }
 
   try {
     await updateWorkOrder(body.id, {

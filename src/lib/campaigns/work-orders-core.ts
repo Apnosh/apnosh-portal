@@ -130,6 +130,14 @@ export function planCampaignPieces(campaign: SavedCampaign, shipISO: string): Pl
   const shipDay = (shipISO || '').slice(0, 10)
   const choices = campaign.producerChoices ?? {}
   const slotByDiscipline: Record<string, number> = {}
+  // Price each piece from the owner's OWN line price (the same source the honest
+  // bill sums), so the accrued charge can never diverge from the quoted plan; fall
+  // back to the catalog default only if no line is found.
+  const priceByType = new Map<string, number>()
+  for (const it of items) {
+    const m = /^content-(.+)$/.exec(it.serviceId)
+    if (m && typeof it.price === 'number') priceByType.set(m[1], it.price)
+  }
 
   return sched.beats.map((b, index) => {
     const discipline = disciplineForType(b.type)
@@ -146,7 +154,7 @@ export function planCampaignPieces(campaign: SavedCampaign, shipISO: string): Pl
       producer = choice === 'team' || choice === 'creator' ? choice : DEFAULT_PRODUCER
       creatorId = producer === 'creator' ? creator.id : null
     }
-    const priceCents = Math.round((CONTENT_META[b.type]?.price ?? 0) * 100)
+    const priceCents = Math.round((priceByType.get(b.type) ?? CONTENT_META[b.type]?.price ?? 0) * 100)
     return { index, type: b.type, label: b.label ?? '', channel: b.channel ?? '', postISO, discipline: discipline ?? null, slot, key, producer, creatorId, priceCents }
   })
 }

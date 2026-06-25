@@ -6,6 +6,7 @@
  */
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { notifyStaffForClient } from '@/lib/notifications'
 import { creatorById } from './creators'
 import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, validateTransition, IllegalTransition, type WorkOrderStatus } from './work-orders-core'
 import type { SavedCampaign, CampaignCharges } from './view'
@@ -175,16 +176,40 @@ export async function accrueChargeForApprovedOrder(orderId: string): Promise<boo
   // select('*') so a missing amount_cents column (pre-180) doesn't error the read.
   const { data: o, error } = await admin.from('creator_work_orders').select('*').eq('id', orderId).single()
   if (error || !o || o.status !== 'approved') return false
+  // Pre-migration 180 (amount_cents + campaign_charges absent) → silent no-op, never
+  // a dead-letter. select('*') omits a missing column, so the key is absent here.
+  if (!('amount_cents' in o)) return false
   const row = buildChargeRow({
     id: o.id as string,
     client_id: o.client_id as string,
     campaign_id: (o.campaign_id as string | null) ?? null,
     amount_cents: (o.amount_cents as number) ?? 0,
   })
+  // An approved creator piece with no price is a data-integrity signal (an order
+  // minted before pricing existed, or an unpriced content type) — never record a
+  // phantom $0 charge; flag it for staff to price + accrue by hand.
+  if (row.amount_cents <= 0) {
+    await notifyStaffForClient(row.client_id, ['strategist'], {
+      kind: 'client_signoff',
+      title: 'Approved piece has no price to bill',
+      body: 'A creator piece was approved with no amount. Set its price and accrue the charge manually.',
+      link: `/work/campaigns?focus=${row.campaign_id ?? ''}`,
+    }).catch(() => ({ notified: 0 }))
+    return false
+  }
   const { error: insErr } = await admin.from('campaign_charges').insert(row)
-  // 23505 = unique violation → already accrued (idempotent success). Any other
-  // error (e.g. table absent pre-180) → not accrued.
-  if (insErr) return insErr.code === '23505'
+  if (insErr) {
+    if (insErr.code === '23505') return true   // unique violation → already accrued (idempotent)
+    // A real failure must never silently lose money — dead-letter it so a human
+    // can accrue the charge before Phase 3b's invoicing runs.
+    await notifyStaffForClient(row.client_id, ['strategist'], {
+      kind: 'client_signoff',
+      title: 'Owner charge failed to record',
+      body: `Approving a creator piece didn't record its $${Math.round(row.amount_cents / 100)} charge (${insErr.message}). Accrue it manually.`,
+      link: `/work/campaigns?focus=${row.campaign_id ?? ''}`,
+    }).catch(() => ({ notified: 0 }))
+    return false
+  }
   return true
 }
 

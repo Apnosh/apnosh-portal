@@ -292,6 +292,15 @@ s.group('owner pricing — per-piece amount + accrued charge')
   s.check('planned creator pieces carry the same priceCents', creatorPieces.every((p) => p.priceCents > 0))
 }
 {
+  // The accrued amount follows the owner's EDITED line price, not the catalog default,
+  // so the charge can never diverge from the quoted plan.
+  const camp = campaignFor({ name: 'Edited price', content: ['reel'], beats: 1, creatorAll: true })
+  const reelLine = camp.draft.items.find((it) => it.serviceId === 'content-reel')
+  if (reelLine) reelLine.price = 200   // owner bumped the reel to $200
+  const rows = buildWorkOrderRows(camp, SHIP)
+  s.eq('order amount follows the edited line price ($200, not catalog $120)', rows[0]?.amount_cents, 20000)
+}
+{
   const charge = buildChargeRow({ id: 'wo1', client_id: 'c1', campaign_id: 'camp1', amount_cents: 12000 })
   s.eq('charge accrues the order amount', charge.amount_cents, 12000)
   s.check('charge starts accrued, creator-sourced, linked to its order', charge.status === 'accrued' && charge.source === 'creator' && charge.work_order_id === 'wo1')
