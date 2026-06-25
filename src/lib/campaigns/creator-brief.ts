@@ -151,7 +151,7 @@ async function generateCreative(type: string, featuring: string, stepsLabel: str
  * Build the full brief for one order, resolving the creative direction:
  * cached → use it; owner_directs → owner's; else AI (cache) → template.
  */
-export async function getCreatorBrief(orderId: string): Promise<{ order: BriefOrder; brief: CreatorBrief } | null> {
+export async function getCreatorBrief(orderId: string, opts?: { generate?: boolean }): Promise<{ order: BriefOrder; brief: CreatorBrief } | null> {
   const admin = createAdminClient()
   const { data: row } = await admin
     .from('creator_work_orders')
@@ -192,7 +192,7 @@ export async function getCreatorBrief(orderId: string): Promise<{ order: BriefOr
   if (cached?.creative) {
     creative = cached.creative
     creativeSource = cached.source ?? 'ai'
-  } else if (campaign) {
+  } else if (campaign && opts?.generate !== false) {
     const ai = await generateCreative(type, featuring, spec.stepsLabel, business, campaign)
     creative = ai ?? templateCreative(type, featuring, business)
     creativeSource = ai ? 'ai' : 'template'
@@ -268,12 +268,32 @@ export async function getBriefSource(orderId: string): Promise<string | null> {
   return ((data?.brief_details as { source?: string } | null)?.source) ?? null
 }
 
-/** Re-run the AI creative for one order (clears the cache, regenerates). Scoped
- *  to unshipped work; the route blocks a creator from wiping owner direction. */
+/** Re-run the AI creative for one order. A per-order claim (brief_generating_at)
+ *  means two concurrent Regenerate clicks don't each bill an AI call: only the
+ *  claimer regenerates; a loser returns the current brief without generating. A
+ *  lock older than 30s is treated as stale (a crashed generation). Scoped to
+ *  unshipped work; the route blocks a creator from wiping owner direction. */
 export async function regenerateCreatorBrief(orderId: string): Promise<{ order: BriefOrder; brief: CreatorBrief } | null> {
   const admin = createAdminClient()
-  await admin.from('creator_work_orders').update({ brief_details: null }).eq('id', orderId).in('status', NON_TERMINAL)
-  return getCreatorBrief(orderId)
+  const staleISO = new Date(Date.now() - 30_000).toISOString()
+  const { data: claimed, error: claimErr } = await admin.from('creator_work_orders')
+    .update({ brief_generating_at: new Date().toISOString() })
+    .eq('id', orderId)
+    .in('status', NON_TERMINAL)
+    .or(`brief_generating_at.is.null,brief_generating_at.lt.${staleISO}`)
+    .select('id')
+  if (claimErr) {
+    // Lock column not present yet (pre-migration 177) — regenerate without it.
+    await admin.from('creator_work_orders').update({ brief_details: null }).eq('id', orderId).in('status', NON_TERMINAL)
+    return getCreatorBrief(orderId)
+  }
+  if (!claimed || !claimed.length) return getCreatorBrief(orderId, { generate: false }) // already regenerating
+  try {
+    await admin.from('creator_work_orders').update({ brief_details: null }).eq('id', orderId).in('status', NON_TERMINAL)
+    return await getCreatorBrief(orderId)
+  } finally {
+    await admin.from('creator_work_orders').update({ brief_generating_at: null }).eq('id', orderId)
+  }
 }
 
 /** Save the owner's hand-written creative direction. Merges into the existing
