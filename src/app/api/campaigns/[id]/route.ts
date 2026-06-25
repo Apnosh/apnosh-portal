@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
 import { mintWorkOrders, clearCampaignBriefCache } from '@/lib/campaigns/work-orders'
-import { buildWorkOrderRows } from '@/lib/campaigns/work-orders-core'
+import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
 import type { LineItem } from '@/lib/campaigns/types'
@@ -53,6 +53,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     body.fields.execution = clean
   }
+  // Validate producer_choices: a map of pieceKey → 'team' | 'creator'. Reject
+  // any other value so a bad payload can't mis-route a piece or persist junk that
+  // planCampaignPieces would ignore anyway.
+  if (body.fields?.producer_choices !== undefined) {
+    const pc = body.fields.producer_choices
+    if (typeof pc !== 'object' || pc === null || Array.isArray(pc)) return NextResponse.json({ error: 'invalid producer_choices' }, { status: 400 })
+    const clean: Record<string, 'team' | 'creator'> = {}
+    for (const [k, v] of Object.entries(pc as Record<string, unknown>)) {
+      if (v !== 'team' && v !== 'creator') return NextResponse.json({ error: `producer_choices.${k} must be 'team' or 'creator'` }, { status: 400 })
+      clean[k] = v
+    }
+    body.fields.producer_choices = clean
+  }
   // Detect the ship transition BEFORE the write (campaign holds the pre-update state).
   const justShipped = body.fields?.status === 'shipped' && campaign.status !== 'shipped'
   try {
@@ -92,11 +105,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         campaign.draft.targetDate = anchor
       }
     }
-    const made = await materializeCampaignDrafts(id, campaign.clientId, campaign.draft, shipISO).catch(() => 0)
-    // Dispatch the creative work to the chosen creators' inboxes (the supply
-    // side). Best-effort; never blocks the ship. We compare what SHOULD have
-    // been minted against what was, so a silent mint failure is caught below.
-    const expectedOrders = buildWorkOrderRows(campaign, shipISO).length
+    // One plan, two lanes: team pieces become content_drafts, creator pieces
+    // become orders — each piece in exactly one lane. Computing both expectations
+    // up front lets each dead-letter below fire only when its OWN lane dropped
+    // work, now that a 0 from either side can be legitimate (all-team / all-creator).
+    const pieces = planCampaignPieces(campaign, shipISO)
+    const expectedTeam = pieces.filter((p) => p.producer === 'team').length
+    const expectedOrders = pieces.filter((p) => p.producer === 'creator' && p.creatorId).length
+    const made = await materializeCampaignDrafts(campaign, shipISO).catch(() => 0)
+    // Dispatch the creator-run pieces to the chosen creators' inboxes (the supply
+    // side). Best-effort; never blocks the ship.
     const minted = await mintWorkOrders(campaign, shipISO).catch(() => 0)
     await notifyStaffForClient(
       campaign.clientId,
@@ -108,9 +126,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         link: `/work/campaigns?focus=${id}`,
       },
     ).catch(() => ({ notified: 0 }))
-    // Dead-letter: a team-run campaign that should have produced pieces but made
-    // none (the silent-drop bug) gets flagged for manual setup, never vanishes.
-    if (made === 0 && (campaign.draft.brief?.contentBeats?.length ?? 0) > 0) {
+    // Dead-letter: the campaign had TEAM pieces to produce but made none (the
+    // silent-drop bug) gets flagged for manual setup, never vanishes.
+    if (made === 0 && expectedTeam > 0) {
       await notifyStaffForClient(campaign.clientId, ['strategist'], {
         kind: 'client_signoff',
         title: 'Campaign shipped but produced no work items',

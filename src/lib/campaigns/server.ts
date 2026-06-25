@@ -10,8 +10,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { CampaignDraft, LineItem, CampaignBrief, BillingCadence } from './types'
-import { deriveSchedule } from './schedule'
-import { reconcileBeatsToLines } from './catalog'
+import { planCampaignPieces } from './work-orders-core'
 import type { StageId } from './stages'
 import type { SavedCampaign, CampaignProgress } from './view'
 
@@ -81,6 +80,7 @@ function rowToSaved(c: Record<string, unknown>, items: LineItem[], brief: Campai
     createdAt: c.created_at as string,
     updatedAt: c.updated_at as string,
     creatorChoices: (c.creator_choices as Record<string, string> | null) ?? {},
+    producerChoices: (c.producer_choices as Record<string, 'team' | 'creator'> | null) ?? {},
     creativeControl: (c.creative_control as SavedCampaign['creativeControl']) ?? 'handoff',
     execution: (c.execution as SavedCampaign['execution']) ?? {},
   }
@@ -205,13 +205,18 @@ export async function replaceLineItems(campaignId: string, clientId: string, ite
   await admin.from('campaigns').update({ updated_at: new Date().toISOString() }).eq('id', campaignId)
 }
 
-export async function updateCampaignFields(id: string, patch: Partial<{ name: string; budget_monthly: number; planned: boolean; phase: string; status: string; shipped_at: string; occasion: string; target_date: string; context: string; creator_choices: Record<string, string>; creative_control: string; execution: Record<string, unknown> }>): Promise<void> {
+export async function updateCampaignFields(id: string, patch: Partial<{ name: string; budget_monthly: number; planned: boolean; phase: string; status: string; shipped_at: string; occasion: string; target_date: string; context: string; creator_choices: Record<string, string>; producer_choices: Record<string, 'team' | 'creator'>; creative_control: string; execution: Record<string, unknown> }>): Promise<void> {
   const admin = createAdminClient()
-  // execution is a partial delta — merge into the stored jsonb so a save of one
-  // field never clobbers the others (concurrent edits, unsurfaced keys).
+  // execution + producer_choices are partial deltas — merge into the stored jsonb
+  // so a save of one field/piece never clobbers the others (concurrent edits, a
+  // single per-piece toggle, unsurfaced keys).
   if (patch.execution) {
     const { data } = await admin.from('campaigns').select('execution').eq('id', id).maybeSingle()
     patch = { ...patch, execution: { ...((data?.execution as Record<string, unknown>) ?? {}), ...patch.execution } }
+  }
+  if (patch.producer_choices) {
+    const { data } = await admin.from('campaigns').select('producer_choices').eq('id', id).maybeSingle()
+    patch = { ...patch, producer_choices: { ...((data?.producer_choices as Record<string, 'team' | 'creator'>) ?? {}), ...patch.producer_choices } }
   }
   // Throw on error like createCampaign/replaceLineItems do, so a failed write
   // (e.g. a failed ship) surfaces as a 500 instead of silently succeeding and,
@@ -240,51 +245,41 @@ function draftServiceLine(beat: { type?: string; channel?: string }): string {
   return DRAFT_SERVICE_LINE[beat.type ?? ''] ?? 'social'
 }
 /**
- * Materialize a shipped campaign's content beats as content_drafts (status
- * 'idea') for the production team. Idempotent: skips if drafts already exist for
- * this campaign. Status is ALWAYS 'idea' so the publish-scheduled cron (which
- * only acts on status='scheduled') can never auto-send them. Returns the count
- * created (0 if no beats or already materialized).
+ * Materialize a shipped campaign's TEAM-assigned pieces as content_drafts (status
+ * 'idea') for the production team. The producer split lives in planCampaignPieces:
+ * pieces the owner kept in-house (or with no creator) land here; creator-assigned
+ * pieces are minted as work orders instead, so no piece is produced twice.
+ * Idempotent: skips if drafts already exist for this campaign. Status is ALWAYS
+ * 'idea' so the publish-scheduled cron (status='scheduled' only) can never
+ * auto-send them. Returns the count created (0 if no team pieces / already done).
  *
- * Dates come from deriveSchedule — the SAME engine the owner saw pre-ship,
- * anchored to the campaign's target date / occasion — so the dates produced for
- * the team match the dates the owner approved (an event campaign's day-of beat
- * lands on the event, not on whatever afternoon they shipped).
+ * Dates come from the same deriveSchedule the owner saw pre-ship (via the planner),
+ * so the team's pieces land on the dates the owner approved.
  */
-export async function materializeCampaignDrafts(
-  campaignId: string,
-  clientId: string,
-  draft: CampaignDraft | null,
-  shipISO: string,
-): Promise<number> {
-  // Production follows the owner's edited line items, not the static template
-  // calendar: opted-out types drop and qty edits change the count, so produced
-  // pieces == billed pieces == the calendar the owner saw.
-  const beats = reconcileBeatsToLines(draft?.items ?? [], draft?.brief?.contentBeats ?? [])
-  if (!beats.length) return 0
-  const sched = deriveSchedule({ targetDate: draft?.targetDate, occasion: draft?.occasion, contentBeats: beats }, shipISO)
+export async function materializeCampaignDrafts(campaign: SavedCampaign, shipISO: string): Promise<number> {
+  // Only the team's share of the calendar (the rest goes to creators); each piece
+  // already follows the owner's edited line items, so produced == billed.
+  const teamPieces = planCampaignPieces(campaign, shipISO).filter((p) => p.producer === 'team')
+  if (!teamPieces.length) return 0
   const admin = createAdminClient()
   const { data: existing, error: existErr } = await admin
     .from('content_drafts')
     .select('id')
-    .eq('campaign_id', campaignId)
+    .eq('campaign_id', campaign.draft.id)
     .limit(1)
   // Bail on a read error (e.g. the campaign_id column not present yet) instead of
   // falling through to an insert that would throw — keeps a pre-migration ship a
   // clean no-op rather than logging a failed insert.
   if (existErr) return 0
   if (existing && existing.length) return 0
-  // Clamp to >= ship day: an event anchored too soon can compute past post dates,
-  // and the team should never receive a piece dated before it was even ordered.
-  const shipDay = (shipISO || '').slice(0, 10)
-  const rows = sched.beats.map((b) => ({
-    client_id: clientId,
-    campaign_id: campaignId,
-    idea: (b.label || 'Campaign piece').slice(0, 280),
+  const rows = teamPieces.map((p) => ({
+    client_id: campaign.clientId,
+    campaign_id: campaign.draft.id,
+    idea: (p.label || 'Campaign piece').slice(0, 280),
     status: 'idea',
-    service_line: draftServiceLine(b),
+    service_line: draftServiceLine({ type: p.type, channel: p.channel }),
     proposed_via: 'strategist',
-    target_publish_date: b.postISO < shipDay ? shipDay : b.postISO,
+    target_publish_date: p.postISO,    // already clamped to >= ship day in the planner
   }))
   const { error } = await admin.from('content_drafts').insert(rows)
   if (error) throw new Error(`materialize campaign drafts: ${error.message}`)
@@ -292,24 +287,30 @@ export async function materializeCampaignDrafts(
 }
 
 /**
- * Owner-facing progress rollup of a shipped campaign's pieces (content_drafts).
- * Lets the detail page mirror real status ("3 of 6 ready · next goes out Tue")
- * instead of a static "preparing" banner. Returns null when nothing is
- * materialized yet (a draft, or pre-migration), so callers degrade cleanly.
+ * Owner-facing progress rollup of a shipped campaign's pieces, UNIONED across both
+ * production lanes — team pieces (content_drafts) and creator pieces
+ * (creator_work_orders) — so the detail mirror counts the whole campaign, not just
+ * the half the team is making. Returns null when nothing is materialized yet (a
+ * draft, or pre-migration), so callers degrade cleanly.
  */
 export async function getCampaignProgress(campaignId: string): Promise<CampaignProgress | null> {
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('content_drafts')
-    .select('status, target_publish_date')
-    .eq('campaign_id', campaignId)
-  if (error || !data || !data.length) return null
+  const [{ data: drafts }, { data: orders }] = await Promise.all([
+    admin.from('content_drafts').select('status, target_publish_date').eq('campaign_id', campaignId),
+    admin.from('creator_work_orders').select('status, due_date').eq('campaign_id', campaignId),
+  ])
+  let total = 0, live = 0, queued = 0, awaitingYou = 0, inProgress = 0
+  let nextDueISO: string | null = null
+  const bumpDue = (raw: string | null) => {
+    const dt = (raw ?? '').slice(0, 10)
+    if (dt && (!nextDueISO || dt < nextDueISO)) nextDueISO = dt
+  }
+
+  // Team lane: content_drafts.
   const DEAD = new Set(['rejected', 'failed', 'archived'])     // terminal: not real work
   const QUEUED = new Set(['scheduled', 'approved'])            // committed to go out
   const NEEDS_YOU = new Set(['client_review', 'revision_requested'])
-  let total = 0, live = 0, queued = 0, awaitingYou = 0, inProgress = 0
-  let nextDueISO: string | null = null
-  for (const d of data) {
+  for (const d of drafts ?? []) {
     const s = (d.status as string) ?? ''
     if (DEAD.has(s)) continue
     total++
@@ -317,9 +318,22 @@ export async function getCampaignProgress(campaignId: string): Promise<CampaignP
     if (QUEUED.has(s)) queued++
     else if (NEEDS_YOU.has(s)) awaitingYou++
     else inProgress++
-    const dt = ((d.target_publish_date as string | null) ?? '').slice(0, 10)
-    if (dt && (!nextDueISO || dt < nextDueISO)) nextDueISO = dt
+    bumpDue(d.target_publish_date as string | null)
   }
+
+  // Creator lane: creator_work_orders. An approved order isn't live until the
+  // publish bridge runs, so it counts as queued; a delivery needs the owner's
+  // review (awaitingYou); a declined order is dead.
+  for (const o of orders ?? []) {
+    const s = (o.status as string) ?? ''
+    if (s === 'declined') continue
+    total++
+    if (s === 'approved') queued++
+    else if (s === 'delivered') awaitingYou++
+    else inProgress++   // offered / accepted / in_progress / revision
+    bumpDue(o.due_date as string | null)
+  }
+
   if (!total) return null
   return { total, live, queued, awaitingYou, inProgress, nextDueISO }
 }

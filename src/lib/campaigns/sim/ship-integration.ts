@@ -48,7 +48,10 @@ export async function runShipIntegrationSim(): Promise<ShipSimReport> {
 
     const saved: SavedCampaign = {
       clientId: TEST_CLIENT, draft: { ...draft, id: campaignId }, phase: 'build', status: 'draft',
-      shippedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), creatorChoices: {}, creativeControl: 'handoff', execution: {},
+      shippedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      // Keep the hero photo in-house, the rest go to creators — so the ship splits
+      // across BOTH lanes and we can prove a piece lands in exactly one.
+      creatorChoices: {}, producerChoices: { 'Photo:0': 'team' }, creativeControl: 'handoff', execution: {},
     }
     const shipISO = new Date().toISOString()
     const shipDay = shipISO.slice(0, 10)
@@ -57,9 +60,12 @@ export async function runShipIntegrationSim(): Promise<ShipSimReport> {
     const expectedOrders = buildWorkOrderRows(saved, shipISO).length
 
     // The REAL ship path.
-    const made = await materializeCampaignDrafts(campaignId, TEST_CLIENT, saved.draft, shipISO)
+    const made = await materializeCampaignDrafts(saved, shipISO)
     const minted = await mintWorkOrders(saved, shipISO)
-    add('materialized drafts == reconciled calendar (bill=calendar=production)', made === reconciled.length, `made=${made} beats=${reconciled.length}`)
+    // The split invariant: every billed calendar piece is produced by exactly one
+    // lane — team drafts + creator orders == the reconciled calendar, no double, no drop.
+    add('team drafts + creator orders == calendar (bill=calendar=production, split)', made + minted === reconciled.length, `made=${made} minted=${minted} beats=${reconciled.length}`)
+    add('team lane made only the in-house piece', made === 1, `made=${made}`)
     add('minted orders == expected per-piece count', minted === expectedOrders, `minted=${minted} expected=${expectedOrders}`)
 
     const orders = await listWorkOrdersForCampaign(campaignId)

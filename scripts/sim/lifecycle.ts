@@ -6,7 +6,7 @@
  */
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { creativeRolesForCampaign, vibeForCampaign, creatorPool, type Disc } from '@/lib/campaigns/creators'
-import { buildWorkOrderRows, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
+import { buildWorkOrderRows, planCampaignPieces, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
 import { composeCampaign } from '@/lib/campaigns/campaign-composer'
 import { buildContentLine, CONTENT_META, reconcileBeatsToLines } from '@/lib/campaigns/catalog'
 import { CAMPAIGN_TEMPLATES } from '@/lib/campaigns/data/campaign-templates'
@@ -28,6 +28,7 @@ interface Spec {
   occasion?: string
   targetDate?: string
   creatorChoices?: Record<string, string>
+  producerChoices?: Record<string, 'team' | 'creator'>   // per-piece team|creator routing
   creativeControl?: string
   excludeIdx?: number[]      // indices to mark included:false
 }
@@ -52,7 +53,7 @@ function campaignFor(s: Spec): SavedCampaign {
     goalKey: s.goalKey as CampaignDraft['goalKey'], occasion: s.occasion, targetDate: s.targetDate, brief,
   } as CampaignDraft
 
-  return { clientId: 'sim-client', draft, phase: 'build', status: 'draft', shippedAt: null, createdAt: SHIP, updatedAt: SHIP, creatorChoices: s.creatorChoices ?? {}, creativeControl: (s.creativeControl as SavedCampaign['creativeControl']) ?? 'handoff', execution: {} }
+  return { clientId: 'sim-client', draft, phase: 'build', status: 'draft', shippedAt: null, createdAt: SHIP, updatedAt: SHIP, creatorChoices: s.creatorChoices ?? {}, producerChoices: s.producerChoices ?? {}, creativeControl: (s.creativeControl as SavedCampaign['creativeControl']) ?? 'handoff', execution: {} }
 }
 
 const s = new Suite()
@@ -135,6 +136,42 @@ s.group('buildWorkOrderRows — ship dispatches honest orders')
   s.check('owner pick reaches the order', rows.find((r) => r.discipline === 'Video')?.creator_id === 'v_maya')
 }
 
+// ── D2. planCampaignPieces — one producer per piece (kills double-production) ──
+s.group('planCampaignPieces — hybrid routing, no piece made twice')
+{
+  const camp = campaignFor({ name: 'All creative', content: ['reel', 'photo', 'post'], beats: 3 })
+  const pieces = planCampaignPieces(camp, SHIP)
+  const team = pieces.filter((p) => p.producer === 'team')
+  const creator = pieces.filter((p) => p.producer === 'creator')
+  s.check('every piece resolves to exactly one producer', pieces.length > 0 && pieces.every((p) => p.producer === 'team' || p.producer === 'creator'))
+  s.eq('team + creator partition the calendar (no double, no drop)', team.length + creator.length, pieces.length)
+  s.check('creator pieces carry creator + discipline + slot', creator.every((p) => !!p.creatorId && !!p.discipline && p.slot !== null))
+  s.eq('mint lane == creator slice exactly (materialize + mint cannot overlap)', buildWorkOrderRows(camp, SHIP).length, creator.length)
+  s.check('default routes creative pieces to creators', creator.length === pieces.length)
+}
+{
+  const camp = campaignFor({ name: 'Mixed creative + email', content: ['reel', 'email'], beats: 2 })
+  const pieces = planCampaignPieces(camp, SHIP)
+  const reel = pieces.find((p) => p.type === 'reel')
+  s.check('the reel is creator-run by default', reel?.producer === 'creator' && !!reel.creatorId)
+  s.check('any non-creative (email) piece is team-run, no creator', pieces.filter((p) => p.type === 'email').every((p) => p.producer === 'team' && !p.creatorId))
+}
+{
+  // Flipping one piece to the team must move it across the line — and the mint lane follows.
+  const flipped = campaignFor({ name: 'One to team', content: ['reel', 'reel'], beats: 2, producerChoices: { 'Video:1': 'team' } })
+  const fp = planCampaignPieces(flipped, SHIP)
+  s.eq('Video:1 → team leaves one creator order', fp.filter((p) => p.producer === 'creator').length, 1)
+  s.check('the flipped piece is the 2nd video, now team', fp.find((p) => p.key === 'Video:1')?.producer === 'team')
+  s.eq('mint follows the flip (1 order, not 2)', buildWorkOrderRows(flipped, SHIP).length, 1)
+}
+{
+  // A stray choice for a piece that doesn't exist is harmless; non-creative stays team.
+  const camp = campaignFor({ name: 'Stray choice', content: ['email', 'sms'], beats: 2, producerChoices: { 'Video:0': 'creator' } })
+  const pieces = planCampaignPieces(camp, SHIP)
+  s.check('stray producer choice never mis-routes a non-creative piece', pieces.every((p) => p.producer === 'team' && !p.creatorId))
+  s.eq('no creative work → 0 creator orders', buildWorkOrderRows(camp, SHIP).length, 0)
+}
+
 // ── E. fuzz sweep — universal invariants over many shapes ──────────────
 s.group('fuzz — universal invariants across many shapes')
 const TYPES = ['reel', 'photo', 'post', 'story', 'email', 'sms']
@@ -146,11 +183,15 @@ for (let i = 0; i < 60; i++) {
   const targetDate = i % 3 === 0 ? undefined : addDays(TODAY, 14 + (i % 40))
   const camp = campaignFor({ name: `fuzz-${i}`, content, beats: k, goalKey: pick(GOALS, i), occasion: i % 2 ? 'event' : undefined, targetDate })
   const rows = buildWorkOrderRows(camp, SHIP)
+  const pieces = planCampaignPieces(camp, SHIP)
+  const creatorPieces = pieces.filter((p) => p.producer === 'creator')
   const sched = deriveSchedule({ targetDate, occasion: i % 2 ? 'event' : undefined, contentBeats: beatsN(k) } as Parameters<typeof deriveSchedule>[0], SHIP)
   const ok =
     rows.every((r) => r.status === 'offered') &&
     rows.every((r) => !!r.creator_id && !!r.discipline && !!r.title) &&
-    (sched.tooSoon || rows.every((r) => notPast(r.due_date)))
+    (sched.tooSoon || rows.every((r) => notPast(r.due_date))) &&
+    pieces.every((p) => p.producer === 'team' || p.producer === 'creator') &&   // exactly one producer each
+    rows.length === creatorPieces.length                                        // mint lane == creator slice (no overlap with team)
   if (!ok) { fuzzFails++; if (fuzzFails <= 3) s.check(`fuzz-${i} invariant`, false, JSON.stringify({ content, rows: rows.map((r) => [r.discipline, r.due_date]) })) }
 }
 s.check(`60 random campaigns all hold invariants`, fuzzFails === 0, fuzzFails ? `${fuzzFails} failed` : undefined)

@@ -18,6 +18,10 @@ export interface SavedCampaign {
   /** Owner's chosen creators per discipline, e.g. { Video: 'v_maya' }. Empty
    *  disciplines fall back to the auto-matched default at render time. */
   creatorChoices: Record<string, string>
+  /** Per-piece producer: who makes each piece — the in-house team or a
+   *  marketplace creator. Keyed by discipline:slot (e.g. { 'Video:0': 'team' });
+   *  a piece with no entry uses the marketplace default. */
+  producerChoices: Record<string, 'team' | 'creator'>
   /** How hands-on the owner is with the creative direction. */
   creativeControl: 'handoff' | 'approve_concept' | 'owner_directs'
   /** Owner execution inputs from the "Get it ready" screen; feed the brief. */
