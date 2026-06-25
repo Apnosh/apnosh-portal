@@ -188,41 +188,47 @@ export interface BridgeOrderRow {
   brief_details?: { creative?: { caption?: unknown; hashtags?: unknown } } | null
 }
 
-/** The content_drafts insert payload (minus the non-pure approved_at stamp). */
+/** The content_drafts insert payload for a bridged piece. */
 export interface BridgeDraftRow {
   client_id: string
   campaign_id: string | null
   idea: string
   caption: string | null
   hashtags: string[]
-  media_urls: string[]
-  status: 'approved'
+  media_urls: string[]                                          // always [] — a delivery LINK is not platform media
+  media_brief: { from_creator: true; source_delivery_url?: string }
+  status: 'draft'                                               // a team finalization to-do, NOT publish-ready
   service_line: 'social'
   proposed_via: 'strategist'
   target_publish_date: string | null
 }
 
+const BRIDGE_CAPTION_MAX = 2200   // Instagram's caption ceiling; the team edits before posting
+
 /**
  * Map an approved creator order to the content_draft that carries it into the team
- * publish queue: the delivered link becomes the draft's media, the brief's creative
- * caption/hashtags carry over, the order's due date becomes the publish date, and
- * the draft lands 'approved' (ready for the team to schedule + publish, NOT
- * auto-posted — the link still needs a human to turn into platform-ready media).
- * Pure so the mapping is unit-testable; the DB insert + link + dedup live in
- * bridgeApprovedOrderToDraft.
+ * publish queue. A creator delivers a LINK, not platform-ready media, so the draft
+ * lands as a 'draft' (an editorial to-do the team finalizes + schedules — NOT a
+ * publish-ready post): the delivered link is safeHref'd into the media BRIEF (not
+ * media_urls, which a publisher would try to post directly), the brief's
+ * caption/hashtags carry over (length-capped), and the order's due date becomes the
+ * target publish date. Pure so the mapping is unit-testable; the DB insert + link +
+ * dedup live in bridgeApprovedOrderToDraft.
  */
 export function buildBridgeDraftRow(o: BridgeOrderRow): BridgeDraftRow {
   const creative = o.brief_details?.creative ?? {}
-  const caption = typeof creative.caption === 'string' ? creative.caption : null
-  const hashtags = Array.isArray(creative.hashtags) ? creative.hashtags.filter((h): h is string => typeof h === 'string') : []
+  const caption = typeof creative.caption === 'string' ? creative.caption.slice(0, BRIDGE_CAPTION_MAX) : null
+  const hashtags = Array.isArray(creative.hashtags) ? creative.hashtags.filter((h): h is string => typeof h === 'string').slice(0, 30) : []
+  const link = safeHref(o.delivered_url)   // drop javascript:/data:/garbage links
   return {
     client_id: o.client_id,
     campaign_id: o.campaign_id ?? null,
     idea: ((o.title ?? '') || 'Creator piece').slice(0, 280),
     caption,
     hashtags,
-    media_urls: o.delivered_url ? [o.delivered_url] : [],
-    status: 'approved',
+    media_urls: [],
+    media_brief: link ? { from_creator: true, source_delivery_url: link } : { from_creator: true },
+    status: 'draft',
     service_line: 'social',
     proposed_via: 'strategist',
     target_publish_date: o.due_date ?? null,

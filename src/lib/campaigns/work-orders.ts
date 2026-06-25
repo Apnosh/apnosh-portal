@@ -158,10 +158,11 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
 
 /**
  * Publish bridge: when the owner approves a creator delivery, materialize the
- * piece as a content_draft (status 'approved') carrying the delivered link + the
- * brief's caption/hashtags, linked back via content_draft_id. This drops the
- * approved creator work into the SAME team publish queue + scheduled-publish cron
- * the team uses, instead of dead-ending at 'approved'. Idempotent + best-effort:
+ * piece as a content_draft (status 'draft' — a team finalization to-do) carrying
+ * the delivered link in its media brief + the brief's caption/hashtags, linked back
+ * via content_draft_id. This drops the approved creator work into the SAME team
+ * drafts queue the team finalizes + schedules from, instead of dead-ending at an
+ * approved work order with nowhere to go. Idempotent + best-effort:
  * never blocks the approval, never makes a 2nd draft for an already-linked order,
  * and cleans up its draft if it loses the link race or the FK column is absent
  * (pre-migration 179). Returns the new content_draft id, or null if not bridged.
@@ -181,7 +182,7 @@ export async function bridgeApprovedOrderToDraft(orderId: string): Promise<strin
   })
   const { data: draft, error: insErr } = await admin
     .from('content_drafts')
-    .insert({ ...row, approved_at: new Date().toISOString() })
+    .insert(row)
     .select('id').single()
   if (insErr || !draft) return null
   // Link only if still unlinked; if the link fails (lost race, or the FK column is

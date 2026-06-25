@@ -148,38 +148,50 @@ async function main() {
       s.check('publish bridge: skipped — apply migration 179 then re-run', true, 'content_draft_id column absent (pre-179)')
     } else if (bridgeCampaignId) {
       const due = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10)
-      const { data: ord } = await a.from('creator_work_orders').insert({
+      await a.from('creator_work_orders').insert({
         campaign_id: bridgeCampaignId, client_id: TEST_CLIENT, creator_id: 'v_maya', discipline: 'Video', slot: 0,
         title: 'Bridge reel', brief: 'x', due_date: due, status: 'delivered', concept_status: 'approved',
         delivered_url: 'https://example.com/reel.mp4', brief_details: { creative: { caption: 'Yum', hashtags: ['#food'] } },
-      }).select('id').single()
+      })
+      // Read the order BACK off the table (a real jsonb round-trip) and map it with
+      // the pure builder — the exact work the server-only bridge does on approval.
+      const { data: ord } = await a.from('creator_work_orders').select('*').eq('campaign_id', bridgeCampaignId).single()
       const orderId = ord?.id as string
-
-      // The exact DB work the server-only bridge does on owner-approval (which can't
-      // import here under tsx): approve, materialize the linked draft from the PURE
-      // row-builder, then link it.
       await a.from('creator_work_orders').update({ status: 'approved' }).eq('id', orderId)
-      const row = buildBridgeDraftRow({ client_id: TEST_CLIENT, campaign_id: bridgeCampaignId, title: 'Bridge reel', due_date: due, delivered_url: 'https://example.com/reel.mp4', brief_details: { creative: { caption: 'Yum', hashtags: ['#food'] } } })
-      s.check('bridge row: approved + carries delivered link + brief caption', row.status === 'approved' && row.media_urls[0] === 'https://example.com/reel.mp4' && row.caption === 'Yum')
-      const { data: cd, error: cdErr } = await a.from('content_drafts').insert({ ...row, approved_at: new Date().toISOString() }).select('id, campaign_id').single()
+      const row = buildBridgeDraftRow({
+        client_id: ord!.client_id as string, campaign_id: ord!.campaign_id as string, title: ord!.title as string,
+        due_date: ord!.due_date as string, delivered_url: ord!.delivered_url as string,
+        brief_details: ord!.brief_details as { creative?: { caption?: unknown; hashtags?: unknown } } | null,
+      })
+      s.check('round-trip map: draft state + link in brief + caption survive jsonb', row.status === 'draft' && row.media_brief.source_delivery_url === 'https://example.com/reel.mp4' && row.caption === 'Yum' && row.media_urls.length === 0)
+
+      const { data: cd, error: cdErr } = await a.from('content_drafts').insert(row).select('id, status, campaign_id, media_brief').single()
       bridgedDraftId = cd?.id as string
-      s.check('bridge draft inserts cleanly into content_drafts', !cdErr && !!bridgedDraftId, cdErr?.message)
+      s.check('bridge draft inserts cleanly as a team draft', !cdErr && cd?.status === 'draft', cdErr?.message)
       s.eq('draft inherits the campaign', cd?.campaign_id, bridgeCampaignId)
+      s.check('the delivery link lands in the draft media brief', (cd?.media_brief as { source_delivery_url?: string })?.source_delivery_url === 'https://example.com/reel.mp4')
       const { error: linkErr } = await a.from('creator_work_orders').update({ content_draft_id: bridgedDraftId }).eq('id', orderId).is('content_draft_id', null)
       s.check('order links to its draft (content_draft_id)', !linkErr, linkErr?.message)
-      const { data: lo } = await a.from('creator_work_orders').select('content_draft_id').eq('id', orderId).single()
-      s.check('link persisted', lo?.content_draft_id === bridgedDraftId)
 
-      // Progress dedup: mirror getCampaignProgress's union — a bridged order
-      // (content_draft_id set) is counted via its content_draft, never twice.
-      const [{ data: cds }, { data: ords }] = await Promise.all([
-        a.from('content_drafts').select('status').eq('campaign_id', bridgeCampaignId),
-        a.from('creator_work_orders').select('status, content_draft_id').eq('campaign_id', bridgeCampaignId),
-      ])
-      const liveDrafts = (cds ?? []).filter((d) => !['rejected', 'failed', 'archived'].includes(d.status as string)).length
-      const unbridgedOrders = (ords ?? []).filter((o) => (o.status as string) !== 'declined' && !o.content_draft_id).length
-      s.eq('the bridged order is skipped in the order lane', unbridgedOrders, 0)
-      s.eq('progress counts the piece exactly once (via the draft)', liveDrafts + unbridgedOrders, 1)
+      // Progress dedup, liveness-aware (mirrors getCampaignProgress): a bridged order
+      // is counted via its LIVE draft, never twice — but if that draft dies, the
+      // order falls back through so the piece is never dropped from the total.
+      const countOnce = async () => {
+        const [{ data: cds }, { data: ords }] = await Promise.all([
+          a.from('content_drafts').select('id, status').eq('campaign_id', bridgeCampaignId),
+          a.from('creator_work_orders').select('status, content_draft_id').eq('campaign_id', bridgeCampaignId),
+        ])
+        const DEAD = ['rejected', 'failed', 'archived']
+        const alive = new Set((cds ?? []).filter((d) => !DEAD.includes(d.status as string)).map((d) => d.id as string))
+        const orders = (ords ?? []).filter((o) => (o.status as string) !== 'declined' && !(o.content_draft_id && alive.has(o.content_draft_id as string))).length
+        return alive.size + orders
+      }
+      s.eq('progress counts the piece exactly once (via the live draft)', await countOnce(), 1)
+
+      // Team rejects the bridged draft → the order falls back through, so the piece
+      // is NOT silently dropped from the total (the rank-4 vanish bug).
+      await a.from('content_drafts').update({ status: 'rejected' }).eq('id', bridgedDraftId)
+      s.eq('rejected draft → piece still counted once (no vanish)', await countOnce(), 1)
 
       if (bridgedDraftId) await a.from('content_drafts').delete().eq('id', bridgedDraftId)  // campaign_id set-null on delete, so remove explicitly
       await a.from('campaigns').delete().eq('id', bridgeCampaignId)

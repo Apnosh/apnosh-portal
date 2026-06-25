@@ -227,6 +227,11 @@ export async function updateCampaignFields(id: string, patch: Partial<{ name: st
 
 export async function deleteCampaign(id: string): Promise<void> {
   const admin = createAdminClient()
+  // This campaign's content_drafts have campaign_id ON DELETE SET NULL, so a bare
+  // delete would strand them as schedulable orphans (the team-materialized pieces
+  // AND the bridged creator pieces). Archive every non-published draft first so it
+  // leaves the team's publish/schedule queue; published work is left untouched.
+  await admin.from('content_drafts').update({ status: 'archived' }).eq('campaign_id', id).neq('status', 'published')
   await admin.from('campaigns').delete().eq('id', id)
 }
 
@@ -296,7 +301,7 @@ export async function materializeCampaignDrafts(campaign: SavedCampaign, shipISO
 export async function getCampaignProgress(campaignId: string): Promise<CampaignProgress | null> {
   const admin = createAdminClient()
   const [{ data: drafts }, { data: orders }] = await Promise.all([
-    admin.from('content_drafts').select('status, target_publish_date').eq('campaign_id', campaignId),
+    admin.from('content_drafts').select('id, status, target_publish_date').eq('campaign_id', campaignId),
     // select('*') so a missing content_draft_id column (pre-179) doesn't error.
     admin.from('creator_work_orders').select('*').eq('campaign_id', campaignId),
   ])
@@ -314,6 +319,10 @@ export async function getCampaignProgress(campaignId: string): Promise<CampaignP
   // in Phase 2 (the publish bridge); only the creator lane drives awaitingYou today.
   const DEAD = new Set(['rejected', 'failed', 'archived'])     // terminal: not real work
   const QUEUED = new Set(['scheduled', 'approved'])            // committed to go out
+  // A bridged order is counted via its content_draft ONLY while that draft is
+  // alive. If the team rejects/archives it, the order falls back through (creator
+  // lane, below) so the piece is never silently dropped from the total.
+  const aliveDraftIds = new Set((drafts ?? []).filter((d) => !DEAD.has((d.status as string) ?? '')).map((d) => d.id as string))
   for (const d of drafts ?? []) {
     const s = (d.status as string) ?? ''
     if (DEAD.has(s)) continue
@@ -330,9 +339,10 @@ export async function getCampaignProgress(campaignId: string): Promise<CampaignP
   for (const o of orders ?? []) {
     const s = (o.status as string) ?? ''
     if (s === 'declined') continue
-    // Bridged on approval → its content_draft now represents it in the team lane;
-    // skip here so an approved-and-bridged piece is counted once, not twice.
-    if (o.content_draft_id) continue
+    // Bridged on approval → its LIVE content_draft represents it in the team lane;
+    // skip here so the piece is counted once. If that draft was rejected/archived,
+    // fall through and count the order so the piece is never dropped from total.
+    if (o.content_draft_id && aliveDraftIds.has(o.content_draft_id as string)) continue
     total++
     if (s === 'approved') queued++
     else if (s === 'delivered') awaitingYou++

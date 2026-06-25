@@ -253,12 +253,14 @@ s.group('disciplineForType == role discipline (planner and seeding agree)')
   }
 }
 
-// ── E4. publish bridge row — approved creator piece → team publish draft ──
-s.group('buildBridgeDraftRow — approved piece carries into the publish queue')
+// ── E4. publish bridge row — approved creator piece → team finalization draft ──
+s.group('buildBridgeDraftRow — approved piece becomes a team draft (not auto-publishable)')
 {
   const row = buildBridgeDraftRow({ client_id: 'c1', campaign_id: 'camp1', title: 'Hero reel', due_date: '2026-07-10', delivered_url: 'https://x.com/a.mp4', brief_details: { creative: { caption: 'Taste it', hashtags: ['#a', '#b'] } } })
-  s.check('lands approved (team schedules + publishes, not auto-posted)', row.status === 'approved')
-  s.eq('delivered link becomes the draft media', row.media_urls.join(','), 'https://x.com/a.mp4')
+  s.check('lands as a team draft (team finalizes + schedules, never auto-posted)', row.status === 'draft')
+  s.eq('the delivery LINK stays OUT of media_urls (not platform media)', row.media_urls.length, 0)
+  s.eq('the link is kept in the media brief for the team to fetch', row.media_brief.source_delivery_url, 'https://x.com/a.mp4')
+  s.check('flagged creator-sourced', row.media_brief.from_creator === true)
   s.eq('brief caption carries over', row.caption, 'Taste it')
   s.eq('brief hashtags carry over', row.hashtags.join(','), '#a,#b')
   s.eq('due date becomes the publish date', row.target_publish_date, '2026-07-10')
@@ -266,11 +268,12 @@ s.group('buildBridgeDraftRow — approved piece carries into the publish queue')
   s.check('routed to the social service line', row.service_line === 'social')
 }
 {
-  // Garbage creative + no link + no title degrade safely (no crash, sane defaults).
-  const row = buildBridgeDraftRow({ client_id: 'c1', campaign_id: null, brief_details: { creative: { caption: 42 as unknown as string, hashtags: 'nope' as unknown as string[] } } })
-  s.check('non-string caption → null', row.caption === null)
+  // Garbage creative + unsafe link + no title degrade safely (no crash, sane defaults).
+  const row = buildBridgeDraftRow({ client_id: 'c1', campaign_id: null, delivered_url: 'javascript:alert(1)', brief_details: { creative: { caption: 'x'.repeat(5000), hashtags: 'nope' as unknown as string[] } } })
+  s.check('oversized caption is capped (not dropped)', (row.caption?.length ?? 0) === 2200)
   s.eq('non-array hashtags → empty', row.hashtags.length, 0)
-  s.eq('no delivered link → empty media', row.media_urls.length, 0)
+  s.eq('media is never a bare link', row.media_urls.length, 0)
+  s.check('an unsafe delivery link is dropped, not stored', !row.media_brief.source_delivery_url)
   s.eq('no title → fallback idea', row.idea, 'Creator piece')
   s.check('null campaign + no due tolerated', row.campaign_id === null && row.target_publish_date === null)
 }
