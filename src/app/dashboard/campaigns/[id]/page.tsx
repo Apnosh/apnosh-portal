@@ -14,7 +14,8 @@ import { playsFrom } from '@/lib/campaigns/plays'
 import { summarize, type LineItem, type OptOutReason } from '@/lib/campaigns/types'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { reconcileBeatsToLines } from '@/lib/campaigns/catalog'
-import { vibeForCampaign } from '@/lib/campaigns/creators'
+import { vibeForCampaign, creativeRolesForCampaign, creatorById } from '@/lib/campaigns/creators'
+import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import type { SavedCampaign, CampaignProgress } from '@/lib/campaigns/view'
 import { AUDIENCES, CHANNELS } from '@/lib/campaigns/data/campaign-templates'
 import PlayCard from '@/components/campaigns/play-card'
@@ -80,6 +81,19 @@ export default function CampaignDetailPage() {
       if (typeof window !== 'undefined') window.alert('Could not save that. Check your connection and try again.')
     }
   }
+  // Per-piece producer: who makes this piece, the in-house team or its creator.
+  // Send only the delta (the PATCH merges + caps it) and roll back on failure.
+  async function setProducer(key: string, producer: 'team' | 'creator') {
+    if (!camp) return
+    const prev = camp.producerChoices ?? {}
+    if (prev[key] === producer) return
+    setCamp({ ...camp, producerChoices: { ...prev, [key]: producer } })  // optimistic
+    const r = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { producer_choices: { [key]: producer } } }) }).catch(() => null)
+    if (!r || !r.ok) {
+      setCamp((c) => (c ? { ...c, producerChoices: prev } : c))
+      if (typeof window !== 'undefined') window.alert('Could not save who makes this piece. Check your connection and try again.')
+    }
+  }
 
   async function ship() {
     if (!camp) return
@@ -115,7 +129,7 @@ export default function CampaignDetailPage() {
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '18px 16px 28px' }}>
           {error ? <div style={{ color: '#c0392b', fontSize: 13.5, padding: '20px 0', textAlign: 'center' }}>{error}</div>
             : !camp ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: C.faint }}><Loader2 size={16} className="animate-spin" /> Loading…</div>
-            : <Detail camp={camp} progress={progress} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} />}
+            : <Detail camp={camp} progress={progress} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} />}
         </div>
 
         {camp && (
@@ -142,7 +156,7 @@ export default function CampaignDetailPage() {
   )
 }
 
-function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl }: {
+function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer }: {
   camp: SavedCampaign
   progress: CampaignProgress | null
   onToggleOptOut: (id: string, r: OptOutReason) => void
@@ -152,6 +166,7 @@ function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onS
   onSetStart: (iso: string) => void
   onChooseCreator: (discipline: string, creatorId: string) => void
   onSetCreativeControl: (mode: string) => void
+  onSetProducer: (key: string, producer: 'team' | 'creator') => void
 }) {
   const items = camp.draft.items
   const core = items.filter((i) => i.included)
@@ -252,6 +267,13 @@ function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onS
             const now = new Date()
             const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
             const sched = deriveSchedule({ targetDate: camp.draft.targetDate, occasion: camp.draft.occasion, contentBeats: planBeats }, todayISO)
+            // Per-piece producer routing, aligned 1:1 with sched.beats (same
+            // reconcile + schedule). creatorByDisc is the candidate creator we'd
+            // hand a piece to if the owner picks "creator", shown on the toggle.
+            const pieces = planCampaignPieces(camp, todayISO)
+            const roles = creativeRolesForCampaign(core, camp.creatorChoices ?? {}, vibeForCampaign(camp.draft.goalKey, camp.draft.occasion))
+            const creatorByDisc = new Map(roles.map((r) => [r.discipline, r.creator]))
+            const showProducer = !shipped && !diy
             return (
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
@@ -264,13 +286,32 @@ function Detail({ camp, progress, onToggleOptOut, onToggleInclude, onRemove, onS
                 {sched.mode === 'estimate' && (
                   <div style={{ fontSize: 11, color: '#9a5a00', background: 'rgba(245,170,70,0.14)', borderRadius: 8, padding: '6px 9px', marginBottom: 8, lineHeight: 1.4 }}>Estimated dates. Pick a start date above to lock the schedule.</div>
                 )}
-                {sched.beats.map((b, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '6px 0', fontSize: 12.5, borderTop: i === 0 ? 'none' : `1px solid ${C.line}` }}>
-                    <span style={{ flexShrink: 0, width: 86, fontSize: 11.5, fontWeight: 700, color: C.greenDk }}>{b.postLabel}</span>
-                    <span style={{ flex: 1, minWidth: 0, color: C.ink }}>{b.label}<span style={{ color: C.faint }}> · {b.relLabel}</span></span>
-                    {b.channel && <span style={{ flexShrink: 0, fontSize: 11, color: C.faint }}>{b.channel}</span>}
-                  </div>
-                ))}
+                {sched.beats.map((b, i) => {
+                  const piece = pieces[i]
+                  const cand = piece?.discipline ? creatorByDisc.get(piece.discipline) : undefined
+                  return (
+                    <div key={i} style={{ padding: '6px 0', borderTop: i === 0 ? 'none' : `1px solid ${C.line}` }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 12.5 }}>
+                        <span style={{ flexShrink: 0, width: 86, fontSize: 11.5, fontWeight: 700, color: C.greenDk }}>{b.postLabel}</span>
+                        <span style={{ flex: 1, minWidth: 0, color: C.ink }}>{b.label}<span style={{ color: C.faint }}> · {b.relLabel}</span></span>
+                        {b.channel && <span style={{ flexShrink: 0, fontSize: 11, color: C.faint }}>{b.channel}</span>}
+                      </div>
+                      {showProducer && piece && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 5, paddingLeft: 96 }}>
+                          {piece.discipline && cand ? (
+                            <>
+                              <span style={{ fontSize: 10.5, color: C.faint, flexShrink: 0 }}>Made by</span>
+                              <ProducerSeg active={piece.producer === 'team'} onClick={() => onSetProducer(piece.key!, 'team')}>Your team</ProducerSeg>
+                              <ProducerSeg active={piece.producer === 'creator'} onClick={() => onSetProducer(piece.key!, 'creator')}>{cand.name}</ProducerSeg>
+                            </>
+                          ) : (
+                            <span style={{ fontSize: 10.5, color: C.faint }}>Made by your team</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
                 {sched.tooSoon ? (
                   <div style={{ fontSize: 11, color: '#9a5a00', background: 'rgba(245,170,70,0.14)', borderRadius: 8, padding: '6px 9px', marginTop: 9, lineHeight: 1.4 }}>That date is sooner than we can produce these pieces. Pick a later date above to give the team runway.</div>
                 ) : (
@@ -304,6 +345,23 @@ function fmtDue(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`)
   if (isNaN(d.getTime())) return ''
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+function ProducerSeg({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      style={{
+        flexShrink: 0, borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', lineHeight: 1.3,
+        border: `1px solid ${active ? C.green : C.line}`,
+        background: active ? C.greenSoft : '#fff',
+        color: active ? C.greenDk : C.mute,
+      }}
+    >
+      {children}
+    </button>
+  )
 }
 
 function Row({ k, v }: { k: string; v: string }) {
