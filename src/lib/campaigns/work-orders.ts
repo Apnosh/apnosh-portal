@@ -283,7 +283,9 @@ export async function reconcileCampaignProduction(campaign: SavedCampaign): Prom
     if (!error) voided = rec.voidOrderIds.length
   }
   if (rec.archiveDraftIds.length) {
-    const { error } = await admin.from('content_drafts').update({ status: 'archived', updated_at: new Date().toISOString() }).in('id', rec.archiveDraftIds)
+    // 'rejected' is the content_drafts terminal dead state ('archived' is NOT in its
+    // status CHECK); getCampaignProgress already treats it as DEAD.
+    const { error } = await admin.from('content_drafts').update({ status: 'rejected', updated_at: new Date().toISOString() }).in('id', rec.archiveDraftIds)
     if (!error) archived = rec.archiveDraftIds.length
   }
   for (const u of rec.redateOrders) { await admin.from('creator_work_orders').update({ due_date: u.dueISO, updated_at: new Date().toISOString() }).eq('id', u.id); redated++ }

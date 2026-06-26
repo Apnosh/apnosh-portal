@@ -229,9 +229,11 @@ export async function deleteCampaign(id: string): Promise<void> {
   const admin = createAdminClient()
   // This campaign's content_drafts have campaign_id ON DELETE SET NULL, so a bare
   // delete would strand them as schedulable orphans (the team-materialized pieces
-  // AND the bridged creator pieces). Archive every non-published draft first so it
-  // leaves the team's publish/schedule queue; published work is left untouched.
-  await admin.from('content_drafts').update({ status: 'archived' }).eq('campaign_id', id).neq('status', 'published')
+  // AND the bridged creator pieces). Reject every non-published draft first so it
+  // leaves the team's publish/schedule queue ('rejected' is the table's terminal
+  // dead state — 'archived' is NOT in the content_drafts status CHECK); published
+  // work is left untouched.
+  await admin.from('content_drafts').update({ status: 'rejected' }).eq('campaign_id', id).neq('status', 'published')
   await admin.from('campaigns').delete().eq('id', id)
 }
 

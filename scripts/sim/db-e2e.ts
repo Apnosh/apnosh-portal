@@ -332,6 +332,10 @@ async function main() {
         const { data: d } = await a.from('content_drafts').insert({ client_id: TEST_CLIENT, campaign_id: pkCampaignId, idea: 'email piece', status: 'idea', service_line: 'email', proposed_via: 'strategist', campaign_piece_key: 'email:0' }).select('id, campaign_piece_key').single()
         const draftId = d?.id as string
         s.check('content_draft carries its campaign_piece_key (team-lane match handle)', d?.campaign_piece_key === 'email:0')
+        // The reconcile cancels a removed draft via status='rejected' (NOT 'archived',
+        // which the content_drafts CHECK forbids) — prove that write is legal.
+        const { error: cancelErr } = await a.from('content_drafts').update({ status: 'rejected' }).eq('id', draftId)
+        s.check("cancel via 'rejected' is a legal content_drafts status", !cancelErr, cancelErr?.message)
         // Re-mint idempotency: upsert the same order twice on (campaign,discipline,slot).
         const orderRow = { campaign_id: pkCampaignId, client_id: TEST_CLIENT, creator_id: 'v_maya', discipline: 'Video', slot: 0, title: 'reel', brief: 'x', status: 'offered', concept_status: 'approved', amount_cents: 12000, due_date: null }
         await a.from('creator_work_orders').upsert(orderRow, { onConflict: 'campaign_id,discipline,slot', ignoreDuplicates: true })
