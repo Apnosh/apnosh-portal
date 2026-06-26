@@ -10,7 +10,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { CampaignDraft, LineItem, CampaignBrief, BillingCadence } from './types'
-import { planCampaignPieces } from './work-orders-core'
+import { planCampaignPieces, teamDraftRowForPiece } from './work-orders-core'
 import type { StageId } from './stages'
 import type { SavedCampaign, CampaignProgress } from './view'
 
@@ -241,14 +241,6 @@ export async function deleteCampaign(id: string): Promise<void> {
    substance). The team then produces + schedules them; the publish-scheduled
    cron sends them. Nothing here can auto-publish (drafts are created 'idea'). */
 
-const DRAFT_SERVICE_LINE: Record<string, string> = {
-  reel: 'social', photo: 'social', post: 'social', story: 'social', email: 'email', sms: 'email',
-}
-function draftServiceLine(beat: { type?: string; channel?: string }): string {
-  const ch = (beat.channel || '').toLowerCase()
-  if (ch.includes('google') || ch.includes('gbp') || ch.includes('maps')) return 'local'
-  return DRAFT_SERVICE_LINE[beat.type ?? ''] ?? 'social'
-}
 /**
  * Materialize a shipped campaign's TEAM-assigned pieces as content_drafts (status
  * 'idea') for the production team. The producer split lives in planCampaignPieces:
@@ -277,16 +269,16 @@ export async function materializeCampaignDrafts(campaign: SavedCampaign, shipISO
   // clean no-op rather than logging a failed insert.
   if (existErr) return 0
   if (existing && existing.length) return 0
-  const rows = teamPieces.map((p) => ({
-    client_id: campaign.clientId,
-    campaign_id: campaign.draft.id,
-    idea: (p.label || 'Campaign piece').slice(0, 280),
-    status: 'idea',
-    service_line: draftServiceLine({ type: p.type, channel: p.channel }),
-    proposed_via: 'strategist',
-    target_publish_date: p.postISO,    // already clamped to >= ship day in the planner
-  }))
-  const { error } = await admin.from('content_drafts').insert(rows)
+  // teamDraftRowForPiece stamps campaign_piece_key (for the post-ship reconcile) +
+  // service line; target_publish_date is already clamped to >= ship day by the planner.
+  const rows = teamPieces.map((p) => teamDraftRowForPiece(campaign, p))
+  let { error } = await admin.from('content_drafts').insert(rows)
+  if (error && error.code === '42703') {
+    // Pre-migration 182 (campaign_piece_key absent) — insert without the key so a
+    // ship never breaks; the reconcile just can't match these team drafts until 182.
+    const stripped = rows.map((r) => { const c = { ...r } as Record<string, unknown>; delete c.campaign_piece_key; return c })
+    ;({ error } = await admin.from('content_drafts').insert(stripped))
+  }
   if (error) throw new Error(`materialize campaign drafts: ${error.message}`)
   return rows.length
 }

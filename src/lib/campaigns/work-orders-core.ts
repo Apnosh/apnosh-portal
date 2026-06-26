@@ -100,7 +100,9 @@ export interface PlannedPiece {
   postISO: string | null      // the day it goes out, clamped to >= ship day
   discipline: Disc | null     // null for non-creative beats (email/sms)
   slot: number | null         // 0-based index within the discipline, null if none
-  key: string | null          // discipline:slot — the producer_choices key
+  key: string                 // group:slot, stable per piece — "Video:0" | "email:1".
+                              // For creative pieces (discipline set) this IS the
+                              // producer_choices key; also the reconcile match key for both lanes.
   producer: Producer          // the ONE lane that makes it
   creatorId: string | null    // the assigned creator when producer === 'creator'
   priceCents: number          // the owner's price for this one piece (CONTENT_META)
@@ -129,7 +131,7 @@ export function planCampaignPieces(campaign: SavedCampaign, shipISO: string): Pl
   )
   const shipDay = (shipISO || '').slice(0, 10)
   const choices = campaign.producerChoices ?? {}
-  const slotByDiscipline: Record<string, number> = {}
+  const slotByGroup: Record<string, number> = {}
   // Price each piece from the owner's OWN line price (the same source the honest
   // bill sums), so the accrued charge can never diverge from the quoted plan; fall
   // back to the catalog default only if no line is found.
@@ -142,15 +144,20 @@ export function planCampaignPieces(campaign: SavedCampaign, shipISO: string): Pl
   return sched.beats.map((b, index) => {
     const discipline = disciplineForType(b.type)
     const creator = discipline ? creatorByDiscipline.get(discipline) : undefined
-    const slot = discipline ? (slotByDiscipline[discipline] = (slotByDiscipline[discipline] ?? -1) + 1) : null
-    const key = discipline && slot != null ? pieceKey(discipline, slot) : null
+    // Every piece gets a stable key by its group (discipline for creative, beat type
+    // for non-creative) + its slot within that group, so both lanes can match it on
+    // a reconcile. For creative pieces key === pieceKey(discipline, slot).
+    const group = discipline ?? b.type
+    const slotInGroup = (slotByGroup[group] = (slotByGroup[group] ?? -1) + 1)
+    const slot = discipline ? slotInGroup : null
+    const key = `${group}:${slotInGroup}`
     // Clamp each piece's post date to the ship day so a backward-anchored (event)
     // or too-soon campaign never produces a piece dated before it was ordered.
     const postISO = b.postISO && shipDay && b.postISO < shipDay ? shipDay : (b.postISO ?? null)
     let producer: Producer = 'team'
     let creatorId: string | null = null
     if (discipline && creator) {
-      const choice = key ? choices[key] : undefined
+      const choice = choices[key]
       producer = choice === 'team' || choice === 'creator' ? choice : DEFAULT_PRODUCER
       creatorId = producer === 'creator' ? creator.id : null
     }
@@ -166,28 +173,119 @@ export function planCampaignPieces(campaign: SavedCampaign, shipISO: string): Pl
  * nothing is creator-run. Pure — the DB write + idempotency live in mintWorkOrders.
  */
 export function buildWorkOrderRows(campaign: SavedCampaign, shipISO: string): WorkOrderRow[] {
+  return planCampaignPieces(campaign, shipISO)
+    .map((p) => workOrderRowForPiece(campaign, p))
+    .filter((r): r is WorkOrderRow => r !== null)
+}
+
+/** The order row for ONE planned piece, or null if the piece isn't creator-run.
+ *  Used by buildWorkOrderRows (initial ship) AND the post-ship reconcile (mint a
+ *  newly-added piece), so both produce identical rows. */
+export function workOrderRowForPiece(campaign: SavedCampaign, p: PlannedPiece): WorkOrderRow | null {
+  if (p.producer !== 'creator' || !p.discipline || !p.creatorId || p.slot == null) return null
   const objective = campaign.draft.brief?.objective ?? ''
   const name = campaign.draft.name
-  // approve_concept holds production until the owner OKs the idea.
   const conceptStatus: 'approved' | 'pending' = campaign.creativeControl === 'approve_concept' ? 'pending' : 'approved'
-  const rows: WorkOrderRow[] = []
-  for (const p of planCampaignPieces(campaign, shipISO)) {
-    if (p.producer !== 'creator' || !p.discipline || !p.creatorId || p.slot == null) continue
-    rows.push({
-      campaign_id: campaign.draft.id,
-      client_id: campaign.clientId,
-      creator_id: p.creatorId,
-      discipline: p.discipline,
-      slot: p.slot,
-      title: p.label.trim() ? p.label.trim() : `${p.discipline} for ${name}`,
-      brief: `Make this ${p.discipline.toLowerCase()} piece for "${name}".${objective ? ` Goal: ${objective}.` : ''} You approve nothing yet — deliver, then the owner reviews.`,
-      due_date: p.postISO,
-      status: 'offered' as const,
-      concept_status: conceptStatus,
-      amount_cents: p.priceCents,
-    })
+  return {
+    campaign_id: campaign.draft.id,
+    client_id: campaign.clientId,
+    creator_id: p.creatorId,
+    discipline: p.discipline,
+    slot: p.slot,
+    title: p.label.trim() ? p.label.trim() : `${p.discipline} for ${name}`,
+    brief: `Make this ${p.discipline.toLowerCase()} piece for "${name}".${objective ? ` Goal: ${objective}.` : ''} You approve nothing yet — deliver, then the owner reviews.`,
+    due_date: p.postISO,
+    status: 'offered',
+    concept_status: conceptStatus,
+    amount_cents: p.priceCents,
   }
-  return rows
+}
+
+/** Which content_drafts service line a piece maps to (social by default; email for
+ *  email/sms; local for a Google/GBP/Maps channel). Pure — shared by materialize +
+ *  the reconcile so the two never disagree. */
+export function serviceLineForPiece(type: string, channel?: string): string {
+  const ch = (channel || '').toLowerCase()
+  if (ch.includes('google') || ch.includes('gbp') || ch.includes('maps')) return 'local'
+  const byType: Record<string, string> = { reel: 'social', photo: 'social', post: 'social', story: 'social', email: 'email', sms: 'email' }
+  return byType[type] ?? 'social'
+}
+
+/** The content_drafts row for ONE team-run piece (status 'idea'), stamped with its
+ *  campaign_piece_key so a later reconcile can match it back to the plan. */
+export interface TeamDraftRow {
+  client_id: string
+  campaign_id: string
+  idea: string
+  status: 'idea'
+  service_line: string
+  proposed_via: 'strategist'
+  target_publish_date: string | null
+  campaign_piece_key: string
+}
+export function teamDraftRowForPiece(campaign: SavedCampaign, p: PlannedPiece): TeamDraftRow {
+  return {
+    client_id: campaign.clientId,
+    campaign_id: campaign.draft.id,
+    idea: (p.label || 'Campaign piece').slice(0, 280),
+    status: 'idea',
+    service_line: serviceLineForPiece(p.type, p.channel),
+    proposed_via: 'strategist',
+    target_publish_date: p.postISO,
+    campaign_piece_key: p.key,
+  }
+}
+
+/* ── Post-ship production reconcile (Phase 5b) ─────────────────────────────────
+   When a SHIPPED campaign's plan changes, re-sync production to it WITHOUT
+   disrupting work in flight. Pure: it computes the actions; the server applies. */
+
+export interface ReconcileExistingOrder { id: string; key: string; status: string; dueISO: string | null }
+export interface ReconcileExistingDraft { id: string; key: string; status: string; dateISO: string | null }
+export interface ProductionReconcile {
+  mintCreator: PlannedPiece[]                          // new creator pieces with no order
+  materializeTeam: PlannedPiece[]                      // new team pieces with no draft
+  voidOrderIds: string[]                               // creator orders removed from the plan (not started)
+  archiveDraftIds: string[]                            // team drafts removed from the plan (not produced)
+  redateOrders: { id: string; dueISO: string | null }[]
+  redateDrafts: { id: string; dateISO: string | null }[]
+}
+
+// A creator order is only cancellable before the creator commits; once in_progress
+// (or delivered/approved/revision) it is protected. Re-dating is locked once a piece
+// is delivered/approved. A team draft is only mutable while it is still editorial
+// (idea/draft/revising) — never once produced/approved/scheduled/published.
+const ORDER_VOIDABLE = new Set(['offered', 'accepted'])
+const ORDER_REDATE_LOCKED = new Set(['delivered', 'approved', 'declined'])
+const DRAFT_MUTABLE = new Set(['idea', 'draft', 'revising'])
+
+export function reconcileProductionPlan(
+  plan: PlannedPiece[],
+  existingOrders: ReconcileExistingOrder[],
+  existingDrafts: ReconcileExistingDraft[],
+): ProductionReconcile {
+  const planCreator = plan.filter((p) => p.producer === 'creator' && p.creatorId)
+  const planTeam = plan.filter((p) => p.producer === 'team')
+  const planCreatorByKey = new Map(planCreator.map((p) => [p.key, p]))
+  const planTeamByKey = new Map(planTeam.map((p) => [p.key, p]))
+  const orderByKey = new Map(existingOrders.map((o) => [o.key, o]))
+  const draftByKey = new Map(existingDrafts.map((d) => [d.key, d]))
+  const r: ProductionReconcile = { mintCreator: [], materializeTeam: [], voidOrderIds: [], archiveDraftIds: [], redateOrders: [], redateDrafts: [] }
+
+  for (const p of planCreator) if (!orderByKey.has(p.key)) r.mintCreator.push(p)
+  for (const o of existingOrders) {
+    const p = planCreatorByKey.get(o.key)
+    if (!p) { if (ORDER_VOIDABLE.has(o.status)) r.voidOrderIds.push(o.id) }
+    else if (!ORDER_REDATE_LOCKED.has(o.status) && (o.dueISO ?? null) !== (p.postISO ?? null)) r.redateOrders.push({ id: o.id, dueISO: p.postISO })
+  }
+
+  for (const p of planTeam) if (!draftByKey.has(p.key)) r.materializeTeam.push(p)
+  for (const d of existingDrafts) {
+    const p = planTeamByKey.get(d.key)
+    if (!p) { if (DRAFT_MUTABLE.has(d.status)) r.archiveDraftIds.push(d.id) }
+    else if (DRAFT_MUTABLE.has(d.status) && (d.dateISO ?? null) !== (p.postISO ?? null)) r.redateDrafts.push({ id: d.id, dateISO: p.postISO })
+  }
+  return r
 }
 
 /** The campaign_charges insert payload for an accepted creator piece. Pure so the

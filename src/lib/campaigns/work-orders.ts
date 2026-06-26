@@ -8,7 +8,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyStaffForClient } from '@/lib/notifications'
 import { creatorById } from './creators'
-import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, DEFAULT_PLATFORM_FEE, validateTransition, IllegalTransition, type WorkOrderStatus } from './work-orders-core'
+import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, DEFAULT_PLATFORM_FEE, validateTransition, IllegalTransition, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
 import type { SavedCampaign, CampaignCharges, CreatorEarnings } from './view'
 
 export type { WorkOrderStatus }
@@ -240,6 +240,55 @@ export async function getCreatorEarnings(creatorId: string): Promise<CreatorEarn
     if (p.status === 'paid') paidCents += n
   }
   return { netCents, paidCents, count: data.length }
+}
+
+/**
+ * Post-ship production reconcile: when a SHIPPED campaign's plan changes, re-sync the
+ * creator orders + team drafts to it WITHOUT disrupting work in flight — mint newly
+ * added pieces, void removed-and-not-started ones, archive removed-and-still-editorial
+ * drafts, and re-date moved pieces that aren't locked. Best-effort, idempotent (the
+ * diff only acts on real differences; mint upserts on the per-piece unique). Returns
+ * the action counts. Pass the POST-edit SavedCampaign.
+ */
+export async function reconcileCampaignProduction(campaign: SavedCampaign): Promise<{ minted: number; materialized: number; voided: number; archived: number; redated: number }> {
+  const admin = createAdminClient()
+  const campaignId = campaign.draft.id
+  const ZERO = { minted: 0, materialized: 0, voided: 0, archived: 0, redated: 0 }
+  // Anchor to now so dates clamp forward (no past-dated pieces); target_date locked at
+  // ship keeps event/start-mode dates stable regardless.
+  const plan = planCampaignPieces(campaign, new Date().toISOString())
+
+  const [{ data: orders, error: oErr }, { data: drafts }] = await Promise.all([
+    admin.from('creator_work_orders').select('id, discipline, slot, status, due_date').eq('campaign_id', campaignId),
+    admin.from('content_drafts').select('id, campaign_piece_key, status, target_publish_date').eq('campaign_id', campaignId).not('campaign_piece_key', 'is', null),
+  ])
+  if (oErr) return ZERO   // pre-migration / read failure → no-op
+  const existingOrders = (orders ?? []).map((o) => ({ id: o.id as string, key: `${o.discipline as string}:${o.slot as number}`, status: (o.status as string) ?? '', dueISO: (o.due_date as string | null) ?? null }))
+  const existingDrafts = (drafts ?? []).map((d) => ({ id: d.id as string, key: (d.campaign_piece_key as string) ?? '', status: (d.status as string) ?? '', dateISO: (d.target_publish_date as string | null) ?? null }))
+  const rec = reconcileProductionPlan(plan, existingOrders, existingDrafts)
+
+  let minted = 0, materialized = 0, voided = 0, archived = 0, redated = 0
+  const orderRows = rec.mintCreator.map((p) => workOrderRowForPiece(campaign, p)).filter((r): r is WorkOrderRow => r !== null)
+  if (orderRows.length) {
+    const { error } = await admin.from('creator_work_orders').upsert(orderRows, { onConflict: 'campaign_id,discipline,slot', ignoreDuplicates: true })
+    if (!error) minted = orderRows.length
+  }
+  const draftRows = rec.materializeTeam.map((p) => teamDraftRowForPiece(campaign, p))
+  if (draftRows.length) {
+    const { error } = await admin.from('content_drafts').insert(draftRows)
+    if (!error) materialized = draftRows.length
+  }
+  if (rec.voidOrderIds.length) {
+    const { error } = await admin.from('creator_work_orders').update({ status: 'declined', note: 'Removed from the plan', updated_at: new Date().toISOString() }).in('id', rec.voidOrderIds)
+    if (!error) voided = rec.voidOrderIds.length
+  }
+  if (rec.archiveDraftIds.length) {
+    const { error } = await admin.from('content_drafts').update({ status: 'archived', updated_at: new Date().toISOString() }).in('id', rec.archiveDraftIds)
+    if (!error) archived = rec.archiveDraftIds.length
+  }
+  for (const u of rec.redateOrders) { await admin.from('creator_work_orders').update({ due_date: u.dueISO, updated_at: new Date().toISOString() }).eq('id', u.id); redated++ }
+  for (const u of rec.redateDrafts) { await admin.from('content_drafts').update({ target_publish_date: u.dateISO, updated_at: new Date().toISOString() }).eq('id', u.id); redated++ }
+  return { minted, materialized, voided, archived, redated }
 }
 
 /** Whether a campaign has any non-void owner charge or creator payout. Used to block

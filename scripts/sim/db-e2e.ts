@@ -319,6 +319,29 @@ async function main() {
         await a.from('campaigns').delete().eq('id', rcCampaignId)                 // cascades the orders + charges
       }
     }
+
+    // ── post-ship reconcile: piece-key stamp + idempotent re-mint ──
+    s.group('reconcile: piece-key stamp + idempotent re-mint')
+    const { error: pkColErr } = await a.from('content_drafts').select('campaign_piece_key').limit(1)
+    if (pkColErr) {
+      s.check('reconcile: skipped — apply migration 182 then re-run', true, 'campaign_piece_key absent (pre-182)')
+    } else {
+      const { data: c7 } = await a.from('campaigns').insert({ client_id: TEST_CLIENT, name: TEST_NAME, path: 'strategist', status: 'shipped', phase: 'monitor' }).select('id').single()
+      const pkCampaignId = c7?.id as string
+      if (pkCampaignId) {
+        const { data: d } = await a.from('content_drafts').insert({ client_id: TEST_CLIENT, campaign_id: pkCampaignId, idea: 'email piece', status: 'idea', service_line: 'email', proposed_via: 'strategist', campaign_piece_key: 'email:0' }).select('id, campaign_piece_key').single()
+        const draftId = d?.id as string
+        s.check('content_draft carries its campaign_piece_key (team-lane match handle)', d?.campaign_piece_key === 'email:0')
+        // Re-mint idempotency: upsert the same order twice on (campaign,discipline,slot).
+        const orderRow = { campaign_id: pkCampaignId, client_id: TEST_CLIENT, creator_id: 'v_maya', discipline: 'Video', slot: 0, title: 'reel', brief: 'x', status: 'offered', concept_status: 'approved', amount_cents: 12000, due_date: null }
+        await a.from('creator_work_orders').upsert(orderRow, { onConflict: 'campaign_id,discipline,slot', ignoreDuplicates: true })
+        await a.from('creator_work_orders').upsert(orderRow, { onConflict: 'campaign_id,discipline,slot', ignoreDuplicates: true })
+        const { data: os } = await a.from('creator_work_orders').select('id').eq('campaign_id', pkCampaignId)
+        s.eq('re-mint upsert is idempotent (one order, not two)', os?.length ?? 0, 1)
+        if (draftId) await a.from('content_drafts').delete().eq('id', draftId)  // set-null on campaign delete, so remove first
+        await a.from('campaigns').delete().eq('id', pkCampaignId)               // cascades the order
+      }
+    }
   } finally {
     // ── teardown: cascade removes the orders ───────────────────────────
     await a.from('campaigns').delete().eq('id', campaignId)

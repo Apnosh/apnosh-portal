@@ -6,7 +6,7 @@
  */
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { creativeRolesForCampaign, vibeForCampaign, creatorPool, disciplineForType, type Disc } from '@/lib/campaigns/creators'
-import { buildWorkOrderRows, planCampaignPieces, buildBridgeDraftRow, buildChargeRow, computePayout, buildPayoutRow, findUnaccrued, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
+import { buildWorkOrderRows, planCampaignPieces, buildBridgeDraftRow, buildChargeRow, computePayout, buildPayoutRow, findUnaccrued, reconcileProductionPlan, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
 import { composeCampaign } from '@/lib/campaigns/campaign-composer'
 import { buildContentLine, CONTENT_META, reconcileBeatsToLines } from '@/lib/campaigns/catalog'
 import { CAMPAIGN_TEMPLATES } from '@/lib/campaigns/data/campaign-templates'
@@ -229,7 +229,7 @@ s.group('planCampaignPieces — producer_choices re-routes, not ignored')
     const content = Array.from({ length: k }, (_, j) => pick(CREATIVE, i * 2 + j))
     const targetDate = addDays(TODAY, 10 + (i % 30))
     const base = campaignFor({ name: `flip-${i}`, content, beats: k, goalKey: pick(GOALS, i), targetDate })
-    const target = planCampaignPieces(base, SHIP).find((p) => p.key && p.producer === 'team')   // a team piece (the default)
+    const target = planCampaignPieces(base, SHIP).find((p) => p.discipline && p.producer === 'team')   // a creative team piece (the default)
     if (!target?.key) continue
     flipsRun++
     const before = buildWorkOrderRows(base, SHIP).length
@@ -369,6 +369,39 @@ s.group('findUnaccrued — recovers gaps, skips present + unpriced')
   const { needCharge, needPayout } = findUnaccrued([{ id: 'x', amount_cents: 5000 }], new Set(['x']), new Set(['x']))
   s.eq('fully-accrued → no charge gaps', needCharge.length, 0)
   s.eq('fully-accrued → no payout gaps', needPayout.length, 0)
+}
+
+// ── E8. reconcileProductionPlan — re-sync without disrupting in-flight ──
+s.group('reconcileProductionPlan — add / void / re-date, protect in-flight')
+{
+  const camp = campaignFor({ name: 'Recon', content: ['reel', 'reel', 'email'], beats: 3, creatorAll: true })
+  const plan = planCampaignPieces(camp, SHIP)
+  const v0 = plan.find((p) => p.key === 'Video:0')!
+  const existingOrders = [
+    { id: 'o0', key: 'Video:0', status: 'offered', dueISO: v0.postISO },          // unchanged
+    { id: 'o2', key: 'Video:2', status: 'offered', dueISO: '2099-01-01' },        // removed, not started → void
+    { id: 'o3', key: 'Video:3', status: 'in_progress', dueISO: '2099-01-01' },    // removed but in flight → protect
+  ]
+  const existingDrafts = [
+    { id: 'd0', key: 'email:0', status: 'idea', dateISO: '2099-01-01' },          // still planned, wrong date → re-date
+    { id: 'dX', key: 'post:9', status: 'idea', dateISO: '2099-01-01' },           // removed, editorial → archive
+    { id: 'dP', key: 'post:8', status: 'published', dateISO: '2099-01-01' },      // removed but live → protect
+  ]
+  const r = reconcileProductionPlan(plan, existingOrders, existingDrafts)
+  s.check('mints the added creator piece (Video:1)', r.mintCreator.length === 1 && r.mintCreator[0].key === 'Video:1')
+  s.check('voids the removed, not-started order (o2)', r.voidOrderIds.length === 1 && r.voidOrderIds[0] === 'o2')
+  s.check('protects the in-flight removed order (o3)', !r.voidOrderIds.includes('o3'))
+  s.check('re-dates the moved team draft (d0)', r.redateDrafts.some((u) => u.id === 'd0'))
+  s.check('does NOT re-date the unchanged order (o0)', !r.redateOrders.some((u) => u.id === 'o0'))
+  s.check('archives the removed editorial draft (dX)', r.archiveDraftIds.includes('dX'))
+  s.check('protects the published removed draft (dP)', !r.archiveDraftIds.includes('dP'))
+}
+{
+  const camp = campaignFor({ name: 'Stable', content: ['reel'], beats: 1, creatorAll: true })
+  const plan = planCampaignPieces(camp, SHIP)
+  const v0 = plan.find((p) => p.producer === 'creator')!
+  const r = reconcileProductionPlan(plan, [{ id: 'o0', key: v0.key, status: 'offered', dueISO: v0.postISO }], [])
+  s.check('unchanged plan → no actions', r.mintCreator.length === 0 && r.voidOrderIds.length === 0 && r.redateOrders.length === 0 && r.materializeTeam.length === 0 && r.archiveDraftIds.length === 0)
 }
 
 // ── F. bill = calendar = production after owner edits (guards #3, #4) ────

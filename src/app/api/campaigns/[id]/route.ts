@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
-import { mintWorkOrders, clearCampaignBriefCache, getCampaignCharges, campaignHasAccruedMoney } from '@/lib/campaigns/work-orders'
+import { mintWorkOrders, clearCampaignBriefCache, getCampaignCharges, campaignHasAccruedMoney, reconcileCampaignProduction } from '@/lib/campaigns/work-orders'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
@@ -156,6 +156,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         link: `/work/campaigns?focus=${id}`,
       }).catch(() => ({ notified: 0 }))
     }
+  }
+  // Editing an ALREADY-shipped campaign (not the initial ship) → reconcile production
+  // to the new plan: mint added pieces, void removed-and-not-started ones, re-date the
+  // moved. Best-effort; never blocks the save. DIY ships mint nothing, so nothing to sync.
+  if (!justShipped && campaign.status === 'shipped' && campaign.draft.path !== 'diy' && (Array.isArray(body.items) || body.fields?.target_date !== undefined)) {
+    const updated = await getCampaign(id)
+    if (updated) await reconcileCampaignProduction(updated).catch(() => null)
   }
   return NextResponse.json({ campaign: await getCampaign(id) })
 }
