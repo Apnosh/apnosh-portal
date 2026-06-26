@@ -158,9 +158,9 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
   // accrue the owner charge. Both best-effort — a failure here must never undo a
   // valid approval, and each is independently idempotent.
   if (patch.status === 'approved') {
-    await bridgeApprovedOrderToDraft(id).catch(() => null)
-    await accrueChargeForApprovedOrder(id).catch(() => null)
-    await accruePayoutForApprovedOrder(id).catch(() => null)
+    await bridgeApprovedOrderToDraft(id).catch((e) => { console.error('bridge threw', id, e); return null })
+    await accrueChargeForApprovedOrder(id).catch((e) => { console.error('accrueCharge threw', id, e); return null })
+    await accruePayoutForApprovedOrder(id).catch((e) => { console.error('accruePayout threw', id, e); return null })
   }
 }
 
@@ -174,7 +174,10 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
 export async function accruePayoutForApprovedOrder(orderId: string): Promise<boolean> {
   const admin = createAdminClient()
   const { data: o, error } = await admin.from('creator_work_orders').select('*').eq('id', orderId).single()
-  if (error || !o || o.status !== 'approved') return false
+  // A real read failure must not look like "not approved" + vanish — log it so the
+  // drop is observable (the durable recovery is the Phase 5 reconcile sweep).
+  if (error) { console.error('accruePayout: order read failed', orderId, error.message); return false }
+  if (!o || o.status !== 'approved') return false
   if (!('amount_cents' in o)) return false   // pre-180: no price to split → silent no-op
   // Seeded pool creators have no vendor record yet → the platform default take-rate.
   // Real vendors override from vendors.platform_fee_percent once supply is real (Phase 5).
@@ -185,6 +188,17 @@ export async function accruePayoutForApprovedOrder(orderId: string): Promise<boo
     creator_id: (o.creator_id as string) ?? '',
     amount_cents: (o.amount_cents as number) ?? 0,
   }, DEFAULT_PLATFORM_FEE)
+  // A payout with no creator is unclaimable AND would consume the one-per-piece
+  // slot — flag it instead of stranding it.
+  if (!row.creator_id.trim()) {
+    await notifyStaffForClient(row.client_id, ['strategist'], {
+      kind: 'client_signoff',
+      title: 'Approved piece has no creator to pay',
+      body: 'A creator piece was approved with no assigned creator. Assign one and accrue the payout manually.',
+      link: `/work/campaigns?focus=${row.campaign_id ?? ''}`,
+    }).catch(() => ({ notified: 0 }))
+    return false
+  }
   if (row.gross_cents <= 0) {
     await notifyStaffForClient(row.client_id, ['strategist'], {
       kind: 'client_signoff',
@@ -197,7 +211,7 @@ export async function accruePayoutForApprovedOrder(orderId: string): Promise<boo
   const { error: insErr } = await admin.from('creator_payouts').insert(row)
   if (insErr) {
     if (insErr.code === '23505') return true                          // already accrued (idempotent)
-    if (insErr.code === '42P01' || insErr.code === '42703') return false   // pre-181 → silent no-op
+    if (insErr.code === '42P01') return false                         // table absent (pre-181) → silent no-op
     await notifyStaffForClient(row.client_id, ['strategist'], {
       kind: 'client_signoff',
       title: 'Creator payout failed to record',
@@ -228,6 +242,19 @@ export async function getCreatorEarnings(creatorId: string): Promise<CreatorEarn
   return { netCents, paidCents, count: data.length }
 }
 
+/** Whether a campaign has any non-void owner charge or creator payout. Used to block
+ *  deleting a campaign that has billed/owed money — a delete would erase the owner
+ *  charge (cascade) yet strand the creator payout (set-null), losing its provenance.
+ *  Degrades to false (allow delete) pre-180/181 (tables absent → query error). */
+export async function campaignHasAccruedMoney(campaignId: string): Promise<boolean> {
+  const admin = createAdminClient()
+  const [{ data: ch }, { data: po }] = await Promise.all([
+    admin.from('campaign_charges').select('id').eq('campaign_id', campaignId).neq('status', 'void').limit(1),
+    admin.from('creator_payouts').select('id').eq('campaign_id', campaignId).neq('status', 'void').limit(1),
+  ])
+  return !!(ch && ch.length) || !!(po && po.length)
+}
+
 /**
  * Money-in: when the owner approves a delivered creator piece, accrue the owner
  * charge for it (the price locked on the order at ship). Accrual ONLY — nothing is
@@ -240,7 +267,8 @@ export async function accrueChargeForApprovedOrder(orderId: string): Promise<boo
   const admin = createAdminClient()
   // select('*') so a missing amount_cents column (pre-180) doesn't error the read.
   const { data: o, error } = await admin.from('creator_work_orders').select('*').eq('id', orderId).single()
-  if (error || !o || o.status !== 'approved') return false
+  if (error) { console.error('accrueCharge: order read failed', orderId, error.message); return false }
+  if (!o || o.status !== 'approved') return false
   // Pre-migration 180 (amount_cents + campaign_charges absent) → silent no-op, never
   // a dead-letter. select('*') omits a missing column, so the key is absent here.
   if (!('amount_cents' in o)) return false

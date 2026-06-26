@@ -70,7 +70,7 @@ function Inbox() {
           {earnings && earnings.count > 0 && (
             <div className="text-right">
               <p className="text-base font-semibold text-emerald-700">${(earnings.netCents / 100).toFixed(earnings.netCents % 100 === 0 ? 0 : 2)}</p>
-              <p className="text-[10.5px] text-neutral-400">earned · {earnings.paidCents < earnings.netCents ? 'not paid out yet' : 'paid out'}</p>
+              <p className="text-[10.5px] text-neutral-400">{earnings.paidCents < earnings.netCents ? 'pending payout' : 'paid out'}</p>
             </div>
           )}
         </div>

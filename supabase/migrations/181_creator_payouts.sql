@@ -19,7 +19,10 @@ create table if not exists creator_payouts (
   fee_cents     int  not null default 0,                 -- Apnosh's cut
   net_cents     int  not null default 0,                 -- the creator's earnings (gross - fee)
   status        text not null default 'accrued' check (status in ('accrued','payable','paid','void')),
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null default now(),
+  -- Cent conservation, enforced at the DB so no writer can ever create or lose money
+  -- in the split (computePayout already guarantees this; this is the backstop).
+  constraint creator_payouts_cents_conserve check (fee_cents >= 0 and net_cents >= 0 and fee_cents + net_cents = gross_cents)
 );
 
 -- One payout per piece (accrual is idempotent on the order).

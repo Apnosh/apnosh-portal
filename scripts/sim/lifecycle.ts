@@ -330,6 +330,26 @@ s.group('creator payout — fee split + accrual')
   s.eq('garbage gross floors to 0', z.gross_cents, 0)
   s.eq('zero gross → zero net', z.net_cents, 0)
 }
+{
+  // Cross-ledger reconciliation: ONE order → the owner charge and the creator payout
+  // must agree on the gross, so money-in and money-out can never drift.
+  const order = { id: 'wo9', client_id: 'c1', campaign_id: 'camp1', creator_id: 'v_maya', amount_cents: 9999 }
+  const charge = buildChargeRow(order)
+  const payout = buildPayoutRow(order, 20)
+  s.eq('charge-in gross == payout-out gross (same order)', charge.amount_cents, payout.gross_cents)
+  s.eq('and both == the order amount', payout.gross_cents, 9999)
+}
+{
+  // Cent conservation across fractional rates + odd grosses (the DB CHECK backstops it).
+  let bad = 0
+  for (const gross of [4, 333, 9999, 12345, 1]) {
+    for (const pct of [12.5, 33.33, 7.77, 99.99, 0, 100]) {
+      const { feeCents, netCents } = computePayout(gross, pct)
+      if (feeCents + netCents !== gross || feeCents < 0 || netCents < 0 || feeCents > gross) bad++
+    }
+  }
+  s.eq('fee + net == gross for every fractional rate × odd gross (no cent lost)', bad, 0)
+}
 
 // ── F. bill = calendar = production after owner edits (guards #3, #4) ────
 s.group('reconcileBeatsToLines — bill = calendar = production after edits')

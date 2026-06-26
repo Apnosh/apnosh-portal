@@ -274,6 +274,14 @@ async function main() {
         const { data: po } = await a.from('creator_payouts').select('net_cents').eq('campaign_id', poCampaignId).in('status', ['accrued', 'payable', 'paid'])
         s.eq('exactly one payout for this campaign', po?.length ?? 0, 1)
         s.eq('payout net == one piece minus fee', (po ?? []).reduce((s2, p) => s2 + ((p.net_cents as number) ?? 0), 0), 9600)
+
+        // $0/negative-gross skip: an unpriced approved order accrues NO payout (mirrors
+        // the guard row.gross_cents <= 0 → no insert), so a creator is never owed $0.
+        const zeroPay = buildPayoutRow({ id: orderId, client_id: TEST_CLIENT, campaign_id: poCampaignId, creator_id: 'v_maya', amount_cents: 0 }, 20)
+        if (zeroPay.gross_cents > 0) await a.from('creator_payouts').insert(zeroPay)
+        const { data: afterZeroPay } = await a.from('creator_payouts').select('id').eq('campaign_id', poCampaignId)
+        s.eq('an unpriced ($0) piece accrues no payout (still 1)', afterZeroPay?.length ?? 0, 1)
+
         if (payoutId) await a.from('creator_payouts').delete().eq('id', payoutId)  // set-null on campaign delete, so remove explicitly
         await a.from('campaigns').delete().eq('id', poCampaignId)
       }

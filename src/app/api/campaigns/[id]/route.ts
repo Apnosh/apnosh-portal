@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
-import { mintWorkOrders, clearCampaignBriefCache, getCampaignCharges } from '@/lib/campaigns/work-orders'
+import { mintWorkOrders, clearCampaignBriefCache, getCampaignCharges, campaignHasAccruedMoney } from '@/lib/campaigns/work-orders'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
@@ -165,6 +165,12 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const { res } = await authorize(id)
   if (res) return res
+  // Don't let a delete strand money: a campaign with accrued owner charges or
+  // creator payouts has real work that was billed/owed. Deleting would erase the
+  // charge (cascade) but orphan the payout (set-null), losing its provenance.
+  if (await campaignHasAccruedMoney(id).catch(() => false)) {
+    return NextResponse.json({ error: 'this campaign has billed or owed pieces — resolve its charges and payouts before deleting' }, { status: 409 })
+  }
   await deleteCampaign(id)
   return NextResponse.json({ ok: true })
 }
