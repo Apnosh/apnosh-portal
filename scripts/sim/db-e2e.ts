@@ -11,7 +11,7 @@
 import { config } from 'dotenv'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildContentLine } from '@/lib/campaigns/catalog'
-import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow } from '@/lib/campaigns/work-orders-core'
+import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued } from '@/lib/campaigns/work-orders-core'
 import type { CampaignBrief, CampaignDraft, ContentBeat, LineItem } from '@/lib/campaigns/types'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 import { Suite } from './lib'
@@ -284,6 +284,39 @@ async function main() {
 
         if (payoutId) await a.from('creator_payouts').delete().eq('id', payoutId)  // set-null on campaign delete, so remove explicitly
         await a.from('campaigns').delete().eq('id', poCampaignId)
+      }
+    }
+    // ── reconcile sweep: recover a dropped charge + payout ──
+    s.group('reconcile sweep: recover a dropped accrual')
+    const { error: rcChErr } = await a.from('campaign_charges').select('id').limit(1)
+    const { error: rcPoErr } = await a.from('creator_payouts').select('id').limit(1)
+    if (rcChErr || rcPoErr) {
+      s.check('reconcile: skipped — apply migrations 180 + 181 then re-run', true, 'ledgers absent')
+    } else {
+      const { data: c6 } = await a.from('campaigns').insert({ client_id: TEST_CLIENT, name: TEST_NAME, path: 'strategist', status: 'shipped', phase: 'monitor' }).select('id').single()
+      const rcCampaignId = c6?.id as string
+      if (rcCampaignId) {
+        const mk = async (slot: number) => (await a.from('creator_work_orders').insert({ campaign_id: rcCampaignId, client_id: TEST_CLIENT, creator_id: 'v_maya', discipline: 'Video', slot, title: `r${slot}`, brief: 'x', status: 'approved', concept_status: 'approved', amount_cents: 12000 }).select('id').single()).data?.id as string
+        const o1 = await mk(0)
+        const o2 = await mk(1)
+        // o1 fully accrued; o2 is a "dropped" gap (no charge, no payout).
+        await a.from('campaign_charges').insert(buildChargeRow({ id: o1, client_id: TEST_CLIENT, campaign_id: rcCampaignId, amount_cents: 12000 }))
+        await a.from('creator_payouts').insert(buildPayoutRow({ id: o1, client_id: TEST_CLIENT, campaign_id: rcCampaignId, creator_id: 'v_maya', amount_cents: 12000 }, 20))
+        // Mirror reconcileAccruals (server-only, tsx can't import): find the gap via
+        // the same query + pure finder, then accrue it.
+        const approved = [{ id: o1, amount_cents: 12000 }, { id: o2, amount_cents: 12000 }]
+        const { data: ch } = await a.from('campaign_charges').select('work_order_id').in('work_order_id', [o1, o2])
+        const { data: po } = await a.from('creator_payouts').select('work_order_id').in('work_order_id', [o1, o2])
+        const gap = findUnaccrued(approved, new Set((ch ?? []).map((r) => r.work_order_id as string)), new Set((po ?? []).map((r) => r.work_order_id as string)))
+        s.check('sweep finds exactly the dropped order', gap.needCharge.length === 1 && gap.needCharge[0] === o2 && gap.needPayout.length === 1 && gap.needPayout[0] === o2)
+        for (const id of gap.needCharge) await a.from('campaign_charges').insert(buildChargeRow({ id, client_id: TEST_CLIENT, campaign_id: rcCampaignId, amount_cents: 12000 }))
+        for (const id of gap.needPayout) await a.from('creator_payouts').insert(buildPayoutRow({ id, client_id: TEST_CLIENT, campaign_id: rcCampaignId, creator_id: 'v_maya', amount_cents: 12000 }, 20))
+        const { data: ch2 } = await a.from('campaign_charges').select('id').eq('campaign_id', rcCampaignId)
+        const { data: po2 } = await a.from('creator_payouts').select('id').eq('campaign_id', rcCampaignId)
+        s.eq('after sweep: both orders have a charge', ch2?.length ?? 0, 2)
+        s.eq('after sweep: both orders have a payout', po2?.length ?? 0, 2)
+        await a.from('creator_payouts').delete().eq('campaign_id', rcCampaignId)  // set-null on campaign delete, so remove first
+        await a.from('campaigns').delete().eq('id', rcCampaignId)                 // cascades the orders + charges
       }
     }
   } finally {

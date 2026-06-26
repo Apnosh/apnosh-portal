@@ -8,7 +8,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyStaffForClient } from '@/lib/notifications'
 import { creatorById } from './creators'
-import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, DEFAULT_PLATFORM_FEE, validateTransition, IllegalTransition, type WorkOrderStatus } from './work-orders-core'
+import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, DEFAULT_PLATFORM_FEE, validateTransition, IllegalTransition, type WorkOrderStatus } from './work-orders-core'
 import type { SavedCampaign, CampaignCharges, CreatorEarnings } from './view'
 
 export type { WorkOrderStatus }
@@ -253,6 +253,35 @@ export async function campaignHasAccruedMoney(campaignId: string): Promise<boole
     admin.from('creator_payouts').select('id').eq('campaign_id', campaignId).neq('status', 'void').limit(1),
   ])
   return !!(ch && ch.length) || !!(po && po.length)
+}
+
+/**
+ * Reconcile sweep: find every approved creator order missing its owner charge or
+ * creator payout and accrue the gap. Recovers anything a best-effort accrual dropped
+ * (a transient failure at approval time) — the durable backstop the money reviews
+ * deferred here. Idempotent (the accrue fns no-op if already present), best-effort,
+ * and a no-op pre-180/181. Run by the reconcile cron, or scoped to one campaign.
+ */
+export async function reconcileAccruals(opts?: { campaignId?: string }): Promise<{ ordersChecked: number; chargesRecovered: number; payoutsRecovered: number }> {
+  const admin = createAdminClient()
+  const ZERO = { ordersChecked: 0, chargesRecovered: 0, payoutsRecovered: 0 }
+  let oq = admin.from('creator_work_orders').select('id, amount_cents').eq('status', 'approved')
+  if (opts?.campaignId) oq = oq.eq('campaign_id', opts.campaignId)
+  const { data: orders, error } = await oq          // pre-180: amount_cents absent → error → no-op
+  if (error || !orders || !orders.length) return ZERO
+  const approved = orders.map((o) => ({ id: o.id as string, amount_cents: (o.amount_cents as number) ?? 0 }))
+  const ids = approved.map((o) => o.id)
+  const [{ data: ch }, { data: po }] = await Promise.all([
+    admin.from('campaign_charges').select('work_order_id').in('work_order_id', ids),
+    admin.from('creator_payouts').select('work_order_id').in('work_order_id', ids),
+  ])
+  const charged = new Set((ch ?? []).map((r) => r.work_order_id as string))
+  const paid = new Set((po ?? []).map((r) => r.work_order_id as string))
+  const { needCharge, needPayout } = findUnaccrued(approved, charged, paid)
+  let chargesRecovered = 0, payoutsRecovered = 0
+  for (const id of needCharge) if (await accrueChargeForApprovedOrder(id).catch(() => false)) chargesRecovered++
+  for (const id of needPayout) if (await accruePayoutForApprovedOrder(id).catch(() => false)) payoutsRecovered++
+  return { ordersChecked: approved.length, chargesRecovered, payoutsRecovered }
 }
 
 /**

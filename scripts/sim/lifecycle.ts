@@ -6,7 +6,7 @@
  */
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { creativeRolesForCampaign, vibeForCampaign, creatorPool, disciplineForType, type Disc } from '@/lib/campaigns/creators'
-import { buildWorkOrderRows, planCampaignPieces, buildBridgeDraftRow, buildChargeRow, computePayout, buildPayoutRow, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
+import { buildWorkOrderRows, planCampaignPieces, buildBridgeDraftRow, buildChargeRow, computePayout, buildPayoutRow, findUnaccrued, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
 import { composeCampaign } from '@/lib/campaigns/campaign-composer'
 import { buildContentLine, CONTENT_META, reconcileBeatsToLines } from '@/lib/campaigns/catalog'
 import { CAMPAIGN_TEMPLATES } from '@/lib/campaigns/data/campaign-templates'
@@ -349,6 +349,26 @@ s.group('creator payout — fee split + accrual')
     }
   }
   s.eq('fee + net == gross for every fractional rate × odd gross (no cent lost)', bad, 0)
+}
+
+// ── E7. reconcile sweep — find dropped accruals (Phase 5 safety net) ──
+s.group('findUnaccrued — recovers gaps, skips present + unpriced')
+{
+  const approved = [
+    { id: 'a', amount_cents: 12000 },  // missing both
+    { id: 'b', amount_cents: 6500 },   // has charge, missing payout
+    { id: 'c', amount_cents: 7000 },   // has both
+    { id: 'd', amount_cents: 0 },      // unpriced → never accrued
+  ]
+  const { needCharge, needPayout } = findUnaccrued(approved, new Set(['b', 'c']), new Set(['c']))
+  s.check('needs charge: only the order with no charge', needCharge.length === 1 && needCharge[0] === 'a')
+  s.check('needs payout: the two without a payout', needPayout.length === 2 && needPayout.includes('a') && needPayout.includes('b'))
+  s.check('an unpriced order is never accrued', !needCharge.includes('d') && !needPayout.includes('d'))
+}
+{
+  const { needCharge, needPayout } = findUnaccrued([{ id: 'x', amount_cents: 5000 }], new Set(['x']), new Set(['x']))
+  s.eq('fully-accrued → no charge gaps', needCharge.length, 0)
+  s.eq('fully-accrued → no payout gaps', needPayout.length, 0)
 }
 
 // ── F. bill = calendar = production after owner edits (guards #3, #4) ────

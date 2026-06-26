@@ -216,6 +216,28 @@ export function buildChargeRow(o: { id: string; client_id: string; campaign_id: 
   }
 }
 
+/**
+ * Pure gap-finder for the accrual reconcile sweep: given the approved creator orders
+ * and the sets of order-ids that ALREADY have a charge / payout, return the order-ids
+ * still missing each. An unpriced order (amount_cents <= 0) is skipped — there is
+ * nothing to accrue. Lets the sweep recover any charge/payout a best-effort accrual
+ * dropped, idempotently (the server then re-runs the idempotent accrue for each gap).
+ */
+export function findUnaccrued(
+  approved: Array<{ id: string; amount_cents: number }>,
+  chargedWoIds: Set<string>,
+  paidWoIds: Set<string>,
+): { needCharge: string[]; needPayout: string[] } {
+  const needCharge: string[] = []
+  const needPayout: string[] = []
+  for (const o of approved) {
+    if ((o.amount_cents ?? 0) <= 0) continue
+    if (!chargedWoIds.has(o.id)) needCharge.push(o.id)
+    if (!paidWoIds.has(o.id)) needPayout.push(o.id)
+  }
+  return { needCharge, needPayout }
+}
+
 /** Apnosh's default take-rate (%) for a marketplace creator, used when the creator
  *  has no real vendor record yet (the seeded pool). Real vendors override this from
  *  vendors.platform_fee_percent once supply is real (Phase 5). Matches migration 146. */
