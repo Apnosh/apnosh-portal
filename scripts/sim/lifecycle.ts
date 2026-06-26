@@ -371,37 +371,49 @@ s.group('findUnaccrued — recovers gaps, skips present + unpriced')
   s.eq('fully-accrued → no payout gaps', needPayout.length, 0)
 }
 
-// ── E8. reconcileProductionPlan — re-sync without disrupting in-flight ──
-s.group('reconcileProductionPlan — add / void / re-date, protect in-flight')
+// ── E8. reconcileProductionPlan — add/revive/void/re-date, protect + flag in-flight ──
+s.group('reconcileProductionPlan — full reconcile, never disrupts in-flight work')
 {
   const camp = campaignFor({ name: 'Recon', content: ['reel', 'reel', 'email'], beats: 3, creatorAll: true })
-  const plan = planCampaignPieces(camp, SHIP)
+  const plan = planCampaignPieces(camp, SHIP)   // creator Video:0, Video:1; team email:0
   const v0 = plan.find((p) => p.key === 'Video:0')!
   const existingOrders = [
     { id: 'o0', key: 'Video:0', status: 'offered', dueISO: v0.postISO },          // unchanged
+    { id: 'o1', key: 'Video:1', status: 'declined', dueISO: '2099-01-01' },       // re-added cancelled slot → REVIVE (not duplicate)
     { id: 'o2', key: 'Video:2', status: 'offered', dueISO: '2099-01-01' },        // removed, not started → void
-    { id: 'o3', key: 'Video:3', status: 'in_progress', dueISO: '2099-01-01' },    // removed but in flight → protect
+    { id: 'o3', key: 'Video:3', status: 'in_progress', dueISO: '2099-01-01' },    // removed but in flight → conflict (flag, never touch)
   ]
   const existingDrafts = [
     { id: 'd0', key: 'email:0', status: 'idea', dateISO: '2099-01-01' },          // still planned, wrong date → re-date
-    { id: 'dX', key: 'post:9', status: 'idea', dateISO: '2099-01-01' },           // removed, editorial → archive
-    { id: 'dP', key: 'post:8', status: 'published', dateISO: '2099-01-01' },      // removed but live → protect
+    { id: 'dX', key: 'post:9', status: 'idea', dateISO: '2099-01-01' },           // removed, editorial → reject
+    { id: 'dP', key: 'post:8', status: 'published', dateISO: '2099-01-01' },      // removed but live → conflict (flag)
   ]
-  const r = reconcileProductionPlan(plan, existingOrders, existingDrafts)
-  s.check('mints the added creator piece (Video:1)', r.mintCreator.length === 1 && r.mintCreator[0].key === 'Video:1')
+  const r = reconcileProductionPlan(plan, existingOrders, existingDrafts, TODAY)
+  s.check('does NOT duplicate Video:1 (its cancelled order is revived)', r.mintCreator.length === 0)
+  s.check('revives the re-added cancelled slot (o1)', r.reviveOrderIds.length === 1 && r.reviveOrderIds[0].id === 'o1')
   s.check('voids the removed, not-started order (o2)', r.voidOrderIds.length === 1 && r.voidOrderIds[0] === 'o2')
-  s.check('protects the in-flight removed order (o3)', !r.voidOrderIds.includes('o3'))
-  s.check('re-dates the moved team draft (d0)', r.redateDrafts.some((u) => u.id === 'd0'))
+  s.check('flags the in-flight removed order (o3), never voids it', r.conflicts.orderIds.includes('o3') && !r.voidOrderIds.includes('o3'))
+  s.check('re-dates the moved editorial draft (d0)', r.redateDrafts.some((u) => u.id === 'd0'))
   s.check('does NOT re-date the unchanged order (o0)', !r.redateOrders.some((u) => u.id === 'o0'))
-  s.check('archives the removed editorial draft (dX)', r.archiveDraftIds.includes('dX'))
-  s.check('protects the published removed draft (dP)', !r.archiveDraftIds.includes('dP'))
+  s.check('rejects the removed editorial draft (dX)', r.archiveDraftIds.includes('dX'))
+  s.check('flags the published removed draft (dP), never rejects it', r.conflicts.draftIds.includes('dP') && !r.archiveDraftIds.includes('dP'))
+}
+{
+  // In-flight is locked from re-dating; a clamp-only past→today re-date is skipped.
+  const piece = (key: string, slot: number, postISO: string) => ({ index: slot, type: 'reel', label: '', channel: '', postISO, discipline: 'Video' as const, slot, key, producer: 'creator' as const, creatorId: 'v_maya', priceCents: 12000 })
+  const r1 = reconcileProductionPlan([piece('Video:0', 0, '2026-09-01')], [{ id: 'ob', key: 'Video:0', status: 'in_progress', dueISO: '2026-08-01' }], [], TODAY)
+  s.check('an in_progress order is never re-dated', r1.redateOrders.length === 0)
+  const r2 = reconcileProductionPlan([piece('Video:0', 0, TODAY)], [{ id: 'o', key: 'Video:0', status: 'offered', dueISO: '2000-01-01' }], [], TODAY)
+  s.check('a clamp-only past→today re-date is skipped as churn', r2.redateOrders.length === 0)
+  const r3 = reconcileProductionPlan([piece('Video:0', 0, '2026-09-01')], [{ id: 'o', key: 'Video:0', status: 'offered', dueISO: '2026-08-01' }], [], TODAY)
+  s.check('a real date move on an offered order re-dates', r3.redateOrders.length === 1)
 }
 {
   const camp = campaignFor({ name: 'Stable', content: ['reel'], beats: 1, creatorAll: true })
   const plan = planCampaignPieces(camp, SHIP)
   const v0 = plan.find((p) => p.producer === 'creator')!
-  const r = reconcileProductionPlan(plan, [{ id: 'o0', key: v0.key, status: 'offered', dueISO: v0.postISO }], [])
-  s.check('unchanged plan → no actions', r.mintCreator.length === 0 && r.voidOrderIds.length === 0 && r.redateOrders.length === 0 && r.materializeTeam.length === 0 && r.archiveDraftIds.length === 0)
+  const r = reconcileProductionPlan(plan, [{ id: 'o0', key: v0.key, status: 'offered', dueISO: v0.postISO }], [], TODAY)
+  s.check('unchanged plan → no actions', r.mintCreator.length + r.reviveOrderIds.length + r.voidOrderIds.length + r.redateOrders.length + r.materializeTeam.length + r.archiveDraftIds.length + r.conflicts.orderIds.length === 0)
 }
 
 // ── F. bill = calendar = production after owner edits (guards #3, #4) ────

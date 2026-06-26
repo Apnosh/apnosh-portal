@@ -244,53 +244,86 @@ export async function getCreatorEarnings(creatorId: string): Promise<CreatorEarn
 
 /**
  * Post-ship production reconcile: when a SHIPPED campaign's plan changes, re-sync the
- * creator orders + team drafts to it WITHOUT disrupting work in flight — mint newly
- * added pieces, void removed-and-not-started ones, archive removed-and-still-editorial
- * drafts, and re-date moved pieces that aren't locked. Best-effort, idempotent (the
- * diff only acts on real differences; mint upserts on the per-piece unique). Returns
- * the action counts. Pass the POST-edit SavedCampaign.
+ * creator orders + team drafts to it WITHOUT disrupting work in flight — mint added
+ * pieces, REVIVE a re-added piece whose slot holds a cancelled order, void
+ * removed-and-not-started ones, reject removed-and-still-editorial drafts, and re-date
+ * moved pieces that aren't locked. In-flight (in_progress/delivered/approved/published)
+ * work is never auto-touched: removed-but-in-flight pieces are flagged to staff, as is
+ * any failed mutation. Mutations re-assert the safe status in their WHERE so a race
+ * can't disrupt work that moved on. Best-effort; pass the POST-edit SavedCampaign.
  */
-export async function reconcileCampaignProduction(campaign: SavedCampaign): Promise<{ minted: number; materialized: number; voided: number; archived: number; redated: number }> {
+export async function reconcileCampaignProduction(campaign: SavedCampaign): Promise<{ minted: number; revived: number; materialized: number; voided: number; archived: number; redated: number; conflicts: number }> {
   const admin = createAdminClient()
   const campaignId = campaign.draft.id
-  const ZERO = { minted: 0, materialized: 0, voided: 0, archived: 0, redated: 0 }
-  // Anchor to now so dates clamp forward (no past-dated pieces); target_date locked at
-  // ship keeps event/start-mode dates stable regardless.
-  const plan = planCampaignPieces(campaign, new Date().toISOString())
+  const ZERO = { minted: 0, revived: 0, materialized: 0, voided: 0, archived: 0, redated: 0, conflicts: 0 }
+  const nowISO = new Date().toISOString()
+  const todayISO = nowISO.slice(0, 10)
+  const plan = planCampaignPieces(campaign, nowISO)   // clamps new pieces forward; locked target_date keeps dates stable
 
-  const [{ data: orders, error: oErr }, { data: drafts }] = await Promise.all([
+  const [{ data: orders, error: oErr }, { data: drafts }, { data: keyless }] = await Promise.all([
     admin.from('creator_work_orders').select('id, discipline, slot, status, due_date').eq('campaign_id', campaignId),
     admin.from('content_drafts').select('id, campaign_piece_key, status, target_publish_date').eq('campaign_id', campaignId).not('campaign_piece_key', 'is', null),
+    // Pre-182 team drafts (keyless, NOT bridge) — if any exist we cannot match the team
+    // lane, so we skip it (a mint-only pass would duplicate). Bridge drafts (from_creator)
+    // are keyless too but are creator-lane artifacts, excluded here.
+    admin.from('content_drafts').select('id').eq('campaign_id', campaignId).is('campaign_piece_key', null).or('media_brief->>from_creator.is.null,media_brief->>from_creator.neq.true').limit(1),
   ])
   if (oErr) return ZERO   // pre-migration / read failure → no-op
+  const teamSafe = !(keyless && keyless.length)
   const existingOrders = (orders ?? []).map((o) => ({ id: o.id as string, key: `${o.discipline as string}:${o.slot as number}`, status: (o.status as string) ?? '', dueISO: (o.due_date as string | null) ?? null }))
   const existingDrafts = (drafts ?? []).map((d) => ({ id: d.id as string, key: (d.campaign_piece_key as string) ?? '', status: (d.status as string) ?? '', dateISO: (d.target_publish_date as string | null) ?? null }))
-  const rec = reconcileProductionPlan(plan, existingOrders, existingDrafts)
+  const rec = reconcileProductionPlan(plan, existingOrders, existingDrafts, todayISO)
 
-  let minted = 0, materialized = 0, voided = 0, archived = 0, redated = 0
+  let minted = 0, revived = 0, materialized = 0, voided = 0, archived = 0, redated = 0, failures = 0
+  const ts = () => new Date().toISOString()
+
+  // Creator lane.
   const orderRows = rec.mintCreator.map((p) => workOrderRowForPiece(campaign, p)).filter((r): r is WorkOrderRow => r !== null)
   if (orderRows.length) {
     const { error } = await admin.from('creator_work_orders').upsert(orderRows, { onConflict: 'campaign_id,discipline,slot', ignoreDuplicates: true })
-    if (!error) minted = orderRows.length
+    if (error) failures++; else minted = orderRows.length
   }
-  const draftRows = rec.materializeTeam.map((p) => teamDraftRowForPiece(campaign, p))
-  if (draftRows.length) {
-    const { error } = await admin.from('content_drafts').insert(draftRows)
-    if (!error) materialized = draftRows.length
+  for (const u of rec.reviveOrderIds) {
+    const { error } = await admin.from('creator_work_orders').update({ status: 'offered', due_date: u.dueISO, note: null, updated_at: ts() }).eq('id', u.id).eq('status', 'declined')
+    if (error) failures++; else revived++
   }
   if (rec.voidOrderIds.length) {
-    const { error } = await admin.from('creator_work_orders').update({ status: 'declined', note: 'Removed from the plan', updated_at: new Date().toISOString() }).in('id', rec.voidOrderIds)
-    if (!error) voided = rec.voidOrderIds.length
+    const { data, error } = await admin.from('creator_work_orders').update({ status: 'declined', note: 'Removed from the plan', updated_at: ts() }).in('id', rec.voidOrderIds).in('status', ['offered', 'accepted']).select('id')
+    if (error) failures++; else voided = data?.length ?? 0
   }
-  if (rec.archiveDraftIds.length) {
-    // 'rejected' is the content_drafts terminal dead state ('archived' is NOT in its
-    // status CHECK); getCampaignProgress already treats it as DEAD.
-    const { error } = await admin.from('content_drafts').update({ status: 'rejected', updated_at: new Date().toISOString() }).in('id', rec.archiveDraftIds)
-    if (!error) archived = rec.archiveDraftIds.length
+  for (const u of rec.redateOrders) { const { error } = await admin.from('creator_work_orders').update({ due_date: u.dueISO, updated_at: ts() }).eq('id', u.id).in('status', ['offered', 'accepted']); if (error) failures++; else redated++ }
+
+  // Team lane — only when every team draft is matchable (no pre-182 keyless drafts).
+  if (teamSafe) {
+    const draftRows = rec.materializeTeam.map((p) => teamDraftRowForPiece(campaign, p))
+    if (draftRows.length) {
+      let { error } = await admin.from('content_drafts').insert(draftRows)
+      if (error && error.code === '42703') {
+        const stripped = draftRows.map((r) => { const c = { ...r } as Record<string, unknown>; delete c.campaign_piece_key; return c })
+        ;({ error } = await admin.from('content_drafts').insert(stripped))
+      }
+      if (error) failures++; else materialized = draftRows.length
+    }
+    if (rec.archiveDraftIds.length) {
+      // 'rejected' is the content_drafts terminal dead state ('archived' is NOT in its CHECK).
+      const { data, error } = await admin.from('content_drafts').update({ status: 'rejected', updated_at: ts() }).in('id', rec.archiveDraftIds).in('status', ['idea', 'draft', 'revising']).select('id')
+      if (error) failures++; else archived = data?.length ?? 0
+    }
+    for (const u of rec.redateDrafts) { const { error } = await admin.from('content_drafts').update({ target_publish_date: u.dateISO, updated_at: ts() }).eq('id', u.id).in('status', ['idea', 'draft', 'revising']); if (error) failures++; else redated++ }
   }
-  for (const u of rec.redateOrders) { await admin.from('creator_work_orders').update({ due_date: u.dueISO, updated_at: new Date().toISOString() }).eq('id', u.id); redated++ }
-  for (const u of rec.redateDrafts) { await admin.from('content_drafts').update({ target_publish_date: u.dateISO, updated_at: new Date().toISOString() }).eq('id', u.id); redated++ }
-  return { minted, materialized, voided, archived, redated }
+
+  // Flag a human for anything we deliberately did NOT auto-touch (removed-but-in-flight
+  // pieces) or any mutation that failed — money + live work is never silently dropped.
+  const conflicts = rec.conflicts.orderIds.length + rec.conflicts.draftIds.length
+  if (conflicts > 0 || failures > 0) {
+    await notifyStaffForClient(campaign.clientId, ['strategist'], {
+      kind: 'client_signoff',
+      title: 'Campaign edit needs a manual review',
+      body: `${campaign.draft.name}: ${conflicts} in-flight piece${conflicts === 1 ? '' : 's'} were removed from the plan but kept (cancel or reschedule by hand)${failures ? `; ${failures} sync action${failures === 1 ? '' : 's'} failed and need redoing` : ''}.`,
+      link: `/work/campaigns?focus=${campaignId}`,
+    }).catch(() => ({ notified: 0 }))
+  }
+  return { minted, revived, materialized, voided, archived, redated, conflicts }
 }
 
 /** Whether a campaign has any non-void owner charge or creator payout. Used to block

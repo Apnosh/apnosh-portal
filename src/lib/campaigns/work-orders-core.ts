@@ -243,26 +243,37 @@ export function teamDraftRowForPiece(campaign: SavedCampaign, p: PlannedPiece): 
 export interface ReconcileExistingOrder { id: string; key: string; status: string; dueISO: string | null }
 export interface ReconcileExistingDraft { id: string; key: string; status: string; dateISO: string | null }
 export interface ProductionReconcile {
-  mintCreator: PlannedPiece[]                          // new creator pieces with no order
+  mintCreator: PlannedPiece[]                          // new creator pieces with no order at all
+  reviveOrderIds: { id: string; dueISO: string | null }[]  // a re-added piece whose slot holds a cancelled order
   materializeTeam: PlannedPiece[]                      // new team pieces with no draft
   voidOrderIds: string[]                               // creator orders removed from the plan (not started)
   archiveDraftIds: string[]                            // team drafts removed from the plan (not produced)
   redateOrders: { id: string; dueISO: string | null }[]
   redateDrafts: { id: string; dateISO: string | null }[]
+  conflicts: { orderIds: string[]; draftIds: string[] }  // removed from the plan but PROTECTED (in flight) — a human must resolve
 }
 
-// A creator order is only cancellable before the creator commits; once in_progress
-// (or delivered/approved/revision) it is protected. Re-dating is locked once a piece
-// is delivered/approved. A team draft is only mutable while it is still editorial
-// (idea/draft/revising) — never once produced/approved/scheduled/published.
+// A creator order is only cancellable before the creator commits (offered/accepted);
+// once in_progress/revision/delivered/approved it is protected — and those are ALSO
+// locked from re-dating (a creator is working to the date, or it is done). A team
+// draft is only mutable while still editorial (idea/draft/revising). Dead states are
+// terminal and ignored.
 const ORDER_VOIDABLE = new Set(['offered', 'accepted'])
-const ORDER_REDATE_LOCKED = new Set(['delivered', 'approved', 'declined'])
+const ORDER_REDATE_LOCKED = new Set(['in_progress', 'revision', 'delivered', 'approved', 'declined'])
 const DRAFT_MUTABLE = new Set(['idea', 'draft', 'revising'])
+const DRAFT_DEAD = new Set(['rejected', 'failed', 'archived'])
+
+/** A re-date that only re-pins an already-past date to today is clamp churn (the
+ *  planner floors past dates to today), not a real reschedule — skip it. */
+function clampOnly(oldISO: string | null, newISO: string | null, todayISO: string): boolean {
+  return !!oldISO && !!newISO && oldISO < todayISO && newISO === todayISO
+}
 
 export function reconcileProductionPlan(
   plan: PlannedPiece[],
   existingOrders: ReconcileExistingOrder[],
   existingDrafts: ReconcileExistingDraft[],
+  todayISO: string,
 ): ProductionReconcile {
   const planCreator = plan.filter((p) => p.producer === 'creator' && p.creatorId)
   const planTeam = plan.filter((p) => p.producer === 'team')
@@ -270,20 +281,34 @@ export function reconcileProductionPlan(
   const planTeamByKey = new Map(planTeam.map((p) => [p.key, p]))
   const orderByKey = new Map(existingOrders.map((o) => [o.key, o]))
   const draftByKey = new Map(existingDrafts.map((d) => [d.key, d]))
-  const r: ProductionReconcile = { mintCreator: [], materializeTeam: [], voidOrderIds: [], archiveDraftIds: [], redateOrders: [], redateDrafts: [] }
+  const r: ProductionReconcile = { mintCreator: [], reviveOrderIds: [], materializeTeam: [], voidOrderIds: [], archiveDraftIds: [], redateOrders: [], redateDrafts: [], conflicts: { orderIds: [], draftIds: [] } }
 
-  for (const p of planCreator) if (!orderByKey.has(p.key)) r.mintCreator.push(p)
+  // Creator lane.
+  for (const p of planCreator) {
+    const o = orderByKey.get(p.key)
+    if (!o) r.mintCreator.push(p)                                          // no order at all → mint
+    else if (o.status === 'declined') r.reviveOrderIds.push({ id: o.id, dueISO: p.postISO })  // re-added a cancelled slot → revive in place
+  }
   for (const o of existingOrders) {
     const p = planCreatorByKey.get(o.key)
-    if (!p) { if (ORDER_VOIDABLE.has(o.status)) r.voidOrderIds.push(o.id) }
-    else if (!ORDER_REDATE_LOCKED.has(o.status) && (o.dueISO ?? null) !== (p.postISO ?? null)) r.redateOrders.push({ id: o.id, dueISO: p.postISO })
+    if (!p) {
+      if (ORDER_VOIDABLE.has(o.status)) r.voidOrderIds.push(o.id)          // removed + not started → void
+      else if (o.status !== 'declined') r.conflicts.orderIds.push(o.id)    // removed but in flight → flag a human (never auto-touch)
+    } else if (!ORDER_REDATE_LOCKED.has(o.status) && (o.dueISO ?? null) !== (p.postISO ?? null) && !clampOnly(o.dueISO, p.postISO, todayISO)) {
+      r.redateOrders.push({ id: o.id, dueISO: p.postISO })
+    }
   }
 
+  // Team lane.
   for (const p of planTeam) if (!draftByKey.has(p.key)) r.materializeTeam.push(p)
   for (const d of existingDrafts) {
     const p = planTeamByKey.get(d.key)
-    if (!p) { if (DRAFT_MUTABLE.has(d.status)) r.archiveDraftIds.push(d.id) }
-    else if (DRAFT_MUTABLE.has(d.status) && (d.dateISO ?? null) !== (p.postISO ?? null)) r.redateDrafts.push({ id: d.id, dateISO: p.postISO })
+    if (!p) {
+      if (DRAFT_MUTABLE.has(d.status)) r.archiveDraftIds.push(d.id)        // removed + editorial → reject
+      else if (!DRAFT_DEAD.has(d.status)) r.conflicts.draftIds.push(d.id)  // removed but produced/live → flag
+    } else if (DRAFT_MUTABLE.has(d.status) && (d.dateISO ?? null) !== (p.postISO ?? null) && !clampOnly(d.dateISO, p.postISO, todayISO)) {
+      r.redateDrafts.push({ id: d.id, dateISO: p.postISO })
+    }
   }
   return r
 }
