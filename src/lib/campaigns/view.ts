@@ -35,6 +35,14 @@ export interface CampaignCharges {
   count: number
 }
 
+/** Creator-facing rollup of what they have earned — net (after Apnosh's fee) across
+ *  their approved pieces. Accrual only; no real transfer has happened yet. */
+export interface CreatorEarnings {
+  netCents: number    // total earned (accrued + payable + paid)
+  paidCents: number   // of that, already paid out
+  count: number
+}
+
 export interface CampaignExecution {
   featuring?: string   // the exact dish/item to feature
   offerText?: string   // the exact offer wording + terms

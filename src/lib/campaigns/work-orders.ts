@@ -8,8 +8,8 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyStaffForClient } from '@/lib/notifications'
 import { creatorById } from './creators'
-import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, validateTransition, IllegalTransition, type WorkOrderStatus } from './work-orders-core'
-import type { SavedCampaign, CampaignCharges } from './view'
+import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, DEFAULT_PLATFORM_FEE, validateTransition, IllegalTransition, type WorkOrderStatus } from './work-orders-core'
+import type { SavedCampaign, CampaignCharges, CreatorEarnings } from './view'
 
 export type { WorkOrderStatus }
 export { IllegalTransition } from './work-orders-core'
@@ -160,7 +160,72 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
   if (patch.status === 'approved') {
     await bridgeApprovedOrderToDraft(id).catch(() => null)
     await accrueChargeForApprovedOrder(id).catch(() => null)
+    await accruePayoutForApprovedOrder(id).catch(() => null)
   }
+}
+
+/**
+ * Money-out: when the owner approves a delivered creator piece, accrue the creator's
+ * payout = the order's locked gross minus Apnosh's take-rate. Accrual ONLY — no real
+ * transfer here; a later owner-triggered Stripe Connect step pays it out. Idempotent
+ * (unique on work_order_id), best-effort, silent no-op pre-migration (180 for the
+ * price, 181 for the table). Returns whether a payout now exists for the order.
+ */
+export async function accruePayoutForApprovedOrder(orderId: string): Promise<boolean> {
+  const admin = createAdminClient()
+  const { data: o, error } = await admin.from('creator_work_orders').select('*').eq('id', orderId).single()
+  if (error || !o || o.status !== 'approved') return false
+  if (!('amount_cents' in o)) return false   // pre-180: no price to split → silent no-op
+  // Seeded pool creators have no vendor record yet → the platform default take-rate.
+  // Real vendors override from vendors.platform_fee_percent once supply is real (Phase 5).
+  const row = buildPayoutRow({
+    id: o.id as string,
+    client_id: o.client_id as string,
+    campaign_id: (o.campaign_id as string | null) ?? null,
+    creator_id: (o.creator_id as string) ?? '',
+    amount_cents: (o.amount_cents as number) ?? 0,
+  }, DEFAULT_PLATFORM_FEE)
+  if (row.gross_cents <= 0) {
+    await notifyStaffForClient(row.client_id, ['strategist'], {
+      kind: 'client_signoff',
+      title: 'Approved piece has no price to pay out',
+      body: 'A creator piece was approved with no amount. Set its price and accrue the payout manually.',
+      link: `/work/campaigns?focus=${row.campaign_id ?? ''}`,
+    }).catch(() => ({ notified: 0 }))
+    return false
+  }
+  const { error: insErr } = await admin.from('creator_payouts').insert(row)
+  if (insErr) {
+    if (insErr.code === '23505') return true                          // already accrued (idempotent)
+    if (insErr.code === '42P01' || insErr.code === '42703') return false   // pre-181 → silent no-op
+    await notifyStaffForClient(row.client_id, ['strategist'], {
+      kind: 'client_signoff',
+      title: 'Creator payout failed to record',
+      body: `Approving a creator piece didn't record its $${Math.round(row.net_cents / 100)} payout (${insErr.message}). Accrue it manually.`,
+      link: `/work/campaigns?focus=${row.campaign_id ?? ''}`,
+    }).catch(() => ({ notified: 0 }))
+    return false
+  }
+  return true
+}
+
+/** Creator-facing rollup: net earned across their pieces (accrued + payable + paid;
+ *  void excluded), and how much of that is already paid out. Degrades to zero pre-181. */
+export async function getCreatorEarnings(creatorId: string): Promise<CreatorEarnings> {
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('creator_payouts')
+    .select('net_cents, status')
+    .eq('creator_id', creatorId)
+    .in('status', ['accrued', 'payable', 'paid'])
+  if (error || !data) return { netCents: 0, paidCents: 0, count: 0 }
+  let netCents = 0, paidCents = 0
+  for (const p of data) {
+    const n = (p.net_cents as number) ?? 0
+    netCents += n
+    if (p.status === 'paid') paidCents += n
+  }
+  return { netCents, paidCents, count: data.length }
 }
 
 /**

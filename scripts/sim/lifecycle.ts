@@ -6,7 +6,7 @@
  */
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { creativeRolesForCampaign, vibeForCampaign, creatorPool, disciplineForType, type Disc } from '@/lib/campaigns/creators'
-import { buildWorkOrderRows, planCampaignPieces, buildBridgeDraftRow, buildChargeRow, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
+import { buildWorkOrderRows, planCampaignPieces, buildBridgeDraftRow, buildChargeRow, computePayout, buildPayoutRow, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
 import { composeCampaign } from '@/lib/campaigns/campaign-composer'
 import { buildContentLine, CONTENT_META, reconcileBeatsToLines } from '@/lib/campaigns/catalog'
 import { CAMPAIGN_TEMPLATES } from '@/lib/campaigns/data/campaign-templates'
@@ -307,6 +307,28 @@ s.group('owner pricing — per-piece amount + accrued charge')
   const z = buildChargeRow({ id: 'wo2', client_id: 'c1', campaign_id: null, amount_cents: -5 })
   s.eq('a negative/garbage amount floors to 0', z.amount_cents, 0)
   s.check('null campaign tolerated on a charge', z.campaign_id === null)
+}
+
+// ── E6. creator payout — net = gross minus the take-rate ──
+s.group('creator payout — fee split + accrual')
+{
+  const { feeCents, netCents } = computePayout(12000, 20)
+  s.eq('20% of $120 → $24 fee', feeCents, 2400)
+  s.eq('creator nets $96', netCents, 9600)
+  s.eq('fee + net == gross (no cents lost)', feeCents + netCents, 12000)
+  s.eq('0% fee → creator gets it all', computePayout(10000, 0).netCents, 10000)
+  s.eq('100% fee → creator nets 0', computePayout(10000, 100).netCents, 0)
+  s.eq('a >100% fee clamps (net never negative)', computePayout(10000, 250).netCents, 0)
+}
+{
+  const row = buildPayoutRow({ id: 'wo1', client_id: 'c1', campaign_id: 'camp1', creator_id: 'v_maya', amount_cents: 12000 }, 20)
+  s.eq('payout gross == order amount', row.gross_cents, 12000)
+  s.eq('payout net == gross - fee', row.net_cents, 9600)
+  s.eq('payout fee == take-rate cut', row.fee_cents, 2400)
+  s.check('starts accrued, linked to the order + creator', row.status === 'accrued' && row.work_order_id === 'wo1' && row.creator_id === 'v_maya')
+  const z = buildPayoutRow({ id: 'wo2', client_id: 'c1', campaign_id: null, creator_id: 'v_x', amount_cents: -5 }, 20)
+  s.eq('garbage gross floors to 0', z.gross_cents, 0)
+  s.eq('zero gross → zero net', z.net_cents, 0)
 }
 
 // ── F. bill = calendar = production after owner edits (guards #3, #4) ────

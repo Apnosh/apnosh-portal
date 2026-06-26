@@ -11,7 +11,7 @@
 import { config } from 'dotenv'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildContentLine } from '@/lib/campaigns/catalog'
-import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow } from '@/lib/campaigns/work-orders-core'
+import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow } from '@/lib/campaigns/work-orders-core'
 import type { CampaignBrief, CampaignDraft, ContentBeat, LineItem } from '@/lib/campaigns/types'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 import { Suite } from './lib'
@@ -244,6 +244,38 @@ async function main() {
         s.eq('rollup counts accrued+invoiced+paid, excludes void', (roll ?? []).reduce((s2, c) => s2 + ((c.amount_cents as number) ?? 0), 0), 12000 + 3000 + 2000)
 
         await a.from('campaigns').delete().eq('id', chCampaignId)  // cascades: removes the order + the charges
+      }
+    }
+
+    // ── money-out: accrue a creator payout on approval (fee split, idempotent) ──
+    s.group('money-out: accrue a creator payout on approval')
+    const { error: poColErr } = await a.from('creator_payouts').select('id').limit(1)
+    if (poColErr) {
+      s.check('payouts: skipped — apply migration 181 then re-run', true, 'creator_payouts absent (pre-181)')
+    } else {
+      const { data: c5 } = await a.from('campaigns').insert({ client_id: TEST_CLIENT, name: TEST_NAME, path: 'strategist', status: 'shipped', phase: 'monitor' }).select('id').single()
+      const poCampaignId = c5?.id as string
+      if (poCampaignId) {
+        const { data: ord } = await a.from('creator_work_orders').insert({
+          campaign_id: poCampaignId, client_id: TEST_CLIENT, creator_id: 'v_maya', discipline: 'Video', slot: 0,
+          title: 'Payout reel', brief: 'x', status: 'approved', concept_status: 'approved', amount_cents: 12000,
+        }).select('*').single()
+        const orderId = ord?.id as string
+        const row = buildPayoutRow({ id: orderId, client_id: TEST_CLIENT, campaign_id: poCampaignId, creator_id: 'v_maya', amount_cents: ord!.amount_cents as number }, 20)
+        s.check('payout row: $120 gross → $96 net + $24 fee, accrued', row.gross_cents === 12000 && row.net_cents === 9600 && row.fee_cents === 2400 && row.status === 'accrued')
+        const { data: poRow, error: poInsErr } = await a.from('creator_payouts').insert(row).select('id, net_cents, fee_cents, gross_cents').single()
+        const payoutId = poRow?.id as string
+        s.check('payout inserts cleanly', !poInsErr, poInsErr?.message)
+        s.check('persisted: $96 net, $24 fee, $120 gross', poRow?.net_cents === 9600 && poRow?.fee_cents === 2400 && poRow?.gross_cents === 12000)
+        const { error: poDupErr } = await a.from('creator_payouts').insert(row)
+        s.check('re-accrual is a no-op (unique on work_order_id)', poDupErr?.code === '23505')
+        // Scoped to THIS campaign to avoid cross-run pollution (campaign delete sets
+        // campaign_id null but keeps the payout, so we delete it explicitly below).
+        const { data: po } = await a.from('creator_payouts').select('net_cents').eq('campaign_id', poCampaignId).in('status', ['accrued', 'payable', 'paid'])
+        s.eq('exactly one payout for this campaign', po?.length ?? 0, 1)
+        s.eq('payout net == one piece minus fee', (po ?? []).reduce((s2, p) => s2 + ((p.net_cents as number) ?? 0), 0), 9600)
+        if (payoutId) await a.from('creator_payouts').delete().eq('id', payoutId)  // set-null on campaign delete, so remove explicitly
+        await a.from('campaigns').delete().eq('id', poCampaignId)
       }
     }
   } finally {

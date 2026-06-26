@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import type { WorkOrder, WorkOrderStatus } from '@/lib/campaigns/work-orders'
+import type { CreatorEarnings } from '@/lib/campaigns/view'
 import { safeHref } from '@/lib/campaigns/work-orders-core'
 
 export default function CreatorWorkPage() {
@@ -23,19 +24,20 @@ function Inbox() {
   const creator = params.get('creator') ?? '' // admin preview of any creator
   const [orders, setOrders] = useState<WorkOrder[] | null>(null)
   const [resolvedId, setResolvedId] = useState<string | null>(null)
+  const [earnings, setEarnings] = useState<CreatorEarnings | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (creator) {
       const r = await fetch(`/api/creator/work?creator=${encodeURIComponent(creator)}`, { cache: 'no-store' })
       const j = await r.json().catch(() => ({ orders: [] }))
-      setOrders(j.orders ?? []); setResolvedId(creator)
+      setOrders(j.orders ?? []); setResolvedId(creator); setEarnings(null)
       return
     }
     // No param: resolve the logged-in creator (creator_logins).
     const r = await fetch('/api/creator/me', { cache: 'no-store' })
     const j = await r.json().catch(() => ({ orders: [], creatorId: null }))
-    setOrders(j.orders ?? []); setResolvedId(j.creatorId ?? null)
+    setOrders(j.orders ?? []); setResolvedId(j.creatorId ?? null); setEarnings((j.earnings as CreatorEarnings) ?? null)
   }, [creator])
 
   useEffect(() => { load() }, [load])
@@ -60,8 +62,18 @@ function Inbox() {
   return (
     <div className="min-h-screen bg-neutral-50">
       <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/80 backdrop-blur px-5 py-4">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Creator workspace</p>
-        <h1 className="mt-0.5 text-lg font-semibold text-neutral-900">{name}</h1>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Creator workspace</p>
+            <h1 className="mt-0.5 text-lg font-semibold text-neutral-900">{name}</h1>
+          </div>
+          {earnings && earnings.count > 0 && (
+            <div className="text-right">
+              <p className="text-base font-semibold text-emerald-700">${(earnings.netCents / 100).toFixed(earnings.netCents % 100 === 0 ? 0 : 2)}</p>
+              <p className="text-[10.5px] text-neutral-400">earned · {earnings.paidCents < earnings.netCents ? 'not paid out yet' : 'paid out'}</p>
+            </div>
+          )}
+        </div>
       </header>
 
       <main className="mx-auto max-w-xl px-4 py-5 space-y-6">

@@ -216,6 +216,55 @@ export function buildChargeRow(o: { id: string; client_id: string; campaign_id: 
   }
 }
 
+/** Apnosh's default take-rate (%) for a marketplace creator, used when the creator
+ *  has no real vendor record yet (the seeded pool). Real vendors override this from
+ *  vendors.platform_fee_percent once supply is real (Phase 5). Matches migration 146. */
+export const DEFAULT_PLATFORM_FEE = 20
+
+/** Split a gross piece price into Apnosh's fee + the creator's net for a take-rate
+ *  percent. Pure + clamped so a bad fee can never pay out more than gross or go
+ *  negative. */
+export function computePayout(grossCents: number, feePercent: number): { feeCents: number; netCents: number } {
+  const gross = Math.max(0, Math.round(grossCents || 0))
+  const pct = Math.min(100, Math.max(0, feePercent || 0))
+  const feeCents = Math.round(gross * pct / 100)
+  return { feeCents, netCents: Math.max(0, gross - feeCents) }
+}
+
+/** The creator_payouts insert payload for an accepted creator piece. */
+export interface PayoutRow {
+  client_id: string
+  campaign_id: string | null
+  work_order_id: string
+  creator_id: string
+  gross_cents: number
+  fee_percent: number
+  fee_cents: number
+  net_cents: number
+  status: 'accrued'
+}
+
+/** Map an approved creator order + a take-rate to the payout it accrues: gross is
+ *  the order's locked amount (what the owner paid), net is what the creator earns
+ *  after Apnosh's fee. Pure; the DB insert + idempotency live in
+ *  accruePayoutForApprovedOrder. */
+export function buildPayoutRow(o: { id: string; client_id: string; campaign_id: string | null; creator_id: string; amount_cents: number }, feePercent: number): PayoutRow {
+  const gross = Math.max(0, Math.round(o.amount_cents || 0))
+  const pct = Math.min(100, Math.max(0, feePercent || 0))
+  const { feeCents, netCents } = computePayout(gross, pct)
+  return {
+    client_id: o.client_id,
+    campaign_id: o.campaign_id ?? null,
+    work_order_id: o.id,
+    creator_id: o.creator_id,
+    gross_cents: gross,
+    fee_percent: pct,
+    fee_cents: feeCents,
+    net_cents: netCents,
+    status: 'accrued',
+  }
+}
+
 /** The fields the publish bridge reads off an approved creator order. */
 export interface BridgeOrderRow {
   client_id: string

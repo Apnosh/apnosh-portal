@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getCreatorIdForUser, listWorkOrdersForCreator } from '@/lib/campaigns/work-orders'
+import { getCreatorIdForUser, listWorkOrdersForCreator, getCreatorEarnings } from '@/lib/campaigns/work-orders'
 
 // The logged-in creator's own inbox: resolves which creator this user IS
 // (creator_logins) and returns their orders. No param to spoof, unlike the
@@ -12,5 +12,9 @@ export async function GET() {
 
   const creatorId = await getCreatorIdForUser(user.id)
   if (!creatorId) return NextResponse.json({ creatorId: null, orders: [] })
-  return NextResponse.json({ creatorId, orders: await listWorkOrdersForCreator(creatorId) })
+  const [orders, earnings] = await Promise.all([
+    listWorkOrdersForCreator(creatorId),
+    getCreatorEarnings(creatorId).catch(() => null),
+  ])
+  return NextResponse.json({ creatorId, orders, earnings })
 }
