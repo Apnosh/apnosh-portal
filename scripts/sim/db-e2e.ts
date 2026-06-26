@@ -346,6 +346,24 @@ async function main() {
         await a.from('campaigns').delete().eq('id', pkCampaignId)               // cascades the order
       }
     }
+
+    // ── real-vendor fee (Phase 5c): a real vendor's payout uses their negotiated rate ──
+    s.group('real-vendor fee — payout uses the vendor take-rate, not the default')
+    {
+      const { data: v } = await a.from('vendors').insert({ slug: `sim-vendor-${Date.now()}`, name: 'Sim Vendor', vendor_type: 'individual', platform_fee_percent: 15, tier: 'pro', bookable: true }).select('id, platform_fee_percent').single()
+      const vendorId = v?.id as string
+      if (vendorId) {
+        // Mirror feePercentForCreator: a UUID creator id resolves the vendor's fee.
+        const { data: vf } = await a.from('vendors').select('platform_fee_percent').eq('id', vendorId).maybeSingle()
+        const feePercent = Number(vf?.platform_fee_percent ?? 20)
+        s.eq('a real vendor resolves its negotiated fee (15%)', feePercent, 15)
+        const payout = buildPayoutRow({ id: 'wo-v', client_id: TEST_CLIENT, campaign_id: null, creator_id: vendorId, amount_cents: 12000 }, feePercent)
+        s.eq('vendor payout net = $120 minus 15% = $102', payout.net_cents, 10200)
+        s.eq('vendor payout fee = $18', payout.fee_cents, 1800)
+        s.check('a seeded pool id is non-UUID → never resolves a vendor (default fee)', !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test('v_maya'))
+        await a.from('vendors').delete().eq('id', vendorId)
+      }
+    }
   } finally {
     // ── teardown: cascade removes the orders ───────────────────────────
     await a.from('campaigns').delete().eq('id', campaignId)

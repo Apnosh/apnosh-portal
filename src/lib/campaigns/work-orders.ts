@@ -8,7 +8,8 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyStaffForClient } from '@/lib/notifications'
 import { creatorById } from './creators'
-import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, DEFAULT_PLATFORM_FEE, validateTransition, IllegalTransition, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
+import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
+import { feePercentForCreator } from './vendor-supply'
 import type { SavedCampaign, CampaignCharges, CreatorEarnings } from './view'
 
 export type { WorkOrderStatus }
@@ -179,15 +180,17 @@ export async function accruePayoutForApprovedOrder(orderId: string): Promise<boo
   if (error) { console.error('accruePayout: order read failed', orderId, error.message); return false }
   if (!o || o.status !== 'approved') return false
   if (!('amount_cents' in o)) return false   // pre-180: no price to split → silent no-op
-  // Seeded pool creators have no vendor record yet → the platform default take-rate.
-  // Real vendors override from vendors.platform_fee_percent once supply is real (Phase 5).
+  // Resolve the take-rate from the assignee's real vendor record when one exists;
+  // a seeded pool creator falls back to the platform default (Phase 5c).
+  const creatorId = (o.creator_id as string) ?? ''
+  const feePercent = await feePercentForCreator(creatorId)
   const row = buildPayoutRow({
     id: o.id as string,
     client_id: o.client_id as string,
     campaign_id: (o.campaign_id as string | null) ?? null,
-    creator_id: (o.creator_id as string) ?? '',
+    creator_id: creatorId,
     amount_cents: (o.amount_cents as number) ?? 0,
-  }, DEFAULT_PLATFORM_FEE)
+  }, feePercent)
   // A payout with no creator is unclaimable AND would consume the one-per-piece
   // slot — flag it instead of stranding it.
   if (!row.creator_id.trim()) {
