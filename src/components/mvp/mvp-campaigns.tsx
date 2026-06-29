@@ -12,9 +12,10 @@ import Link from 'next/link'
 import { useClient } from '@/lib/client-context'
 import {
   Plus, Repeat, Check, TrendingUp, TrendingDown, Minus, ArrowRight, Clock,
-  CalendarDays, Eye, Heart, ChevronLeft, ChevronRight, Loader2,
+  CalendarDays, Eye, Heart, Loader2,
 } from 'lucide-react'
 import { campaignCardVM, type CampCard, type SavedCampaign } from '@/lib/campaigns/view'
+import MvpCalendar from './mvp-calendar'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
@@ -111,7 +112,7 @@ export default function MvpCampaigns() {
         ) : empty ? (
           <EmptyState />
         ) : view === 'calendar' ? (
-          <CampaignCalendar saved={saved ?? []} />
+          <MvpCalendar saved={saved ?? []} />
         ) : (
           <>
             <div className="cc-scroll" style={{ display: 'flex', gap: 7, marginBottom: 16, overflowX: 'auto', paddingBottom: 2 }}>
@@ -226,51 +227,5 @@ function CampaignCard({ c }: { c: CampCard }) {
         {c.review && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.amberBg, border: `0.5px solid ${C.amberLine}`, color: C.amber, borderRadius: 99, padding: '4px 10px', fontWeight: 700, fontSize: 11.5 }}><Eye size={12} /> Needs your OK</span>}
       </div>
     </Link>
-  )
-}
-
-/* Month calendar: campaign target dates as dots. */
-function CampaignCalendar({ saved }: { saved: SavedCampaign[] }) {
-  const [cur, setCur] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() } })
-  const first = new Date(cur.y, cur.m, 1)
-  const startDow = first.getDay()
-  const days = new Date(cur.y, cur.m + 1, 0).getDate()
-  const monthLabel = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-  const today = new Date()
-  const isToday = (d: number) => today.getFullYear() === cur.y && today.getMonth() === cur.m && today.getDate() === d
-
-  const marks: Record<number, number> = {}
-  for (const s of saved) {
-    const td = s.draft.targetDate
-    if (!td) continue
-    const d = new Date(td + 'T00:00:00')
-    if (d.getFullYear() === cur.y && d.getMonth() === cur.m) marks[d.getDate()] = (marks[d.getDate()] ?? 0) + 1
-  }
-
-  const cells: (number | null)[] = [...Array(startDow).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)]
-  return (
-    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 14px 16px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <button onClick={() => setCur((c) => ({ y: c.m === 0 ? c.y - 1 : c.y, m: c.m === 0 ? 11 : c.m - 1 }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.mute, padding: 4 }}><ChevronLeft size={18} /></button>
-        <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 15 }}>{monthLabel}</span>
-        <button onClick={() => setCur((c) => ({ y: c.m === 11 ? c.y + 1 : c.y, m: c.m === 11 ? 0 : c.m + 1 }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.mute, padding: 4 }}><ChevronRight size={18} /></button>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginBottom: 4 }}>
-        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: C.faint }}>{d}</div>)}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
-        {cells.map((d, i) => (
-          <div key={i} style={{ aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, borderRadius: 9, background: d && isToday(d) ? C.greenSoft : 'transparent' }}>
-            {d && <span style={{ fontSize: 12, fontWeight: isToday(d) ? 700 : 500, color: isToday(d) ? C.greenDk : C.ink }}>{d}</span>}
-            <div style={{ display: 'flex', gap: 2, height: 4 }}>
-              {Array.from({ length: Math.min(3, marks[d ?? -1] ?? 0) }).map((_, j) => <span key={j} style={{ width: 4, height: 4, borderRadius: 99, background: C.green }} />)}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12, fontSize: 11, color: C.mute }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 7, height: 7, borderRadius: 99, background: C.green }} /> Campaign date</span>
-      </div>
-    </div>
   )
 }
