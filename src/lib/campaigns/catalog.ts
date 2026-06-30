@@ -3,8 +3,8 @@
  * the builder can add, and group the catalog by growth-loop stage for the
  * Add-service picker.
  */
-import { PRICED_CATALOG, type PricedService } from '@/lib/campaigns/data/priced-catalog'
-import type { BillingCadence, ContentBeat, LineItem } from '@/lib/campaigns/types'
+import { PRICED_CATALOG, SHOOT_COST, type PricedService, type SystemGoal, type GoalPlay } from '@/lib/campaigns/data/priced-catalog'
+import { summarize, type BillingCadence, type BillingSummary, type ContentBeat, type LineItem, type PieceBrief } from '@/lib/campaigns/types'
 
 export function cadenceOf(s: PricedService): { price: number; cadence: BillingCadence } {
   const p = s.prices[0]
@@ -30,6 +30,22 @@ const PLAIN_NAMES: Record<string, string> = {
   'local-seo': 'Rank in local search', 'video-engine': 'Short-form video', 'social-mgmt': 'Run your social',
   'paid-ads': 'Local ads', 'sms-program': 'Text your regulars', 'offer-eng': 'A promo that works',
   'event-pkg': 'Promote an event', 'feedback-loop': 'Catch problems privately',
+  'capture-kit': 'Grow your guest list',
+  'nextdoor-local': 'Show up for neighbors', 'street-sampling': 'Sample at local events',
+  'cross-promo': 'Team up with neighbors', 'friend-hook': 'Bring-a-friend reward', 'creator-collab': 'Team up with a creator',
+  // The rest of the catalog, in plain owner language (was rendering raw technical names).
+  'website-care': 'Keep your site fresh', 'email-found': 'Set up your email', 'brand-kit': 'Your look and voice',
+  'channel-connect': 'Connect your accounts', 'listings-sync': 'Same info everywhere', 'ordering-setup': 'Take orders on your site',
+  'video-single': 'One short video', 'delivery-opt': 'Win on delivery apps', 'pr-media': 'Get in the news',
+  'truck-location': 'Tell fans where you are', 'graphic': 'A graphic for your event', 'gbp-event-post': 'Post your event on Google',
+  'fb-event': 'A Facebook event page', 'concierge': 'Get hotels to send guests', 'landing-page': 'A signup page for your offer',
+  'incentive-design': 'Pick the right giveaway', 'ai-phone': 'Never miss a call', 'pre-opening': 'Open with a crowd',
+  'newsletter': 'One good email a month', 'menu-eng': 'Make your menu sell more', 'bar-events': 'Fill your slow weeknights',
+  'catering-engine': 'Land catering jobs', 'giftcards': 'Sell gift cards', 'reservation-protect': 'Cut no-shows',
+  'reminder-send': 'A book-now reminder', 'referral': 'Turn regulars into promoters', 'seasonal-cal': 'Plan the next 3 months',
+  'vip-comms': 'Treat your VIPs first', 'reporting': 'See what is working',
+  'happy-hour-engine': 'Run a happy hour', 'ugc-rights': 'Repost guest photos', 'menu-photo-refresh': 'Refresh your photos',
+  'lto-launch': 'Launch a new item', 'staff-advocacy': 'Get your team asking', 'google-food-order': 'Google order button',
 }
 
 /** Build a Line Item from a catalog service (used for newly-added lines). */
@@ -41,6 +57,22 @@ export function serviceToLine(s: PricedService, id: string): LineItem {
     metric: s.metric, why: s.evidence, market: s.prices[0].market, handler: s.handler,
     included: true, lock: 'editable',
   }
+}
+
+/** One Line Item PER price point of a service — so a service with both a setup and a monthly
+ *  (e.g. nextdoor-local: $245 once + $115/mo) bills both, not just the first price. */
+export function serviceToLines(s: PricedService, idBase: string): LineItem[] {
+  return s.prices.map((p, i) => {
+    const cadence: BillingCadence = p.kind === 'monthly'
+      ? { kind: 'recurring', every: 'monthly' }
+      : p.kind === 'per-unit' ? { kind: 'per-occurrence', unit: p.unit ?? 'unit' } : { kind: 'one-time' }
+    return {
+      id: `${idBase}-${i}`, serviceId: s.id, name: s.name, plain: PLAIN_NAMES[s.id] ?? s.name, does: shortDoes(s),
+      stage: s.section, price: p.amount, cadence, eta: '~1 week',
+      metric: s.metric, why: s.evidence, market: p.market, handler: s.handler,
+      included: true, lock: 'editable',
+    }
+  })
 }
 
 /* ── Content pieces ──────────────────────────────────────────────────
@@ -84,8 +116,14 @@ export const CONTENT_META: Record<string, ContentMeta> = {
     market: { low: 25, high: 100, label: 'managed SMS blast' }, metric: { label: 'Clicks & redemptions', expect: 'Fast response — track redemptions, not opens' }, handler: 'hybrid' },
 }
 
-/** Build a transparent Line Item for a content piece (mirrors serviceToLine). */
-export function buildContentLine(type: string, id: string, opts?: { qty?: number; stage?: LineItem['stage']; why?: string }): LineItem | null {
+/** Build a transparent Line Item for a content piece (mirrors serviceToLine).
+ *  The Content Menu passes the per-piece handler + brief + date the owner chose in
+ *  the add-piece modal; the legacy composer omits them (undefined → unchanged). */
+export function buildContentLine(
+  type: string,
+  id: string,
+  opts?: { qty?: number; stage?: LineItem['stage']; why?: string; producer?: LineItem['producer']; brief?: PieceBrief; postISO?: string },
+): LineItem | null {
   const m = CONTENT_META[type]
   if (!m) return null
   const qty = Math.max(1, opts?.qty ?? 1)
@@ -97,8 +135,55 @@ export function buildContentLine(type: string, id: string, opts?: { qty?: number
     price: m.price, cadence: { kind: 'per-occurrence', unit: m.unit }, qty,
     eta: '~5 days',
     metric: m.metric, why: opts?.why ?? m.why, market: m.market, handler: m.handler,
+    producer: opts?.producer, brief: opts?.brief, postISO: opts?.postISO,
     included: true, lock: 'editable',
   }
+}
+
+/** Default channel a content type goes out on, for a derived calendar beat. */
+const CONTENT_CHANNEL: Record<string, string> = {
+  reel: 'Instagram', photo: 'Instagram', post: 'Instagram', story: 'Instagram', email: 'Email', sms: 'SMS',
+}
+
+/**
+ * Derive the production calendar straight from the line items, for a Content-Menu
+ * campaign that has no AI-authored brief. One beat per included content piece, each
+ * carrying a STABLE id (the line id — so producer_choices / the post-ship reconcile /
+ * content_drafts all key by it, never by a positional slot a re-order would shift)
+ * plus that line's per-piece producer + brief, so planCampaignPieces routes and
+ * briefs each piece independently. qty>1 clones the piece forward; every clone shares
+ * the line's handler + brief (qty repeats the SAME piece — a different dish is a new
+ * line). The beat label leads with the dish so it reads as the piece's identity
+ * everywhere downstream (the order title, the team draft idea).
+ */
+export function beatsFromLines(items: LineItem[]): ContentBeat[] {
+  const out: ContentBeat[] = []
+  let week = 0
+  for (const it of items) {
+    if (!it.included || it.optOut) continue
+    const m = /^content-(.+)$/.exec(it.serviceId ?? '')
+    if (!m || !CONTENT_META[m[1]]) continue
+    const type = m[1]
+    const meta = CONTENT_META[type]
+    const n = Math.max(1, it.qty ?? 1)
+    for (let i = 0; i < n; i++) {
+      week += 1
+      out.push({
+        week,
+        type,
+        label: it.brief?.featuring ? `${meta.label} · ${it.brief.featuring}` : meta.label,
+        channel: CONTENT_CHANNEL[type] ?? 'Instagram',
+        // Always suffix the index, even at qty 1, so a qty 2→1 shrink keeps piece #0's
+        // key stable (`L#0`) instead of flipping it to a bare `L` and churning its
+        // order/draft on the post-ship reconcile.
+        id: `${it.id}#${i}`,
+        lineId: it.id,
+        producer: it.producer,
+        brief: it.brief,
+      })
+    }
+  }
+  return out
 }
 
 /**
@@ -136,8 +221,106 @@ export function reconcileBeatsToLines(items: LineItem[], beats: ContentBeat[]): 
   return out.sort((a, b) => a.week - b.week)
 }
 
+/* ── Shoot Day batching ──────────────────────────────────────────────
+ * On-site creative (a reel/photo, or a story the owner chooses to film on location)
+ * needs a person to physically come in, which carries a fixed trip cost. Batching
+ * several on-site pieces into ONE visit amortizes that trip — so the owner's price for
+ * a lone on-site piece carries a small "solo visit" surcharge that MELTS to $0 the
+ * moment a second on-site piece shares the visit. Remote pieces (post/email/sms, a
+ * repost story) carry no trip and are never batched. The per-piece menu prices already
+ * bake in the batched-shoot assumption (see video-engine vs video-single), so we never
+ * re-split a piece into creative+trip — we only ADD the solo surcharge when it applies. */
+
+/** The retail surcharge (cents) for a lone on-site piece that needs its own visit. Set
+ *  to the REAL solo-minus-batched shoot COGS gap so the price signal mirrors our cost,
+ *  and it melts to $0 once a 2nd on-site piece shares the trip. */
+export const SOLO_VISIT_SURCHARGE_CENTS = (SHOOT_COST.solo - SHOOT_COST.batched) * 100  // $75
+
+/** Price (cents) of an AI first draft for a designed/written piece (post/email/sms).
+ *  Owner's model: FREE on premium accounts; on free accounts it's our generation cost
+ *  plus ~20%. There's no account-tier flag wired yet, so this is the free-tier placeholder
+ *  shown everywhere; swap for a tier-aware resolver when premium is modeled. */
+export const AI_DRAFT_CENTS = 900  // $9 (free-tier placeholder; premium = $0)
+
+/** Whether a content piece needs someone physically on-site to make it. reel + photo
+ *  always do; a story only when the owner chose to film it on location; everything else
+ *  (post / email / sms, a repost story) is remote. Switches on the literal type KEY,
+ *  NOT the discipline regex (which can misfire on a 'featuring' dish string). */
+export function isOnSitePiece(type: string, brief?: PieceBrief | null): boolean {
+  if (type === 'reel' || type === 'photo') return true
+  if (type === 'story') return brief?.captureMode === 'on-site'
+  return false
+}
+
+export interface ShootDay {
+  id: string
+  /** The line items whose on-site pieces share this visit. */
+  lineIds: string[]
+  /** How many on-site PIECES (qty-aware) need this visit — DIY pieces excluded (the
+   *  owner films those, so they need no Apnosh visit). */
+  onSiteCount: number
+  /** $0 once 2+ pieces share the visit; the solo surcharge when exactly one does. */
+  soloSurchargeCents: number
+}
+
+/** Group a campaign's on-site pieces into Shoot Days (v1: one bucket, 'sd1'). A line's
+ *  qty counts as that many pieces (two reels in one line still share one visit). DIY
+ *  on-site pieces are excluded — the owner makes those, so Apnosh sends no one. The
+ *  surcharge lands only on a day holding exactly one on-site piece. Pure. */
+export function shootDaysFromLines(items: LineItem[]): ShootDay[] {
+  const byDay = new Map<string, ShootDay>()
+  for (const it of items) {
+    if (!it.included || it.optOut) continue
+    if (it.producer === 'diy') continue
+    const m = /^content-(.+)$/.exec(it.serviceId ?? '')
+    if (!m || !isOnSitePiece(m[1], it.brief)) continue
+    const id = it.brief?.shootDayId ?? 'sd1'
+    const n = Math.max(1, it.qty ?? 1)
+    const cur = byDay.get(id) ?? { id, lineIds: [], onSiteCount: 0, soloSurchargeCents: 0 }
+    cur.lineIds.push(it.id)
+    cur.onSiteCount += n
+    byDay.set(id, cur)
+  }
+  return [...byDay.values()].map((sd) => ({ ...sd, soloSurchargeCents: sd.onSiteCount === 1 ? SOLO_VISIT_SURCHARGE_CENTS : 0 }))
+}
+
+/** Total visit surcharge (cents) across all of a campaign's Shoot Days. */
+export function visitSurchargeCents(items: LineItem[]): number {
+  return shootDaysFromLines(items).reduce((s, sd) => s + sd.soloSurchargeCents, 0)
+}
+
+/** The ONE price truth for a Content-Menu campaign: the honest line bill PLUS any
+ *  solo-visit surcharge, so the cart footer, cost page, and accrued charges all agree.
+ *  oneTimeOnDelivery folds the visit in (it bills with the on-site piece on delivery);
+ *  visitSurchargeDollars is also surfaced separately so the bill can show the line. */
+export interface CampaignBill extends BillingSummary {
+  visitSurchargeDollars: number
+}
+export function campaignBill(items: LineItem[]): CampaignBill {
+  const base = summarize(items)
+  const visit = visitSurchargeCents(items) / 100
+  return { ...base, oneTimeOnDelivery: base.oneTimeOnDelivery + visit, visitSurchargeDollars: visit }
+}
+
 export function serviceById(id: string): PricedService | undefined {
   return PRICED_CATALOG.find(s => s.id === id)
+}
+
+/** The owner-facing plain name for a service (falls back to the catalog name). */
+export function plainNameOf(s: PricedService): string {
+  return PLAIN_NAMES[s.id] ?? s.name
+}
+
+/** Every catalog service that serves a system goal, paired with its play for that goal.
+ *  One O(n) scan over PRICED_CATALOG — the catalog IS the source of truth for which
+ *  services a goal pulls in, so tagging a new service makes it available automatically.
+ *  buildSystem (compose-plan) tier-filters + orders these instead of reading a fixed list. */
+export function playsForGoal(goal: SystemGoal): { service: PricedService; play: GoalPlay }[] {
+  const out: { service: PricedService; play: GoalPlay }[] = []
+  for (const s of PRICED_CATALOG) {
+    for (const p of s.goalPlays ?? []) if (p.goal === goal) out.push({ service: s, play: p })
+  }
+  return out
 }
 
 /** Catalog grouped by section, excluding services already on the campaign. */

@@ -73,7 +73,8 @@ function featuringFor(campaign: SavedCampaign, business: { name: string }): stri
   if (campaign.execution?.featuring?.trim()) return campaign.execution.featuring.trim()  // owner's "Get it ready" input wins
   const offer = campaign.draft.brief?.offer?.label
   if (offer) return offer
-  if (campaign.draft.occasion) return campaign.draft.occasion
+  // draft.occasion is a SCHEDULE anchor (e.g. "your launch"), not a dish — never
+  // feature it. Fall back to the business's standout dish.
   return `${business.name}'s standout dish`
 }
 
@@ -203,7 +204,9 @@ export async function getCreatorBrief(orderId: string, opts?: { generate?: boole
   }
 
   const offerLabel = campaign?.execution?.offerText?.trim() || campaign?.draft.brief?.offer?.label || null
-  const vibe = campaign?.draft.occasion || campaign?.draft.brief?.objective || 'campaign'
+  // Prefer the campaign objective (a real goal sentence) over occasion, which is a
+  // schedule anchor like "your launch" and reads oddly as the order's goal.
+  const vibe = campaign?.draft.brief?.objective || campaign?.draft.occasion || 'campaign'
   // Clamp the schedule forward so a brief opened after its planned dates (estimate
   // mode, or a past target) never shows shoot/draft/post dates in the past.
   const todayISO = new Date().toISOString().slice(0, 10)

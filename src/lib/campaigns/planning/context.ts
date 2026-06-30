@@ -7,15 +7,17 @@ import 'server-only'
 import { PRICED_CATALOG } from '@/lib/campaigns/data/priced-catalog'
 import { getBusinessProfile } from './business-profile'
 import { assembleSignals } from './signals'
+import { getPlanningHistory } from './history'
 import type { PlanningContext, PlanRequest } from './types'
 
 export async function assemblePlanningContext(
   clientId: string,
   request: PlanRequest,
 ): Promise<PlanningContext> {
-  const [business, signals] = await Promise.all([
+  const [business, signals, history] = await Promise.all([
     getBusinessProfile(clientId),
     assembleSignals(clientId),
+    getPlanningHistory(clientId),
   ])
   // If the caller didn't pin a goal, fall back to the business's primary goal.
   const req: PlanRequest = { ...request, goalKey: request.goalKey ?? business.goalKey }
@@ -23,7 +25,9 @@ export async function assemblePlanningContext(
     business,
     request: req,
     signals,
-    history: { pastLines: [], droppedServiceIds: [] }, // feedback loop: later stage
+    // The real feedback loop: what actually worked, from the campaign_outcomes ledger.
+    // getPlanningHistory never throws, so a history-read failure can't break planning.
+    history,
     catalog: PRICED_CATALOG,
   }
 }

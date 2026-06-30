@@ -10,8 +10,9 @@
  */
 import { config } from 'dotenv'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buildContentLine } from '@/lib/campaigns/catalog'
-import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued } from '@/lib/campaigns/work-orders-core'
+import { buildContentLine, CONTENT_META, SOLO_VISIT_SURCHARGE_CENTS } from '@/lib/campaigns/catalog'
+import { buildWorkOrderRows, buildChargeRow, buildPayoutRow, findUnaccrued, buildBridgeDraftRow } from '@/lib/campaigns/work-orders-core'
+import type { PieceBrief, PieceProducer } from '@/lib/campaigns/types'
 import type { CampaignBrief, CampaignDraft, ContentBeat, LineItem } from '@/lib/campaigns/types'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 import { Suite } from './lib'
@@ -126,10 +127,14 @@ async function main() {
       s.eq('buildWorkOrderRows → 3 pieces (2 reel + 1 post)', rows.length, 3)
       const { data: pre } = await a.from('creator_work_orders').select('id').eq('campaign_id', mintCampaignId).limit(1)
       s.check('mint guard: no orders before ship', !(pre && pre.length))
-      // amount_cents is stamped on every row; strip it pre-180 so the insert stays green.
+      // amount_cents (180) + campaign_piece_key (183) are stamped on every row; strip
+      // whichever column is absent so the insert stays green pre-migration and really
+      // exercises each once applied.
       const { error: amtColErr } = await a.from('creator_work_orders').select('amount_cents').limit(1)
-      const stripAmount = (r: typeof rows[number]) => { const copy = { ...r } as Record<string, unknown>; delete copy.amount_cents; return copy }
-      const insertRows = amtColErr ? rows.map(stripAmount) : rows
+      const { error: pkColErr } = await a.from('creator_work_orders').select('campaign_piece_key').limit(1)
+      const { error: surColErr } = await a.from('creator_work_orders').select('surcharge_cents').limit(1)
+      const strip = (r: typeof rows[number]) => { const copy = { ...r } as Record<string, unknown>; if (amtColErr) delete copy.amount_cents; if (pkColErr) delete copy.campaign_piece_key; if (surColErr) delete copy.surcharge_cents; return copy }
+      const insertRows = (amtColErr || pkColErr || surColErr) ? rows.map(strip) : rows
       const { error: insErr } = await a.from('creator_work_orders').insert(insertRows)
       s.check('mint inserts the rows cleanly', !insErr, insErr?.message)
       const { data: landed } = await a.from('creator_work_orders').select('id, discipline, slot').eq('campaign_id', mintCampaignId)
@@ -138,6 +143,53 @@ async function main() {
       const { data: again } = await a.from('creator_work_orders').select('id').eq('campaign_id', mintCampaignId).limit(1)
       s.check('re-mint guard sees existing rows → would skip', !!(again && again.length))
       await a.from('campaigns').delete().eq('id', mintCampaignId)
+    }
+
+    // ── Content Menu: per-piece columns (183) + shoot-batching mint economics ──
+    s.group('Content Menu: per-piece columns + shoot-batching mint (migration 183)')
+    const { error: prodColErr } = await a.from('campaign_line_items').select('producer').limit(1)
+    if (prodColErr) {
+      s.check('skipped — apply migration 183 then re-run', true, 'producer/brief columns absent (pre-183)')
+    } else {
+      // (a) the line item persists its per-piece producer + brief jsonb.
+      const liRow = {
+        campaign_id: campaignId, client_id: TEST_CLIENT, position: 99, service_id: 'content-reel',
+        name: 'A reel', plain: 'A reel', does: 'x', stage: 'awareness', price: 120,
+        cadence: { kind: 'per-occurrence', unit: 'reel' }, eta: '~5 days', included: true, lock: 'editable',
+        producer: 'creator' as PieceProducer, brief: { featuring: 'Birria tacos', offer: '$1 oysters' } as PieceBrief, post_iso: null,
+      }
+      const { data: liBack, error: liErr } = await a.from('campaign_line_items').insert(liRow).select('producer, brief').single()
+      s.check('line item persists per-piece producer + brief (183)', !liErr && liBack?.producer === 'creator' && (liBack?.brief as { featuring?: string } | null)?.featuring === 'Birria tacos', liErr?.message)
+      await a.from('campaign_line_items').delete().eq('campaign_id', campaignId).eq('position', 99)
+
+      // (b) a menu campaign (no brief) mints its creator pieces with the stable line-id
+      //     key, the solo reel folding in the visit surcharge; a batched pair does not.
+      const NOW = new Date().toISOString()
+      const mLine = (type: string, id: string, producer: PieceProducer, brief: PieceBrief): LineItem => buildContentLine(type, id, { producer, brief })!
+      const menuCampOf = (items: LineItem[]): SavedCampaign => ({
+        clientId: TEST_CLIENT, draft: { id: 'menu', name: 'menu', path: 'ai', items } as unknown as CampaignDraft,
+        phase: 'build', status: 'draft', shippedAt: null, createdAt: NOW, updatedAt: NOW, creatorChoices: {}, producerChoices: {}, creativeControl: 'handoff', execution: {},
+      })
+      const soloRows = buildWorkOrderRows(menuCampOf([mLine('reel', 'li-r', 'creator', { featuring: 'Birria' })]), NOW)
+      s.eq('solo reel order folds in the visit surcharge', soloRows[0]?.amount_cents, CONTENT_META.reel.price * 100 + SOLO_VISIT_SURCHARGE_CENTS)
+      s.eq('the surcharge is recorded separately (netted from payout)', soloRows[0]?.surcharge_cents, SOLO_VISIT_SURCHARGE_CENTS)
+      s.eq('menu order carries the stable per-piece key (#0)', soloRows[0]?.campaign_piece_key, 'li-r#0')
+
+      const { data: menuCamp } = await a.from('campaigns').insert({ client_id: TEST_CLIENT, name: TEST_NAME, path: 'ai', status: 'draft', phase: 'build' }).select('id').single()
+      const menuId = menuCamp?.id as string
+      if (menuId) {
+        // surcharge_cents is migration 184; strip it if not yet applied so the insert stays green.
+        const { error: surColErr } = await a.from('creator_work_orders').select('surcharge_cents').limit(1)
+        const insertRows = soloRows.map((r) => { const c = { ...r, campaign_id: menuId } as Record<string, unknown>; if (surColErr) delete c.surcharge_cents; return c })
+        const { error: moErr } = await a.from('creator_work_orders').insert(insertRows)
+        s.check('menu order inserts with its piece key + surcharged amount', !moErr, moErr?.message)
+        const { data: oBack } = await a.from('creator_work_orders').select('campaign_piece_key, amount_cents').eq('campaign_id', menuId).single()
+        s.check('piece key + surcharged amount persisted', oBack?.campaign_piece_key === 'li-r#0' && oBack?.amount_cents === CONTENT_META.reel.price * 100 + SOLO_VISIT_SURCHARGE_CENTS)
+
+        const batchedRows = buildWorkOrderRows(menuCampOf([mLine('reel', 'li-r', 'creator', { featuring: 'Birria' }), mLine('photo', 'li-p', 'creator', { featuring: 'Corn' })]), NOW)
+        s.eq('batched: two on-site orders, no surcharge on either', batchedRows.filter((r) => r.amount_cents === CONTENT_META.reel.price * 100 || r.amount_cents === CONTENT_META.photo.price * 100).length, 2)
+        await a.from('campaigns').delete().eq('id', menuId)
+      }
     }
 
     // ── publish bridge: approve → linked content_draft + progress dedup ──

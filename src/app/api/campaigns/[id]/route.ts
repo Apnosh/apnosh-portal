@@ -3,9 +3,11 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
 import { mintWorkOrders, clearCampaignBriefCache, getCampaignCharges, campaignHasAccruedMoney, reconcileCampaignProduction } from '@/lib/campaigns/work-orders'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
+import { getCampaignOutcomes } from '@/lib/campaigns/outcomes/read'
+import { beatsFromLines } from '@/lib/campaigns/catalog'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
-import type { LineItem } from '@/lib/campaigns/types'
+import type { LineItem, PieceProducer } from '@/lib/campaigns/types'
 
 async function authorize(id: string) {
   const campaign = await getCampaign(id)
@@ -22,11 +24,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (res) return res
   // Only shipped, team-run campaigns have materialized pieces / accrued charges;
   // skip the queries for drafts and DIY.
-  const shippedTeamRun = !!campaign && campaign.status === 'shipped' && campaign.draft.path !== 'diy'
-  const [progress, charges] = shippedTeamRun
-    ? await Promise.all([getCampaignProgress(id).catch(() => null), getCampaignCharges(id).catch(() => null)])
-    : [null, null]
-  return NextResponse.json({ campaign, progress, charges })
+  const shipped = !!campaign && campaign.status === 'shipped'
+  const shippedTeamRun = shipped && campaign!.draft.path !== 'diy'
+  // Outcomes apply to any shipped campaign with published pieces (team or DIY); progress/
+  // charges are team-run only. Each read is best-effort so one failure never blanks the page.
+  const [progress, charges, outcomes] = await Promise.all([
+    shippedTeamRun ? getCampaignProgress(id).catch(() => null) : Promise.resolve(null),
+    shippedTeamRun ? getCampaignCharges(id).catch(() => null) : Promise.resolve(null),
+    shipped ? getCampaignOutcomes(id).catch(() => null) : Promise.resolve(null),
+  ])
+  return NextResponse.json({ campaign, progress, charges, outcomes })
 }
 
 // PATCH /api/campaigns/:id — { items?: LineItem[], fields?: {...} }.
@@ -54,24 +61,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     body.fields.execution = clean
   }
-  // Validate producer_choices: a bounded map of pieceKey ("Discipline:slot") →
-  // 'team' | 'creator'. Cap the count + pin the key shape (mirroring execution's
-  // hardening) so a bad/oversized payload can't mis-route a piece or accrete junk
-  // jsonb that planCampaignPieces would ignore anyway.
-  const PIECE_KEY = /^(Video|Photo|Social|Design):\d{1,3}$/
+  // Validate producer_choices: a bounded map of pieceKey → the service ('team' |
+  // 'creator' | 'diy' | 'ai'). The key is "<group>:<slot>" where group is a discipline
+  // (Video/Photo/Social/Design) for shots OR the content type (email/sms/…) for sends —
+  // so accept any word:slot, not just the four disciplines (else sends can't be chosen).
+  // Cap the count + pin the shape so a bad/oversized payload can't accrete junk jsonb.
+  const PIECE_KEY = /^[A-Za-z]+:\d{1,3}$/
+  const PRODUCERS = new Set(['team', 'creator', 'diy', 'ai'])
   if (body.fields?.producer_choices !== undefined) {
     // The mint is one-shot at ship, so a post-ship change would silently no-op —
     // fail loudly instead of round-tripping a choice that changes no production.
-    if (campaign.status === 'shipped') return NextResponse.json({ error: 'producer choices are locked once the campaign has shipped' }, { status: 409 })
+    if (campaign.status === 'shipped') return NextResponse.json({ error: 'service choices are locked once the campaign has shipped' }, { status: 409 })
     const pc = body.fields.producer_choices
     if (typeof pc !== 'object' || pc === null || Array.isArray(pc)) return NextResponse.json({ error: 'invalid producer_choices' }, { status: 400 })
     const entries = Object.entries(pc as Record<string, unknown>)
     if (entries.length > 64) return NextResponse.json({ error: 'too many producer_choices (64 max)' }, { status: 400 })
-    const clean: Record<string, 'team' | 'creator'> = {}
+    const clean: Record<string, PieceProducer> = {}
     for (const [k, v] of entries) {
       if (!PIECE_KEY.test(k)) return NextResponse.json({ error: `producer_choices key '${k}' is not a valid piece key` }, { status: 400 })
-      if (v !== 'team' && v !== 'creator') return NextResponse.json({ error: `producer_choices.${k} must be 'team' or 'creator'` }, { status: 400 })
-      clean[k] = v
+      if (typeof v !== 'string' || !PRODUCERS.has(v)) return NextResponse.json({ error: `producer_choices.${k} must be team, creator, diy, or ai` }, { status: 400 })
+      clean[k] = v as PieceProducer
     }
     body.fields.producer_choices = clean
   }
@@ -107,11 +116,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // deriveSchedule re-anchors to "now" on every call, so the dates the owner
     // approved would drift forward by the review→ship gap. Persist the anchor as
     // target_date so calendar, drafts, and orders all agree from here on.
-    if (!campaign.draft.targetDate && !campaign.draft.occasion && (campaign.draft.brief?.contentBeats?.length ?? 0) > 0) {
-      const anchor = deriveSchedule({ contentBeats: campaign.draft.brief?.contentBeats }, shipISO).firstPostISO
-      if (anchor) {
-        await updateCampaignFields(id, { target_date: anchor }).catch(() => {})
-        campaign.draft.targetDate = anchor
+    // A menu campaign has no brief, so its calendar is derived from its lines — anchor
+    // off THOSE beats, else every later edit re-anchors to a fresh "now" and churns
+    // every piece's due date through the reconcile.
+    if (!campaign.draft.targetDate && !campaign.draft.occasion) {
+      const beats = (campaign.draft.brief?.contentBeats?.length ?? 0) > 0
+        ? campaign.draft.brief!.contentBeats
+        : beatsFromLines((campaign.draft.items ?? []).filter((it) => it.included))
+      if (beats.length > 0) {
+        const anchor = deriveSchedule({ contentBeats: beats }, shipISO).firstPostISO
+        if (anchor) {
+          await updateCampaignFields(id, { target_date: anchor }).catch(() => {})
+          campaign.draft.targetDate = anchor
+        }
       }
     }
     // One plan, two lanes: team pieces become content_drafts, creator pieces
@@ -125,16 +142,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Dispatch the creator-run pieces to the chosen creators' inboxes (the supply
     // side). Best-effort; never blocks the ship.
     const minted = await mintWorkOrders(campaign, shipISO).catch(() => 0)
-    await notifyStaffForClient(
-      campaign.clientId,
-      ['strategist', 'community_mgr'],
-      {
-        kind: 'client_signoff',
-        title: 'Owner shipped a campaign, ready to build',
-        body: `${campaign.draft.name}. The owner approved it to go live. Build and run the pieces.`,
-        link: `/work/campaigns?focus=${id}`,
-      },
-    ).catch(() => ({ notified: 0 }))
+    // Only hand off to staff when there is actually team/creator work to build. A menu
+    // campaign whose pieces are all DIY (the owner makes them) is path 'ai' but produces
+    // nothing for the team, so the path-based gate above isn't enough.
+    if (expectedTeam > 0 || expectedOrders > 0) {
+      await notifyStaffForClient(
+        campaign.clientId,
+        ['strategist', 'community_mgr'],
+        {
+          kind: 'client_signoff',
+          title: 'Owner shipped a campaign, ready to build',
+          body: `${campaign.draft.name}. The owner approved it to go live. Build and run the pieces.`,
+          link: `/work/campaigns?focus=${id}`,
+        },
+      ).catch(() => ({ notified: 0 }))
+    }
     // Dead-letter: the campaign had TEAM pieces to produce but made none (the
     // silent-drop bug) gets flagged for manual setup, never vanishes.
     if (made === 0 && expectedTeam > 0) {

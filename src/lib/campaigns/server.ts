@@ -9,7 +9,7 @@
 
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { CampaignDraft, LineItem, CampaignBrief, BillingCadence } from './types'
+import type { CampaignDraft, LineItem, CampaignBrief, BillingCadence, PieceProducer } from './types'
 import { planCampaignPieces, teamDraftRowForPiece } from './work-orders-core'
 import type { StageId } from './stages'
 import type { SavedCampaign, CampaignProgress } from './view'
@@ -38,6 +38,9 @@ function rowToLineItem(r: Record<string, unknown>): LineItem {
     optOut: (r.opt_out as LineItem['optOut']) ?? undefined,
     paused: (r.paused as boolean) ?? undefined,
     qty: (r.qty as number) ?? undefined,
+    producer: (r.producer as LineItem['producer']) ?? undefined,
+    brief: (r.brief as LineItem['brief']) ?? undefined,
+    postISO: (r.post_iso as string) ?? undefined,
     lock: (r.lock as LineItem['lock']) ?? 'editable',
   }
 }
@@ -80,7 +83,7 @@ function rowToSaved(c: Record<string, unknown>, items: LineItem[], brief: Campai
     createdAt: c.created_at as string,
     updatedAt: c.updated_at as string,
     creatorChoices: (c.creator_choices as Record<string, string> | null) ?? {},
-    producerChoices: (c.producer_choices as Record<string, 'team' | 'creator'> | null) ?? {},
+    producerChoices: (c.producer_choices as Record<string, PieceProducer> | null) ?? {},
     creativeControl: (c.creative_control as SavedCampaign['creativeControl']) ?? 'handoff',
     execution: (c.execution as SavedCampaign['execution']) ?? {},
   }
@@ -88,7 +91,7 @@ function rowToSaved(c: Record<string, unknown>, items: LineItem[], brief: Campai
 
 // ── domain → row ─────────────────────────────────────────────
 function lineItemToRow(campaignId: string, clientId: string, it: LineItem, position: number) {
-  return {
+  const row: Record<string, unknown> = {
     campaign_id: campaignId,
     client_id: clientId,
     position,
@@ -112,6 +115,12 @@ function lineItemToRow(campaignId: string, clientId: string, it: LineItem, posit
     when_label: it.when ?? null,
     draft: it.draft ?? null,
   }
+  // Content Menu per-piece fields (migration 183). Only written when SET, so a legacy
+  // line never references these columns and inserts work unchanged pre-183.
+  if (it.producer !== undefined) row.producer = it.producer
+  if (it.brief !== undefined) row.brief = it.brief ?? null
+  if (it.postISO !== undefined) row.post_iso = it.postISO ?? null
+  return row
 }
 
 // ── CRUD ─────────────────────────────────────────────────────
@@ -205,7 +214,7 @@ export async function replaceLineItems(campaignId: string, clientId: string, ite
   await admin.from('campaigns').update({ updated_at: new Date().toISOString() }).eq('id', campaignId)
 }
 
-export async function updateCampaignFields(id: string, patch: Partial<{ name: string; budget_monthly: number; planned: boolean; phase: string; status: string; shipped_at: string; occasion: string; target_date: string; context: string; creator_choices: Record<string, string>; producer_choices: Record<string, 'team' | 'creator'>; creative_control: string; execution: Record<string, unknown> }>): Promise<void> {
+export async function updateCampaignFields(id: string, patch: Partial<{ name: string; budget_monthly: number; planned: boolean; phase: string; status: string; shipped_at: string; occasion: string; target_date: string; context: string; creator_choices: Record<string, string>; producer_choices: Record<string, PieceProducer>; creative_control: string; execution: Record<string, unknown> }>): Promise<void> {
   const admin = createAdminClient()
   // execution + producer_choices are partial deltas — merge into the stored jsonb
   // so a save of one field/piece never clobbers the others (concurrent edits, a
@@ -216,7 +225,7 @@ export async function updateCampaignFields(id: string, patch: Partial<{ name: st
   }
   if (patch.producer_choices) {
     const { data } = await admin.from('campaigns').select('producer_choices').eq('id', id).maybeSingle()
-    patch = { ...patch, producer_choices: { ...((data?.producer_choices as Record<string, 'team' | 'creator'>) ?? {}), ...patch.producer_choices } }
+    patch = { ...patch, producer_choices: { ...((data?.producer_choices as Record<string, PieceProducer>) ?? {}), ...patch.producer_choices } }
   }
   // Throw on error like createCampaign/replaceLineItems do, so a failed write
   // (e.g. a failed ship) surfaces as a 500 instead of silently succeeding and,
@@ -256,9 +265,10 @@ export async function deleteCampaign(id: string): Promise<void> {
  * so the team's pieces land on the dates the owner approved.
  */
 export async function materializeCampaignDrafts(campaign: SavedCampaign, shipISO: string): Promise<number> {
-  // Only the team's share of the calendar (the rest goes to creators); each piece
-  // already follows the owner's edited line items, so produced == billed.
-  const teamPieces = planCampaignPieces(campaign, shipISO).filter((p) => p.producer === 'team')
+  // The team's share of the calendar (creator pieces go to orders; DIY pieces mint
+  // nothing). An AI-draft piece also lands here — the team finalizes the AI first draft —
+  // until real generation is wired. Each piece follows the owner's edited line items.
+  const teamPieces = planCampaignPieces(campaign, shipISO).filter((p) => p.producer === 'team' || p.producer === 'ai')
   if (!teamPieces.length) return 0
   const admin = createAdminClient()
   const { data: existing, error: existErr } = await admin

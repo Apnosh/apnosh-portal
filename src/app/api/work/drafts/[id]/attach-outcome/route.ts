@@ -23,6 +23,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { snapshotCampaign } from '@/lib/campaigns/outcomes/reconcile'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isCapable } from '@/lib/auth/require-any-capability'
 
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const { data: draft } = await supabase
     .from('content_drafts')
-    .select('id, client_id, status, source_theme_id, proposed_by, proposed_via, ai_generation_ids, caption, published_post_id')
+    .select('id, client_id, campaign_id, status, source_theme_id, proposed_by, proposed_via, ai_generation_ids, caption, published_post_id')
     .eq('id', id)
     .maybeSingle()
   if (!draft) return NextResponse.json({ error: 'draft not found' }, { status: 404 })
@@ -141,6 +142,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       },
     })
     .eq('id', id)
+
+  // Record the first real outcome reading for this piece's campaign, now that it has a
+  // live post. Best-effort — never block publishing on the snapshot.
+  if (draft.campaign_id) await snapshotCampaign(draft.campaign_id as string).catch(() => {})
 
   await admin.from('events').insert({
     client_id: draft.client_id,

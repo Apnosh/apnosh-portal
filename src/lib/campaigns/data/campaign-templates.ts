@@ -20,6 +20,11 @@ export const AUDIENCES: Record<string, AudienceOption> = {
   vips: { id: 'vips', label: 'VIPs', icon: '👑', channels: ['email', 'sms'], segmentId: 'vip', sub: 'Top guests by spend' },
   families: { id: 'families', label: 'Families', icon: '👨‍👩‍👧', channels: ['reels', 'ads', 'social'], sub: 'Family-friendly diners nearby' },
   datenight: { id: 'datenight', label: 'Date-night crowd', icon: '🍷', channels: ['reels', 'ads', 'social'], sub: 'Couples looking for a night out' },
+  // Catering buyers (B2B) — drive who a catering campaign targets.
+  offices: { id: 'offices', label: 'Nearby offices', icon: '🏢', channels: ['email', 'social', 'ads'], sub: 'Companies and teams that order catering' },
+  planners: { id: 'planners', label: 'Event planners', icon: '🗓️', channels: ['email', 'social'], sub: 'People who book food for events' },
+  schools: { id: 'schools', label: 'Schools & groups', icon: '🎓', channels: ['email', 'social', 'ads'], sub: 'Schools, teams, and big groups nearby' },
+  'past-orders': { id: 'past-orders', label: 'Past big orders', icon: '📦', channels: ['email', 'social'], sub: 'Guests who ordered catering before' },
   everyone: { id: 'everyone', label: 'Everyone', icon: '🌍', channels: ['reels', 'email', 'gbp', 'social'], sub: 'All your guests + new locals' },
 }
 
@@ -50,7 +55,7 @@ export interface SpecQuestion {
   placeholder?: string
 }
 
-export interface ContentBeatSpec { week: number; type: string; label: string; channel: string }
+export interface ContentBeatSpec { week: number; type: string; label: string; channel: string; boost?: boolean; because?: string }
 
 export type CampaignCategory = 'demand' | 'capacity' | 'retain' | 'reputation'
 export const CATEGORY_META: Record<CampaignCategory, { label: string }> = {

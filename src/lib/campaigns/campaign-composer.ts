@@ -50,7 +50,13 @@ export function composeCampaign(t: CampaignTemplate, spec: Record<string, string
   const feature = spec.feature?.trim()
   const contentBeats: ContentBeat[] = t.contentPlan.map(b => ({
     week: b.week, type: b.type, channel: b.channel,
-    label: feature && b.type === 'reel' && b.week === 1 ? `${b.label} — featuring ${feature}` : b.label,
+    // Weave the owner's feature into the lead reel — but only when the label has no
+    // descriptive "— …" clause of its own, so we never double up the em-dash.
+    label: feature && b.type === 'reel' && b.week === 1 && !b.label.includes('—') ? `${b.label} — featuring ${feature}` : b.label,
+    // A one-time per-piece boost (carried from the composer); it does NOT add the $/mo ads line.
+    ...(b.boost ? { boost: true } : {}),
+    // The situation-aware plan pass's owner-facing reason for this piece, shown in the plan flow.
+    ...(b.because ? { because: b.because } : {}),
   }))
 
   // Deliverables (priced): one per content type, quantity = its occurrences;

@@ -12,15 +12,20 @@ import { useRouter } from 'next/navigation'
 import { useClient } from '@/lib/client-context'
 import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
 import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
-import { summarize, type LineItem } from '@/lib/campaigns/types'
+import { resolveBrainGoal } from '@/lib/campaigns/builder/compose-plan'
+import { CREATE_CATALOG_IDS } from '@/lib/campaigns/data/create-catalog'
+import type { CampaignProfile } from '@/lib/campaigns/builder/campaign-profile'
+import { summarize, type LineItem, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
+import CampaignPlanFlow from '@/components/campaigns/plan-flow/campaign-plan-flow'
 // apnosh-campaign is intentionally .jsx (untyped design code). TS infers a
 // narrow props type from its defaults, so re-type it to the real prop surface.
 import ApnoshCampaignRaw from './apnosh-campaign'
 
-type MenuOpt = { l: string }
+type MenuOpt = { l: string; photo?: string; f?: boolean }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void }
+type PlanPayload = { itemId: string; vals: Record<string, unknown> }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -31,12 +36,15 @@ const TEMPLATE_MAP: Record<string, string> = {
   'recurring-night': 'nights', winback: 'winback', regulars: 'regulars',
   discover: 'reach', reviews: 'reviewsplan',
 }
-const CATALOG_IDS = new Set([
-  'reach', 'nights', 'firstvisit', 'regulars', 'catering', 'reviewsplan', 'reel', 'story',
-  'carousel', 'graphic', 'dish', 'gpost', 'promoevent', 'launch', 'creator', 'welcome',
-  'second', 'news', 'slowoffer', 'birthday', 'earlyaccess', 'shoot', 'gbp', 'reviewsreply',
-  'qr', 'friction', 'giftcard', 'ticket', 'winback',
-])
+// Derived from the single-source create catalog so the deep-link validator can never drift from the
+// set the recommend feed emits (scripts/verify-catalog-ids.ts guards it against the JSX render list).
+const CATALOG_IDS = new Set(CREATE_CATALOG_IDS)
+
+// A few catalog items ARE one of the brain's system goals under a different id. Alias them so the
+// brain (buildSystem ordering + plan-mix) drives those goals too. Today only reviews: the catalog
+// offers 'reviewsplan' (the lighter content version) instead of the 'reviews' system goal, so route
+// it to the system reviews plan the other three system goals already use.
+const SYSTEM_GOAL_ALIAS: Record<string, string> = { reviewsplan: 'reviews' }
 function resolveInitialItem(template?: string): string | undefined {
   if (!template) return undefined
   return TEMPLATE_MAP[template] ?? (CATALOG_IDS.has(template) ? template : undefined)
@@ -50,7 +58,42 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
   const [recsLoading, setRecsLoading] = useState(false)
   const [commitment, setCommitment] = useState<{ perMonth: number; count: number }>({ perMonth: 0, count: 0 })
   const [monthlyCap, setMonthlyCap] = useState(0)
+  // undefined while loading, then the real answer. Tri-state so an owner who DOES
+  // have a list never momentarily defaults to social-only before the check lands.
+  const [hasList, setHasList] = useState<boolean | undefined>(undefined)
+  // The owner's real account profile (neighborhood, target audience, rating, …) so the madlib
+  // arrives pre-filled from what onboarding already knew instead of static placeholders.
+  const [profile, setProfile] = useState<CampaignProfile | null>(null)
   const initialItem = resolveInitialItem(template)
+  // Carry profile facts the composer should use into the spec, without asking the owner for what we
+  // already know: the neighborhood drives "near me" copy + the ad geo, and the live rating + count
+  // let the composer hold paid reach when a low rating is the real ceiling (the reputation move).
+  const applyProfile = (vals: Record<string, unknown>): Record<string, unknown> => {
+    if (!profile) return vals
+    const add: Record<string, unknown> = {}
+    if (profile.neighborhood && !('neighborhood' in vals)) add.neighborhood = profile.neighborhood
+    if (profile.rating != null && !('rating' in vals)) add.rating = String(profile.rating)
+    if (profile.ratingCount != null && !('ratingCount' in vals)) add.ratingCount = String(profile.ratingCount)
+    if (profile.presence != null && !('presence' in vals)) add.presence = String(profile.presence)
+    return Object.keys(add).length ? { ...vals, ...add } : vals
+  }
+  // List handling. Items that ASK (a 'list' slot, e.g. a launch) respect the owner's choice but
+  // get gated down to social-only when there is no connection, so the plan never promises a send
+  // they can't make. Items that DON'T ask (firstvisit) auto-detect from the real connection — the
+  // owner is never asked a question that invites them to skip people they already own.
+  const applyList = (vals: Record<string, unknown>): Record<string, unknown> => {
+    if ('list' in vals) return hasList === false ? { ...vals, list: 'social only' } : vals
+    if (hasList === undefined) return vals // still loading; composer treats an absent list as none
+    return { ...vals, list: hasList ? 'reaching your email + text list' : 'social only' }
+  }
+  // The plan flow (steps 2–3): after the madlib, the host overlays the breakdown + order
+  // summary, then persists + ships on confirm. Overlays the builder so its madlib state
+  // survives a Back.
+  const [plan, setPlan] = useState<PlanPayload | null>(null)
+  const [planBusy, setPlanBusy] = useState(false)
+  const [planError, setPlanError] = useState<string | null>(null)
+  const [planOutcome, setPlanOutcome] = useState<string | null>(null)
+  const [planLead, setPlanLead] = useState<string | null>(null)
 
   // The owner's monthly marketing budget (from their profile), used as a soft
   // spend cap: the builder warns when the running total would go over it.
@@ -63,10 +106,34 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
     return () => { cancelled = true }
   }, [])
 
+  // Does the owner have a connected email/text list? Gates the launch list
+  // option so we never plan a send to a list that does not exist.
+  useEffect(() => {
+    if (!client?.id) return
+    let cancelled = false
+    fetch(`/api/dashboard/list-status?clientId=${client.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelled && typeof j?.hasList === 'boolean') setHasList(j.hasList) })
+      .catch(() => { /* default: no list, plan social-only */ })
+    return () => { cancelled = true }
+  }, [client?.id])
+
+  // The real account profile — so the madlib defaults come from who the owner actually is
+  // (their neighborhood, the audience they described at onboarding, their rating).
+  useEffect(() => {
+    if (!client?.id) return
+    let cancelled = false
+    fetch(`/api/campaigns/profile?clientId=${client.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelled && j?.profile) setProfile(j.profile as CampaignProfile) })
+      .catch(() => { /* fall back to static defaults */ })
+    return () => { cancelled = true }
+  }, [client?.id])
+
   useEffect(() => {
     let cancelled = false
     listMyMenuItems()
-      .then((res) => { if (!cancelled) setMenu(res.success ? res.data.map((m) => ({ l: m.name })) : []) })
+      .then((res) => { if (!cancelled) setMenu(res.success ? res.data.map((m) => ({ l: m.name, photo: m.photoUrl ?? undefined, f: m.isFeatured })) : []) })
       .catch(() => { if (!cancelled) setMenu([]) })
     return () => { cancelled = true }
   }, [])
@@ -116,7 +183,7 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
   const onCreate = async (payload: CreatePayload): Promise<boolean> => {
     if (!client?.id) return false
     try {
-      const draft = draftFromBuilder(payload)
+      const draft = draftFromBuilder({ ...payload, vals: applyProfile(applyList(payload.vals)) })
       const res = await fetch('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -137,18 +204,93 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
     }
   }
 
+  // Show the plan. For a system goal we show the deterministic plan instantly, then ask the
+  // AI selection layer for the best mix for this owner's real situation and refine in place.
+  // The AI never blocks the plan: any failure/slowness keeps the deterministic plan (busy just
+  // guards the Confirm button while it tailors). The composer stays pure — it reads spec.aiMix.
+  const handlePlan = async (p: PlanPayload) => {
+    // A few catalog items ARE a brain goal under another id: reviewsplan → the 'reviews' system goal
+    // (remaps the plan item too), promoevent → the 'promote-event' atom goal (plan item stays). The
+    // plan keeps the catalog id; the route is asked for the brain vocabulary (resolveBrainGoal).
+    const goalId = SYSTEM_GOAL_ALIAS[p.itemId] ?? p.itemId
+    const brainGoal = resolveBrainGoal(goalId)
+    const vals = applyProfile(applyList(p.vals))
+    setPlan({ itemId: goalId, vals })
+    setPlanOutcome(null)
+    setPlanLead(null)
+    if (!brainGoal || !client?.id) return
+    setPlanBusy(true)
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 12000)
+    try {
+      const budget = String(vals.budget ?? '')
+      const res = await fetch(`/api/campaigns/plan-mix?clientId=${client.id}&goal=${encodeURIComponent(brainGoal)}&budget=${encodeURIComponent(budget)}`, { signal: ctrl.signal })
+      const j = (await res.json().catch(() => ({}))) as { mix?: string[]; outcome?: string; lead?: string; suggestedTier?: { tier?: string } }
+      const next: Record<string, unknown> = { ...vals }
+      if (Array.isArray(j.mix) && j.mix.length) next.aiMix = j.mix.join(',')
+      // No budget entered → size the plan with the brain's suggested tier instead of defaulting to Standard.
+      if (!budget.trim() && !String(vals.tier ?? '').trim() && j.suggestedTier?.tier) next.tier = j.suggestedTier.tier
+      if (next.aiMix || next.tier) setPlan({ itemId: goalId, vals: next })
+      if (typeof j.outcome === 'string') setPlanOutcome(j.outcome)
+      // The cold-start reason the brain shaped the lead, e.g. "Led with reviews because your rating is 4.1…".
+      if (typeof j.lead === 'string') setPlanLead(j.lead)
+    } catch { /* keep the deterministic plan */ } finally {
+      clearTimeout(timer); setPlanBusy(false)
+    }
+  }
+
+  // Confirm the order: create the campaign with the owner's edited pieces + service
+  // choices, then ship it (the team starts), and land on the live campaign.
+  const onConfirm = async ({ draft, producerChoices }: { draft: CampaignDraft; producerChoices: Record<string, PieceProducer> }) => {
+    if (!client?.id) return
+    setPlanBusy(true); setPlanError(null)
+    const h = { 'Content-Type': 'application/json' }
+    try {
+      const res = await fetch('/api/campaigns', { method: 'POST', headers: h, body: JSON.stringify({ clientId: client.id, draft }) })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not create the campaign')
+      const { id } = (await res.json()) as { id?: string }
+      if (id) {
+        if (Object.keys(producerChoices).length) await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify({ fields: { producer_choices: producerChoices } }) }).catch(() => {})
+        await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: new Date().toISOString() } }) }).catch(() => {})
+      }
+      router.push(id ? `/dashboard/campaigns/${id}` : '/dashboard/campaigns')
+    } catch (e) {
+      setPlanError(e instanceof Error ? e.message : 'Something went wrong'); setPlanBusy(false)
+    }
+  }
+
   return (
-    <ApnoshCampaign
-      restaurant={client?.name || 'your restaurant'}
-      menu={menu}
-      initialItem={initialItem}
-      recommended={recommended}
-      recsLoading={recsLoading}
-      monthlyCommitment={commitment.perMonth}
-      liveCount={commitment.count}
-      monthlyCap={monthlyCap}
-      onCreate={onCreate}
-      onClose={onClose}
-    />
+    <>
+      <ApnoshCampaign
+        restaurant={client?.name || 'your restaurant'}
+        menu={menu}
+        initialItem={initialItem}
+        recommended={recommended}
+        recsLoading={recsLoading}
+        monthlyCommitment={commitment.perMonth}
+        liveCount={commitment.count}
+        monthlyCap={monthlyCap}
+        hasList={hasList}
+        profile={profile}
+        onCreate={onCreate}
+        onClose={onClose}
+        onPlan={handlePlan}
+      />
+      {plan && client?.id && (
+        <CampaignPlanFlow
+          itemId={plan.itemId}
+          vals={plan.vals}
+          restaurant={client.name || 'your restaurant'}
+          menu={menu}
+          busy={planBusy}
+          error={planError}
+          monthlyCap={monthlyCap}
+          outcome={planOutcome}
+          lead={planLead}
+          onConfirm={onConfirm}
+          onBack={() => { setPlan(null); setPlanError(null); setPlanOutcome(null); setPlanLead(null) }}
+        />
+      )}
+    </>
   )
 }

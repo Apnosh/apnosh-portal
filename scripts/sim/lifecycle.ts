@@ -6,11 +6,12 @@
  */
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { creativeRolesForCampaign, vibeForCampaign, creatorPool, disciplineForType, type Disc } from '@/lib/campaigns/creators'
-import { buildWorkOrderRows, planCampaignPieces, buildBridgeDraftRow, buildChargeRow, computePayout, buildPayoutRow, findUnaccrued, reconcileProductionPlan, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
+import { buildWorkOrderRows, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, briefInstructions, buildBridgeDraftRow, buildChargeRow, computePayout, buildPayoutRow, findUnaccrued, reconcileProductionPlan, validateTransition, safeHref } from '@/lib/campaigns/work-orders-core'
 import { composeCampaign } from '@/lib/campaigns/campaign-composer'
-import { buildContentLine, CONTENT_META, reconcileBeatsToLines } from '@/lib/campaigns/catalog'
+import { buildContentLine, beatsFromLines, isOnSitePiece, shootDaysFromLines, campaignBill, SOLO_VISIT_SURCHARGE_CENTS, AI_DRAFT_CENTS, CONTENT_META, reconcileBeatsToLines } from '@/lib/campaigns/catalog'
 import { CAMPAIGN_TEMPLATES } from '@/lib/campaigns/data/campaign-templates'
-import type { CampaignBrief, CampaignDraft, ContentBeat, LineItem } from '@/lib/campaigns/types'
+import { summarize } from '@/lib/campaigns/types'
+import type { CampaignBrief, CampaignDraft, ContentBeat, LineItem, PieceBrief, PieceProducer } from '@/lib/campaigns/types'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 import { Suite, pick } from './lib'
 
@@ -28,7 +29,7 @@ interface Spec {
   occasion?: string
   targetDate?: string
   creatorChoices?: Record<string, string>
-  producerChoices?: Record<string, 'team' | 'creator'>   // per-piece team|creator routing
+  producerChoices?: Record<string, PieceProducer>   // per-piece service routing
   creatorAll?: boolean       // route every creative piece to a creator (mint-path tests)
   creativeControl?: string
   excludeIdx?: number[]      // indices to mark included:false
@@ -58,7 +59,7 @@ function campaignFor(s: Spec): SavedCampaign {
   // Team is the default producer, so the mint-path tests opt every creative piece
   // into a creator explicitly (what the Phase 1b toggle will do per piece).
   if (s.creatorAll) {
-    const choices: Record<string, 'team' | 'creator'> = { ...camp.producerChoices }
+    const choices: Record<string, PieceProducer> = { ...camp.producerChoices }
     for (const p of planCampaignPieces(camp, SHIP)) if (p.key) choices[p.key] = 'creator'
     camp.producerChoices = choices
   }
@@ -293,7 +294,8 @@ s.group('owner pricing — per-piece amount + accrued charge')
 }
 {
   // The accrued amount follows the owner's EDITED line price, not the catalog default,
-  // so the charge can never diverge from the quoted plan.
+  // so the charge can never diverge from the quoted plan. (A brief/builder campaign does
+  // not batch, so a lone reel is its base price — no solo-visit surcharge.)
   const camp = campaignFor({ name: 'Edited price', content: ['reel'], beats: 1, creatorAll: true })
   const reelLine = camp.draft.items.find((it) => it.serviceId === 'content-reel')
   if (reelLine) reelLine.price = 200   // owner bumped the reel to $200
@@ -400,7 +402,7 @@ s.group('reconcileProductionPlan — full reconcile, never disrupts in-flight wo
 }
 {
   // In-flight is locked from re-dating; a clamp-only past→today re-date is skipped.
-  const piece = (key: string, slot: number, postISO: string) => ({ index: slot, type: 'reel', label: '', channel: '', postISO, discipline: 'Video' as const, slot, key, producer: 'creator' as const, creatorId: 'v_maya', priceCents: 12000 })
+  const piece = (key: string, slot: number, postISO: string) => ({ index: slot, type: 'reel', label: '', channel: '', postISO, discipline: 'Video' as const, slot, key, producer: 'creator' as const, creatorId: 'v_maya', priceCents: 12000, brief: null, shootDayId: null, soloSurchargeCents: 0 })
   const r1 = reconcileProductionPlan([piece('Video:0', 0, '2026-09-01')], [{ id: 'ob', key: 'Video:0', status: 'in_progress', dueISO: '2026-08-01' }], [], TODAY)
   s.check('an in_progress order is never re-dated', r1.redateOrders.length === 0)
   const r2 = reconcileProductionPlan([piece('Video:0', 0, TODAY)], [{ id: 'o', key: 'Video:0', status: 'offered', dueISO: '2000-01-01' }], [], TODAY)
@@ -517,6 +519,164 @@ s.group('estimate anchor: locking target_date removes preview→ship drift')
   const a1 = deriveSchedule({ targetDate: ship!, contentBeats: beats } as Parameters<typeof deriveSchedule>[0], '2026-06-25T12:00:00Z').firstPostISO
   const a2 = deriveSchedule({ targetDate: ship!, contentBeats: beats } as Parameters<typeof deriveSchedule>[0], '2026-06-28T12:00:00Z').firstPostISO
   s.eq('anchored (start mode) is stable across ship timing', a1, a2)
+}
+
+// ── L. Content Menu: per-piece producer + brief, derived from lines, DIY is free ──
+s.group('Content Menu: per-piece handler + brief route from the lines (no AI brief)')
+{
+  const menuCamp = (items: LineItem[], opts?: { creatorChoices?: Record<string, string>; targetDate?: string }): SavedCampaign => ({
+    clientId: 'sim-client',
+    draft: { id: 'menu-1', name: 'Taco Tuesday', path: 'ai', items, targetDate: opts?.targetDate } as unknown as CampaignDraft,
+    phase: 'build', status: 'draft', shippedAt: null, createdAt: SHIP, updatedAt: SHIP,
+    creatorChoices: opts?.creatorChoices ?? {}, producerChoices: {}, creativeControl: 'handoff', execution: {},
+  })
+  const mLine = (type: string, id: string, producer: PieceProducer, brief?: PieceBrief): LineItem =>
+    buildContentLine(type, id, { producer, brief })!
+
+  // A campaign with NO authored brief — the calendar must derive from the pieces.
+  const reel = mLine('reel', 'li-reel', 'creator', { featuring: 'Birria tacos', offer: '$1 oysters til 6pm' })
+  const photo = mLine('photo', 'li-photo', 'team', { featuring: 'Street corn' })
+  const email = mLine('email', 'li-email', 'diy', { offer: 'Half-off Tuesdays' })
+  const camp = menuCamp([reel, photo, email])
+  const plan = planCampaignPieces(camp, SHIP)
+
+  s.check('derives one piece per line with no brief.contentBeats', plan.length === 3)
+  const byKey = new Map(plan.map((p) => [p.key, p]))
+  // Each piece keys by its stable line id + index ("L#0") — the #-suffix is what keeps
+  // a qty 2→1 shrink from re-keying piece #0.
+  s.check('each piece keys by its stable per-piece id', byKey.has('li-reel#0') && byKey.has('li-photo#0') && byKey.has('li-email#0'))
+  s.check('the reel honors its per-piece creator handler', byKey.get('li-reel#0')?.producer === 'creator' && !!byKey.get('li-reel#0')?.creatorId)
+  s.check('the photo honors its per-piece team handler', byKey.get('li-photo#0')?.producer === 'team' && !byKey.get('li-photo#0')?.creatorId)
+  s.check('the email honors its DIY handler', byKey.get('li-email#0')?.producer === 'diy')
+  s.check('a DIY piece is priced at $0', byKey.get('li-email#0')?.priceCents === 0)
+  s.check('a team/creator piece keeps its catalog price', byKey.get('li-reel#0')?.priceCents === CONTENT_META.reel.price * 100 && byKey.get('li-photo#0')?.priceCents === CONTENT_META.photo.price * 100)
+  s.check('the brief threads onto the piece', byKey.get('li-reel#0')?.brief?.featuring === 'Birria tacos')
+
+  // The creator order carries the stable key + the folded brief.
+  const reelPiece = byKey.get('li-reel#0')!
+  const row = workOrderRowForPiece(camp, reelPiece)
+  s.check('creator order stamps the stable piece key', row?.campaign_piece_key === 'li-reel#0')
+  s.check('creator order title leads with the dish', !!row && row.title.includes('Birria tacos'))
+  s.check('creator order brief folds in featuring + offer', !!row && row.brief.includes('Feature: Birria tacos.') && row.brief.includes('$1 oysters'))
+  s.check('a DIY piece is never a creator order', workOrderRowForPiece(camp, byKey.get('li-email#0')!) === null)
+
+  // The bill: DIY is free, the rest sum honestly via the SAME summarize().
+  const bill = summarize([reel, photo, email])
+  s.eq('DIY zeroes its line in the honest bill', bill.oneTimeOnDelivery, CONTENT_META.reel.price + CONTENT_META.photo.price)
+
+  // qty>1 clones the piece, sharing the brief, with distinct stable ids.
+  const two = mLine('story', 'li-story', 'team', { featuring: 'Churros' }); two.qty = 2
+  const beats = beatsFromLines([two])
+  s.check('qty>1 clones the piece forward', beats.length === 2)
+  s.check('clones share the brief but get distinct ids', beats[0].brief?.featuring === 'Churros' && beats[1].brief?.featuring === 'Churros' && beats[0].id !== beats[1].id)
+  s.check('the beat label leads with the dish', beats[0].label.includes('Churros'))
+
+  // Legacy campaigns (an authored brief) are untouched: positional keys, no per-piece brief.
+  const legacy = campaignFor({ name: 'Legacy', content: ['reel'], beats: 1, creatorAll: true })
+  const legacyPlan = planCampaignPieces(legacy, SHIP)
+  s.check('a legacy campaign still keys positionally (group:slot)', legacyPlan.every((p) => /^[A-Za-z]+:\d+$/.test(p.key)))
+  s.check('a legacy piece carries no per-piece brief', legacyPlan.every((p) => p.brief === null))
+}
+
+// ── M. Shoot Day batching: solo-visit surcharge melts when on-site pieces batch ──
+s.group('Shoot Day: solo-visit surcharge that melts when on-site pieces batch')
+{
+  const SUR = SOLO_VISIT_SURCHARGE_CENTS
+  s.check('the surcharge equals the real solo-vs-batched cost gap ($75)', SUR === 7500)
+
+  // on-site vs remote classification
+  s.check('reel + photo are on-site', isOnSitePiece('reel') && isOnSitePiece('photo'))
+  s.check('post / email / sms are remote', !isOnSitePiece('post') && !isOnSitePiece('email') && !isOnSitePiece('sms'))
+  s.check('story is remote by default', !isOnSitePiece('story'))
+  s.check('story is on-site only when filmed here', isOnSitePiece('story', { captureMode: 'on-site' }))
+
+  const mLine = (type: string, id: string, producer?: PieceProducer, brief?: PieceBrief): LineItem => buildContentLine(type, id, { producer, brief })!
+
+  // One on-site piece alone → solo surcharge applies.
+  const soloReel = mLine('reel', 'li-r', 'team')
+  const sd1 = shootDaysFromLines([soloReel])
+  s.check('a lone on-site piece forms one solo Shoot Day', sd1.length === 1 && sd1[0].onSiteCount === 1 && sd1[0].soloSurchargeCents === SUR)
+
+  // Add a second on-site piece → the surcharge melts to $0.
+  const photo = mLine('photo', 'li-p', 'creator')
+  const sd2 = shootDaysFromLines([soloReel, photo])
+  s.check('two on-site pieces share one visit, surcharge melts to $0', sd2.length === 1 && sd2[0].onSiteCount === 2 && sd2[0].soloSurchargeCents === 0)
+
+  // A remote piece never joins a shoot or pays a visit.
+  const email = mLine('email', 'li-e', 'team')
+  s.check('a remote piece never forms a Shoot Day', shootDaysFromLines([email]).length === 0)
+
+  // DIY on-site piece needs no Apnosh visit → excluded from the count.
+  const diyReel = mLine('reel', 'li-dr', 'diy')
+  s.check('a DIY on-site piece adds no visit (owner films it)', shootDaysFromLines([diyReel]).length === 0)
+  s.check('one team reel + one DIY reel is still a SOLO visit', shootDaysFromLines([soloReel, diyReel])[0].soloSurchargeCents === SUR)
+
+  // The surcharge folds into the lone piece's price via planCampaignPieces.
+  const menuCamp = (items: LineItem[]): SavedCampaign => ({
+    clientId: 'sim-client', draft: { id: 'sd-camp', name: 'Shoot', path: 'ai', items } as unknown as CampaignDraft,
+    phase: 'build', status: 'draft', shippedAt: null, createdAt: SHIP, updatedAt: SHIP, creatorChoices: {}, producerChoices: {}, creativeControl: 'handoff', execution: {},
+  })
+  const solo = planCampaignPieces(menuCamp([soloReel]), SHIP)
+  s.check('solo on-site piece price folds in the visit surcharge', solo.length === 1 && solo[0].priceCents === CONTENT_META.reel.price * 100 + SUR && solo[0].soloSurchargeCents === SUR)
+  const batched = planCampaignPieces(menuCamp([soloReel, photo]), SHIP)
+  s.check('batched on-site pieces carry NO surcharge', batched.every((p) => p.soloSurchargeCents === 0) && batched.find((p) => p.type === 'reel')?.priceCents === CONTENT_META.reel.price * 100)
+  s.check('every on-site piece is stamped with its shoot day', batched.filter((p) => p.type === 'reel' || p.type === 'photo').every((p) => p.shootDayId === 'sd1'))
+  s.check('a remote piece in the same campaign has no shoot day', planCampaignPieces(menuCamp([soloReel, photo, email]), SHIP).find((p) => p.type === 'email')?.shootDayId === null)
+
+  // campaignBill = the one price truth (lines + visit surcharge).
+  const billSolo = campaignBill([soloReel])
+  s.eq('campaignBill folds the solo visit into the delivery total', billSolo.oneTimeOnDelivery, CONTENT_META.reel.price + SUR / 100)
+  s.eq('campaignBill surfaces the visit surcharge separately', billSolo.visitSurchargeDollars, SUR / 100)
+  const billBatched = campaignBill([soloReel, photo])
+  s.eq('batched: no visit surcharge in the bill', billBatched.visitSurchargeDollars, 0)
+  s.eq('batched delivery total is just the two piece prices', billBatched.oneTimeOnDelivery, CONTENT_META.reel.price + CONTENT_META.photo.price)
+}
+
+// ── N. Review fixes: payout nets the surcharge, both lanes carry the brief, stable id ──
+s.group('Review fixes: surcharge out of payout, brief on both lanes, qty-stable keys')
+{
+  // Owner pays the surcharge; the creator is paid on the piece only.
+  const surcharged = buildPayoutRow({ id: 'wo', client_id: 'c', campaign_id: 'k', creator_id: 'v_maya', amount_cents: 19500, surcharge_cents: 7500 }, 20)
+  s.eq('payout gross nets out the solo-visit surcharge', surcharged.gross_cents, 12000)
+  s.eq('payout net is on the piece, not the trip', surcharged.net_cents, 9600)
+  s.eq('the owner charge still bills the full surcharged amount', buildChargeRow({ id: 'wo', client_id: 'c', campaign_id: 'k', amount_cents: 19500 }).amount_cents, 19500)
+  s.eq('no surcharge → gross is the full amount', buildPayoutRow({ id: 'wo', client_id: 'c', campaign_id: 'k', creator_id: 'v_maya', amount_cents: 12000 }, 20).gross_cents, 12000)
+
+  // briefInstructions includes subject + cta (sends are always team — dropping them loses the point).
+  const instr = briefInstructions({ offer: 'BOGO', subject: 'Tonight only', cta: 'Reply YES', mustSay: 'kitchen closes 10pm' })
+  s.check('brief instructions include subject + cta', instr.some((x) => x.includes('Tonight only')) && instr.some((x) => x.includes('Reply YES')))
+
+  // A team piece carries the brief in media_brief (the team no longer builds blind).
+  const teamCamp: SavedCampaign = {
+    clientId: 'c', draft: { id: 'm', name: 'm', path: 'ai', items: [buildContentLine('email', 'li-e', { producer: 'team', brief: { offer: 'BOGO', subject: 'Tonight only', cta: 'Reply YES' } })!] } as unknown as CampaignDraft,
+    phase: 'build', status: 'draft', shippedAt: null, createdAt: SHIP, updatedAt: SHIP, creatorChoices: {}, producerChoices: {}, creativeControl: 'handoff', execution: {},
+  }
+  const emailPiece = planCampaignPieces(teamCamp, SHIP)[0]
+  const draftRow = teamDraftRowForPiece(teamCamp, emailPiece)
+  s.check('team draft carries the brief in media_brief', !!draftRow.media_brief && draftRow.media_brief.instructions.some((x) => x.includes('Tonight only')))
+  s.check('team draft idea leads with the offer', draftRow.idea.includes('BOGO'))
+
+  // beatsFromLines stamps a #-suffixed id even at qty 1, so a 2→1 shrink keeps piece #0.
+  const oneBeat = beatsFromLines([buildContentLine('reel', 'li-x', { producer: 'team' })!])
+  s.eq('qty-1 beat id is suffixed (#0), not bare', oneBeat[0]?.id, 'li-x#0')
+  const two = buildContentLine('reel', 'li-y', { producer: 'team' })!; two.qty = 2
+  const twoBeats = beatsFromLines([two])
+  s.check('qty-2 keeps #0 and adds #1 — shrink trims #1, never re-keys #0', twoBeats[0]?.id === 'li-y#0' && twoBeats[1]?.id === 'li-y#1')
+}
+
+// ── O. Per-piece service resolves to team/creator/diy/ai; brief campaigns don't batch ──
+s.group('Per-piece service resolves (team/creator/diy/ai); brief campaigns keep base pricing')
+{
+  // A brief (builder) campaign: producer_choices can carry all four values; planCampaignPieces
+  // resolves each — DIY is free, AI is the flat fee, creator routes to a creator — and a brief
+  // campaign never batches, so no on-site surcharge is folded in.
+  const camp = campaignFor({ name: 'Serviced', content: ['reel', 'photo', 'post'], beats: 3, producerChoices: { 'Video:0': 'creator', 'Photo:0': 'diy', 'Design:0': 'ai' } })
+  const byType = new Map(planCampaignPieces(camp, SHIP).map((p) => [p.type, p]))
+  s.check('a piece set to DIY is $0', byType.get('photo')?.producer === 'diy' && byType.get('photo')?.priceCents === 0)
+  s.check('a piece set to AI bills the flat AI fee', byType.get('post')?.producer === 'ai' && byType.get('post')?.priceCents === AI_DRAFT_CENTS)
+  s.check('a piece set to a creator routes to a creator', byType.get('reel')?.producer === 'creator' && !!byType.get('reel')?.creatorId)
+  s.eq('a brief-campaign creative keeps its base price (no batching surcharge)', byType.get('reel')?.priceCents, CONTENT_META.reel.price * 100)
+  s.check('a brief campaign stamps no shoot day on its pieces', planCampaignPieces(camp, SHIP).every((p) => p.shootDayId === null))
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')

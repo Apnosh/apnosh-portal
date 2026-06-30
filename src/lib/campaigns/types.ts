@@ -59,6 +59,39 @@ export type OptOutReason = 'have-it' | 'diy'
 /** Where an item sits in the live-campaign lifecycle. */
 export type ItemLock = 'editable' | 'in-production' | 'delivered'
 
+/** Who makes a piece, chosen per-piece in the add-piece modal (Content Menu):
+ *  'team' (Apnosh makes it) · 'creator' (a marketplace creator) · 'diy' (the owner
+ *  makes it — $0, nothing is produced for them) · 'ai' (an AI draft — v2, tier-priced).
+ *  Undefined on legacy AI/strategist lines, which resolve via the positional
+ *  producer_choices map instead. */
+export type PieceProducer = 'team' | 'creator' | 'diy' | 'ai'
+
+/** The brief the maker needs, collected inside the add-piece modal so a piece is
+ *  never half-specified. Per-type subsets: shots use `featuring`; sends use `offer`
+ *  (+ `subject` for email, `cta` for sms); the rest are optional refinements. */
+export interface PieceBrief {
+  /** The dish/item the piece is about (required for shots). */
+  featuring?: string
+  /** The hook / reason to act (required for sends, optional on shots). */
+  offer?: string
+  /** Email subject line. */
+  subject?: string
+  /** SMS call-to-action (a link or "reply to book"). */
+  cta?: string
+  /** Anything that must be included. */
+  mustSay?: string
+  /** Anything to keep out. */
+  avoid?: string
+  /** Timing / posting preferences. */
+  notes?: string
+  /** Which Shoot Day this on-site piece shares (Content Menu batching). 'sd1' = the
+   *  campaign's one visit in v1. Absent on remote pieces. */
+  shootDayId?: string
+  /** For a story only: whether it is filmed on location ('on-site') or a quick
+   *  repost ('remote', the default). Drives isOnSitePiece + batching. */
+  captureMode?: 'on-site' | 'remote'
+}
+
 export interface LineItem {
   id: string
   serviceId: string
@@ -92,7 +125,39 @@ export interface LineItem {
   paused?: boolean
   /** For per-occurrence lines (reels/posts/sends): how many. */
   qty?: number
+  /** Who makes this piece (Content Menu, per-piece). Undefined on legacy lines. */
+  producer?: PieceProducer
+  /** The add-piece brief for this piece (Content Menu). */
+  brief?: PieceBrief
+  /** This piece's own post date, ISO (Content Menu). v1 uses the campaign date. */
+  postISO?: string
   lock: ItemLock
+}
+
+/** A stage of a goal SYSTEM plan — its key + owner-facing label. Each goal defines its own ordered
+ *  stages (first-visit, slow-nights and regulars have different shapes), so this is data, not a
+ *  fixed union. */
+export type PlanStageKey = string
+export interface PlanStage {
+  stage: string
+  title: string
+  sub: string
+}
+
+/** One move in a staged system plan: a real, priced catalog service with an owner-facing role.
+ *  Each move rides as a line item (its price/cadence come from there), so this carries only the
+ *  strategy framing — which stage it belongs to and what it does. */
+export interface PlanMove {
+  serviceId: string
+  stage: PlanStageKey
+  /** Owner-facing one-liner: what this move does for them. */
+  role: string
+  /** Optional deeper why (evidence / rationale). */
+  because?: string
+  /** The quantity the owner tuned in the builder (how many reels / texts / photos), when they
+   *  changed it from the catalog default. Absent = the service's standard count. The line price
+   *  already reflects this; carried here so the saved plan records the chosen count. */
+  qty?: number
 }
 
 export interface CampaignDraft {
@@ -118,6 +183,19 @@ export interface CampaignDraft {
   /** For a focused campaign (vs the always-on plan): its strategic brief —
    * the offer, audience, channels and content calendar. */
   brief?: CampaignBrief
+  /** The situation-aware pass HELD the paid-ads line (a low rating is the real ceiling); the plan
+   *  flow surfaces it with a one-tap "run ads anyway" that restores the normal plan. */
+  heldAds?: boolean
+  /** The operational move the plan LEADS with (e.g. "Get found on Google"), chosen by the binding
+   *  constraint. The plan flow renders it above the content, which is now the support slot. */
+  leadMove?: { title: string; because: string; price: number; cadence: BillingCadence }
+  /** A staged SYSTEM plan (e.g. win first visits): the ordered service moves the plan is built from.
+   *  When present, the plan flow renders the staged system instead of the content-beat Walk; each
+   *  move's price/cadence live on its matching line item(s) in `items`. */
+  moves?: PlanMove[]
+  /** The ordered stage labels for the system plan (goal-defined; the plan flow renders stages in
+   *  this order, grouping `moves` by stage). */
+  stages?: PlanStage[]
 }
 
 /* ── Campaign brief ───────────────────────────────────────────────────
@@ -135,6 +213,22 @@ export interface ContentBeat {
   label: string
   /** Where it goes out. */
   channel: string
+  /** This piece gets a one-time paid boost (ad spend at cost, no monthly retainer). */
+  boost?: boolean
+  /** A plain owner-facing reason the situation-aware plan pass added/moved this piece. */
+  because?: string
+  /** Stable per-piece id (Content Menu): the producer_choices / reconcile /
+   *  content_drafts match key. Absent on legacy AI/strategist beats, which key
+   *  positionally by discipline:slot. */
+  id?: string
+  /** An exact post day (YYYY-MM-DD) the owner picked, overriding the week-derived date. */
+  dateISO?: string
+  /** The line item this beat was derived from (Content Menu). */
+  lineId?: string
+  /** Per-piece handler chosen in the add-piece modal (Content Menu). */
+  producer?: PieceProducer
+  /** Per-piece brief collected at add-time (Content Menu). */
+  brief?: PieceBrief
 }
 
 export interface CampaignBrief {
@@ -174,8 +268,10 @@ export interface BillingSummary {
   optedOutSaved: number
 }
 
-/** A line's charge at its current quantity (per-occurrence lines multiply). */
+/** A line's charge at its current quantity (per-occurrence lines multiply). A piece
+ *  the owner makes themselves (producer 'diy') is always free — they do the work. */
 export function lineTotal(it: LineItem): number {
+  if (it.producer === 'diy') return 0
   if (it.cadence.kind === 'per-occurrence') return it.price * Math.max(1, it.qty ?? 1)
   return it.price
 }

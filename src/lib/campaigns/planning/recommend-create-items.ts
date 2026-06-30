@@ -1,49 +1,17 @@
 import 'server-only'
 /**
- * AI recommender for the create page's own campaign catalog (the ~28 items the
+ * AI recommender for the create page's own campaign catalog (the 29 items the
  * owner picks from in the builder). Ranks them for the restaurant's goal + live
  * signals so the create page's "Suggested for you" row + featured card are
  * tailored, not hardcoded. Same discipline as the plan builder: the model
  * proposes catalog ids + a reason; code validates against the closed list. A
  * goal-anchored rules ranker is the fallback.
  */
-import type { GoalKey } from '@/lib/campaigns/types'
 import type { PlanningContext, UpcomingMoment } from './types'
 import { callStructuredOutput } from './anthropic'
+import type { GoalKey } from '@/lib/campaigns/types'
+import { CREATE_CATALOG } from '@/lib/campaigns/data/create-catalog'
 
-/** The create-page catalog (mirrors CATALOG in apnosh-campaign.jsx). id + a goal
- *  it serves; unknown ids returned by the model are dropped by the client. */
-const CREATE_CATALOG: { id: string; title: string; goal: GoalKey }[] = [
-  { id: 'reach', title: 'Reach new locals', goal: 'new-customers' },
-  { id: 'nights', title: 'Fill your slow nights', goal: 'slow-nights' },
-  { id: 'firstvisit', title: 'Win first-time visits', goal: 'new-customers' },
-  { id: 'regulars', title: 'Turn first-timers into regulars', goal: 'regulars' },
-  { id: 'catering', title: 'Catering and big orders', goal: 'new-customers' },
-  { id: 'reviewsplan', title: 'Boost reviews and rating', goal: 'reviews' },
-  { id: 'reel', title: 'A short video reel', goal: 'new-customers' },
-  { id: 'story', title: 'A story post', goal: 'new-customers' },
-  { id: 'carousel', title: 'A carousel post', goal: 'new-customers' },
-  { id: 'graphic', title: 'A designed graphic', goal: 'new-customers' },
-  { id: 'dish', title: 'Feature a dish', goal: 'new-customers' },
-  { id: 'gpost', title: 'A Google Business post', goal: 'new-customers' },
-  { id: 'promoevent', title: 'Promote an event', goal: 'slow-nights' },
-  { id: 'launch', title: 'Launch a special', goal: 'new-customers' },
-  { id: 'creator', title: 'Work with a creator', goal: 'new-customers' },
-  { id: 'welcome', title: 'Welcome new subscribers', goal: 'regulars' },
-  { id: 'second', title: 'Nudge a second visit', goal: 'regulars' },
-  { id: 'news', title: 'Monthly newsletter', goal: 'regulars' },
-  { id: 'slowoffer', title: 'Slow-night offer email and text', goal: 'slow-nights' },
-  { id: 'birthday', title: 'Birthday treat', goal: 'regulars' },
-  { id: 'earlyaccess', title: 'Early access for regulars', goal: 'regulars' },
-  { id: 'shoot', title: 'Book a photo and video shoot', goal: 'new-customers' },
-  { id: 'gbp', title: 'Polish your Google profile', goal: 'reviews' },
-  { id: 'reviewsreply', title: 'Reply to reviews', goal: 'reviews' },
-  { id: 'qr', title: 'Add a table QR', goal: 'regulars' },
-  { id: 'friction', title: 'Smooth out ordering', goal: 'new-customers' },
-  { id: 'giftcard', title: 'Push gift cards', goal: 'new-customers' },
-  { id: 'ticket', title: 'Run a ticketed event', goal: 'new-customers' },
-  { id: 'winback', title: 'Win back quiet guests', goal: 'regulars' },
-]
 const VALID = new Set(CREATE_CATALOG.map((c) => c.id))
 
 export interface ItemRec { id: string; reason: string }

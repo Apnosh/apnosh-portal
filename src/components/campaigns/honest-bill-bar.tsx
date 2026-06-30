@@ -5,11 +5,13 @@
  * pieces on, off, DIY or "I have it". The whole "only pay for what you need"
  * promise made visible: one number that only ever reflects what they kept.
  */
-import { summarize, type LineItem } from '@/lib/campaigns/types'
+import { summarize, type BillingSummary, type LineItem } from '@/lib/campaigns/types'
 import { C, DISPLAY, money } from './ui'
 
-export default function HonestBillBar({ items, note }: { items: LineItem[]; note?: string }) {
-  const s = summarize(items)
+/** `bill` overrides the line summary when given (a Content-Menu campaign passes
+ *  campaignBill so the solo-visit surcharge is in the on-delivery figure). */
+export default function HonestBillBar({ items, note, bill }: { items: LineItem[]; note?: string; bill?: BillingSummary }) {
+  const s = bill ?? summarize(items)
   const free = s.oneTimeOnDelivery === 0 && s.perMonth === 0
 
   return (

@@ -5,8 +5,9 @@
  * mint logic without pulling in the admin DB client.
  */
 import type { SavedCampaign } from './view'
+import type { PieceBrief } from './types'
 import { creativeRolesForCampaign, vibeForCampaign, disciplineForType, type Disc } from './creators'
-import { reconcileBeatsToLines, CONTENT_META } from './catalog'
+import { reconcileBeatsToLines, beatsFromLines, isOnSitePiece, SOLO_VISIT_SURCHARGE_CENTS, AI_DRAFT_CENTS, CONTENT_META } from './catalog'
 import { deriveSchedule } from './schedule'
 
 export type WorkOrderStatus = 'offered' | 'accepted' | 'in_progress' | 'delivered' | 'approved' | 'revision' | 'declined'
@@ -53,6 +54,22 @@ export function safeHref(url?: string | null): string | null {
   } catch { return null }
 }
 
+/** The owner's per-piece answers, folded into a maker-facing instruction list. Shared by
+ *  both lanes so a team draft and a creator order carry the SAME brief (subject + cta
+ *  included — sends are always team, so dropping those silently loses the whole point). */
+export function briefInstructions(b?: PieceBrief | null): string[] {
+  if (!b) return []
+  return [
+    b.featuring && `Feature: ${b.featuring}.`,
+    b.offer && `Offer / hook: ${b.offer}.`,
+    b.subject && `Subject line: ${b.subject}.`,
+    b.cta && `Call to action: ${b.cta}.`,
+    b.mustSay && `Must include: ${b.mustSay}.`,
+    b.avoid && `Avoid: ${b.avoid}.`,
+    b.notes && `Notes: ${b.notes}.`,
+  ].filter((x): x is string => !!x)
+}
+
 /** The insert shape for one creator_work_orders row. */
 export interface WorkOrderRow {
   campaign_id: string
@@ -65,12 +82,16 @@ export interface WorkOrderRow {
   due_date: string | null
   status: WorkOrderStatus
   concept_status: 'approved' | 'pending'  // 'pending' when the owner wants to OK the idea first
-  amount_cents: number  // the owner's price for this piece, locked at ship (feeds charge + payout)
+  amount_cents: number  // the owner's price for this piece, locked at ship (feeds the owner charge)
+  campaign_piece_key: string  // the plan's stable key for this piece — the reconcile match key (migration 183)
+  surcharge_cents: number  // the solo-visit surcharge inside amount_cents — netted OUT of the creator payout (migration 184)
 }
 
-/** Who makes a given piece: the owner's in-house team (→ content_drafts, worked
- *  in /work) or a marketplace creator (→ a creator_work_order + brief). */
-export type Producer = 'team' | 'creator'
+/** Who makes a given piece. The two PRODUCED lanes are 'team' (→ content_drafts,
+ *  worked in /work) and 'creator' (→ a creator_work_order + brief). 'diy' (the owner
+ *  makes it — $0, nothing minted) and 'ai' (an AI draft, v2) are self-serve lanes the
+ *  Content Menu adds; both are skipped by the team + creator mint filters. */
+export type Producer = 'team' | 'creator' | 'diy' | 'ai'
 
 /** Default producer for a creative piece with an available creator and no explicit
  *  owner choice. TEAM by default: real creator supply is still a seeded test pool
@@ -100,12 +121,16 @@ export interface PlannedPiece {
   postISO: string | null      // the day it goes out, clamped to >= ship day
   discipline: Disc | null     // null for non-creative beats (email/sms)
   slot: number | null         // 0-based index within the discipline, null if none
-  key: string                 // group:slot, stable per piece — "Video:0" | "email:1".
-                              // For creative pieces (discipline set) this IS the
-                              // producer_choices key; also the reconcile match key for both lanes.
+  key: string                 // stable per piece. Menu pieces use the line id; legacy
+                              // pieces use group:slot ("Video:0" | "email:1"). For a
+                              // creative piece this is also the producer_choices key,
+                              // and it is the reconcile + content_drafts match key.
   producer: Producer          // the ONE lane that makes it
   creatorId: string | null    // the assigned creator when producer === 'creator'
-  priceCents: number          // the owner's price for this one piece (CONTENT_META)
+  priceCents: number          // the owner's price for this piece, INCLUDING any folded solo-visit surcharge ($0 when 'diy')
+  brief: PieceBrief | null    // the add-piece brief (Content Menu), null for legacy pieces
+  shootDayId: string | null   // the visit this on-site piece shares (Content Menu); null for remote/legacy pieces
+  soloSurchargeCents: number  // the solo-visit surcharge folded into priceCents (0 unless this is a lone on-site piece)
 }
 
 /**
@@ -122,9 +147,17 @@ export function planCampaignPieces(campaign: SavedCampaign, shipISO: string): Pl
   const roles = creativeRolesForCampaign(items, campaign.creatorChoices, vibe)
   const creatorByDiscipline = new Map(roles.map((r) => [r.discipline, r.creator]))
 
-  // The same reconciled calendar both lanes date against, so an order's due date
-  // agrees with the content_draft's publish date for the same beat.
-  const beats = reconcileBeatsToLines(items, campaign.draft.brief?.contentBeats ?? [])
+  // The same calendar both lanes date against, so an order's due date agrees with the
+  // content_draft's publish date for the same beat. A legacy AI/strategist campaign
+  // carries an authored brief (reconcile its beats to the edited lines); a Content-Menu
+  // campaign has none, so the calendar is derived straight from the pieces it ordered.
+  const briefBeats = campaign.draft.brief?.contentBeats ?? []
+  // A Content-Menu campaign has no authored brief — its pieces were added together so the
+  // single-Shoot-Day batching model holds. A builder/AI campaign's beats are spread across
+  // weeks (a week-1 reel and a week-6 reel are DIFFERENT shoots), so it keeps its prior
+  // pricing: no batching, no surcharge. isMenu gates both the beats source AND the batching.
+  const isMenu = briefBeats.length === 0
+  const beats = isMenu ? beatsFromLines(items) : reconcileBeatsToLines(items, briefBeats)
   const sched = deriveSchedule(
     { targetDate: campaign.draft.targetDate, occasion: campaign.draft.occasion, contentBeats: beats },
     shipISO,
@@ -140,29 +173,58 @@ export function planCampaignPieces(campaign: SavedCampaign, shipISO: string): Pl
     const m = /^content-(.+)$/.exec(it.serviceId)
     if (m && typeof it.price === 'number') priceByType.set(m[1], it.price)
   }
+  // Every on-site piece of a campaign shares ONE visit (the owner's "batch into one
+  // shoot" model). isMenu is kept only to pick the beats SOURCE above (menu derives from
+  // lines; a brief campaign reconciles its authored beats); both batch the same here.
+  const ONE_SHOOT = 'sd1'
 
-  return sched.beats.map((b, index) => {
+  // ── Pass 1: resolve each piece's producer + on-site flag + base price ──
+  const draft = sched.beats.map((b, index) => {
     const discipline = disciplineForType(b.type)
     const creator = discipline ? creatorByDiscipline.get(discipline) : undefined
-    // Every piece gets a stable key by its group (discipline for creative, beat type
-    // for non-creative) + its slot within that group, so both lanes can match it on
-    // a reconcile. For creative pieces key === pieceKey(discipline, slot).
+    // Slot = the 0-based index within the discipline (the 2nd video is slot 1); it
+    // keys the order's onConflict + the legacy positional key. The MATCH key is the
+    // beat's own stable id when it has one (Content Menu, == the line id) so a
+    // re-order can't shift it, else the legacy group:slot.
     const group = discipline ?? b.type
     const slotInGroup = (slotByGroup[group] = (slotByGroup[group] ?? -1) + 1)
     const slot = discipline ? slotInGroup : null
-    const key = `${group}:${slotInGroup}`
+    const key = b.id ?? `${group}:${slotInGroup}`
     // Clamp each piece's post date to the ship day so a backward-anchored (event)
     // or too-soon campaign never produces a piece dated before it was ordered.
     const postISO = b.postISO && shipDay && b.postISO < shipDay ? shipDay : (b.postISO ?? null)
+    // The owner's per-piece choice: the beat's own producer (Content Menu) wins, else the
+    // positional producer_choices map (the previous builder's service picker writes that).
+    // Now a full four-value choice — team | creator | diy | ai.
+    const want = b.producer ?? choices[key]
     let producer: Producer = 'team'
     let creatorId: string | null = null
-    if (discipline && creator) {
-      const choice = choices[key]
-      producer = choice === 'team' || choice === 'creator' ? choice : DEFAULT_PRODUCER
+    if (want === 'diy' || want === 'ai') {
+      producer = want                                   // owner / AI lane — neither team nor creator mints it
+    } else if (discipline && creator) {
+      producer = want === 'team' || want === 'creator' ? want : DEFAULT_PRODUCER
       creatorId = producer === 'creator' ? creator.id : null
+    } else if (want === 'team') {
+      producer = 'team'
     }
-    const priceCents = Math.round((priceByType.get(b.type) ?? CONTENT_META[b.type]?.price ?? 0) * 100)
-    return { index, type: b.type, label: b.label ?? '', channel: b.channel ?? '', postISO, discipline: discipline ?? null, slot, key, producer, creatorId, priceCents }
+    // On-site = a reel/photo (or a story filmed on location) someone must come shoot. DIY
+    // (the owner shoots it) and AI (no shoot at all) never need an Apnosh visit.
+    const onSite = isMenu && isOnSitePiece(b.type, b.brief) && producer !== 'diy' && producer !== 'ai'
+    const shootDayId = onSite ? (b.brief?.shootDayId ?? ONE_SHOOT) : null
+    const baseCents = Math.round((priceByType.get(b.type) ?? CONTENT_META[b.type]?.price ?? 0) * 100)
+    return { index, type: b.type, label: b.label ?? '', channel: b.channel ?? '', postISO, discipline: discipline ?? null, slot, key, producer, creatorId, baseCents, brief: b.brief ?? null, shootDayId }
+  })
+
+  // ── Pass 2: a shoot day holding exactly ONE on-site piece carries the solo-visit
+  // surcharge (no second piece to split the trip), folded into that one piece's price.
+  // An AI piece bills the flat AI-draft fee; a DIY piece is free; everyone else pays the
+  // line price plus any surcharge. ──
+  const onSiteByDay = new Map<string, number>()
+  for (const p of draft) if (p.shootDayId) onSiteByDay.set(p.shootDayId, (onSiteByDay.get(p.shootDayId) ?? 0) + 1)
+  return draft.map((p) => {
+    const soloSurchargeCents = p.shootDayId && onSiteByDay.get(p.shootDayId) === 1 ? SOLO_VISIT_SURCHARGE_CENTS : 0
+    const priceCents = p.producer === 'diy' ? 0 : p.producer === 'ai' ? AI_DRAFT_CENTS : p.baseCents + soloSurchargeCents
+    return { index: p.index, type: p.type, label: p.label, channel: p.channel, postISO: p.postISO, discipline: p.discipline, slot: p.slot, key: p.key, producer: p.producer, creatorId: p.creatorId, priceCents, brief: p.brief, shootDayId: p.shootDayId, soloSurchargeCents }
   })
 }
 
@@ -186,18 +248,31 @@ export function workOrderRowForPiece(campaign: SavedCampaign, p: PlannedPiece): 
   const objective = campaign.draft.brief?.objective ?? ''
   const name = campaign.draft.name
   const conceptStatus: 'approved' | 'pending' = campaign.creativeControl === 'approve_concept' ? 'pending' : 'approved'
+  // Fold the owner's per-piece add-time answers (Content Menu) into the brief the
+  // creator executes, so a marketplace piece carries the same instructions a team
+  // piece would. Legacy pieces (no brief) keep the original generic brief.
+  const f = p.brief ?? undefined
+  const title = f?.featuring ? `${p.discipline} · ${f.featuring}` : (p.label.trim() ? p.label.trim() : `${p.discipline} for ${name}`)
+  const brief = [
+    `Make this ${p.discipline.toLowerCase()} piece for "${name}".`,
+    ...briefInstructions(f),
+    objective && `Goal: ${objective}.`,
+    `You approve nothing yet — deliver, then the owner reviews.`,
+  ].filter(Boolean).join(' ')
   return {
     campaign_id: campaign.draft.id,
     client_id: campaign.clientId,
     creator_id: p.creatorId,
     discipline: p.discipline,
     slot: p.slot,
-    title: p.label.trim() ? p.label.trim() : `${p.discipline} for ${name}`,
-    brief: `Make this ${p.discipline.toLowerCase()} piece for "${name}".${objective ? ` Goal: ${objective}.` : ''} You approve nothing yet — deliver, then the owner reviews.`,
+    title,
+    brief,
     due_date: p.postISO,
     status: 'offered',
     concept_status: conceptStatus,
     amount_cents: p.priceCents,
+    campaign_piece_key: p.key,
+    surcharge_cents: p.soloSurchargeCents,
   }
 }
 
@@ -222,17 +297,24 @@ export interface TeamDraftRow {
   proposed_via: 'strategist'
   target_publish_date: string | null
   campaign_piece_key: string
+  /** The owner's per-piece brief, so the team isn't building blind. Stored in the
+   *  existing media_brief jsonb; null when there's no brief (legacy pieces). */
+  media_brief: { from_menu: true; instructions: string[] } | null
 }
 export function teamDraftRowForPiece(campaign: SavedCampaign, p: PlannedPiece): TeamDraftRow {
+  const instructions = briefInstructions(p.brief)
+  // Lead the idea with the offer when there is one, so the queue row reads usefully.
+  const idea = [p.label || 'Campaign piece', p.brief?.offer ? `— ${p.brief.offer}` : ''].filter(Boolean).join(' ').slice(0, 280)
   return {
     client_id: campaign.clientId,
     campaign_id: campaign.draft.id,
-    idea: (p.label || 'Campaign piece').slice(0, 280),
+    idea,
     status: 'idea',
     service_line: serviceLineForPiece(p.type, p.channel),
     proposed_via: 'strategist',
     target_publish_date: p.postISO,
     campaign_piece_key: p.key,
+    media_brief: instructions.length ? { from_menu: true, instructions } : null,
   }
 }
 
@@ -393,8 +475,10 @@ export interface PayoutRow {
  *  the order's locked amount (what the owner paid), net is what the creator earns
  *  after Apnosh's fee. Pure; the DB insert + idempotency live in
  *  accruePayoutForApprovedOrder. */
-export function buildPayoutRow(o: { id: string; client_id: string; campaign_id: string | null; creator_id: string; amount_cents: number }, feePercent: number): PayoutRow {
-  const gross = Math.max(0, Math.round(o.amount_cents || 0))
+export function buildPayoutRow(o: { id: string; client_id: string; campaign_id: string | null; creator_id: string; amount_cents: number; surcharge_cents?: number }, feePercent: number): PayoutRow {
+  // The owner pays the full amount (charge); the creator is paid on the PIECE only —
+  // the solo-visit surcharge is Apnosh's trip-cost recovery, so net it out of gross.
+  const gross = Math.max(0, Math.round((o.amount_cents || 0) - (o.surcharge_cents || 0)))
   const pct = Math.min(100, Math.max(0, feePercent || 0))
   const { feeCents, netCents } = computePayout(gross, pct)
   return {

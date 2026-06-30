@@ -24,6 +24,8 @@ import CreatorsCard from '@/components/campaigns/creators-card'
 import CreativeControl from '@/components/campaigns/creative-control'
 import DeliveriesCard from '@/components/campaigns/deliveries-card'
 import HonestBillBar from '@/components/campaigns/honest-bill-bar'
+import OutcomesCard from '@/components/campaigns/outcomes-card'
+import type { CampaignOutcomes } from '@/lib/campaigns/outcomes/verdict'
 import { C, DISPLAY, GRAD } from '@/components/campaigns/ui'
 
 export default function CampaignDetailPage() {
@@ -32,6 +34,7 @@ export default function CampaignDetailPage() {
   const [camp, setCamp] = useState<SavedCampaign | null>(null)
   const [progress, setProgress] = useState<CampaignProgress | null>(null)
   const [charges, setCharges] = useState<CampaignCharges | null>(null)
+  const [outcomes, setOutcomes] = useState<CampaignOutcomes | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -39,7 +42,7 @@ export default function CampaignDetailPage() {
     let live = true
     fetch(`/api/campaigns/${id}`)
       .then(async (r) => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Load failed (${r.status})`); return r.json() })
-      .then((j) => { if (live) { setCamp(j.campaign as SavedCampaign); setProgress((j.progress as CampaignProgress) ?? null); setCharges((j.charges as CampaignCharges) ?? null) } })
+      .then((j) => { if (live) { setCamp(j.campaign as SavedCampaign); setProgress((j.progress as CampaignProgress) ?? null); setCharges((j.charges as CampaignCharges) ?? null); setOutcomes((j.outcomes as CampaignOutcomes) ?? null) } })
       .catch((e) => { if (live) setError(e.message) })
     return () => { live = false }
   }, [id])
@@ -108,7 +111,7 @@ export default function CampaignDetailPage() {
     // Land on the "Get it ready" checklist (team-run campaigns only — DIY mints
     // no orders, so there's nothing for the team to need from the owner).
     if (camp.draft.path !== 'diy') router.push(`/dashboard/campaigns/${id}/ready`)
-    else fetch(`/api/campaigns/${id}`).then((r) => r.json()).then((j) => { setProgress((j.progress as CampaignProgress) ?? null); setCharges((j.charges as CampaignCharges) ?? null) }).catch(() => {})
+    else fetch(`/api/campaigns/${id}`).then((r) => r.json()).then((j) => { setProgress((j.progress as CampaignProgress) ?? null); setCharges((j.charges as CampaignCharges) ?? null); setOutcomes((j.outcomes as CampaignOutcomes) ?? null) }).catch(() => {})
   }
   async function del() {
     setBusy(true)
@@ -130,7 +133,7 @@ export default function CampaignDetailPage() {
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '18px 16px 28px' }}>
           {error ? <div style={{ color: '#c0392b', fontSize: 13.5, padding: '20px 0', textAlign: 'center' }}>{error}</div>
             : !camp ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: C.faint }}><Loader2 size={16} className="animate-spin" /> Loading…</div>
-            : <Detail camp={camp} progress={progress} charges={charges} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} />}
+            : <Detail camp={camp} progress={progress} charges={charges} outcomes={outcomes} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} />}
         </div>
 
         {camp && (
@@ -157,10 +160,11 @@ export default function CampaignDetailPage() {
   )
 }
 
-function Detail({ camp, progress, charges, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer }: {
+function Detail({ camp, progress, charges, outcomes, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer }: {
   camp: SavedCampaign
   progress: CampaignProgress | null
   charges: CampaignCharges | null
+  outcomes: CampaignOutcomes | null
   onToggleOptOut: (id: string, r: OptOutReason) => void
   onToggleInclude: (id: string) => void
   onRemove: (id: string) => void
@@ -233,6 +237,9 @@ function Detail({ camp, progress, charges, onToggleOptOut, onToggleInclude, onRe
           <span style={{ fontSize: 15, fontWeight: 800, color: C.ink }}>${(charges.accruedCents / 100).toFixed(charges.accruedCents % 100 === 0 ? 0 : 2)}<span style={{ fontSize: 11.5, fontWeight: 600, color: C.faint }}> · {charges.count} {charges.count === 1 ? 'piece' : 'pieces'}</span></span>
         </div>
       )}
+
+      {/* real results — per-piece reach/engagement, or an honest "still gathering" */}
+      {shipped && outcomes && <OutcomesCard outcomes={outcomes} />}
 
       {/* the plays */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

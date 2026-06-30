@@ -75,7 +75,14 @@ export async function mintWorkOrders(campaign: SavedCampaign, shipISO: string): 
   if (existErr) return 0
   if (existing && existing.length) return 0
 
-  const { error } = await admin.from('creator_work_orders').insert(rows)
+  let { error } = await admin.from('creator_work_orders').insert(rows)
+  // Pre-183/184 the campaign_piece_key / surcharge_cents columns are absent (42703);
+  // retry without them so ship never breaks. The reconcile then matches positionally,
+  // and the payout simply can't net a surcharge it can't read (degrades to today).
+  if (error && error.code === '42703') {
+    const stripped = rows.map((r) => { const c = { ...r } as Record<string, unknown>; delete c.campaign_piece_key; delete c.surcharge_cents; return c })
+    ;({ error } = await admin.from('creator_work_orders').insert(stripped))
+  }
   if (error) return 0
   return rows.length
 }
@@ -190,6 +197,7 @@ export async function accruePayoutForApprovedOrder(orderId: string): Promise<boo
     campaign_id: (o.campaign_id as string | null) ?? null,
     creator_id: creatorId,
     amount_cents: (o.amount_cents as number) ?? 0,
+    surcharge_cents: (o.surcharge_cents as number) ?? 0,   // netted out of gross (absent pre-184 → 0)
   }, feePercent)
   // A payout with no creator is unclaimable AND would consume the one-per-piece
   // slot — flag it instead of stranding it.
@@ -263,17 +271,31 @@ export async function reconcileCampaignProduction(campaign: SavedCampaign): Prom
   const todayISO = nowISO.slice(0, 10)
   const plan = planCampaignPieces(campaign, nowISO)   // clamps new pieces forward; locked target_date keeps dates stable
 
-  const [{ data: orders, error: oErr }, { data: drafts }, { data: keyless }] = await Promise.all([
-    admin.from('creator_work_orders').select('id, discipline, slot, status, due_date').eq('campaign_id', campaignId),
+  const [ordersRes, { data: drafts }, { data: keyless }] = await Promise.all([
+    admin.from('creator_work_orders').select('id, discipline, slot, status, due_date, campaign_piece_key').eq('campaign_id', campaignId),
     admin.from('content_drafts').select('id, campaign_piece_key, status, target_publish_date').eq('campaign_id', campaignId).not('campaign_piece_key', 'is', null),
     // Pre-182 team drafts (keyless, NOT bridge) — if any exist we cannot match the team
     // lane, so we skip it (a mint-only pass would duplicate). Bridge drafts (from_creator)
     // are keyless too but are creator-lane artifacts, excluded here.
     admin.from('content_drafts').select('id').eq('campaign_id', campaignId).is('campaign_piece_key', null).or('media_brief->>from_creator.is.null,media_brief->>from_creator.neq.true').limit(1),
   ])
+  // Loosely typed: the pre-183 retry below selects a narrower row (no piece key), and
+  // the mapping reads every column by cast anyway.
+  let orders: Record<string, unknown>[] | null = ordersRes.data
+  let oErr = ordersRes.error
+  // Pre-183 the campaign_piece_key column is absent (42703); re-read without it so the
+  // reconcile still runs for legacy (positionally-keyed) campaigns.
+  if (oErr && (oErr as { code?: string }).code === '42703') {
+    const retry = await admin.from('creator_work_orders').select('id, discipline, slot, status, due_date').eq('campaign_id', campaignId)
+    orders = retry.data; oErr = retry.error
+  }
   if (oErr) return ZERO   // pre-migration / read failure → no-op
   const teamSafe = !(keyless && keyless.length)
-  const existingOrders = (orders ?? []).map((o) => ({ id: o.id as string, key: `${o.discipline as string}:${o.slot as number}`, status: (o.status as string) ?? '', dueISO: (o.due_date as string | null) ?? null }))
+  // Match an order by its stored stable key when it has one (migration 183, Content
+  // Menu), else fall back to the legacy positional discipline:slot. Both lanes of a
+  // single campaign are consistent: a menu campaign's orders all carry a key, a legacy
+  // campaign's never do, so the plan key (line id vs group:slot) always lines up.
+  const existingOrders = (orders ?? []).map((o) => ({ id: o.id as string, key: (o.campaign_piece_key as string | null) || `${o.discipline as string}:${o.slot as number}`, status: (o.status as string) ?? '', dueISO: (o.due_date as string | null) ?? null }))
   const existingDrafts = (drafts ?? []).map((d) => ({ id: d.id as string, key: (d.campaign_piece_key as string) ?? '', status: (d.status as string) ?? '', dateISO: (d.target_publish_date as string | null) ?? null }))
   const rec = reconcileProductionPlan(plan, existingOrders, existingDrafts, todayISO)
 
@@ -283,7 +305,11 @@ export async function reconcileCampaignProduction(campaign: SavedCampaign): Prom
   // Creator lane.
   const orderRows = rec.mintCreator.map((p) => workOrderRowForPiece(campaign, p)).filter((r): r is WorkOrderRow => r !== null)
   if (orderRows.length) {
-    const { error } = await admin.from('creator_work_orders').upsert(orderRows, { onConflict: 'campaign_id,discipline,slot', ignoreDuplicates: true })
+    let { error } = await admin.from('creator_work_orders').upsert(orderRows, { onConflict: 'campaign_id,discipline,slot', ignoreDuplicates: true })
+    if (error && error.code === '42703') {   // pre-183/184: no campaign_piece_key / surcharge_cents column → mint without them
+      const stripped = orderRows.map((r) => { const c = { ...r } as Record<string, unknown>; delete c.campaign_piece_key; delete c.surcharge_cents; return c })
+      ;({ error } = await admin.from('creator_work_orders').upsert(stripped, { onConflict: 'campaign_id,discipline,slot', ignoreDuplicates: true }))
+    }
     if (error) failures++; else minted = orderRows.length
   }
   for (const u of rec.reviveOrderIds) {

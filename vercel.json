@@ -84,6 +84,10 @@
     {
       "path": "/api/cron/social-sync",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/outcomes-poll",
+      "schedule": "0 17 * * *"
     }
   ]
 }

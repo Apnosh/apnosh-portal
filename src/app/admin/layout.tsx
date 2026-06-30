@@ -59,6 +59,7 @@ const navSections = [
   {
     label: 'Setup',
     items: [
+      { label: 'Catalog', href: '/admin/catalog', icon: ShoppingBag },
       { label: 'Team', href: '/admin/team', icon: UserCog },
       { label: 'Settings', href: '/admin/settings', icon: Settings },
       { label: 'Sim', href: '/admin/sim', icon: FlaskConical },

@@ -83,7 +83,12 @@ export function deriveSchedule(
   }
 
   const dated: DatedBeat[] = beats.map((b) => {
-    const post = postFor(b)
+    // An owner-picked exact day wins over the week-derived date.
+    let post = parseDay(b.dateISO) ?? postFor(b)
+    // Backward (event) scheduling from a date too soon for the full buildup would
+    // push the earliest teasers into the past — clamp those to today so the plan
+    // stays real. The tooSoon flag below still signals the squeeze.
+    if (mode === 'event' && post.getTime() < today.getTime()) post = today
     const postISO = toISODay(post)
     const draftReadyISO = toISODay(addDays(post, -REVIEW_LEAD_DAYS))
     let relLabel: string
