@@ -37,18 +37,11 @@ const DISPLAY = "'Cal Sans','Inter',sans-serif"
    a floating icon, and a rise-in entrance. Honors reduced-motion. */
 const MVP_ANIM_CSS = `
 @keyframes mvpRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-@keyframes mvpGradShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-@keyframes mvpFloaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
-@keyframes mvpSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-@keyframes mvpDriftA{0%,100%{transform:translate(0,0) rotate(0)}50%{transform:translate(6px,-5px) rotate(8deg)}}
-@keyframes mvpDriftB{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-7px,4px) scale(1.08)}}
 .mvp-rise{animation:mvpRise .5s cubic-bezier(.2,.7,.3,1) both}
-.mvp-reviewGlow{background:linear-gradient(120deg,#2e9a78,#3a8fb0,#5b6fc9);background-size:200% 200%;animation:mvpGradShift 13s ease infinite}
-.mvp-floaty{animation:mvpFloaty 3.2s ease-in-out infinite}
-.mvp-driftA{animation:mvpDriftA 6s ease-in-out infinite}
-.mvp-driftB{animation:mvpDriftB 7.5s ease-in-out infinite}
-.mvp-spin{animation:mvpSpin 18s linear infinite}
-@media (prefers-reduced-motion: reduce){.mvp-rise,.mvp-reviewGlow,.mvp-floaty,.mvp-driftA,.mvp-driftB,.mvp-spin{animation:none}}
+/* one calm, static brand surface — no animated multi-colour gradient */
+.mvp-reviewGlow{background:linear-gradient(135deg,#2e9a78,#1f8f6c)}
+/* decorative loops removed for a calmer, more intentional feel */
+.mvp-floaty{}.mvp-driftA{}.mvp-driftB{}.mvp-spin{}.mvp-breathe{}.mvp-ping{}
 .mvp-swipe{scrollbar-width:none;-ms-overflow-style:none}
 .mvp-swipe::-webkit-scrollbar{display:none}
 @keyframes mvpGrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
@@ -62,17 +55,12 @@ const MVP_ANIM_CSS = `
 .mvp-stagger>*:nth-child(6){animation-delay:.33s}
 .mvp-stagger>*:nth-child(7){animation-delay:.39s}
 .mvp-stagger>*:nth-child(8){animation-delay:.45s}
-@media (prefers-reduced-motion: reduce){.mvp-grow,.mvp-stagger>*{animation:none}}
-/* native-app feel: a quick press-in on tap, a slow breathing glow on the lead
-   card, and a soft ping on live indicators (freshest win, a scheduled post). */
+@media (prefers-reduced-motion: reduce){.mvp-rise,.mvp-grow,.mvp-stagger>*{animation:none}}
+/* quick press-in on tap only */
 .mvp-press{transition:transform .16s cubic-bezier(.2,.7,.3,1),box-shadow .2s}
 .mvp-press:active{transform:scale(.975)}
 @media (hover:hover){.mvp-press:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.07)}}
-@keyframes mvpBreathe{0%,100%{box-shadow:0 5px 14px rgba(0,0,0,.10)}50%{box-shadow:0 9px 24px rgba(0,0,0,.16)}}
-.mvp-breathe{animation:mvpBreathe 4.5s ease-in-out infinite}
-@keyframes mvpPing{0%{box-shadow:0 0 0 0 rgba(74,189,152,.32)}70%{box-shadow:0 0 0 7px rgba(74,189,152,0)}100%{box-shadow:0 0 0 0 rgba(74,189,152,0)}}
-.mvp-ping{animation:mvpPing 2.4s ease-out infinite}
-@media (prefers-reduced-motion: reduce){.mvp-breathe,.mvp-ping{animation:none}.mvp-press,.mvp-press:active,.mvp-press:hover{transition:none;transform:none}}
+@media (prefers-reduced-motion: reduce){.mvp-press,.mvp-press:active,.mvp-press:hover{transition:none;transform:none}}
 `
 
 export interface MetricView {
@@ -171,14 +159,9 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
       <div style={{ padding: '16px 18px 0' }}>
         {/* monthly review nudge */}
         {data.review && !reviewHidden && (
-          <div className="mvp-rise mvp-reviewGlow" style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 18, padding: '13px 16px', color: '#fff' }}>
-            {/* drifting / spinning shapes, ported from the design */}
-            <i aria-hidden className="mvp-driftB" style={{ position: 'absolute', width: 118, height: 118, top: -44, right: -28, borderRadius: '50%', background: 'rgba(255,255,255,.10)' }} />
-            <i aria-hidden className="mvp-driftA" style={{ position: 'absolute', width: 66, height: 66, bottom: -26, left: 40, borderRadius: '50%', border: '2px solid rgba(255,255,255,.18)' }} />
-            <i aria-hidden className="mvp-spin" style={{ position: 'absolute', width: 22, height: 22, top: 34, right: 30, borderRadius: 6, background: 'rgba(255,255,255,.12)' }} />
-            <i aria-hidden className="mvp-driftA" style={{ position: 'absolute', width: 11, height: 11, bottom: 18, right: 78, borderRadius: '50%', background: 'rgba(255,255,255,.3)' }} />
+          <div className="mvp-rise mvp-reviewGlow" style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 16, padding: '13px 16px', color: '#fff' }}>
             <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 11 }}>
-              <div className="mvp-floaty" style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Receipt size={19} /></div>
+              <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Receipt size={19} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Sparkles size={13} /><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', opacity: .92 }}>New this month</span></div>
                 <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2 }}>Your {data.review.prevMonthLabel} review is ready</div>
