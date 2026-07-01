@@ -295,15 +295,19 @@ function AgendaCard({ e, onDelete }: { e: CalEvent; onDelete: (id: string) => vo
 function WeekView({ today, campaigns, owner, holidayEvents, closedEvents, recurring }: {
   today: Date; campaigns: CalEvent[]; owner: CalEvent[]; holidayEvents: CalEvent[]; closedEvents: CalEvent[]; recurring: typeof RECURRING
 }) {
-  const weekStart = addDays(today, -today.getDay())
+  const mondayOf = (d: Date) => addDays(d, -((d.getDay() + 6) % 7))
+  const [weekStart, setWeekStart] = useState<Date>(() => mondayOf(today))
   const weekEnd = addDays(weekStart, 6)
+  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const DOWM = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
   const inWeek = (d: string) => { const x = parse(d); return x >= weekStart && x <= addDays(weekEnd, 0.99) }
+  const clampDay = (s: string) => { const x = parse(s); return x < weekStart ? weekStart : x }
+  const spans = [...campaigns, ...owner].filter((e) => e.end && parse(e.start) <= weekEnd && parse(e.end as string) >= weekStart)
 
-  // this week's items: a recurring reel (needs approval) on Friday, holidays, closed, campaigns active
   const reelMeta = recurring.find((r) => r.id === 'weeklyreels')
   const items: { date: Date; node: React.ReactNode; key: string }[] = []
   if (reelMeta && reelMeta.weekday != null) {
-    const fri = addDays(weekStart, reelMeta.weekday)
+    const fri = addDays(weekStart, ((reelMeta.weekday + 6) % 7))
     items.push({ date: fri, key: 'reel', node: (
       <Row tileBg={C.greenSoft} tileFg={C.greenDk} icon={<Film size={18} />} title="Weekly Reels reel" sub="Needs approval · part of Weekly Reels" subColor={C.amber}
         action={<Link href="/dashboard/approvals" style={actionLink(C.amber)}>Approve <ArrowRight size={14} /></Link>} />
@@ -317,23 +321,61 @@ function WeekView({ today, campaigns, owner, holidayEvents, closedEvents, recurr
     <Row tileBg={C.bg2} tileFg={C.mute} icon={<Ban size={18} />} title={c.title} sub="Closed" subColor={C.faint}
       action={<ChevronRight size={17} color={C.faint} />} />
   ) }))
-  campaigns.filter((e) => e.end && inWeek(e.start)).forEach((e) => items.push({ date: parse(e.start), key: e.id, node: (
+  spans.forEach((e) => items.push({ date: clampDay(e.start), key: e.id, node: e.kind === 'campaign' ? (
     <Link href={`/dashboard/campaigns/${e.id}`} style={{ textDecoration: 'none' }}>
       <Row tileBg={C.greenSoft} tileFg={C.greenDk} icon={<Megaphone size={18} />} title={e.title} sub={`Campaign · ${fmtRange(e.start, e.end)}`} subColor={C.greenDk}
         action={<ArrowRight size={17} color={C.faint} />} />
     </Link>
+  ) : (
+    <Row tileBg={C.bg2} tileFg={C.mute} icon={<CalendarDays size={18} />} title={e.title} sub={fmtRange(e.start, e.end)} subColor={C.mute}
+      action={<Link href="/dashboard/campaigns/new" style={actionLink(C.greenDk)}>Plan <ArrowRight size={14} /></Link>} />
   ) }))
   items.sort((a, b) => a.date.getTime() - b.date.getTime())
 
-  // group by day
   const groups: { day: Date; rows: typeof items }[] = []
   items.forEach((it) => {
     const g = groups.find((x) => sameDay(x.day, it.date))
     if (g) g.rows.push(it); else groups.push({ day: it.date, rows: [it] })
   })
 
+  const reelWeekday = reelMeta?.weekday ?? null
+  const holidayThisWeek = holidayEvents.find((h) => inWeek(h.start))
+  const plannedCount = (reelWeekday !== null ? 1 : 0) + spans.length
+  const isHoliday = (d: Date) => holidayEvents.some((h) => sameDay(parse(h.start), d))
+  const hasContent = (d: Date) => (reelWeekday !== null && d.getDay() === reelWeekday) || spans.some((e) => parse(e.start) <= d && parse(e.end as string) >= d)
+
   return (
     <div>
+      {/* header + nav */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 3 }}>This week</div>
+          <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 25, lineHeight: 1, color: C.ink }}>Your week ahead</div>
+          <div style={{ fontSize: 13, color: C.mute, marginTop: 6 }}>{plannedCount} planned{holidayThisWeek ? ` · ${holidayThisWeek.title} this week` : ''}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <button onClick={() => setWeekStart(mondayOf(today))} style={{ border: `1px solid ${C.line}`, background: '#fff', color: C.greenDk, borderRadius: 9, padding: '5px 11px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Today</button>
+          <NavBtn onClick={() => setWeekStart(addDays(weekStart, -7))}><ChevronLeft size={17} /></NavBtn>
+          <NavBtn onClick={() => setWeekStart(addDays(weekStart, 7))}><ChevronRight size={17} /></NavBtn>
+        </div>
+      </div>
+
+      {/* week strip */}
+      <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: '14px 6px 12px', marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)' }}>
+          {days.map((d, i) => {
+            const t = sameDay(d, today), h = isHoliday(d)
+            return (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: t ? C.greenDk : C.faint }}>{DOWM[i]}</span>
+                <span style={{ width: 38, height: 38, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: t ? 700 : 600, color: t ? '#fff' : h ? C.holi : C.ink, background: t ? C.green : 'transparent' }}>{d.getDate()}</span>
+                <span style={{ width: 5, height: 5, borderRadius: 3, background: hasContent(d) && !t ? C.ink : 'transparent' }} />
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Always running */}
       <div style={{ background: C.greenSoft, border: `1px solid ${C.greenLine}`, borderRadius: 16, padding: 14, marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 }}>
