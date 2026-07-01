@@ -75,11 +75,10 @@ export default function MvpCampaigns() {
   const lastItemId = lastTpl?.startsWith('builder-') ? lastTpl.slice('builder-'.length) : undefined
 
   return (
-    <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#f5f5f7', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
+    <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fafafb', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{ANIM}</style>
-      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', padding: '14px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}` }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fafafb', padding: '14px 18px 12px', display: 'flex', alignItems: 'center', borderBottom: `1px solid ${C.line}` }}>
         <div style={{ fontFamily: DISPLAY, fontSize: 25, color: C.ink, fontWeight: 600, lineHeight: 1 }}>Campaigns</div>
-        <Link href="/dashboard/campaigns/new" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 99, padding: '8px 14px', fontWeight: 700, fontSize: 13.5 }}><Plus size={16} strokeWidth={2.5} /> New</Link>
       </div>
 
       <div style={{ padding: '16px 18px 0' }}>

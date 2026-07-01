@@ -24,7 +24,7 @@ import { signOut } from '@/lib/supabase/hooks'
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
   ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2',
-  line: '#e6e6ea', coral: '#c0564f', coralSoft: '#fdeeee', bg: '#f5f5f7',
+  line: '#e6e6ea', coral: '#c0564f', coralSoft: '#fdeeee', bg: '#fafafb',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 

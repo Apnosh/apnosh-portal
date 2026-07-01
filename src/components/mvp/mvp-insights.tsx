@@ -28,7 +28,7 @@ import { ActionsChart, SourceCard, type MetricView } from './mvp-home'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
-  ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#f5f5f7',
+  ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#fafafb',
   amber: '#f5a623', coral: '#a85c3c', coralBg: '#f8efe9',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
@@ -100,7 +100,7 @@ export default function MvpInsights({ data, loading, error, clientId }: { data: 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#f0f0f3', display: 'flex', justifyContent: 'center' }}>
       <style>{INSIGHTS_CSS}</style>
-      <div style={{ width: '100%', maxWidth: 480, height: '100dvh', background: '#f5f5f7', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
+      <div style={{ width: '100%', maxWidth: 480, height: '100dvh', background: '#fafafb', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
       {/* sticky back header */}
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 12px 6px', borderBottom: `1px solid ${C.line}`, background: '#fff' }}>
         <button onClick={back} aria-label="Back" style={{ width: 38, height: 38, borderRadius: 99, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.ink }}><ChevronLeft size={24} /></button>

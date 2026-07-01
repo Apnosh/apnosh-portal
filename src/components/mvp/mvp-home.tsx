@@ -28,7 +28,7 @@ const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
   ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', ghost: '#e6e6ea',
   amber: '#8a5a0c', amberBtn: '#bd7e16', amberBg: '#fbf3e4', amberLine: '#eed9b3',
-  coral: '#a85c3c', coralBg: '#f8efe9', bg: '#f5f5f7',
+  coral: '#a85c3c', coralBg: '#f8efe9', bg: '#fafafb',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 

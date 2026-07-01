@@ -20,7 +20,7 @@ const TOKENS = {
   line: "#e6e6ea",
   hair: "#ededf1",
   card: "#ffffff",
-  canvas: "#f5f5f7",     // cool grey app canvas
+  canvas: "#fafafb",     // cool grey app canvas
   canvas2: "#fafafc",
   mint: "#4abd98",       // brand
   mintDark: "#2e9a78",
@@ -3193,6 +3193,9 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           @keyframes apndot { 0%, 100% { opacity: 0.35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
           @keyframes aspin { to { transform: rotate(360deg); } }
           @keyframes apnrise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+          @keyframes apnpresent { from { opacity: 0; transform: translateY(40px) scale(0.985); } to { opacity: 1; transform: none; } }
+          .apncreate { animation: apnpresent 400ms cubic-bezier(.2,.85,.25,1) both; }
+          @media (prefers-reduced-motion: reduce) { .apncreate { animation: none; } }
           .apncard { transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms ease; }
           .apncard:active { transform: scale(0.975); }
           @media (hover: hover) { .apncard:hover { transform: translateY(-2px); box-shadow: ${SHADOW.cardLift}; } }
