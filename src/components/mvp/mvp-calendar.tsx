@@ -288,7 +288,7 @@ function AgendaCard({ e, onDelete }: { e: CalEvent; onDelete: (id: string) => vo
         </div>
       </div>
       <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.45, marginBottom: 12 }}>Want to drive turnout? We&apos;ll make the posts + ads to promote it — you just approve.</div>
-      <Link href="/dashboard/campaigns/new" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)', color: '#fff', borderRadius: 12, padding: '12px', fontFamily: DISPLAY, fontWeight: 600, fontSize: 15, textDecoration: 'none' }}><Megaphone size={17} /> Plan a promo for this</Link>
+      <Link href="/dashboard/campaigns/new" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)', color: '#fff', borderRadius: 12, padding: '12px', fontFamily: 'var(--font-inter),system-ui,sans-serif', fontWeight: 700, fontSize: 15, textDecoration: 'none' }}><Megaphone size={17} /> Plan a promo for this</Link>
     </div>
   )
 }
@@ -473,7 +473,7 @@ function AddEventSheet({ date, onSave, onClose }: { date: Date; onSave: (title: 
         </div>
         <button onClick={() => setMulti((m) => !m)} style={{ background: 'none', border: 'none', color: C.greenDk, fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: '10px 0 4px' }}>{multi ? '– Single day' : '+ Add an end date'}</button>
 
-        <button disabled={!canSave} onClick={() => onSave(title.trim(), start, multi ? end : undefined)} style={{ width: '100%', marginTop: 8, height: 50, borderRadius: 13, border: 'none', cursor: canSave ? 'pointer' : 'default', background: canSave ? 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)' : '#cfe7dd', color: '#fff', fontFamily: DISPLAY, fontWeight: 600, fontSize: 15.5 }}>Add to calendar</button>
+        <button disabled={!canSave} onClick={() => onSave(title.trim(), start, multi ? end : undefined)} style={{ width: '100%', marginTop: 8, height: 50, borderRadius: 13, border: 'none', cursor: canSave ? 'pointer' : 'default', background: canSave ? 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)' : '#cfe7dd', color: '#fff', fontFamily: 'var(--font-inter),system-ui,sans-serif', fontWeight: 600, fontSize: 15.5 }}>Add to calendar</button>
         <button onClick={onClose} style={{ width: '100%', height: 44, marginTop: 6, border: 'none', background: 'none', color: C.mute, fontWeight: 600, fontSize: 13.5, cursor: 'pointer' }}>Cancel</button>
       </div>
     </div>

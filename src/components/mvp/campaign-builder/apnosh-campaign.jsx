@@ -2304,7 +2304,7 @@ function HeroShell({ eyebrowIcon, eyebrow, title, body, cta, onOpen, onDismiss }
           </div>
           <div style={{ fontFamily: FONT_D, fontSize: 22, fontWeight: 600, color: "#fff", lineHeight: 1.14, marginBottom: 7, paddingRight: 20, letterSpacing: -0.3 }}>{title}</div>
           <div style={{ fontFamily: FONT_B, fontSize: 13, color: "rgba(255,255,255,0.94)", lineHeight: 1.45, marginBottom: 15, maxWidth: 280 }}>{body}</div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 40, padding: "0 17px", borderRadius: 20, background: "#fff", color: INK, fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, boxShadow: "0 6px 16px -6px rgba(0,0,0,0.3)" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 7, height: 40, padding: "0 17px", borderRadius: 20, background: "#fff", color: INK, fontFamily: FONT_B, fontSize: 14, fontWeight: 700, boxShadow: "0 6px 16px -6px rgba(0,0,0,0.3)" }}>
             {cta}
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
           </div>
@@ -2481,8 +2481,8 @@ function PlanDetail({ itemId, onBack, onAdd, onMarketer }) {
         </div>
       </div>
       <div style={{ flexShrink: 0, padding: "13px 20px 22px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-        <button onClick={onAdd} className="apnpop" style={{ width: "100%", height: 53, borderRadius: RADIUS.xl, border: "none", cursor: "pointer", background: `${GREEN_GRAD}`, color: "#fff", fontFamily: FONT_D, fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 10px 24px -10px rgba(31,141,107,0.7)" }}>Add this plan</button>
-        <button onClick={onMarketer} className="apnpop" style={{ width: "100%", height: 48, marginTop: 9, borderRadius: RADIUS.lg, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Hand it to a marketer</button>
+        <button onClick={onAdd} className="apnpop" style={{ width: "100%", height: 53, borderRadius: RADIUS.xl, border: "none", cursor: "pointer", background: `${GREEN_GRAD}`, color: "#fff", fontFamily: FONT_B, fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 10px 24px -10px rgba(31,141,107,0.7)" }}>Add this plan</button>
+        <button onClick={onMarketer} className="apnpop" style={{ width: "100%", height: 48, marginTop: 9, borderRadius: RADIUS.lg, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: FONT_B, fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Hand it to a marketer</button>
       </div>
     </div>
   );
@@ -2854,7 +2854,7 @@ function Builder({ itemId, menu, onBack, onGenerate, onSaveDraft }) {
         )}
       </div>
       <div style={{ flexShrink: 0, padding: "12px 22px 20px", background: "linear-gradient(to top, rgba(0,0,0,0.10), rgba(0,0,0,0))" }}>
-        <button onClick={() => ready && onGenerate(vals)} disabled={!ready} style={{ width: "100%", height: 54, borderRadius: RADIUS.xl, border: "none", cursor: ready ? "pointer" : "default", background: ready ? "#fff" : "rgba(255,255,255,0.40)", color: ready ? c1 : "rgba(255,255,255,0.85)", fontFamily: FONT_D, fontWeight: 600, fontSize: 16.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent", transition: "background 150ms ease, color 150ms ease", boxShadow: ready ? "0 10px 26px -8px rgba(0,0,0,0.4)" : "none" }}>
+        <button onClick={() => ready && onGenerate(vals)} disabled={!ready} style={{ width: "100%", height: 54, borderRadius: RADIUS.xl, border: "none", cursor: ready ? "pointer" : "default", background: ready ? "#fff" : "rgba(255,255,255,0.40)", color: ready ? c1 : "rgba(255,255,255,0.85)", fontFamily: FONT_B, fontWeight: 600, fontSize: 16.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent", transition: "background 150ms ease, color 150ms ease", boxShadow: ready ? "0 10px 26px -8px rgba(0,0,0,0.4)" : "none" }}>
           {ready ? "Build my plan" : "Finish the blanks above"}
           {ready && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={c1} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>}
         </button>
@@ -2865,8 +2865,8 @@ function Builder({ itemId, menu, onBack, onGenerate, onSaveDraft }) {
           <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", background: "#fff", borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: "20px 20px calc(20px + env(safe-area-inset-bottom))", boxShadow: SHADOW.sheet }}>
             <div style={{ fontFamily: FONT_D, fontSize: 19, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.2 }}>Save this as a draft?</div>
             <p style={{ fontFamily: FONT_B, fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.45, margin: "6px 0 18px" }}>Keep what you've set up so you can finish it later, or discard it.</p>
-            <button onClick={saveDraft} className="apnpop" style={{ width: "100%", height: 50, borderRadius: RADIUS.lg, border: "none", cursor: "pointer", background: `${GREEN_GRAD}`, color: "#fff", fontFamily: FONT_D, fontSize: 15.5, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 8px 20px -8px rgba(31,141,107,0.7)" }}>Save as draft</button>
-            <button onClick={onBack} className="apnpop" style={{ width: "100%", height: 48, marginTop: 9, borderRadius: RADIUS.lg, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Discard</button>
+            <button onClick={saveDraft} className="apnpop" style={{ width: "100%", height: 50, borderRadius: RADIUS.lg, border: "none", cursor: "pointer", background: `${GREEN_GRAD}`, color: "#fff", fontFamily: FONT_B, fontSize: 15.5, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 8px 20px -8px rgba(31,141,107,0.7)" }}>Save as draft</button>
+            <button onClick={onBack} className="apnpop" style={{ width: "100%", height: 48, marginTop: 9, borderRadius: RADIUS.lg, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: FONT_B, fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Discard</button>
             <button onClick={() => setExitAsk(false)} style={{ width: "100%", height: 42, marginTop: 4, border: "none", background: "none", cursor: "pointer", color: TOKENS.sub, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 600, WebkitTapHighlightColor: "transparent" }}>Keep editing</button>
           </div>
         </div>
@@ -3125,8 +3125,8 @@ function PlanSteps({ itemId, vals, onBack, onAdd, onMarketer }) {
         </div>
       </div>
       <div style={{ flexShrink: 0, padding: "13px 20px 20px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-        <button onClick={() => onAdd(onSteps)} className="apnpop" style={{ width: "100%", height: 53, borderRadius: RADIUS.xl, border: "none", cursor: "pointer", background: `${GREEN_GRAD}`, color: "#fff", fontFamily: FONT_D, fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 10px 24px -10px rgba(31,141,107,0.7)" }}>Add this plan</button>
-        <button onClick={onMarketer} className="apnpop" style={{ width: "100%", height: 48, marginTop: 9, borderRadius: RADIUS.lg, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: FONT_D, fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
+        <button onClick={() => onAdd(onSteps)} className="apnpop" style={{ width: "100%", height: 53, borderRadius: RADIUS.xl, border: "none", cursor: "pointer", background: `${GREEN_GRAD}`, color: "#fff", fontFamily: FONT_B, fontSize: 16, fontWeight: 600, WebkitTapHighlightColor: "transparent", boxShadow: "0 10px 24px -10px rgba(31,141,107,0.7)" }}>Add this plan</button>
+        <button onClick={onMarketer} className="apnpop" style={{ width: "100%", height: 48, marginTop: 9, borderRadius: RADIUS.lg, border: `1.5px solid ${TOKENS.line}`, cursor: "pointer", background: "#fff", color: TOKENS.ink, fontFamily: FONT_B, fontSize: 14.5, fontWeight: 600, WebkitTapHighlightColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" /></svg>
           Hand it to a marketer
         </button>
