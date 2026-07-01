@@ -15,7 +15,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight, Megaphone, Gift, Search, Film, Pencil, Trash2,
-  ArrowRight, CalendarDays, Ban,
+  ArrowRight, CalendarDays, Ban, Repeat,
 } from 'lucide-react'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 
@@ -376,11 +376,11 @@ function WeekView({ today, campaigns, owner, holidayEvents, closedEvents, recurr
         </div>
       </div>
 
-      {/* Always running */}
+      {/* Recurring */}
       <div style={{ background: C.greenSoft, border: `1px solid ${C.greenLine}`, borderRadius: 16, padding: 14, marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk }}>
-            <span style={{ width: 7, height: 7, borderRadius: 99, background: C.green }} /> Always running
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.greenDk }}>
+            <Repeat size={13} /> Recurring
           </span>
           <span style={{ fontSize: 12, color: C.mute }}>we run these</span>
         </div>

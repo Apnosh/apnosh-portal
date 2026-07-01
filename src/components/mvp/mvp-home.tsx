@@ -151,7 +151,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
   const goTo = (i: number) => { const el = scrollRef.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' }) }
 
   return (
-    <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: 'radial-gradient(135% 55% at 50% 0%, rgba(74,189,152,0.10), rgba(255,255,255,0) 52%), #fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
+    <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: C.bg, minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{MVP_ANIM_CSS}</style>
       {/* sticky greeting bar — suppressed when embedded under the portal's
           own top bar (the design's full chrome lands in the nav-shell step). */}
