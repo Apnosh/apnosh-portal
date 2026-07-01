@@ -154,12 +154,12 @@ function MonthView({ year, month, today, multiDay, dots, recurring, onPrev, onNe
 
   return (
     <div>
-      <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: '14px 12px 12px' }}>
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 12px 12px' }}>
         {/* month header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '0 2px' }}>
           <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 19 }}>{fmtMonth(firstOfMonth)}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button onClick={onToday} style={{ border: `1px solid ${C.line}`, background: '#fff', color: C.greenDk, borderRadius: 12, padding: '5px 11px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Today</button>
+            <button onClick={onToday} style={{ border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, borderRadius: 12, padding: '5px 11px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Today</button>
             <NavBtn onClick={onPrev}><ChevronLeft size={17} /></NavBtn>
             <NavBtn onClick={onNext}><ChevronRight size={17} /></NavBtn>
           </div>
@@ -225,7 +225,7 @@ function MonthView({ year, month, today, multiDay, dots, recurring, onPrev, onNe
         })}
 
         {/* legend */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 12, paddingTop: 12, borderTop: `0.5px solid ${C.line}` }}>
           <Legend color={C.green} label="Live" />
           <Legend color={C.holi} label="Holiday" square />
         </div>
@@ -263,7 +263,7 @@ function AgendaCard({ e, onDelete }: { e: CalEvent; onDelete: (id: string) => vo
   }
   if (e.kind === 'holiday') {
     return (
-      <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: '12px 13px', display: 'flex', alignItems: 'center', gap: 11 }}>
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '12px 13px', display: 'flex', alignItems: 'center', gap: 11 }}>
         <Tile bg={C.holiSoft} fg={C.holi}><Gift size={18} /></Tile>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 15.5, color: C.ink }}>{e.title}</div>
@@ -275,7 +275,7 @@ function AgendaCard({ e, onDelete }: { e: CalEvent; onDelete: (id: string) => vo
   }
   // owner event
   return (
-    <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: '13px 14px' }}>
+    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '13px 14px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 11 }}>
         <Tile bg={C.bg2} fg={C.mute}><CalendarDays size={18} /></Tile>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -356,14 +356,14 @@ function WeekView({ today, campaigns, owner, holidayEvents, closedEvents, recurr
           <div style={{ fontSize: 13, color: C.mute, marginTop: 6 }}>{plannedCount} planned{holidayThisWeek ? ` · ${holidayThisWeek.title} this week` : ''}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <button onClick={() => setWeekStart(mondayOf(today))} style={{ border: `1px solid ${C.line}`, background: '#fff', color: C.greenDk, borderRadius: 12, padding: '5px 11px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Today</button>
+          <button onClick={() => setWeekStart(mondayOf(today))} style={{ border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, borderRadius: 12, padding: '5px 11px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Today</button>
           <NavBtn onClick={() => setWeekStart(addDays(weekStart, -7))}><ChevronLeft size={17} /></NavBtn>
           <NavBtn onClick={() => setWeekStart(addDays(weekStart, 7))}><ChevronRight size={17} /></NavBtn>
         </div>
       </div>
 
       {/* week strip */}
-      <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: '14px 6px 12px', marginBottom: 20 }}>
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 6px 12px', marginBottom: 20 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)' }}>
           {days.map((d, i) => {
             const t = sameDay(d, today), h = isHoliday(d)
@@ -416,7 +416,7 @@ function WeekView({ today, campaigns, owner, holidayEvents, closedEvents, recurr
 
 /* ---------- small atoms ---------- */
 function NavBtn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
-  return <button onClick={onClick} style={{ width: 32, height: 32, borderRadius: 12, border: `1px solid ${C.line}`, background: '#fff', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{children}</button>
+  return <button onClick={onClick} style={{ width: 32, height: 32, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{children}</button>
 }
 function Legend({ color, label, square }: { color: string; label: string; square?: boolean }) {
   return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: C.mute }}><span style={{ width: 9, height: 9, borderRadius: square ? 3 : 99, background: color }} />{label}</span>
@@ -430,7 +430,7 @@ function IconBtn({ children, danger, onClick, label }: { children: React.ReactNo
 const actionLink = (color: string): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 4, color, fontWeight: 700, fontSize: 13, textDecoration: 'none', flexShrink: 0 })
 function Row({ tileBg, tileFg, icon, title, sub, subColor, action }: { tileBg: string; tileFg: string; icon: React.ReactNode; title: string; sub: string; subColor: string; action: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: '11px 13px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '11px 13px' }}>
       <Tile bg={tileBg} fg={tileFg}>{icon}</Tile>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 15, color: C.ink }}>{title}</div>
@@ -448,7 +448,7 @@ function AddEventSheet({ date, onSave, onClose }: { date: Date; onSave: (title: 
   const [multi, setMulti] = useState(false)
   const [end, setEnd] = useState(iso(addDays(date, 1)))
   const canSave = title.trim().length > 0
-  const field: React.CSSProperties = { width: '100%', border: `1px solid ${C.line}`, borderRadius: 12, padding: '11px 12px', fontSize: 14, color: C.ink, fontFamily: 'inherit', background: '#fff', boxSizing: 'border-box', outline: 'none' }
+  const field: React.CSSProperties = { width: '100%', border: `0.5px solid ${C.line}`, borderRadius: 12, padding: '11px 12px', fontSize: 14, color: C.ink, fontFamily: 'inherit', background: '#fff', boxSizing: 'border-box', outline: 'none' }
   const label: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, marginBottom: 5 }
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(10,15,13,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>

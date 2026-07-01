@@ -77,7 +77,7 @@ export default function MvpCampaigns() {
   return (
     <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fafafb', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{ANIM}</style>
-      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fafafb', padding: '14px 18px 12px', display: 'flex', alignItems: 'center', borderBottom: `1px solid ${C.line}` }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fafafb', padding: '14px 18px 12px', display: 'flex', alignItems: 'center', borderBottom: `0.5px solid ${C.line}` }}>
         <div style={{ fontFamily: DISPLAY, fontSize: 25, color: C.ink, fontWeight: 600, lineHeight: 1 }}>Campaigns</div>
       </div>
 
@@ -85,7 +85,7 @@ export default function MvpCampaigns() {
         <p style={{ fontSize: 13.5, color: C.mute, margin: '0 0 16px' }}>Open any card to see what it costs, what it&apos;s driving, and how it&apos;s doing inside.</p>
 
         {!empty && lastItemId && (
-          <Link href={`/dashboard/campaigns/new?template=${lastItemId}`} style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: '12px 14px', marginBottom: 18, color: 'inherit', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+          <Link href={`/dashboard/campaigns/new?template=${lastItemId}`} style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '12px 14px', marginBottom: 18, color: 'inherit', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
             <span style={{ width: 34, height: 34, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Repeat size={17} color={C.greenDk} /></span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: 'block', fontFamily: DISPLAY, fontWeight: 600, fontSize: 14.5, color: C.ink }}>Re-run last campaign</span>

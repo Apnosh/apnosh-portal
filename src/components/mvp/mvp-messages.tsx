@@ -165,7 +165,7 @@ export default function MvpMessages() {
           </button>
         </div>
         {searchOpen && (
-          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search messages…" style={{ width: '100%', marginTop: 12, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 13px', fontSize: 14, color: C.ink, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
+          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search messages…" style={{ width: '100%', marginTop: 12, border: `0.5px solid ${C.line}`, borderRadius: 12, padding: '10px 13px', fontSize: 14, color: C.ink, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
         )}
       </div>
 
@@ -364,7 +364,7 @@ function Conversation({ active, userId, onBack, onThreadCreated }: { active: Act
 
       {/* composer */}
       <div style={{ flexShrink: 0, padding: '10px 14px calc(12px + env(safe-area-inset-bottom))', borderTop: `0.5px solid ${C.line}`, display: 'flex', gap: 9, alignItems: 'center', background: '#fff' }}>
-        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send() }} placeholder={`Message ${title}…`} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 999, padding: '12px 16px', fontSize: 14, color: C.ink, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send() }} placeholder={`Message ${title}…`} style={{ flex: 1, minWidth: 0, border: `0.5px solid ${C.line}`, borderRadius: 999, padding: '12px 16px', fontSize: 14, color: C.ink, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
         <button onClick={send} disabled={!input.trim() || sending} style={{ width: 44, height: 44, flexShrink: 0, borderRadius: '50%', border: 'none', background: input.trim() ? C.green : '#e3e9e6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default' }}>{sending ? <Loader2 size={17} className="animate-spin" /> : <Send size={18} />}</button>
       </div>
       <style>{`@keyframes mrise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.mrise{animation:mrise .26s ease both}`}</style>
