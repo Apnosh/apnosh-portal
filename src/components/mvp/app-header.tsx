@@ -40,12 +40,12 @@ export default function AppHeader(_props: { unread?: boolean }) {
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
-          <div style={{ position: 'absolute', top: 'calc(100% - 1px)', left: 10, zIndex: 31, minWidth: 230, maxWidth: 300, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,.15)', padding: 6, animation: 'hdrpop .15s ease' }}>
+          <div style={{ position: 'absolute', top: 'calc(100% - 1px)', left: 10, zIndex: 31, minWidth: 230, maxWidth: 300, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, boxShadow: '0 10px 30px rgba(0,0,0,.15)', padding: 6, animation: 'hdrpop .15s ease' }}>
             <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '6px 10px 4px' }}>{locations.length > 1 ? 'Your locations' : 'Location'}</div>
             {locations.map((loc) => {
               const active = loc.id === client?.id
               return (
-                <button key={loc.id} onClick={() => { setOpen(false); if (!active) switchClient(loc.id) }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: active ? C.greenSoft : 'none', border: 'none', borderRadius: 10, padding: '9px 10px', cursor: 'pointer', textAlign: 'left' }}>
+                <button key={loc.id} onClick={() => { setOpen(false); if (!active) switchClient(loc.id) }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: active ? C.greenSoft : 'none', border: 'none', borderRadius: 12, padding: '9px 10px', cursor: 'pointer', textAlign: 'left' }}>
                   <div style={{ width: 26, height: 26, borderRadius: '50%', background: active ? C.green : '#eef0ef', color: active ? '#fff' : C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{(loc.name[0] ?? '•').toUpperCase()}</div>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: active ? 700 : 500, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.name}</span>
                   {active && <Check size={15} color={C.greenDk} style={{ flexShrink: 0 }} />}

@@ -19,7 +19,7 @@ import { markInboxRead } from '@/app/dashboard/inbox/actions'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenBar: '#34c759',
-  ink: '#1d1d1f', ink2: '#3a3a3c', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#f5f5f7',
+  ink: '#1d1d1f', ink2: '#3a3a3c', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#fafafb',
   coral: '#c0564f', coralSoft: '#fdeeee',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"

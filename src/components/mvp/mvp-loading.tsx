@@ -20,8 +20,8 @@ export default function MvpLoading() {
         {/* content */}
         <div style={{ flex: 1, background: '#f5f5f7', padding: '16px 14px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginBottom: 16 }}>
-            <span className="mvp-skel" style={{ height: 62, borderRadius: 13, display: 'block' }} />
-            <span className="mvp-skel" style={{ height: 62, borderRadius: 13, display: 'block' }} />
+            <span className="mvp-skel" style={{ height: 62, borderRadius: 16, display: 'block' }} />
+            <span className="mvp-skel" style={{ height: 62, borderRadius: 16, display: 'block' }} />
           </div>
           {[0, 1, 2, 3].map((i) => (
             <span key={i} className="mvp-skel" style={{ display: 'block', height: 60, borderRadius: 16, marginBottom: 12 }} />

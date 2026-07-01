@@ -161,7 +161,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
         {data.review && !reviewHidden && (
           <div className="mvp-rise mvp-reviewGlow" style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 16, padding: '13px 16px', color: '#fff' }}>
             <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 11 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Receipt size={19} /></div>
+              <div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Receipt size={19} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Sparkles size={13} /><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', opacity: .92 }}>New this month</span></div>
                 <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2 }}>Your {data.review.prevMonthLabel} review is ready</div>
@@ -247,7 +247,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
             (data.upcomingWork ?? []).map((w) => {
               const t = WORK_TONE[w.tone] ?? WORK_TONE.planning
               return (
-                <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
+                <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 12, marginBottom: 8 }}>
                   <span className={w.tone === 'scheduled' ? 'mvp-ping' : undefined} style={{ width: 9, height: 9, borderRadius: 99, background: t.fg, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.title}</div>
@@ -305,8 +305,8 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 12 }}>Quick links</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {QUICK_LINKS.map((q) => (
-              <Link key={q.href} href={q.href} className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 13, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '15px 14px', textDecoration: 'none', color: 'inherit' }}>
-                <div style={{ width: 40, height: 40, borderRadius: 11, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 10px rgba(74,189,152,0.18)' }}><q.Icon size={19} color={C.greenDk} /></div>
+              <Link key={q.href} href={q.href} className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 13, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '15px 14px', textDecoration: 'none', color: 'inherit' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 10px rgba(74,189,152,0.18)' }}><q.Icon size={19} color={C.greenDk} /></div>
                 <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600, lineHeight: 1.2 }}>{q.label}</span>
                 <ChevronRight size={17} color={C.faint} />
               </Link>
@@ -400,7 +400,7 @@ function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[
     // flash "all caught up" before a real card has had a chance to arrive.
     if (!ready) {
       return (
-        <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: 16, marginBottom: 22, display: 'flex', gap: 13, alignItems: 'center' }}>
+        <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 16, marginBottom: 22, display: 'flex', gap: 13, alignItems: 'center' }}>
           <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={18} color={C.greenDk} /></div>
           <div style={{ fontSize: 13.5, lineHeight: 1.4, color: C.faint }}>Looking over what needs you&hellip;</div>
         </div>
@@ -409,7 +409,7 @@ function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[
     // Honest now: obligations can't be dismissed, so an empty deck means there
     // genuinely is nothing waiting — only soft tips were cleared.
     return (
-      <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: 16, marginBottom: 22, display: 'flex', gap: 13, alignItems: 'center' }}>
+      <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 16, marginBottom: 22, display: 'flex', gap: 13, alignItems: 'center' }}>
         <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={19} color={C.greenDk} /></div>
         <div style={{ fontSize: 13.5, lineHeight: 1.4, color: C.mute }}><b style={{ color: C.ink }}>You&apos;re all caught up.</b> Nothing needs you right now.</div>
       </div>
@@ -475,7 +475,7 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
     height: isFront ? undefined : '100%',
     transformOrigin: 'top center',
     transition: 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s',
-    background: a.bg, border: `0.5px solid ${a.border}`, borderRadius: 18,
+    background: a.bg, border: `0.5px solid ${a.border}`, borderRadius: 16,
     padding: '12px 15px', boxSizing: 'border-box', overflow: 'hidden',
     textDecoration: 'none', display: 'block', color: 'inherit', cursor: 'pointer',
     boxShadow: pos === 0 ? '0 6px 16px rgba(0,0,0,0.13)' : '0 2px 7px rgba(0,0,0,0.08)',
@@ -493,7 +493,7 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose() }} aria-label={s.obligation ? 'Next' : 'Dismiss'} style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,0.05)', color: C.faint, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 2 }}><X size={14} /></button>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 9 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 11, background: '#fff', border: `0.5px solid ${a.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={18} color={a.fg} /></div>
+        <div style={{ width: 38, height: 38, borderRadius: 12, background: '#fff', border: `0.5px solid ${a.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={18} color={a.fg} /></div>
         <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.07em', color: a.fg }}>{s.eyebrow}</span>
       </div>
       <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.22, color: C.ink, marginBottom: 5, paddingRight: 14, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.title}</div>
@@ -510,7 +510,7 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
    with a haloed icon so it feels designed rather than blank. */
 function EmptySection({ icon, title, text }: { icon?: React.ReactNode; title?: string; text: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'linear-gradient(180deg,#fbfdfc,#f5f9f7)', border: `1px dashed ${C.greenLine}`, borderRadius: 18, padding: '22px 20px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'linear-gradient(180deg,#fbfdfc,#f5f9f7)', border: `1px dashed ${C.greenLine}`, borderRadius: 16, padding: '22px 20px' }}>
       {icon && (
         <div style={{ width: 46, height: 46, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, boxShadow: '0 2px 10px rgba(74,189,152,0.18)' }}>{icon}</div>
       )}
@@ -524,7 +524,7 @@ export function SourceCard({ s }: { s: { key: string; label: string; value: stri
   const Icon = TILE_ICON[s.key] ?? MousePointerClick
   const zero = !s.value || s.value === '0' || s.value === '—'
   return (
-    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '7px 4px', textAlign: 'center', minHeight: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: zero ? 0.5 : 1 }}>
+    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '7px 4px', textAlign: 'center', minHeight: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: zero ? 0.5 : 1 }}>
       <Icon size={14} color={C.green} />
       <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 500, lineHeight: 1, color: C.ink }}>{s.value}</div>
       <div style={{ fontSize: 10, color: C.faint }}>{s.label}</div>

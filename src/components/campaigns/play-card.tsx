@@ -37,7 +37,7 @@ export default function PlayCard({
   const monthly = active.filter((i) => i.cadence.kind === 'recurring').reduce((a, i) => a + i.price, 0)
 
   return (
-    <div style={{ borderRadius: 18, background: '#fff', border: `1px solid ${C.line}`, boxShadow: `inset 3px 0 0 ${hex}`, overflow: 'hidden' }}>
+    <div style={{ borderRadius: 16, background: '#fff', border: `1px solid ${C.line}`, boxShadow: `inset 3px 0 0 ${hex}`, overflow: 'hidden' }}>
       <button type="button" onClick={() => setOpen((o) => !o)} style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 12, padding: '13px 14px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}>
         <span aria-hidden style={{ flex: 'none', width: 40, height: 40, borderRadius: 12, display: 'grid', placeItems: 'center', background: `${hex}1f` }}><Icon size={19} color={hex} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>

@@ -152,7 +152,7 @@ function Detail({ camp, onToggleOptOut, onToggleInclude, onRemove, onSetQty }: {
 
       {/* brief */}
       {brief && (
-        <div style={{ marginTop: 16, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 18, padding: 16 }}>
+        <div style={{ marginTop: 16, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.green, marginBottom: 10 }}>The plan</div>
           {brief.offer && <Row k="Offer" v={brief.offer.label} />}
           <Row k="Goal" v={brief.kpi} />
@@ -203,8 +203,8 @@ function ContentPreview({ items, shipped }: { items: LineItem[]; shipped: boolea
           const ready = shipped || it.lock === 'delivered'
           const Icon = meta.Icon
           return (
-            <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, padding: '10px 12px' }}>
-              <div style={{ position: 'relative', width: 46, height: 46, borderRadius: 11, background: GRAD, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
+            <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: '10px 12px' }}>
+              <div style={{ position: 'relative', width: 46, height: 46, borderRadius: 12, background: GRAD, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff' }}>
                 <Icon size={20} fill={meta.verb === 'Watch reel' ? '#fff' : 'none'} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>

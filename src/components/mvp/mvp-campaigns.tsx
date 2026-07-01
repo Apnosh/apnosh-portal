@@ -85,8 +85,8 @@ export default function MvpCampaigns() {
         <p style={{ fontSize: 13.5, color: C.mute, margin: '0 0 16px' }}>Open any card to see what it costs, what it&apos;s driving, and how it&apos;s doing inside.</p>
 
         {!empty && lastItemId && (
-          <Link href={`/dashboard/campaigns/new?template=${lastItemId}`} style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, padding: '12px 14px', marginBottom: 18, color: 'inherit', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
-            <span style={{ width: 34, height: 34, borderRadius: 10, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Repeat size={17} color={C.greenDk} /></span>
+          <Link href={`/dashboard/campaigns/new?template=${lastItemId}`} style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: '12px 14px', marginBottom: 18, color: 'inherit', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+            <span style={{ width: 34, height: 34, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Repeat size={17} color={C.greenDk} /></span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: 'block', fontFamily: DISPLAY, fontWeight: 600, fontSize: 14.5, color: C.ink }}>Re-run last campaign</span>
               <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{last?.draft.name} · set it to repeat</span>
@@ -96,7 +96,7 @@ export default function MvpCampaigns() {
         )}
 
         {!empty && (
-          <div style={{ display: 'inline-flex', background: '#f1f3f2', borderRadius: 10, padding: 3, marginBottom: 18 }}>
+          <div style={{ display: 'inline-flex', background: '#f1f3f2', borderRadius: 12, padding: 3, marginBottom: 18 }}>
             {([['list', 'List'], ['calendar', 'Calendar']] as const).map(([k, l]) => {
               const on = view === k
               return <button key={k} onClick={() => setView(k)} style={{ border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 13, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 3px rgba(0,0,0,.08)' : 'none', cursor: 'pointer', transition: 'all .15s' }}>{l}</button>
@@ -140,8 +140,8 @@ export default function MvpCampaigns() {
 
 function EmptyState() {
   return (
-    <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 18, padding: '34px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-      <div style={{ width: 48, height: 48, borderRadius: 14, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} color={C.greenDk} /></div>
+    <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 16, padding: '34px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+      <div style={{ width: 48, height: 48, borderRadius: 16, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} color={C.greenDk} /></div>
       <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600 }}>No campaigns yet</div>
       <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, maxWidth: 280 }}>Start one and your strategist runs it — you just approve. Pick a goal and we build the plan.</div>
       <Link href="/dashboard/campaigns/new" style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 12, padding: '11px 18px', fontWeight: 700, fontSize: 14 }}><Plus size={16} strokeWidth={2.5} /> New campaign</Link>
@@ -165,7 +165,7 @@ function CampaignCard({ c }: { c: CampCard }) {
   const fmtReach = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 
   return (
-    <Link href={c.href} style={{ display: 'block', textDecoration: 'none', color: 'inherit', position: 'relative', overflow: 'hidden', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '11px 13px 10px', marginBottom: 9, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+    <Link href={c.href} style={{ display: 'block', textDecoration: 'none', color: 'inherit', position: 'relative', overflow: 'hidden', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '11px 13px 10px', marginBottom: 9, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: tone.bar }} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -213,7 +213,7 @@ function CampaignCard({ c }: { c: CampCard }) {
             { I: Heart, v: fmtReach(c.perf.likes), l: 'likes' },
             { I: TrendingUp, v: c.perf.result, l: 'result' },
           ].map((m, i) => (
-            <div key={i} style={{ flex: 1, minWidth: 0, background: '#f7f8f7', borderRadius: 9, padding: '7px 9px' }}>
+            <div key={i} style={{ flex: 1, minWidth: 0, background: '#f7f8f7', borderRadius: 12, padding: '7px 9px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}><m.I size={11} color={C.greenDk} /><span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.v}</span></div>
               <div style={{ fontSize: 9.5, color: C.faint, fontWeight: 600 }}>{m.l}</div>
             </div>

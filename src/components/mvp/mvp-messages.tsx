@@ -18,7 +18,7 @@ import { markThreadRead } from '@/app/dashboard/messages/actions'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenBar: '#34c759',
-  ink: '#1d1d1f', ink2: '#3a3a3c', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#f5f5f7',
+  ink: '#1d1d1f', ink2: '#3a3a3c', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#fafafb',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 const GRAD = 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)'
@@ -216,7 +216,7 @@ function ThreadRowView({ t, onOpen }: { t: ThreadRow; onOpen: () => void }) {
   const c = contactForSubject(t.subject)
   const name = c?.name ?? t.subject
   return (
-    <button onClick={onOpen} className="mrise" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 9, boxShadow: '0 1px 2px rgba(0,0,0,.03)', cursor: 'pointer', textAlign: 'left' }}>
+    <button onClick={onOpen} className="mrise" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 12, marginBottom: 9, boxShadow: '0 1px 2px rgba(0,0,0,.03)', cursor: 'pointer', textAlign: 'left' }}>
       <Avatar c={c} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -232,7 +232,7 @@ function ThreadRowView({ t, onOpen }: { t: ThreadRow; onOpen: () => void }) {
 
 function ContactRowView({ c, onOpen }: { c: Contact; onOpen: () => void }) {
   return (
-    <button onClick={onOpen} className="mrise" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 9, boxShadow: '0 1px 2px rgba(0,0,0,.03)', cursor: 'pointer', textAlign: 'left' }}>
+    <button onClick={onOpen} className="mrise" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 12, marginBottom: 9, boxShadow: '0 1px 2px rgba(0,0,0,.03)', cursor: 'pointer', textAlign: 'left' }}>
       <Avatar c={c} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>

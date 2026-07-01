@@ -176,7 +176,7 @@ function Body({ data, sel, setSel, summary, summaryLoading }: { data: InsightsDa
               const dn = m.weekPct < 0
               return (
                 <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: 9, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={15} color={C.greenDk} /></div>
+                  <div style={{ width: 30, height: 30, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={15} color={C.greenDk} /></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
                       <span style={{ fontSize: 12.5, color: C.mute, fontWeight: 500 }}>{m.tabLabel}</span>
@@ -252,7 +252,7 @@ function Body({ data, sel, setSel, summary, summaryLoading }: { data: InsightsDa
         <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {data.reviews.slice(0, 3).map((r) => (
-              <Link key={r.id} href={`/dashboard/reviews/${r.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12 }}>
+              <Link key={r.id} href={`/dashboard/reviews/${r.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
                   <span style={{ fontWeight: 600, fontSize: 13 }}>{r.authorName}</span>
                   <Stars n={r.rating} />
@@ -287,7 +287,7 @@ function Section({ title, sub, action, children }: { title: string; sub?: string
 function Highlight({ tone, text }: { tone: 'up' | 'down' | 'star' | 'info'; text: React.ReactNode }) {
   const dot = tone === 'down' ? C.coral : tone === 'star' ? C.amber : C.green
   return (
-    <div style={{ display: 'flex', gap: 10, background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '11px 13px' }}>
+    <div style={{ display: 'flex', gap: 10, background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '11px 13px' }}>
       <span style={{ width: 7, height: 7, borderRadius: 99, background: dot, marginTop: 6, flexShrink: 0 }} />
       <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.45 }}>{text}</div>
     </div>
@@ -298,7 +298,7 @@ function ReviewSentiment({ summary, loading }: { summary: ReviewSummary | null; 
   if (!summary) {
     return (
       <Section title="What customers are saying">
-        <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14, fontSize: 13, color: C.faint }}>
+        <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 14, fontSize: 13, color: C.faint }}>
           {loading ? 'Reading your reviews…' : 'We could not load your review summary just now. Check back in a bit.'}
         </div>
       </Section>

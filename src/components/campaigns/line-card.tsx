@@ -36,7 +36,7 @@ export default function LineCard({
 
   return (
     <div style={{
-      borderRadius: 14, background: '#fff', transition: 'all .15s',
+      borderRadius: 16, background: '#fff', transition: 'all .15s',
       border: `1px ${dim ? 'dashed' : 'solid'} ${off ? C.greenLine : C.line}`,
       opacity: recommended ? 0.92 : 1,
     }}>
@@ -72,7 +72,7 @@ export default function LineCard({
             <p style={{ margin: 0, fontSize: 11.5, color: C.mute, lineHeight: 1.4 }}><b>Vs. market:</b> agencies charge {money(item.market.low)}–{money(item.market.high)} for {item.market.label ?? 'the same scope'}. Yours is {cadenceLabel(item)}.</p>
           )}
           {item.draft && (
-            <div style={{ background: '#f4f0ff', border: '1px solid #e6dcff', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ background: '#f4f0ff', border: '1px solid #e6dcff', borderRadius: 12, padding: '8px 10px' }}>
               <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: '#6b46c1', marginBottom: 4 }}>AI draft</div>
               {item.draft.title && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.ink, marginBottom: 3 }}>{item.draft.title}</div>}
               <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{item.draft.body}</div>
@@ -99,7 +99,7 @@ export default function LineCard({
           {item.cadence.kind === 'per-occurrence' && onSetQty && !off && !recommended && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 11.5, color: C.mute }}>How many {item.cadence.unit}s?</span>
-              <div style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${C.line}`, borderRadius: 9, overflow: 'hidden' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', border: `1px solid ${C.line}`, borderRadius: 12, overflow: 'hidden' }}>
                 <button type="button" onClick={() => onSetQty(Math.max(1, (item.qty ?? 1) - 1))} style={qtyBtn}>−</button>
                 <span style={{ padding: '0 8px', fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums', minWidth: 30, textAlign: 'center' }}>{item.qty ?? 1}</span>
                 <button type="button" onClick={() => onSetQty((item.qty ?? 1) + 1)} style={{ ...qtyBtn, color: C.greenDk }}>+</button>

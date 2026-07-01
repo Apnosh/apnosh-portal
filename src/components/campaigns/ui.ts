@@ -3,7 +3,7 @@ import { lineTotal, type LineItem } from '@/lib/campaigns/types'
 
 export const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
-  ink: '#1d1d1f', ink2: '#3a3a3c', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#f5f5f7',
+  ink: '#1d1d1f', ink2: '#3a3a3c', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#fafafb',
   red: '#c0392b', redBg: '#fdecea',
 }
 export const DISPLAY = "'Cal Sans','Inter',sans-serif"

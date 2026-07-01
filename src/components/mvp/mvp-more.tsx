@@ -99,7 +99,7 @@ export default function MvpMore({ name, location, tier }: { name: string; locati
               <div key={r.href}>
                 {i > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 61 }} />}
                 <Link href={r.href} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '12px 14px', textDecoration: 'none', color: 'inherit' }}>
-                  <span style={{ width: 34, height: 34, borderRadius: 9, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><r.Icon size={18} color={C.greenDk} /></span>
+                  <span style={{ width: 34, height: 34, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><r.Icon size={18} color={C.greenDk} /></span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.25 }}>{r.label}</span>
                     <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>{r.sub}</span>
@@ -114,7 +114,7 @@ export default function MvpMore({ name, location, tier }: { name: string; locati
 
       <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden', marginBottom: 14 }}>
         <button type="button" onClick={() => { void signOut() }} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 13, padding: '13px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
-          <span style={{ width: 34, height: 34, borderRadius: 9, background: C.coralSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><LogOut size={18} color={C.coral} /></span>
+          <span style={{ width: 34, height: 34, borderRadius: 12, background: C.coralSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><LogOut size={18} color={C.coral} /></span>
           <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: C.coral }}>Sign out</span>
         </button>
       </div>

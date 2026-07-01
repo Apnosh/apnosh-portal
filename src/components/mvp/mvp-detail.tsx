@@ -63,7 +63,7 @@ export function MvpGroup({ title, children }: { title?: string; children: React.
 export function MvpRow({ icon, label, sub, href, onClick, right, danger, external }: { icon?: React.ReactNode; label: string; sub?: string; href?: string; onClick?: () => void; right?: React.ReactNode; danger?: boolean; external?: boolean }) {
   const inner = (
     <>
-      {icon && <span style={{ width: 34, height: 34, borderRadius: 9, background: danger ? C.coralSoft : C.greenSoft, color: danger ? C.coral : C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>}
+      {icon && <span style={{ width: 34, height: 34, borderRadius: 12, background: danger ? C.coralSoft : C.greenSoft, color: danger ? C.coral : C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>}
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: danger ? C.coral : C.ink, lineHeight: 1.25 }}>{label}</span>
         {sub && <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</span>}
@@ -86,7 +86,7 @@ export function MvpSaveBar({ onClick, label = 'Save', disabled, saving, hint }: 
   return (
     <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: `0.5px solid ${C.line}`, padding: '10px 14px calc(12px + env(safe-area-inset-bottom))' }}>
       {hint && <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginBottom: 8 }}>{hint}</div>}
-      <button type="button" onClick={onClick} disabled={off} style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', background: off ? '#bfe7da' : C.green, color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: 'inherit', cursor: off ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+      <button type="button" onClick={onClick} disabled={off} style={{ width: '100%', height: 48, borderRadius: 16, border: 'none', background: off ? '#bfe7da' : C.green, color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: 'inherit', cursor: off ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
         {saving && <Loader2 size={18} className="mvp-spin" />}{label}
       </button>
     </div>
@@ -126,7 +126,7 @@ export function MvpPill({ tone = 'neutral', label, dot }: { tone?: PillTone; lab
 // dot when on. Sits in a flex row of one or more above the first group.
 export function StatusPill({ label, on, onText = 'Connected', offText = 'Not connected' }: { label: string; on: boolean; onText?: string; offText?: string }) {
   return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 9, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '10px 12px', minWidth: 0 }}>
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 9, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '10px 12px', minWidth: 0 }}>
       <span style={{ width: 8, height: 8, borderRadius: 99, background: on ? C.green : C.faint, flexShrink: 0 }} />
       <span style={{ minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
@@ -147,7 +147,7 @@ export function MvpStat({ icon, value, label, delta }: { icon?: React.ReactNode;
   const zero = !value || value === '0' || value === '—' || value === '$0' || value === '0%'
   const dColor = delta?.dir === 'up' ? C.greenDk : delta?.dir === 'down' ? C.coral : C.faint
   return (
-    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '10px 6px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, opacity: zero ? 0.5 : 1, minWidth: 0 }}>
+    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '10px 6px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, opacity: zero ? 0.5 : 1, minWidth: 0 }}>
       {icon && <span style={{ color: C.green, display: 'flex' }}>{icon}</span>}
       <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 500, lineHeight: 1.05, color: C.ink }}>{value}</div>
       <div style={{ fontSize: 10.5, color: C.faint, lineHeight: 1.2 }}>{label}</div>
@@ -165,7 +165,7 @@ export function MvpStatGrid({ children }: { children: React.ReactNode }) {
 // Not-connected / empty state. Dashed green halo card with an optional icon.
 export function MvpEmpty({ icon, title, text }: { icon?: React.ReactNode; title?: string; text: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'linear-gradient(180deg,#fbfdfc,#f5f9f7)', border: '1px dashed rgba(74,189,152,0.4)', borderRadius: 18, padding: '26px 20px', marginBottom: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'linear-gradient(180deg,#fbfdfc,#f5f9f7)', border: '1px dashed rgba(74,189,152,0.4)', borderRadius: 16, padding: '26px 20px', marginBottom: 14 }}>
       {icon && <div style={{ width: 46, height: 46, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, boxShadow: '0 2px 10px rgba(74,189,152,0.18)' }}>{icon}</div>}
       {title && <div style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink, marginBottom: 4 }}>{title}</div>}
       <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, maxWidth: 240 }}>{text}</div>
