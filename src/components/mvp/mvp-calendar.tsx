@@ -94,11 +94,9 @@ export default function MvpCalendar({ saved }: { saved: SavedCampaign[] }) {
   const today = useMemo(() => new Date(), [])
   const [tab, setTab] = useState<'month' | 'week'>('month')
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
-  // Seed one owner event near today so edit/delete + "plan a promo" are usable.
-  const [owner, setOwner] = useState<CalEvent[]>(() => {
-    const thu = addDays(today, (4 - today.getDay() + 7) % 7)
-    return [{ id: 'owner-rw', kind: 'owner', title: 'Restaurant Week', start: iso(thu), end: iso(addDays(thu, 6)) }]
-  })
+  // Owner-added events (any date, no campaign needed) live in local state.
+  const [owner, setOwner] = useState<CalEvent[]>([])
+  const [addFor, setAddFor] = useState<Date | null>(null)
 
   const year = cursor.getFullYear()
   const month = cursor.getMonth()
@@ -109,7 +107,9 @@ export default function MvpCalendar({ saved }: { saved: SavedCampaign[] }) {
   const holidayEvents: CalEvent[] = holidays.map((h) => ({ id: `h-${h.date}`, kind: 'holiday', title: h.name, start: h.date }))
   const closedEvents: CalEvent[] = closed.map((c) => ({ id: `c-${c.date}`, kind: 'closed', title: c.label, start: c.date }))
   const multiDay = [...campaigns, ...owner].filter((e) => e.end && e.end !== e.start)
-  const allDots = [...holidayEvents, ...campaigns.filter((e) => !e.end || e.end === e.start)]
+  const allDots = [...holidayEvents, ...campaigns.filter((e) => !e.end || e.end === e.start), ...owner.filter((e) => !e.end || e.end === e.start)]
+  const deleteOwner = (id: string) => setOwner((xs) => xs.filter((x) => x.id !== id))
+  const addOwner = (title: string, startISO: string, endISO?: string) => setOwner((xs) => [...xs, { id: 'owner-' + Date.now(), kind: 'owner', title, start: startISO, end: endISO && endISO !== startISO ? endISO : undefined }])
 
   return (
     <div>
@@ -128,8 +128,10 @@ export default function MvpCalendar({ saved }: { saved: SavedCampaign[] }) {
         ? <MonthView year={year} month={month} today={today} multiDay={multiDay} dots={allDots} recurring={RECURRING}
             onPrev={() => setCursor(new Date(year, month - 1, 1))} onNext={() => setCursor(new Date(year, month + 1, 1))} onToday={() => setCursor(new Date(today.getFullYear(), today.getMonth(), 1))}
             agenda={[...campaigns, ...owner, ...holidayEvents].filter((e) => withinMonth(e.start, year, month))}
-            onDeleteOwner={(id) => setOwner((xs) => xs.filter((x) => x.id !== id))} />
-        : <WeekView today={today} campaigns={campaigns} owner={owner} holidayEvents={holidayEvents} closedEvents={closedEvents} recurring={RECURRING} />}
+            onDayClick={(d) => setAddFor(d)} onDeleteOwner={deleteOwner} />
+        : <WeekView today={today} campaigns={campaigns} owner={owner} holidayEvents={holidayEvents} closedEvents={closedEvents} recurring={RECURRING} onDayClick={(d) => setAddFor(d)} />}
+
+      {addFor && <AddEventSheet date={addFor} onClose={() => setAddFor(null)} onSave={(title, startISO, endISO) => { addOwner(title, startISO, endISO); setAddFor(null) }} />}
     </div>
   )
 }
@@ -137,9 +139,9 @@ export default function MvpCalendar({ saved }: { saved: SavedCampaign[] }) {
 const withinMonth = (d: string, y: number, m: number) => { const x = parse(d); return x.getFullYear() === y && x.getMonth() === m }
 
 /* ---------- Month grid ---------- */
-function MonthView({ year, month, today, multiDay, dots, recurring, onPrev, onNext, onToday, agenda, onDeleteOwner }: {
+function MonthView({ year, month, today, multiDay, dots, recurring, onPrev, onNext, onToday, agenda, onDayClick, onDeleteOwner }: {
   year: number; month: number; today: Date; multiDay: CalEvent[]; dots: CalEvent[]; recurring: typeof RECURRING
-  onPrev: () => void; onNext: () => void; onToday: () => void; agenda: CalEvent[]; onDeleteOwner: (id: string) => void
+  onPrev: () => void; onNext: () => void; onToday: () => void; agenda: CalEvent[]; onDayClick: (d: Date) => void; onDeleteOwner: (id: string) => void
 }) {
   const firstOfMonth = new Date(year, month, 1)
   const startPad = firstOfMonth.getDay()
@@ -148,7 +150,7 @@ function MonthView({ year, month, today, multiDay, dots, recurring, onPrev, onNe
 
   const dotMap = new Map<string, { color: string }[]>()
   const pushDot = (key: string, color: string) => { const a = dotMap.get(key) ?? []; if (a.length < 3) a.push({ color }); dotMap.set(key, a) }
-  dots.forEach((e) => pushDot(e.start, e.kind === 'holiday' ? C.holi : C.green))
+  dots.forEach((e) => pushDot(e.start, e.kind === 'holiday' ? C.holi : e.kind === 'owner' ? C.neutral : C.green))
 
   return (
     <div>
@@ -191,7 +193,7 @@ function MonthView({ year, month, today, multiDay, dots, recurring, onPrev, onNe
                   return (
                     <div key={i} style={{ height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {inMonth && (
-                        <span style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? '#fff' : C.ink, background: isToday ? C.green : 'transparent' }}>{d.getDate()}</span>
+                        <button onClick={() => onDayClick(d)} aria-label={`Add event on ${fmtShort(d)}`} style={{ width: 26, height: 26, borderRadius: '50%', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: isToday ? 700 : 500, color: isToday ? '#fff' : C.ink, background: isToday ? C.green : 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>{d.getDate()}</button>
                       )}
                     </div>
                   )
@@ -292,8 +294,8 @@ function AgendaCard({ e, onDelete }: { e: CalEvent; onDelete: (id: string) => vo
 }
 
 /* ---------- Week view ---------- */
-function WeekView({ today, campaigns, owner, holidayEvents, closedEvents, recurring }: {
-  today: Date; campaigns: CalEvent[]; owner: CalEvent[]; holidayEvents: CalEvent[]; closedEvents: CalEvent[]; recurring: typeof RECURRING
+function WeekView({ today, campaigns, owner, holidayEvents, closedEvents, recurring, onDayClick }: {
+  today: Date; campaigns: CalEvent[]; owner: CalEvent[]; holidayEvents: CalEvent[]; closedEvents: CalEvent[]; recurring: typeof RECURRING; onDayClick: (d: Date) => void
 }) {
   const mondayOf = (d: Date) => addDays(d, -((d.getDay() + 6) % 7))
   const [weekStart, setWeekStart] = useState<Date>(() => mondayOf(today))
@@ -302,7 +304,7 @@ function WeekView({ today, campaigns, owner, holidayEvents, closedEvents, recurr
   const DOWM = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
   const inWeek = (d: string) => { const x = parse(d); return x >= weekStart && x <= addDays(weekEnd, 0.99) }
   const clampDay = (s: string) => { const x = parse(s); return x < weekStart ? weekStart : x }
-  const spans = [...campaigns, ...owner].filter((e) => e.end && parse(e.start) <= weekEnd && parse(e.end as string) >= weekStart)
+  const events = [...campaigns, ...owner].filter((e) => parse(e.start) <= weekEnd && parse(e.end ?? e.start) >= weekStart)
 
   const reelMeta = recurring.find((r) => r.id === 'weeklyreels')
   const items: { date: Date; node: React.ReactNode; key: string }[] = []
@@ -321,7 +323,7 @@ function WeekView({ today, campaigns, owner, holidayEvents, closedEvents, recurr
     <Row tileBg={C.bg2} tileFg={C.mute} icon={<Ban size={18} />} title={c.title} sub="Closed" subColor={C.faint}
       action={<ChevronRight size={17} color={C.faint} />} />
   ) }))
-  spans.forEach((e) => items.push({ date: clampDay(e.start), key: e.id, node: e.kind === 'campaign' ? (
+  events.forEach((e) => items.push({ date: clampDay(e.start), key: e.id, node: e.kind === 'campaign' ? (
     <Link href={`/dashboard/campaigns/${e.id}`} style={{ textDecoration: 'none' }}>
       <Row tileBg={C.greenSoft} tileFg={C.greenDk} icon={<Megaphone size={18} />} title={e.title} sub={`Campaign · ${fmtRange(e.start, e.end)}`} subColor={C.greenDk}
         action={<ArrowRight size={17} color={C.faint} />} />
@@ -340,9 +342,9 @@ function WeekView({ today, campaigns, owner, holidayEvents, closedEvents, recurr
 
   const reelWeekday = reelMeta?.weekday ?? null
   const holidayThisWeek = holidayEvents.find((h) => inWeek(h.start))
-  const plannedCount = (reelWeekday !== null ? 1 : 0) + spans.length
+  const plannedCount = (reelWeekday !== null ? 1 : 0) + events.length
   const isHoliday = (d: Date) => holidayEvents.some((h) => sameDay(parse(h.start), d))
-  const hasContent = (d: Date) => (reelWeekday !== null && d.getDay() === reelWeekday) || spans.some((e) => parse(e.start) <= d && parse(e.end as string) >= d)
+  const hasContent = (d: Date) => (reelWeekday !== null && d.getDay() === reelWeekday) || events.some((e) => parse(e.start) <= d && parse(e.end ?? e.start) >= d)
 
   return (
     <div>
@@ -368,7 +370,7 @@ function WeekView({ today, campaigns, owner, holidayEvents, closedEvents, recurr
             return (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: t ? C.greenDk : C.faint }}>{DOWM[i]}</span>
-                <span style={{ width: 38, height: 38, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: t ? 700 : 600, color: t ? '#fff' : h ? C.holi : C.ink, background: t ? C.green : 'transparent' }}>{d.getDate()}</span>
+                <button onClick={() => onDayClick(d)} aria-label={`Add event on ${fmtShort(d)}`} style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: t ? 700 : 600, color: t ? '#fff' : h ? C.holi : C.ink, background: t ? C.green : 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>{d.getDate()}</button>
                 <span style={{ width: 5, height: 5, borderRadius: 3, background: hasContent(d) && !t ? C.ink : 'transparent' }} />
               </div>
             )
@@ -435,6 +437,45 @@ function Row({ tileBg, tileFg, icon, title, sub, subColor, action }: { tileBg: s
         <div style={{ fontSize: 12.5, color: subColor, marginTop: 1 }}>{sub}</div>
       </div>
       {action}
+    </div>
+  )
+}
+
+/* Add your own dated event — no campaign required. */
+function AddEventSheet({ date, onSave, onClose }: { date: Date; onSave: (title: string, startISO: string, endISO?: string) => void; onClose: () => void }) {
+  const [title, setTitle] = useState('')
+  const [start, setStart] = useState(iso(date))
+  const [multi, setMulti] = useState(false)
+  const [end, setEnd] = useState(iso(addDays(date, 1)))
+  const canSave = title.trim().length > 0
+  const field: React.CSSProperties = { width: '100%', border: `1px solid ${C.line}`, borderRadius: 11, padding: '11px 12px', fontSize: 14, color: C.ink, fontFamily: 'inherit', background: '#fff', boxSizing: 'border-box', outline: 'none' }
+  const label: React.CSSProperties = { display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, marginBottom: 5 }
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(10,15,13,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: '20px 20px calc(20px + env(safe-area-inset-bottom))' }}>
+        <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 19, color: C.ink }}>Add an event</div>
+        <div style={{ fontSize: 13, color: C.mute, margin: '2px 0 16px' }}>Your own date — no campaign needed. You can plan a promo for it later.</div>
+
+        <label style={label}>Event</label>
+        <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Restaurant Week, live music, anniversary…" style={{ ...field, marginBottom: 12 }} />
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label style={label}>Starts</label>
+            <input type="date" value={start} onChange={(e) => setStart(e.target.value)} style={field} />
+          </div>
+          {multi && (
+            <div style={{ flex: 1 }}>
+              <label style={label}>Ends</label>
+              <input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} style={field} />
+            </div>
+          )}
+        </div>
+        <button onClick={() => setMulti((m) => !m)} style={{ background: 'none', border: 'none', color: C.greenDk, fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: '10px 0 4px' }}>{multi ? '– Single day' : '+ Add an end date'}</button>
+
+        <button disabled={!canSave} onClick={() => onSave(title.trim(), start, multi ? end : undefined)} style={{ width: '100%', marginTop: 8, height: 50, borderRadius: 13, border: 'none', cursor: canSave ? 'pointer' : 'default', background: canSave ? 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)' : '#cfe7dd', color: '#fff', fontFamily: DISPLAY, fontWeight: 600, fontSize: 15.5 }}>Add to calendar</button>
+        <button onClick={onClose} style={{ width: '100%', height: 44, marginTop: 6, border: 'none', background: 'none', color: C.mute, fontWeight: 600, fontSize: 13.5, cursor: 'pointer' }}>Cancel</button>
+      </div>
     </div>
   )
 }
