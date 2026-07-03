@@ -28,12 +28,19 @@ export async function GET(
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/not-found`)
   }
 
-  // Increment click count (fire and forget)
+  // Increment click count (fire and forget). The 196 RPC is atomic — the old
+  // read-then-write lost concurrent clicks; keep it only as the pre-196 fallback.
   supabase
-    .from('tracked_links')
-    .update({ click_count: (link.click_count || 0) + 1 })
-    .eq('short_code', code)
-    .then(() => {})
+    .rpc('increment_link_clicks', { p_code: code })
+    .then(({ error }) => {
+      if (error) {
+        return supabase
+          .from('tracked_links')
+          .update({ click_count: (link.click_count || 0) + 1 })
+          .eq('short_code', code)
+          .then(() => {})
+      }
+    })
 
   return NextResponse.redirect(link.original_url)
 }

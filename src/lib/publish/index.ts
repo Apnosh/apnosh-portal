@@ -29,6 +29,9 @@ interface PublishInput {
   mediaType: 'image' | 'video' | 'carousel' | null
   linkUrl: string | null
   platforms: string[]
+  /** GBP post CTA button (LEARN_MORE/ORDER/... + url) — the reliable link carrier
+   *  there, since the 1500-char summary trim can silently cut a caption link. */
+  gbpCallToAction?: { actionType: string; url?: string } | null
   // Extended options
   locationId?: string
   userTags?: { username: string; x: number; y: number }[]
@@ -114,6 +117,7 @@ export async function publishToAllPlatforms(
           accessToken: conn.access_token,
           text: input.text,
           mediaUrls: input.mediaUrls,
+          ...(input.gbpCallToAction ? { callToAction: input.gbpCallToAction } : {}),
         })
         results[platform] = {
           status: gbpResult.success ? 'published' : 'failed',

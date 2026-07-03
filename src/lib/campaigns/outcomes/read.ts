@@ -9,6 +9,7 @@ import 'server-only'
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCampaign } from '@/lib/campaigns/server'
+import { clicksByDraft } from '@/lib/publish/tracked-link'
 import { campaignChannelLift } from './window-lift'
 import { computeVerdict, type PieceOutcome, type CampaignOutcomes, type WindowProof } from './verdict'
 
@@ -64,6 +65,10 @@ export async function getCampaignOutcomes(campaignId: string): Promise<CampaignO
     for (const p of posts ?? []) metrics.set(p.id as string, { reach: (p.reach as number) ?? null, interactions: (p.total_interactions as number) ?? null, permalink: (p.permalink as string) ?? null })
   }
 
+  // First-party link taps per piece (tracked_links minted at publish). Fails soft
+  // to an empty map pre-196; a piece with no tracked link stays clicks: null.
+  const clickMap = await clicksByDraft(admin, list.map((d) => d.id as string)).catch(() => new Map<string, number>())
+
   let sumReach = 0, sumInteractions = 0, liveCount = 0
   const pieces: PieceOutcome[] = list.map((d) => {
     const postId = (d.published_post_id as string | null) ?? fallbackByDraft.get(d.id as string) ?? null
@@ -82,6 +87,7 @@ export async function getCampaignOutcomes(campaignId: string): Promise<CampaignO
       link: post?.permalink ?? null,             // the real post URL when the platform gives one; never synthesized
       lifecycle: lifecycleOf((d.status as string) ?? ''),
       publishedAtISO: (d.published_at as string) ?? null,   // the real posted date, per piece
+      clicks: clickMap.get(d.id as string) ?? null,         // first-party link taps; null = no tracked link
 
       readout: computeVerdict({ hasData, attribution: hasData ? 'per_post' : 'none', reach, interactions, engagementRate: er }),
     }

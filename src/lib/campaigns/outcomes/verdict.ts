@@ -47,6 +47,9 @@ export interface PieceOutcome {
   lifecycle: 'making' | 'scheduled' | 'posted'
   /** when the piece actually posted (content_drafts.published_at), null until it posts. Real, per-piece. */
   publishedAtISO: string | null
+  /** taps on the piece's tracked short link (/r/[code]) — first-party, per-piece,
+   *  never modeled. null when the piece has no tracked link. */
+  clicks: number | null
   readout: VerdictReadout
 }
 

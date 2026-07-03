@@ -117,6 +117,8 @@ async function composeWrapUpLetter(campaignId: string, name: string): Promise<Le
     piece: p.label ?? 'a piece',
     result: p.readout.gathering ? 'still gathering' : (p.readout.value || p.readout.plain || 'posted'),
   }))
+  // First-party link taps across the campaign's tracked links (null pieces contribute 0).
+  const totalClicks = (outcomes?.pieces ?? []).reduce((n, p) => n + (p.clicks ?? 0), 0)
   const servicesDone = ((swoRes.data ?? []) as { title: string | null }[]).map((s) => s.title).filter((t): t is string => !!t)
   const gatheringCount = pieces.filter((p) => p.result === 'still gathering').length
   const rollupPlain = outcomes && !outcomes.rollup.gathering ? outcomes.rollup.plain : null
@@ -128,13 +130,14 @@ async function composeWrapUpLetter(campaignId: string, name: string): Promise<Le
   if (servicesDone.length > 0) parts.push(`Finished for you: ${servicesDone.slice(0, 3).join(', ')}${servicesDone.length > 3 ? ` and ${servicesDone.length - 3} more` : ''}.`)
   if (rollupPlain) parts.push(rollupPlain)
   else if (gatheringCount > 0) parts.push('Results are still coming in. Numbers land over the next days.')
+  if (totalClicks > 0) parts.push(`People tapped your links ${totalClicks} time${totalClicks === 1 ? '' : 's'}.`)
   if (billed) parts.push(`Billed for this campaign so far: ${billed}.`)
   parts.push('Open the campaign for the full breakdown.')
   const fallback: Letter = { title: `${name} wrapped`, body: parts.join(' ') }
 
   const ai = await callStructuredOutput<Letter>({
     system: LETTER_SYSTEM,
-    user: JSON.stringify({ campaignName: name, pieces, servicesFinished: servicesDone, overallSoFar: rollupPlain ?? 'still gathering', billedSoFar: billed ?? 'nothing billed yet' }),
+    user: JSON.stringify({ campaignName: name, pieces, servicesFinished: servicesDone, linkTaps: totalClicks > 0 ? totalClicks : null, overallSoFar: rollupPlain ?? 'still gathering', billedSoFar: billed ?? 'nothing billed yet' }),
     schema: LETTER_SCHEMA as unknown as object,
     maxTokens: 400,
   })

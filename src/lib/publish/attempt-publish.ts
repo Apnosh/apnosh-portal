@@ -12,6 +12,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { publishToAllPlatforms, resolveOverallStatus } from '@/lib/publish'
 import { getPublishConnectionsForClient } from './get-connections'
 import { getApprovalSettings } from '@/lib/work/approval-settings'
+import { mintTrackedLinkForDraft } from './tracked-link'
 import type { PlatformPublishResult } from '@/types/database'
 
 export interface AttemptPublishResult {
@@ -39,6 +40,7 @@ export interface AttemptPublishResult {
 interface DraftRow {
   id: string
   client_id: string
+  campaign_id: string | null
   caption: string | null
   hashtags: string[] | null
   media_urls: string[] | null
@@ -61,7 +63,7 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
 
   const { data: draftRaw } = await admin
     .from('content_drafts')
-    .select('id, client_id, caption, hashtags, media_urls, target_platforms, status, client_signed_off_at, published_at, published_url')
+    .select('id, client_id, campaign_id, caption, hashtags, media_urls, target_platforms, status, client_signed_off_at, published_at, published_url')
     .eq('id', draftId)
     .maybeSingle()
   if (!draftRaw) return { ok: false, errorCode: 'draft_not_found', error: 'draft not found' }
@@ -133,6 +135,16 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
     }
   }
 
+  // Attribution: a campaign piece carries a tracked short link when the business
+  // has somewhere real to send people (campaign ordering link → website). The
+  // link rides the caption (auto-links on Facebook, visible on Instagram) and
+  // GBP's CTA button below. One link per draft, forever — /r/[code] counts the
+  // taps. Fails soft: a link problem never blocks a publish.
+  let trackedUrl: string | null = null
+  if (draft.campaign_id) {
+    trackedUrl = await mintTrackedLinkForDraft(admin, { draftId: draft.id, campaignId: draft.campaign_id, clientId: draft.client_id }).catch(() => null)
+  }
+
   // Hashtag handling: append as a trailing line. Some platforms (IG)
   // weight in-caption hashtags more than first-comment ones; trailing
   // line is the safest default until per-platform tuning is added.
@@ -141,7 +153,7 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
     .map(h => (h.startsWith('#') ? h : `#${h}`))
     .filter(h => h.length > 1)
     .join(' ')
-  const text = hashtagLine ? `${caption}\n\n${hashtagLine}` : caption
+  const text = [caption, hashtagLine, trackedUrl].filter(Boolean).join('\n\n')
 
   // Infer media type from the URLs. The publish lib branches on this.
   const mediaType: 'image' | 'video' | 'carousel' =
@@ -154,7 +166,10 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
       text,
       mediaUrls,
       mediaType,
-      linkUrl: null,
+      linkUrl: trackedUrl,
+      // GBP posts get the link as a real tappable CTA button — the caption-appended
+      // URL can be silently cut by GBP's 1500-char trim, the button never is.
+      gbpCallToAction: trackedUrl ? { actionType: 'LEARN_MORE', url: trackedUrl } : null,
       platforms,
     },
     // Map our adapter shape to the publish lib's expected shape.
