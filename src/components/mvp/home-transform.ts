@@ -56,19 +56,60 @@ function firstNDays(inst: HomeInstance | undefined, n: number): number {
 function buildMetricView(m: HomeMetric): MetricView {
   const meta = META[m.key] ?? { tab: m.label, heroLabel: m.label, heroSub: m.sub, unit: 'tracked' }
 
-  // Headline uses the last COMPLETE week. The final bucket is the current,
-  // in-progress calendar week — partial while GBP data lags (a day or two of
-  // sparse data), which would make "this week" read misleadingly low. Skip it,
-  // then skip any empty trailing weeks.
   const weeks = m.week ?? []
+  const months = m.month ?? []
+
+  // Settled daily series (ascending). get-home-metrics nulls every day past the
+  // data frontier (the last day Google/social has reliably reported), so every
+  // entry here is a real, settled day — the newest is the frontier.
+  const daily: { date: string; value: number }[] = []
+  for (const mo of months) {
+    const d0 = new Date(mo.start + 'T00:00:00')
+    ;(mo.vals ?? []).forEach((v, i) => {
+      if (v != null) daily.push({ date: ymd(new Date(d0.getFullYear(), d0.getMonth(), 1 + i)), value: Number(v) })
+    })
+  }
+  daily.sort((a, b) => a.date.localeCompare(b.date))
+  const dmap = new Map(daily.map((d) => [d.date, d.value]))
+  const lastDataDate = daily.length ? daily[daily.length - 1].date : ''
+
+  // Headline = the ROLLING last 7 settled days ending at the frontier (not the
+  // last calendar week — that hid ~a week of ready data). The newest day is SHOWN
+  // in the chart but EXCLUDED from the up/down %, because Google keeps filling in
+  // the most recent day for a few days and a half-reported day must never fake a
+  // trend. So: total counts all 7 days; the % compares only the settled days
+  // before the newest one, against the aligned prior week.
+  const DAY = 86400000
+  const roll: { value: number; prev: number; dow: number }[] = []
+  if (lastDataDate) {
+    const f = new Date(lastDataDate + 'T00:00:00')
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(f.getTime() - i * DAY)
+      const p = new Date(d.getTime() - 7 * DAY)
+      roll.push({ value: dmap.get(ymd(d)) ?? 0, prev: dmap.get(ymd(p)) ?? 0, dow: d.getDay() })
+    }
+  }
+  // Fallback (no daily data): the old last-complete-week path keeps working.
   let ti = Math.max(0, weeks.length - 2)
   while (ti > 0 && (weeks[ti]?.total ?? 0) === 0) ti--
   const thisWeek = weeks[ti]
   const lastWeek = weeks[ti - 1]
-  const total = thisWeek?.total ?? 0
-  const weekPct = pct(total, lastWeek?.total ?? 0)
 
-  const months = m.month ?? []
+  const chart = roll.length
+    ? roll.map((r) => ({ label: DOW[r.dow], value: r.value, prev: r.prev }))
+    : DOW.map((label, i) => ({ label, value: Number((thisWeek?.vals ?? [])[i] ?? 0), prev: Number((lastWeek?.vals ?? [])[i] ?? 0) }))
+  const chartStartISO = roll.length && lastDataDate
+    ? ymd(new Date(new Date(lastDataDate + 'T00:00:00').getTime() - 6 * DAY))
+    : thisWeek?.start
+  const total = roll.length ? roll.reduce((s, r) => s + r.value, 0) : (thisWeek?.total ?? 0)
+  // Trend drops the newest day (roll[6]) and its comparison, so a still-filling
+  // latest day can't tilt up/down. Compares the 6 settled days before it to the
+  // same 6 days a week earlier.
+  const settledDays = roll.slice(0, -1)
+  const weekPct = roll.length
+    ? pct(settledDays.reduce((s, r) => s + r.value, 0), settledDays.reduce((s, r) => s + r.prev, 0))
+    : pct(total, lastWeek?.total ?? 0)
+
   const thisMonth = months[months.length - 1]
   const lastMonth = months[months.length - 2]
   const domCount = (thisMonth?.vals ?? []).filter((v) => v != null).length || 1
@@ -81,19 +122,6 @@ function buildMetricView(m: HomeMetric): MetricView {
   // that happen to be non-flat.
   const hasMonthCompare = !!lastMonth && lastMonthVal > 0
   const monthPct = hasMonthCompare ? Math.round(((thisMonthVal - lastMonthVal) / lastMonthVal) * 100) : 0
-
-  const tv = thisWeek?.vals ?? []
-  const lv = lastWeek?.vals ?? []
-  const chart = DOW.map((label, i) => ({ label, value: Number(tv[i] ?? 0), prev: Number(lv[i] ?? 0) }))
-
-  const daily: { date: string; value: number }[] = []
-  for (const mo of months) {
-    const d0 = new Date(mo.start + 'T00:00:00')
-    ;(mo.vals ?? []).forEach((v, i) => {
-      if (v != null) daily.push({ date: ymd(new Date(d0.getFullYear(), d0.getMonth(), 1 + i)), value: Number(v) })
-    })
-  }
-  daily.sort((a, b) => a.date.localeCompare(b.date))
 
   // Continuous monthly series across ALL available years, built from the `year`
   // instances' monthly bars (the `month` field only holds the trailing 12).
@@ -109,22 +137,17 @@ function buildMetricView(m: HomeMetric): MetricView {
     })
   }
 
+  // Source breakdown tiles stay week-based (they split a period into calls /
+  // directions / views); the last populated week is a fine, cheap source.
   const tiles = (thisWeek?.breakdown ?? []).map((b) => ({
     key: b.icon, label: b.label, value: b.value,
     configured: !!b.value && b.value !== '0' && b.value !== '—',
   }))
 
-  // The freshest day we actually have data for (the data frontier — get-home-metrics
-  // nulls every day past it). `daily` is sorted ascending, so its last date is that
-  // frontier. The hero uses this to tell a live trend from a stale one: when the
-  // newest data is weeks old, a "this week vs last" arrow would be frozen, so the
-  // hero shows how fresh the numbers are instead of a stuck direction.
-  const lastDataDate = daily.length ? daily[daily.length - 1].date : ''
-
   return {
     key: m.key, tabLabel: meta.tab, heroLabel: meta.heroLabel, heroSub: meta.heroSub, unit: meta.unit,
     total, weekPct, monthPct, prevMonthLabel: hasMonthCompare ? monthName(lastMonth!.start) : '',
-    chart, chartStart: thisWeek?.start, daily, monthly, tiles, lastDataDate,
+    chart, chartStart: chartStartISO, daily, monthly, tiles, lastDataDate,
   }
 }
 

@@ -638,7 +638,14 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
 
   const total = bars.reduce((s, b) => s + b.value, 0)
   const compareTotal = bars.reduce((s, b) => s + b.compare, 0)
-  const deltaPct = compareTotal === 0 ? (total > 0 ? 100 : 0) : Math.round(((total - compareTotal) / compareTotal) * 100)
+  // The up/down % drops the NEWEST bar and its comparison: the latest day (or
+  // month) is still filling in — Google backfills it for a few days — so a
+  // half-reported period must never fake a trend. The bar is still SHOWN; it
+  // just isn't counted in the direction.
+  const trend = bars.length > 1 ? bars.slice(0, -1) : bars
+  const curTrend = trend.reduce((s, b) => s + b.value, 0)
+  const cmpTrend = trend.reduce((s, b) => s + b.compare, 0)
+  const deltaPct = cmpTrend === 0 ? (curTrend > 0 ? 100 : 0) : Math.round(((curTrend - cmpTrend) / cmpTrend) * 100)
   const avg = bars.length ? Math.round(total / bars.length) : 0
   const max = Math.max(1, ...bars.map((b) => Math.max(b.value, b.compare)), avg)
   return { bars, curLbl, cmpLbl, cmpFrame, total, compareTotal, deltaPct, avg, max, periodDays }

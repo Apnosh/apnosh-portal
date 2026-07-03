@@ -43,8 +43,18 @@ export interface HealthReport {
   newlyErrored: number
   stillErrored: number
   notificationsCreated: number
+  staleFeeds: number
   failures: Array<{ id: string; channel: string; clientId: string; message: string }>
 }
+
+/* A connection can probe 'active' (Google access is fine) yet stop delivering
+   data — a sync that errors internally but returns 200, a paused job, an API
+   that quietly returns nothing. That is the "numbers got stuck" case, and a
+   pure access probe misses it. So after the access probe we also watch the
+   FRESHNESS of what actually landed: if no new metric rows have been WRITTEN
+   for an active client in this many days, flag it (deduped) so the owner gets
+   an honest, actionable nudge instead of silently frozen numbers. */
+const STALE_FEED_DAYS = 3
 
 function getAdminClient() {
   return createAdminClient(
@@ -68,6 +78,7 @@ export async function runConnectionHealthProbe(): Promise<HealthReport> {
     newlyErrored: 0,
     stillErrored: 0,
     notificationsCreated: 0,
+    staleFeeds: 0,
     failures: [],
   }
 
@@ -97,7 +108,58 @@ export async function runConnectionHealthProbe(): Promise<HealthReport> {
     }
   }
 
+  // Freshness watchdog: for every GBP connection that still looks active, make
+  // sure data is actually still flowing. This catches the silent-stall case a
+  // pure access probe cannot see.
+  const gbpConns = conns.filter((c) => c.channel === 'google_business_profile' && c.status !== 'error')
+  await checkFeedFreshness(admin, gbpConns, report)
+
   return report
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function checkFeedFreshness(admin: any, gbpConns: Connection[], report: HealthReport) {
+  const cutoff = new Date(Date.now() - STALE_FEED_DAYS * 86_400_000).toISOString()
+  for (const conn of gbpConns) {
+    try {
+      // The newest gbp_metrics row WRITTEN for this client. On a healthy client
+      // the daily sync writes a row every day, so created_at advances daily even
+      // on a zero-activity day; if it stops advancing the sync itself stalled.
+      const { data: latest } = await admin
+        .from('gbp_metrics')
+        .select('created_at')
+        .eq('client_id', conn.client_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      const lastWrite = (latest?.created_at as string | undefined) ?? null
+      if (!lastWrite) continue                 // never synced → a setup concern, not a stall
+      if (lastWrite >= cutoff) continue        // fresh: data is still landing
+
+      report.staleFeeds += 1
+      // Notify at most once per stall window (don't nag daily).
+      const { data: recent } = await admin
+        .from('notifications')
+        .select('id')
+        .eq('client_id', conn.client_id)
+        .eq('type', 'feed_stalled')
+        .gte('created_at', cutoff)
+        .limit(1)
+      if (recent && recent.length) continue
+
+      await admin.from('notifications').insert({
+        user_id: conn.connected_by,
+        client_id: conn.client_id,
+        type: 'feed_stalled',
+        title: 'Your Google numbers stopped updating',
+        body: `No new Google Business Profile data has come in for over ${STALE_FEED_DAYS} days. Your connection may need a quick reconnect to start the numbers flowing again.`,
+        link: '/dashboard/connected-accounts',
+      })
+      report.notificationsCreated += 1
+    } catch {
+      /* a freshness read failing must never break the health probe */
+    }
+  }
 }
 
 interface ProbeResult {
