@@ -140,55 +140,57 @@ export default function AdminMessagesPage() {
       .from('message_threads')
       .select('*')
       .order('last_message_at', { ascending: false })
+      .limit(50)
 
     if (error || !threadRows) {
       setLoadingThreads(false)
       return
     }
 
-    // Get unique business IDs and fetch names
+    const threadIds = threadRows.map((t: ThreadRow) => t.id)
     const bizIds = [...new Set(threadRows.map((t: ThreadRow) => t.business_id))]
-    const { data: bizRows } = await supabase
-      .from('businesses')
-      .select('id, name')
-      .in('id', bizIds)
+
+    // Was 2 queries PER thread (2N+2 round-trips). Now 3 bulk reads in parallel:
+    // business names, recent messages (for the latest-per-thread preview), and
+    // the unread client messages — all joined in memory below.
+    const [{ data: bizRows }, { data: recentMsgs }, { data: unreadRows }] = await Promise.all([
+      supabase.from('businesses').select('id, name').in('id', bizIds),
+      supabase
+        .from('messages')
+        .select('thread_id, content, sender_role, created_at')
+        .in('thread_id', threadIds)
+        .order('created_at', { ascending: false })
+        .limit(400),
+      supabase
+        .from('messages')
+        .select('thread_id')
+        .in('thread_id', threadIds)
+        .eq('sender_role', 'client')
+        .is('read_at', null),
+    ])
 
     const bizMap: Record<string, string> = {}
-    if (bizRows) {
-      bizRows.forEach((b: { id: string; name: string }) => {
-        bizMap[b.id] = b.name
-      })
+    ;(bizRows ?? []).forEach((b: { id: string; name: string }) => { bizMap[b.id] = b.name })
+
+    // Rows are newest-first, so the first row seen per thread is its latest message.
+    const lastByThread = new Map<string, { content: string | null; sender_role: string | null }>()
+    for (const m of (recentMsgs ?? []) as Array<{ thread_id: string; content: string | null; sender_role: string | null }>) {
+      if (!lastByThread.has(m.thread_id)) lastByThread.set(m.thread_id, { content: m.content, sender_role: m.sender_role })
     }
 
-    // Enrich each thread
-    const enriched: ThreadWithPreview[] = await Promise.all(
-      threadRows.map(async (thread: ThreadRow) => {
-        // Get last message
-        const { data: lastMsg } = await supabase
-          .from('messages')
-          .select('content, sender_role')
-          .eq('thread_id', thread.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single()
+    const unreadThreads = new Set<string>()
+    for (const r of (unreadRows ?? []) as Array<{ thread_id: string }>) unreadThreads.add(r.thread_id)
 
-        // Check for unread (client messages with no read_at)
-        const { count } = await supabase
-          .from('messages')
-          .select('id', { count: 'exact', head: true })
-          .eq('thread_id', thread.id)
-          .eq('sender_role', 'client')
-          .is('read_at', null)
-
-        return {
-          ...thread,
-          clientName: bizMap[thread.business_id] ?? 'Unknown Client',
-          lastMessageContent: lastMsg?.content ?? null,
-          lastSenderRole: (lastMsg?.sender_role as ThreadWithPreview['lastSenderRole']) ?? null,
-          unread: (count ?? 0) > 0,
-        }
-      })
-    )
+    const enriched: ThreadWithPreview[] = threadRows.map((thread: ThreadRow) => {
+      const last = lastByThread.get(thread.id)
+      return {
+        ...thread,
+        clientName: bizMap[thread.business_id] ?? 'Unknown Client',
+        lastMessageContent: last?.content ?? null,
+        lastSenderRole: (last?.sender_role as ThreadWithPreview['lastSenderRole']) ?? null,
+        unread: unreadThreads.has(thread.id),
+      }
+    })
 
     setThreads(enriched)
     setLoadingThreads(false)

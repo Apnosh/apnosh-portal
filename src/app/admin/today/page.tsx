@@ -103,18 +103,18 @@ export default function TodayPage() {
   const load = useCallback(async () => {
     setLoading(true)
     const supabase = createClient()
+    // Filter snoozed tasks in the query, not after: snoozed rows shouldn't cross
+    // the wire or eat into the 500-row budget (they'd crowd out real work).
+    const nowIso = new Date().toISOString()
     const { data } = await supabase
       .from('client_tasks')
       .select('*, client:clients(id, name, slug)')
       .in('status', ['todo', 'doing'])
+      .or(`snoozed_until.is.null,snoozed_until.lte.${nowIso}`)
       .order('due_at', { ascending: true, nullsFirst: false })
       .limit(500)
 
-    const now = Date.now()
-    const filtered = (data ?? []).filter((t: TaskWithClient) =>
-      !t.snoozed_until || new Date(t.snoozed_until).getTime() <= now
-    )
-    setTasks(filtered as TaskWithClient[])
+    setTasks((data ?? []) as TaskWithClient[])
     setLoading(false)
   }, [])
 

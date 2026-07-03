@@ -54,6 +54,9 @@ export default function GlobalQueuePage() {
       .from('content_queue')
       .select('*')
       .order('created_at', { ascending: false })
+      // Bound to the most recent items (served by idx_content_queue_created_at)
+      // rather than scanning the whole table. Pagination is a Tier-2 follow-up.
+      .limit(500)
 
     if (!queueData || queueData.length === 0) {
       setItems([])

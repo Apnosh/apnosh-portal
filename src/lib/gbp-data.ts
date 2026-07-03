@@ -1,40 +1,18 @@
 /**
- * GBP Data Parsing & Import
- * Ported from Lovable analytics dashboard
+ * GBP Data — pure helpers (metric fields, column mapping, date extraction,
+ * formatting, row building). Ported from Lovable analytics dashboard.
+ *
+ * IMPORTANT: this module must stay free of `xlsx` so it's safe to import from
+ * client components (charts, previews). The spreadsheet parser that needs xlsx
+ * lives in gbp-parse.ts; import parseFile from there.
  */
-import * as XLSX from 'xlsx'
 import type { GBPMetricField, GBPMonthlyData } from '@/types/database'
 
-// --- File Parsing ---
+// --- Shared shape ---
 
 export interface ParsedSheet {
   headers: string[]
   rows: Record<string, unknown>[]
-}
-
-export function parseFile(file: File): Promise<ParsedSheet> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target!.result as ArrayBuffer)
-        const wb = XLSX.read(data, { type: 'array', cellDates: true })
-        const sheetName = wb.SheetNames[0]
-        const sheet = wb.Sheets[sheetName]
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
-        if (!json.length) {
-          reject(new Error('File is empty or has no data rows'))
-          return
-        }
-        const headers = Object.keys(json[0])
-        resolve({ headers, rows: json })
-      } catch (err) {
-        reject(err)
-      }
-    }
-    reader.onerror = () => reject(new Error('Failed to read file'))
-    reader.readAsArrayBuffer(file)
-  })
 }
 
 // --- Metric Field Definitions ---

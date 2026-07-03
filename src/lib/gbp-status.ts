@@ -56,11 +56,21 @@ const RECENT_METRIC_DAYS = 14
 export async function getAllClientGbpStatuses(): Promise<Map<string, ClientGbpStatus>> {
   const db = adminDb()
 
+  // gbp_metrics is append-only and grows per client per day. We only need the
+  // LATEST row per client, and any metric older than the freshness windows below
+  // (max 35 days for CSV) already reads as stale. Bound the read to a generous
+  // recent window so this query stops scanning the full history forever — the
+  // payload was unbounded before, the single biggest cost on the clients list.
+  const metricsQueryCutoff = new Date()
+  metricsQueryCutoff.setDate(metricsQueryCutoff.getDate() - 180)
+  const metricsQueryCutoffIso = metricsQueryCutoff.toISOString().slice(0, 10)
+
   const [clientsRes, connectionsRes, metricsRes] = await Promise.all([
     db.from('clients').select('id, gbp_invite_sent_at'),
     db.from('gbp_connections').select('client_id, location_name, last_sync_at, sync_status'),
     db.from('gbp_metrics')
       .select('client_id, date, source')
+      .gte('date', metricsQueryCutoffIso)
       .order('date', { ascending: false }),
   ])
 

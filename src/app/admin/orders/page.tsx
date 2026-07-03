@@ -123,6 +123,9 @@ export default function AdminOrdersPage() {
         .from('orders')
         .select('id, business_id, type, service_name, quantity, unit_price, total_price, status, created_at, businesses(name)')
         .order('created_at', { ascending: false })
+        // Bound the read to the most recent orders (served by idx_orders_created_at)
+        // instead of the whole table. Full pagination is a Tier-2 follow-up.
+        .limit(500)
 
       if (fetchError) {
         setError(fetchError.message)

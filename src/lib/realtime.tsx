@@ -111,6 +111,11 @@ export function useRealtimeNotifications(userId: string | undefined, onNew: () =
 // Provider — single channel for all table subscriptions
 // ---------------------------------------------------------------------------
 
+// Only the tables whose changes should live-update the UI. The high-churn
+// analytics tables (social_metrics, website_*, search_metrics, email_list_snapshot)
+// were dropped from the always-on channel: they ingest in bulk and don't need
+// second-by-second push in the shell — a page can still refetch them on load or
+// interval. This shrinks the realtime firehose that every admin session holds open.
 const TRACKED_TABLES: TableName[] = [
   'deliverables',
   'invoices',
@@ -124,16 +129,9 @@ const TRACKED_TABLES: TableName[] = [
   'businesses',
   'content_queue',
   'client_feedback',
-  'social_metrics',
   'reviews',
-  'website_health',
-  'website_traffic',
-  'website_metrics',
-  'website_metrics_monthly',
-  'search_metrics',
   'weekly_briefs',
   'email_campaigns',
-  'email_list_snapshot',
 ]
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {

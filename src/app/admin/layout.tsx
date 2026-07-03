@@ -87,8 +87,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   //   Queue    -> deliverables awaiting client approval
   //   Messages -> unread messages
   //   Billing  -> draft or overdue invoices
-  // Polled every 60s + on pathname change so completing work clears
-  // the count within a click or a minute.
+  // Set up ONCE and polled every 60s. (Previously keyed on pathname, which
+  // re-fired all 5 count queries on every in-app navigation — pure waste, since
+  // the 60s interval already keeps them fresh.)
   const [counts, setCounts] = useState<Record<string, number>>({})
   useEffect(() => {
     let cancelled = false
@@ -134,7 +135,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     void load()
     const t = setInterval(() => void load(), 60_000)
     return () => { cancelled = true; clearInterval(t) }
-  }, [pathname])
+  }, [])
 
   // Color per badge — red for time-sensitive, amber for things that
   // need attention but aren't blocking, ink (dark) for everything else.
@@ -150,20 +151,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // /admin/clients/[slug] for client drill-in, and we render a slim
   // strategist-only nav for them so they don't see admin-only items
   // (Strategists, Settings, Billing, etc.) they can't access anyway.
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
-  useEffect(() => {
-    if (!user?.id) return
-    let cancelled = false
-    void createClient()
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!cancelled) setIsAdmin((data?.role as string | null) === 'admin')
-      })
-    return () => { cancelled = true }
-  }, [user?.id])
+  // useUser already loads the full profile row (which includes role), so derive
+  // admin from it instead of firing a SECOND profiles query per admin load (role
+  // was previously fetched 3x: middleware, useUser, and here). This also removes
+  // the sidebar's brief strategist->admin nav flip after the extra round-trip.
+  const isAdmin: boolean | null = userLoading
+    ? null
+    : ((user as { role?: string | null } | null)?.role === 'admin')
 
   // Strategist nav: the same shape they see in /work/* so the drill-in
   // experience feels like a continuation, not a context-switch.

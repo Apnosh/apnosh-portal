@@ -593,34 +593,36 @@ export default function AdminClientsPage() {
     }
 
     const clientIds = clientRows.map(c => c.id)
+    const idFilter = clientIds.length > 0 ? clientIds : ['__none__']
 
-    // Get latest logo per client
-    const { data: logos } = await supabase
-      .from('client_assets')
-      .select('client_id, file_url')
-      .in('client_id', clientIds.length > 0 ? clientIds : ['__none__'])
-      .eq('type', 'logo')
-      .order('uploaded_at', { ascending: false })
+    // These three enrichments are independent of each other — run them in one
+    // parallel wave instead of a 3-step sequential waterfall (each previously
+    // awaited the one before it, so the list blocked on the sum of all four reads).
+    const [{ data: logos }, { data: queueCounts }, gbpRes] = await Promise.all([
+      supabase
+        .from('client_assets')
+        .select('client_id, file_url')
+        .in('client_id', idFilter)
+        .eq('type', 'logo')
+        .order('uploaded_at', { ascending: false }),
+      supabase
+        .from('content_queue')
+        .select('client_id')
+        .in('client_id', idFilter)
+        .in('status', ['new', 'drafting', 'in_review']),
+      getAllClientGbpStatusesAction(),
+    ])
 
     const logoMap = new Map<string, string>()
     for (const l of logos ?? []) {
       if (!logoMap.has(l.client_id)) logoMap.set(l.client_id, l.file_url)
     }
 
-    // Count pending queue items per client
-    const { data: queueCounts } = await supabase
-      .from('content_queue')
-      .select('client_id')
-      .in('client_id', clientIds.length > 0 ? clientIds : ['__none__'])
-      .in('status', ['new', 'drafting', 'in_review'])
-
     const queueMap = new Map<string, number>()
     for (const q of queueCounts ?? []) {
       queueMap.set(q.client_id, (queueMap.get(q.client_id) ?? 0) + 1)
     }
 
-    // Bulk-load GBP connection status (server action)
-    const gbpRes = await getAllClientGbpStatusesAction()
     const gbpMap: Record<string, ClientGbpStatus> = gbpRes.success ? gbpRes.data : {}
 
     const cards: ClientCard[] = clientRows.map(c => ({
