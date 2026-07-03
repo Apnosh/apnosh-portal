@@ -10,7 +10,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { CampaignDraft, LineItem, CampaignBrief, BillingCadence, PieceProducer } from './types'
-import { planCampaignPieces, teamDraftRowForPiece, PLAN_REMOVED_NOTE } from './work-orders-core'
+import { planCampaignPieces, teamDraftRowForPiece, PLAN_REMOVED_NOTE, STOP_NOTE } from './work-orders-core'
 import { turnaroundFor } from './data/service-turnaround'
 import type { StageId } from './stages'
 import type { SavedCampaign, CampaignProgress } from './view'
@@ -252,7 +252,10 @@ export async function updateCampaignFields(id: string, patch: Partial<{ name: st
   // for a ship, firing a phantom "ready to build" staff notification.
   const row = { ...patch, updated_at: new Date().toISOString() }
   if (opts?.onlyIfNotShipped) {
-    const { data, error } = await admin.from('campaigns').update(row).eq('id', id).neq('status', 'shipped').select('id')
+    // The ship claim: only a DRAFT can ship. eq('draft') (not neq('shipped')) so a
+    // STOPPED campaign can never be re-shipped — that would re-run the one-shot
+    // mint block and double-materialize production.
+    const { data, error } = await admin.from('campaigns').update(row).eq('id', id).eq('status', 'draft').select('id')
     if (error) throw new Error(`update campaign: ${error.message}`)
     return (data?.length ?? 0) > 0
   }
@@ -411,7 +414,10 @@ function computeProgress(drafts: Record<string, unknown>[], orders: Record<strin
   for (const o of orders ?? []) {
     const s = (o.status as string) ?? ''
     if (s === 'declined') {
-      if ((o.note as string | null) !== PLAN_REMOVED_NOTE) dropped++
+      // Owner-initiated voids vanish: a plan-removal (PLAN_REMOVED_NOTE) or a
+      // campaign stop (STOP_NOTE) is the owner's own call, not a dropped piece.
+      const note = o.note as string | null
+      if (note !== PLAN_REMOVED_NOTE && note !== STOP_NOTE) dropped++
       continue
     }
     // Bridged on approval → its LIVE content_draft represents it in the team lane;

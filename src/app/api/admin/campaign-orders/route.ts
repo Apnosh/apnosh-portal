@@ -45,10 +45,12 @@ export async function GET() {
   // Unconfirmed first (confirmed_at NULLS FIRST), then newest ship: confirmed history can
   // never push a still-waiting order out of the 100-row window.
   let confirmationsReady = true
+  // Stopped campaigns stay in the list: they can carry accrued charges that still
+  // need invoicing — dropping them would hide money from the humans who bill it.
   let { data, error } = await svc
     .from('campaigns')
     .select('id, name, client_id, shipped_at, confirmed_at')
-    .eq('status', 'shipped')
+    .in('status', ['shipped', 'stopped'])
     .order('confirmed_at', { ascending: false, nullsFirst: true })
     .order('shipped_at', { ascending: false })
     .limit(100)
@@ -59,7 +61,7 @@ export async function GET() {
     const fallback = await svc
       .from('campaigns')
       .select('id, name, client_id, shipped_at')
-      .eq('status', 'shipped')
+      .in('status', ['shipped', 'stopped'])
       .order('shipped_at', { ascending: false })
       .limit(100)
     data = (fallback.data ?? []).map((r) => ({ ...r, confirmed_at: null }))

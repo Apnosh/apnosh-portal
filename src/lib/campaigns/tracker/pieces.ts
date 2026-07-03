@@ -9,7 +9,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { creatorById } from '@/lib/campaigns/creators'
 import { getCampaignOutcomes } from '@/lib/campaigns/outcomes/read'
-import { safeHref, PLAN_REMOVED_NOTE } from '@/lib/campaigns/work-orders-core'
+import { safeHref, PLAN_REMOVED_NOTE, STOP_NOTE } from '@/lib/campaigns/work-orders-core'
 import { stageForOrder, stageForDraft, stageRank, type Stage } from './stages'
 import type { TrackerPiece } from './types'
 import type { PieceOutcome } from '@/lib/campaigns/outcomes/verdict'
@@ -107,7 +107,10 @@ export async function getCampaignPieces(campaignId: string): Promise<TrackerPiec
   // the owner took it out themselves.
   for (const o of orders) {
     const status = (o.status as string) ?? ''
-    if (status === 'declined' && (o.note as string | null) === PLAN_REMOVED_NOTE) continue
+    // Owner-initiated voids (plan removal or a campaign stop) are hidden — the owner
+    // took the piece out themselves; only a creator's own decline stays visible.
+    const note = o.note as string | null
+    if (status === 'declined' && (note === PLAN_REMOVED_NOTE || note === STOP_NOTE)) continue
     const cd = o.content_draft_id as string | null
     if (cd && aliveIds.has(cd)) continue
     const stage = stageForOrder(status)

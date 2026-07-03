@@ -9,7 +9,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, Loader2, Trash2, Rocket, Check, CalendarDays, Users, FileText } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Trash2, Rocket, Check, CalendarDays, Users, FileText, Ban } from 'lucide-react'
 import { playsFrom } from '@/lib/campaigns/plays'
 import { type LineItem, type OptOutReason } from '@/lib/campaigns/types'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
@@ -147,7 +147,19 @@ export default function CampaignDetailPage() {
     router.push('/dashboard/campaigns')
   }
 
-  const shipped = camp?.status === 'shipped'
+  // Terminal stop: nothing new starts or posts; in-flight work finishes and bills.
+  async function stop() {
+    if (!camp) return
+    if (typeof window !== 'undefined' && !window.confirm('Stop this campaign? Nothing new will start or post. Work already being made finishes and bills as normal. This cannot be undone.')) return
+    setBusy(true)
+    const r = await fetch(`/api/campaigns/${id}/stop`, { method: 'POST' }).catch(() => null)
+    setBusy(false)
+    if (r && r.ok) { void load() }
+    else if (typeof window !== 'undefined') window.alert('Could not stop the campaign. Try again.')
+  }
+
+  // 'stopped' renders the shipped-style view (history + settlement), never the draft editor.
+  const shipped = camp?.status === 'shipped' || camp?.status === 'stopped'
   const path = camp?.draft.path ?? 'strategist'
 
   return (
@@ -170,7 +182,7 @@ export default function CampaignDetailPage() {
                 <div className="cw-skel" style={{ width: '100%', height: 280, borderRadius: 18 }} />
               </div>
             )
-            : <Detail camp={camp} progress={progress} outcomes={outcomes} pieces={pieces} activity={activity} readiness={readiness} onReload={load} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} />}
+            : <Detail camp={camp} progress={progress} outcomes={outcomes} pieces={pieces} activity={activity} readiness={readiness} onReload={load} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} onStop={stop} />}
         </div>
 
         {/* Footer only while a draft: bill + Save/Ship. Once shipped, the header pill + Now card carry the
@@ -196,7 +208,7 @@ export default function CampaignDetailPage() {
   )
 }
 
-function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReload, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer }: {
+function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReload, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer, onStop }: {
   camp: SavedCampaign
   progress: CampaignProgress | null
   outcomes: CampaignOutcomes | null
@@ -212,6 +224,7 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReloa
   onChooseCreator: (discipline: string, creatorId: string) => void
   onSetCreativeControl: (mode: string) => void
   onSetProducer: (key: string, producer: 'team' | 'creator') => void
+  onStop: () => void
 }) {
   const router = useRouter()
   const items = camp.draft.items
@@ -219,7 +232,8 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReloa
   const recommended = items.filter((i) => !i.included)
   const plays = playsFrom(core)
   const brief = camp.draft.brief
-  const shipped = camp.status === 'shipped'
+  const stopped = camp.status === 'stopped'
+  const shipped = camp.status === 'shipped' || stopped   // stopped renders the shipped-style view
   const inReview = !shipped && camp.phase === 'review'
   const diy = camp.draft.path === 'diy'
   const st = shipped ? shippedStatus(progress, (camp.draft.brief?.contentBeats?.length ?? 0) > 0, ownerSetupComplete(camp), servicesSettingUp(camp)) : null
@@ -359,6 +373,13 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReloa
 
       {shipped && st && sv ? (
         <div className="cw-stagger">
+          {/* stopped: the terminal banner leads — history and billing stay visible below */}
+          {stopped && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#f4f4f6', color: C.ink, borderRadius: 12, padding: '11px 12px', marginBottom: 14, fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>
+              <Ban size={14} style={{ flexShrink: 0, marginTop: 1, color: C.mute }} />
+              <span>This campaign is stopped. Nothing new starts or posts. Anything already in flight finished and billed as normal.</span>
+            </div>
+          )}
           {/* the interrupt/result card: a piece needing your OK (any phase), or the live/done story */}
           {(st.phase === 'live' || st.phase === 'done' || sv.readyCount > 0) && (
             <CampaignNowCard
@@ -399,8 +420,10 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReloa
           {/* who handles everything: Apnosh runs setup, matched creators make the creative — changeable */}
           <CampaignTeamCard camp={camp} onChoose={onChooseCreator} onOpenTeam={() => router.push(`/dashboard/campaigns/${camp.draft.id}/team`)} />
           {/* the order receipt, its own page */}
-          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <LinkRow Icon={FileText} label="View order details" sub="Everything you ordered, with prices" onClick={() => router.push(`/dashboard/campaigns/${camp.draft.id}/order`)} />
+            {/* terminal stop — quiet by design; the confirm dialog carries the consequences */}
+            {!stopped && <LinkRow Icon={Ban} label="Stop this campaign" sub="Nothing new starts or posts. In-flight work finishes and bills." onClick={onStop} />}
           </div>
           {/* the running log of real, timestamped production events */}
           <ActivityFeed events={activity} />

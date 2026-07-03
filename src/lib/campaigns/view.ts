@@ -12,7 +12,9 @@ export interface SavedCampaign {
   clientId: string
   draft: CampaignDraft
   phase: 'build' | 'review' | 'ship' | 'monitor' | 'iterate'
-  status: 'draft' | 'shipped'
+  /** 'stopped' is terminal: the owner ended the campaign (in-flight work finished
+   *  and billed; nothing new starts or posts). A stopped campaign can never re-ship. */
+  status: 'draft' | 'shipped' | 'stopped'
   shippedAt: string | null
   /** when a human on the Apnosh team reviewed + took on the order (from /admin/campaign-orders).
    *  Absent on drafts and pre-feature constructions; null = shipped but not yet confirmed. */
@@ -235,6 +237,11 @@ export function campaignCardVM(s: SavedCampaign, progress?: CampaignProgress | n
   const total = items.filter((it) => it.included && !it.optOut).length
   const { cost, recurring } = billLabel(items)
   const base = { key: s.draft.id, title: s.draft.name, cost, recurring, review: false, href: `/dashboard/campaigns/${s.draft.id}` }
+
+  // Stopped is terminal — never the Draft card (which carries a live Ship footer).
+  if (s.status === 'stopped') {
+    return { ...base, kind: 'done', pill: 'Stopped', pillIcon: 'dot', blurb: 'Stopped · anything in flight finished and billed', perf: null }
+  }
 
   if (s.status !== 'shipped') {
     const inReview = s.phase === 'review'   // strategist path: built by Apnosh, awaiting the owner's OK

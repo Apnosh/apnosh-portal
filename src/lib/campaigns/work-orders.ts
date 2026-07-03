@@ -8,7 +8,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
 import { creatorById } from './creators'
-import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, PLAN_REMOVED_NOTE, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
+import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, PLAN_REMOVED_NOTE, STOP_NOTE, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
 import { feePercentForCreator } from './vendor-supply'
 import type { SavedCampaign, CampaignCharges, CreatorEarnings } from './view'
 
@@ -579,6 +579,55 @@ export async function accrueChargeForPublishedDraft(draftId: string): Promise<bo
     return false
   }
   return true
+}
+
+/**
+ * Stop a campaign's production, terminally. A dedicated sweep — NOT the
+ * empty-plan reconcile trick: that would stamp PLAN_REMOVED_NOTE (whose voids a
+ * later reconcile auto-REVIVES) and send the wrong staff copy. Guards mirror the
+ * reconcile's exactly:
+ *  - creator orders: void only offered/accepted (never started) with STOP_NOTE;
+ *    in-flight work (in_progress/revision/delivered/approved) is PROTECTED — it
+ *    finishes and bills (charges accrue at approval), counted for the settlement.
+ *  - team drafts: reject everything editorial or queued-to-post (idea/draft/
+ *    revising/approved/scheduled) — a stopped campaign must never keep posting;
+ *    published work is history and stays.
+ *  - service orders: cancel everything not yet delivered (the 196 'cancelled'
+ *    terminal); delivered work is proof-backed history and stays.
+ * Money is untouched by construction: charges/payouts only exist for
+ * approved/published work, which this never voids.
+ */
+export interface StopSweep { voidedOrders: number; rejectedDrafts: number; cancelledServices: number; inFlight: number }
+export async function stopCampaign(campaignId: string): Promise<StopSweep> {
+  const admin = createAdminClient()
+  const ts = new Date().toISOString()
+  const [voidedRes, rejectedRes, cancelledRes, inflightRes] = await Promise.all([
+    admin.from('creator_work_orders')
+      .update({ status: 'declined', note: STOP_NOTE, updated_at: ts })
+      .eq('campaign_id', campaignId)
+      .in('status', ['offered', 'accepted'])
+      .select('id'),
+    admin.from('content_drafts')
+      .update({ status: 'rejected', updated_at: ts })
+      .eq('campaign_id', campaignId)
+      .in('status', ['idea', 'draft', 'revising', 'approved', 'scheduled'])
+      .select('id'),
+    admin.from('service_work_orders')
+      .update({ status: 'cancelled', updated_at: ts })
+      .eq('campaign_id', campaignId)
+      .in('status', ['queued', 'claimed', 'in_progress', 'blocked_client', 'blocked_gate', 'ready_for_client'])
+      .select('id'),
+    admin.from('creator_work_orders')
+      .select('id')
+      .eq('campaign_id', campaignId)
+      .in('status', ['in_progress', 'revision', 'delivered', 'approved']),
+  ])
+  return {
+    voidedOrders: voidedRes.data?.length ?? 0,
+    rejectedDrafts: rejectedRes.data?.length ?? 0,
+    cancelledServices: cancelledRes.data?.length ?? 0,   // pre-196 CHECK → error → 0, degrades silently
+    inFlight: inflightRes.data?.length ?? 0,
+  }
 }
 
 /** Owner-facing rollup: what a campaign has accrued to bill (accrued + invoiced +

@@ -7,7 +7,7 @@ import 'server-only'
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { creatorById } from '@/lib/campaigns/creators'
-import { PLAN_REMOVED_NOTE } from '@/lib/campaigns/work-orders-core'
+import { PLAN_REMOVED_NOTE, STOP_NOTE } from '@/lib/campaigns/work-orders-core'
 import type { ActivityEvent } from './types'
 
 const DEAD = new Set(['rejected', 'failed', 'archived'])
@@ -45,7 +45,7 @@ export async function getCampaignActivity(campaignId: string): Promise<ActivityE
   // as a visible event — the piece still needs a maker and its history must not vanish.
   for (const o of orders) {
     const status = (o.status as string) ?? ''
-    if (status === 'declined' && (o.note as string | null) === PLAN_REMOVED_NOTE) continue
+    if (status === 'declined' && ((o.note as string | null) === PLAN_REMOVED_NOTE || (o.note as string | null) === STOP_NOTE)) continue
     const who = creatorById(o.creator_id as string)?.name ?? (o.creator_id as string)
     const piece = shortLabel(o.title, `${(o.discipline as string) || 'A piece'}`)
     const cd = o.content_draft_id as string | null

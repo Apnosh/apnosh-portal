@@ -120,7 +120,8 @@ export default function BillingPage() {
 
     // Campaign orders (receipts) — independent of Stripe billing setup; shows what the owner has ordered.
     const campRes = await fetch(`/api/campaigns?clientId=${clientId}`).then((r) => (r.ok ? r.json() : { campaigns: [] })).catch(() => ({ campaigns: [] }))
-    setOrders(((campRes.campaigns ?? []) as SavedCampaign[]).filter((c) => c.status === 'shipped'))
+    // Stopped campaigns stay: they can carry real charges the owner should still see.
+    setOrders(((campRes.campaigns ?? []) as SavedCampaign[]).filter((c) => c.status === 'shipped' || c.status === 'stopped'))
 
     setLoading(false)
   }, [])

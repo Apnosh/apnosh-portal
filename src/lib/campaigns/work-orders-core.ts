@@ -18,6 +18,10 @@ export type WorkOrderStatus = 'offered' | 'accepted' | 'in_progress' | 'delivere
  *  is how every reader (revive, tracker pieces/activity, progress) tells an owner removal
  *  (hide it, safe to revive) from a creator's own decline (keep it visible, needs a human). */
 export const PLAN_REMOVED_NOTE = 'Removed from the plan'
+/** The owner stopped the whole campaign. DISTINCT from PLAN_REMOVED_NOTE on purpose:
+ *  the reconcile's revive path only re-offers PLAN_REMOVED_NOTE voids, so a stop is
+ *  terminal — pieces can never quietly come back to life on a later edit. */
+export const STOP_NOTE = 'Campaign stopped'
 
 /**
  * The only legal status moves. Approved + declined are terminal. A delivery

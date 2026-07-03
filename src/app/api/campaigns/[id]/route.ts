@@ -26,9 +26,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params
   const { campaign, res } = await authorize(id)
   if (res) return res
-  // Only shipped, team-run campaigns have materialized pieces / accrued charges;
-  // skip the queries for drafts and DIY.
-  const shipped = !!campaign && campaign.status === 'shipped'
+  // Only shipped (or stopped — the settlement view still needs its charges/
+  // progress/history), team-run campaigns have materialized pieces; skip the
+  // queries for drafts and DIY.
+  const shipped = !!campaign && (campaign.status === 'shipped' || campaign.status === 'stopped')
   const shippedTeamRun = shipped && campaign!.draft.path !== 'diy'
   // Outcomes apply to any shipped campaign with published pieces (team or DIY); progress/
   // charges are team-run only. Each read is best-effort so one failure never blanks the page.
