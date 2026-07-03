@@ -489,7 +489,12 @@ export function reconcileProductionPlan(
   todayISO: string,
 ): ProductionReconcile {
   const planCreator = plan.filter((p) => p.producer === 'creator' && p.creatorId)
-  const planTeam = plan.filter((p) => p.producer === 'team')
+  // The "team lane" here must match what materializeCampaignDrafts mints: BOTH
+  // 'team' and 'ai' pieces land as content_drafts (the team finalizes AI first
+  // drafts). Filtering to 'team' only made every paid AI-lane draft look
+  // "removed from the plan" on any post-ship edit — archived, and never
+  // re-materialized. Owner-paid work silently deleted.
+  const planTeam = plan.filter((p) => p.producer === 'team' || p.producer === 'ai')
   const planCreatorByKey = new Map(planCreator.map((p) => [p.key, p]))
   const planTeamByKey = new Map(planTeam.map((p) => [p.key, p]))
   const orderByKey = new Map(existingOrders.map((o) => [o.key, o]))
