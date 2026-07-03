@@ -695,7 +695,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
         {/* sticky footer */}
         <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, padding: '11px 16px calc(12px + env(safe-area-inset-bottom))', background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
           {error && <div style={{ color: C.red, fontSize: 12, textAlign: 'center', marginBottom: 8 }}>{error}</div>}
-          {step === 'review' && <div style={{ textAlign: 'center', fontSize: 11, color: C.faint, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}><LockOpen size={11} /> You&rsquo;ll approve every piece before it posts. Nothing&rsquo;s locked yet.</div>}
+          {step === 'review' && <div style={{ textAlign: 'center', fontSize: 11, color: C.faint, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}><LockOpen size={11} /> Every piece gets a human check before it posts. Nothing&rsquo;s locked yet.</div>}
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 9 }}>
             <span style={{ fontSize: 11, color: C.faint, lineHeight: 1.3 }}>{step === 'review' ? 'Your plan, charged as it ships' : 'Charged per piece, on delivery'}</span>
             <span style={{ fontSize: 18, fontWeight: 700, color: C.ink, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{money(bill.oneTimeOnDelivery)}{bill.perMonth > 0 ? <span style={{ fontSize: 13, fontWeight: 400, color: C.mute }}> · {money(bill.perMonth)}/mo</span> : null}</span>
@@ -1470,7 +1470,7 @@ function Summary({ creatives, services, bill, sched, doneSetup, onPiece, monthly
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: C.greenDk, margin: '11px 2px 0' }}><Check size={13} /> Fits your {money(monthlyCap)}/mo budget{firstMonth < monthlyCap ? `, ${money(monthlyCap - firstMonth)} to spare` : ''}.</div>
       ))}
       <div style={{ background: C.greenSoft, borderRadius: 12, padding: '11px 13px', margin: '12px 0', fontSize: 12, color: C.greenDk, lineHeight: 1.5 }}>
-        <b style={{ fontWeight: 700 }}>Nothing upfront.</b> Each piece is charged only when it ships, after you approve it.{bill.perMonth > 0 ? ' Ads bill monthly while the campaign runs — pause anytime.' : ''}
+        <b style={{ fontWeight: 700 }}>Nothing upfront.</b> Each piece is charged only when it ships.{bill.perMonth > 0 ? ' Ads bill monthly while the campaign runs — pause anytime.' : ''}
       </div>
       {(() => {
         const posts = [...sched.beats].sort((a, b) => a.postISO.localeCompare(b.postISO))

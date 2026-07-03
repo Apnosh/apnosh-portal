@@ -191,7 +191,7 @@ export default function CampaignReceiptView({ restaurant, orderId, draft, receip
 
       {/* honest billing note */}
       <div style={{ background: C.greenSoft, borderRadius: 12, padding: '11px 13px', margin: '12px 0', fontSize: 12, color: C.greenDk, lineHeight: 1.5 }}>
-        <b style={{ fontWeight: 700 }}>Nothing upfront.</b> Each piece is charged only when it ships, after you approve it.{bill.perMonth > 0 ? ' Ads bill monthly while the campaign runs, pause anytime.' : ''}
+        <b style={{ fontWeight: 700 }}>Nothing upfront.</b> Each piece is charged only when it ships.{bill.perMonth > 0 ? ' Ads bill monthly while the campaign runs, pause anytime.' : ''}
       </div>
 
       {/* timeline summary */}

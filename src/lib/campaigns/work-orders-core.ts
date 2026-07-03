@@ -433,6 +433,12 @@ export interface TeamDraftRow {
    *  a JSON key, not a column, so pre-182 fallbacks and the lifecycle edit's
    *  merge-never-replace behavior are unaffected. */
   media_brief: { from_menu: true; instructions: string[]; producer: 'team' | 'ai' }
+  /** In 'handoff' mode the owner's standing consent carries to team/AI pieces —
+   *  pre-stamped at mint (the buildBridgeDraftRow precedent) so the publish gate,
+   *  computeProgress.awaitingYou, and every inbox/approvals surface agree the
+   *  owner is NOT a required tap. NULL (a human stamp comes later) in the other
+   *  modes. client_signed_off_by stays unset: NULL marks a system stamp. */
+  client_signed_off_at: string | null
 }
 export function teamDraftRowForPiece(campaign: SavedCampaign, p: PlannedPiece): TeamDraftRow {
   // per-piece answers (add-time brief + Walk) merged with the campaign-level madlib answers
@@ -450,6 +456,7 @@ export function teamDraftRowForPiece(campaign: SavedCampaign, p: PlannedPiece): 
     campaign_piece_key: p.key,
     target_platforms: targetPlatformsForPiece(p.type, p.channel),
     media_brief: { from_menu: true, instructions, producer: p.producer === 'ai' ? 'ai' : 'team' },
+    client_signed_off_at: campaign.creativeControl === 'handoff' ? new Date().toISOString() : null,
   }
 }
 

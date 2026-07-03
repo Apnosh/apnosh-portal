@@ -175,6 +175,17 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
     await accrueChargeForApprovedOrder(id).catch((e) => { console.error('accrueCharge threw', id, e); return null })
     await accruePayoutForApprovedOrder(id).catch((e) => { console.error('accruePayout threw', id, e); return null })
   }
+  // Delivered work is the OWNER's turn — this transition previously notified nobody,
+  // so finished pieces sat invisible until the owner happened to open the campaign
+  // (the silent stall). Tell them; the campaign page has Approve / Ask-for-changes.
+  if (patch.status === 'delivered' && cur && cur.campaign_id) {
+    await notifyClientOwners(cur.client_id, {
+      kind: 'client_signoff',
+      title: `${cur.title || 'A piece'} is ready for your review`,
+      body: 'The finished work was delivered. Take a look and approve it, or ask for changes.',
+      link: `/dashboard/campaigns/${cur.campaign_id}`,
+    }).catch(() => ({ notified: 0 }))
+  }
   // A creator saying no is terminal and reaches a human on BOTH sides, or the piece
   // silently strands: no reassignment path exists, so the signal IS the recovery.
   if (patch.status === 'declined' && cur) {

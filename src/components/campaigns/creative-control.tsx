@@ -9,9 +9,12 @@
 import { C } from '@/components/campaigns/ui'
 
 const MODES: { key: string; label: string; desc: string }[] = [
-  { key: 'handoff', label: 'Just handle it', desc: 'We write the brief and the creator runs with it. You approve the final piece.' },
-  { key: 'approve_concept', label: 'Run the idea by me first', desc: 'You OK the concept before the creator produces anything.' },
-  { key: 'owner_directs', label: 'I’ll write the direction', desc: 'You write the brief yourself; the creator executes it.' },
+  // 'handoff' is real hands-off: team/AI pieces are pre-signed at mint (standing
+  // consent) and post on schedule after the team's check; creator deliveries still
+  // come to the owner (delivery approval is the money gate). Say exactly that.
+  { key: 'handoff', label: 'Just handle it', desc: 'We handle it end to end. Your team checks each piece and it posts on schedule. Creator work still comes to you for a quick OK.' },
+  { key: 'approve_concept', label: 'Run the idea by me first', desc: 'You OK the concept before anything is produced, and you approve each finished piece.' },
+  { key: 'owner_directs', label: 'I’ll write the direction', desc: 'You write the brief yourself and approve each finished piece.' },
 ]
 
 export default function CreativeControl({ value, onChange, disabled }: { value: string; onChange: (mode: string) => void; disabled?: boolean }) {

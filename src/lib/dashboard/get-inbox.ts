@@ -9,12 +9,14 @@
  *   - Scheduled posts in in_review state
  *   - Unreplied reviews (≤3-star prioritized as high)
  *   - Open client_tasks visible to the owner
+ *   - Delivered creator work waiting for their review (campaign pieces)
  *
  * Sorted by urgency, then by recency. Each item carries an href to
  * the right detail page so the inbox is fast to triage.
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { creatorById } from '@/lib/campaigns/creators'
 
 export type InboxItemKind = 'approval' | 'post_review' | 'review' | 'task' | 'connection'
 
@@ -77,7 +79,7 @@ export async function getInbox(clientId: string, userId?: string): Promise<Inbox
       })()
     : Promise.resolve(new Set<string>())
 
-  const [delivsRow, postsRow, reviewsRow, tasksRow, draftApprovalsRow, connectionsRow] = await Promise.all([
+  const [delivsRow, postsRow, reviewsRow, tasksRow, draftApprovalsRow, connectionsRow, creatorDeliveriesRow] = await Promise.all([
     admin
       .from('deliverables')
       .select('id, title, type, status, created_at')
@@ -132,6 +134,17 @@ export async function getInbox(clientId: string, userId?: string): Promise<Inbox
       .eq('client_id', clientId)
       .in('status', ['error', 'expired', 'disconnected'])
       .limit(10),
+    // Delivered creator work — the owner's turn to approve or ask for changes.
+    // Previously this state appeared NOWHERE in the inbox (the silent stall):
+    // a bridged draft only exists after approval, so pre-approval deliveries
+    // were invisible unless the owner happened to open the campaign page.
+    admin
+      .from('creator_work_orders')
+      .select('id, title, discipline, creator_id, campaign_id, updated_at')
+      .eq('client_id', clientId)
+      .eq('status', 'delivered')
+      .order('updated_at', { ascending: false })
+      .limit(20),
   ])
 
   const items: InboxItem[] = []
@@ -266,6 +279,25 @@ export async function getInbox(clientId: string, userId?: string): Promise<Inbox
       status: 'Ready for your review',
       source: 'apnosh',
       senderName: 'Apnosh team',
+      unread: true,
+    })
+  }
+
+  // Delivered creator pieces waiting on the owner's verdict. Reuses kind
+  // 'approval' so chips/icons/read-state all work unchanged; the campaign
+  // page carries the Approve / Ask-for-changes buttons.
+  for (const o of creatorDeliveriesRow.data ?? []) {
+    items.push({
+      id: `creator-delivery-${o.id}`,
+      kind: 'approval',
+      title: (o.title as string) || 'Delivered work',
+      detail: 'The finished piece is in. Approve it or ask for changes.',
+      urgency: 'high',
+      href: o.campaign_id ? `/dashboard/campaigns/${o.campaign_id}` : '/dashboard/campaigns',
+      whenIso: (o.updated_at as string) ?? new Date().toISOString(),
+      status: 'Ready for your review',
+      source: 'apnosh',
+      senderName: creatorById((o.creator_id as string) ?? '')?.name ?? 'Apnosh team',
       unread: true,
     })
   }

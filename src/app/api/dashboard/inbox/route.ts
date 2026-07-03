@@ -47,8 +47,8 @@ function dayBucket(iso?: string | null): 'Today' | 'Yesterday' | 'Earlier' {
 const ICON: Record<string, string> = { approval: '🎨', post_review: '📝', campaign: '🚀', review: '⭐', connection: '🔌', task: '✅', win: '🎉' }
 const CHIP_BY_KIND: Record<string, Chip> = { approval: 'approvals', post_review: 'approvals', campaign: 'approvals', review: 'reviews', connection: 'fix', task: 'todos' }
 // Owner-relevant notification types for the quiet "good to know" lane.
-const WIN_TYPES = new Set(['draft_published', 'draft_approved', 'client_signoff', 'payment', 'holiday_hours_reminder', 'traffic_anomaly', 'site_audit'])
-const WIN_ICON: Record<string, string> = { draft_published: '🎬', draft_approved: '✅', client_signoff: '👍', payment: '💳', holiday_hours_reminder: '🗓️', traffic_anomaly: '📈', site_audit: '🔍' }
+const WIN_TYPES = new Set(['draft_published', 'draft_approved', 'client_signoff', 'payment', 'holiday_hours_reminder', 'traffic_anomaly', 'site_audit', 'awaiting_you_digest', 'campaign_wrapped'])
+const WIN_ICON: Record<string, string> = { draft_published: '🎬', draft_approved: '✅', client_signoff: '👍', payment: '💳', holiday_hours_reminder: '🗓️', traffic_anomaly: '📈', site_audit: '🔍', awaiting_you_digest: '⏳', campaign_wrapped: '🏁' }
 
 export async function GET(req: NextRequest) {
   const clientId = req.nextUrl.searchParams.get('clientId')

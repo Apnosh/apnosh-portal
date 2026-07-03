@@ -46,6 +46,10 @@
       "schedule": "*/10 * * * *"
     },
     {
+      "path": "/api/cron/awaiting-you-digest",
+      "schedule": "0 16 * * *"
+    },
+    {
       "path": "/api/cron/reconcile-accruals",
       "schedule": "0 */6 * * *"
     },

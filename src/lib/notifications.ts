@@ -26,6 +26,8 @@ export type NotificationKind =
   | 'traffic_anomaly'
   | 'site_audit'
   | 'ai_drafts_ready'
+  | 'awaiting_you_digest'
+  | 'campaign_wrapped'
 
 export interface NotificationRow {
   id: string
