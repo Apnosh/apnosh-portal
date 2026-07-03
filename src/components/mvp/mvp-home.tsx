@@ -90,6 +90,7 @@ export interface MetricView {
   daily: { date: string; value: number }[]
   monthly: { label: string; value: number; ym: string }[]
   tiles: { key: string; label: string; value: string; configured: boolean }[]
+  lastDataDate: string      // freshest day with data (data frontier); '' if none
 }
 
 export interface MvpHomeData {
@@ -195,42 +196,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
         {/* SWIPEABLE METRIC CARDS — swipe left/right to change which graph
             you're looking at; dots show where you are. No tabs. */}
         <div ref={scrollRef} onScroll={onScroll} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory' }}>
-          {metrics.map((mv) => {
-            const dn = mv.weekPct < 0
-            const ac = dn ? C.coral : C.green
-            const acbg = dn ? C.coralBg : C.greenSoft
-            return (
-              <div key={mv.key} style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'center' }}>
-                {/* hero */}
-                <div>
-                  <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>{mv.heroLabel}</div>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
-                    <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{mv.total ? mv.total.toLocaleString() : '—'}</span>
-                    {mv.total > 0 && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, color: ac, background: acbg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
-                        <span style={{ fontSize: 11 }}>{dn ? '▼' : '▲'}</span>{Math.abs(mv.weekPct)}% this week
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 14, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
-                  {mv.prevMonthLabel && (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: mv.monthPct > 0 ? C.green : mv.monthPct < 0 ? C.coral : C.mute }}>
-                      {mv.monthPct > 0 ? <TrendingUp size={14} /> : mv.monthPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
-                      {mv.monthPct > 0 ? `Up ${mv.monthPct}% from ${mv.prevMonthLabel}` : mv.monthPct < 0 ? `Down ${Math.abs(mv.monthPct)}% from ${mv.prevMonthLabel}` : `Even with ${mv.prevMonthLabel}`}
-                    </div>
-                  )}
-                </div>
-                {/* chart */}
-                <ActionsChart chart={mv.chart} chartStart={mv.chartStart} daily={mv.daily} monthly={mv.monthly} noun={mv.unit} />
-                {/* breakdown tiles */}
-                {mv.tiles.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, mv.tiles.length)},1fr)`, gap: 8, margin: '10px 0 0' }}>
-                    {mv.tiles.slice(0, 4).map((s) => <SourceCard key={s.key + s.label} s={s} />)}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+          {metrics.map((mv) => <MetricCard key={mv.key} mv={mv} />)}
         </div>
 
         {/* dots — current metric + tap to jump */}
@@ -549,53 +515,104 @@ export function SourceCard({ s }: { s: { key: string; label: string; value: stri
   )
 }
 
+/* One swipeable metric slide: the hero number + trend, its range chart, and the
+   breakdown tiles. Hero and chart share ONE range summary (useChartRange), so the
+   range chips move the big number + delta, not just the bars. The delta is honest
+   about staleness: when the freshest data is too old for a "this period vs last"
+   claim, it shows "Updated <when>" instead of a frozen arrow. */
+function MetricCard({ mv }: { mv: MetricView }) {
+  const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
+  const fresh = isFresh(mv.lastDataDate, summary.periodDays)
+  const dn = summary.deltaPct < 0
+  const ac = dn ? C.coral : C.green
+  const acbg = dn ? C.coralBg : C.greenSoft
+  return (
+    <div style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'center' }}>
+      {/* hero */}
+      <div>
+        <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>{mv.heroLabel}</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
+          <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{summary.total ? summary.total.toLocaleString() : '—'}</span>
+          {summary.total > 0 && fresh && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, color: ac, background: acbg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
+              <span style={{ fontSize: 11 }}>{dn ? '▼' : '▲'}</span>{Math.abs(summary.deltaPct)}% {summary.cmpFrame}
+            </span>
+          )}
+          {summary.total > 0 && !fresh && mv.lastDataDate && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: C.mute, background: C.bg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
+              Updated {relDate(mv.lastDataDate)}
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: 14, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
+        {fresh && mv.prevMonthLabel && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: mv.monthPct > 0 ? C.green : mv.monthPct < 0 ? C.coral : C.mute }}>
+            {mv.monthPct > 0 ? <TrendingUp size={14} /> : mv.monthPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
+            {mv.monthPct > 0 ? `Up ${mv.monthPct}% from ${mv.prevMonthLabel}` : mv.monthPct < 0 ? `Down ${Math.abs(mv.monthPct)}% from ${mv.prevMonthLabel}` : `Even with ${mv.prevMonthLabel}`}
+          </div>
+        )}
+      </div>
+      {/* chart */}
+      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} />
+      {/* breakdown tiles */}
+      {mv.tiles.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, mv.tiles.length)},1fr)`, gap: 8, margin: '10px 0 0' }}>
+          {mv.tiles.slice(0, 4).map((s) => <SourceCard key={s.key + s.label} s={s} />)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ActionsChart — faithful port of the design: range chips (Last 7 days /
    Last 30 days / Last year / Custom), grouped bars (current green + comparison
    grey), an average dashed line, tappable bars with a date + comparison
-   tooltip, and a legend. Wired to the real daily + monthly series. */
-type ChartRange = '7d' | '30d' | '1y' | 'custom'
-const RANGES: [ChartRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['1y', 'Last year'], ['custom', 'Custom']]
+   tooltip, and a legend. Now CONTROLLED: the range + the computed summary come
+   from useChartRange (shared with the hero), so switching the range moves the
+   headline number and delta, not only the bars. */
+export type ChartRange = '7d' | '30d' | '1y' | 'custom'
+const CHART_RANGES: [ChartRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['1y', 'Last year'], ['custom', 'Custom']]
 
-export function ActionsChart({
-  chart, chartStart, daily = [], monthly = [], noun = 'took action',
-}: {
-  chart: { label: string; value: number; prev: number }[]
-  chartStart?: string
-  daily?: { date: string; value: number }[]
-  monthly?: { label: string; value: number; ym: string }[]
-  noun?: string
-}) {
-  const H = 62
-  const [range, setRange] = useState<ChartRange>('7d')
-  const [picked, setPicked] = useState<number | null>(null)
-  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+export function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+type ChartSrc = { chart: { label: string; value: number; prev: number }[]; chartStart?: string; daily?: { date: string; value: number }[]; monthly?: { label: string; value: number; ym: string }[] }
+type Bar = { value: number; compare: number; label: string; tip: string; cmpLabel: string; cmpDate: string }
+export interface RangeSummary {
+  bars: Bar[]; curLbl: string; cmpLbl: string; cmpFrame: string
+  total: number; compareTotal: number; deltaPct: number
+  avg: number; max: number; periodDays: number
+}
+
+/* Bucket the real series for a chosen range — PURE, so the hero and the chart
+   read the SAME summary and the headline total + delta track the selected range.
+   The '7d' branch reproduces the old fixed hero exactly (current = the last
+   complete week, compare = the week before), so the default view is unchanged. */
+export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEnd: string): RangeSummary {
+  const { chart, chartStart, daily = [], monthly = [] } = src
   const parseISO = (s: string) => new Date(s + 'T00:00:00')
-  const today = new Date()
-  const [cStart, setCStart] = useState(() => iso(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 13)))
-  const [cEnd, setCEnd] = useState(() => iso(today))
   const dmap = new Map(daily.map((d) => [d.date, d.value]))
   const start = chartStart ? parseISO(chartStart) : null
-
-  type Bar = { value: number; compare: number; label: string; tip: string; cmpLabel: string; cmpDate: string }
-  let bars: Bar[] = []; let curLbl = ''; let cmpLbl = ''
   const wk = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' })
   const full = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  let bars: Bar[] = []; let curLbl = ''; let cmpLbl = ''; let cmpFrame = ''; let periodDays = 7
 
   if (range === '7d') {
-    curLbl = 'Last 7 days'; cmpLbl = 'Last week'
+    curLbl = 'Last 7 days'; cmpLbl = 'Last week'; cmpFrame = 'vs last week'; periodDays = 7
     bars = chart.map((b, i) => {
       const d = start ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + i) : null
       const prior = d ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 7) : null
       return { value: b.value, compare: b.prev, label: d ? wk(d) : b.label, tip: d ? full(d) : b.label, cmpLabel: 'last week', cmpDate: prior ? full(prior) : '' }
     })
   } else if (range === '30d') {
-    curLbl = 'Last 30 days'; cmpLbl = 'Prior 30 days'
+    curLbl = 'Last 30 days'; cmpLbl = 'Prior 30 days'; cmpFrame = 'vs prior 30 days'; periodDays = 30
     bars = daily.slice(-30).map((d) => {
       const dt = parseISO(d.date); const prior = new Date(dt); prior.setDate(prior.getDate() - 30)
-      return { value: d.value, compare: dmap.get(iso(prior)) ?? 0, label: String(dt.getDate()), tip: full(dt), cmpLabel: '30 days earlier', cmpDate: full(prior) }
+      return { value: d.value, compare: dmap.get(isoDate(prior)) ?? 0, label: String(dt.getDate()), tip: full(dt), cmpLabel: '30 days earlier', cmpDate: full(prior) }
     })
   } else if (range === '1y') {
-    curLbl = 'Last 12 months'; cmpLbl = 'Prior year'
+    curLbl = 'Last 12 months'; cmpLbl = 'Prior year'; cmpFrame = 'vs prior year'; periodDays = 365
     // Compare each of the last 12 months to the SAME month a year earlier,
     // looked up by calendar key — so the prior-year (grey) bars line up
     // correctly even with fewer than 24 months of history, and fill in wherever
@@ -608,19 +625,72 @@ export function ActionsChart({
       return { value: mo.value, compare: byKey.get(priorKey) ?? 0, label: mo.label.slice(0, 3), tip: `${mo.label} ${yr}`, cmpLabel: 'a year earlier', cmpDate: `${mo.label} ${yr - 1}` }
     })
   } else {
-    curLbl = 'Custom'; cmpLbl = 'Prior period'
+    curLbl = 'Custom'; cmpLbl = 'Prior period'; cmpFrame = 'vs prior period'
     const s = parseISO(cStart), e = parseISO(cEnd); const lo = s <= e ? s : e, hi = s <= e ? e : s
     const span = Math.min(92, Math.max(1, Math.round((hi.getTime() - lo.getTime()) / 86400000) + 1))
+    periodDays = span
     bars = Array.from({ length: span }, (_, i) => {
       const dt = new Date(lo.getFullYear(), lo.getMonth(), lo.getDate() + i)
       const prior = new Date(dt); prior.setDate(prior.getDate() - span)
-      return { value: dmap.get(iso(dt)) ?? 0, compare: dmap.get(iso(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpLabel: 'prior period', cmpDate: full(prior) }
+      return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpLabel: 'prior period', cmpDate: full(prior) }
     })
   }
 
   const total = bars.reduce((s, b) => s + b.value, 0)
+  const compareTotal = bars.reduce((s, b) => s + b.compare, 0)
+  const deltaPct = compareTotal === 0 ? (total > 0 ? 100 : 0) : Math.round(((total - compareTotal) / compareTotal) * 100)
   const avg = bars.length ? Math.round(total / bars.length) : 0
   const max = Math.max(1, ...bars.map((b) => Math.max(b.value, b.compare)), avg)
+  return { bars, curLbl, cmpLbl, cmpFrame, total, compareTotal, deltaPct, avg, max, periodDays }
+}
+
+/* Shared range state + summary for one metric. The hero and its chart both read
+   this, so the range chips move the headline number, not just the bars. */
+export function useChartRange(src: ChartSrc): {
+  range: ChartRange; setRange: (r: ChartRange) => void
+  cStart: string; setCStart: (s: string) => void
+  cEnd: string; setCEnd: (s: string) => void
+  summary: RangeSummary
+} {
+  const [range, setRange] = useState<ChartRange>('7d')
+  const [cStart, setCStart] = useState(() => { const t = new Date(); return isoDate(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 13)) })
+  const [cEnd, setCEnd] = useState(() => isoDate(new Date()))
+  const summary = useMemo(() => bucketsFor(range, src, cStart, cEnd), [range, src, cStart, cEnd])
+  return { range, setRange, cStart, setCStart, cEnd, setCEnd, summary }
+}
+
+/* Freshness gate for the hero delta. Beyond ~a period + grace with no new data,
+   a "this period vs last" arrow compares two OLD windows and calls the older one
+   "now" — that is the "stuck down" bug. When stale, the hero shows an honest
+   "Updated <when>" instead of a frozen direction. The year view tolerates long
+   lag (its 12-month trend still reads). */
+export function isFresh(lastDataDate: string, periodDays: number): boolean {
+  if (!lastDataDate) return false
+  const t = Date.parse(lastDataDate + 'T00:00:00'); if (Number.isNaN(t)) return false
+  const staleDays = Math.floor((Date.now() - t) / 86400000)
+  return staleDays <= Math.max(9, periodDays + 3)
+}
+export function relDate(lastDataDate: string): string {
+  const t = Date.parse(lastDataDate + 'T00:00:00'); if (Number.isNaN(t)) return ''
+  const days = Math.floor((Date.now() - t) / 86400000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 7) return `${days} days ago`
+  return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+export function ActionsChart({
+  range, setRange, cStart, setCStart, cEnd, setCEnd, summary, noun = 'took action',
+}: {
+  range: ChartRange; setRange: (r: ChartRange) => void
+  cStart: string; setCStart: (s: string) => void
+  cEnd: string; setCEnd: (s: string) => void
+  summary: RangeSummary
+  noun?: string
+}) {
+  const H = 62
+  const [picked, setPicked] = useState<number | null>(null)
+  const { bars, curLbl, cmpLbl, total, avg, max } = summary
   const avgY = (avg / max) * H
   const dense = bars.length > 8
   const dateInput: React.CSSProperties = { border: `1px solid ${C.line}`, borderRadius: 8, padding: '5px 8px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', background: '#fff' }
@@ -628,7 +698,7 @@ export function ActionsChart({
   return (
     <div style={{ margin: '8px 0 0' }}>
       <div style={{ display: 'flex', gap: 7, marginBottom: 12, overflowX: 'auto', paddingBottom: 2 }}>
-        {RANGES.map(([k, l]) => {
+        {CHART_RANGES.map(([k, l]) => {
           const on = range === k
           return (
             <button key={k} onClick={() => { setRange(k); setPicked(null) }} style={{ flexShrink: 0, whiteSpace: 'nowrap', border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer' }}>{l}</button>

@@ -24,7 +24,7 @@ import {
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Star,
   Eye, MousePointerClick, CalendarDays, Mail, BarChart3,
 } from 'lucide-react'
-import { ActionsChart, SourceCard, type MetricView } from './mvp-home'
+import { ActionsChart, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
@@ -139,6 +139,13 @@ function Body({ data, sel, setSel, summary, summaryLoading }: { data: InsightsDa
   // Biggest mover this week (by absolute weekly change), for the highlight line.
   const mover = [...metrics].filter((m) => m.total > 0 && m.weekPct !== 0).sort((a, b) => Math.abs(b.weekPct) - Math.abs(a.weekPct))[0]
 
+  // Selected metric's chart shares its range with the hero, so the range chips
+  // move the headline number + delta (not just the bars); the delta goes honest
+  // ("Updated <when>") when the data is too stale to claim a current trend.
+  const rc = useChartRange(mv)
+  const fresh = isFresh(mv?.lastDataDate ?? '', rc.summary.periodDays)
+  const dn = rc.summary.deltaPct < 0
+
   return (
     <div style={{ padding: '4px 18px 40px' }}>
 
@@ -215,15 +222,20 @@ function Body({ data, sel, setSel, summary, summaryLoading }: { data: InsightsDa
         {/* selected metric */}
         <div style={{ fontSize: 14, color: C.mute, fontWeight: 500 }}>{mv.heroLabel}</div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
-          <span style={{ fontFamily: DISPLAY, fontSize: 44, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em' }}>{mv.total ? mv.total.toLocaleString() : '—'}</span>
-          {mv.total > 0 && mv.weekPct !== 0 && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: mv.weekPct < 0 ? C.coral : C.greenDk, background: mv.weekPct < 0 ? C.coralBg : C.greenSoft, padding: '4px 11px', borderRadius: 99, marginBottom: 5 }}>
-              <span style={{ fontSize: 10 }}>{mv.weekPct < 0 ? '▼' : '▲'}</span>{Math.abs(mv.weekPct)}% this week
+          <span style={{ fontFamily: DISPLAY, fontSize: 44, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em' }}>{rc.summary.total ? rc.summary.total.toLocaleString() : '—'}</span>
+          {rc.summary.total > 0 && fresh && rc.summary.deltaPct !== 0 && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: dn ? C.coral : C.greenDk, background: dn ? C.coralBg : C.greenSoft, padding: '4px 11px', borderRadius: 99, marginBottom: 5 }}>
+              <span style={{ fontSize: 10 }}>{dn ? '▼' : '▲'}</span>{Math.abs(rc.summary.deltaPct)}% {rc.summary.cmpFrame}
+            </span>
+          )}
+          {rc.summary.total > 0 && !fresh && mv.lastDataDate && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: C.mute, background: C.bg, padding: '4px 11px', borderRadius: 99, marginBottom: 5 }}>
+              Updated {relDate(mv.lastDataDate)}
             </span>
           )}
         </div>
         <div style={{ fontSize: 13.5, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
-        {mv.prevMonthLabel && (
+        {fresh && mv.prevMonthLabel && (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: mv.monthPct > 0 ? C.greenDk : mv.monthPct < 0 ? C.coral : C.mute }}>
             {mv.monthPct > 0 ? <TrendingUp size={14} /> : mv.monthPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
             {mv.monthPct > 0 ? `Up ${mv.monthPct}% from ${mv.prevMonthLabel}` : mv.monthPct < 0 ? `Down ${Math.abs(mv.monthPct)}% from ${mv.prevMonthLabel}` : `Even with ${mv.prevMonthLabel}`}
@@ -231,7 +243,7 @@ function Body({ data, sel, setSel, summary, summaryLoading }: { data: InsightsDa
         )}
 
         {/* full chart with range chips (reused from the home) */}
-        <ActionsChart chart={mv.chart} chartStart={mv.chartStart} daily={mv.daily} monthly={mv.monthly} noun={mv.unit} />
+        <ActionsChart range={rc.range} setRange={rc.setRange} cStart={rc.cStart} setCStart={rc.setCStart} cEnd={rc.cEnd} setCEnd={rc.setCEnd} summary={rc.summary} noun={mv.unit} />
 
         {/* what feeds this metric */}
         {mv.tiles.length > 0 && (

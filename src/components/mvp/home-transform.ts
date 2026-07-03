@@ -114,10 +114,17 @@ function buildMetricView(m: HomeMetric): MetricView {
     configured: !!b.value && b.value !== '0' && b.value !== '—',
   }))
 
+  // The freshest day we actually have data for (the data frontier — get-home-metrics
+  // nulls every day past it). `daily` is sorted ascending, so its last date is that
+  // frontier. The hero uses this to tell a live trend from a stale one: when the
+  // newest data is weeks old, a "this week vs last" arrow would be frozen, so the
+  // hero shows how fresh the numbers are instead of a stuck direction.
+  const lastDataDate = daily.length ? daily[daily.length - 1].date : ''
+
   return {
     key: m.key, tabLabel: meta.tab, heroLabel: meta.heroLabel, heroSub: meta.heroSub, unit: meta.unit,
     total, weekPct, monthPct, prevMonthLabel: hasMonthCompare ? monthName(lastMonth!.start) : '',
-    chart, chartStart: thisWeek?.start, daily, monthly, tiles,
+    chart, chartStart: thisWeek?.start, daily, monthly, tiles, lastDataDate,
   }
 }
 
@@ -147,7 +154,14 @@ export function transformHome(
       emoji: '📄',
     }))
 
-  const down = (primary?.weekPct ?? 0) < 0
+  // Only call it a "down week" when the primary metric has FRESH data — otherwise
+  // a stalled data feed would leave this banner (and the hero arrow) stuck on an
+  // old comparison for weeks. Stale → treat as on-track, no false alarm.
+  const primaryStaleDays = primary?.lastDataDate
+    ? Math.floor((Date.now() - Date.parse(primary.lastDataDate + 'T00:00:00')) / 86400000)
+    : 9999
+  const primaryFresh = primaryStaleDays <= 9
+  const down = primaryFresh && (primary?.weekPct ?? 0) < 0
   const signal: MvpHomeData['signal'] = down
     ? { state: 'recommendation', metric: primary?.tabLabel.toLowerCase() ?? 'numbers', message: 'Fewer actions on your business this week than last. A fresh post can bring it back up.' }
     : { state: 'ontrack' }
