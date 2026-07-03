@@ -46,12 +46,6 @@ function pct(curr: number, prev: number): number {
   if (prev === 0) return curr > 0 ? 100 : 0
   return Math.round(((curr - prev) / prev) * 100)
 }
-function monthName(iso: string): string {
-  return MONTHS[Number(iso.slice(5, 7)) - 1] ?? ''
-}
-function firstNDays(inst: HomeInstance | undefined, n: number): number {
-  return (inst?.vals ?? []).slice(0, n).reduce((s: number, v) => s + (Number(v) || 0), 0)
-}
 
 function buildMetricView(m: HomeMetric): MetricView {
   const meta = META[m.key] ?? { tab: m.label, heroLabel: m.label, heroSub: m.sub, unit: 'tracked' }
@@ -118,25 +112,6 @@ function buildMetricView(m: HomeMetric): MetricView {
     ? (settledDays.length ? pct(settledDays.reduce((s, w) => s + w.value, 0), settledDays.reduce((s, w) => s + w.prev, 0)) : 0)
     : pct(total, lastWeek?.total ?? 0)
 
-  // Month-over-month, anchored to the month that CONTAINS the data frontier —
-  // the latest month with real data — NOT the calendar's current month. Early in
-  // a month (before Google reports its first days) the current month is empty and
-  // comparing it to a full prior month reads as a fake "down 100%". Anchoring to
-  // the frontier month compares month-to-date (through the frontier) against the
-  // same leading days of the prior month.
-  const frontierYm = lastDataDate.slice(0, 7)
-  let mi = frontierYm ? months.findIndex((mo) => String(mo.start).slice(0, 7) === frontierYm) : -1
-  if (mi < 0) mi = months.length - 1
-  const thisMonth = months[mi]
-  const lastMonth = mi > 0 ? months[mi - 1] : undefined
-  const domCount = (thisMonth?.vals ?? []).filter((v) => v != null).length || 1
-  const thisMonthVal = firstNDays(thisMonth, domCount)
-  const lastMonthVal = firstNDays(lastMonth, domCount)
-  // Only surface it when BOTH sides have real data in the comparable window —
-  // never a fake ±100% off an empty current or prior month.
-  const hasMonthCompare = !!lastMonth && lastMonthVal > 0 && thisMonthVal > 0
-  const monthPct = hasMonthCompare ? Math.round(((thisMonthVal - lastMonthVal) / lastMonthVal) * 100) : 0
-
   // Continuous monthly series across ALL available years, built from the `year`
   // instances' monthly bars (the `month` field only holds the trailing 12).
   // This lets the chart's "Last year" view compare each month against the SAME
@@ -151,6 +126,29 @@ function buildMetricView(m: HomeMetric): MetricView {
     })
   }
 
+  // Secondary trend = YEAR OVER YEAR: the last COMPLETE month vs the SAME month
+  // a year earlier. Restaurant traffic is seasonal, so June-vs-last-June is a
+  // fairer read than June-vs-May. Whole months only (the freshest complete one,
+  // so a still-filling current month never distorts it); no year-ago data → no
+  // line, never a fake ±100%.
+  const byYm = new Map(monthly.map((mo) => [mo.ym, mo.value]))
+  let yoyLabel = ''
+  let monthPct = 0
+  if (lastDataDate) {
+    const fD = new Date(lastDataDate + 'T00:00:00')
+    const endOfMonth = new Date(fD.getFullYear(), fD.getMonth() + 1, 0).getDate()
+    const complete = fD.getDate() >= endOfMonth   // is the frontier the last day of its month?
+    const cm = complete ? new Date(fD.getFullYear(), fD.getMonth(), 1) : new Date(fD.getFullYear(), fD.getMonth() - 1, 1)
+    const cmYm = `${cm.getFullYear()}-${String(cm.getMonth() + 1).padStart(2, '0')}`
+    const agoYm = `${cm.getFullYear() - 1}-${String(cm.getMonth() + 1).padStart(2, '0')}`
+    const nowVal = byYm.get(cmYm) ?? 0
+    const agoVal = byYm.get(agoYm) ?? 0
+    if (nowVal > 0 && agoVal > 0) {
+      monthPct = Math.round(((nowVal - agoVal) / agoVal) * 100)
+      yoyLabel = `${MONTHS[cm.getMonth()]} ${cm.getFullYear() - 1}`
+    }
+  }
+
   // Source breakdown tiles stay week-based (they split a period into calls /
   // directions / views); the last populated week is a fine, cheap source.
   const tiles = (thisWeek?.breakdown ?? []).map((b) => ({
@@ -160,7 +158,7 @@ function buildMetricView(m: HomeMetric): MetricView {
 
   return {
     key: m.key, tabLabel: meta.tab, heroLabel: meta.heroLabel, heroSub: meta.heroSub, unit: meta.unit,
-    total, weekPct, monthPct, prevMonthLabel: hasMonthCompare ? monthName(lastMonth!.start) : '',
+    total, weekPct, monthPct, prevMonthLabel: yoyLabel,
     chart, chartStart: chartStartISO, daily, monthly, tiles, lastDataDate,
   }
 }
