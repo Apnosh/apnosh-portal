@@ -13,7 +13,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCampaign } from './server'
 import { reconcileBeatsToLines } from './catalog'
 import { deriveSchedule, type DatedBeat } from './schedule'
-import { disciplineForType, creatorById } from './creators'
+import { disciplineForType } from './creators'
+import { creatorNamesByIds } from './vendor-supply'
 import { callStructuredOutput } from './planning/anthropic'
 import type { SavedCampaign } from './view'
 
@@ -238,11 +239,15 @@ export async function getCreatorBrief(orderId: string, opts?: { generate?: boole
     deliverables: spec.deliverables,
   }
 
+  // Resolves pool ids and real-vendor UUIDs alike — the brief header carries the
+  // maker's actual name.
+  const briefNames = await creatorNamesByIds([(row.creator_id as string) ?? ''])
+
   return {
     order: {
       id: row.id as string,
       creatorId: (row.creator_id as string) ?? '',
-      creatorName: creatorById((row.creator_id as string) ?? '')?.name ?? (row.creator_id as string),
+      creatorName: briefNames.get((row.creator_id as string) ?? '') ?? (row.creator_id as string),
       discipline: (row.discipline as string) ?? '',
       status: (row.status as string) ?? 'offered',
       conceptStatus: (row.concept_status as string) ?? 'approved',

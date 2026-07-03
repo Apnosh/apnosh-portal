@@ -6,7 +6,7 @@ import 'server-only'
  * for an order we emit AT MOST ONE current-status event marked precise=false. Never invents a time.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
-import { creatorById } from '@/lib/campaigns/creators'
+import { creatorNamesByIds } from '@/lib/campaigns/vendor-supply'
 import { PLAN_REMOVED_NOTE, STOP_NOTE } from '@/lib/campaigns/work-orders-core'
 import type { ActivityEvent } from './types'
 
@@ -43,10 +43,13 @@ export async function getCampaignActivity(campaignId: string): Promise<ActivityE
   // Creator lane: "sent" (precise created_at) + the current status (approximate updated_at, one only).
   // An owner plan-removal (PLAN_REMOVED_NOTE) leaves the feed entirely; a creator's own decline stays
   // as a visible event — the piece still needs a maker and its history must not vanish.
+  // Pool ids AND real-vendor UUIDs resolve to names in one batch — a raw UUID
+  // must never appear as a "who" in the owner's feed.
+  const names = await creatorNamesByIds(orders.map((o) => (o.creator_id as string) ?? ''))
   for (const o of orders) {
     const status = (o.status as string) ?? ''
     if (status === 'declined' && ((o.note as string | null) === PLAN_REMOVED_NOTE || (o.note as string | null) === STOP_NOTE)) continue
-    const who = creatorById(o.creator_id as string)?.name ?? (o.creator_id as string)
+    const who = names.get((o.creator_id as string) ?? '') ?? (o.creator_id as string)
     const piece = shortLabel(o.title, `${(o.discipline as string) || 'A piece'}`)
     const cd = o.content_draft_id as string | null
     const bridged = !!cd && aliveIds.has(cd)

@@ -2,12 +2,13 @@ import 'server-only'
 /**
  * getCampaignPieces — the merged, deduped, per-piece production list that powers the transparency
  * tracker. Reads the SAME two tables computeProgress uses (content_drafts + creator_work_orders) plus
- * the outcomes reader for real numbers and creatorById for names. Dedup mirrors computeProgress exactly
+ * the outcomes reader for real numbers and creatorNamesByIds for names (pool ids + real-vendor UUIDs).
+ * Dedup mirrors computeProgress exactly
  * (a bridged creator piece is represented by its draft, once), so pieces.length === progress.total +
  * progress.dropped (killed pieces stay visible as 'dropped' rows; owner plan-removals are hidden).
  */
 import { createAdminClient } from '@/lib/supabase/admin'
-import { creatorById } from '@/lib/campaigns/creators'
+import { creatorNamesByIds } from '@/lib/campaigns/vendor-supply'
 import { getCampaignOutcomes } from '@/lib/campaigns/outcomes/read'
 import { safeHref, PLAN_REMOVED_NOTE, STOP_NOTE } from '@/lib/campaigns/work-orders-core'
 import { stageForOrder, stageForDraft, stageRank, type Stage } from './stages'
@@ -56,6 +57,9 @@ export async function getCampaignPieces(campaignId: string): Promise<TrackerPiec
   for (const p of outcomes?.pieces ?? []) { outByDraft.set(p.draftId, p); if (p.pieceKey) outByKey.set(p.pieceKey, p) }
   const orderByDraftId = new Map<string, Record<string, unknown>>()
   for (const o of orders) { const cd = o.content_draft_id as string | null; if (cd) orderByDraftId.set(cd, o) }
+  // Pool ids and real-vendor UUIDs resolve to names in one batch — the "who"
+  // column must never show a raw UUID.
+  const names = await creatorNamesByIds(orders.map((o) => (o.creator_id as string) ?? ''))
 
   const pieces: TrackerPiece[] = []
 
@@ -75,13 +79,13 @@ export async function getCampaignPieces(campaignId: string): Promise<TrackerPiec
     const out = (key ? outByKey.get(key) : undefined) ?? outByDraft.get(did) ?? null
     if (stage === 'posted' && (!out || out.state !== 'live')) stage = 'gathering'   // posted but numbers not synced
     const { atISO, precise } = draftStamp(d, stage)
-    const creator = order ? creatorById(order.creator_id as string) : undefined
+    const creatorName = order ? names.get((order.creator_id as string) ?? '') : undefined
     pieces.push({
       id: did,
       orderId: order ? (order.id as string) : null,
       label: pieceLabel(d.caption) ?? (order ? (order.title as string) : null) ?? fallbackLabel((order?.discipline as string) || disciplineFromKey(key)),
       channel: (order?.discipline as string) || disciplineFromKey(key),
-      who: creator?.name ?? (order ? (order.creator_id as string) : 'Your team'),
+      who: creatorName ?? (order ? (order.creator_id as string) : 'Your team'),
       lane: order ? 'creator' : 'team',
       stage,
       stageAtISO: atISO,
@@ -114,7 +118,6 @@ export async function getCampaignPieces(campaignId: string): Promise<TrackerPiec
     const cd = o.content_draft_id as string | null
     if (cd && aliveIds.has(cd)) continue
     const stage = stageForOrder(status)
-    const creator = creatorById(o.creator_id as string)
     const key = (o.campaign_piece_key as string) ?? null
     const out = key ? outByKey.get(key) ?? null : null
     const concept = ((o.concept_status as 'approved' | 'pending' | 'changes') ?? 'approved')
@@ -123,7 +126,7 @@ export async function getCampaignPieces(campaignId: string): Promise<TrackerPiec
       orderId: o.id as string,
       label: (o.title as string) || fallbackLabel((o.discipline as string) || disciplineFromKey(key)),
       channel: (o.discipline as string) || disciplineFromKey(key),
-      who: creator?.name ?? (o.creator_id as string),
+      who: names.get((o.creator_id as string) ?? '') ?? (o.creator_id as string),
       lane: 'creator',
       stage,
       stageAtISO: status === 'offered' ? ((o.created_at as string) ?? null) : ((o.updated_at as string) ?? (o.created_at as string) ?? null),

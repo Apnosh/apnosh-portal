@@ -18,6 +18,7 @@ import {
   AlertTriangle, Eye, Combine, X, CheckCircle2, Loader2,
 } from 'lucide-react'
 import { InvoiceDetailModal } from '@/components/admin/invoice-detail-modal'
+import { CreatorPayoutsCard } from '@/components/admin/creator-payouts-card'
 import { previewConsolidate, consolidateOpenInvoices, type ConsolidatePreview } from '@/lib/billing-actions'
 
 /* ------------------------------------------------------------------ */
@@ -675,6 +676,11 @@ export default function AdminBillingPage() {
           </div>
         </div>
       </div>
+
+      {/* Money-out: what makers are owed for approved campaign work, with the
+          env-gated Stripe Connect Pay action. Self-loading; renders nothing
+          until a payout exists. */}
+      <CreatorPayoutsCard />
 
       {detailInvoiceId && (
         <InvoiceDetailModal

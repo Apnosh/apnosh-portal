@@ -29,6 +29,7 @@ export type NotificationKind =
   | 'awaiting_you_digest'
   | 'campaign_wrapped'
   | 'invoice_reminder'
+  | 'work_offer'
 
 export interface NotificationRow {
   id: string

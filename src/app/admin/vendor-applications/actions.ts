@@ -11,6 +11,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { craftForCategories } from '@/lib/campaigns/vendor-supply'
 
 async function requireAdmin(): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
   const supabase = await createServerClient()
@@ -80,7 +81,11 @@ export async function approveApplication(
     if (suffix > 50) return { ok: false, error: 'Could not generate unique slug' }
   }
 
-  /* Create vendor row. */
+  /* Create vendor row. The craft (dispatch discipline) comes from the applicant's
+     own categories — with it set, campaign work auto-routes to this vendor the
+     moment they log in (vendors.person_id links on first login, matched by the
+     application email). Non-creative categories leave craft null: bookable on
+     the storefront, never auto-dispatched. */
   const { data: vendor, error: vErr } = await admin
     .from('vendors')
     .insert({
@@ -92,6 +97,7 @@ export async function approveApplication(
       tier: 'free',
       platform_fee_percent: 20.00,
       bookable: true,
+      craft: craftForCategories(app.categories),
     })
     .select('id, slug')
     .single() as { data: { id: string; slug: string } | null; error: { message: string } | null }
@@ -134,6 +140,50 @@ export async function declineApplication(
   if (error) return { ok: false, error: error.message }
 
   revalidatePath('/admin/vendor-applications')
+  return { ok: true }
+}
+
+/**
+ * Link a vendor to their portal login, explicitly. This is the ONLY way a real
+ * vendor becomes dispatchable (bestVendorForDiscipline requires person_id):
+ * email-based auto-linking was removed because this project's auth runs with
+ * autoconfirm on — an unverified signup email must never claim a vendor's work
+ * queue and payout rail. The admin verifies the person out-of-band, then links.
+ * One-shot: an already-claimed vendor is never re-pointed (unlink is a manual
+ * DB act, deliberately).
+ */
+export async function linkVendorLogin(
+  vendorId: string,
+  userEmail: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { ok: false, error: auth.error }
+  const admin = createAdminClient()
+
+  const wanted = userEmail.trim().toLowerCase()
+  if (!wanted) return { ok: false, error: 'An email is required' }
+
+  // supabase-js has no lookup-by-email; scan pages (fine at this user count).
+  let userId: string | null = null
+  for (let page = 1; page <= 10 && !userId; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 })
+    if (error) return { ok: false, error: error.message }
+    userId = data.users.find((u) => (u.email ?? '').toLowerCase() === wanted)?.id ?? null
+    if (data.users.length < 200) break
+  }
+  if (!userId) return { ok: false, error: `No portal user with the email ${wanted}. Ask them to sign up first.` }
+
+  const { data: claimed, error: claimErr } = await admin
+    .from('vendors')
+    .update({ person_id: userId })
+    .eq('id', vendorId)
+    .is('person_id', null)
+    .select('id, name')
+    .maybeSingle()
+  if (claimErr) return { ok: false, error: claimErr.message }
+  if (!claimed) return { ok: false, error: 'This vendor already has a login linked (or was not found).' }
+
+  revalidatePath('/admin/vendors')
   return { ok: true }
 }
 

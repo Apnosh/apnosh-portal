@@ -7,9 +7,9 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
-import { creatorById } from './creators'
+import { creatorById, rankCreators, type Disc } from './creators'
 import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, PLAN_REMOVED_NOTE, STOP_NOTE, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
-import { feePercentForCreator } from './vendor-supply'
+import { feePercentForCreator, assignVendorsToOrderRows, notifyVendorsOfNewWork, notifyVendorOfWork, bestVendorForDiscipline, creatorNamesByIds } from './vendor-supply'
 import type { SavedCampaign, CampaignCharges, CreatorEarnings } from './view'
 
 export type { WorkOrderStatus }
@@ -37,14 +37,16 @@ export interface WorkOrder {
   updatedAt: string
 }
 
-function rowToWO(r: Record<string, unknown>): WorkOrder {
+function rowToWO(r: Record<string, unknown>, names?: Map<string, string>): WorkOrder {
   const creatorId = (r.creator_id as string) ?? ''
   return {
     id: r.id as string,
     campaignId: (r.campaign_id as string) ?? '',
     clientId: (r.client_id as string) ?? '',
     creatorId,
-    creatorName: creatorById(creatorId)?.name ?? creatorId,
+    // Pool ids resolve locally; a vendor UUID needs the batch `names` map from
+    // creatorNamesByIds — without it the raw id is the last-resort fallback.
+    creatorName: names?.get(creatorId) ?? creatorById(creatorId)?.name ?? creatorId,
     discipline: (r.discipline as string) ?? '',
     title: (r.title as string) ?? '',
     brief: (r.brief as string) ?? null,
@@ -65,8 +67,12 @@ function rowToWO(r: Record<string, unknown>): WorkOrder {
  * materializeCampaignDrafts — degrades to 0 if the table is not present yet.
  */
 export async function mintWorkOrders(campaign: SavedCampaign, shipISO: string): Promise<number> {
-  const rows = buildWorkOrderRows(campaign, shipISO)
-  if (!rows.length) return 0
+  const built = buildWorkOrderRows(campaign, shipISO)
+  if (!built.length) return 0
+
+  // Real supply: swap in the best live vendor per craft (one maker per craft —
+  // briefs and shoots batch); crafts with an empty bench keep the internal team.
+  const { rows, assigned } = await assignVendorsToOrderRows(built)
 
   const admin = createAdminClient()
   const { data: existing, error: existErr } = await admin
@@ -86,6 +92,9 @@ export async function mintWorkOrders(campaign: SavedCampaign, shipISO: string): 
     ;({ error } = await admin.from('creator_work_orders').insert(stripped))
   }
   if (error) return 0
+  // Real vendors get told there is work waiting (the internal team already has
+  // the staff rails); only after the insert actually landed.
+  await notifyVendorsOfNewWork(rows, assigned, campaign.draft.name).catch(() => undefined)
   return rows.length
 }
 
@@ -98,7 +107,8 @@ export async function listWorkOrdersForCreator(creatorId: string): Promise<WorkO
     .eq('creator_id', creatorId)
     .order('created_at', { ascending: false })
   if (error || !data) return []
-  return data.map((r) => ({ ...rowToWO(r), campaignName: ((r as { campaigns?: { name?: string } }).campaigns?.name) ?? undefined }))
+  const names = await creatorNamesByIds(data.map((r) => (r.creator_id as string) ?? ''))
+  return data.map((r) => ({ ...rowToWO(r, names), campaignName: ((r as { campaigns?: { name?: string } }).campaigns?.name) ?? undefined }))
 }
 
 /** Clear the cached creative brief for a campaign's orders so the next open
@@ -114,12 +124,27 @@ export async function clearCampaignBriefCache(campaignId: string): Promise<void>
     .not('brief_details->>source', 'eq', 'owner')
 }
 
-/** The pool creator id this auth user signs in as (test-creator login), or null. */
+/**
+ * The creator identity this auth user works as, or null. Two sources, in order:
+ *   1. creator_logins — the explicit map (test-creator logins, manual links).
+ *   2. vendors.person_id — a real vendor's durable identity (171's RLS already
+ *      assumes it); their orders carry the vendor UUID as creator_id.
+ *
+ * There is deliberately NO email-based auto-link: this project's auth runs with
+ * mailer_autoconfirm on, so a signup email is UNVERIFIED — matching it against
+ * an approved vendor application would let anyone who knows an applicant's
+ * (publicly submitted) email sign up as them and permanently claim the vendor's
+ * work queue, client briefs, and payout rail. Linking a vendor to a login is an
+ * explicit admin act (linkVendorLogin in vendor-applications actions) until a
+ * signed invite-token flow ships.
+ */
 export async function getCreatorIdForUser(userId: string): Promise<string | null> {
   const admin = createAdminClient()
-  const { data, error } = await admin.from('creator_logins').select('creator_id').eq('person_id', userId).maybeSingle()
-  if (error || !data) return null
-  return (data.creator_id as string) ?? null
+  const { data } = await admin.from('creator_logins').select('creator_id').eq('person_id', userId).maybeSingle()
+  if (data?.creator_id) return data.creator_id as string
+
+  const { data: vendor } = await admin.from('vendors').select('id').eq('person_id', userId).limit(1).maybeSingle()
+  return vendor?.id ? (vendor.id as string) : null
 }
 
 /** One order by id (for authorization scoping at the route). */
@@ -127,7 +152,8 @@ export async function getWorkOrder(id: string): Promise<WorkOrder | null> {
   const admin = createAdminClient()
   const { data, error } = await admin.from('creator_work_orders').select('*').eq('id', id).single()
   if (error || !data) return null
-  return rowToWO(data)
+  const names = await creatorNamesByIds([(data.creator_id as string) ?? ''])
+  return rowToWO(data, names)
 }
 
 /** Owner/team view: the orders for one campaign. */
@@ -139,7 +165,8 @@ export async function listWorkOrdersForCampaign(campaignId: string): Promise<Wor
     .eq('campaign_id', campaignId)
     .order('discipline')
   if (error || !data) return []
-  return data.map(rowToWO)
+  const names = await creatorNamesByIds(data.map((r) => (r.creator_id as string) ?? ''))
+  return data.map((r) => rowToWO(r, names))
 }
 
 /** Move an order along its status machine (accept / deliver / approve / revise).
@@ -148,6 +175,11 @@ export async function listWorkOrdersForCampaign(campaignId: string): Promise<Wor
  *  or resurrect a terminal one. Throws IllegalTransition on a bad move. */
 export async function updateWorkOrder(id: string, patch: { status?: WorkOrderStatus; delivered_url?: string; note?: string; concept_status?: 'approved' | 'pending' | 'changes' }): Promise<void> {
   const admin = createAdminClient()
+  // The two sentinel notes are SYSTEM markers (plan removal / campaign stop),
+  // written only by direct system updates — never through here. A caller-supplied
+  // note matching one verbatim would hide the decline from the owner's tracker
+  // and re-arm the reconcile's revive machinery, so it is quoted, not trusted.
+  if (patch.note === PLAN_REMOVED_NOTE || patch.note === STOP_NOTE) patch = { ...patch, note: `"${patch.note}"` }
   type CurOrder = { status: string; campaign_id: string | null; client_id: string; title: string | null }
   let cur: CurOrder | null = null
   if (patch.status) {
@@ -162,11 +194,20 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
     const v = validateTransition(data.status as WorkOrderStatus, patch.status, effectiveUrl, data.concept_status as string | null)
     if (!v.ok) throw new IllegalTransition(v.reason)
   }
-  const { error } = await admin
+  // Status writes re-assert the status they validated against: a decline racing
+  // a campaign stop / plan-removal void (both stamp declined + a sentinel note
+  // between our read and this write) loses instead of overwriting the sentinel —
+  // which would have hidden the void AND auto-reassigned a stopped piece.
+  let q = admin
     .from('creator_work_orders')
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', id)
+  if (patch.status && cur) q = q.eq('status', cur.status)
+  const { data: written, error } = await q.select('id')
   if (error) throw new Error(`update work order: ${error.message}`)
+  if (patch.status && (!written || !written.length)) {
+    throw new IllegalTransition('the order changed just now — refresh and retry')
+  }
   // On owner-approval: drop the finished piece into the team's publish pipeline AND
   // accrue the owner charge. Both best-effort — a failure here must never undo a
   // valid approval, and each is independently idempotent.
@@ -186,25 +227,123 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
       link: `/dashboard/campaigns/${cur.campaign_id}`,
     }).catch(() => ({ notified: 0 }))
   }
-  // A creator saying no is terminal and reaches a human on BOTH sides, or the piece
-  // silently strands: no reassignment path exists, so the signal IS the recovery.
+  // A creator saying no used to be terminal (the signal WAS the recovery). Now
+  // the bench answers first: the next live vendor for the craft, then the
+  // internal team. Only when nobody is left does the decline become a human
+  // problem, with the original loud notifications.
   if (patch.status === 'declined' && cur) {
     const piece = cur.title || 'a piece'
-    await notifyStaffForClient(cur.client_id, ['strategist'], {
-      kind: 'client_signoff',
-      title: 'A creator declined a piece',
-      body: `${piece}${patch.note ? `: "${patch.note}"` : ''}. Assign a new maker or move it to the team.`,
-      link: `/work/today?focus=${cur.campaign_id ?? ''}`,
-    }).catch(() => ({ notified: 0 }))
-    if (cur.campaign_id) {
-      await notifyClientOwners(cur.client_id, {
+    const reassigned = await autoReassignDeclinedOrder(id).catch(() => null)
+    if (reassigned) {
+      // Staff see the bounce (decline reasons matter), the owner is NOT pinged —
+      // the piece never left production, so there is nothing for them to do.
+      await notifyStaffForClient(cur.client_id, ['strategist'], {
         kind: 'client_signoff',
-        title: 'A piece needs a new maker',
-        body: `The creator could not take on ${piece}. Your team is finding a new maker.`,
-        link: `/dashboard/campaigns/${cur.campaign_id}`,
+        title: 'A declined piece was reassigned automatically',
+        body: `${piece}${patch.note ? ` (decline note: "${patch.note}")` : ''} moved to ${reassigned.name}.`,
+        link: `/work/today?focus=${cur.campaign_id ?? ''}`,
       }).catch(() => ({ notified: 0 }))
+    } else {
+      await notifyStaffForClient(cur.client_id, ['strategist'], {
+        kind: 'client_signoff',
+        title: 'A creator declined a piece',
+        body: `${piece}${patch.note ? `: "${patch.note}"` : ''}. Assign a new maker or move it to the team.`,
+        link: `/work/today?focus=${cur.campaign_id ?? ''}`,
+      }).catch(() => ({ notified: 0 }))
+      if (cur.campaign_id) {
+        await notifyClientOwners(cur.client_id, {
+          kind: 'client_signoff',
+          title: 'A piece needs a new maker',
+          body: `The creator could not take on ${piece}. Your team is finding a new maker.`,
+          link: `/dashboard/campaigns/${cur.campaign_id}`,
+        }).catch(() => ({ notified: 0 }))
+      }
     }
   }
+}
+
+const UUID_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Re-offer a just-declined order to the next maker: the best live vendor for the
+ * craft who has NOT declined it before, then the internal pool (only when the
+ * decliner was a real vendor — a pool decline already came from the team, and
+ * re-offering the same humans under a different style id helps nobody).
+ *
+ * The decline history rides prior_creator_ids so a piece never bounces back to
+ * someone who said no, and a 3-bounce cap hands chronic ping-pong to a human.
+ * validateTransition treats 'declined' as terminal by design, so the re-offer is
+ * a guarded direct update (same posture as the reconcile's revive): only a row
+ * still 'declined' flips, and the decline note is preserved in the history, not
+ * wiped. Returns the new maker (for the staff note) or null when nobody is left.
+ */
+async function autoReassignDeclinedOrder(orderId: string): Promise<{ id: string; name: string } | null> {
+  const admin = createAdminClient()
+  const { data: row, error } = await admin.from('creator_work_orders').select('*').eq('id', orderId).maybeSingle()
+  if (error || !row || row.status !== 'declined') return null
+
+  // A stopped campaign's work must stay stopped: the decline block only runs on
+  // real creator declines, but a stop can land between that write and this read —
+  // the campaign status is the truth the note can't spoof.
+  const campaignId = (row.campaign_id as string | null) ?? null
+  if (campaignId) {
+    const { data: camp } = await admin.from('campaigns').select('status').eq('id', campaignId).maybeSingle()
+    if (camp && camp.status !== 'shipped') return null
+  }
+
+  const discipline = (row.discipline as string) ?? ''
+  if (!['Video', 'Photo', 'Social', 'Design'].includes(discipline)) return null
+  const d = discipline as Disc
+
+  const decliner = (row.creator_id as string) ?? ''
+  const prior = [...new Set([...(((row.prior_creator_ids as string[] | null) ?? [])), decliner].filter(Boolean))]
+  if (prior.length >= 3) return null   // the third distinct decline is a pattern; humans decide now
+
+  const vendor = await bestVendorForDiscipline(d, prior).catch(() => null)
+  let next: { id: string; name: string; personId: string | null } | null = vendor
+  if (!next && UUID_ID.test(decliner)) {
+    // Team fallback — only across the vendor→team boundary.
+    const pool = rankCreators(d).map((r) => r.creator).find((c) => !prior.includes(c.id))
+    if (pool) next = { id: pool.id, name: pool.name, personId: null }
+  }
+  if (!next) return null
+
+  // A decline clusters near its due date; re-offering "due yesterday" sets the
+  // new maker up to fail. Give at least a 3-day runway, keep a later date as-is.
+  const minDueISO = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
+  const curDue = (row.due_date as string | null) ?? null
+  const declineNote = typeof row.note === 'string' && row.note.trim() ? row.note.trim() : null
+  const reoffer = {
+    creator_id: next.id,
+    vendor_id: UUID_ID.test(next.id) ? next.id : null,
+    status: 'offered',
+    // The decline reason is real context for the next maker ("client's address
+    // is wrong") — carry it on the row, attributed, instead of wiping it.
+    note: declineNote ? `Previous maker declined: "${declineNote}"` : null,
+    prior_creator_ids: prior,
+    due_date: !curDue || curDue < minDueISO ? minDueISO : curDue,
+    updated_at: new Date().toISOString(),
+  }
+  const { data: updated, error: upErr } = await admin
+    .from('creator_work_orders')
+    .update(reoffer)
+    .eq('id', orderId)
+    .eq('status', 'declined')
+    .select('id')
+    .maybeSingle()
+  // Pre-198 (no prior_creator_ids column, 42703): do NOT reassign — without the
+  // history the exclude list forgets everyone but the last decliner and two
+  // vendors can ping-pong the piece forever. The old human path takes over.
+  if (upErr || !updated) return null
+
+  if (next.personId) {
+    await notifyVendorOfWork(
+      next.personId,
+      'New work from Apnosh',
+      `"${(row.title as string) || 'A piece'}" needs a maker — the previous one couldn't take it on.`,
+    ).catch(() => undefined)
+  }
+  return { id: next.id, name: next.name }
 }
 
 /**
@@ -307,7 +446,7 @@ export async function reconcileCampaignProduction(campaign: SavedCampaign): Prom
   const plan = planCampaignPieces(campaign, nowISO)   // clamps new pieces forward; locked target_date keeps dates stable
 
   const [ordersRes, { data: drafts }, { data: keyless }] = await Promise.all([
-    admin.from('creator_work_orders').select('id, discipline, slot, status, due_date, campaign_piece_key').eq('campaign_id', campaignId),
+    admin.from('creator_work_orders').select('id, creator_id, discipline, slot, status, due_date, campaign_piece_key').eq('campaign_id', campaignId),
     admin.from('content_drafts').select('id, campaign_piece_key, status, target_publish_date').eq('campaign_id', campaignId).not('campaign_piece_key', 'is', null),
     // Pre-182 team drafts (keyless, NOT bridge) — if any exist we cannot match the team
     // lane, so we skip it (a mint-only pass would duplicate). Bridge drafts (from_creator)
@@ -321,7 +460,7 @@ export async function reconcileCampaignProduction(campaign: SavedCampaign): Prom
   // Pre-183 the campaign_piece_key column is absent (42703); re-read without it so the
   // reconcile still runs for legacy (positionally-keyed) campaigns.
   if (oErr && (oErr as { code?: string }).code === '42703') {
-    const retry = await admin.from('creator_work_orders').select('id, discipline, slot, status, due_date').eq('campaign_id', campaignId)
+    const retry = await admin.from('creator_work_orders').select('id, creator_id, discipline, slot, status, due_date').eq('campaign_id', campaignId)
     orders = retry.data; oErr = retry.error
   }
   if (oErr) return ZERO   // pre-migration / read failure → no-op
@@ -337,15 +476,40 @@ export async function reconcileCampaignProduction(campaign: SavedCampaign): Prom
   let minted = 0, revived = 0, materialized = 0, voided = 0, archived = 0, redated = 0, failures = 0
   const ts = () => new Date().toISOString()
 
-  // Creator lane.
-  const orderRows = rec.mintCreator.map((p) => workOrderRowForPiece(campaign, p)).filter((r): r is WorkOrderRow => r !== null)
+  // Creator lane. New pieces get the same real-vendor assignment as the ship
+  // mint, but each craft stays with its INCUMBENT — the maker already holding
+  // this campaign's non-terminal orders — so briefs and shoots keep batching
+  // with one vendor instead of splitting on a fresh best-ranked pick.
+  const LIVE_ORDER = new Set(['offered', 'accepted', 'in_progress', 'revision', 'delivered', 'approved'])
+  const incumbents = new Map<string, string>()
+  for (const o of orders ?? []) {
+    const disc = (o.discipline as string) ?? ''
+    const cid = (o.creator_id as string) ?? ''
+    if (disc && cid && !incumbents.has(disc) && LIVE_ORDER.has((o.status as string) ?? '')) incumbents.set(disc, cid)
+  }
+  const builtRows = rec.mintCreator.map((p) => workOrderRowForPiece(campaign, p)).filter((r): r is WorkOrderRow => r !== null)
+  const { rows: orderRows, assigned: reconcileAssigned } = builtRows.length
+    ? await assignVendorsToOrderRows(builtRows, incumbents)
+    : { rows: [] as WorkOrderRow[], assigned: new Map<Disc, { id: string; name: string; personId: string | null }>() }
   if (orderRows.length) {
-    let { error } = await admin.from('creator_work_orders').upsert(orderRows, { onConflict: 'campaign_id,discipline,slot', ignoreDuplicates: true })
+    let { data: insertedRows, error } = await admin.from('creator_work_orders').upsert(orderRows, { onConflict: 'campaign_id,discipline,slot', ignoreDuplicates: true }).select('creator_id')
     if (error && error.code === '42703') {   // pre-183/184: no campaign_piece_key / surcharge_cents column → mint without them
       const stripped = orderRows.map((r) => { const c = { ...r } as Record<string, unknown>; delete c.campaign_piece_key; delete c.surcharge_cents; return c })
-      ;({ error } = await admin.from('creator_work_orders').upsert(stripped, { onConflict: 'campaign_id,discipline,slot', ignoreDuplicates: true }))
+      ;({ data: insertedRows, error } = await admin.from('creator_work_orders').upsert(stripped, { onConflict: 'campaign_id,discipline,slot', ignoreDuplicates: true }).select('creator_id'))
     }
-    if (error) failures++; else minted = orderRows.length
+    if (error) failures++
+    else {
+      // Honest count: ignoreDuplicates silently SKIPS a row whose (discipline,
+      // slot) is still occupied — e.g. a removed piece's voided order holding
+      // the slot its replacement needs. A skipped mint is a piece nobody will
+      // ever make; counting it as a failure routes it into the staff "needs a
+      // manual review" notification below instead of vanishing as a success.
+      minted = insertedRows?.length ?? 0
+      const skipped = orderRows.length - minted
+      if (skipped > 0) failures += skipped
+      // Only rows that actually inserted generate a vendor ping.
+      await notifyVendorsOfNewWork((insertedRows ?? []) as Array<{ creator_id?: string | null }>, reconcileAssigned, campaign.draft.name).catch(() => undefined)
+    }
   }
   // Only revive orders WE voided when the owner removed the piece (stamped with
   // PLAN_REMOVED_NOTE). A creator's own decline is terminal here: silently re-offering

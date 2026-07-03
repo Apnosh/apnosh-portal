@@ -16,7 +16,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { creatorById } from '@/lib/campaigns/creators'
+import { creatorNamesByIds } from '@/lib/campaigns/vendor-supply'
 
 export type InboxItemKind = 'approval' | 'post_review' | 'review' | 'task' | 'connection'
 
@@ -285,7 +285,10 @@ export async function getInbox(clientId: string, userId?: string): Promise<Inbox
 
   // Delivered creator pieces waiting on the owner's verdict. Reuses kind
   // 'approval' so chips/icons/read-state all work unchanged; the campaign
-  // page carries the Approve / Ask-for-changes buttons.
+  // page carries the Approve / Ask-for-changes buttons. Names resolve pool ids
+  // AND real-vendor UUIDs in one batch (a vendor's delivery must carry their
+  // real name, not 'Apnosh team').
+  const deliveryNames = await creatorNamesByIds((creatorDeliveriesRow.data ?? []).map((o) => (o.creator_id as string) ?? ''))
   for (const o of creatorDeliveriesRow.data ?? []) {
     items.push({
       id: `creator-delivery-${o.id}`,
@@ -297,7 +300,7 @@ export async function getInbox(clientId: string, userId?: string): Promise<Inbox
       whenIso: (o.updated_at as string) ?? new Date().toISOString(),
       status: 'Ready for your review',
       source: 'apnosh',
-      senderName: creatorById((o.creator_id as string) ?? '')?.name ?? 'Apnosh team',
+      senderName: deliveryNames.get((o.creator_id as string) ?? '') ?? 'Apnosh team',
       unread: true,
     })
   }
