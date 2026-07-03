@@ -289,7 +289,10 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
       if (diagRes.status === 'fulfilled' && diagRes.value) {
         const d = (await diagRes.value.json().catch(() => null)) as { diagnosis?: Diagnosis; source?: string } | null
         if (d?.diagnosis?.bindingConstraint && d.diagnosis.bet) {
-          setPlanDiagnosis({ diagnosis: d.diagnosis, source: d.source === 'ai' ? 'ai' : 'rules' })
+          // Normalize at the network boundary: the server's coerce() guarantees these arrays,
+          // but the UI must never crash on a drifted contract.
+          const diag: Diagnosis = { ...d.diagnosis, skip: Array.isArray(d.diagnosis.skip) ? d.diagnosis.skip : [], evidence: Array.isArray(d.diagnosis.evidence) ? d.diagnosis.evidence : [] }
+          setPlanDiagnosis({ diagnosis: diag, source: d.source === 'ai' ? 'ai' : 'rules' })
         }
       }
     } catch { setPlanTailored(false) /* keep the deterministic plan */ } finally {
