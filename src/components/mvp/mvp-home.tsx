@@ -604,10 +604,10 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
   let bars: Bar[] = []; let curLbl = ''; let cmpLbl = ''; let cmpFrame = ''; let periodDays = 7
 
   if (range === '7d') {
-    curLbl = 'This week'; cmpLbl = 'Last week'; cmpFrame = 'vs last week'; periodDays = 7
-    // The current Sun–Sat week; the transform already stamped settled/elapsed
-    // per day (future days elapsed=false; the still-filling frontier day
-    // settled=false). Carry them through so the trend/total honor them.
+    curLbl = 'Last 7 days'; cmpLbl = 'Last week'; cmpFrame = 'vs last week'; periodDays = 7
+    // The last 7 days; the transform already stamped settled/elapsed per day
+    // (the still-filling newest day is settled=false). Carry them through so the
+    // trend/total honor them.
     bars = chart.map((b, i) => {
       const d = start ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + i) : null
       const prior = d ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 7) : null
