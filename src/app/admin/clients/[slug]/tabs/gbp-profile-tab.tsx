@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Loader2, Save, Phone, Globe, Clock, Tag, Plus, X, Search,
   CheckCircle2, AlertTriangle, ExternalLink, Link2, History,
+  Image as ImageIcon, UtensilsCrossed,
 } from 'lucide-react'
 import type { ListingFields, WeeklyHours, DayKey, ListingCategory, AttributeValues } from '@/lib/gbp-listing'
 import MobileListingPreview from '@/components/dashboard/mobile-listing-preview'
@@ -34,6 +35,22 @@ function emptyHours(): WeeklyHours {
 
 interface CatalogItem { id: string; label: string; group: string }
 interface AuditEntry { id: string; actor_email: string | null; action: string; fields: { changedFields?: string[] } | null; error: string | null; created_at: string }
+
+// The on-profile structured menu (mirrors gbp-menu.ts FoodMenu; kept local so this client component
+// never imports the server module).
+interface MItem { name: string; description?: string; price?: string }
+interface MSection { name: string; items: MItem[] }
+interface FoodMenuT { name: string; sections: MSection[] }
+
+const PHOTO_CATEGORIES: { value: string; label: string }[] = [
+  { value: 'FOOD_AND_DRINK', label: 'Food and drink' },
+  { value: 'INTERIOR', label: 'Interior' },
+  { value: 'EXTERIOR', label: 'Storefront / exterior' },
+  { value: 'COVER', label: 'Cover' },
+  { value: 'LOGO', label: 'Logo' },
+  { value: 'MENU', label: 'Menu' },
+  { value: 'ADDITIONAL', label: 'Other' },
+]
 
 export default function GbpProfileTab({ clientId }: Props) {
   const [loading, setLoading] = useState(true)
@@ -55,6 +72,21 @@ export default function GbpProfileTab({ clientId }: Props) {
   const [audit, setAudit] = useState<AuditEntry[]>([])
   const [hoursLocked, setHoursLocked] = useState(false)
   const [reviewUrl, setReviewUrl] = useState<string | null>(null)
+
+  // Photos (add-to-Google): the operator supplies a hosted image URL + category; the route pushes it.
+  const [photoUrl, setPhotoUrl] = useState('')
+  const [photoCat, setPhotoCat] = useState('FOOD_AND_DRINK')
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [photoMsg, setPhotoMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // Menu (link + structured). Structured needs v4; the route degrades to the link when it is not on.
+  const [menuUrl, setMenuUrl] = useState('')
+  const [menuUrlSnap, setMenuUrlSnap] = useState('')
+  const [menus, setMenus] = useState<FoodMenuT[]>([])
+  const [structuredAvailable, setStructuredAvailable] = useState(false)
+  const [menusError, setMenusError] = useState<string | null>(null)
+  const [menuBusy, setMenuBusy] = useState(false)
+  const [menuMsg, setMenuMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   // Category search
   const [catQuery, setCatQuery] = useState('')
@@ -81,11 +113,12 @@ export default function GbpProfileTab({ clientId }: Props) {
       setConnected(isConnected)
       if (!isConnected) { setLoading(false); return }
 
-      const [listingRes, attrsRes, auditRes, reviewRes] = await Promise.all([
+      const [listingRes, attrsRes, auditRes, reviewRes, menuRes] = await Promise.all([
         fetch(`/api/dashboard/listing${q}`),
         fetch(`/api/dashboard/listing/attributes${q}`),
         fetch(`/api/dashboard/listing/audit${q}`),
         fetch(`/api/dashboard/listing/review-link${q}`),
+        fetch(`/api/dashboard/listing/menu${q}`),
       ])
       if (!listingRes.ok) {
         const j = await listingRes.json().catch(() => ({}))
@@ -118,6 +151,14 @@ export default function GbpProfileTab({ clientId }: Props) {
       if (reviewRes.ok) {
         const rv = await reviewRes.json()
         setReviewUrl(rv.reviewUrl ?? null)
+      }
+      if (menuRes.ok) {
+        const mn = await menuRes.json()
+        setMenus(Array.isArray(mn.menus) ? mn.menus : [])
+        setMenuUrl(mn.menuUrl ?? '')
+        setMenuUrlSnap(mn.menuUrl ?? '')
+        setStructuredAvailable(mn.structuredMenusAvailable === true)
+        setMenusError(mn.menusError ?? null)
       }
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : 'Could not load the profile.')
@@ -208,6 +249,117 @@ export default function GbpProfileTab({ clientId }: Props) {
     if (catMode === 'primary') setPrimaryCat(c)
     else if (catMode === 'additional' && !additionalCats.some((x) => x.name === c.name) && additionalCats.length < 9) setAdditionalCats((a) => [...a, c])
     setCatMode(null); setCatQuery(''); setCatResults([])
+  }
+
+  // ── Photos ────────────────────────────────────────────────────────────────
+  // The operator pastes a hosted image URL (the client's asset library gives public URLs). Google
+  // fetches it by URL — we never proxy the bytes — and the read-back audit row is the proof it landed.
+  async function addPhoto() {
+    const url = photoUrl.trim()
+    if (!url) return
+    setPhotoBusy(true); setPhotoMsg(null)
+    try {
+      const res = await fetch(`/api/dashboard/listing/media${q}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceUrl: url, category: photoCat }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error || 'Google did not accept the photo.')
+      setPhotoUrl('')
+      setPhotoMsg({ ok: true, text: 'Added to Google. It can take a few minutes to appear.' })
+      void load()
+    } catch (e) {
+      setPhotoMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not add the photo.' })
+    } finally {
+      setPhotoBusy(false)
+    }
+  }
+
+  // ── Menu ──────────────────────────────────────────────────────────────────
+  const menuLinkDirty = menuUrl.trim() !== menuUrlSnap.trim()
+
+  // The menu link (a URL to the menu) rides v1 and works without v4 approval.
+  async function saveMenuLink() {
+    setMenuBusy(true); setMenuMsg(null)
+    try {
+      const res = await fetch(`/api/dashboard/listing/menu${q}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ menuUrl: menuUrl.trim() }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error || 'Google did not accept the menu link.')
+      setMenuUrlSnap(menuUrl.trim())
+      setMenuMsg({ ok: true, text: 'Menu link saved to Google.' })
+    } catch (e) {
+      setMenuMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not save the menu link.' })
+    } finally {
+      setMenuBusy(false)
+    }
+  }
+
+  // The structured menu (sections + priced items) needs v4. The route sends the whole menu at once.
+  async function saveMenu() {
+    setMenuBusy(true); setMenuMsg(null)
+    try {
+      // Drop empty scaffolding so we never push a blank section/item to Google.
+      const clean: FoodMenuT[] = menus
+        .map((m) => ({
+          name: m.name?.trim() || 'Menu',
+          sections: (m.sections ?? [])
+            .map((s) => ({
+              name: s.name?.trim() || 'Section',
+              items: (s.items ?? [])
+                .filter((it) => it.name?.trim())
+                .map((it) => ({
+                  name: it.name.trim(),
+                  ...(it.description?.trim() ? { description: it.description.trim() } : {}),
+                  ...(it.price?.trim() ? { price: it.price.trim() } : {}),
+                })),
+            }))
+            .filter((s) => s.items.length > 0),
+        }))
+        .filter((m) => m.sections.length > 0)
+      if (clean.length === 0) { setMenuMsg({ ok: false, text: 'Add at least one item before saving.' }); setMenuBusy(false); return }
+      const res = await fetch(`/api/dashboard/listing/menu${q}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ menus: clean }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error || 'Google did not accept the menu.')
+      setMenuMsg({ ok: true, text: 'Menu saved to Google.' })
+      void load()
+    } catch (e) {
+      setMenuMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not save the menu.' })
+    } finally {
+      setMenuBusy(false)
+    }
+  }
+
+  // Structured-menu editor operates on a single working menu (menus[0]); GBP food menus are one list.
+  function workingMenu(prev: FoodMenuT[]): FoodMenuT[] {
+    return prev.length > 0 ? prev : [{ name: 'Menu', sections: [] }]
+  }
+  function addSection() {
+    setMenus((prev) => {
+      const m = workingMenu(prev)
+      const [first, ...rest] = m
+      return [{ ...first, sections: [...first.sections, { name: '', items: [{ name: '', description: '', price: '' }] }] }, ...rest]
+    })
+  }
+  function removeSection(si: number) {
+    setMenus((prev) => prev.map((m, mi) => (mi === 0 ? { ...m, sections: m.sections.filter((_, i) => i !== si) } : m)))
+  }
+  function setSectionName(si: number, name: string) {
+    setMenus((prev) => prev.map((m, mi) => (mi === 0 ? { ...m, sections: m.sections.map((s, i) => (i === si ? { ...s, name } : s)) } : m)))
+  }
+  function addItem(si: number) {
+    setMenus((prev) => prev.map((m, mi) => (mi === 0 ? { ...m, sections: m.sections.map((s, i) => (i === si ? { ...s, items: [...s.items, { name: '', description: '', price: '' }] } : s)) } : m)))
+  }
+  function removeItem(si: number, ii: number) {
+    setMenus((prev) => prev.map((m, mi) => (mi === 0 ? { ...m, sections: m.sections.map((s, i) => (i === si ? { ...s, items: s.items.filter((_, k) => k !== ii) } : s)) } : m)))
+  }
+  function setItemField(si: number, ii: number, field: keyof MItem, value: string) {
+    setMenus((prev) => prev.map((m, mi) => (mi === 0 ? { ...m, sections: m.sections.map((s, i) => (i === si ? { ...s, items: s.items.map((it, k) => (k === ii ? { ...it, [field]: value } : it)) } : s)) } : m)))
   }
 
   if (loading) {
@@ -371,6 +523,77 @@ export default function GbpProfileTab({ clientId }: Props) {
               </div>
             </section>
           )}
+
+          {/* Photos — hand Google a hosted image URL; it fetches and posts it. */}
+          <section className="rounded-xl border border-ink-6 bg-white p-4">
+            <h3 className="text-sm font-semibold text-ink mb-1 flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5 text-ink-4" /> Photos</h3>
+            <p className="text-[11px] text-ink-4 mb-2.5">Paste a hosted image link and pick where it goes. Google fetches it and adds it to the profile. It can take a few minutes to show up.</p>
+            <div className="space-y-2">
+              <input type="url" value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} placeholder="https://…/photo.jpg" className="w-full rounded-lg border border-ink-6 bg-white px-3 py-2 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-brand/40" />
+              <div className="flex items-center gap-2">
+                <select value={photoCat} onChange={(e) => setPhotoCat(e.target.value)} className="rounded-lg border border-ink-6 bg-white px-2.5 py-2 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-brand/40">
+                  {PHOTO_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+                <button type="button" onClick={addPhoto} disabled={photoBusy || !photoUrl.trim()} className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3.5 py-2 text-[13px] font-medium text-white hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  {photoBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Add to Google
+                </button>
+              </div>
+              {photoMsg && <p className={`text-[12px] ${photoMsg.ok ? 'text-brand-dark' : 'text-red-600'}`}>{photoMsg.text}</p>}
+            </div>
+          </section>
+
+          {/* Menu — link (v1, always) + full item-by-item menu (v4 only). */}
+          <section className="rounded-xl border border-ink-6 bg-white p-4">
+            <h3 className="text-sm font-semibold text-ink mb-2 flex items-center gap-1.5"><UtensilsCrossed className="w-3.5 h-3.5 text-ink-4" /> Menu</h3>
+
+            <p className="text-[11px] text-ink-4 mb-1.5">A link to the menu. Shows on the profile as a Menu button.</p>
+            <div className="flex items-center gap-2">
+              <input type="url" value={menuUrl} onChange={(e) => setMenuUrl(e.target.value)} placeholder="https://…/menu" className="flex-1 rounded-lg border border-ink-6 bg-white px-3 py-2 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-brand/40" />
+              <button type="button" onClick={saveMenuLink} disabled={menuBusy || !menuLinkDirty} className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3.5 py-2 text-[13px] font-medium text-white hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                {menuBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save
+              </button>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-ink-6">
+              {!structuredAvailable ? (
+                <div className="rounded-lg bg-bg-2/60 border border-ink-6 px-3 py-2 text-[12px] text-ink-4">
+                  The full item-by-item menu needs Google&apos;s advanced access, which is not on for this listing yet. The menu link above works in the meantime.
+                  {menusError ? <span className="block mt-1 text-ink-4/80">{menusError}</span> : null}
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[12px] font-medium text-ink-2">Full menu</span>
+                    <button type="button" onClick={saveMenu} disabled={menuBusy} className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-[12px] font-medium text-white hover:bg-brand-dark disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                      {menuBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Save menu
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {(menus[0]?.sections ?? []).map((sec, si) => (
+                      <div key={si} className="rounded-lg border border-ink-6 p-2.5">
+                        <div className="flex items-center gap-2 mb-2">
+                          <input value={sec.name} onChange={(e) => setSectionName(si, e.target.value)} placeholder="Section (e.g. Appetizers)" className="flex-1 rounded border border-ink-6 px-2 py-1 text-[12px] font-medium text-ink focus:outline-none focus:ring-2 focus:ring-brand/40" />
+                          <button type="button" onClick={() => removeSection(si)}><X className="w-3.5 h-3.5 text-ink-4 hover:text-ink" /></button>
+                        </div>
+                        <div className="space-y-1.5">
+                          {sec.items.map((it, ii) => (
+                            <div key={ii} className="flex items-center gap-1.5">
+                              <input value={it.name} onChange={(e) => setItemField(si, ii, 'name', e.target.value)} placeholder="Item" className="flex-1 rounded border border-ink-6 px-2 py-1 text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-brand/40" />
+                              <input value={it.price ?? ''} onChange={(e) => setItemField(si, ii, 'price', e.target.value)} placeholder="9.99" inputMode="decimal" className="w-16 rounded border border-ink-6 px-2 py-1 text-[12px] text-ink focus:outline-none focus:ring-2 focus:ring-brand/40" />
+                              <button type="button" onClick={() => removeItem(si, ii)}><X className="w-3.5 h-3.5 text-ink-4 hover:text-ink" /></button>
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => addItem(si)} className="inline-flex items-center gap-0.5 text-[11px] text-brand-dark hover:underline"><Plus className="w-3 h-3" /> Add item</button>
+                        </div>
+                      </div>
+                    ))}
+                    <button type="button" onClick={addSection} className="inline-flex items-center gap-0.5 text-[12px] text-brand-dark hover:underline"><Plus className="w-3.5 h-3.5" /> Add section</button>
+                  </div>
+                </>
+              )}
+            </div>
+            {menuMsg && <p className={`mt-2 text-[12px] ${menuMsg.ok ? 'text-brand-dark' : 'text-red-600'}`}>{menuMsg.text}</p>}
+          </section>
         </div>
 
         {/* Preview rail: what the customer sees, straight from the same data */}
