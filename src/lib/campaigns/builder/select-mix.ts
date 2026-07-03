@@ -13,10 +13,13 @@ import 'server-only'
  * means "use the deterministic plan" — no blank screens, no throws.
  */
 import { playsForGoal } from '@/lib/campaigns/catalog'
+import { playsForGoalAtoms, type PlanGoal } from '@/lib/campaigns/data/atom-plays'
 import type { PricedService, SystemGoal, Tier } from '@/lib/campaigns/data/priced-catalog'
 import { callStructuredOutput } from '@/lib/campaigns/planning/anthropic'
 
 const TIER_RANK: Record<Tier, number> = { lean: 0, standard: 1, aggressive: 2 }
+
+const SYSTEM_GOALS = new Set<string>(['firstvisit', 'nights', 'regulars', 'reviews'])
 
 export interface MixSignals {
   rating: number | null
@@ -34,8 +37,10 @@ export interface MixCandidate {
   name: string
   section: string
   essential: boolean
-  /** Monthly-equivalent load (recurring at face, one-time spread over 6). */
-  monthlyLoad: number
+  /** Monthly-equivalent load (recurring at face, one-time spread over 6). Null for
+   *  event plays — their synthetic ids have no catalog price; the composed plan
+   *  prices them later, so showing a number here would be invented. */
+  monthlyLoad: number | null
   stage: string
   role: string
   minTier: Tier
@@ -64,6 +69,26 @@ export function mixCandidates(goal: SystemGoal, tier: Tier): MixCandidate[] {
       role: c.play.role,
       minTier: c.play.minTier,
       weight: c.play.weight ?? 0,
+    }))
+}
+
+/** Event-goal candidates from the atom plays (the evt-, lnch- and deal- ids live there, not
+ *  in the priced catalog). crucial maps to essential so disposal always keeps the plan's
+ *  spine — the AI orders and reasons; it cannot amputate the arc. Pure. */
+export function eventMixCandidates(goal: PlanGoal, tier: Tier): MixCandidate[] {
+  const rank = TIER_RANK[tier]
+  return playsForGoalAtoms(goal)
+    .filter((p) => p.crucial || TIER_RANK[p.minTier] <= rank)
+    .map((p) => ({
+      id: p.serviceId,
+      name: p.role,
+      section: p.stage,
+      essential: p.crucial,
+      monthlyLoad: null,
+      stage: p.stage,
+      role: p.because ? `${p.role} — ${p.because}` : p.role,
+      minTier: p.minTier,
+      weight: p.weight ?? 0,
     }))
 }
 
@@ -109,14 +134,17 @@ const PROPOSAL_SCHEMA = {
   },
 }
 
-const GOAL_LABEL: Record<SystemGoal, string> = {
+const GOAL_LABEL: Record<PlanGoal, string> = {
   firstvisit: 'win first-time visits from new locals',
   nights: 'fill slow weeknights',
   regulars: 'turn guests into regulars',
   reviews: 'raise your star rating',
+  'promote-event': 'pack the room for a one-night event',
+  launch: 'launch a new item so people come try it',
+  'run-deal': 'move a time-boxed deal before it ends',
 }
 
-const SYSTEM = `You are a restaurant marketing strategist choosing the best mix of services for ONE owner.
+const SYSTEM_BASE = `You are a restaurant marketing strategist choosing the best mix of services for ONE owner.
 You are given a goal, the owner's real situation, and a fixed CANDIDATE list of services (each already
 affordable for their budget). You pick the SUBSET that best fits this owner and order it most-important
 first. You never invent a service: every serviceId must come from the candidate list. Plain language,
@@ -127,10 +155,14 @@ How to choose:
 - Lead with what this owner's situation most needs: a low rating means reviews come first; a weak Google
   listing means be-found first; no guest list means capture a list before sends that need one.
 - Prefer a focused, high-leverage mix over including everything. Dropping a weak-fit service is good.
-- Some services overlap; do not pick both of a pair unless each clearly earns its place: friend-hook (a first-visit bring-a-friend pass) vs referral (an ongoing referral loop for regulars); reminder-send (a one-off book-now nudge) vs vip-comms (VIP early-access sends); event-pkg (a single event) vs bar-events (a committed weekly series).
 - Keep the order honest: most-important first. Reason each keep in one short sentence tied to their situation.`
 
-function buildUser(goal: SystemGoal, tier: Tier, s: MixSignals, cands: MixCandidate[]): string {
+// Overlap pairs exist only in the system-goal catalog; naming them on an event call
+// would be misleading context about services that are never candidates there.
+const SYSTEM_GOAL_GUIDANCE = `
+- Some services overlap; do not pick both of a pair unless each clearly earns its place: friend-hook (a first-visit bring-a-friend pass) vs referral (an ongoing referral loop for regulars); reminder-send (a one-off book-now nudge) vs vip-comms (VIP early-access sends); event-pkg (a single event) vs bar-events (a committed weekly series).`
+
+function buildUser(goal: PlanGoal, tier: Tier, s: MixSignals, cands: MixCandidate[]): string {
   const L: string[] = []
   L.push(`GOAL: ${GOAL_LABEL[goal]} (budget level: ${tier}).`)
   L.push('')
@@ -141,9 +173,11 @@ function buildUser(goal: SystemGoal, tier: Tier, s: MixSignals, cands: MixCandid
   if (s.neighborhood) L.push(`- Neighborhood: ${s.neighborhood}`)
   if (s.monthlyBudget) L.push(`- Rough monthly comfort: about $${s.monthlyBudget} (advisory)`)
   L.push('')
-  L.push('CANDIDATES (choose serviceIds from here only; ~$/mo is the running cost):')
+  const hasCosts = cands.some((c) => c.monthlyLoad != null)
+  L.push(hasCosts ? 'CANDIDATES (choose serviceIds from here only; ~$/mo is the running cost):' : 'CANDIDATES (choose serviceIds from here only):')
   for (const c of cands) {
-    L.push(`- ${c.id} [stage: ${c.stage}${c.essential ? ', foundation' : ''}] ~$${c.monthlyLoad}/mo: ${c.role}`)
+    const cost = c.monthlyLoad != null ? ` ~$${c.monthlyLoad}/mo` : ''
+    L.push(`- ${c.id} [stage: ${c.stage}${c.essential ? ', foundation' : ''}]${cost}: ${c.role}`)
   }
   L.push('')
   L.push('Return keep (ordered best-first) and drop. Keep the foundations. Serve this owner.')
@@ -186,17 +220,33 @@ function dispose(keep: { serviceId: string }[], cands: MixCandidate[]): string[]
  * disposed serviceId list (a subset of the candidates). Never throws.
  */
 export async function selectMix(goal: SystemGoal, tier: Tier, signals: MixSignals, opts?: { excludeIds?: readonly string[] }): Promise<{ mix: string[]; reasons: Record<string, string> } | null> {
+  return selectMixForGoal(goal, tier, signals, opts)
+}
+
+/**
+ * selectMix widened past the 4 system goals: event goals (promote-event / launch /
+ * run-deal) get the same propose→dispose treatment with candidates from their atom
+ * plays. For them the payoff is grounded per-play REASONS and a this-owner ORDER —
+ * the dialed composer keeps deciding quantity (scale/minTier) and buildDialedPlan
+ * consumes the mix as within-stage ordering, so a dropped non-crucial play demotes
+ * rather than amputates. System goals route through the exact original candidate
+ * builder (byte-identical behavior). Never throws; null = deterministic plan.
+ */
+export async function selectMixForGoal(goal: PlanGoal, tier: Tier, signals: MixSignals, opts?: { excludeIds?: readonly string[]; timeoutMs?: number }): Promise<{ mix: string[]; reasons: Record<string, string> } | null> {
   // Proven losers (services that measurably flopped for THIS business) are dropped from the
   // candidate set BEFORE the model sees them, so a known loser can never be re-proposed; dispose
   // validates against this same closed set, so it cannot reappear downstream either.
+  const isSystem = SYSTEM_GOALS.has(goal)
   const exclude = opts?.excludeIds && opts.excludeIds.length ? new Set(opts.excludeIds) : null
-  const cands = exclude ? mixCandidates(goal, tier).filter((c) => !exclude.has(c.id)) : mixCandidates(goal, tier)
+  const base = isSystem ? mixCandidates(goal as SystemGoal, tier) : eventMixCandidates(goal, tier)
+  const cands = exclude ? base.filter((c) => !exclude.has(c.id)) : base
   if (cands.length === 0) return null
   const parsed = await callStructuredOutput<Proposal>({
-    system: SYSTEM,
+    system: isSystem ? SYSTEM_BASE + SYSTEM_GOAL_GUIDANCE : SYSTEM_BASE,
     user: buildUser(goal, tier, signals, cands),
     schema: PROPOSAL_SCHEMA,
     maxTokens: 1400,
+    ...(opts?.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
   })
   const keep = (parsed?.keep ?? []).filter((k) => k && typeof k.serviceId === 'string')
   if (keep.length === 0) return null

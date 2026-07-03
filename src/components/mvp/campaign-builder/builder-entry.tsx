@@ -282,7 +282,8 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
         if (j.reasons && typeof j.reasons === 'object') setPlanReasons(j.reasons)
         // Honest finish copy: "built around what we found" ONLY when the brain genuinely tailored
         // the mix. Safe-routed cold starts and rule fallbacks say what they are — a proven starter.
-        setPlanTailored(j.source === 'ai+lift' || j.source === 'brain')
+        // 'ai' = an event goal's AI pick (kept in the model's own order, no lift re-rank).
+        setPlanTailored(j.source === 'ai+lift' || j.source === 'ai' || j.source === 'brain')
       } else {
         setPlanTailored(false)
       }

@@ -16,7 +16,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
-import { selectMix, type MixSignals } from '@/lib/campaigns/builder/select-mix'
+import { selectMixForGoal, type MixSignals } from '@/lib/campaigns/builder/select-mix'
 import { tierFor, isSystemGoal, planLeadHeadline } from '@/lib/campaigns/builder/compose-plan'
 import { assembleBrain } from '@/lib/campaigns/brain/assemble-signals'
 import { planRoute } from '@/lib/campaigns/brain/signals'
@@ -73,20 +73,25 @@ export async function GET(req: NextRequest) {
     // conservative gate is "not proven true", not "proven false".
     if (isEventGoal && val(brain.hasList) !== true) excludeIds.push('evt-email', 'evt-sms', 'lnch-email', 'deal-email', 'deal-sms')
 
-    // The objective function drives the ORDER by expected lift on the goal's outcome (threaded via
-    // spec.aiMix). Events use the deterministic lift mix; system goals also get the AI's focused pick,
-    // re-ranked by lift. The pure composer consumes the mix, untouched.
+    // Every covered goal — the 4 system goals AND the event goals — gets the AI's focused pick
+    // with per-play reasons; the deterministic lift mix stays the fallback whenever the model
+    // returns nothing. System goals keep the lift re-rank (the objective function drives their
+    // order); EVENT mixes keep the AI's own order — re-sorting by lift would throw away the one
+    // thing the event call buys (buildDialedPlan consumes the order within stages; a dropped
+    // non-crucial play demotes rather than disappears). The event call is budgeted at 8s so a
+    // slow model degrades to exactly the old deterministic event response BEFORE the client's
+    // 12s abort would have discarded the whole payload (lead, outcome, tier suggestion included).
     const brainGoal = goal as Parameters<typeof brainRankedMix>[0]
     const ranked = brainRankedMix(brainGoal, tier, brain, { excludeIds, measured })
-    const result = isSystemGoal(goal) ? await selectMix(goal, tier, signals, { excludeIds }) : null
-    const mix = result ? rankMixByLift(result.mix, brainGoal, brain, { excludeIds, measured }) : ranked.mix
+    const result = await selectMixForGoal(brainGoal, tier, signals, { excludeIds, ...(isEventGoal ? { timeoutMs: 8000 } : {}) })
+    const mix = result ? (isEventGoal ? result.mix : rankMixByLift(result.mix, brainGoal, brain, { excludeIds, measured })) : ranked.mix
     // Cold-start headline: derived from the plan's ACTUAL lead move, so it can never claim a class
     // (e.g. reviews) the composed plan does not actually lead with.
     const lead = planLeadHeadline(brainGoal, mix, brain)
     return NextResponse.json({
       mix,
       ...(result?.reasons ? { reasons: result.reasons } : {}),
-      source: result ? 'ai+lift' : 'brain',
+      source: result ? (isEventGoal ? 'ai' : 'ai+lift') : 'brain',
       outcome: ranked.outcome.label,
       ...(lead ? { lead } : {}),
       ...(budget ? {} : { suggestedTier: suggested }),
