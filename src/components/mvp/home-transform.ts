@@ -121,17 +121,23 @@ function buildMetricView(m: HomeMetric): MetricView {
     ? (settledDays.length ? pct(settledDays.reduce((s, w) => s + w.value, 0), settledDays.reduce((s, w) => s + w.prev, 0)) : 0)
     : pct(total, lastWeek?.total ?? 0)
 
-  const thisMonth = months[months.length - 1]
-  const lastMonth = months[months.length - 2]
+  // Month-over-month, anchored to the month that CONTAINS the data frontier —
+  // the latest month with real data — NOT the calendar's current month. Early in
+  // a month (before Google reports its first days) the current month is empty and
+  // comparing it to a full prior month reads as a fake "down 100%". Anchoring to
+  // the frontier month compares month-to-date (through the frontier) against the
+  // same leading days of the prior month.
+  const frontierYm = lastDataDate.slice(0, 7)
+  let mi = frontierYm ? months.findIndex((mo) => String(mo.start).slice(0, 7) === frontierYm) : -1
+  if (mi < 0) mi = months.length - 1
+  const thisMonth = months[mi]
+  const lastMonth = mi > 0 ? months[mi - 1] : undefined
   const domCount = (thisMonth?.vals ?? []).filter((v) => v != null).length || 1
   const thisMonthVal = firstNDays(thisMonth, domCount)
   const lastMonthVal = firstNDays(lastMonth, domCount)
-  // Per-metric month-over-month delta. Only meaningful when last month actually
-  // had data in the comparable (same number of leading days) window — otherwise
-  // the percent is a fake +100%. When it is comparable we always surface it
-  // (up / down / even), so every graph shows its own change, not just the ones
-  // that happen to be non-flat.
-  const hasMonthCompare = !!lastMonth && lastMonthVal > 0
+  // Only surface it when BOTH sides have real data in the comparable window —
+  // never a fake ±100% off an empty current or prior month.
+  const hasMonthCompare = !!lastMonth && lastMonthVal > 0 && thisMonthVal > 0
   const monthPct = hasMonthCompare ? Math.round(((thisMonthVal - lastMonthVal) / lastMonthVal) * 100) : 0
 
   // Continuous monthly series across ALL available years, built from the `year`
