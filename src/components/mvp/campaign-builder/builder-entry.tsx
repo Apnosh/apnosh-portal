@@ -324,6 +324,13 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
       }
       const sr = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: new Date().toISOString() } }) }).catch(() => null)
       if (!sr || !sr.ok) throw new Error(SHIP_FAIL)
+      // Remember durable answers on the profile (fill-when-empty, server-side; a
+      // failure costs nothing) — a cold client's first campaign teaches the brain
+      // what they're after and who they're for, instead of the answers evaporating
+      // with the draft and being re-asked forever.
+      if (plan?.itemId && plan?.vals) {
+        fetch('/api/campaigns/profile-recall', { method: 'POST', headers: h, body: JSON.stringify({ clientId: client.id, goalId: plan.itemId, vals: plan.vals }) }).catch(() => {})
+      }
       // Show the "you're all set" receipt (with a handoff to setup) instead of jumping straight in.
       setConfirmed({ id, draft, receipt }); setPlanBusy(false)
     } catch (e) {
