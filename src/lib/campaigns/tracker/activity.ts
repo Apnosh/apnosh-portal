@@ -20,12 +20,16 @@ function shortLabel(caption: unknown, fallback: string): string {
 
 export async function getCampaignActivity(campaignId: string): Promise<ActivityEvent[]> {
   const admin = createAdminClient()
-  const [draftsRes, ordersRes] = await Promise.all([
+  const [draftsRes, ordersRes, servicesRes] = await Promise.all([
     admin.from('content_drafts').select('id, caption, status, created_at, approved_at, scheduled_for, published_at, campaign_piece_key').eq('campaign_id', campaignId),
     admin.from('creator_work_orders').select('id, creator_id, discipline, title, status, delivered_url, note, content_draft_id, created_at, updated_at').eq('campaign_id', campaignId),
+    // Service lane (migration 190): started_at / delivered_at are precise columns;
+    // pre-migration the read errors → `?? []` keeps the feed content-only.
+    admin.from('service_work_orders').select('id, title, status, proof_url, started_at, delivered_at').eq('campaign_id', campaignId),
   ])
   const drafts = (draftsRes.data ?? []) as Record<string, unknown>[]
   const orders = (ordersRes.data ?? []) as Record<string, unknown>[]
+  const services = (servicesRes.data ?? []) as Record<string, unknown>[]
   const aliveIds = new Set(drafts.filter((d) => !DEAD.has((d.status as string) ?? '')).map((d) => d.id as string))
   const bridgedDraftIds = new Set(orders.map((o) => o.content_draft_id as string | null).filter(Boolean) as string[])
 
@@ -64,6 +68,16 @@ export async function getCampaignActivity(campaignId: string): Promise<ActivityE
     push(`${did}-appr`, d.approved_at, true, 'approved', 'Approved to go out', piece)
     push(`${did}-sch`, d.scheduled_for, true, 'scheduled', 'Set to post', piece)
     push(`${did}-post`, d.published_at, true, 'posted', 'Posted', piece)
+  }
+
+  // Service lane: precise start + proof-backed delivery. The delivered event carries
+  // the proof link, so the owner can see exactly what "done" means.
+  for (const w of services) {
+    const piece = shortLabel(w.title, 'A service')
+    push(`${w.id}-svc-start`, w.started_at, true, 'started', 'Your team started on it', piece)
+    if ((w.status as string) === 'delivered') {
+      push(`${w.id}-svc-done`, w.delivered_at, true, 'delivered', 'Done — proof attached', piece, (w.proof_url as string | null) ?? null)
+    }
   }
 
   ev.sort((a, b) => b.atISO.localeCompare(a.atISO))

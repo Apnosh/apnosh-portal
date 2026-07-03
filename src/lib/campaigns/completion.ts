@@ -17,8 +17,10 @@ import 'server-only'
  *      fallback says the same facts plainer.
  *   4. notifies the owner (kind 'campaign_wrapped', visible in the inbox wins lane).
  *
- * Services-only campaigns (total=0) and DIY are excluded — they have no piece
- * spine to complete (view.ts:201's own caveat).
+ * DIY campaigns are excluded (no production spine). Services-only campaigns
+ * complete too now that finite service work orders count in progress (delivered
+ * with proof = live); campaigns whose services are ALL recurring-class stay
+ * total=0 and never wrap — a monthly program has no finish line.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCampaignProgressBatch } from './server'
@@ -102,33 +104,37 @@ export async function sweepCampaignCompletions(): Promise<CompletionSweep> {
   return { checked: candidates.length, completed, notified }
 }
 
-/** Grounded letter: outcomes readouts + the charge ledger, AI-phrased with a
- *  deterministic same-facts fallback. Both honest by construction. */
+/** Grounded letter: outcomes readouts + delivered services + the charge ledger,
+ *  AI-phrased with a deterministic same-facts fallback. Honest by construction. */
 async function composeWrapUpLetter(campaignId: string, name: string): Promise<Letter> {
-  const [outcomes, charges] = await Promise.all([
+  const admin = createAdminClient()
+  const [outcomes, charges, swoRes] = await Promise.all([
     getCampaignOutcomes(campaignId).catch(() => null),
     getCampaignCharges(campaignId).catch(() => null),
+    admin.from('service_work_orders').select('title, status').eq('campaign_id', campaignId).eq('status', 'delivered'),
   ])
   const pieces = (outcomes?.pieces ?? []).map((p) => ({
     piece: p.label ?? 'a piece',
     result: p.readout.gathering ? 'still gathering' : (p.readout.value || p.readout.plain || 'posted'),
   }))
+  const servicesDone = ((swoRes.data ?? []) as { title: string | null }[]).map((s) => s.title).filter((t): t is string => !!t)
   const gatheringCount = pieces.filter((p) => p.result === 'still gathering').length
   const rollupPlain = outcomes && !outcomes.rollup.gathering ? outcomes.rollup.plain : null
   const billedCents = charges?.accruedCents ?? 0
   const billed = billedCents > 0 ? `$${Math.round(billedCents / 100)}` : null
 
   // Deterministic fallback — the same facts, plainer.
-  const parts: string[] = [`Every piece of ${name} went out.`]
+  const parts: string[] = [pieces.length > 0 ? `Every piece of ${name} went out.` : `Everything in ${name} is done.`]
+  if (servicesDone.length > 0) parts.push(`Finished for you: ${servicesDone.slice(0, 3).join(', ')}${servicesDone.length > 3 ? ` and ${servicesDone.length - 3} more` : ''}.`)
   if (rollupPlain) parts.push(rollupPlain)
   else if (gatheringCount > 0) parts.push('Results are still coming in. Numbers land over the next days.')
   if (billed) parts.push(`Billed for this campaign so far: ${billed}.`)
-  parts.push('Open the campaign for the piece-by-piece breakdown.')
+  parts.push('Open the campaign for the full breakdown.')
   const fallback: Letter = { title: `${name} wrapped`, body: parts.join(' ') }
 
   const ai = await callStructuredOutput<Letter>({
     system: LETTER_SYSTEM,
-    user: JSON.stringify({ campaignName: name, pieces, overallSoFar: rollupPlain ?? 'still gathering', billedSoFar: billed ?? 'nothing billed yet' }),
+    user: JSON.stringify({ campaignName: name, pieces, servicesFinished: servicesDone, overallSoFar: rollupPlain ?? 'still gathering', billedSoFar: billed ?? 'nothing billed yet' }),
     schema: LETTER_SCHEMA as unknown as object,
     maxTokens: 400,
   })

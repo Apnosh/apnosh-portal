@@ -45,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // the honesty guarantee against proof that already exists.
   const { data: row, error: readErr } = await svc
     .from('service_work_orders')
-    .select('campaign_id, steps, status, proof_url, started_at, updated_at')
+    .select('campaign_id, client_id, title, steps, status, proof_url, started_at, updated_at')
     .eq('id', id)
     .maybeSingle()
   if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
@@ -152,6 +152,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!writeRes || writeRes.length === 0) {
     return NextResponse.json({ error: 'This order changed while you were working. Refresh and try again.' }, { status: 409 })
+  }
+
+  // Tell the owner when their service is genuinely DONE (proof-backed delivered).
+  // Service deliveries previously notified nobody — the same silent-stall class
+  // the creator lane fixed. Best-effort, never blocks the write result.
+  if (update.status === 'delivered' && row.status !== 'delivered' && row.client_id) {
+    const { notifyClientOwners } = await import('@/lib/notifications')
+    await notifyClientOwners(row.client_id as string, {
+      kind: 'client_signoff',
+      title: `${(row.title as string) || 'A service'} is done`,
+      body: 'Your team finished it. The proof is on your campaign page.',
+      link: row.campaign_id ? `/dashboard/campaigns/${row.campaign_id}` : '/dashboard/campaigns',
+    }).catch(() => ({ notified: 0 }))
   }
 
   if (row.campaign_id) revalidatePath(`/admin/campaign-orders/${row.campaign_id}`)

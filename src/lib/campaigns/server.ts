@@ -11,6 +11,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { CampaignDraft, LineItem, CampaignBrief, BillingCadence, PieceProducer } from './types'
 import { planCampaignPieces, teamDraftRowForPiece, PLAN_REMOVED_NOTE } from './work-orders-core'
+import { turnaroundFor } from './data/service-turnaround'
 import type { StageId } from './stages'
 import type { SavedCampaign, CampaignProgress } from './view'
 
@@ -330,36 +331,41 @@ export async function materializeCampaignDrafts(campaign: SavedCampaign, shipISO
  */
 export async function getCampaignProgress(campaignId: string): Promise<CampaignProgress | null> {
   const admin = createAdminClient()
-  const [{ data: drafts }, { data: orders }] = await Promise.all([
+  const [{ data: drafts }, { data: orders }, { data: services }] = await Promise.all([
     admin.from('content_drafts').select('id, status, target_publish_date, client_signed_off_at').eq('campaign_id', campaignId),
     // select('*') so a missing content_draft_id column (pre-179) doesn't error.
     admin.from('creator_work_orders').select('*').eq('campaign_id', campaignId),
+    // Service lane (migration 190). select('*') + `?? []` so a missing table
+    // pre-190 keeps the exact null-when-nothing-materialized semantics.
+    admin.from('service_work_orders').select('*').eq('campaign_id', campaignId),
   ])
-  return computeProgress((drafts ?? []) as Record<string, unknown>[], (orders ?? []) as Record<string, unknown>[])
+  return computeProgress((drafts ?? []) as Record<string, unknown>[], (orders ?? []) as Record<string, unknown>[], (services ?? []) as Record<string, unknown>[])
 }
 
-/** Progress for MANY campaigns in two queries (list views need one per card without N round-trips). */
+/** Progress for MANY campaigns in three queries (list views need one per card without N round-trips). */
 export async function getCampaignProgressBatch(campaignIds: string[]): Promise<Record<string, CampaignProgress>> {
   if (!campaignIds.length) return {}
   const admin = createAdminClient()
-  const [{ data: drafts }, { data: orders }] = await Promise.all([
+  const [{ data: drafts }, { data: orders }, { data: services }] = await Promise.all([
     admin.from('content_drafts').select('id, campaign_id, status, target_publish_date, client_signed_off_at').in('campaign_id', campaignIds),
     admin.from('creator_work_orders').select('*').in('campaign_id', campaignIds),
+    admin.from('service_work_orders').select('*').in('campaign_id', campaignIds),
   ])
   const group = (rows: Record<string, unknown>[]): Map<string, Record<string, unknown>[]> => {
     const m = new Map<string, Record<string, unknown>[]>()
     for (const r of rows) { const k = r.campaign_id as string; const a = m.get(k) ?? []; a.push(r); m.set(k, a) }
     return m
   }
-  const dBy = group((drafts ?? []) as Record<string, unknown>[]), oBy = group((orders ?? []) as Record<string, unknown>[])
+  const dBy = group((drafts ?? []) as Record<string, unknown>[]), oBy = group((orders ?? []) as Record<string, unknown>[]), sBy = group((services ?? []) as Record<string, unknown>[])
   const out: Record<string, CampaignProgress> = {}
-  for (const id of campaignIds) { const p = computeProgress(dBy.get(id) ?? [], oBy.get(id) ?? []); if (p) out[id] = p }
+  for (const id of campaignIds) { const p = computeProgress(dBy.get(id) ?? [], oBy.get(id) ?? [], sBy.get(id) ?? []); if (p) out[id] = p }
   return out
 }
 
-/** Pure bucketing of a campaign's content_drafts (team lane) + creator_work_orders (creator lane). */
-function computeProgress(drafts: Record<string, unknown>[], orders: Record<string, unknown>[]): CampaignProgress | null {
-  let total = 0, live = 0, queued = 0, awaitingYou = 0, inProgress = 0, dropped = 0
+/** Pure bucketing of a campaign's content_drafts (team lane) + creator_work_orders
+ *  (creator lane) + service_work_orders (service lane, migration 190). */
+function computeProgress(drafts: Record<string, unknown>[], orders: Record<string, unknown>[], serviceOrders: Record<string, unknown>[] = []): CampaignProgress | null {
+  let total = 0, live = 0, queued = 0, awaitingYou = 0, inProgress = 0, dropped = 0, servicesAwaitingYou = 0
   let nextDueISO: string | null = null
   const bumpDue = (raw: string | null) => {
     const dt = (raw ?? '').slice(0, 10)
@@ -419,6 +425,26 @@ function computeProgress(drafts: Record<string, unknown>[], orders: Record<strin
     bumpDue(o.due_date as string | null)
   }
 
+  // Service lane: real, checkable service work minted at ship (migration 190).
+  // 'delivered' is the proof-backed done (all steps complete + proof required by
+  // the admin route) → live. The client-blocked states are the OWNER's turn but
+  // live in their own field (servicesAwaitingYou), never awaitingYou — the
+  // piece-worded surfaces (readiness "review N pieces", inbox CTA, digest) would
+  // miscount and dead-end otherwise. RECURRING-class services (monthly cycles,
+  // continuous care) are programs, not finite pieces — excluded entirely so an
+  // ongoing cycle can never hold a campaign out of 'done' forever. 'cancelled'
+  // (a stopped campaign's void) is not work anymore.
+  for (const w of serviceOrders ?? []) {
+    if (turnaroundFor((w.service_id as string) ?? '')?.class === 'recurring') continue
+    const s = (w.status as string) ?? ''
+    if (s === 'cancelled') continue
+    total++
+    if (s === 'delivered') { live++; continue }
+    if (s === 'ready_for_client' || s === 'blocked_client') servicesAwaitingYou++
+    else inProgress++   // queued / claimed / in_progress / blocked_gate
+    bumpDue(w.due_date as string | null)
+  }
+
   if (!total && !dropped) return null
-  return { total, live, queued, awaitingYou, inProgress, nextDueISO, dropped }
+  return { total, live, queued, awaitingYou, inProgress, nextDueISO, dropped, servicesAwaitingYou }
 }

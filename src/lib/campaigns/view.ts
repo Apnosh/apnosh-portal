@@ -83,12 +83,17 @@ export interface CampaignExecution {
  *  Dead states (rejected/failed) are excluded from total but surfaced as dropped. */
 export interface CampaignProgress {
   total: number
-  live: number          // published
+  live: number          // published pieces + delivered (proof-backed) services
   queued: number        // scheduled or approved+signed, committed to go out
   awaitingYou: number   // delivered creator work, or an approved draft holding for your sign-off
-  inProgress: number    // being made (idea/draft/produced/etc.)
+  inProgress: number    // being made (idea/draft/produced/etc.), incl. services being set up
   nextDueISO: string | null
   dropped?: number      // killed pieces kept visible (team reject / creator decline) — not in total
+  /** Service work blocked on the owner (blocked_client / ready_for_client). Kept
+   *  SEPARATE from awaitingYou: the piece-worded surfaces (readiness copy, the
+   *  inbox CTA, the digest) count awaitingYou and would miscount/dead-end on
+   *  services. Recurring-class services are excluded from all counts. */
+  servicesAwaitingYou?: number
 }
 
 export type CampPerf =
@@ -203,8 +208,10 @@ export function servicesSettingUp(s: SavedCampaign, nowMs = Date.now()): boolean
 }
 
 // Cells the detail page relies on being IMPOSSIBLE: diy never yields 'setup' (ownerSetupComplete is
-// true for diy); a services-only plan (no pieces, no beats) yields 'production' only while inside the
-// settingUp window and, since 'done' requires total > 0, never yields 'done' — it settles at 'live'.
+// true for diy). NOTE (services in progress): finite service work orders now count in total/live, so
+// a services-only campaign CAN reach 'done' once every service is delivered with proof — the old
+// "settles at 'live'" invariant only still holds for plans whose services are all recurring-class
+// (those are excluded from the counts, so total stays 0 and the settingUp branch below still runs).
 export function shippedStatus(progress: CampaignProgress | null | undefined, hasContentPlanned: boolean, setupComplete = true, settingUp = false): { phase: ShippedPhase; label: string; blurb: string; live: number; total: number } {
   const p = progress ?? null
   const totalPieces = p?.total ?? 0
