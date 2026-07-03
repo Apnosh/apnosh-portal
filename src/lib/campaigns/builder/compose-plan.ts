@@ -40,7 +40,9 @@ export type ItemKind = 'program' | 'piece' | 'event' | 'setup'
  *  carry a real phased week); programs/single pieces omit it and fall to positional order. The
  *  5th is an optional `because` — a plain owner-facing reason the situation-aware adapt() pass
  *  attaches when it adds/moves a piece, so no change is ever a silent black box. */
-export type Beat = [type: PieceType, channel: string, label: string, week?: number, because?: string]
+// serviceId (6th slot) rides only on dialed atom-engine beats — it lets the plan UI look up the
+// AI's per-play reason for THIS owner. Legacy 5-tuples simply leave it undefined.
+export type Beat = [type: PieceType, channel: string, label: string, week?: number, because?: string, serviceId?: string]
 
 export interface ItemShape {
   title: string
@@ -721,7 +723,7 @@ export function composePlanForGoal(itemId: string, spec: Record<string, string>)
   // No list → never propose a send (mirrors the playbook's need:'list' gating for the atom path).
   if (brainEventBeats.length && !hasList) brainEventBeats = brainEventBeats.filter((b) => b.type !== 'email' && b.type !== 'sms')
   let beats: Beat[] = brainEventBeats.length
-    ? brainEventBeats.map((b) => [b.type, b.channel, b.label, b.week, b.because] as Beat)
+    ? brainEventBeats.map((b) => [b.type, b.channel, b.label, b.week, b.because, b.serviceId] as Beat)
     : playbook
       ? buildEventPlanBeats(itemId, spec)
       : shaped
@@ -776,7 +778,7 @@ export function composePlanForGoal(itemId: string, spec: Record<string, string>)
     if (boostIdx < 0) boostIdx = 0
   }
 
-  const contentPlan: ContentBeatSpec[] = beats.map(([type, channel, label, week, because], i) => ({ week: week ?? (i + 1), type, channel, label, ...(i === boostIdx ? { boost: true } : {}), ...(because ? { because } : {}) }))
+  const contentPlan: ContentBeatSpec[] = beats.map(([type, channel, label, week, because, serviceId], i) => ({ week: week ?? (i + 1), type, channel, label, ...(i === boostIdx ? { boost: true } : {}), ...(because ? { because } : {}), ...(serviceId ? { serviceId } : {}) }))
   const channels = Array.from(new Set([...beats.map(([, ch]) => ch), ...(managedAds ? ['ads'] : [])]))
   // Geo comes from the owner's real profile (their neighborhood) when we have it, else a radius;
   // it drives the "near me" framing + the ad targeting, so the brief reads like their actual area.

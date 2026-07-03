@@ -55,7 +55,7 @@ export interface SpecQuestion {
   placeholder?: string
 }
 
-export interface ContentBeatSpec { week: number; type: string; label: string; channel: string; boost?: boolean; because?: string }
+export interface ContentBeatSpec { week: number; type: string; label: string; channel: string; boost?: boolean; because?: string; serviceId?: string }
 
 export type CampaignCategory = 'demand' | 'capacity' | 'retain' | 'reputation'
 export const CATEGORY_META: Record<CampaignCategory, { label: string }> = {

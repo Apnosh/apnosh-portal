@@ -182,7 +182,7 @@ type Beat = {
   // "Plan Card" per-type extras — all optional, defaulted at render, captured for the team's brief
   footage?: 'photo' | 'clip' | 'film'; subjectKind?: 'dish' | 'deal' | 'news'; newsLine?: string
   messagePoint?: string; buttonTarget?: 'menu' | 'book' | 'order' | 'deal'; onCamera?: 'owner' | 'staff' | 'food'
-  addPoll?: boolean; hasReference?: boolean; dateISO?: string; boost?: boolean; because?: string
+  addPoll?: boolean; hasReference?: boolean; dateISO?: string; boost?: boolean; because?: string; serviceId?: string
 }
 // The convincing, dish-forward headline for a piece (the "where it posts" comes from channelPhrase).
 const beatLabel = (b: Beat): string => {
@@ -288,6 +288,10 @@ type CardNode =
       variant: 'content'; b: Beat; d?: { postLabel: string; relLabel: string; draftReadyISO: string };
       tint: { tint: string; fg: string }; Icon?: ComponentType<{ size?: number; color?: string }>;
       photo?: string; nextUp: boolean; needsPhoto: boolean; idx: number; ongoing: boolean; onOpen: () => void
+      /** The AI's one-line reason THIS piece is in THIS restaurant's plan (event goals via
+       *  selectMix, keyed by the beat's atom serviceId), falling back to the atom's static
+       *  because. Resolved in the card memo so late-arriving reasons still render. */
+      reason?: string
     }
 type Stop =
   | { kind: 'hero' }
@@ -341,7 +345,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
       // ~3 weeks rather than one piece per week over six. Events keep their countdown weeks (real meaning).
       week: ongoing ? actWeek(act) : (b.week || 1),
       featuring: ['reel', 'photo', 'story', 'post'].includes(b.type) ? seedFeat : '', offer: seedOffer, note: '', baseLabel: b.label, edited: false,
-      boost: b.boost || false, because: b.because || undefined, act,
+      boost: b.boost || false, because: b.because || undefined, serviceId: b.serviceId || undefined, act,
     }
   }))
   const [planFeat, setPlanFeat] = useState(seedFeat)
@@ -618,6 +622,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
             variant: 'content', b, d: dateById.get(b.id), tint, Icon: TYPE_ICON[b.type], photo: dishPhoto(b.featuring),
             nextUp: b.id === nextUpId, needsPhoto: !!(b.type === 'photo' && b.featuring && !dishPhoto(b.featuring)),
             idx: flatOrder.get(b.id) ?? 0, ongoing, onOpen: () => setSheet({ kind: 'piece', id: b.id }),
+            reason: (b.serviceId ? reasons?.[b.serviceId] : undefined) ?? b.because,
           },
         })
         if (boostBeat && b.id === boostId) {
@@ -983,9 +988,10 @@ function PathCard({ node, delay }: { node: CardNode; delay: number }) {
         {/* expanded detail — "learn more" */}
         {open && !readOnly && (
           <div className="pf-text" style={{ marginTop: 10, paddingTop: 10, borderTop: '0.5px solid #f0f0f2' }}>
-            {/* The AI's reason THIS service is in THIS plan (when the mix was tailored) — the
-                personal why, above the generic catalog description. */}
-            {!isContent && node.reason && (
+            {/* The AI's reason THIS piece/service is in THIS plan (when the mix was tailored) —
+                the personal why, above the generic description. Content beats fall back to the
+                atom's static because when no tailored reason exists. */}
+            {node.reason && (
               <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5, borderLeft: `3px solid ${C.greenDk}`, paddingLeft: 10, marginBottom: 8 }}>{node.reason}</div>
             )}
             <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5 }}>{detail}</div>

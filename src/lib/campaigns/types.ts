@@ -217,6 +217,9 @@ export interface ContentBeat {
   boost?: boolean
   /** A plain owner-facing reason the situation-aware plan pass added/moved this piece. */
   because?: string
+  /** The atom play's serviceId (dialed event goals only) — the key the plan UI uses to
+   *  look up the AI's per-play reason for THIS owner. Absent on legacy/template beats. */
+  serviceId?: string
   /** Stable per-piece id (Content Menu): the producer_choices / reconcile /
    *  content_drafts match key. Absent on legacy AI/strategist beats, which key
    *  positionally by discipline:slot. */

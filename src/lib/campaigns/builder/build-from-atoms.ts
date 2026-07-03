@@ -233,13 +233,13 @@ export function stepsToContentBeats(steps: PlanStep[]): ContentBeatSpec[] {
       // The RSVP / Facebook event page is a CRUCIAL owner step (the home base invitees land on) — it
       // was previously dropped because it isn't a social piece. Surface it as a week-1 setup line so
       // the owner actually sees it; priced as a page-equivalent post.
-      beats.push({ week: STAGE_WEEK[p.stage] ?? 1, type: 'post', label: p.role, channel: 'web', ...(p.because ? { because: p.because } : {}) })
+      beats.push({ week: STAGE_WEEK[p.stage] ?? 1, type: 'post', label: p.role, channel: 'web', serviceId: p.serviceId, ...(p.because ? { because: p.because } : {}) })
       continue
     }
     if (p.atom === 'set-tracking') {
       // A measurement step (e.g. count deal redemptions) is not a social piece either; show it as a
       // week-1 setup line so the plan can actually prove the outcome it promises.
-      beats.push({ week: STAGE_WEEK[p.stage] ?? 1, type: 'post', label: p.role, channel: 'web', ...(p.because ? { because: p.because } : {}) })
+      beats.push({ week: STAGE_WEEK[p.stage] ?? 1, type: 'post', label: p.role, channel: 'web', serviceId: p.serviceId, ...(p.because ? { because: p.because } : {}) })
       continue
     }
     const type = beatTypeFor(p)
@@ -247,7 +247,7 @@ export function stepsToContentBeats(steps: PlanStep[]): ContentBeatSpec[] {
     const week = STAGE_WEEK[p.stage] ?? 2
     const n = Math.max(1, step.amount)
     for (let i = 0; i < n; i++) {
-      beats.push({ week, type, label: p.role, channel, ...(p.because ? { because: p.because } : {}) })
+      beats.push({ week, type, label: p.role, channel, serviceId: p.serviceId, ...(p.because ? { because: p.because } : {}) })
     }
   }
   if (wantBoost) {
