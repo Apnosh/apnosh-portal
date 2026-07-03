@@ -414,14 +414,8 @@ export default function ApprovalDetailPage() {
               <div className="mt-2 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>
-                  Revision limit reached. Additional revisions available as an
-                  add-on.{' '}
-                  <Link
-                    href="/dashboard/orders"
-                    className="underline font-medium"
-                  >
-                    View orders
-                  </Link>
+                  Revision limit reached. Additional revisions are available as an
+                  add-on &mdash; message your strategist to add one.
                 </span>
               </div>
             )}

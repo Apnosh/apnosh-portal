@@ -1,12 +1,14 @@
 /**
  * Creator supply + matching for the campaign marketplace.
  *
- * Seeded pool today, shaped like the real `vendors` table (migration 146:
- * avg_rating, total_bookings, service_area) so the source swaps to a live query
- * without changing callers. rankCreators is the matching brain: a deterministic,
- * honest score (rating + restaurant experience + style fit to the campaign's
- * vibe). The LLM brand-fit layer (reading real brand guidelines + reviews) slots
- * in later when there is real supply — model proposes, code disposes.
+ * HONEST v1: there is no real creator marketplace yet, so we do NOT invent named
+ * individuals or ratings. Each craft (video/photo/social/design) resolves to the
+ * Apnosh creative team, differentiated only by style so the vibe-matching still
+ * routes work to the right craft. The record is shaped like the real `vendors`
+ * table (migration 146: avg_rating, total_bookings, service_area) so the source
+ * swaps to a live query without changing callers; rating/jobs are 0 here because
+ * there is no real per-creator track record to show. When real supply exists,
+ * this pool becomes a live query and the identity/rating fields fill in for real.
  */
 export type Disc = 'Video' | 'Photo' | 'Social' | 'Design'
 export type Style = 'warm' | 'clean' | 'bold'
@@ -25,27 +27,31 @@ export interface Creator {
 export interface RankedCreator { creator: Creator; reason: string; topMatch: boolean }
 export interface CreativeRole { discipline: Disc; creator: Creator; reason: string; recommended: boolean }
 
+// One craft per discipline = the Apnosh creative team. Multiple style variants
+// keep vibe-matching working (and preserve historical ids so already-minted work
+// orders still resolve to a name), but every entry is the same honest team — no
+// invented individuals, no fabricated ratings or job counts.
 const POOL: Record<Disc, Creator[]> = {
   Video: [
-    { id: 'v_devon', name: 'Devon K.', rating: 4.8, jobs: 58, specialty: 'Snappy food reels', style: 'clean', tones: ['#cfe0f2', '#7099d0'], based: 'Local' },
-    { id: 'v_maya', name: 'Maya R.', rating: 4.9, jobs: 47, specialty: 'Cozy, warm reels', style: 'warm', tones: ['#d8a06a', '#8a5638'], based: 'Local' },
-    { id: 'v_sam', name: 'Sam T.', rating: 4.7, jobs: 39, specialty: 'Bold, trendy edits', style: 'bold', tones: ['#ef6aa0', '#8a63e0'], based: 'Remote' },
-    { id: 'v_rae', name: 'Rae B.', rating: 4.8, jobs: 51, specialty: 'Chef-at-work stories', style: 'warm', tones: ['#f5a93f', '#b56b42'], based: 'Local' },
+    { id: 'v_devon', name: 'Apnosh video team', rating: 0, jobs: 0, specialty: 'Snappy food reels', style: 'clean', tones: ['#cfe0f2', '#7099d0'], based: 'Apnosh' },
+    { id: 'v_maya', name: 'Apnosh video team', rating: 0, jobs: 0, specialty: 'Cozy, warm reels', style: 'warm', tones: ['#d8a06a', '#8a5638'], based: 'Apnosh' },
+    { id: 'v_sam', name: 'Apnosh video team', rating: 0, jobs: 0, specialty: 'Bold, trendy edits', style: 'bold', tones: ['#ef6aa0', '#8a63e0'], based: 'Apnosh' },
+    { id: 'v_rae', name: 'Apnosh video team', rating: 0, jobs: 0, specialty: 'Chef-at-work stories', style: 'warm', tones: ['#f5a93f', '#b56b42'], based: 'Apnosh' },
   ],
   Photo: [
-    { id: 'p_theo', name: 'Theo M.', rating: 4.9, jobs: 72, specialty: 'Bright, clean dishes', style: 'clean', tones: ['#e7eef5', '#9fc0e8'], based: 'Local' },
-    { id: 'p_lena', name: 'Lena P.', rating: 4.8, jobs: 61, specialty: 'Natural-light food', style: 'warm', tones: ['#d8a06a', '#a8763f'], based: 'Local' },
-    { id: 'p_kira', name: 'Kira W.', rating: 4.7, jobs: 44, specialty: 'Moody, rich plating', style: 'bold', tones: ['#6b5b4a', '#2e2620'], based: 'Remote' },
+    { id: 'p_theo', name: 'Apnosh photo team', rating: 0, jobs: 0, specialty: 'Bright, clean dishes', style: 'clean', tones: ['#e7eef5', '#9fc0e8'], based: 'Apnosh' },
+    { id: 'p_lena', name: 'Apnosh photo team', rating: 0, jobs: 0, specialty: 'Natural-light food', style: 'warm', tones: ['#d8a06a', '#a8763f'], based: 'Apnosh' },
+    { id: 'p_kira', name: 'Apnosh photo team', rating: 0, jobs: 0, specialty: 'Moody, rich plating', style: 'bold', tones: ['#6b5b4a', '#2e2620'], based: 'Apnosh' },
   ],
   Social: [
-    { id: 's_ivy', name: 'Ivy C.', rating: 4.9, jobs: 52, specialty: 'Clean daily stories', style: 'clean', tones: ['#cfe0f2', '#7099d0'], based: 'Local' },
-    { id: 's_nina', name: 'Nina F.', rating: 4.8, jobs: 45, specialty: 'Warm day-of stories', style: 'warm', tones: ['#f5a93f', '#b56b42'], based: 'Local' },
-    { id: 's_omar', name: 'Omar D.', rating: 4.7, jobs: 38, specialty: 'Punchy story sets', style: 'bold', tones: ['#ef6aa0', '#8a63e0'], based: 'Remote' },
+    { id: 's_ivy', name: 'Apnosh social team', rating: 0, jobs: 0, specialty: 'Clean daily stories', style: 'clean', tones: ['#cfe0f2', '#7099d0'], based: 'Apnosh' },
+    { id: 's_nina', name: 'Apnosh social team', rating: 0, jobs: 0, specialty: 'Warm day-of stories', style: 'warm', tones: ['#f5a93f', '#b56b42'], based: 'Apnosh' },
+    { id: 's_omar', name: 'Apnosh social team', rating: 0, jobs: 0, specialty: 'Punchy story sets', style: 'bold', tones: ['#ef6aa0', '#8a63e0'], based: 'Apnosh' },
   ],
   Design: [
-    { id: 'd_jordan', name: 'Jordan L.', rating: 4.7, jobs: 40, specialty: 'Clean menu graphics', style: 'clean', tones: ['#cfe0f2', '#7099d0'], based: 'Remote' },
-    { id: 'd_priya', name: 'Priya N.', rating: 4.9, jobs: 34, specialty: 'Warm, rustic posts', style: 'warm', tones: ['#d8a06a', '#8a5638'], based: 'Remote' },
-    { id: 'd_kai', name: 'Kai W.', rating: 4.8, jobs: 51, specialty: 'Bold, punchy promos', style: 'bold', tones: ['#ef6aa0', '#f5a93f'], based: 'Remote' },
+    { id: 'd_jordan', name: 'Apnosh design team', rating: 0, jobs: 0, specialty: 'Clean menu graphics', style: 'clean', tones: ['#cfe0f2', '#7099d0'], based: 'Apnosh' },
+    { id: 'd_priya', name: 'Apnosh design team', rating: 0, jobs: 0, specialty: 'Warm, rustic posts', style: 'warm', tones: ['#d8a06a', '#8a5638'], based: 'Apnosh' },
+    { id: 'd_kai', name: 'Apnosh design team', rating: 0, jobs: 0, specialty: 'Bold, punchy promos', style: 'bold', tones: ['#ef6aa0', '#f5a93f'], based: 'Apnosh' },
   ],
 }
 
@@ -68,19 +74,20 @@ export function vibeForCampaign(goalKey?: string | null, occasion?: string | nul
 }
 
 /**
- * Rank a discipline's creators for a campaign: highest rating + most restaurant
- * experience, with a bonus when their style matches the campaign's vibe. Returns
- * best-first, each with a plain-language reason and a topMatch flag.
+ * Rank a discipline's craft variants for a campaign by how well their style fits
+ * the campaign's vibe. Returns best-first, each with a plain-language reason and a
+ * topMatch flag. (No fabricated rating/experience — see the file header.)
  */
 export function rankCreators(d: Disc, vibe?: Style | null): RankedCreator[] {
   const pool = creatorPool(d)
   if (!pool.length) return []
-  const maxJobs = Math.max(1, ...pool.map((c) => c.jobs))
   const scored = pool
     .map((c) => {
       const fit = vibe && c.style === vibe ? 1 : 0
-      const score = (c.rating / 5) * 0.55 + (c.jobs / maxJobs) * 0.2 + fit * 0.25
-      const bits = [fit ? `${c.style} style fits` : '', `${c.rating}★`, `${c.jobs} restaurant jobs`].filter(Boolean)
+      // No real per-creator rating/track record yet, so rank purely on style fit
+      // to the campaign's vibe; the reason is the honest craft, not a fake score.
+      const score = fit * 0.25
+      const bits = [c.specialty, fit ? `${c.style} style fit` : ''].filter(Boolean)
       return { creator: c, score, reason: bits.join(' · ') }
     })
     .sort((a, b) => b.score - a.score)
@@ -134,7 +141,7 @@ export function creativeRolesForCampaign(
       const top = rankCreators(d, vibe)[0]
       // Drop the discipline if nothing resolves (e.g. an empty live pool), rather
       // than crash the card.
-      return top ? { discipline: d, creator: top.creator, reason: `Best match · ${top.reason}`, recommended: true } : null
+      return top ? { discipline: d, creator: top.creator, reason: top.reason, recommended: true } : null
     })
     .filter((r): r is CreativeRole => r !== null)
 }

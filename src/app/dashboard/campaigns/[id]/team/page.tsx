@@ -12,33 +12,16 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, Compass, CreditCard, Loader2, MessageCircle, Star } from 'lucide-react'
+import { ChevronLeft, Compass, CreditCard, Loader2, MessageCircle } from 'lucide-react'
 import { C, DISPLAY, EYEBROW, GRAD, SHADOW_CARD } from '@/components/campaigns/ui'
 import MotionStyles from '@/components/campaigns/motion-styles'
-import { creatorPool, creativeRolesForCampaign, vibeForCampaign, type Creator, type Disc } from '@/lib/campaigns/creators'
+import { creativeRolesForCampaign, vibeForCampaign } from '@/lib/campaigns/creators'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 import type { TrackerPiece } from '@/lib/campaigns/tracker/types'
 
 /** channel -> the message contact key that owns that craft (mvp-messages CONTACTS). */
 const CHANNEL_CONTACT: Record<string, string> = { Video: 'videographer', Photo: 'photographer', Design: 'designer', Social: 'strategist' }
 const OUT = new Set(['posted', 'gathering', 'dropped'])
-
-/** The creator-market tone strip — each creator's colors, same as the marketplace sheet. */
-function Strip({ tones }: { tones: string[] }) {
-  return (
-    <div style={{ display: 'flex', gap: 3, height: 30, width: 54, borderRadius: 7, overflow: 'hidden', flexShrink: 0 }}>
-      {tones.map((t, i) => <div key={i} style={{ flex: 1, background: `linear-gradient(150deg, ${t}, rgba(0,0,0,0.22))` }} />)}
-    </div>
-  )
-}
-
-function poolByName(name: string): Creator | undefined {
-  for (const d of ['Video', 'Photo', 'Social', 'Design'] as Disc[]) {
-    const hit = creatorPool(d).find((c) => c.name === name)
-    if (hit) return hit
-  }
-  return undefined
-}
 
 export default function TeamPage() {
   const { id } = useParams<{ id: string }>()
@@ -65,7 +48,7 @@ export default function TeamPage() {
   // YOUR CREATORS = the people from the marketplace: anyone with real work on this campaign
   // ("Making: ..."), plus the campaign's matched creators from the builder even while your in-house
   // team makes the pieces ("Matched for your video work" — honest: matched, not making). One row each.
-  const makers: { key: string; title: string; making: string; to: string; creator?: Creator }[] = []
+  const makers: { key: string; title: string; making: string; to: string }[] = []
   let teamPieces: TrackerPiece[] = []
   if (pieces) {
     const byWho = new Map<string, TrackerPiece[]>()
@@ -82,7 +65,6 @@ export default function TeamPage() {
         key: who, title: who,
         making: `${verb}: ${active.label}${list.length > 1 ? ` +${list.length - 1} more` : ''}`,
         to: CHANNEL_CONTACT[active.channel] ?? 'strategist',
-        creator: poolByName(who),
       })
     }
   }
@@ -95,7 +77,6 @@ export default function TeamPage() {
         key: r.creator.name, title: r.creator.name,
         making: `Matched for your ${r.discipline.toLowerCase()} work`,
         to: CHANNEL_CONTACT[r.discipline] ?? 'strategist',
-        creator: r.creator,
       })
     }
   }
@@ -131,28 +112,16 @@ export default function TeamPage() {
                   <div style={{ marginBottom: 18 }}>
                     <div style={{ ...EYEBROW, marginBottom: 10 }}>Your creators</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {makers.map((m) => {
-                        const initials = m.title.split(' ').map((x) => x[0]).join('')
-                        return (
-                          <div key={m.key} style={{ border: `1px solid ${C.line}`, background: '#fff', borderRadius: 14, boxShadow: SHADOW_CARD, padding: 12, display: 'flex', alignItems: 'center', gap: 11 }}>
-                            <span style={{ width: 40, height: 40, borderRadius: 20, background: '#fff', border: `1px solid ${C.line}`, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>{initials}</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontWeight: 600, fontSize: 13.5, color: C.ink }}>{m.title}</span>
-                                {m.creator && (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, color: C.mute }}>
-                                    <Star size={10} style={{ fill: C.gold, color: C.gold }} /> {m.creator.rating}
-                                  </span>
-                                )}
-                              </div>
-                              {m.creator && <div style={{ fontSize: 11.5, color: C.mute, marginTop: 1 }}>{m.creator.specialty} · {m.creator.based}</div>}
-                              <div style={{ fontSize: 11.5, color: C.faint, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.making}</div>
-                            </div>
-                            {m.creator && <Strip tones={m.creator.tones} />}
-                            <button onClick={() => msg(m.to, `About ${m.title} on ${camp?.draft.name || 'this campaign'}: `)} className="cw-press" style={{ flexShrink: 0, border: 'none', height: 44, borderRadius: 10, padding: '0 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer', background: GRAD, color: '#fff' }}>Message</button>
+                      {makers.map((m) => (
+                        <div key={m.key} style={{ border: `1px solid ${C.line}`, background: '#fff', borderRadius: 14, boxShadow: SHADOW_CARD, padding: 12, display: 'flex', alignItems: 'center', gap: 11 }}>
+                          <span style={{ width: 40, height: 40, borderRadius: 20, background: '#fff', border: `1px solid ${C.line}`, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 16, flexShrink: 0 }}>◆</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: 13.5, color: C.ink }}>{m.title}</div>
+                            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.making}</div>
                           </div>
-                        )
-                      })}
+                          <button onClick={() => msg(m.to, `About ${m.title} on ${camp?.draft.name || 'this campaign'}: `)} className="cw-press" style={{ flexShrink: 0, border: 'none', height: 44, borderRadius: 10, padding: '0 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer', background: GRAD, color: '#fff' }}>Message</button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
