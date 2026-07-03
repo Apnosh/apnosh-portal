@@ -547,10 +547,10 @@ function MetricCard({ mv }: { mv: MetricView }) {
           )}
         </div>
         <div style={{ fontSize: 14, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
-        {fresh && mv.prevMonthLabel && (
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: mv.monthPct > 0 ? C.green : mv.monthPct < 0 ? C.coral : C.mute }}>
-            {mv.monthPct > 0 ? <TrendingUp size={14} /> : mv.monthPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
-            {mv.monthPct > 0 ? `Up ${mv.monthPct}% from ${mv.prevMonthLabel}` : mv.monthPct < 0 ? `Down ${Math.abs(mv.monthPct)}% from ${mv.prevMonthLabel}` : `Even with ${mv.prevMonthLabel}`}
+        {fresh && summary.yoyPct != null && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: summary.yoyPct > 0 ? C.green : summary.yoyPct < 0 ? C.coral : C.mute }}>
+            {summary.yoyPct > 0 ? <TrendingUp size={14} /> : summary.yoyPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
+            {summary.yoyPct > 0 ? `Up ${summary.yoyPct}% ${summary.yoyLabel}` : summary.yoyPct < 0 ? `Down ${Math.abs(summary.yoyPct)}% ${summary.yoyLabel}` : `Even with last year`}
           </div>
         )}
       </div>
@@ -582,11 +582,16 @@ export function isoDate(d: Date): string {
 type ChartSrc = { chart: { label: string; value: number; prev: number; settled?: boolean; elapsed?: boolean }[]; chartStart?: string; daily?: { date: string; value: number }[]; monthly?: { label: string; value: number; ym: string }[]; lastDataDate?: string }
 // settled = fully reported → counted in the %; elapsed = has happened → counted
 // in the total/average. A future/not-yet-reported day is neither (shown, empty).
-type Bar = { value: number; compare: number; label: string; tip: string; cmpLabel: string; cmpDate: string; settled: boolean; elapsed: boolean }
+// ago = the same day a YEAR earlier (52 weeks back), for the seasonal YoY line.
+type Bar = { value: number; compare: number; label: string; tip: string; cmpLabel: string; cmpDate: string; settled: boolean; elapsed: boolean; ago: number }
 export interface RangeSummary {
   bars: Bar[]; curLbl: string; cmpLbl: string; cmpFrame: string
   total: number; compareTotal: number; deltaPct: number
   avg: number; max: number; periodDays: number
+  // Year-over-year for the SELECTED window (this period vs the same period last
+  // year). null when the range can't support it (annual view — the pill already
+  // is YoY) or there isn't enough data from a year ago.
+  yoyPct: number | null; yoyLabel: string
 }
 
 /* Bucket the real series for a chosen range — PURE, so the hero and the chart
@@ -601,6 +606,9 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
   const frontier = src.lastDataDate ? parseISO(src.lastDataDate) : null
   const wk = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' })
   const full = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  // Same day one year earlier = 52 weeks back, which preserves the weekday
+  // (a Saturday compares to a Saturday) — the honest "same period last year".
+  const yearAgo = (d: Date) => dmap.get(isoDate(new Date(d.getTime() - 364 * 86_400_000))) ?? 0
   let bars: Bar[] = []; let curLbl = ''; let cmpLbl = ''; let cmpFrame = ''; let periodDays = 7
 
   if (range === '7d') {
@@ -613,7 +621,7 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
       const prior = d ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 7) : null
       const elapsed = b.elapsed ?? true
       const settled = b.settled ?? (i < chart.length - 1)
-      return { value: b.value, compare: b.prev, label: d ? wk(d) : b.label, tip: d ? full(d) : b.label, cmpLabel: 'last week', cmpDate: prior ? full(prior) : '', settled, elapsed }
+      return { value: b.value, compare: b.prev, label: d ? wk(d) : b.label, tip: d ? full(d) : b.label, cmpLabel: 'last week', cmpDate: prior ? full(prior) : '', settled, elapsed, ago: d ? yearAgo(d) : 0 }
     })
   } else if (range === '30d') {
     curLbl = 'Last 30 days'; cmpLbl = 'Prior 30 days'; cmpFrame = 'vs prior 30 days'; periodDays = 30
@@ -622,7 +630,7 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
       const dt = parseISO(d.date); const prior = new Date(dt); prior.setDate(prior.getDate() - 30)
       // The `daily` series ends AT the frontier, so only the last row is the
       // still-filling day → not settled; every day has elapsed.
-      return { value: d.value, compare: dmap.get(isoDate(prior)) ?? 0, label: String(dt.getDate()), tip: full(dt), cmpLabel: '30 days earlier', cmpDate: full(prior), settled: i < rows.length - 1, elapsed: true }
+      return { value: d.value, compare: dmap.get(isoDate(prior)) ?? 0, label: String(dt.getDate()), tip: full(dt), cmpLabel: '30 days earlier', cmpDate: full(prior), settled: i < rows.length - 1, elapsed: true, ago: yearAgo(dt) }
     })
   } else if (range === '1y') {
     curLbl = 'Last 12 months'; cmpLbl = 'Prior year'; cmpFrame = 'vs prior year'; periodDays = 365
@@ -636,7 +644,7 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
       const yr = Number(mo.ym.slice(0, 4)); const mi = Number(mo.ym.slice(5, 7))
       const priorKey = `${yr - 1}-${String(mi).padStart(2, '0')}`
       // The last month is the current, still-accruing one → not settled.
-      return { value: mo.value, compare: byKey.get(priorKey) ?? 0, label: mo.label.slice(0, 3), tip: `${mo.label} ${yr}`, cmpLabel: 'a year earlier', cmpDate: `${mo.label} ${yr - 1}`, settled: i < last12.length - 1, elapsed: true }
+      return { value: mo.value, compare: byKey.get(priorKey) ?? 0, label: mo.label.slice(0, 3), tip: `${mo.label} ${yr}`, cmpLabel: 'a year earlier', cmpDate: `${mo.label} ${yr - 1}`, settled: i < last12.length - 1, elapsed: true, ago: byKey.get(priorKey) ?? 0 }
     })
   } else {
     curLbl = 'Custom'; cmpLbl = 'Prior period'; cmpFrame = 'vs prior period'
@@ -650,7 +658,7 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
       // itself is still filling in.
       const elapsed = frontier ? dt.getTime() <= frontier.getTime() : true
       const settled = frontier ? dt.getTime() < frontier.getTime() : i < span - 1
-      return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpLabel: 'prior period', cmpDate: full(prior), settled, elapsed }
+      return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpLabel: 'prior period', cmpDate: full(prior), settled, elapsed, ago: yearAgo(dt) }
     })
   }
 
@@ -667,7 +675,20 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
   const deltaPct = settled.length === 0 ? 0 : (cmpTrend === 0 ? (curTrend > 0 ? 100 : 0) : Math.round(((curTrend - cmpTrend) / cmpTrend) * 100))
   const avg = elapsed.length ? Math.round(total / elapsed.length) : 0
   const max = Math.max(1, ...bars.map((b) => Math.max(b.value, b.compare)), avg)
-  return { bars, curLbl, cmpLbl, cmpFrame, total, compareTotal, deltaPct, avg, max, periodDays }
+
+  // Year-over-year for THIS window: the elapsed days vs the same days a year ago.
+  // Hidden for the annual view (the pill is already YoY there) and when a year
+  // ago is too sparse to be honest (fewer than 60% of the days had data) — so a
+  // newer client never sees a made-up seasonal number.
+  const agoTotal = elapsed.reduce((s, b) => s + b.ago, 0)
+  const agoCoverage = elapsed.filter((b) => b.ago > 0).length
+  let yoyPct: number | null = null
+  let yoyLabel = ''
+  if (range !== '1y' && agoTotal > 0 && elapsed.length > 0 && agoCoverage >= Math.ceil(elapsed.length * 0.6)) {
+    yoyPct = Math.round(((total - agoTotal) / agoTotal) * 100)
+    yoyLabel = 'vs last year'
+  }
+  return { bars, curLbl, cmpLbl, cmpFrame, total, compareTotal, deltaPct, avg, max, periodDays, yoyPct, yoyLabel }
 }
 
 /* Shared range state + summary for one metric. The hero and its chart both read

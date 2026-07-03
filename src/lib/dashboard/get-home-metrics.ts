@@ -150,7 +150,10 @@ function buildMetric(cfg: BuildCfg, today: Date, earliest: Date | null, frontier
 
   /* ── Month: up to 12 months of daily bars ── */
   const monIdx = (d: Date) => d.getFullYear() * 12 + d.getMonth()
-  const monthsAvail = Math.min(12, Math.max(1, monIdx(today) - monIdx(earliestDay) + 1))
+  // 15 months of daily history (not 12): the hero's "vs last year" line compares
+  // the selected window (last 7 / 30 days, etc.) to the SAME window a year ago,
+  // which needs daily data reaching ~13 months back.
+  const monthsAvail = Math.min(15, Math.max(1, monIdx(today) - monIdx(earliestDay) + 1))
   for (let k = monthsAvail - 1; k >= 0; k--) {
     const first = new Date(today.getFullYear(), today.getMonth() - k, 1)
     const dim = daysInMonth(first.getFullYear(), first.getMonth())

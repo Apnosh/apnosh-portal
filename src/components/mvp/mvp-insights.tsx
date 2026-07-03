@@ -235,10 +235,10 @@ function Body({ data, sel, setSel, summary, summaryLoading }: { data: InsightsDa
           )}
         </div>
         <div style={{ fontSize: 13.5, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
-        {fresh && mv.prevMonthLabel && (
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: mv.monthPct > 0 ? C.greenDk : mv.monthPct < 0 ? C.coral : C.mute }}>
-            {mv.monthPct > 0 ? <TrendingUp size={14} /> : mv.monthPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
-            {mv.monthPct > 0 ? `Up ${mv.monthPct}% from ${mv.prevMonthLabel}` : mv.monthPct < 0 ? `Down ${Math.abs(mv.monthPct)}% from ${mv.prevMonthLabel}` : `Even with ${mv.prevMonthLabel}`}
+        {fresh && rc.summary.yoyPct != null && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: rc.summary.yoyPct > 0 ? C.greenDk : rc.summary.yoyPct < 0 ? C.coral : C.mute }}>
+            {rc.summary.yoyPct > 0 ? <TrendingUp size={14} /> : rc.summary.yoyPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
+            {rc.summary.yoyPct > 0 ? `Up ${rc.summary.yoyPct}% ${rc.summary.yoyLabel}` : rc.summary.yoyPct < 0 ? `Down ${Math.abs(rc.summary.yoyPct)}% ${rc.summary.yoyLabel}` : `Even with last year`}
           </div>
         )}
 
