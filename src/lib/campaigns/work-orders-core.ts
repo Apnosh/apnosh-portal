@@ -427,8 +427,12 @@ export interface TeamDraftRow {
   target_platforms: string[]
   /** The owner's per-piece brief, so the team isn't building blind. Stored in the
    *  existing media_brief jsonb; the column is NOT NULL, so a piece with nothing to
-   *  say still carries the object with empty instructions (never null). */
-  media_brief: { from_menu: true; instructions: string[] }
+   *  say still carries the object with empty instructions (never null). `producer`
+   *  records which lane the owner bought ('ai' pieces get a real generated first
+   *  draft from the generate-ai-drafts cron; 'team' pieces are staff-authored) —
+   *  a JSON key, not a column, so pre-182 fallbacks and the lifecycle edit's
+   *  merge-never-replace behavior are unaffected. */
+  media_brief: { from_menu: true; instructions: string[]; producer: 'team' | 'ai' }
 }
 export function teamDraftRowForPiece(campaign: SavedCampaign, p: PlannedPiece): TeamDraftRow {
   // per-piece answers (add-time brief + Walk) merged with the campaign-level madlib answers
@@ -445,7 +449,7 @@ export function teamDraftRowForPiece(campaign: SavedCampaign, p: PlannedPiece): 
     target_publish_date: p.postISO,
     campaign_piece_key: p.key,
     target_platforms: targetPlatformsForPiece(p.type, p.channel),
-    media_brief: { from_menu: true, instructions },
+    media_brief: { from_menu: true, instructions, producer: p.producer === 'ai' ? 'ai' : 'team' },
   }
 }
 

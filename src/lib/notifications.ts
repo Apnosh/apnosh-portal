@@ -25,6 +25,7 @@ export type NotificationKind =
   | 'holiday_hours_reminder'
   | 'traffic_anomaly'
   | 'site_audit'
+  | 'ai_drafts_ready'
 
 export interface NotificationRow {
   id: string

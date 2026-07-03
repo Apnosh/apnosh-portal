@@ -42,6 +42,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/generate-ai-drafts",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/reconcile-accruals",
       "schedule": "0 */6 * * *"
     },
