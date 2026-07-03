@@ -111,6 +111,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // mode === 'push' — every mutating mode requires explicit consent and a prior prepare.
     if (body?.consent !== true) return NextResponse.json({ error: 'This writes to the live Google profile, so it needs your explicit confirmation.' }, { status: 400 })
     if (!step.prepared?.proposed) return NextResponse.json({ error: 'Prepare and review the draft first. A push always follows a review.' }, { status: 400 })
+    // gbp-posts authored its own human gate: a person reviews the month's plan BEFORE
+    // anything publishes. Honor it — the qa-review step must be done before any push.
+    if (action.handler === 'gbpPosts') {
+      const qa = steps.find((s) => s.id === 'qa-review')
+      if (qa && qa.status !== 'done') {
+        return NextResponse.json({ error: 'Finish the review step first — a person checks the posts before anything goes live.' }, { status: 400 })
+      }
+    }
     const value = typeof body?.value === 'string' ? body.value : ''
     const result = await pushWrite(clientId, action, value)
     if (result.ok) {
@@ -123,9 +131,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         verified,
         by: auth.userId,
         consent: true,
+        // The public link Google returned (a post's searchUrl): the cockpit renders
+        // the step's proof from applied.proofUrl, so it must persist, not just ride
+        // the one-shot HTTP response.
+        proofUrl: result.proofUrl ?? null,
       }
-      // Done only when the read-back confirms it. A pending/unconfirmed write stays open, honestly.
-      const fail = await saveStep(svc, id, campaignId, row.updated_at as string, steps, stepId, { applied }, verified)
+      // Done only when the read-back confirms it — and never auto-done for gbp-posts:
+      // one verified post is one post, not the month the step describes (four posts,
+      // the Q&A answers). The operator closes that step when the month actually is.
+      const completes = verified && action.handler !== 'gbpPosts'
+      const fail = await saveStep(svc, id, campaignId, row.updated_at as string, steps, stepId, { applied }, completes)
       if (fail) return fail
     }
     return NextResponse.json(result)

@@ -35,3 +35,27 @@ export function truncateAtBoundary(text: string, max = DESCRIPTION_MAX): string 
   const wordEnd = slice.lastIndexOf(' ')
   return (wordEnd > 0 ? slice.slice(0, wordEnd) : slice).trim()
 }
+
+/* ── GBP local posts (What's New) ── */
+
+// Google's summary cap is 1500; we stop well short so posts read like posts, not essays.
+export const POST_MAX = 1200
+export const POST_MIN = 80
+
+// Post copy is full of dotted times ("5.30-10.30"), dotted dates, and prices, which
+// the description's dot-tolerant PHONE_RE reads as phone numbers. Posts drop '.' from
+// the separator set: real phone shapes (555-123-4567, (555) 123 4567) still match.
+const PHONE_RE_POST = /(\+?\d[\s()-]*){7,}/
+
+export function validateGbpPost(text: string): { ok: true; value: string } | { ok: false; error: string } {
+  const v = text.trim()
+  if (!v) return { ok: false, error: 'The post is empty.' }
+  if (v.length > POST_MAX) return { ok: false, error: `The post is over ${POST_MAX} characters (${v.length}). Trim it and try again.` }
+  if (v.length < POST_MIN) return { ok: false, error: 'The post came out too short to be worth publishing. Draft it again.' }
+  // Same contact-detail guards as the description: the post's button carries the
+  // link, and a raw URL/phone in the summary reads as spam on the public profile.
+  if (URL_RE.test(v)) return { ok: false, error: 'Remove the link from the post text — the post button carries the link.' }
+  if (EMAIL_RE.test(v)) return { ok: false, error: 'Remove the email address from the post.' }
+  if (PHONE_RE_POST.test(v)) return { ok: false, error: 'Remove the phone number from the post; the profile already shows it.' }
+  return { ok: true, value: v }
+}

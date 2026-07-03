@@ -11,9 +11,10 @@ import 'server-only'
  */
 import { getActiveTokenForClient } from '@/lib/gbp-menu'
 import { updateClientListing, getClientListing } from '@/lib/gbp-listing'
+import { publishToGbp } from '@/lib/publish/gbp'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { draftDescription } from './draft'
-import { validateDescription } from './validate'
+import { draftDescription, draftGbpPost } from './draft'
+import { validateDescription, validateGbpPost } from './validate'
 import type { StepAction } from './bindings'
 
 export type ApplyResult = {
@@ -144,12 +145,62 @@ export async function prepareWrite(clientId: string, action: StepAction): Promis
     const current = live.ok ? (live.fields.description ?? null) : null
     return { ok: true, proposed: draft.proposed, current }
   }
+  if (action.handler === 'gbpPosts') {
+    // A post has no meaningful "current live value" — each publish is a new post.
+    const draft = await draftGbpPost(clientId)
+    if (!draft.ok) return { ok: false, error: draft.error }
+    return { ok: true, proposed: draft.proposed, current: null }
+  }
   return { ok: true, note: `The draft for ${action.label} lands next. The push path is ready.` }
 }
 
 export type PushOutcome = ApplyResult & { detail?: { sent?: string; readBack?: string | null; verified?: boolean } & Record<string, unknown> }
 
+/** Publish one reviewed post to the live profile. Same honesty contract as the
+ *  description push: validate before burning a rate slot, refuse the ambiguous
+ *  multi-location case, and only claim "live" on Google's own confirmation — a
+ *  returned post name IS the read-back for a create, and its public searchUrl
+ *  becomes the step's proof link. */
+async function pushGbpPost(clientId: string, value: string): Promise<PushOutcome> {
+  const check = validateGbpPost(value)
+  if (!check.ok) return { ok: false, error: check.error }
+  const v = check.value
+
+  const tok = await getActiveTokenForClient(clientId, null)
+  if ('error' in tok) return { ok: false, error: `Not connected to Google yet: ${tok.error}` }
+  const admin = createAdminClient()
+  const { count } = await admin.from('gbp_locations').select('id', { count: 'exact', head: true }).eq('client_id', clientId).eq('status', 'assigned')
+  if ((count ?? 0) > 1) return { ok: false, error: 'This client has more than one Google location, so a push could hit the wrong one. Per-location targeting is coming; for now post from the Google dashboard.' }
+
+  if (!(await acquireWriteSlot(tok.v4Path))) return { ok: false, error: 'Too many Google edits in the last minute for this profile. Wait a moment and push again.' }
+
+  // The validator strips URLs from the text promising "the button carries the link" —
+  // keep that promise: attach a Learn-more button pointing at the site on file. No
+  // site, no button (the post still stands; the profile itself carries the basics).
+  const { data: biz } = await admin.from('businesses').select('website_url').eq('client_id', clientId).maybeSingle()
+  let site = ((biz?.website_url as string | null) ?? '').trim()
+  if (!site) {
+    const { data: cl } = await admin.from('clients').select('website').eq('id', clientId).maybeSingle()
+    site = ((cl?.website as string | null) ?? '').trim()
+  }
+  if (site && !/^https?:\/\//i.test(site)) site = `https://${site}`
+  const callToAction = site ? { actionType: 'LEARN_MORE', url: site } : null
+
+  const res = await publishToGbp({ resourceName: tok.v4Path, accessToken: tok.accessToken, text: v, mediaUrls: [], callToAction })
+  if (!res.success) return { ok: false, error: res.error ?? 'Google did not accept the post.' }
+  if (!res.postName) {
+    return { ok: true, summary: 'Submitted to Google, but no post id came back to confirm it. Open the profile and check the post is showing.', detail: { sent: v, readBack: null, verified: false } }
+  }
+  return {
+    ok: true,
+    summary: 'The post is confirmed live on the Google profile.',
+    proofUrl: res.searchUrl,
+    detail: { sent: v, readBack: res.postName, verified: true, postName: res.postName, searchUrl: res.searchUrl ?? null },
+  }
+}
+
 export async function pushWrite(clientId: string, action: StepAction, value: string): Promise<PushOutcome> {
+  if (action.handler === 'gbpPosts') return pushGbpPost(clientId, value)
   if (action.handler !== 'description') return { ok: false, enabled: false, reason: `Live push for ${action.label} is wired next.` }
 
   // 1. Validate BEFORE anything else — an invalid value must never burn a rate slot or reach Google.

@@ -384,6 +384,8 @@ function YourTurnCard({ p, next, busy, edits, setEdits, onPush, onToggle, onSign
   if (s.prepared?.proposed && p.action?.kind === 'write') {
     const value = edits[s.id] ?? s.prepared.proposed
     const pendingPush = s.applied && s.applied.verified === false
+    // Per-handler limit: Google caps descriptions at 750; posts run to 1200 here.
+    const maxLen = p.action?.handler === 'gbpPosts' ? 1200 : 750
     return (
       <div className={shell}>
         {next && <NextBadge />}
@@ -398,9 +400,9 @@ function YourTurnCard({ p, next, busy, edits, setEdits, onPush, onToggle, onSign
         <div className="mt-2">
           <div className="flex items-center justify-between mb-1">
             <div className="text-[10px] text-ink-4 uppercase tracking-wide font-medium">Our draft · edit freely</div>
-            <div className={`text-[10px] tabular-nums ${value.length > 750 ? 'text-red-600 font-semibold' : 'text-ink-4'}`}>{value.length}/750</div>
+            <div className={`text-[10px] tabular-nums ${value.length > maxLen ? 'text-red-600 font-semibold' : 'text-ink-4'}`}>{value.length}/{maxLen}</div>
           </div>
-          <textarea value={value} maxLength={750} onChange={(e) => setEdits((d) => ({ ...d, [s.id]: e.target.value }))} rows={4} className="w-full rounded-lg border border-ink-6 bg-white px-3 py-2 text-[13px] text-ink resize-none focus:outline-none focus:ring-2 focus:ring-brand/40" />
+          <textarea value={value} maxLength={maxLen} onChange={(e) => setEdits((d) => ({ ...d, [s.id]: e.target.value }))} rows={4} className="w-full rounded-lg border border-ink-6 bg-white px-3 py-2 text-[13px] text-ink resize-none focus:outline-none focus:ring-2 focus:ring-brand/40" />
         </div>
         <button type="button" onClick={() => onPush(s.id, s.label, value)} disabled={busy || !value.trim()} className="mt-2 rounded-md bg-brand px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-brand-dark disabled:opacity-40 inline-flex items-center gap-1.5">{busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />} Push to Google</button>
       </div>
