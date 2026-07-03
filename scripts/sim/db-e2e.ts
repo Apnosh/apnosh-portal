@@ -9,6 +9,7 @@
  *   npx tsx scripts/sim/db-e2e.ts
  */
 import { config } from 'dotenv'
+import { createClient as createAnonClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildContentLine, CONTENT_META, SOLO_VISIT_SURCHARGE_CENTS } from '@/lib/campaigns/catalog'
 import { buildWorkOrderRows, buildChargeRow, buildPayoutRow, findUnaccrued, buildBridgeDraftRow } from '@/lib/campaigns/work-orders-core'
@@ -414,6 +415,95 @@ async function main() {
         s.eq('vendor payout fee = $18', payout.fee_cents, 1800)
         s.check('a seeded pool id is non-UUID → never resolves a vendor (default fee)', !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test('v_maya'))
         await a.from('vendors').delete().eq('id', vendorId)
+      }
+    }
+
+    // ── vendor dispatch rail (198/199): craft query + reassign CAS + column privacy ──
+    // Mirrors bestVendorForDiscipline / autoReassignDeclinedOrder's DB semantics
+    // (server-only, tsx can't import) the same way the reconcile group mirrors its sweep.
+    s.group('vendor dispatch rail — craft query, reassign CAS, column privacy (198/199)')
+    {
+      const stamp = Date.now()
+      // The seeded test creator's auth user doubles as a vendor login (person_id is an
+      // auth.users FK, so only a REAL user id can make a vendor dispatchable).
+      const { data: login } = await a.from('creator_logins').select('person_id').eq('creator_id', 'v_maya').maybeSingle()
+      const personId = (login?.person_id as string | null) ?? null
+
+      const { data: vd } = await a.from('vendors').insert({ slug: `sim-craft-${stamp}`, name: 'Sim Craft Vendor', vendor_type: 'individual', platform_fee_percent: 18, tier: 'pro', bookable: true, craft: 'Video', ...(personId ? { person_id: personId } : {}) }).select('id').single()
+      const dispatchable = (vd?.id as string) ?? null
+      const { data: vn } = await a.from('vendors').insert({ slug: `sim-craft-nologin-${stamp}`, name: 'Sim No-Login Vendor', vendor_type: 'individual', tier: 'free', bookable: true, craft: 'Video' }).select('id').single()
+      const noLogin = (vn?.id as string) ?? null
+      s.check('craft vendors insert (198 columns live)', !!dispatchable && !!noLogin)
+
+      if (dispatchable && noLogin) {
+        // The dispatch query, scoped to our fixtures so real future vendors can't flake it.
+        const best = await a
+          .from('vendors')
+          .select('id, name, person_id')
+          .in('id', [dispatchable, noLogin])
+          .eq('craft', 'Video')
+          .eq('bookable', true)
+          .not('person_id', 'is', null)
+          .order('avg_rating', { ascending: false, nullsFirst: false })
+          .order('total_bookings', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        if (personId) s.eq('dispatch picks the craft vendor WITH a login', best.data?.id, dispatchable)
+        else s.check('seed creator missing — dispatchable check skipped (run seed-test-creator)', true)
+        s.check('a vendor without a login is never dispatchable', best.data?.id !== noLogin)
+
+        // Decline-reassign compare-and-swap: the guarded re-offer lands exactly once,
+        // carries the decline reason to the next maker, and keeps the bounce history.
+        const { data: ro } = await a.from('creator_work_orders').insert({
+          campaign_id: campaignId, client_id: TEST_CLIENT, creator_id: 'v_maya', discipline: 'Social', slot: 9,
+          title: 'Reassign CAS test', brief: 'x', status: 'declined', note: 'too busy this week',
+        }).select('id').single()
+        const roId = (ro?.id as string) ?? null
+        if (roId) {
+          const reoffer = { creator_id: 's_ivy', vendor_id: null, status: 'offered', note: 'Previous maker declined: "too busy this week"', prior_creator_ids: ['v_maya'], updated_at: new Date().toISOString() }
+          const r1 = await a.from('creator_work_orders').update(reoffer).eq('id', roId).eq('status', 'declined').select('id').maybeSingle()
+          s.check('guarded re-offer lands once', !!r1.data, r1.error?.message)
+          const r2 = await a.from('creator_work_orders').update(reoffer).eq('id', roId).eq('status', 'declined').select('id').maybeSingle()
+          s.check('second guarded re-offer is a no-op (status moved on)', !r2.data)
+          const { data: after } = await a.from('creator_work_orders').select('status, creator_id, note, prior_creator_ids').eq('id', roId).single()
+          s.eq('re-offered to the team', [after?.status, after?.creator_id], ['offered', 's_ivy'])
+          s.eq('decline history rides prior_creator_ids (198)', after?.prior_creator_ids, ['v_maya'])
+          s.check('decline reason carried to the next maker', typeof after?.note === 'string' && after.note.includes('too busy'))
+        }
+
+        // Column privacy (199): anon can browse the storefront columns but never the
+        // money/identity ones — grants, not RLS, do the scoping.
+        const anon = createAnonClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+        const privAcct = await anon.from('vendors').select('stripe_account_id').limit(1)
+        s.check('anon cannot read vendors.stripe_account_id (199)', !!privAcct.error)
+        const privPerson = await anon.from('vendors').select('person_id').limit(1)
+        s.check('anon cannot read vendors.person_id (199)', !!privPerson.error)
+        const privFee = await anon.from('vendors').select('platform_fee_percent').limit(1)
+        s.check('anon cannot read vendors.platform_fee_percent (199)', !!privFee.error)
+        const pub = await anon.from('vendors').select('id, name, craft, avg_rating').eq('bookable', true).limit(1)
+        s.check('anon still reads the public display columns', !pub.error, pub.error?.message)
+      }
+      if (dispatchable) await a.from('vendors').delete().eq('id', dispatchable)
+      if (noLogin) await a.from('vendors').delete().eq('id', noLogin)
+    }
+
+    // ── invoice bridge (197): the accrued→invoiced claim CAS + id-scoped void release ──
+    s.group('invoice bridge — claim CAS + void release (197)')
+    {
+      const { data: ch } = await a.from('campaign_charges').insert({ client_id: TEST_CLIENT, campaign_id: campaignId, source: 'team', amount_cents: 500, status: 'accrued' }).select('id').single()
+      const chId = (ch?.id as string) ?? null
+      s.check('accrued charge inserts', !!chId)
+      if (chId) {
+        const c1 = await a.from('campaign_charges').update({ status: 'invoiced', invoiced_at: new Date().toISOString() }).eq('id', chId).eq('status', 'accrued').select('id')
+        s.eq('the claim wins exactly once', c1.data?.length ?? 0, 1)
+        const c2 = await a.from('campaign_charges').update({ status: 'invoiced' }).eq('id', chId).eq('status', 'accrued').select('id')
+        s.eq('a racing second claim loses', c2.data?.length ?? 0, 0)
+        await a.from('campaign_charges').update({ stripe_invoice_id: `in_sim_${Date.now()}` }).eq('id', chId)
+        const { data: stamped } = await a.from('campaign_charges').select('stripe_invoice_id').eq('id', chId).single()
+        const invId = stamped?.stripe_invoice_id as string
+        const rel = await a.from('campaign_charges').update({ status: 'accrued', stripe_invoice_id: null, invoiced_at: null }).eq('stripe_invoice_id', invId).eq('status', 'invoiced').select('id')
+        s.eq('the void release is id-scoped and lands', rel.data?.length ?? 0, 1)
+        // the charge rides on the throwaway campaign → teardown cascades it
       }
     }
   } finally {
