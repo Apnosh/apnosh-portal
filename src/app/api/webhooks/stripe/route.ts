@@ -142,6 +142,8 @@ async function dispatch(event: Stripe.Event, supabase: AdminClient) {
       return handleInvoiceFailed(supabase, event.data.object as Stripe.Invoice)
     case 'invoice.voided':
       return handleInvoiceVoided(supabase, event.data.object as Stripe.Invoice)
+    case 'invoice.marked_uncollectible':
+      return handleInvoiceUncollectible(supabase, event.data.object as Stripe.Invoice)
 
     // --- Customer / payment method ---
     case 'customer.updated':
@@ -542,6 +544,33 @@ async function handleInvoicePaid(supabase: AdminClient, invoice: Stripe.Invoice)
     const { markQuotePaid } = await import('@/lib/admin/quote-invoice')
     await markQuotePaid(invoice.id)
   }
+
+  // Campaign-charge bridge: an invoice generated from accrued campaign work flips
+  // its charges paid, and each paid creator-lane piece unlocks its payout
+  // (accrued→payable) — money-out only ever follows money-in. Status-conditional,
+  // so the invoice.paid / invoice.payment_succeeded double-fire is a no-op the
+  // second time. Pre-197 the filter column is absent (42703) → skip silently.
+  if (invoice.id) {
+    const { data: flipped, error } = await supabase
+      .from('campaign_charges')
+      .update({ status: 'paid', paid_at: new Date().toISOString() })
+      .eq('stripe_invoice_id', invoice.id)
+      .eq('status', 'invoiced')
+      .select('work_order_id')
+    if (error && error.code !== '42703') {
+      console.warn('[stripe webhook] campaign_charges paid-flip failed:', error.message)
+    }
+    const orderIds = ((flipped ?? []) as { work_order_id: string | null }[])
+      .map((r) => r.work_order_id)
+      .filter((v): v is string => !!v)
+    if (orderIds.length) {
+      await supabase
+        .from('creator_payouts')
+        .update({ status: 'payable' })
+        .in('work_order_id', orderIds)
+        .eq('status', 'accrued')
+    }
+  }
 }
 
 async function handleInvoiceFailed(supabase: AdminClient, invoice: Stripe.Invoice) {
@@ -570,6 +599,39 @@ async function handleInvoiceVoided(supabase: AdminClient, invoice: Stripe.Invoic
   if (invoice.metadata?.apnosh_quote_id && invoice.id) {
     const { markQuoteVoided } = await import('@/lib/admin/quote-invoice')
     await markQuoteVoided(invoice.id)
+  }
+
+  // Campaign-charge bridge: a voided (discarded) invoice releases its claimed
+  // charges back to accrued so the work can be invoiced again. Paid charges are
+  // untouched — Stripe cannot void a paid invoice.
+  if (invoice.id) {
+    const { error } = await supabase
+      .from('campaign_charges')
+      .update({ status: 'accrued', stripe_invoice_id: null, invoiced_at: null })
+      .eq('stripe_invoice_id', invoice.id)
+      .eq('status', 'invoiced')
+    if (error && error.code !== '42703') {
+      console.warn('[stripe webhook] campaign_charges void-release failed:', error.message)
+    }
+  }
+}
+
+async function handleInvoiceUncollectible(supabase: AdminClient, invoice: Stripe.Invoice) {
+  await upsertInvoice(supabase, invoice, 'uncollectible')
+
+  // A write-off is a deliberate decision NOT to collect: bridge charges go
+  // terminally 'void' — releasing them to 'accrued' would re-bill work the
+  // admin just wrote off. Payouts are left where they are; whether creators
+  // still get paid for written-off work is a human policy call, not a webhook's.
+  if (invoice.id) {
+    const { error } = await supabase
+      .from('campaign_charges')
+      .update({ status: 'void' })
+      .eq('stripe_invoice_id', invoice.id)
+      .eq('status', 'invoiced')
+    if (error && error.code !== '42703') {
+      console.warn('[stripe webhook] campaign_charges uncollectible-void failed:', error.message)
+    }
   }
 }
 

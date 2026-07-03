@@ -387,6 +387,14 @@ export async function createOneTimeInvoice(args: {
    * here since one-time invoices have no future billing period.
    */
   discount?: Omit<DiscountInput, 'duration' | 'durationMonths'>
+  /**
+   * Server-side callers only (never crosses the client boundary): runs after the
+   * draft invoice exists but BEFORE it finalizes. The campaign-charge bridge
+   * stamps its charge rows with the invoice id here, so an invoice can only
+   * become collectible once the work it bills is linked to it — a throw aborts
+   * the run and the catch below deletes the still-draft invoice.
+   */
+  beforeFinalize?: (stripeInvoiceId: string) => Promise<void>
 }): Promise<ActionResult<{
   invoiceId: string
   stripeInvoiceId: string
@@ -417,6 +425,13 @@ export async function createOneTimeInvoice(args: {
     return { success: false, error: 'Client has no Stripe customer yet. Run "Set up Stripe billing" first.' }
   }
 
+  // Tracked outside the try so the catch can clean up its own orphan: a run that
+  // dies after creating the invoice must not leave it behind — a still-draft
+  // invoice is deleted, a finalized one voided. Otherwise a transient failure
+  // strands a collectible invoice the admin never saw (and, for the bridge
+  // caller, opens a double-billing window when the charges are re-invoiced).
+  let createdInvoiceId: string | null = null
+  let didFinalize = false
   try {
     // Step 1: create the invoice in Stripe (draft state) so we can attach
     // line items to it. payment_settings lets the client choose card OR
@@ -468,6 +483,7 @@ export async function createOneTimeInvoice(args: {
       metadata: { client_id: args.clientId, source: 'admin_portal_one_time' },
       ...(couponId ? { discounts: [{ coupon: couponId }] } : {}),
     })
+    createdInvoiceId = invoice.id
 
     // Step 2: attach each line item.
     for (const line of args.lines) {
@@ -485,6 +501,11 @@ export async function createOneTimeInvoice(args: {
       })
     }
 
+    // Let a server-side caller link its own rows to the invoice while it is
+    // still an uncollectible draft — a throw here aborts to the catch, which
+    // deletes the draft, so nothing half-linked can ever be sent or paid.
+    if (args.beforeFinalize) await args.beforeFinalize(invoice.id)
+
     // Step 3: finalize WITHOUT sending. This moves status draft -> open,
     // assigns a permanent invoice number, and runs tax calculation so
     // the hosted URL shows final numbers. Admin gets to review before
@@ -492,6 +513,7 @@ export async function createOneTimeInvoice(args: {
     const finalized = await stripe.invoices.finalizeInvoice(invoice.id, {
       auto_advance: false,
     })
+    didFinalize = true
 
     // Step 4: re-fetch to get the authoritative finalized invoice.
     // Stripe's tax calculation + discount application happen during
@@ -549,8 +571,138 @@ export async function createOneTimeInvoice(args: {
       },
     }
   } catch (err) {
+    // Best-effort orphan cleanup (see the tracking vars above the try). A void
+    // still emits invoice.voided, so any rows a caller linked pre-finalize are
+    // released by the normal webhook machinery.
+    if (createdInvoiceId) {
+      if (didFinalize) await stripe.invoices.voidInvoice(createdInvoiceId).then(() => undefined, () => undefined)
+      else await stripe.invoices.del(createdInvoiceId).then(() => undefined, () => undefined)
+    }
     const msg = err instanceof Error ? err.message : 'Failed to create invoice'
     return { success: false, error: msg }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Campaign-charge bridge -- turn accrued campaign work into a reviewable invoice
+// ---------------------------------------------------------------------------
+
+/**
+ * The accrual→invoice bridge: collect every accrued campaign charge for a client
+ * onto ONE finalized-but-unsent Stripe invoice (the same admin-review posture as
+ * createOneTimeInvoice above — nothing reaches the client until the admin clicks
+ * Send in the billing card).
+ *
+ * Ordering is the whole design:
+ *   1. CLAIM the charges (accrued→invoiced, conditional) before Stripe is
+ *      touched — two admins racing can't put one piece of work on two invoices.
+ *   2. Stamp stripe_invoice_id on the rows BEFORE the invoice finalizes (the
+ *      beforeFinalize hook), so an invoice only ever becomes collectible with
+ *      its charges already linked. No failure window can leave an open invoice
+ *      whose work has quietly returned to 'accrued' (the double-billing orphan).
+ *   3. On any failure, createOneTimeInvoice deletes its draft / voids a
+ *      finalized invoice, and the claim is released here. A claim stranded by a
+ *      hard crash reverts via the reconcileAccruals backstop within a few hours
+ *      (the reconcile cron runs every 6).
+ * The stamped id is what the webhook uses to flip rows paid (invoice.paid) or
+ * release them back to accrued (invoice.voided — the admin discarded the draft).
+ */
+export async function createInvoiceFromAccruedCharges(clientId: string): Promise<ActionResult<{
+  invoiceId: string
+  stripeInvoiceId: string
+  hostedUrl: string | null
+  totalCents: number
+  chargeCount: number
+}>> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+  const admin = getAdminSupabase()
+
+  const { data: accrued, error: readErr } = await admin
+    .from('campaign_charges')
+    .select('id, amount_cents, campaign_id, work_order_id, source')
+    .eq('client_id', clientId)
+    .eq('status', 'accrued')
+    .gt('amount_cents', 0)
+    .order('created_at', { ascending: true })
+    .limit(100)
+  if (readErr) return { success: false, error: readErr.message }
+  const accruedRows = (accrued ?? []) as { id: string; amount_cents: number; campaign_id: string | null; work_order_id: string | null; source: string }[]
+  if (accruedRows.length === 0) return { success: false, error: 'Nothing is accrued for this client.' }
+
+  const ids = accruedRows.map((c) => c.id)
+  const { data: claimed, error: claimErr } = await admin
+    .from('campaign_charges')
+    .update({ status: 'invoiced', invoiced_at: new Date().toISOString() })
+    .in('id', ids)
+    .eq('status', 'accrued')
+    .select('id')
+  if (claimErr) return { success: false, error: claimErr.message }
+  const claimedIds = new Set(((claimed ?? []) as { id: string }[]).map((r) => r.id))
+  const charges = accruedRows.filter((c) => claimedIds.has(c.id))
+  if (!charges.length) return { success: false, error: 'These charges were just claimed by another invoice. Refresh and retry.' }
+
+  // Human-readable lines: the campaign's name plus the piece's work-order title
+  // when it has one, so the client recognizes every dollar on the hosted page.
+  const campaignIds = [...new Set(charges.map((c) => c.campaign_id).filter((v): v is string => !!v))]
+  const orderIds = charges.map((c) => c.work_order_id).filter((v): v is string => !!v)
+  const [campsRes, ordersRes] = await Promise.all([
+    campaignIds.length ? admin.from('campaigns').select('id, name').in('id', campaignIds) : Promise.resolve({ data: [] }),
+    orderIds.length ? admin.from('creator_work_orders').select('id, title').in('id', orderIds) : Promise.resolve({ data: [] }),
+  ])
+  const campName = new Map(((campsRes.data ?? []) as { id: string; name: string | null }[]).map((c) => [c.id, c.name || 'Campaign']))
+  const orderTitle = new Map(((ordersRes.data ?? []) as { id: string; title: string | null }[]).map((o) => [o.id, o.title || '']))
+
+  const lines: InvoiceLineInput[] = charges.map((c) => {
+    const camp = campName.get(c.campaign_id ?? '') ?? 'Campaign work'
+    const piece = orderTitle.get(c.work_order_id ?? '') || (c.source === 'creator' ? 'creator piece' : 'published content piece')
+    return { description: `${camp} — ${piece}`, quantity: 1, unitAmountDollars: c.amount_cents / 100, serviceCategory: 'custom' }
+  })
+
+  let stampedInvoiceId: string | null = null
+  const created = await createOneTimeInvoice({
+    clientId,
+    lines,
+    notes: 'Campaign work — delivered and published pieces',
+    // Link the claimed rows while the invoice is still an uncollectible draft;
+    // a failure here aborts the run and the draft is deleted.
+    beforeFinalize: async (stripeInvoiceId) => {
+      stampedInvoiceId = stripeInvoiceId
+      const { error } = await admin
+        .from('campaign_charges')
+        .update({ stripe_invoice_id: stripeInvoiceId })
+        .in('id', [...claimedIds])
+        .eq('status', 'invoiced')
+      if (error) throw new Error(`linking the charges to the invoice failed: ${error.message}`)
+    },
+  })
+  if (!created.success || !created.data) {
+    // No collectible invoice survives a failure (the draft was deleted, or a
+    // finalized invoice voided), so release the claim. Scoped to THIS run's
+    // stamp (or no stamp): a row the voided-webhook already released and a
+    // faster admin re-claimed onto a new invoice carries the new invoice's id
+    // and is untouched. Best-effort — the reconcile backstop reverts the rest.
+    const release = admin
+      .from('campaign_charges')
+      .update({ status: 'accrued', stripe_invoice_id: null, invoiced_at: null })
+      .in('id', [...claimedIds])
+      .eq('status', 'invoiced')
+    await (stampedInvoiceId
+      ? release.or(`stripe_invoice_id.is.null,stripe_invoice_id.eq.${stampedInvoiceId}`)
+      : release.is('stripe_invoice_id', null)
+    ).then(() => undefined, () => undefined)
+    return { success: false, error: created.success ? 'Invoice creation failed' : created.error }
+  }
+
+  return {
+    success: true,
+    data: {
+      invoiceId: created.data.invoiceId,
+      stripeInvoiceId: created.data.stripeInvoiceId,
+      hostedUrl: created.data.hostedUrl,
+      totalCents: created.data.totalCents,
+      chargeCount: charges.length,
+    },
   }
 }
 
@@ -613,6 +765,14 @@ export async function deleteDraftInvoice(invoiceId: string): Promise<ActionResul
     await stripe.invoices.del(inv.stripe_invoice_id)
     // Remove our mirror too -- Stripe won't send any events for a deletion.
     await admin.from('invoices').delete().eq('id', invoiceId)
+    // No event also means no webhook release: free any bridge campaign charges
+    // stamped to this draft (only possible if a bridge run died between its
+    // stamp and finalize) so the work stays billable.
+    await admin.from('campaign_charges')
+      .update({ status: 'accrued', stripe_invoice_id: null, invoiced_at: null })
+      .eq('stripe_invoice_id', inv.stripe_invoice_id)
+      .eq('status', 'invoiced')
+      .then(() => undefined, () => undefined)
     revalidatePath(`/admin/clients/${inv.client_id}`)
     revalidatePath('/admin/billing')
     return { success: true }
@@ -642,6 +802,17 @@ export async function voidInvoice(invoiceId: string): Promise<ActionResult> {
 
   try {
     await stripe.invoices.voidInvoice(inv.stripe_invoice_id)
+    // Optimistic mirror + bridge-charge release: the invoice.voided webhook does
+    // both idempotently, but the admin's card reloads immediately after this
+    // action — without these the voided invoice still reads 'open' and any
+    // bridged campaign charges look vanished until the webhook lands.
+    await admin.from('invoices').update({ status: 'void' }).eq('id', invoiceId)
+      .then(() => undefined, () => undefined)
+    await admin.from('campaign_charges')
+      .update({ status: 'accrued', stripe_invoice_id: null, invoiced_at: null })
+      .eq('stripe_invoice_id', inv.stripe_invoice_id)
+      .eq('status', 'invoiced')
+      .then(() => undefined, () => undefined)
     revalidatePath(`/admin/clients/${inv.client_id}`)
     revalidatePath('/admin/billing')
     return { success: true }

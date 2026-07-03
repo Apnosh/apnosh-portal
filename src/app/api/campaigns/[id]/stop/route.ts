@@ -57,7 +57,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const settlementLines = [
     stoppedCount > 0 ? `${stoppedCount} unstarted piece${stoppedCount === 1 ? '' : 's'} of work stopped.` : 'Nothing was left to stop.',
     sweep.inFlight > 0 ? `${sweep.inFlight} piece${sweep.inFlight === 1 ? ' is' : 's are'} already being made — they finish and bill as normal.` : null,
-    charges.accruedCents > 0 ? `Billed so far: $${Math.round(charges.accruedCents / 100)}. That stands — the work was done.` : 'Nothing has been billed.',
+    charges.accruedCents > 0 ? `Owed for delivered work so far: $${Math.round(charges.accruedCents / 100)}. That stands — the work was done; it arrives on one invoice.` : 'Nothing is owed.',
     monthlyStopped > 0 ? `Monthly items ($${Math.round(monthlyStopped)}/mo) stop now.` : null,
   ].filter((l): l is string => !!l)
 

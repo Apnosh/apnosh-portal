@@ -425,9 +425,9 @@ export async function campaignHasAccruedMoney(campaignId: string): Promise<boole
  * deferred here. Idempotent (the accrue fns no-op if already present), best-effort,
  * and a no-op pre-180/181. Run by the reconcile cron, or scoped to one campaign.
  */
-export async function reconcileAccruals(opts?: { campaignId?: string }): Promise<{ ordersChecked: number; chargesRecovered: number; payoutsRecovered: number; draftsChecked: number; teamChargesRecovered: number }> {
+export async function reconcileAccruals(opts?: { campaignId?: string }): Promise<{ ordersChecked: number; chargesRecovered: number; payoutsRecovered: number; draftsChecked: number; teamChargesRecovered: number; claimsReverted: number; paidSynced: number; voidsSynced: number }> {
   const admin = createAdminClient()
-  const ZERO = { ordersChecked: 0, chargesRecovered: 0, payoutsRecovered: 0, draftsChecked: 0, teamChargesRecovered: 0 }
+  const ZERO = { ordersChecked: 0, chargesRecovered: 0, payoutsRecovered: 0, draftsChecked: 0, teamChargesRecovered: 0, claimsReverted: 0, paidSynced: 0, voidsSynced: 0 }
   let oq = admin.from('creator_work_orders').select('id, amount_cents').eq('status', 'approved')
   if (opts?.campaignId) oq = oq.eq('campaign_id', opts.campaignId)
   const { data: orders, error } = await oq          // pre-180: amount_cents absent → error → no-op
@@ -472,8 +472,92 @@ export async function reconcileAccruals(opts?: { campaignId?: string }): Promise
     draftsChecked = draftIds.length
   }
 
-  if (!ordersChecked && !draftsChecked) return ZERO
-  return { ordersChecked, chargesRecovered, payoutsRecovered, draftsChecked, teamChargesRecovered }
+  // Invoice-bridge backstop (197). Two recoveries:
+  //   (a) release claims stranded by a hard crash — 'invoiced' with no
+  //       stripe_invoice_id after an hour means the bridge died before an
+  //       invoice existed (its own release also failed); the work must go back
+  //       to 'accrued' or it is never billed.
+  //   (b) re-sync flips the webhook missed (it returns 200 even on handler
+  //       errors, so Stripe never retries): read the local invoices mirror by
+  //       invoice id — and when the mirror itself is unsettled, ask Stripe
+  //       directly, because the mirror is written by the very webhook whose
+  //       failure this backstop covers (it can lie 'open' forever).
+  //       paid → charges paid + payouts unlocked (accrued→payable);
+  //       void → charges released to accrued; uncollectible (write-off) → void.
+  // Every update is scoped to BOTH the charge status and the invoice id, so a
+  // charge that moved onto a NEW invoice between our read and the write is
+  // untouched. Pre-197 the filter columns are absent → the reads error → no-op.
+  // Scoped (per-campaign) reconciles skip this — it is the 6-hourly cron's job.
+  let claimsReverted = 0, paidSynced = 0, voidsSynced = 0
+  if (!opts?.campaignId) {
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { data: stranded, error: strandedErr } = await admin
+      .from('campaign_charges')
+      .update({ status: 'accrued', invoiced_at: null })
+      .eq('status', 'invoiced')
+      .is('stripe_invoice_id', null)
+      .lt('invoiced_at', hourAgo)
+      .select('id')
+    if (!strandedErr) claimsReverted = stranded?.length ?? 0
+
+    const { data: invoiced, error: invErr } = await admin
+      .from('campaign_charges')
+      .select('id, stripe_invoice_id, work_order_id')
+      .eq('status', 'invoiced')
+      .not('stripe_invoice_id', 'is', null)
+      .limit(500)
+    if (!invErr && invoiced && invoiced.length) {
+      const byInvoice = new Map<string, string[]>()
+      for (const c of invoiced) {
+        const key = c.stripe_invoice_id as string
+        byInvoice.set(key, [...(byInvoice.get(key) ?? []), c.id as string])
+      }
+      const invIds = [...byInvoice.keys()]
+      const { data: mirror } = await admin.from('invoices').select('stripe_invoice_id, status').in('stripe_invoice_id', invIds)
+      const statusByInv = new Map((mirror ?? []).map((m) => [m.stripe_invoice_id as string, (m.status as string) ?? '']))
+
+      // Mirror unsettled (or missing) → Stripe is the source of truth. Capped
+      // per run; anything past the cap waits for the next 6-hour sweep.
+      const unsettled = invIds.filter((id) => !['paid', 'void', 'uncollectible'].includes(statusByInv.get(id) ?? ''))
+      if (unsettled.length) {
+        try {
+          const { stripe } = await import('@/lib/stripe')
+          for (const id of unsettled.slice(0, 20)) {
+            const inv = await stripe.invoices.retrieve(id).catch(() => null)
+            if (inv?.status) statusByInv.set(id, inv.status)
+          }
+        } catch { /* no Stripe key in this environment → the mirror is all we have */ }
+      }
+
+      for (const [invId, chargeIds] of byInvoice) {
+        const st = statusByInv.get(invId) ?? ''
+        if (st === 'paid') {
+          const { data: flipped } = await admin.from('campaign_charges')
+            .update({ status: 'paid', paid_at: new Date().toISOString() })
+            .in('id', chargeIds).eq('status', 'invoiced').eq('stripe_invoice_id', invId)
+            .select('work_order_id')
+          paidSynced += flipped?.length ?? 0
+          const orderIds = (flipped ?? []).map((r) => r.work_order_id as string | null).filter((v): v is string => !!v)
+          if (orderIds.length) {
+            await admin.from('creator_payouts').update({ status: 'payable' }).in('work_order_id', orderIds).eq('status', 'accrued')
+          }
+        } else if (st === 'void') {
+          const { data: released } = await admin.from('campaign_charges')
+            .update({ status: 'accrued', stripe_invoice_id: null, invoiced_at: null })
+            .in('id', chargeIds).eq('status', 'invoiced').eq('stripe_invoice_id', invId)
+            .select('id')
+          voidsSynced += released?.length ?? 0
+        } else if (st === 'uncollectible') {
+          await admin.from('campaign_charges')
+            .update({ status: 'void' })
+            .in('id', chargeIds).eq('status', 'invoiced').eq('stripe_invoice_id', invId)
+        }
+      }
+    }
+  }
+
+  if (!ordersChecked && !draftsChecked && !claimsReverted && !paidSynced && !voidsSynced) return ZERO
+  return { ordersChecked, chargesRecovered, payoutsRecovered, draftsChecked, teamChargesRecovered, claimsReverted, paidSynced, voidsSynced }
 }
 
 /**

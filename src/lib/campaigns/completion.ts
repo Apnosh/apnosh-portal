@@ -40,7 +40,7 @@ const LETTER_SCHEMA = {
     title: { type: 'string', description: 'Short, warm, factual. e.g. "Your slow-nights campaign wrapped". No exclamation marks.' },
     body: {
       type: 'string',
-      description: '2-4 short sentences. Plain words a busy owner reads in ten seconds. State what went out, what the results show so far (or that results are still coming in), and what was billed. ONLY the facts given — never invent numbers.',
+      description: '2-4 short sentences. Plain words a busy owner reads in ten seconds. State what went out, what the results show so far (or that results are still coming in), and what the delivered work costs (it is invoiced separately — never say it was already billed or charged). ONLY the facts given — never invent numbers.',
     },
   },
   required: ['title', 'body'],
@@ -131,13 +131,16 @@ async function composeWrapUpLetter(campaignId: string, name: string): Promise<Le
   if (rollupPlain) parts.push(rollupPlain)
   else if (gatheringCount > 0) parts.push('Results are still coming in. Numbers land over the next days.')
   if (totalClicks > 0) parts.push(`People tapped your links ${totalClicks} time${totalClicks === 1 ? '' : 's'}.`)
-  if (billed) parts.push(`Billed for this campaign so far: ${billed}.`)
+  // 'Owed', not 'billed': the rollup counts accrued charges that may not be on
+  // an invoice yet — the invoice bridge sends them later. Saying 'billed' would
+  // make the eventual invoice read as a second, surprise charge.
+  if (billed) parts.push(`Cost of the delivered work: ${billed} — it arrives on one invoice.`)
   parts.push('Open the campaign for the full breakdown.')
   const fallback: Letter = { title: `${name} wrapped`, body: parts.join(' ') }
 
   const ai = await callStructuredOutput<Letter>({
     system: LETTER_SYSTEM,
-    user: JSON.stringify({ campaignName: name, pieces, servicesFinished: servicesDone, linkTaps: totalClicks > 0 ? totalClicks : null, overallSoFar: rollupPlain ?? 'still gathering', billedSoFar: billed ?? 'nothing billed yet' }),
+    user: JSON.stringify({ campaignName: name, pieces, servicesFinished: servicesDone, linkTaps: totalClicks > 0 ? totalClicks : null, overallSoFar: rollupPlain ?? 'still gathering', costOfDeliveredWorkInvoicedSeparately: billed ?? 'nothing owed yet' }),
     schema: LETTER_SCHEMA as unknown as object,
     maxTokens: 400,
   })

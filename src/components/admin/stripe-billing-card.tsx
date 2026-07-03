@@ -22,6 +22,7 @@ import {
   startMonthlyRetainer,
   cancelSubscription,
   createOneTimeInvoice,
+  createInvoiceFromAccruedCharges,
   resendInvoice,
   voidInvoice,
   createCustomerPortalLink,
@@ -151,24 +152,30 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [accrued, setAccrued] = useState<{ count: number; totalCents: number }>({ count: 0, totalCents: 0 })
 
   const load = useCallback(async () => {
     setLoading(true)
     const supabase = createClient()
 
-    const [bcRes, subRes, invRes, prodRes, clientRes, profileRes] = await Promise.all([
+    const [bcRes, subRes, invRes, prodRes, clientRes, profileRes, accruedRes] = await Promise.all([
       supabase.from('billing_customers').select('id, stripe_customer_id, payment_method_brand, payment_method_last4').eq('client_id', clientId).maybeSingle(),
       supabase.from('subscriptions').select('id, plan_name, amount_cents, status, collection_method, current_period_end, cancel_at_period_end').eq('client_id', clientId).in('status', ['active', 'trialing', 'past_due', 'paused', 'incomplete']).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('invoices').select('id, invoice_number, type, status, total_cents, issued_at, paid_at, due_at, hosted_invoice_url').eq('client_id', clientId).order('created_at', { ascending: false }).limit(20),
       supabase.from('products').select('id, name, category, amount_cents, billing_type').eq('active', true).in('category', ['reel', 'addon', 'website', 'gbp']).order('amount_cents', { ascending: false }),
       supabase.from('clients').select('email, billing_email').eq('id', clientId).maybeSingle(),
       supabase.from('client_profiles').select('full_address, city, state, zip').eq('client_id', clientId).maybeSingle(),
+      // Delivered campaign work no invoice collects yet (RLS: admin-only table, and
+      // this card only renders for admins). $0 charges owe nothing — excluded.
+      supabase.from('campaign_charges').select('amount_cents').eq('client_id', clientId).eq('status', 'accrued').gt('amount_cents', 0),
     ])
 
     setBillingCustomer(bcRes.data as BillingCustomerRow | null)
     setSubscription(subRes.data as SubscriptionRow | null)
     setInvoices((invRes.data ?? []) as InvoiceRow[])
     setProducts((prodRes.data ?? []) as ProductRow[])
+    const accruedRows = (accruedRes.data ?? []) as { amount_cents: number | null }[]
+    setAccrued({ count: accruedRows.length, totalCents: accruedRows.reduce((s, r) => s + (r.amount_cents ?? 0), 0) })
 
     // Build prefill object from whatever we have. Defaults kept empty
     // strings (not undefined) so form inputs stay controlled.
@@ -244,6 +251,21 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
     else setNotice('Invoice resent.')
   }
 
+  async function onGenerateAccruedInvoice() {
+    setBusyAction('accrued'); setError(null); setNotice(null)
+    const result = await createInvoiceFromAccruedCharges(clientId)
+    setBusyAction(null)
+    if (!result.success || !result.data) { setError(result.success ? 'Invoice creation failed' : result.error); load(); return }
+    // One generate claims at most 100 charges; say so instead of letting the
+    // admin send a partial bill believing it is complete.
+    const capped = result.data.chargeCount < accrued.count
+    setNotice(
+      `Invoice drafted: ${result.data.chargeCount} piece${result.data.chargeCount === 1 ? '' : 's'}, $${(result.data.totalCents / 100).toFixed(2)}. Nothing was sent — review it below, then Send.`
+      + (capped ? ` This covers the first ${result.data.chargeCount} pieces — generate again for the rest.` : '')
+    )
+    load()
+  }
+
   async function onVoidInvoice(invoiceId: string) {
     if (!confirm('Cancel this invoice? The client will no longer be able to pay it. This cannot be undone.')) return
     setBusyAction(`void-${invoiceId}`); setError(null); setNotice(null)
@@ -313,6 +335,38 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
               Oldest is {oldestDaysOverdue} days past due. Click an invoice below to resend the email or cancel.
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Accrued campaign work → one reviewable invoice. Renders in EVERY state:
+          charges accrue at approval time with no billing precondition, so a
+          client with no Stripe customer yet must still show the money waiting
+          (the button gates on setup instead). The generated invoice lands in
+          the list below with the normal Send / Cancel controls. */}
+      {accrued.count > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 mb-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-ink">
+                ${(accrued.totalCents / 100).toFixed(2)} of campaign work to bill
+              </div>
+              <div className="text-[11px] text-ink-3">
+                {accrued.count} delivered piece{accrued.count === 1 ? '' : 's'} not on any invoice yet
+              </div>
+            </div>
+            <button
+              onClick={onGenerateAccruedInvoice}
+              disabled={busyAction === 'accrued' || !hasCustomer}
+              title={hasCustomer ? undefined : 'Set up Stripe billing first'}
+              className="shrink-0 bg-white hover:bg-bg-2 border border-ink-6 text-ink text-xs font-medium rounded-lg px-3 py-1.5 inline-flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {busyAction === 'accrued' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              Generate invoice
+            </button>
+          </div>
+          {!hasCustomer && (
+            <div className="mt-1.5 text-[11px] text-amber-700">Set up Stripe billing first — the invoice needs a Stripe customer.</div>
+          )}
         </div>
       )}
 
