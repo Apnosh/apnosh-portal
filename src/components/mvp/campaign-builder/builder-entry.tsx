@@ -15,6 +15,7 @@ import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
 import { resolveBrainGoal } from '@/lib/campaigns/builder/compose-plan'
 import { CREATE_CATALOG_IDS } from '@/lib/campaigns/data/create-catalog'
 import type { CampaignProfile } from '@/lib/campaigns/builder/campaign-profile'
+import type { Diagnosis } from '@/lib/campaigns/planning/types'
 import { summarize, type LineItem, type CampaignDraft, type PieceProducer, type CampaignReceipt } from '@/lib/campaigns/types'
 import CampaignPlanFlow from '@/components/campaigns/plan-flow/campaign-plan-flow'
 import PlanAnalyzing from '@/components/campaigns/plan-flow/plan-analyzing'
@@ -47,6 +48,10 @@ const CATALOG_IDS = new Set(CREATE_CATALOG_IDS)
 // offers 'reviewsplan' (the lighter content version) instead of the 'reviews' system goal, so route
 // it to the system reviews plan the other three system goals already use.
 const SYSTEM_GOAL_ALIAS: Record<string, string> = { reviewsplan: 'reviews' }
+// The strategist diagnosis (constraint + bet) speaks the business-goal vocabulary, not catalog ids.
+// Only the four system goals get one: diagnosing an event plan against the STORED business goal
+// could contradict the plan the owner is looking at, so event goals skip the call.
+const DIAGNOSE_GOAL_KEY: Record<string, string> = { firstvisit: 'new-customers', nights: 'slow-nights', regulars: 'regulars', reviews: 'reviews' }
 // Owner-facing goal phrase for the "analyzing" screen ("Locking onto your goal: …"). Falls back to a
 // plain truthful label for any catalog id not listed.
 const GOAL_PHRASE: Record<string, string> = {
@@ -105,6 +110,13 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
   const [planError, setPlanError] = useState<string | null>(null)
   const [planOutcome, setPlanOutcome] = useState<string | null>(null)
   const [planLead, setPlanLead] = useState<string | null>(null)
+  // Honesty wiring: the AI's per-service reasons (selectMix already writes them; they were
+  // discarded here before), the strategist's diagnosis (constraint + bet), and whether the
+  // mix was GENUINELY tailored — drives the analyzing screen's finish copy so it never
+  // claims "built around what we found" when the safe route or a failure kept the template.
+  const [planReasons, setPlanReasons] = useState<Record<string, string> | null>(null)
+  const [planDiagnosis, setPlanDiagnosis] = useState<{ diagnosis: Diagnosis; source: 'ai' | 'rules' } | null>(null)
+  const [planTailored, setPlanTailored] = useState<boolean | null>(null)
   // The "AI is analyzing your business" screen plays over the plan while the brain tailors it. It
   // reveals the plan (sets false) when the staged steps finish AND the plan-mix call has resolved.
   const [analyzing, setAnalyzing] = useState(false)
@@ -232,26 +244,55 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
     const brainGoal = resolveBrainGoal(goalId)
     const vals = applyProfile(applyList(p.vals))
     setPlan({ itemId: goalId, vals })
-    setAnalyzing(true)
     setPlanOutcome(null)
     setPlanLead(null)
+    setPlanReasons(null)
+    setPlanDiagnosis(null)
+    setPlanTailored(null)
+    // HONESTY: the analyzing screen only plays when analysis actually runs. Template goals
+    // compose deterministically with zero calls — playing "Analyzing your business" over
+    // them was pure theater — so they go straight to the plan.
     if (!brainGoal || !client?.id) return
+    setAnalyzing(true)
     setPlanBusy(true)
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 12000)
     try {
       const budget = String(vals.budget ?? '')
-      const res = await fetch(`/api/campaigns/plan-mix?clientId=${client.id}&goal=${encodeURIComponent(brainGoal)}&budget=${encodeURIComponent(budget)}`, { signal: ctrl.signal })
-      const j = (await res.json().catch(() => ({}))) as { mix?: string[]; outcome?: string; lead?: string; suggestedTier?: { tier?: string } }
-      const next: Record<string, unknown> = { ...vals }
-      if (Array.isArray(j.mix) && j.mix.length) next.aiMix = j.mix.join(',')
-      // No budget entered → size the plan with the brain's suggested tier instead of defaulting to Standard.
-      if (!budget.trim() && !String(vals.tier ?? '').trim() && j.suggestedTier?.tier) next.tier = j.suggestedTier.tier
-      if (next.aiMix || next.tier) setPlan({ itemId: goalId, vals: next })
-      if (typeof j.outcome === 'string') setPlanOutcome(j.outcome)
-      // The cold-start reason the brain shaped the lead, e.g. "Led with reviews because your rating is 4.1…".
-      if (typeof j.lead === 'string') setPlanLead(j.lead)
-    } catch { /* keep the deterministic plan */ } finally {
+      // The strategist diagnosis (constraint + bet) runs alongside the mix selection for the
+      // four system goals; the analyzing screen absorbs both. Each fails soft on its own.
+      const goalKey = DIAGNOSE_GOAL_KEY[goalId]
+      const [mixRes, diagRes] = await Promise.allSettled([
+        fetch(`/api/campaigns/plan-mix?clientId=${client.id}&goal=${encodeURIComponent(brainGoal)}&budget=${encodeURIComponent(budget)}`, { signal: ctrl.signal }),
+        goalKey
+          ? fetch('/api/campaigns/diagnose', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: client.id, goalKey }), signal: ctrl.signal })
+          : Promise.resolve(null),
+      ])
+      if (mixRes.status === 'fulfilled') {
+        const j = (await mixRes.value.json().catch(() => ({}))) as { mix?: string[]; reasons?: Record<string, string>; source?: string; route?: string; outcome?: string; lead?: string; suggestedTier?: { tier?: string } }
+        const next: Record<string, unknown> = { ...vals }
+        if (Array.isArray(j.mix) && j.mix.length) next.aiMix = j.mix.join(',')
+        // No budget entered → size the plan with the brain's suggested tier instead of defaulting to Standard.
+        if (!budget.trim() && !String(vals.tier ?? '').trim() && j.suggestedTier?.tier) next.tier = j.suggestedTier.tier
+        if (next.aiMix || next.tier) setPlan({ itemId: goalId, vals: next })
+        if (typeof j.outcome === 'string') setPlanOutcome(j.outcome)
+        // The cold-start reason the brain shaped the lead, e.g. "Led with reviews because your rating is 4.1…".
+        if (typeof j.lead === 'string') setPlanLead(j.lead)
+        // The AI's per-service reasons (partial map — dispose() adds/drops ids; cards fall back).
+        if (j.reasons && typeof j.reasons === 'object') setPlanReasons(j.reasons)
+        // Honest finish copy: "built around what we found" ONLY when the brain genuinely tailored
+        // the mix. Safe-routed cold starts and rule fallbacks say what they are — a proven starter.
+        setPlanTailored(j.source === 'ai+lift' || j.source === 'brain')
+      } else {
+        setPlanTailored(false)
+      }
+      if (diagRes.status === 'fulfilled' && diagRes.value) {
+        const d = (await diagRes.value.json().catch(() => null)) as { diagnosis?: Diagnosis; source?: string } | null
+        if (d?.diagnosis?.bindingConstraint && d.diagnosis.bet) {
+          setPlanDiagnosis({ diagnosis: d.diagnosis, source: d.source === 'ai' ? 'ai' : 'rules' })
+        }
+      }
+    } catch { setPlanTailored(false) /* keep the deterministic plan */ } finally {
       clearTimeout(timer); setPlanBusy(false)
     }
   }
@@ -314,6 +355,7 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
           profile={profile}
           goalLabel={goalPhrase(plan.itemId)}
           ready={!planBusy}
+          tailored={planTailored}
           onDone={() => setAnalyzing(false)}
         />
       )}
@@ -328,9 +370,12 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
           monthlyCap={monthlyCap}
           outcome={planOutcome}
           lead={planLead}
+          reasons={planReasons}
+          diagnosis={planDiagnosis?.diagnosis ?? null}
+          diagnosisSource={planDiagnosis?.source ?? null}
           doneSetup={profile?.doneSetup ?? []}
           onConfirm={onConfirm}
-          onBack={() => { setPlan(null); setPlanError(null); setPlanOutcome(null); setPlanLead(null) }}
+          onBack={() => { setPlan(null); setPlanError(null); setPlanOutcome(null); setPlanLead(null); setPlanReasons(null); setPlanDiagnosis(null); setPlanTailored(null) }}
         />
       )}
       {confirmed && client?.id && (

@@ -55,7 +55,7 @@ function buildSteps(profile: CampaignProfile | null, goalLabel: string): Step[] 
 }
 
 export default function PlanAnalyzing({
-  restaurant, itemId, profile, goalLabel, ready, onDone,
+  restaurant, itemId, profile, goalLabel, ready, tailored, onDone,
 }: {
   restaurant: string
   /** The campaign/item being built — drives the matching gradient + illustration. */
@@ -64,6 +64,10 @@ export default function PlanAnalyzing({
   goalLabel: string
   /** True once the live brain call has resolved (or timed out). The last step holds until this. */
   ready: boolean
+  /** Whether the brain GENUINELY tailored the mix (null while unknown). false = the safe route
+   *  or a fallback kept the proven starter plan — the finish copy says so instead of claiming
+   *  "built around what we found". */
+  tailored?: boolean | null
   onDone: () => void
 }) {
   const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -137,7 +141,10 @@ export default function PlanAnalyzing({
               <Check size={30} color="#2e9a78" strokeWidth={2.8} />
             </div>
             <div style={{ fontFamily: CAL, fontSize: 22, fontWeight: 600 }}>Your plan is ready</div>
-            <div style={{ fontFamily: INTER, fontSize: 13, color: W(0.85), marginTop: 4 }}>Built around what we found</div>
+            {/* Honest finish: only claim "what we found" when the brain genuinely tailored the mix. */}
+            <div style={{ fontFamily: INTER, fontSize: 13, color: W(0.85), marginTop: 4 }}>
+              {tailored === false ? 'A proven starter plan. It sharpens as your data grows.' : 'Built around what we found'}
+            </div>
           </div>
         )}
 

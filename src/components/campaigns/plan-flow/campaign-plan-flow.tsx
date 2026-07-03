@@ -22,6 +22,7 @@ import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { aggregateGoLive, addBusinessDays } from '@/lib/campaigns/aggregate-golive'
 import { buildContentLine, serviceById, serviceToLines, addableByStage, cadenceOf } from '@/lib/campaigns/catalog'
 import type { PricedService } from '@/lib/campaigns/data/priced-catalog'
+import type { Diagnosis } from '@/lib/campaigns/planning/types'
 import { SERVICE_CHANNELS } from '@/lib/campaigns/data/service-channels'
 import { VOLUME_RATES, priceForQty, eachAtQty, clampQty, isQtyAdjustable } from '@/lib/campaigns/data/volume-rates'
 import { creatorById } from '@/lib/campaigns/creators'
@@ -273,6 +274,9 @@ type CardNode =
       variant: 'service'; Icon: LucideIcon; title: string; deliverable: string; priceShort: string;
       spine: boolean; included: string[]; pieces?: { label: string; qty: number; each: number }[];
       channels?: string[]; onOpen: () => void; onRemove?: () => void; readOnly?: boolean
+      /** The AI's one-line reason THIS service is in THIS restaurant's plan (selectMix). Partial:
+       *  dependency-added services have none — the card falls back to the catalog description. */
+      reason?: string
       /** Present only for quantity-adjustable services (the rate card). Drives the inline stepper. */
       qty?: {
         value: number; min: number; max: number; step: number; unit: string; unitPlural: string
@@ -293,7 +297,7 @@ type Stop =
   | { kind: 'add'; id: string; label: string; onAdd: () => void }
   | { kind: 'endcap'; id: string }
 
-export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, monthlyCap = 0, outcome, lead, doneSetup, onConfirm, onBack }: {
+export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, monthlyCap = 0, outcome, lead, reasons, diagnosis, diagnosisSource, doneSetup, onConfirm, onBack }: {
   itemId: string
   vals: Record<string, unknown>
   restaurant: string
@@ -308,6 +312,12 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
   outcome?: string | null
   /** The cold-start reason the brain shaped the lead, e.g. "Led with reviews because your rating is 4.1…". */
   lead?: string | null
+  /** The AI's per-service reasons from selectMix (serviceId → one line). Partial map; cards fall back. */
+  reasons?: Record<string, string> | null
+  /** The strategist's diagnosis (constraint + bet) — the plan's opening chapter when present. */
+  diagnosis?: Diagnosis | null
+  /** Honesty tag: 'ai' = the strategist genuinely read the data; 'rules' = deterministic baseline. */
+  diagnosisSource?: 'ai' | 'rules' | null
   onConfirm: (payload: { draft: CampaignDraft; producerChoices: Record<string, PieceProducer>; receipt: CampaignReceipt }) => void
   onBack: () => void
 }) {
@@ -571,6 +581,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
               variant: 'service', Icon: moveIcon(m.serviceId), title: info.plain, deliverable: info.deliverable,
               priceShort: info.priceShort, spine: spineIds.has(m.serviceId), included: info.included, pieces: info.pieces,
               channels: SERVICE_CHANNELS[m.serviceId],
+              reason: reasons?.[m.serviceId],
               qty: rate ? {
                 value: curQty, min: rate.min, max: rate.max, step: rate.step,
                 unit: rate.unit, unitPlural: rate.unitPlural,
@@ -649,7 +660,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
     out.push({ kind: 'endcap', id: 'endcap' })
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSystem, systemStages, spineIds, lead, moveCount, spineCount, initial, useWalk, actGroups, groups, dateById, flatOrder, nextUpId, ongoing, boostBeat, boostId, boostRange, audienceLabels, hasManagedAds, adsService, adsWindowLabel, planFeat, planOffer, items, serviceQty])
+  }, [isSystem, systemStages, spineIds, lead, reasons, moveCount, spineCount, initial, useWalk, actGroups, groups, dateById, flatOrder, nextUpId, ongoing, boostBeat, boostId, boostRange, audienceLabels, hasManagedAds, adsService, adsWindowLabel, planFeat, planOffer, items, serviceQty])
 
   const stopCount = stops.filter((s) => s.kind === 'card').length
   const durationLabel = isSystem ? `${moveCount} service${moveCount === 1 ? '' : 's'}` : (windowLabel || `${groups.length} week${groups.length === 1 ? '' : 's'}`)
@@ -674,6 +685,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
               nights={itemId === 'nights'} slowNight={slowNight} onPickNight={onBack}
               stops={stops} stopCount={stopCount} durationLabel={durationLabel} lead={lead ?? null} ongoing={ongoing}
               busy={!!busy} confirming={confirming}
+              diagnosis={diagnosis ?? null} diagnosisSource={diagnosisSource ?? null}
             />
           ) : (
             <Summary creatives={creatives} services={services} bill={bill} sched={sched} doneSetup={doneSetup} onPiece={openPiece} monthlyCap={monthlyCap} firstMonth={firstMonth} overBudget={overBudget} canTrim={canTrim} onTrim={() => trimToFit(trimIds)} />
@@ -728,7 +740,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
         )}
         {sheet?.kind === 'service' && (() => {
           const sid = sheet.id; const info = moveInfo(sid)
-          return <ServiceSheet Icon={moveIcon(sid)} plain={info.plain} deliverable={info.deliverable} pieces={info.pieces} charge={info.charge} billing={info.billing} included={info.included} spine={spineIds.has(sid)} onRemove={() => { removeMove(sid, info.plain); setSheet(null) }} onClose={() => setSheet(null)} />
+          return <ServiceSheet Icon={moveIcon(sid)} plain={info.plain} deliverable={info.deliverable} pieces={info.pieces} charge={info.charge} billing={info.billing} included={info.included} spine={spineIds.has(sid)} reason={reasons?.[sid]} onRemove={() => { removeMove(sid, info.plain); setSheet(null) }} onClose={() => setSheet(null)} />
         })()}
         {sheet?.kind === 'field' && (
           <FieldSheet field={sheet.field} value={sheet.field === 'feature' ? planFeat : planOffer} dishes={dishes} onDone={(v) => applyPlanField(sheet.field, v)} onClose={() => setSheet(null)} />
@@ -751,6 +763,7 @@ const coverPill: React.CSSProperties = { display: 'inline-flex', alignItems: 'ce
 function PathReview({
   hero, initialName, audienceLabels, outcome, isSystem, estimateMode, heldAds, adsOverride, onRunAds, onUndoAds,
   planFeat, planOffer, onEditFeat, onEditOffer, nights, slowNight, onPickNight, stops, stopCount, durationLabel, lead, ongoing, busy, confirming,
+  diagnosis, diagnosisSource,
 }: {
   hero: { label: string; Icon: ComponentType<{ size?: number; color?: string }>; bg: string; fg: string }
   initialName: string; audienceLabels: string[]; outcome?: string | null; isSystem: boolean; estimateMode: boolean
@@ -758,6 +771,7 @@ function PathReview({
   planFeat: string; planOffer: string; onEditFeat: () => void; onEditOffer: () => void
   nights: boolean; slowNight: string | null; onPickNight: () => void
   stops: Stop[]; stopCount: number; durationLabel: string; lead?: string | null; ongoing: boolean; busy: boolean; confirming: boolean
+  diagnosis?: Diagnosis | null; diagnosisSource?: 'ai' | 'rules' | null
 }) {
   // Cards reveal via the self-contained `.pf-card` CSS entrance (reduced-motion shows them statically),
   // so visibility never depends on JS or an observer firing.
@@ -801,6 +815,22 @@ function PathReview({
         </div>
         {estimateMode && <div style={{ fontSize: 11, color: C.faint, marginTop: 5 }}>Dates lock when you pick a start.</div>}
         {!isSystem && lead && <div style={{ fontSize: 13, color: C.mute, marginTop: 10, borderLeft: `3px solid ${C.greenDk}`, paddingLeft: 10, lineHeight: 1.45 }}>{lead}</div>}
+        {/* The strategist's opening: the diagnosis this plan was built from — situation, the one
+            binding constraint, and the bet. Honestly tagged: 'Strategist read' only when the AI
+            genuinely read the data; the deterministic fallback says 'Baseline read'. */}
+        {diagnosis && (
+          <div className="pf-up" style={{ marginTop: 12, background: 'rgba(255,255,255,0.72)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', border: '1px solid rgba(255,255,255,0.9)', borderRadius: 14, boxShadow: E2, padding: '11px 13px', animationDelay: '.06s' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: diagnosisSource === 'ai' ? C.greenDk : C.faint }}>
+              <Sparkles size={11} /> {diagnosisSource === 'ai' ? 'Strategist read' : 'Baseline read'}
+            </div>
+            {diagnosis.situation && <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, marginTop: 6 }}>{diagnosis.situation}</div>}
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 13, lineHeight: 1.45, color: C.ink }}><span style={{ fontWeight: 700 }}>The one thing to fix:</span> {diagnosis.bindingConstraint}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.45, color: C.mute }}><span style={{ fontWeight: 600, color: C.ink }}>The bet:</span> {diagnosis.bet}</div>
+              {diagnosis.skip.length > 0 && <div style={{ fontSize: 12.5, lineHeight: 1.45, color: C.faint }}>Skip for now: {diagnosis.skip.map((s) => s.what).join(', ')}</div>}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* zone 3 — the set-up bar (the only glass in the hero) */}
@@ -953,6 +983,11 @@ function PathCard({ node, delay }: { node: CardNode; delay: number }) {
         {/* expanded detail — "learn more" */}
         {open && !readOnly && (
           <div className="pf-text" style={{ marginTop: 10, paddingTop: 10, borderTop: '0.5px solid #f0f0f2' }}>
+            {/* The AI's reason THIS service is in THIS plan (when the mix was tailored) — the
+                personal why, above the generic catalog description. */}
+            {!isContent && node.reason && (
+              <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5, borderLeft: `3px solid ${C.greenDk}`, paddingLeft: 10, marginBottom: 8 }}>{node.reason}</div>
+            )}
             <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5 }}>{detail}</div>
             {channels.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 9 }}>
@@ -1042,8 +1077,8 @@ function PathSkeleton() {
 }
 
 /* ── A service detail sheet — the deliverable, what's included, the charge, and Remove (one place) ── */
-function ServiceSheet({ Icon, plain, deliverable, pieces, charge, billing, included, spine, onRemove, onClose }: {
-  Icon: LucideIcon; plain: string; deliverable: string; pieces?: { label: string; qty: number; each: number }[]; charge: string; billing: string; included?: string[]; spine?: boolean; onRemove: () => void; onClose: () => void
+function ServiceSheet({ Icon, plain, deliverable, pieces, charge, billing, included, spine, reason, onRemove, onClose }: {
+  Icon: LucideIcon; plain: string; deliverable: string; pieces?: { label: string; qty: number; each: number }[]; charge: string; billing: string; included?: string[]; spine?: boolean; reason?: string; onRemove: () => void; onClose: () => void
 }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(20,20,25,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -1059,6 +1094,12 @@ function ServiceSheet({ Icon, plain, deliverable, pieces, charge, billing, inclu
           </div>
         </div>
         <div style={{ overflowY: 'auto', padding: '4px 18px 8px' }}>
+          {reason && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 5 }}>Why this for you</div>
+              <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5, borderLeft: `3px solid ${C.greenDk}`, paddingLeft: 10 }}>{reason}</div>
+            </div>
+          )}
           {deliverable && <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5 }}>{deliverable}</div>}
           {pieces && pieces.length ? <div style={{ fontSize: 13, color: C.greenDk, marginTop: 9 }}>{pieces.map((p) => `${p.qty} × ${p.label} (~${money(p.each)} ea)`).join('  ·  ')}</div> : null}
           {included && included.length ? (
