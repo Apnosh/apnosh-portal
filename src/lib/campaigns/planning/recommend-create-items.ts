@@ -13,8 +13,21 @@ import type { GoalKey } from '@/lib/campaigns/types'
 import { CREATE_CATALOG } from '@/lib/campaigns/data/create-catalog'
 
 const VALID = new Set(CREATE_CATALOG.map((c) => c.id))
+const GOAL_OF = new Map(CREATE_CATALOG.map((c) => [c.id, c.goal]))
 
 export interface ItemRec { id: string; reason: string }
+/** What the account already has live, so we never re-recommend a running campaign as the top pick. */
+export interface ActivePlans { goals: GoalKey[]; names: string[] }
+const NO_ACTIVE: ActivePlans = { goals: [], names: [] }
+
+// Push catalog items whose goal is already covered by a live standing plan to the BACK, keeping order
+// within each group. So an owner already running a new-customers plan never sees it recommended first.
+function deprioritizeCovered(recs: ItemRec[], covered: Set<GoalKey>): ItemRec[] {
+  if (!covered.size) return recs
+  const fresh: ItemRec[] = [], back: ItemRec[] = []
+  for (const r of recs) { (covered.has(GOAL_OF.get(r.id) as GoalKey) ? back : fresh).push(r) }
+  return [...fresh, ...back]
+}
 
 const SCHEMA = {
   type: 'object', additionalProperties: false, required: ['recommended'],
@@ -24,9 +37,11 @@ const SYSTEM = `You recommend which marketing campaigns a restaurant should run,
 Rank the best ones for THIS restaurant's goal and situation, strongest first. For each, write one
 short "why this fits you" reason grounded in a signal you were given (a review theme, a listing gap,
 the goal, an upcoming date). Only state a number you were given; never invent data. Plain language,
-under 14 words, no jargon, no em dashes. Use only ids from the catalog. Return 6 to 8.`
+under 14 words, no jargon, no em dashes. Use only ids from the catalog. Return 6 to 8.
+Do NOT recommend a campaign the owner is already running (listed under "Already live"); suggest what is
+not yet covered or the natural next step instead.`
 
-function signalsBlock(ctx: PlanningContext, moment?: UpcomingMoment): string {
+function signalsBlock(ctx: PlanningContext, moment: UpcomingMoment | undefined, active: ActivePlans): string {
   const { business, signals } = ctx
   const rep = signals.reputation
   const L: string[] = []
@@ -37,12 +52,14 @@ function signalsBlock(ctx: PlanningContext, moment?: UpcomingMoment): string {
   const weak = signals.presence.filter((p) => p.completeness < 70)
   if (weak.length) L.push(`Getting-found gaps: ${weak.map((p) => `${p.name} ${p.completeness}%`).join(', ')}`)
   if (moment) L.push(`Coming up: ${moment.label} (${moment.daysLabel})`)
+  if (active.names.length) L.push(`Already live (do NOT recommend these again): ${active.names.join('; ')}`)
+  if (active.goals.length) L.push(`Goals already covered by a live plan: ${active.goals.join(', ')} — prefer other goals or the next step.`)
   return L.join('\n')
 }
 const catalogBlock = () => CREATE_CATALOG.map((c) => `- ${c.id} (serves ${c.goal}): ${c.title}`).join('\n')
 
-async function aiRecommend(ctx: PlanningContext, moment?: UpcomingMoment): Promise<ItemRec[] | null> {
-  const user = `${signalsBlock(ctx, moment)}\n\nCATALOG:\n${catalogBlock()}\n\nRecommend the best campaigns for this restaurant, strongest first.`
+async function aiRecommend(ctx: PlanningContext, moment: UpcomingMoment | undefined, active: ActivePlans): Promise<ItemRec[] | null> {
+  const user = `${signalsBlock(ctx, moment, active)}\n\nCATALOG:\n${catalogBlock()}\n\nRecommend the best campaigns for this restaurant, strongest first.`
   const parsed = await callStructuredOutput<{ recommended: ItemRec[] }>({ system: SYSTEM, user, schema: SCHEMA, maxTokens: 1000 })
   if (!parsed?.recommended) return null
   const seen = new Set<string>()
@@ -63,7 +80,7 @@ const REASON_BY_GOAL: Record<GoalKey, string> = {
   reviews: 'Lifts your rating with fresh reviews',
 }
 
-export function rulesRecommend(ctx: PlanningContext, moment?: UpcomingMoment): ItemRec[] {
+export function rulesRecommend(ctx: PlanningContext, moment?: UpcomingMoment, active: ActivePlans = NO_ACTIVE): ItemRec[] {
   const goal = ctx.request.goalKey ?? ctx.business.goalKey
   const rep = ctx.signals.reputation
   const out: ItemRec[] = []
@@ -78,11 +95,12 @@ export function rulesRecommend(ctx: PlanningContext, moment?: UpcomingMoment): I
     const c = CREATE_CATALOG.find((x) => x.id === id)
     if (c) push(c.id, REASON_BY_GOAL[c.goal])
   }
-  return out.slice(0, 8)
+  return deprioritizeCovered(out, new Set(active.goals)).slice(0, 8)
 }
 
-export async function recommendCreateItems(ctx: PlanningContext, moment?: UpcomingMoment): Promise<{ recommended: ItemRec[]; source: 'ai' | 'rules' }> {
-  const ai = await aiRecommend(ctx, moment)
-  if (ai && ai.length) return { recommended: ai, source: 'ai' }
-  return { recommended: rulesRecommend(ctx, moment), source: 'rules' }
+export async function recommendCreateItems(ctx: PlanningContext, moment?: UpcomingMoment, active: ActivePlans = NO_ACTIVE): Promise<{ recommended: ItemRec[]; source: 'ai' | 'rules' }> {
+  const covered = new Set(active.goals)
+  const ai = await aiRecommend(ctx, moment, active)
+  if (ai && ai.length) return { recommended: deprioritizeCovered(ai, covered), source: 'ai' }
+  return { recommended: rulesRecommend(ctx, moment, active), source: 'rules' }
 }

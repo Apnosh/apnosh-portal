@@ -52,6 +52,7 @@ function readApiKey(): string | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fs = require('fs') as typeof import('fs')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require('path') as typeof import('path')
     const env = fs.readFileSync(path.join(process.cwd(), '.env.local'), 'utf8')
     const m = env.match(/^ANTHROPIC_API_KEY=(.+)$/m)
@@ -156,13 +157,15 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient()
   const social = ['instagram', 'facebook', 'tiktok']
 
-  const [inbox, reviewRes, pcRes, hm, bizRes, sig] = await Promise.all([
+  const [inbox, reviewRes, pcRes, hm, bizRes, sig, campRes] = await Promise.all([
     getInbox(clientId, access.userId).catch(() => []),
     admin.from('reviews').select('author_name, rating, response_text').eq('client_id', clientId).is('response_text', null).order('rating', { ascending: true }).limit(50),
     admin.from('platform_connections').select('platform, access_token').eq('client_id', clientId),
     getHomeMetrics(clientId).catch(() => null),
     admin.from('clients').select('name').eq('id', clientId).maybeSingle(),
     assembleSignals(clientId).catch(() => null),
+    // Does the account already have a campaign live? Steps down the "start a campaign" nudges.
+    admin.from('campaigns').select('id', { count: 'exact', head: true }).eq('client_id', clientId).eq('status', 'shipped'),
   ])
 
   // approvals / tasks from the inbox
@@ -218,6 +221,7 @@ export async function GET(req: NextRequest) {
     connections,
     plans,
     quickWins,
+    hasActiveCampaigns: (campRes.count ?? 0) > 0,
   }
 
   const candidates = buildCandidates(facts)

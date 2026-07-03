@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
 import { mintWorkOrders, clearCampaignBriefCache, getCampaignCharges, campaignHasAccruedMoney, reconcileCampaignProduction } from '@/lib/campaigns/work-orders'
+import { mintServiceWorkOrders } from '@/lib/campaigns/service-work-orders'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import { getCampaignOutcomes } from '@/lib/campaigns/outcomes/read'
+import { getCampaignPieces } from '@/lib/campaigns/tracker/pieces'
+import { getCampaignActivity } from '@/lib/campaigns/tracker/activity'
+import { getCampaignReadiness } from '@/lib/campaigns/readiness'
 import { beatsFromLines } from '@/lib/campaigns/catalog'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
@@ -28,12 +32,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const shippedTeamRun = shipped && campaign!.draft.path !== 'diy'
   // Outcomes apply to any shipped campaign with published pieces (team or DIY); progress/
   // charges are team-run only. Each read is best-effort so one failure never blanks the page.
-  const [progress, charges, outcomes] = await Promise.all([
+  const [progress, charges, outcomes, pieces, activity, readiness] = await Promise.all([
     shippedTeamRun ? getCampaignProgress(id).catch(() => null) : Promise.resolve(null),
     shippedTeamRun ? getCampaignCharges(id).catch(() => null) : Promise.resolve(null),
     shipped ? getCampaignOutcomes(id).catch(() => null) : Promise.resolve(null),
+    shipped ? getCampaignPieces(id).catch(() => null) : Promise.resolve(null),
+    shipped ? getCampaignActivity(id).catch(() => null) : Promise.resolve(null),
+    shipped ? getCampaignReadiness(id).catch(() => null) : Promise.resolve(null),
   ])
-  return NextResponse.json({ campaign, progress, charges, outcomes })
+  return NextResponse.json({ campaign, progress, charges, outcomes, pieces, activity, readiness })
 }
 
 // PATCH /api/campaigns/:id — { items?: LineItem[], fields?: {...} }.
@@ -42,6 +49,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { campaign, res } = await authorize(id)
   if (res || !campaign) return res ?? NextResponse.json({ error: 'not found' }, { status: 404 })
   const body = await req.json().catch(() => ({}))
+  // Whitelist writable columns: fields is spread into a service-role UPDATE on campaigns,
+  // so an unlisted key (client_id, confirmed_at, created_at, …) must never pass through —
+  // it would let an authenticated owner move tenants or self-confirm past the admin gate.
+  const WRITABLE_FIELDS = new Set(['name', 'budget_monthly', 'planned', 'phase', 'status', 'shipped_at', 'occasion', 'target_date', 'context', 'creator_choices', 'producer_choices', 'creative_control', 'execution'])
+  if (body.fields !== undefined) {
+    if (typeof body.fields !== 'object' || body.fields === null || Array.isArray(body.fields)) return NextResponse.json({ error: 'invalid fields' }, { status: 400 })
+    for (const k of Object.keys(body.fields)) {
+      if (!WRITABLE_FIELDS.has(k)) return NextResponse.json({ error: `field '${k}' cannot be written` }, { status: 400 })
+    }
+    // The only status an owner can set here is 'shipped'. Un-shipping would re-fire the
+    // one-shot ship block on the next ship and dodge the admin confirmation.
+    if (body.fields.status !== undefined && body.fields.status !== 'shipped') {
+      return NextResponse.json({ error: 'invalid status' }, { status: 400 })
+    }
+  }
   // Validate the enum'd field so a bad value is a clean 400, not a DB-check 500.
   if (body.fields?.creative_control && !['handoff', 'approve_concept', 'owner_directs'].includes(body.fields.creative_control)) {
     return NextResponse.json({ error: 'invalid creative_control' }, { status: 400 })
@@ -52,7 +74,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const e = body.fields.execution
     if (typeof e !== 'object' || e === null || Array.isArray(e)) return NextResponse.json({ error: 'invalid execution' }, { status: 400 })
     const clean: Record<string, string> = {}
-    for (const k of ['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes']) {
+    // Creative-brief keys + operational setup-intake keys (CampaignExecution). Only listed keys
+    // persist; anything else is dropped, so unbounded/injected text can never accrete or reach a prompt.
+    for (const k of ['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'setupNotes', 'vendorInfo', 'menuSource', 'setupSkipped']) {
       const v = (e as Record<string, unknown>)[k]
       if (v === undefined) continue
       if (typeof v !== 'string') return NextResponse.json({ error: `execution.${k} must be a string` }, { status: 400 })
@@ -62,11 +86,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     body.fields.execution = clean
   }
   // Validate producer_choices: a bounded map of pieceKey → the service ('team' |
-  // 'creator' | 'diy' | 'ai'). The key is "<group>:<slot>" where group is a discipline
-  // (Video/Photo/Social/Design) for shots OR the content type (email/sms/…) for sends —
-  // so accept any word:slot, not just the four disciplines (else sends can't be chosen).
+  // 'creator' | 'diy' | 'ai'). The key mirrors planCampaignPieces: the beat's own stable
+  // id when it has one (the Walk's b<n>/b<epoch> ids, a Content-Menu line id), else the
+  // legacy positional "<group>:<slot>" where group is a discipline (Video/Photo/…) for
+  // shots or the content type (email/sms/…) for sends. Accept BOTH shapes — rejecting
+  // the id shape silently threw away every creator/AI/DIY pick made in the Walk.
   // Cap the count + pin the shape so a bad/oversized payload can't accrete junk jsonb.
-  const PIECE_KEY = /^[A-Za-z]+:\d{1,3}$/
+  const PIECE_KEY = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}(?::\d{1,3})?$/
   const PRODUCERS = new Set(['team', 'creator', 'diy', 'ai'])
   if (body.fields?.producer_choices !== undefined) {
     // The mint is one-shot at ship, so a post-ship change would silently no-op —
@@ -84,11 +110,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     body.fields.producer_choices = clean
   }
-  // Detect the ship transition BEFORE the write (campaign holds the pre-update state).
-  const justShipped = body.fields?.status === 'shipped' && campaign.status !== 'shipped'
+  // Detect the ship transition BEFORE the write (campaign holds the pre-update state),
+  // then CLAIM it atomically inside the update (guarded on status <> 'shipped') so two
+  // concurrent ship PATCHes (double-tap, retry, two tabs) can never both run the
+  // one-shot mint/notify block below — the loser's guarded update matches zero rows.
+  const wantsShip = body.fields?.status === 'shipped' && campaign.status !== 'shipped'
+  let justShipped = false
   try {
     if (Array.isArray(body.items)) await replaceLineItems(id, campaign.clientId, body.items as LineItem[])
-    if (body.fields && typeof body.fields === 'object') await updateCampaignFields(id, body.fields)
+    if (body.fields && typeof body.fields === 'object') {
+      const applied = await updateCampaignFields(id, body.fields, { onlyIfNotShipped: wantsShip })
+      justShipped = wantsShip && applied
+    }
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'update failed' }, { status: 500 })
   }
@@ -136,12 +169,32 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // up front lets each dead-letter below fire only when its OWN lane dropped
     // work, now that a 0 from either side can be legitimate (all-team / all-creator).
     const pieces = planCampaignPieces(campaign, shipISO)
-    const expectedTeam = pieces.filter((p) => p.producer === 'team').length
+    // AI pieces land in the team lane too (materializeCampaignDrafts creates them and the
+    // team finalizes the AI first draft) — count them, or an ai-heavy campaign's failed
+    // materialize slips past the dead-letter and its handoff never fires.
+    const expectedTeam = pieces.filter((p) => p.producer === 'team' || p.producer === 'ai').length
     const expectedOrders = pieces.filter((p) => p.producer === 'creator' && p.creatorId).length
     const made = await materializeCampaignDrafts(campaign, shipISO).catch(() => 0)
     // Dispatch the creator-run pieces to the chosen creators' inboxes (the supply
     // side). Best-effort; never blocks the ship.
     const minted = await mintWorkOrders(campaign, shipISO).catch(() => 0)
+    // Every included service line (the non-content half of the plan — gbp-setup, listings, SEO,
+    // ads, ...) becomes a service work order the team claims and works through its playbook. This
+    // is what closes the audit's #1 gap: services used to mint NOTHING and had no "done". Idempotent
+    // + best-effort; a failure here must never break the ship.
+    const swo = await mintServiceWorkOrders(campaign, shipISO).catch(() => ({ minted: 0, expected: 0, error: 'threw' }))
+    // Every fresh order lands in the admin confirmation queue: notify the admins so a
+    // human reviews + confirms it (/admin/campaign-orders sets confirmed_at). Best-effort.
+    ;(async () => {
+      const { createAdminClient } = await import('@/lib/supabase/admin')
+      const { getAdminUserIds, notifyCampaignOrderShipped } = await import('@/lib/notify')
+      const svc = createAdminClient()
+      const [adminIds, client] = await Promise.all([
+        getAdminUserIds(svc),
+        svc.from('clients').select('name').eq('id', campaign.clientId).maybeSingle().then((r) => r.data),
+      ])
+      if (adminIds.length) await notifyCampaignOrderShipped(svc, adminIds, (client?.name as string) ?? 'A client', campaign.draft.name)
+    })().catch(() => {})
     // Only hand off to staff when there is actually team/creator work to build. A menu
     // campaign whose pieces are all DIY (the owner makes them) is path 'ai' but produces
     // nothing for the team, so the path-based gate above isn't enough.
@@ -153,7 +206,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           kind: 'client_signoff',
           title: 'Owner shipped a campaign, ready to build',
           body: `${campaign.draft.name}. The owner approved it to go live. Build and run the pieces.`,
-          link: `/work/campaigns?focus=${id}`,
+          link: `/work/drafts?focus=${id}`,
+        },
+      ).catch(() => ({ notified: 0 }))
+    } else if ((campaign.draft.items ?? []).some((it) => it.included)) {
+      // A service-only plan (SEO, listings, ads — the system goals sell mostly services,
+      // not content pieces) mints nothing in either lane, so without this branch the ship
+      // reached NOBODY on the Apnosh side: no work item, no handoff, a paid order in a
+      // void. Until services get real work items, this handoff IS the work signal.
+      const n = (campaign.draft.items ?? []).filter((it) => it.included).length
+      await notifyStaffForClient(
+        campaign.clientId,
+        ['strategist', 'community_mgr'],
+        {
+          kind: 'client_signoff',
+          title: 'Owner shipped a service plan, set it up',
+          body: `${campaign.draft.name}. ${n} ${n === 1 ? 'service' : 'services'} to set up and run. No content pieces to build.`,
+          link: `/work/today?focus=${id}`,
         },
       ).catch(() => ({ notified: 0 }))
     }
@@ -164,7 +233,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         kind: 'client_signoff',
         title: 'Campaign shipped but produced no work items',
         body: `${campaign.draft.name} shipped, but no content pieces were created. Set it up manually.`,
-        link: `/work/campaigns?focus=${id}`,
+        link: `/work/drafts?focus=${id}`,
       }).catch(() => ({ notified: 0 }))
     }
     // Dead-letter: the campaign had creative work to dispatch but no creator
@@ -175,7 +244,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         kind: 'client_signoff',
         title: 'Campaign shipped but creators were not dispatched',
         body: `${campaign.draft.name} shipped with ${expectedOrders} creative ${expectedOrders === 1 ? 'order' : 'orders'} to assign, but none reached a creator. Assign manually.`,
-        link: `/work/campaigns?focus=${id}`,
+        link: `/work/today?focus=${id}`,
+      }).catch(() => ({ notified: 0 }))
+    }
+    // Dead-letter: the plan had service lines to set up but no service work order was minted
+    // (transient insert error / missing table). Never let the service side silently strand —
+    // re-mint is idempotent once fixed.
+    if (swo.expected > 0 && swo.minted === 0) {
+      await notifyStaffForClient(campaign.clientId, ['strategist'], {
+        kind: 'client_signoff',
+        title: 'Campaign shipped but services were not set up',
+        body: `${campaign.draft.name} shipped with ${swo.expected} ${swo.expected === 1 ? 'service' : 'services'} to run, but no work order was created. Set them up manually.`,
+        link: `/work/today?focus=${id}`,
       }).catch(() => ({ notified: 0 }))
     }
   }

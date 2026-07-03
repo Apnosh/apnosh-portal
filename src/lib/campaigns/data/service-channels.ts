@@ -35,6 +35,7 @@ export const SERVICE_CHANNELS: Record<string, string[]> = {
   'delivery-opt': ['Delivery apps'],
   'paid-ads': ['Google', 'Instagram', 'Facebook'],
   'creator-collab': ['Instagram', 'TikTok'],
+  'creator-monthly': ['Instagram', 'TikTok'],
   'nextdoor-local': ['Nextdoor', 'Facebook'],
   'street-sampling': ['In person'],
   'cross-promo': ['In person'],

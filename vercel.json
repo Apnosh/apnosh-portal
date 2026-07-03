@@ -42,6 +42,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/reconcile-accruals",
+      "schedule": "0 */6 * * *"
+    },
+    {
       "path": "/api/cron/holiday-hours-check",
       "schedule": "0 16 * * *"
     },

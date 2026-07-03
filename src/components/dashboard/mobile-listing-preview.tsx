@@ -13,6 +13,8 @@ import type { ListingFields } from '@/lib/gbp-listing'
 
 interface Props {
   locationId?: string | null
+  /** Admin mode: preview a specific client's listing. The API honors this only for admins. */
+  clientId?: string | null
 }
 
 interface Preview {
@@ -28,21 +30,24 @@ interface Preview {
   primaryPhoto?: string
 }
 
-export default function MobileListingPreview({ locationId }: Props) {
+export default function MobileListingPreview({ locationId, clientId }: Props) {
   const [data, setData] = useState<Preview | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    const q = locationId ? `?locationId=${encodeURIComponent(locationId)}` : ''
+    const params = new URLSearchParams()
+    if (locationId) params.set('locationId', locationId)
+    if (clientId) params.set('clientId', clientId)
+    const q = params.size > 0 ? `?${params.toString()}` : ''
     fetch(`/api/dashboard/listing/preview${q}`)
       .then(async r => r.ok ? r.json() as Promise<Preview> : null)
       .then(d => { if (!cancelled && d) setData(d) })
       .catch(() => { /* silent — preview is non-critical */ })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [locationId])
+  }, [locationId, clientId])
 
   return (
     <div className="rounded-2xl border border-ink-6 bg-white p-5">

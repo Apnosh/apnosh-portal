@@ -13,6 +13,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { getAdminUserIds } from '@/lib/notify'
 
 export type NotificationKind =
   | 'client_request'
@@ -76,7 +77,7 @@ export async function notifyStaffForClient(
   clientId: string,
   capabilities: string[],
   payload: { kind: NotificationKind; title: string; body?: string; link?: string },
-): Promise<{ notified: number }> {
+): Promise<{ notified: number; fellBackToAdmins?: boolean }> {
   const admin = createAdminClient()
 
   // Find everyone assigned to this client with an active role
@@ -86,20 +87,31 @@ export async function notifyStaffForClient(
     .eq('client_id', clientId)
     .is('ended_at', null)
 
-  if (!assignees?.length) return { notified: 0 }
+  let recipients: string[] = []
+  if (assignees?.length) {
+    const candidateIds = [...new Set(assignees.map(a => a.person_id))]
 
-  const candidateIds = [...new Set(assignees.map(a => a.person_id))]
+    // Of those, who has an active capability we care about?
+    const { data: caps } = await admin
+      .from('person_capabilities')
+      .select('person_id, capability')
+      .in('person_id', candidateIds)
+      .eq('status', 'active')
+      .in('capability', [...capabilities, 'admin'])
 
-  // Of those, who has an active capability we care about?
-  const { data: caps } = await admin
-    .from('person_capabilities')
-    .select('person_id, capability')
-    .in('person_id', candidateIds)
-    .eq('status', 'active')
-    .in('capability', [...capabilities, 'admin'])
+    recipients = [...new Set((caps ?? []).map(c => c.person_id))]
+  }
 
-  const recipients = [...new Set((caps ?? []).map(c => c.person_id))]
-  if (!recipients.length) return { notified: 0 }
+  // Safety net: a client with no capable assignee (new or misconfigured) is
+  // exactly the one whose ship handoffs and dead-letters must not vanish —
+  // route the event to every admin instead of dropping it.
+  let fellBackToAdmins = false
+  if (!recipients.length) {
+    recipients = await getAdminUserIds(admin)
+    fellBackToAdmins = true
+    console.warn(`[notifications] no capable staff assigned to client ${clientId}; falling back to ${recipients.length} admin(s)`)
+    if (!recipients.length) return { notified: 0, fellBackToAdmins }
+  }
 
   const rows = recipients.map(uid => ({
     user_id: uid,
@@ -112,9 +124,9 @@ export async function notifyStaffForClient(
   const { error } = await admin.from('notifications').insert(rows)
   if (error) {
     console.warn('[notifications] fan-out failed:', error.message)
-    return { notified: 0 }
+    return { notified: 0, fellBackToAdmins }
   }
-  return { notified: recipients.length }
+  return { notified: recipients.length, fellBackToAdmins }
 }
 
 /**

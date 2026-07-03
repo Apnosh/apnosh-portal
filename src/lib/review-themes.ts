@@ -41,11 +41,14 @@ const STALE_AFTER_DAYS = 7
 const WINDOW_DAYS = 90
 const MAX_REVIEWS_TO_SAMPLE = 200
 
-/* Pull the latest cached result for this client+location. Returns
-   null when nothing's cached or the cache is older than 7 days. */
+/* Pull the latest cached result for this client+location. Returns null when nothing's cached or the
+   cache is older than maxAgeDays (default 7 — the dashboard's freshness bar). Planners pass a wider
+   window (~30d): a slightly stale theme still describes the restaurant, while a null makes every
+   recommender run blind on its richest signal. */
 export async function getCachedThemes(
   clientId: string,
   locationId?: string | null,
+  maxAgeDays: number = STALE_AFTER_DAYS,
 ): Promise<ReviewThemesResult | null> {
   const admin = createAdminClient()
   let q = admin
@@ -58,7 +61,7 @@ export async function getCachedThemes(
   const { data } = await q.maybeSingle()
   if (!data) return null
   const ageMs = Date.now() - new Date(data.generated_at).getTime()
-  if (ageMs > STALE_AFTER_DAYS * 24 * 60 * 60 * 1000) return null
+  if (ageMs > maxAgeDays * 24 * 60 * 60 * 1000) return null
   return {
     generatedAt: data.generated_at,
     windowStart: data.window_start,

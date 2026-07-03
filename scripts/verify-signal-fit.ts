@@ -26,7 +26,7 @@ for (const g of GOALS) for (const p of playsForGoalAtoms(g)) if (signalFit(p, em
 ok(allZero, 'signalFit(play, emptySignals) === 0 for every play of every goal (honest gating)')
 ok(leadFor('firstvisit', emptySignals()) === null, 'planLeadHeadline(empty) === null (no fabricated headline)')
 // Honesty: a goal whose plan has NO reputation play can never say "reviews" even at a low rating.
-const lowSig = emptySignals(); lowSig.rating = reading(4.0); lowSig.ratingCount = reading(40); lowSig.listingCompleteness = reading(0.85); lowSig.hasList = reading(true)
+const lowSig = emptySignals(); lowSig.rating = reading(4.0); lowSig.ratingCount = reading(40); lowSig.listingCompleteness = reading(85); lowSig.hasList = reading(true)
 ok(!/review/i.test(leadFor('nights', lowSig) ?? ''), 'nights headline never claims reviews (no review play in plan)')
 ok(!/review/i.test(leadFor('run-deal', lowSig) ?? ''), 'run-deal headline never claims reviews (no review play in plan)')
 
@@ -39,9 +39,14 @@ for (const g of GOALS) for (const t of ['lean', 'standard', 'aggressive'] as con
 ok(baselineMatch, 'brainRankedMix(empty) is byte-identical to the pre-edit baseline (21 goal/tier combos)')
 
 // ── firstvisit plan order for a given business (the real stage-grouped moves the owner sees) ──
+// Compose at an explicit standard tier so the plan contains BOTH capture-build and capture-send
+// services the ordering checks below compare. (This used to pass budget:'500', which relied on the
+// old cutoff mapping 500 -> standard; the owner's 2026-07-02 fit-to-plan change now maps 500 to lean
+// for firstvisit, which drops those services, so the tier is stated directly here. Ordering is a
+// signal-fit property, independent of tier.)
 function order(sig: BrainSignals): { serviceId: string; stage: string }[] {
   const mix = brainRankedMix('firstvisit', 'standard', sig).mix
-  const plan = composePlanForGoal('firstvisit', { budget: '500', aiMix: mix.join(',') }) as { moves?: { serviceId: string; stage: string }[] }
+  const plan = composePlanForGoal('firstvisit', { tier: 'the full plan', aiMix: mix.join(',') }) as { moves?: { serviceId: string; stage: string }[] }
   return plan.moves ?? []
 }
 const idx = (o: { serviceId: string }[], id: string) => o.findIndex((m) => m.serviceId === id)
@@ -50,15 +55,15 @@ const inStage = (o: { serviceId: string; stage: string }[], stage: string) => o.
 
 // Three fresh businesses (no campaign history), each clearing the >=3 core-signal richness gate.
 const A = emptySignals() // LOW RATING
-A.rating = reading(4.1); A.ratingCount = reading(60); A.listingCompleteness = reading(0.85); A.hasList = reading(true)
+A.rating = reading(4.1); A.ratingCount = reading(60); A.listingCompleteness = reading(85); A.hasList = reading(true)
 A.cuisine = reading('Italian'); A.neighborhood = reading('Lincoln Park'); A.priceRange = reading('$$')
 
 const B = emptySignals() // NO LIST
-B.rating = reading(4.7); B.ratingCount = reading(80); B.listingCompleteness = reading(0.85); B.hasList = reading(false)
+B.rating = reading(4.7); B.ratingCount = reading(80); B.listingCompleteness = reading(85); B.hasList = reading(false)
 B.cuisine = reading('Tacos'); B.priceRange = reading('$')
 
 const C = emptySignals() // POOR LISTING
-C.rating = reading(4.6); C.ratingCount = reading(50); C.listingCompleteness = reading(0.45); C.hasList = reading(true)
+C.rating = reading(4.6); C.ratingCount = reading(50); C.listingCompleteness = reading(45); C.hasList = reading(true)
 C.cuisine = reading('Sushi'); C.priceRange = reading('$$$')
 
 console.log('\n== 2. TAILORING: three fresh businesses, three plans ==')

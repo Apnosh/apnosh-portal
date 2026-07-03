@@ -43,6 +43,14 @@ interface Body {
   postedAt?: string
 }
 
+// Outcome numbers are hand-entered by staff, so bound them: a pasted extra
+// zero or a negative would flow straight into social_posts and poison every
+// analytics read downstream (topPostsByEngagement, campaign snapshots).
+const METRIC_CAP = 10_000_000
+function badMetric(v: unknown): boolean {
+  return typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > METRIC_CAP
+}
+
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -59,6 +67,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!body?.externalId || typeof body.reach !== 'number') {
     return NextResponse.json({ error: 'externalId + reach required' }, { status: 400 })
   }
+  // reach is required; the rest only validate when present (the write below
+  // defaults absent ones to 0). NaN/Infinity fail Number.isInteger, so they
+  // are rejected here too.
+  const metricFields = {
+    reach: body.reach, likes: body.likes, comments: body.comments,
+    saves: body.saves, shares: body.shares, videoViews: body.videoViews,
+  }
+  for (const [field, value] of Object.entries(metricFields)) {
+    if (value === undefined) continue
+    if (badMetric(value)) {
+      return NextResponse.json({ error: `${field} must be a whole number between 0 and ${METRIC_CAP.toLocaleString()}` }, { status: 400 })
+    }
+  }
 
   const { data: draft } = await supabase
     .from('content_drafts')
@@ -73,6 +94,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const admin = createAdminClient()
   const platform = body.platform ?? 'instagram'
   const interactions = (body.likes ?? 0) + (body.comments ?? 0) + (body.saves ?? 0) + (body.shares ?? 0)
+  // Each part passed the per-field cap, but the SUM is what analytics ranks
+  // on — bound it too so four near-cap fields can't stack into an absurdity.
+  if (interactions > METRIC_CAP) {
+    return NextResponse.json({ error: `likes + comments + saves + shares must not exceed ${METRIC_CAP.toLocaleString()}` }, { status: 400 })
+  }
   const postedAt = body.postedAt ?? new Date().toISOString()
 
   // Read the current brand version to stamp this outcome with the voice

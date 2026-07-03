@@ -50,6 +50,10 @@ export interface SuggestionFacts {
     feature?: string
     fixTheme?: string
   }
+  /** True when the account already has a shipped campaign running. When set, the generic
+   *  "plan a post / start a campaign" nudges step down so they don't lead — the team is already
+   *  producing content, so real maintenance wins + dated moments come first. */
+  hasActiveCampaigns?: boolean
 }
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
@@ -92,13 +96,13 @@ export function buildCandidates(f: SuggestionFacts): Suggestion[] {
       cta: 'See reviews', href: '/dashboard/inbox?tab=reviews' })
   }
   if (f.quickWins?.feature) {
-    out.push({ id: 'feature-strength', eyebrow: 'QUICK WIN', accent: 'green', icon: 'sparkles', priority: 49,
+    out.push({ id: 'feature-strength', eyebrow: 'QUICK WIN', accent: 'green', icon: 'sparkles', priority: f.hasActiveCampaigns ? 18 : 49,
       title: `Show off your ${f.quickWins.feature}`, body: 'Guests keep praising it. A quick post puts it in front of more of them.',
       cta: 'Plan a post', href: '/dashboard/campaigns/new' })
   }
   if (f.metric && f.metric.weekPct < 0) {
     const m = f.metric
-    out.push({ id: `metric-down-${slug(m.label)}`, eyebrow: 'HEADS UP', accent: 'coral', icon: 'trendingDown', priority: 62,
+    out.push({ id: `metric-down-${slug(m.label)}`, eyebrow: 'HEADS UP', accent: 'coral', icon: 'trendingDown', priority: f.hasActiveCampaigns ? 26 : 62,
       title: `${cap(m.label)} dipped ${Math.abs(m.weekPct)}% this week`, body: 'A fresh post usually brings it back up within a few days.',
       cta: 'Plan a post', href: '/dashboard/campaigns/new' })
   }

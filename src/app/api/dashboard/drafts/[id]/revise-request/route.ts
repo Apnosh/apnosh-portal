@@ -7,6 +7,13 @@
  * the same retrieval pipeline AI helpers use, so the next AI batch
  * avoids whatever didn't land.
  *
+ * The full note is ALSO written to media_brief.owner_note on the
+ * draft: human_judgments rows are RLS-scoped to admins + the author,
+ * so makers would never see the note otherwise.
+ *
+ * Guards: published drafts can't regress (409). Scheduled drafts are
+ * unscheduled first so the pending publish can't ship stale content.
+ *
  * Body: { note: string }
  */
 
@@ -35,7 +42,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const admin = createAdminClient()
   const { data: draft } = await admin
     .from('content_drafts')
-    .select('id, client_id, status, revision_count')
+    .select('id, client_id, status, revision_count, media_brief')
     .eq('id', id)
     .maybeSingle()
   if (!draft) return NextResponse.json({ error: 'draft not found' }, { status: 404 })
@@ -45,12 +52,31 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  // Move the draft back to 'revising' and log the judgment
+  // A published post can't loop back through 'revising' — it's already
+  // on the feed. That needs a human, not a status flip.
+  if (draft.status === 'published') {
+    return NextResponse.json(
+      { error: 'This post is already live. Message your team and they will fix it.' },
+      { status: 409 },
+    )
+  }
+
+  // A scheduled post comes off the calendar first, so the cron can't
+  // publish the version the owner just sent back. Staff get told below.
+  const wasScheduled = draft.status === 'scheduled'
+
+  // Move the draft back to 'revising' and log the judgment. The full
+  // note also lands on the draft itself (media_brief.owner_note) so
+  // every staff surface can read it — human_judgments is RLS-scoped to
+  // admins + the author.
+  const priorBrief = (draft.media_brief as Record<string, unknown>) ?? {}
   const { error: updateErr } = await admin
     .from('content_drafts')
     .update({
       status: 'revising',
       revision_count: Number(draft.revision_count ?? 0) + 1,
+      media_brief: { ...priorBrief, owner_note: body.note.trim() },
+      ...(wasScheduled ? { scheduled_for: null } : {}),
     })
     .eq('id', id)
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
@@ -73,7 +99,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     actor_id: user.id,
     actor_role: 'client',
     summary: 'Client requested revisions',
-    payload: { note_chars: body.note.length },
+    payload: { note_chars: body.note.length, unscheduled: wasScheduled },
   })
 
   await notifyStaffForClient(
@@ -81,8 +107,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     ['strategist', 'copywriter', 'community_mgr'],
     {
       kind: 'client_revise',
-      title: 'Client asked for revisions',
-      body: body.note.trim().slice(0, 140),
+      title: wasScheduled
+        ? 'Client asked for revisions (pulled off the schedule)'
+        : 'Client asked for revisions',
+      body: body.note.trim(),
       link: `/work/drafts?focus=${id}`,
     },
   ).catch(() => ({ notified: 0 }))

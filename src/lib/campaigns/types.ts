@@ -268,6 +268,12 @@ export interface BillingSummary {
   optedOutSaved: number
 }
 
+/** Snapshot of what the owner approved at ship — the exact content pieces, the plan's services, and
+ *  the producer-aware bill — so the order-confirmed receipt renders the same lines + totals it just
+ *  showed, with no re-derivation (which could drift to list price instead of the chosen producers). */
+export type ReceiptCreative = { key: string; type: string; label: string; producer: PieceProducer; cents: number; creatorName?: string }
+export interface CampaignReceipt { creatives: ReceiptCreative[]; services: LineItem[]; bill: BillingSummary }
+
 /** A line's charge at its current quantity (per-occurrence lines multiply). A piece
  *  the owner makes themselves (producer 'diy') is always free — they do the work. */
 export function lineTotal(it: LineItem): number {

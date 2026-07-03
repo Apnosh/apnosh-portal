@@ -10,7 +10,16 @@ import { serviceById, serviceToLine, buildContentLine, CONTENT_META } from '@/li
 import { AUDIENCES, CHANNELS, type CampaignTemplate } from '@/lib/campaigns/data/campaign-templates'
 import type { CampaignBrief, ContentBeat, LineItem } from '@/lib/campaigns/types'
 
-const SENTINEL_NO_OFFER = new Set(['Just show it off', 'No offer — just the invite', 'No offer', 'Just ask, nicely'])
+const SENTINEL_NO_OFFER = new Set(['Just show it off', 'No offer — just the invite', 'No offer', 'Just ask, nicely', 'just introduce it, no discount'])
+
+/** True when an "offer" answer is really the no-offer choice — ONE shared check so a sentinel can
+ *  never leak into offers, objectives, or maker briefs as if it were a real deal. Matches the known
+ *  labels exactly, plus the obvious phrasings case-insensitively. */
+export function isNoOfferSentinel(label: string | undefined | null): boolean {
+  if (!label) return true
+  const l = label.trim()
+  return SENTINEL_NO_OFFER.has(l) || /^(no (offer|discount)|just (show|introduce|ask))/i.test(l)
+}
 
 /** A readable campaign name from the spec. */
 function nameFor(t: CampaignTemplate, spec: Record<string, string>): string {
@@ -44,7 +53,7 @@ export function composeCampaign(t: CampaignTemplate, spec: Record<string, string
 
   // Offer (skip the "no offer" sentinels).
   const offerLabel = spec.offer?.trim()
-  const offer = offerLabel && !SENTINEL_NO_OFFER.has(offerLabel) ? { label: offerLabel } : undefined
+  const offer = offerLabel && !isNoOfferSentinel(offerLabel) ? { label: offerLabel } : undefined
 
   // Content calendar: template cadence, lightly tailored by the feature note.
   const feature = spec.feature?.trim()

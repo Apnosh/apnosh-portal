@@ -17,10 +17,6 @@ import { transformHome } from '@/components/mvp/home-transform'
 import MvpShell from '@/components/mvp/mvp-shell'
 import type { Suggestion } from '@/lib/dashboard/suggestions'
 
-// Design sample content — shown only where the client has no real monthly
-// review yet, so the home reads complete during this build phase.
-const SAMPLE_REVIEW: MvpHomeData['review'] = { prevMonthLabel: 'May', cycleLabel: 'June', budget: 800 }
-
 export default function DashboardHomePage() {
   const { client, loading: clientLoading } = useClient()
   const [data, setData] = useState<MvpHomeData | null>(null)
@@ -45,7 +41,6 @@ export default function DashboardHomePage() {
       .then((json) => {
         if (!live) return
         const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·', undefined, json.comingUp)
-        if (!d.review) d.review = SAMPLE_REVIEW
         d.activity = json.sinceLastChecked ?? []
         d.upcomingWork = json.upcomingWork ?? []
         setData(d)

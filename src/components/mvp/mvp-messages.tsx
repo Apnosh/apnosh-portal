@@ -53,7 +53,8 @@ function contactForSubject(subject: string): Contact | null {
 
 interface ThreadRow { id: string; subject: string; lastAt: string; lastMessage: string | null; unread: boolean }
 interface Msg { id: string; from: 'owner' | 'team'; senderName: string; text: string; createdAt: string }
-interface Active { threadId: string | null; contact: Contact | null; subject: string }
+/** draft pre-fills the composer (deep links pass who/what the note is about). */
+interface Active { threadId: string | null; contact: Contact | null; subject: string; draft?: string }
 
 function timeAgo(iso?: string | null): string {
   if (!iso) return ''
@@ -115,21 +116,29 @@ export default function MvpMessages() {
 
   useEffect(() => { loadThreads() }, [loadThreads])
 
-  const openContact = useCallback((c: Contact) => {
+  const openContact = useCallback((c: Contact, draft?: string) => {
     const existing = threads.find((t) => contactForSubject(t.subject)?.key === c.key)
-    setActive({ threadId: existing?.id ?? null, contact: c, subject: existing?.subject ?? c.subject })
+    setActive({ threadId: existing?.id ?? null, contact: c, subject: existing?.subject ?? c.subject, draft })
   }, [threads])
 
   const openThread = useCallback((t: ThreadRow) => {
     setActive({ threadId: t.id, contact: contactForSubject(t.subject), subject: t.subject })
   }, [])
 
-  // Deep link: /dashboard/messages?to=<contactKey> opens that conversation.
+  // Deep link: /dashboard/messages?to=<contactKey> opens that conversation, and
+  // ?draft= pre-fills the composer with who/what the note is about. Some older
+  // links pass a person id instead of a contact key; there is no person lookup
+  // here, so anything unknown lands on the strategist (the router for the whole
+  // team) rather than silently doing nothing.
   useEffect(() => {
     if (deepLinked.current || loading || !businessId) return
     deepLinked.current = true
-    const to = new URLSearchParams(window.location.search).get('to')
-    if (to) { const c = CONTACTS.find((x) => x.key === to); if (c) openContact(c) }
+    const params = new URLSearchParams(window.location.search)
+    const to = params.get('to')
+    if (!to) return
+    const draft = params.get('draft') ?? undefined
+    const c = CONTACTS.find((x) => x.key === to) ?? CONTACTS.find((x) => x.key === 'strategist')!
+    openContact(c, draft)
   }, [loading, businessId, openContact])
 
   const onBack = () => { setActive(null); loadThreads() }
@@ -259,7 +268,9 @@ function Conversation({ active, userId, onBack, onThreadCreated }: { active: Act
   const [threadId, setThreadId] = useState<string | null>(active.threadId)
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [loading, setLoading] = useState(!!active.threadId)
-  const [input, setInput] = useState('')
+  // Seed from the deep-link draft; the component remounts per conversation
+  // (keyed on threadId/subject) so this never leaks across threads.
+  const [input, setInput] = useState(active.draft ?? '')
   const [sending, setSending] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const c = active.contact

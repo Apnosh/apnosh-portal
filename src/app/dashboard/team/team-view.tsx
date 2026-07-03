@@ -24,6 +24,26 @@ interface Props {
   openRequests: TeamRequest[]
 }
 
+/* The messages screen keys its contacts by role (strategist, videographer,
+   photographer, designer, account, support), not by person id, so a raw
+   personId in ?to= never resolves and the tap dead-ends. Link each member
+   to their craft's thread; roles without their own thread route to the
+   strategist, who loops the right person in. Non-primary members get their
+   name pre-filled in the composer so the team knows who the note is for. */
+const ROLE_CONTACT: Record<string, string> = {
+  strategist: 'strategist',
+  videographer: 'videographer',
+  photographer: 'photographer',
+  designer: 'designer',
+}
+
+function messageHref(member: TeamMember): string {
+  if (member.isPrimaryContact) return '/dashboard/messages?to=strategist'
+  const key = member.roles.map(r => ROLE_CONTACT[r]).find(Boolean) ?? 'strategist'
+  const first = member.displayName.split(' ')[0]
+  return `/dashboard/messages?to=${key}&draft=${encodeURIComponent(`For ${first}: `)}`
+}
+
 export default function TeamView({ clientId, team, openRequests }: Props) {
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null)
   const [swapTarget, setSwapTarget] = useState<{ personId: string; role: string; personName: string } | null>(null)
@@ -50,7 +70,7 @@ export default function TeamView({ clientId, team, openRequests }: Props) {
   const others = visible.filter(m => !m.isPrimaryContact)
 
   const messageThreadHref = primary
-    ? `/dashboard/messages?to=${primary.personId}`
+    ? messageHref(primary)
     : '/dashboard/messages'
 
   return (
@@ -218,7 +238,7 @@ function PrimaryCard({
 
           <div className="flex items-center gap-2 flex-wrap">
             <Link
-              href={`/dashboard/messages?to=${member.personId}`}
+              href={messageHref(member)}
               className="inline-flex items-center gap-1.5 text-[13px] font-semibold bg-ink hover:bg-ink-2 text-white rounded-lg px-3.5 py-2"
             >
               <MessageSquare className="w-4 h-4" />
@@ -307,7 +327,7 @@ function StandardCard({
 
       <div className="mt-3 flex items-center gap-1">
         <Link
-          href={`/dashboard/messages?to=${member.personId}`}
+          href={messageHref(member)}
           className="inline-flex items-center gap-1 text-[12px] font-medium text-ink-2 hover:text-ink bg-ink-7 hover:bg-ink-6 rounded-md px-2 py-1"
         >
           <MessageSquare className="w-3.5 h-3.5" />

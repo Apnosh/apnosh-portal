@@ -1,0 +1,78 @@
+/**
+ * Service-driven "what we need from you" — turns the campaign's actual services into the specific
+ * inputs/actions the team needs, so the readiness page asks ONLY for what THIS plan requires (an SMS
+ * service ⇒ carrier registration; an ordering service ⇒ your POS vendor; any shoot ⇒ shoot access).
+ * Each service already carries the signal: its turnaround gate (service-turnaround.ts) and needsShoot.
+ * Emits the same ReadinessItem shape readiness.ts renders. Server-only. Pure over its inputs.
+ */
+import 'server-only'
+import { turnaroundFor } from './data/service-turnaround'
+import type { SavedCampaign, CampaignExecution } from './view'
+import type { ReadinessItem } from './readiness-types'
+
+const isContent = (serviceId?: string) => /^content-/.test(serviceId ?? '')
+const CONNECT_HREF = '/dashboard/connected-accounts'
+const BIZ_HREF = '/dashboard/business-info'
+
+const MENU_SERVICES = new Set(['site-menu', 'menu-eng', 'catering-engine', 'menu-photo-refresh'])
+const LIST_SERVICES = new Set(['crm-list', 'email-found'])
+
+export function deriveServiceNeeds(
+  campaign: SavedCampaign,
+  opts: { doneSetup: Set<string>; hasMenuItems: boolean; hasAddress: boolean; exec: CampaignExecution },
+): ReadinessItem[] {
+  const { doneSetup, hasMenuItems, hasAddress, exec } = opts
+  const svc = (campaign.draft.items ?? []).filter((it) => it.included && !isContent(it.serviceId))
+  const ids = new Set(svc.map((s) => s.serviceId).filter((x): x is string => !!x))
+  const out: ReadinessItem[] = []
+  const seen = new Set<string>()
+  const push = (it: ReadinessItem) => { if (!seen.has(it.id)) { seen.add(it.id); out.push(it) } }
+
+  // ── gate-driven needs: each setup service's external dependency implies one owner-facing ask ──
+  for (const id of ids) {
+    const t = turnaroundFor(id)
+    const gate = t && t.class === 'setup' ? t.gate : undefined
+    if (!gate) continue
+    switch (gate.kind) {
+      case 'gbp-verify':
+        if (!doneSetup.has('gbp-setup')) push({ id: 'gbp-access', kind: 'action', group: 'Access', title: 'Connect your Google profile', why: 'So we can update your Google listing. Google verifies it, which can add a few days.', actionLabel: 'Connect', href: CONNECT_HREF, done: false })
+        break
+      case 'listing-propagation':
+        if (!doneSetup.has('review-claim')) push({ id: 'listing-access', kind: 'action', group: 'Access', title: 'Connect your listings', why: 'So your hours and menu match everywhere. Listings can take up to a week to update.', actionLabel: 'Connect', href: CONNECT_HREF, done: false })
+        break
+      case 'pos-vendor':
+        push({ id: 'pos-vendor', kind: 'input', group: 'Access', field: 'vendorInfo', inputType: 'text', title: 'Which ordering or POS system do you use?', why: 'Your ordering or point-of-sale vendor controls when this can go live.', placeholder: 'e.g. Toast, Square, Clover', value: exec.vendorInfo ?? '', done: !!exec.vendorInfo })
+        break
+      case 'sms-10dlc':
+        push({ id: 'sms-register', kind: 'action', group: 'Info', title: 'Set up text messaging', why: 'Carriers require your legal business details before you can text customers. We collect these securely.', actionLabel: 'Add', href: BIZ_HREF, done: false })
+        break
+      case 'print':
+        if (!hasAddress) push({ id: 'print-address', kind: 'action', group: 'Info', title: 'Confirm your shipping address', why: 'So we can send your printed cards and QR codes.', actionLabel: 'Add', href: BIZ_HREF, done: false })
+        break
+    }
+  }
+
+  // ── shoot needs: shared by every on-site shoot service + any content that needs filming ──
+  const beatTypes = new Set((campaign.draft.brief?.contentBeats ?? []).map((b) => (b as { type?: string }).type))
+  const shootFromBeats = ['reel', 'video', 'photo'].some((tp) => beatTypes.has(tp))
+  const shootFromServices = [...ids].some((id) => { const t = turnaroundFor(id); return t?.class === 'creative' && !!t.needsShoot })
+  if (shootFromBeats || shootFromServices) {
+    push({ id: 'shootTimes', kind: 'input', group: 'Shoot', field: 'shootTimes', inputType: 'text', title: 'Best days and times to film', why: 'So we come when your food and light look their best.', placeholder: 'e.g. weekday mornings before 11', value: exec.shootTimes ?? '', done: !!exec.shootTimes })
+    push({ id: 'onSiteContact', kind: 'input', group: 'Shoot', field: 'onSiteContact', inputType: 'text', title: 'Who should we ask for?', why: 'A name and role so our team knows who to find.', placeholder: 'e.g. Maria, manager', value: exec.onSiteContact ?? '', done: !!exec.onSiteContact })
+    push({ id: 'filmStaff', kind: 'input', group: 'Shoot', field: 'filmStaff', inputType: 'select', options: ['Yes', 'Ask first', 'No'], title: 'OK to film and tag your staff?', why: 'We need your OK before we show or tag your team.', value: exec.filmStaff ?? '', done: !!exec.filmStaff })
+    push({ id: 'accessNotes', kind: 'input', group: 'Shoot', field: 'accessNotes', inputType: 'text', title: 'Parking or entry notes', why: 'Anything tricky about getting in.', placeholder: 'Optional', value: exec.accessNotes ?? '', done: !!exec.accessNotes, optional: true })
+    push({ id: 'blackoutDates', kind: 'input', group: 'Scheduling', field: 'blackoutDates', inputType: 'text', title: 'Any busy dates to avoid', why: 'Holidays or private events we should plan around.', placeholder: 'Optional', value: exec.blackoutDates ?? '', done: !!exec.blackoutDates, optional: true })
+  }
+
+  // ── menu source ──
+  if ([...ids].some((id) => MENU_SERVICES.has(id))) {
+    push({ id: 'menu-source', kind: 'input', group: 'Content', field: 'menuSource', inputType: 'text', title: 'Send us your current menu', why: 'So the content and page show the right items and prices.', placeholder: hasMenuItems ? 'We have one on file — add a link if it changed' : 'Link to your menu, or where to find it', value: exec.menuSource ?? '', done: !!exec.menuSource || hasMenuItems, optional: hasMenuItems })
+  }
+
+  // ── customer list ──
+  if ([...ids].some((id) => LIST_SERVICES.has(id))) {
+    push({ id: 'customer-list', kind: 'action', group: 'Info', title: 'Share your customer list', why: 'So we can set up your email and text outreach.', actionLabel: 'Add', href: BIZ_HREF, done: false })
+  }
+
+  return out
+}

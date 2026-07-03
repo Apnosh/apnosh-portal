@@ -65,7 +65,7 @@ export function toServiceMoves(atomMoves: AtomPlay[]): PlanMove[] {
  * needs exists. Unlike a generic "build before send" rule, these hold even when the owner already
  * has a list (the CRM / sending domain still has to be set up before a blast can fire), so it is
  * safe to enforce unconditionally. The lift order is otherwise preserved. */
-const SEND_DEPS: Record<string, readonly string[]> = {
+export const SEND_DEPS: Record<string, readonly string[]> = {
   'sms-program': ['sms-found', 'crm-list'],
   'reminder-send': ['sms-found', 'crm-list'],
   'welcome-seq': ['email-found', 'crm-list'],
@@ -103,7 +103,7 @@ export function buildFromAtoms(
   spec: Record<string, string>,
   opts?: BuildOpts,
 ): { moves: PlanMove[]; stages: PlanStage[]; atomMoves: AtomPlay[] } {
-  const rank = TIER_RANK[tierFor(spec)]
+  const rank = TIER_RANK[tierFor(spec, goal)]
   const stages = SYSTEM_STAGES[goal]
   const stageOrder = new Map(stages.map((s, i) => [s.stage, i] as const))
   const exclude = excludeSet(opts)
@@ -156,7 +156,8 @@ export function buildDialedPlan(
   stages: PlanStage[],
   opts?: BuildOpts,
 ): { steps: PlanStep[]; stages: PlanStage[]; moves: PlanMove[] } {
-  const tier = tierFor(spec)
+  // goal here may be a system OR event goal; tierFor only fits system goals, else legacy cutoffs.
+  const tier = tierFor(spec, goal)
   const rank = TIER_RANK[tier]
   const stageOrder = new Map(stages.map((s, i) => [s.stage, i] as const))
   const exclude = excludeSet(opts)

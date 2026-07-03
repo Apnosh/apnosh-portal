@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
       primaryGoal: val(brain.primaryGoal),
       hasList: val(brain.hasList),
     })
-    const tier = budget ? tierFor({ budget }) : suggested.tier
+    const tier = budget ? tierFor({ budget }, goal) : suggested.tier
 
     const signals: MixSignals = {
       rating: val(brain.rating),
@@ -68,9 +68,10 @@ export async function GET(req: NextRequest) {
       monthlyBudget: val(brain.monthlyBudget),
     }
     const excludeIds = [...(val(brain.droppedServiceIds) ?? [])]
-    // No list → never propose a send: drop the email/text plays from the mix, for EVERY promo goal
-    // (the composer also type-filters email/sms beats; keeping the mix consistent avoids drift).
-    if (isEventGoal && val(brain.hasList) === false) excludeIds.push('evt-email', 'evt-sms', 'lnch-email', 'deal-email', 'deal-sms')
+    // No CONFIRMED list → never propose a send: a send with no audience is an actively wrong plan.
+    // hasList can only ever read true-or-missing today (the list reader has no honest false), so the
+    // conservative gate is "not proven true", not "proven false".
+    if (isEventGoal && val(brain.hasList) !== true) excludeIds.push('evt-email', 'evt-sms', 'lnch-email', 'deal-email', 'deal-sms')
 
     // The objective function drives the ORDER by expected lift on the goal's outcome (threaded via
     // spec.aiMix). Events use the deterministic lift mix; system goals also get the AI's focused pick,

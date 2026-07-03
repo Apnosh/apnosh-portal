@@ -15,7 +15,7 @@ export const maxDuration = 30
 const DAYS = ['sun','mon','tue','wed','thu','fri','sat'] as const
 
 export async function GET(req: NextRequest) {
-  const { user, clientId } = await resolveCurrentClient()
+  const { user, clientId } = await resolveCurrentClient(req.nextUrl.searchParams.get('clientId'))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 

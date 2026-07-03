@@ -71,6 +71,9 @@ function contentType(beat: DatedBeat | null, discipline: string): string {
 
 function featuringFor(campaign: SavedCampaign, business: { name: string }): string {
   if (campaign.execution?.featuring?.trim()) return campaign.execution.featuring.trim()  // owner's "Get it ready" input wins
+  // the dish the owner picked in the madlib — asked FIRST, so it outranks the offer text
+  const specFeature = campaign.draft.brief?.spec?.feature?.trim()
+  if (specFeature) return specFeature
   const offer = campaign.draft.brief?.offer?.label
   if (offer) return offer
   // draft.occasion is a SCHEDULE anchor (e.g. "your launch"), not a dish — never

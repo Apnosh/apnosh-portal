@@ -18,6 +18,7 @@ import QueueTab from './tabs/queue-tab'
 import MetricsTab from './tabs/metrics-tab'
 import KnowledgeTab from '@/components/admin/knowledge-tab'
 import LocalSeoTab from './tabs/local-seo-tab'
+import GbpProfileTab from './tabs/gbp-profile-tab'
 import SeoToolkitTab from './tabs/seo-toolkit-tab'
 import ReviewsTab from './tabs/reviews-tab'
 import NotesTab from './tabs/notes-tab'
@@ -47,6 +48,7 @@ import type {
 type Tab =
   | 'overview'
   | 'profile'
+  | 'google'         // the client's LIVE Google Business Profile, editable from our side
   | 'timeline'       // every call, email, meeting, note
   | 'docs'
   | 'brand'          // Brand System + Assets + Style Library
@@ -59,6 +61,7 @@ type Tab =
 const TABS: { key: Tab; label: string; icon: typeof Building2 }[] = [
   { key: 'overview',    label: 'Overview',    icon: Building2 },
   { key: 'profile',     label: 'Profile',     icon: UserCircle },
+  { key: 'google',      label: 'Google',      icon: MapPin },
   { key: 'timeline',    label: 'Timeline',    icon: Activity },
   { key: 'docs',        label: 'Docs',        icon: FileText },
   { key: 'brand',       label: 'Brand',       icon: Palette },
@@ -257,11 +260,13 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
   }, [])
 
   // Filter the tab list: strategist does not need Docs or Settings.
-  // Settings is mostly billing/connection config; Docs is admin-only.
+  // Settings is mostly billing/connection config; Docs is admin-only. The Google tab edits the
+  // client's LIVE Google listing and its API honors ?clientId= only for admins, so a strategist
+  // would see a false "not connected" state at best — admin-only.
   const visibleTabs = useMemo(() => (
     isAdmin === true
       ? TABS
-      : TABS.filter(t => t.key !== 'docs' && t.key !== 'settings')
+      : TABS.filter(t => t.key !== 'docs' && t.key !== 'settings' && t.key !== 'google')
   ), [isAdmin])
 
   const fetchAll = useCallback(async () => {
@@ -445,6 +450,10 @@ export default function ClientDetailPage({ params }: { params: Promise<{ slug: s
 
       {activeTab === 'profile' && (
         <ProfileTab clientId={client.id} />
+      )}
+
+      {activeTab === 'google' && (
+        <GbpProfileTab clientId={client.id} />
       )}
 
       {activeTab === 'timeline' && (

@@ -7,10 +7,17 @@
 import type { SavedCampaign } from './view'
 import type { PieceBrief } from './types'
 import { creativeRolesForCampaign, vibeForCampaign, disciplineForType, type Disc } from './creators'
+import { isNoOfferSentinel } from './campaign-composer'
 import { reconcileBeatsToLines, beatsFromLines, isOnSitePiece, SOLO_VISIT_SURCHARGE_CENTS, AI_DRAFT_CENTS, CONTENT_META } from './catalog'
 import { deriveSchedule } from './schedule'
 
 export type WorkOrderStatus = 'offered' | 'accepted' | 'in_progress' | 'delivered' | 'approved' | 'revision' | 'declined'
+
+/** The note the reconcile stamps on an order it voids when the OWNER removes the piece
+ *  from the plan. 'declined' is one DB status for two different events — this exact string
+ *  is how every reader (revive, tracker pieces/activity, progress) tells an owner removal
+ *  (hide it, safe to revive) from a creator's own decline (keep it visible, needs a human). */
+export const PLAN_REMOVED_NOTE = 'Removed from the plan'
 
 /**
  * The only legal status moves. Approved + declined are terminal. A delivery
@@ -67,6 +74,82 @@ export function briefInstructions(b?: PieceBrief | null): string[] {
     b.mustSay && `Must include: ${b.mustSay}.`,
     b.avoid && `Avoid: ${b.avoid}.`,
     b.notes && `Notes: ${b.notes}.`,
+  ].filter((x): x is string => !!x)
+}
+
+/** The owner's CAMPAIGN-level madlib answers (draft.brief.spec), folded into the same maker-facing
+ *  instruction list. Builder pieces ship with piece.brief = null, so without this every dish, offer
+ *  rule, promo code, event detail, and timing the owner typed died in the spec jsonb while the team
+ *  built blind. Used ONLY when a piece has no per-piece brief; pricing is untouched (piece.brief
+ *  stays null). Keys mirror the madlib slots across all goals. */
+export function specInstructions(spec?: Record<string, string> | null): string[] {
+  if (!spec) return []
+  const v = (k: string) => { const x = spec[k]; return typeof x === 'string' && x.trim() ? x.trim() : null }
+  const out: string[] = []
+  const feature = v('feature') ?? v('subject')
+  if (feature) out.push(`Feature: ${feature}.`)
+  const offer = v('offer')
+  if (offer && !isNoOfferSentinel(offer)) out.push(`Offer / hook: ${offer}.`)
+  const event = v('event'); if (event) out.push(`Event: ${event}.`)
+  const price = v('price'); if (price) out.push(`Ticket price: ${price}.`)
+  const time = v('time'); if (time) out.push(`Timing: ${time}.`)
+  const days = v('days'); if (days) out.push(`Target days: ${days}.`)
+  const limits = v('limits'); if (limits) out.push(`Rules / limits: ${limits}.`)
+  const code = v('code'); if (code) out.push(`Promo code: ${code}.`)
+  const redeem = v('redeem'); if (redeem) out.push(`How guests redeem: ${redeem}.`)
+  const details = v('details'); if (details) out.push(`Details: ${details}.`)
+  const amounts = v('amounts'); if (amounts) out.push(`Amounts: ${amounts}.`)
+  const min = v('min'); if (min) out.push(`Minimum: ${min}.`)
+  const message = v('message'); if (message) out.push(`Message: ${message}.`)
+  const which = v('which'); if (which) out.push(`Scope: ${which}.`)
+  const cadence = v('cadence'); if (cadence) out.push(`Cadence: ${cadence}.`)
+  const where = v('where'); if (where) out.push(`Format / where it goes: ${where}.`)
+  const purpose = v('purpose'); if (purpose) out.push(`Purpose: ${purpose}.`)
+  const audience = v('audienceChoice'); if (audience) out.push(`Audience, in the owner's words: ${audience}.`)
+  const notes = v('notes'); if (notes) out.push(`Notes: ${notes}.`)
+  return out
+}
+
+/** The Walk's per-piece owner answers. The plan flow writes these straight onto each
+ *  content beat it persists (campaign_briefs.content_beats) WITHOUT widening the
+ *  ContentBeat type, so they come back as loose extras on the beat; only non-empty
+ *  strings are kept. Field names mirror the Walk's beat editor exactly. */
+export interface WalkAnswers {
+  note?: string          // free-text must-haves / vibe
+  footage?: string       // 'photo' | 'clip' | 'film'
+  subjectKind?: string   // 'dish' | 'deal' | 'news'
+  newsLine?: string      // the news itself, when subjectKind is 'news'
+  messagePoint?: string  // what an email/sms is about
+  buttonTarget?: string  // 'menu' | 'book' | 'order' | 'deal'
+}
+
+const WALK_ANSWER_KEYS = ['note', 'footage', 'subjectKind', 'newsLine', 'messagePoint', 'buttonTarget'] as const
+
+/** Pull the Walk answers off a persisted beat, or null when it carries none. */
+export function walkAnswersFromBeat(beat: object): WalkAnswers | null {
+  const src = beat as Record<string, unknown>
+  let found: WalkAnswers | null = null
+  for (const k of WALK_ANSWER_KEYS) {
+    const v = src[k]
+    if (typeof v === 'string' && v.trim()) (found ??= {})[k] = v.trim()
+  }
+  return found
+}
+
+/** Fold the Walk answers into the same maker-facing instruction list. Choice keys are
+ *  translated to plain words so the maker reads a sentence, not an enum value. */
+export function walkAnswerInstructions(a?: WalkAnswers | null): string[] {
+  if (!a) return []
+  const subject: Record<string, string> = { dish: 'a dish', deal: 'a deal', news: 'news' }
+  const footage: Record<string, string> = { photo: "use the owner's menu photo", clip: 'the owner sends a clip', film: 'we film it on site' }
+  const button: Record<string, string> = { menu: 'See menu', book: 'Book a table', order: 'Order now', deal: 'Get the deal' }
+  return [
+    a.subjectKind && `Post subject: ${subject[a.subjectKind] ?? a.subjectKind}.`,
+    a.newsLine && `News to share: ${a.newsLine}.`,
+    a.messagePoint && `Message point: ${a.messagePoint}.`,
+    a.footage && `Footage: ${footage[a.footage] ?? a.footage}.`,
+    a.buttonTarget && `Button goes to: ${button[a.buttonTarget] ?? a.buttonTarget}.`,
+    a.note && `Owner note: ${a.note}.`,
   ].filter((x): x is string => !!x)
 }
 
@@ -129,6 +212,7 @@ export interface PlannedPiece {
   creatorId: string | null    // the assigned creator when producer === 'creator'
   priceCents: number          // the owner's price for this piece, INCLUDING any folded solo-visit surcharge ($0 when 'diy')
   brief: PieceBrief | null    // the add-piece brief (Content Menu), null for legacy pieces
+  ownerAnswers?: WalkAnswers | null  // the Walk's per-piece answers on the beat; null/absent when it has none
   shootDayId: string | null   // the visit this on-site piece shares (Content Menu); null for remote/legacy pieces
   soloSurchargeCents: number  // the solo-visit surcharge folded into priceCents (0 unless this is a lone on-site piece)
 }
@@ -212,7 +296,7 @@ export function planCampaignPieces(campaign: SavedCampaign, shipISO: string): Pl
     const onSite = isMenu && isOnSitePiece(b.type, b.brief) && producer !== 'diy' && producer !== 'ai'
     const shootDayId = onSite ? (b.brief?.shootDayId ?? ONE_SHOOT) : null
     const baseCents = Math.round((priceByType.get(b.type) ?? CONTENT_META[b.type]?.price ?? 0) * 100)
-    return { index, type: b.type, label: b.label ?? '', channel: b.channel ?? '', postISO, discipline: discipline ?? null, slot, key, producer, creatorId, baseCents, brief: b.brief ?? null, shootDayId }
+    return { index, type: b.type, label: b.label ?? '', channel: b.channel ?? '', postISO, discipline: discipline ?? null, slot, key, producer, creatorId, baseCents, brief: b.brief ?? null, ownerAnswers: walkAnswersFromBeat(b), shootDayId }
   })
 
   // ── Pass 2: a shoot day holding exactly ONE on-site piece carries the solo-visit
@@ -224,7 +308,7 @@ export function planCampaignPieces(campaign: SavedCampaign, shipISO: string): Pl
   return draft.map((p) => {
     const soloSurchargeCents = p.shootDayId && onSiteByDay.get(p.shootDayId) === 1 ? SOLO_VISIT_SURCHARGE_CENTS : 0
     const priceCents = p.producer === 'diy' ? 0 : p.producer === 'ai' ? AI_DRAFT_CENTS : p.baseCents + soloSurchargeCents
-    return { index: p.index, type: p.type, label: p.label, channel: p.channel, postISO: p.postISO, discipline: p.discipline, slot: p.slot, key: p.key, producer: p.producer, creatorId: p.creatorId, priceCents, brief: p.brief, shootDayId: p.shootDayId, soloSurchargeCents }
+    return { index: p.index, type: p.type, label: p.label, channel: p.channel, postISO: p.postISO, discipline: p.discipline, slot: p.slot, key: p.key, producer: p.producer, creatorId: p.creatorId, priceCents, brief: p.brief, ownerAnswers: p.ownerAnswers, shootDayId: p.shootDayId, soloSurchargeCents }
   })
 }
 
@@ -238,6 +322,22 @@ export function buildWorkOrderRows(campaign: SavedCampaign, shipISO: string): Wo
   return planCampaignPieces(campaign, shipISO)
     .map((p) => workOrderRowForPiece(campaign, p))
     .filter((r): r is WorkOrderRow => r !== null)
+}
+
+/** Every instruction line a maker should see for ONE piece: the per-piece add-time
+ *  brief first (Content Menu), then the owner's Walk answers on the beat, then the
+ *  campaign-level madlib answers (spec). A piece WITH a brief used to drop the spec
+ *  entirely, so the offer rules, promo code, timing and audience the owner typed never
+ *  reached the maker. Exact-duplicate lines are skipped (brief + spec both emit e.g.
+ *  a "Feature:" line). Shared by both row builders so the two lanes carry the SAME
+ *  merged brief. */
+export function pieceInstructions(campaign: SavedCampaign, p: PlannedPiece): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const line of [...briefInstructions(p.brief), ...walkAnswerInstructions(p.ownerAnswers), ...specInstructions(campaign.draft.brief?.spec)]) {
+    if (!seen.has(line)) { seen.add(line); out.push(line) }
+  }
+  return out
 }
 
 /** The order row for ONE planned piece, or null if the piece isn't creator-run.
@@ -255,7 +355,8 @@ export function workOrderRowForPiece(campaign: SavedCampaign, p: PlannedPiece): 
   const title = f?.featuring ? `${p.discipline} · ${f.featuring}` : (p.label.trim() ? p.label.trim() : `${p.discipline} for ${name}`)
   const brief = [
     `Make this ${p.discipline.toLowerCase()} piece for "${name}".`,
-    ...briefInstructions(f),
+    // per-piece answers (add-time brief + Walk) merged with the campaign-level madlib answers
+    ...pieceInstructions(campaign, p),
     objective && `Goal: ${objective}.`,
     `You approve nothing yet — deliver, then the owner reviews.`,
   ].filter(Boolean).join(' ')
@@ -286,6 +387,29 @@ export function serviceLineForPiece(type: string, channel?: string): string {
   return byType[type] ?? 'social'
 }
 
+/** The platforms a piece publishes to, in the publish lib's vocabulary (instagram |
+ *  facebook | tiktok | linkedin | gbp — what publishToAllPlatforms and
+ *  getPublishConnectionsForClient speak). Derived from the beat's channel string
+ *  ('Instagram', 'Instagram · TikTok', 'Google', ...). attemptPublish hard-fails a
+ *  draft with EMPTY platforms ('no_platforms'), so a social piece always carries at
+ *  least one — instagram, the calendar's default channel. Pure — shared by both
+ *  draft builders so the two lanes stamp the same vocabulary. */
+export function targetPlatformsForPiece(type: string, channel?: string | null): string[] {
+  // Email/SMS sends go out on the email/SMS rail, not attemptPublish — their
+  // platforms stay empty on purpose.
+  if (type === 'email' || type === 'sms') return []
+  const ch = (channel || '').toLowerCase()
+  const out: string[] = []
+  if (ch.includes('instagram')) out.push('instagram')
+  if (ch.includes('facebook')) out.push('facebook')
+  // TikTok is deliberately NOT stamped: its publish adapter is an always-fail stub
+  // (src/lib/publish/tiktok.ts), so targeting it guarantees a partial/hard failure.
+  // Re-add here when the adapter is real.
+  if (ch.includes('linkedin')) out.push('linkedin')
+  if (ch.includes('google') || ch.includes('gbp') || ch.includes('maps')) out.push('gbp')
+  return out.length > 0 ? out : ['instagram']
+}
+
 /** The content_drafts row for ONE team-run piece (status 'idea'), stamped with its
  *  campaign_piece_key so a later reconcile can match it back to the plan. */
 export interface TeamDraftRow {
@@ -297,12 +421,18 @@ export interface TeamDraftRow {
   proposed_via: 'strategist'
   target_publish_date: string | null
   campaign_piece_key: string
+  /** Publish-lib platform names from the beat's channel; [] for email/sms (the
+   *  send rail delivers those, not attemptPublish). Without this the draft can
+   *  NEVER publish — attemptPublish hard-fails on empty platforms. */
+  target_platforms: string[]
   /** The owner's per-piece brief, so the team isn't building blind. Stored in the
-   *  existing media_brief jsonb; null when there's no brief (legacy pieces). */
-  media_brief: { from_menu: true; instructions: string[] } | null
+   *  existing media_brief jsonb; the column is NOT NULL, so a piece with nothing to
+   *  say still carries the object with empty instructions (never null). */
+  media_brief: { from_menu: true; instructions: string[] }
 }
 export function teamDraftRowForPiece(campaign: SavedCampaign, p: PlannedPiece): TeamDraftRow {
-  const instructions = briefInstructions(p.brief)
+  // per-piece answers (add-time brief + Walk) merged with the campaign-level madlib answers
+  const instructions = pieceInstructions(campaign, p)
   // Lead the idea with the offer when there is one, so the queue row reads usefully.
   const idea = [p.label || 'Campaign piece', p.brief?.offer ? `— ${p.brief.offer}` : ''].filter(Boolean).join(' ').slice(0, 280)
   return {
@@ -314,7 +444,8 @@ export function teamDraftRowForPiece(campaign: SavedCampaign, p: PlannedPiece): 
     proposed_via: 'strategist',
     target_publish_date: p.postISO,
     campaign_piece_key: p.key,
-    media_brief: instructions.length ? { from_menu: true, instructions } : null,
+    target_platforms: targetPlatformsForPiece(p.type, p.channel),
+    media_brief: { from_menu: true, instructions },
   }
 }
 
@@ -517,6 +648,8 @@ export interface BridgeDraftRow {
   service_line: 'social'
   proposed_via: 'strategist'
   target_publish_date: string | null
+  target_platforms: string[]                                    // publish-lib names; empty would hard-fail attemptPublish
+  client_signed_off_at: string                                  // the owner's delivery approval IS the sign-off
 }
 
 const BRIDGE_CAPTION_MAX = 2200   // Instagram's caption ceiling; the team edits before posting
@@ -548,5 +681,13 @@ export function buildBridgeDraftRow(o: BridgeOrderRow): BridgeDraftRow {
     service_line: 'social',
     proposed_via: 'strategist',
     target_publish_date: o.due_date ?? null,
+    // A creator piece is social by construction (service_line above); the order
+    // carries no channel, so stamp the calendar's default platform via the same
+    // helper both lanes share. Empty would hard-fail attemptPublish ('no_platforms').
+    target_platforms: targetPlatformsForPiece('post', null),
+    // The owner ALREADY approved this delivery (the bridge only runs on an approved
+    // order), so that approval moment carries over as the sign-off — otherwise the
+    // attemptPublish consent gate would hold approved work for a second sign-off.
+    client_signed_off_at: new Date().toISOString(),
   }
 }

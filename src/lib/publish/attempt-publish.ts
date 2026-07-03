@@ -11,6 +11,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { publishToAllPlatforms, resolveOverallStatus } from '@/lib/publish'
 import { getPublishConnectionsForClient } from './get-connections'
+import { getApprovalSettings } from '@/lib/work/approval-settings'
 import type { PlatformPublishResult } from '@/types/database'
 
 export interface AttemptPublishResult {
@@ -26,6 +27,7 @@ export interface AttemptPublishResult {
     | 'missing_platform_connection'
     | 'all_platforms_failed'
     | 'draft_not_found'
+    | 'awaiting_signoff'
   /** Per-platform results (always set if we reached the publish call). */
   perPlatform?: Record<string, PlatformPublishResult>
   /** A single URL to surface in the UI; first successful publish wins. */
@@ -42,6 +44,9 @@ interface DraftRow {
   media_urls: string[] | null
   target_platforms: string[] | null
   status: string
+  client_signed_off_at: string | null
+  published_at: string | null
+  published_url: string | null
 }
 
 /**
@@ -56,12 +61,41 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
 
   const { data: draftRaw } = await admin
     .from('content_drafts')
-    .select('id, client_id, caption, hashtags, media_urls, target_platforms, status')
+    .select('id, client_id, caption, hashtags, media_urls, target_platforms, status, client_signed_off_at, published_at, published_url')
     .eq('id', draftId)
     .maybeSingle()
   if (!draftRaw) return { ok: false, errorCode: 'draft_not_found', error: 'draft not found' }
 
   const draft = draftRaw as DraftRow
+
+  // Idempotency: a draft that already carries a publish receipt must never post
+  // again — a manual staff publish racing the 5-minute cron (or a double-tap)
+  // would otherwise put the same post on the feed twice. Return the existing
+  // receipt so every caller converges on the same success.
+  if (draft.published_at) {
+    return { ok: true, publishedUrl: draft.published_url ?? undefined }
+  }
+
+  // Owner-consent gate, enforced at the one chokepoint every publish path
+  // shares (manual publish, the schedule action + publish-scheduled cron,
+  // auto-publish-on-signoff) — the manual route checks this too, but a
+  // scheduled draft used to slip past it entirely. Mirrors the lifecycle
+  // route's rule exactly: a trusted strategist may bypass when
+  // allow_strategist_direct_publish is on. The cron treats this code as a
+  // soft skip (stays scheduled), so the post goes out on the first tick
+  // after the owner signs.
+  const settings = await getApprovalSettings(draft.client_id)
+  if (
+    settings.client_signoff_required &&
+    !draft.client_signed_off_at &&
+    !settings.allow_strategist_direct_publish
+  ) {
+    return {
+      ok: false,
+      errorCode: 'awaiting_signoff',
+      error: 'Waiting for the owner to sign off before this can go live.',
+    }
+  }
 
   // Preflight: all the gating rules in one place so the UI can mirror them.
   const caption = (draft.caption ?? '').trim()
@@ -217,11 +251,51 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
       .update({
         published_at: new Date().toISOString(),
         published_url: publishedUrl ?? null,
-        // Note: content_drafts.published_post_id references social_posts,
-        // not the platform-side ID, so we DON'T write it from here.
-        // Phase 2 will create a social_posts row + link.
       })
       .eq('id', draftId)
+  }
+
+  // Close the publish→outcomes loop: seed a social_posts row for the winning
+  // platform and link the draft to it. The nightly metrics sync upserts on
+  // (client_id, platform, external_id), so it fills reach/likes into THIS row
+  // and the outcomes reader (which resolves solely via published_post_id) can
+  // finally attach real numbers — without this, every published piece read
+  // "Posted, waiting on numbers" forever. Best-effort: recording must never
+  // fail a publish that already happened.
+  //
+  // Platform choice: Instagram is the only platform the per-post metrics sync
+  // covers today, so when Instagram succeeded the stub must carry ITS post id
+  // even if another platform's publish resolved first — otherwise the synced
+  // numbers land in a row the draft never points at and the piece reads as
+  // gathering forever. Any other mix keeps the first win.
+  const igWin = perPlatform.instagram
+  const igStubId = igWin?.status === 'published' ? igWin.post_id : undefined
+  const stubPlatform = igStubId
+    ? 'instagram'
+    : Object.entries(perPlatform).find(([, r]) => r.status === 'published')?.[0]
+  const stubPostId = igStubId ?? publishedPostId
+  if (stubPlatform && stubPostId) {
+    try {
+      const { data: stub } = await admin
+        .from('social_posts')
+        .upsert({
+          client_id: draft.client_id,
+          platform: stubPlatform,
+          external_id: stubPostId,
+          permalink: publishedUrl ?? null,
+          caption,
+          media_url: mediaUrls[0] ?? null,
+          posted_at: new Date().toISOString(),
+          source_draft_id: draftId,
+        }, { onConflict: 'client_id,platform,external_id' })
+        .select('id')
+        .maybeSingle()
+      if (stub?.id) {
+        await admin.from('content_drafts').update({ published_post_id: stub.id }).eq('id', draftId)
+      }
+    } catch (e) {
+      console.error('publish recorded but social_posts link failed', draftId, e)
+    }
   }
 
   // Audit event with the full per-platform breakdown so support can

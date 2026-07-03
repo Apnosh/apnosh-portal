@@ -87,11 +87,16 @@ export default function ContentMenu({ restaurant, menuItems, clientId, draftId, 
         id = (await res.json() as { id?: string }).id
       }
       if (ship && id) {
-        await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: new Date().toISOString() } }) }).catch(() => {})
+        // The status flip IS the order: if it doesn't land, the campaign is only a saved
+        // draft, so fail the whole ship instead of navigating to a page that looks live.
+        const r = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: new Date().toISOString() } }) }).catch(() => null)
+        if (!r || !r.ok) throw new Error("That didn't go through. Nothing was ordered. Try again.")
       }
       router.push(id ? `/dashboard/campaigns/${id}` : '/dashboard/campaigns')   // stays in-flight through nav
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong'); setBusy(false); inFlight.current = false
+      // Land back on the cart: it is the only view that renders the error (a ship from
+      // the cost view would otherwise fail invisibly), and its Ship button is the retry.
+      setError(e instanceof Error ? e.message : 'Something went wrong'); setView('cart'); setBusy(false); inFlight.current = false
     }
   }
 

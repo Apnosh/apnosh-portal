@@ -15,10 +15,14 @@
  */
 
 import { useEffect, useState, useCallback } from 'react'
-import { Calendar, CreditCard, ExternalLink, Download, Loader2 } from 'lucide-react'
+import Link from 'next/link'
+import { Calendar, CreditCard, ExternalLink, Download, Loader2, ChevronRight, ReceiptText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, MvpGroup, MvpRow, MvpPill, C, DISPLAY, type PillTone } from '@/components/mvp/mvp-detail'
+import { buildReceipt } from '@/lib/campaigns/receipt'
+import { money } from '@/components/campaigns/ui'
+import type { SavedCampaign } from '@/lib/campaigns/view'
 
 interface BillingCustomerRow {
   stripe_customer_id: string
@@ -83,6 +87,7 @@ export default function BillingPage() {
   const [billingCustomer, setBillingCustomer] = useState<BillingCustomerRow | null>(null)
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null)
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
+  const [orders, setOrders] = useState<SavedCampaign[]>([])
   const [loading, setLoading] = useState(true)
   const [portalLoading, setPortalLoading] = useState(false)
   const [portalError, setPortalError] = useState<string | null>(null)
@@ -112,6 +117,11 @@ export default function BillingPage() {
     setBillingCustomer(bcRes.data as BillingCustomerRow | null)
     setSubscription(subRes.data as SubscriptionRow | null)
     setInvoices((invRes.data ?? []) as InvoiceRow[])
+
+    // Campaign orders (receipts) — independent of Stripe billing setup; shows what the owner has ordered.
+    const campRes = await fetch(`/api/campaigns?clientId=${clientId}`).then((r) => (r.ok ? r.json() : { campaigns: [] })).catch(() => ({ campaigns: [] }))
+    setOrders(((campRes.campaigns ?? []) as SavedCampaign[]).filter((c) => c.status === 'shipped'))
+
     setLoading(false)
   }, [])
 
@@ -168,6 +178,7 @@ export default function BillingPage() {
     }
   }
 
+  const today = new Date().toISOString().slice(0, 10)
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Billing" subtitle="Your plan and invoices" />}>
       <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
@@ -181,7 +192,36 @@ export default function BillingPage() {
 
         {loading ? (
           <Skeleton />
-        ) : !billingCustomer ? (
+        ) : (
+          <>
+            {/* Orders — campaign receipts, rebuilt from each shipped campaign. Independent of Stripe setup. */}
+            {orders.length > 0 && (
+              <div style={{ marginBottom: 22 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 6px 7px' }}>Orders</div>
+                <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+                  {orders.map((o, i) => {
+                    const r = buildReceipt(o, today)
+                    return (
+                      <Link key={o.draft.id} href={`/dashboard/billing/orders/${o.draft.id}`} style={{ textDecoration: 'none', display: 'block', color: 'inherit' }}>
+                        {i > 0 && <div style={{ height: '0.5px', background: C.line }} />}
+                        <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+                            <span style={{ width: 30, height: 30, borderRadius: 8, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ReceiptText size={15} color={C.greenDk} /></span>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.draft.name}</div>
+                              <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>{money(r.bill.oneTimeOnDelivery)}{r.bill.perMonth > 0 ? ` + ${money(r.bill.perMonth)}/mo` : ''}{o.shippedAt ? ` · ${formatDate(o.shippedAt)}` : ''}</div>
+                            </div>
+                          </div>
+                          <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {!billingCustomer ? (
           <div style={{ background: '#fff', border: `1px dashed ${C.green}`, borderRadius: 16, padding: '30px 22px', textAlign: 'center', marginTop: 4 }}>
             <CreditCard size={26} color={C.greenDk} style={{ margin: '0 auto 10px' }} />
             <div style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>Billing not set up yet</div>
@@ -287,6 +327,8 @@ export default function BillingPage() {
                 </div>
               </div>
             )}
+          </>
+        )}
           </>
         )}
       </div>

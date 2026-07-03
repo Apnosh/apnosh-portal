@@ -1,13 +1,23 @@
 /** Shared design tokens + helpers for the campaign canvas (portal mvp look). */
+import type { CSSProperties } from 'react'
 import { lineTotal, type LineItem } from '@/lib/campaigns/types'
 
 export const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
   ink: '#1d1d1f', ink2: '#3a3a3c', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#f5f5f7',
   red: '#c0392b', redBg: '#fdecea',
+  // amber = the owner-owed color, and only that. gold = ratings (desaturated so it never reads amber).
+  amber: '#e0a13a', amberDk: '#b9760f', amberBg: '#FEF4E4', amberFg: '#8A5A12', amberDot: '#d3a24a',
+  gold: '#d9b26a',
 }
 export const DISPLAY = "'Cal Sans','Inter',sans-serif"
 export const GRAD = 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)'
+export const AMBER_GRAD = 'linear-gradient(135deg,#e0a13a 0%,#b9760f 100%)'
+/** the one resting card shadow + the hero-only glow — cards read calm, the hero reads alive. */
+export const SHADOW_CARD = '0 1px 3px rgba(0,0,0,.03)'
+export const SHADOW_HERO = '0 8px 24px rgba(46,154,120,0.08)'
+/** the one section-label style (matches the portal Home). */
+export const EYEBROW: CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#6e6e73' }
 
 export const money = (n: number) => (n === 0 ? 'Free' : `$${Math.round(n).toLocaleString()}`)
 

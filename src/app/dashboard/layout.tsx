@@ -107,6 +107,7 @@ const MVP_EXACT = new Set([
 const MVP_PREFIX = [
   '/dashboard/campaigns', '/dashboard/reviews', '/dashboard/business-info',
   '/dashboard/agreements', '/dashboard/settings', '/dashboard/connected-accounts',
+  '/dashboard/billing', // billing + its sub-routes (e.g. /billing/orders/[id]) own their full-screen chrome
 ]
 function isMvpRoute(path: string): boolean {
   return MVP_EXACT.has(path) || MVP_PREFIX.some(p => path === p || path.startsWith(p + '/'))

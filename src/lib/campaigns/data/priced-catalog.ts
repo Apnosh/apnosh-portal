@@ -75,6 +75,16 @@ export const OVERHEAD_MULT = 1.25
 export const PROCESSING = 0.03
 /** Items below this true margin get flagged in the UI. */
 export const MARGIN_FLOOR = 0.5
+/** Field and partner services (Nextdoor, street sampling, cross-promo, FB events, referral,
+ *  friend-hook) sell on relationship and reach, not billable labor, so their value is real even
+ *  when the labor margin is thin. Owner decision 2026-07-02: hold their prices, judge them against
+ *  a 25% floor instead of 50%. Every other service keeps the 50% floor. */
+export const FIELD_PARTNER_FLOOR = 0.25
+export const FIELD_PARTNER_IDS = new Set(['nextdoor-local', 'street-sampling', 'cross-promo', 'fb-event', 'referral', 'friend-hook'])
+/** The margin floor that applies to a given service id. */
+export function marginFloorFor(serviceId: string): number {
+  return FIELD_PARTNER_IDS.has(serviceId) ? FIELD_PARTNER_FLOOR : MARGIN_FLOOR
+}
 /** Sub-$150 lines don't clear their fixed per-account overhead alone. */
 export const MIN_ENGAGEMENT = 500
 
@@ -189,15 +199,94 @@ export function marginOf(p: PricePoint): { cost: number; dollars: number; pct: n
  *  (scripts/gen-catalog.ts -> catalog.generated.ts). Each service carries its goalPlays inline.
  *  Edit it in the admin store and Publish to regenerate; this stays the pure/sync array the
  *  composer reads at module load, so composePlanForGoal never touches the DB. */
-export const PRICED_CATALOG: PricedService[] = GENERATED_CATALOG
+/** Hand-authored services appended in CODE (not the generated DB snapshot, which would overwrite
+ *  them). playsForGoal / playsForGoalAtoms read PRICED_CATALOG live, so a service with a goalPlay
+ *  here is recommended + composes like any catalog service. Owner-reviewable; price draft pending
+ *  sign-off. Move into the catalog_services table + regenerate once it's confirmed. */
+const EXTRA_SERVICES: PricedService[] = [
+  {
+    id: 'creator-monthly',
+    section: 'awareness',
+    name: 'Monthly creator collab',
+    desc: 'A fresh local food creator visits and posts about you every month, for steady borrowed reach.',
+    essential: false,
+    handler: 'apnosh',
+    handlerWhy: 'Sourcing, vetting and coordinating a new creator each month is ongoing relationship work.',
+    prices: [
+      { amount: 595, kind: 'monthly', cost: { us: 3, offshore: 0.5 }, note: 'creator fee billed at cost' },
+    ],
+    goalPlays: [
+      {
+        goal: 'firstvisit',
+        role: 'A new trusted local food creator features you to their audience every month.',
+        stage: 'get-discovered',
+        weight: 3,
+        because: 'A steady drip of borrowed, already-trusting reach — net-new awareness that compounds month over month, instead of one spike that fades.',
+        minTier: 'standard',
+      },
+    ],
+    fit: {
+      avoid: {
+        qsr: 'Creator "come visit" content underperforms for QSR — loyalty and delivery channels move the number.',
+      },
+    },
+    deliverables: {
+      summary: 'Every month we line up a new trusted local food creator and run a paid post about you.',
+      included: [
+        'A fresh creator each month whose followers match your neighbors, reach checked',
+        'Terms and payment handled for you, the creator fee billed at cost',
+        'A written brief with the story and dishes to feature',
+        'The visit coordinated start to finish',
+        'Follow-through so each post goes live, with the finished link',
+      ],
+    },
+  },
+]
+
+/* ── Send infrastructure completeness (owner decision 2026-07-02) ──────────────────────────────
+ * Every plan that sells a text or email program must also carry the setup that makes it legal and
+ * deliverable: SMS registration (sms-found), a verified sending domain (email-found), and the contact
+ * list (crm-list). These services already exist in the catalog; here each gets a goalPlay at the goal
+ * and tier where its dependent send first appears, so no composed plan can sell a send without its
+ * setup. Applied in CODE (not the DB snapshot) so it survives catalog regeneration; the DB
+ * catalog_services rows should be updated to match. Proven by scripts/verify-send-deps.ts. */
+const SEND_INFRA_ADD: Record<string, GoalPlay[]> = {
+  'sms-found': [
+    { goal: 'nights', stage: 'activate', minTier: 'lean', weight: 40, role: 'The one-time setup that makes texting your guests legal and lands your texts in their inbox.' },
+  ],
+  'email-found': [
+    { goal: 'firstvisit', stage: 'capture-return', minTier: 'aggressive', weight: 40, role: 'The sending setup that keeps your welcome emails out of the spam folder.' },
+  ],
+}
+/** Existing infra plays whose tier must drop so the setup is present at the tier its send runs. */
+const SEND_INFRA_RETIER: { id: string; goal: SystemGoal; minTier: Tier }[] = [
+  { id: 'crm-list', goal: 'firstvisit', minTier: 'standard' }, // second-visit (standard) needs the list
+  { id: 'sms-found', goal: 'regulars', minTier: 'lean' },       // reminder-send (lean) needs SMS setup
+]
+function withSendInfra(catalog: PricedService[]): PricedService[] {
+  return catalog.map((s) => {
+    const add = SEND_INFRA_ADD[s.id]
+    const retier = SEND_INFRA_RETIER.filter((r) => r.id === s.id)
+    if (!add && !retier.length) return s
+    const goalPlays = (s.goalPlays ?? []).map((p) => {
+      const r = retier.find((x) => x.goal === p.goal)
+      return r ? { ...p, minTier: r.minTier } : p
+    })
+    if (add) goalPlays.push(...add)
+    return { ...s, goalPlays }
+  })
+}
+
+export const PRICED_CATALOG: PricedService[] = [...withSendInfra(GENERATED_CATALOG), ...EXTRA_SERVICES]
 
 // "Perfect" stays machine-checked: in dev, warn on any line under the margin floor or carrying a
 // placeholder price (surfaced, never auto-changed — pricing is an owner decision).
 if (process.env.NODE_ENV !== 'production') {
   for (const __s of PRICED_CATALOG) {
+    const __floor = marginFloorFor(__s.id)
     for (const __p of __s.prices) {
       const __m = marginOf(__p)
-      if (__m.pct < MARGIN_FLOOR) console.warn(`[catalog] margin floor: ${__s.id} ${__p.kind} $${__p.amount} is ${(__m.pct * 100).toFixed(1)}% (floor ${MARGIN_FLOOR * 100}%)`)
+      if (__m.pct < __floor) console.warn(`[catalog] margin floor: ${__s.id} ${__p.kind} $${__p.amount} is ${(__m.pct * 100).toFixed(1)}% (floor ${__floor * 100}%)`)
       if (__p.note && /placeholder/i.test(__p.note)) console.warn(`[catalog] placeholder price still live: ${__s.id} ${__p.kind} $${__p.amount}`)
     }
   }

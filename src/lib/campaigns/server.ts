@@ -10,7 +10,7 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { CampaignDraft, LineItem, CampaignBrief, BillingCadence, PieceProducer } from './types'
-import { planCampaignPieces, teamDraftRowForPiece } from './work-orders-core'
+import { planCampaignPieces, teamDraftRowForPiece, PLAN_REMOVED_NOTE } from './work-orders-core'
 import type { StageId } from './stages'
 import type { SavedCampaign, CampaignProgress } from './view'
 
@@ -80,6 +80,9 @@ function rowToSaved(c: Record<string, unknown>, items: LineItem[], brief: Campai
     phase: (c.phase as SavedCampaign['phase']) ?? 'build',
     status: (c.status as SavedCampaign['status']) ?? 'draft',
     shippedAt: (c.shipped_at as string) ?? null,
+    // undefined = the column does not exist yet (pre-migration) -> the UI treats it as legacy-confirmed;
+    // null = shipped but a human has not confirmed it yet (the real waiting state).
+    confirmedAt: 'confirmed_at' in c ? ((c.confirmed_at as string) ?? null) : undefined,
     createdAt: c.created_at as string,
     updatedAt: c.updated_at as string,
     creatorChoices: (c.creator_choices as Record<string, string> | null) ?? {},
@@ -205,16 +208,32 @@ export async function createCampaign(clientId: string, createdBy: string | null,
 /** Replace a campaign's line items wholesale (positions preserved). */
 export async function replaceLineItems(campaignId: string, clientId: string, items: LineItem[]): Promise<void> {
   const admin = createAdminClient()
+  // No transaction across PostgREST calls, so snapshot before the delete: a failed
+  // insert must put the old plan back, not leave a (possibly shipped) campaign with
+  // ZERO line items — the plan is also the pricing source for every piece.
+  const { data: prior, error: readErr } = await admin.from('campaign_line_items').select('*').eq('campaign_id', campaignId)
+  if (readErr) throw new Error(`read line items: ${readErr.message}`)
   const { error: delErr } = await admin.from('campaign_line_items').delete().eq('campaign_id', campaignId)
   if (delErr) throw new Error(`clear line items: ${delErr.message}`)
   if (items.length) {
     const { error: insErr } = await admin.from('campaign_line_items').insert(items.map((it, i) => lineItemToRow(campaignId, clientId, it, i)))
-    if (insErr) throw new Error(`replace line items: ${insErr.message}`)
+    if (insErr) {
+      // Best-effort restore of the snapshot (same ids, already deleted, so no conflict).
+      let restored = false
+      if (prior?.length) {
+        const r = await admin.from('campaign_line_items').insert(prior)
+        restored = !r.error
+      }
+      throw new Error(`replace line items: ${insErr.message}${restored ? ' (previous plan restored)' : ''}`)
+    }
   }
   await admin.from('campaigns').update({ updated_at: new Date().toISOString() }).eq('id', campaignId)
 }
 
-export async function updateCampaignFields(id: string, patch: Partial<{ name: string; budget_monthly: number; planned: boolean; phase: string; status: string; shipped_at: string; occasion: string; target_date: string; context: string; creator_choices: Record<string, string>; producer_choices: Record<string, PieceProducer>; creative_control: string; execution: Record<string, unknown> }>): Promise<void> {
+/** Returns whether the update applied. With opts.onlyIfNotShipped the write is guarded on
+ *  status <> 'shipped' — the atomic claim of the one-shot ship transition, so two racing
+ *  ship PATCHes can never both "win" (the loser matches zero rows and gets false). */
+export async function updateCampaignFields(id: string, patch: Partial<{ name: string; budget_monthly: number; planned: boolean; phase: string; status: string; shipped_at: string; occasion: string; target_date: string; context: string; creator_choices: Record<string, string>; producer_choices: Record<string, PieceProducer>; creative_control: string; execution: Record<string, unknown> }>, opts?: { onlyIfNotShipped?: boolean }): Promise<boolean> {
   const admin = createAdminClient()
   // execution + producer_choices are partial deltas — merge into the stored jsonb
   // so a save of one field/piece never clobbers the others (concurrent edits, a
@@ -230,8 +249,15 @@ export async function updateCampaignFields(id: string, patch: Partial<{ name: st
   // Throw on error like createCampaign/replaceLineItems do, so a failed write
   // (e.g. a failed ship) surfaces as a 500 instead of silently succeeding and,
   // for a ship, firing a phantom "ready to build" staff notification.
-  const { error } = await admin.from('campaigns').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+  const row = { ...patch, updated_at: new Date().toISOString() }
+  if (opts?.onlyIfNotShipped) {
+    const { data, error } = await admin.from('campaigns').update(row).eq('id', id).neq('status', 'shipped').select('id')
+    if (error) throw new Error(`update campaign: ${error.message}`)
+    return (data?.length ?? 0) > 0
+  }
+  const { error } = await admin.from('campaigns').update(row).eq('id', id)
   if (error) throw new Error(`update campaign: ${error.message}`)
+  return true
 }
 
 export async function deleteCampaign(id: string): Promise<void> {
@@ -305,44 +331,83 @@ export async function materializeCampaignDrafts(campaign: SavedCampaign, shipISO
 export async function getCampaignProgress(campaignId: string): Promise<CampaignProgress | null> {
   const admin = createAdminClient()
   const [{ data: drafts }, { data: orders }] = await Promise.all([
-    admin.from('content_drafts').select('id, status, target_publish_date').eq('campaign_id', campaignId),
+    admin.from('content_drafts').select('id, status, target_publish_date, client_signed_off_at').eq('campaign_id', campaignId),
     // select('*') so a missing content_draft_id column (pre-179) doesn't error.
     admin.from('creator_work_orders').select('*').eq('campaign_id', campaignId),
   ])
-  let total = 0, live = 0, queued = 0, awaitingYou = 0, inProgress = 0
+  return computeProgress((drafts ?? []) as Record<string, unknown>[], (orders ?? []) as Record<string, unknown>[])
+}
+
+/** Progress for MANY campaigns in two queries (list views need one per card without N round-trips). */
+export async function getCampaignProgressBatch(campaignIds: string[]): Promise<Record<string, CampaignProgress>> {
+  if (!campaignIds.length) return {}
+  const admin = createAdminClient()
+  const [{ data: drafts }, { data: orders }] = await Promise.all([
+    admin.from('content_drafts').select('id, campaign_id, status, target_publish_date, client_signed_off_at').in('campaign_id', campaignIds),
+    admin.from('creator_work_orders').select('*').in('campaign_id', campaignIds),
+  ])
+  const group = (rows: Record<string, unknown>[]): Map<string, Record<string, unknown>[]> => {
+    const m = new Map<string, Record<string, unknown>[]>()
+    for (const r of rows) { const k = r.campaign_id as string; const a = m.get(k) ?? []; a.push(r); m.set(k, a) }
+    return m
+  }
+  const dBy = group((drafts ?? []) as Record<string, unknown>[]), oBy = group((orders ?? []) as Record<string, unknown>[])
+  const out: Record<string, CampaignProgress> = {}
+  for (const id of campaignIds) { const p = computeProgress(dBy.get(id) ?? [], oBy.get(id) ?? []); if (p) out[id] = p }
+  return out
+}
+
+/** Pure bucketing of a campaign's content_drafts (team lane) + creator_work_orders (creator lane). */
+function computeProgress(drafts: Record<string, unknown>[], orders: Record<string, unknown>[]): CampaignProgress | null {
+  let total = 0, live = 0, queued = 0, awaitingYou = 0, inProgress = 0, dropped = 0
   let nextDueISO: string | null = null
   const bumpDue = (raw: string | null) => {
     const dt = (raw ?? '').slice(0, 10)
     if (dt && (!nextDueISO || dt < nextDueISO)) nextDueISO = dt
   }
 
-  // Team lane: content_drafts. A campaign draft can reach idea/draft/revising/
-  // produced (in progress), approved/scheduled (queued), published (live), or
-  // rejected (dead) — there is NO owner-review status on this table, so team
-  // pieces never contribute to awaitingYou. Owner sign-off on team work is wired
-  // in Phase 2 (the publish bridge); only the creator lane drives awaitingYou today.
+  // Team lane: content_drafts. idea/draft/revising/produced are in progress;
+  // scheduled is queued; published is live. 'approved' splits on the owner's
+  // sign-off gate: the publish paths hold an unsigned draft until the owner signs
+  // (attempt-publish 'awaiting_signoff'), so approved+unsigned is the OWNER'S turn
+  // (awaitingYou), and approved+signed is queued. (Sign-off is required for every
+  // live client today; where a client turns it off the piece just moves on fast,
+  // so a brief awaitingYou miscount there is harmless.)
   const DEAD = new Set(['rejected', 'failed', 'archived'])     // terminal: not real work
-  const QUEUED = new Set(['scheduled', 'approved'])            // committed to go out
   // A bridged order is counted via its content_draft ONLY while that draft is
   // alive. If the team rejects/archives it, the order falls back through (creator
   // lane, below) so the piece is never silently dropped from the total.
   const aliveDraftIds = new Set((drafts ?? []).filter((d) => !DEAD.has((d.status as string) ?? '')).map((d) => d.id as string))
+  const orderByDraft = new Map<string, Record<string, unknown>>()
+  for (const o of orders ?? []) { const cd = o.content_draft_id as string | null; if (cd) orderByDraft.set(cd, o) }
   for (const d of drafts ?? []) {
     const s = (d.status as string) ?? ''
-    if (DEAD.has(s)) continue
+    if (DEAD.has(s)) {
+      // A killed campaign piece stays visible as 'dropped' (never silently shrinks the
+      // owner's plan) — unless a backing order represents it in the creator lane below.
+      if (!orderByDraft.has(d.id as string)) dropped++
+      continue
+    }
     total++
     if (s === 'published') { live++; continue }
-    if (QUEUED.has(s)) queued++
+    // scheduled-unsigned is held by the publish cron until the owner signs, so
+    // it is STILL the owner's turn, same as approved-unsigned.
+    if (s === 'scheduled' || s === 'approved') { if (d.client_signed_off_at) queued++; else awaitingYou++ }
     else inProgress++
     bumpDue(d.target_publish_date as string | null)
   }
 
   // Creator lane: creator_work_orders. An approved order isn't live until the
   // publish bridge runs, so it counts as queued; a delivery needs the owner's
-  // review (awaitingYou); a declined order is dead.
+  // review (awaitingYou). A creator's decline is a visible 'dropped' (the piece
+  // still needs a maker); a plan-removed void (PLAN_REMOVED_NOTE) is the owner's
+  // own edit, so it vanishes entirely.
   for (const o of orders ?? []) {
     const s = (o.status as string) ?? ''
-    if (s === 'declined') continue
+    if (s === 'declined') {
+      if ((o.note as string | null) !== PLAN_REMOVED_NOTE) dropped++
+      continue
+    }
     // Bridged on approval → its LIVE content_draft represents it in the team lane;
     // skip here so the piece is counted once. If that draft was rejected/archived,
     // fall through and count the order so the piece is never dropped from total.
@@ -354,6 +419,6 @@ export async function getCampaignProgress(campaignId: string): Promise<CampaignP
     bumpDue(o.due_date as string | null)
   }
 
-  if (!total) return null
-  return { total, live, queued, awaitingYou, inProgress, nextDueISO }
+  if (!total && !dropped) return null
+  return { total, live, queued, awaitingYou, inProgress, nextDueISO, dropped }
 }

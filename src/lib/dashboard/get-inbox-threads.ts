@@ -13,8 +13,8 @@
  *   - reviews                    → kind='review'   (Google, Yelp, ...)
  *   - social_interactions        → kind='dm'|'comment'|'mention'
  *                                  (IG DMs, IG comments, mentions)
- *   - content_drafts             → kind='approval' (client_request drafts
- *                                  approved internally, awaiting your sign-off)
+ *   - content_drafts             → kind='approval' (client_request + campaign
+ *                                  drafts approved internally, awaiting your sign-off)
  *   - deliverables               → kind='approval' (legacy approvals path)
  *
  * Severity is derived per-kind; sorting is by recency across all kinds.
@@ -71,15 +71,18 @@ export async function getInboxThreads(clientId: string, limit = 50): Promise<Inb
       .eq('client_id', clientId)
       .order('created_at_platform', { ascending: false })
       .limit(limit),
-    /* Content drafts that originated from a client request, were
-       approved internally by staff, and are now waiting on the
-       owner's final sign-off. The "Ready for your review" loop. */
+    /* Content drafts approved internally by staff and now waiting on
+       the owner's final sign-off — from a client request OR minted by
+       a shipped campaign (proposed_via='strategist' with a campaign_id).
+       The "Ready for your review" loop; the publish gate holds both. */
     admin
       .from('content_drafts')
-      .select('id, idea, caption, media_urls, status, proposed_via, approved_at, target_publish_date, target_platforms, client_signed_off_at')
+      .select('id, idea, caption, media_urls, status, proposed_via, campaign_id, approved_at, target_publish_date, target_platforms, client_signed_off_at')
       .eq('client_id', clientId)
-      .eq('proposed_via', 'client_request')
-      .eq('status', 'approved')
+      .or('proposed_via.eq.client_request,campaign_id.not.is.null')
+      // 'scheduled' included: the publish cron holds a scheduled-unsigned draft
+      // until sign-off, so it is still waiting on the owner.
+      .in('status', ['approved', 'scheduled'])
       .is('client_signed_off_at', null)
       .order('approved_at', { ascending: false })
       .limit(20),

@@ -11,7 +11,7 @@
  * On confirm it hands the finished draft + service choices up to the host to persist + ship.
  * Mobile-only. All edits live in local state until confirm.
  */
-import { useMemo, useRef, useState, type ComponentType } from 'react'
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { ChevronLeft, ChevronRight, ChevronDown, X, Loader2, Rocket, Flag, DoorOpen, CalendarDays, Pencil, Plus, Minus, Trash2, Repeat, Moon, Heart, Star, Smartphone, LockOpen, Camera, Megaphone, Sparkles, Image as ImageIcon, Upload, Check, Scissors, Wallet } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { MapPin, Globe, LineChart, BarChart3, Video, QrCode, Tag, Utensils, MessageCircle, Home, Store, ArrowLeftRight, Newspaper, Share2, UserPlus, RotateCcw, Mail, MessageSquare, Award, Cake, Gift, Crown, CalendarCheck, Users } from 'lucide-react'
@@ -19,12 +19,13 @@ import { C, GRAD, money } from '@/components/campaigns/ui'
 import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
+import { aggregateGoLive, addBusinessDays } from '@/lib/campaigns/aggregate-golive'
 import { buildContentLine, serviceById, serviceToLines, addableByStage, cadenceOf } from '@/lib/campaigns/catalog'
 import type { PricedService } from '@/lib/campaigns/data/priced-catalog'
 import { SERVICE_CHANNELS } from '@/lib/campaigns/data/service-channels'
 import { VOLUME_RATES, priceForQty, eachAtQty, clampQty, isQtyAdjustable } from '@/lib/campaigns/data/volume-rates'
 import { creatorById } from '@/lib/campaigns/creators'
-import { summarize, type CampaignDraft, type ContentBeat, type LineItem, type PieceProducer, type BillingSummary } from '@/lib/campaigns/types'
+import { summarize, lineTotal, type CampaignDraft, type ContentBeat, type LineItem, type PieceProducer, type BillingSummary, type CampaignReceipt } from '@/lib/campaigns/types'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 import ServicePicker from '@/components/campaigns/content-menu/service-picker'
 import { TYPE_ICON } from '@/components/campaigns/content-menu/add-piece-modal'
@@ -292,20 +293,22 @@ type Stop =
   | { kind: 'add'; id: string; label: string; onAdd: () => void }
   | { kind: 'endcap'; id: string }
 
-export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, monthlyCap = 0, outcome, lead, onConfirm, onBack }: {
+export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, monthlyCap = 0, outcome, lead, doneSetup, onConfirm, onBack }: {
   itemId: string
   vals: Record<string, unknown>
   restaurant: string
   menu?: { l: string; photo?: string }[]
   busy?: boolean
   error?: string | null
+  /** Setup serviceIds the restaurant already has (from CampaignProfile.doneSetup) — skipped in the go-live estimate. */
+  doneSetup?: string[]
   /** The owner's monthly marketing budget (dollars). 0 = none set → no budget signal. */
   monthlyCap?: number
   /** The result the brain built this plan to move, e.g. "fuller tables on your slow nights". */
   outcome?: string | null
   /** The cold-start reason the brain shaped the lead, e.g. "Led with reviews because your rating is 4.1…". */
   lead?: string | null
-  onConfirm: (payload: { draft: CampaignDraft; producerChoices: Record<string, PieceProducer> }) => void
+  onConfirm: (payload: { draft: CampaignDraft; producerChoices: Record<string, PieceProducer>; receipt: CampaignReceipt }) => void
   onBack: () => void
 }) {
   // When reputation holds the paid-ads line, the owner can override ("run ads anyway") — re-derive
@@ -340,7 +343,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
   const undoRef = useRef<Beat[]>([])
   const [undo, setUndo] = useState<Beat[] | null>(null)
   // The approve "wax-seal" one-shot fires inline on the end-cap before handing off to the summary step.
-  const [confirming, setConfirming] = useState(false)
+  const [confirming] = useState(false)
   // System-plan moves the owner dropped (by serviceId). Their line items leave the bill and the
   // move leaves the stage; a toast offers a one-tap restore.
   const [removed, setRemoved] = useState<Set<string>>(() => new Set())
@@ -421,6 +424,9 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
   // offering a trim there would just lose content and stay over budget.
   const trimSaves = useMemo(() => { const set = new Set(trimIds); return creatives.reduce((s, c) => s + (c.id && set.has(c.id) ? c.cents / 100 : 0), 0) }, [creatives, trimIds])
   const canTrim = overBudget > 0 && trimSaves >= overBudget
+  // The armed state of the two-tap over-budget ship confirm; re-arms whenever the overage changes.
+  const [overOk, setOverOk] = useState(false)
+  useEffect(() => { setOverOk(false) }, [overBudget])
 
   const groups = useMemo(() => {
     const byWeek = new Map<number, Beat[]>(); for (const b of beats) { const a = byWeek.get(b.week) ?? []; a.push(b); byWeek.set(b.week, a) }
@@ -460,7 +466,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
   }
   function setService(producer: PieceProducer) { const keys = picker?.keys ?? []; setChoices((c) => { const n = { ...c }; for (const k of keys) n[k] = producer; return n }); setPicker(null) }
   const openPiece = (c: { key: string; type: string; producer: PieceProducer; creatorName?: string }) => setPicker({ type: c.type, keys: [c.key], producer: c.producer, creatorName: c.creatorName })
-  function confirm() { const movesOut = visibleMoves.map((m) => (serviceQty[m.serviceId] != null ? { ...m, qty: serviceQty[m.serviceId] } : m)); onConfirm({ draft: { ...initial, items, ...(isSystem ? { moves: movesOut } : {}), brief: initial.brief ? { ...initial.brief, contentBeats: editedBeats } : initial.brief }, producerChoices: choices }) }
+  function confirm() { const movesOut = visibleMoves.map((m) => (serviceQty[m.serviceId] != null ? { ...m, qty: serviceQty[m.serviceId] } : m)); onConfirm({ draft: { ...initial, items, ...(isSystem ? { moves: movesOut } : {}), brief: initial.brief ? { ...initial.brief, contentBeats: editedBeats } : initial.brief }, producerChoices: choices, receipt: { creatives, services, bill } }) }
 
   const hero = GOAL_HERO[initial.goalKey ?? ''] ?? HERO_FALLBACK
   const audienceLabels = (initial.brief?.audienceIds ?? []).map((id) => AUD_LABEL[id]).filter(Boolean)
@@ -670,7 +676,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
               busy={!!busy} confirming={confirming}
             />
           ) : (
-            <Summary creatives={creatives} services={services} bill={bill} sched={sched} onPiece={openPiece} monthlyCap={monthlyCap} firstMonth={firstMonth} overBudget={overBudget} canTrim={canTrim} onTrim={() => trimToFit(trimIds)} />
+            <Summary creatives={creatives} services={services} bill={bill} sched={sched} doneSetup={doneSetup} onPiece={openPiece} monthlyCap={monthlyCap} firstMonth={firstMonth} overBudget={overBudget} canTrim={canTrim} onTrim={() => trimToFit(trimIds)} />
           )}
         </div>
 
@@ -684,11 +690,19 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
           </div>
           {step === 'review' ? (
             <button
-              onClick={() => { if (busy || confirming) return; setConfirming(true); const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; setTimeout(() => { setStep('summary'); setConfirming(false) }, reduce ? 0 : 820) }}
+              onClick={() => { if (busy) return; setStep('summary') }}
               style={{ ...ctaBtn, boxShadow: `${E3}, 0 0 22px -6px rgba(22,163,74,.5)` }}
-            >See the price <ChevronRight size={17} /></button>
+            >Continue <ChevronRight size={17} /></button>
           ) : (
-            <button onClick={confirm} disabled={busy} style={{ ...ctaBtn, opacity: busy ? 0.7 : 1 }}>{busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />} Confirm &amp; start campaign</button>
+            // Over budget is a TWO-TAP ship: the first tap arms the button with the real overage, so
+            // the owner never commits past their stated number without seeing it on the button itself.
+            <button
+              onClick={() => { if (busy) return; if (Math.round(overBudget) >= 1 && !overOk) { setOverOk(true); return } confirm() }}
+              disabled={busy}
+              style={{ ...ctaBtn, opacity: busy ? 0.7 : 1, ...(Math.round(overBudget) >= 1 && overOk ? { background: 'linear-gradient(135deg,#e0a13a,#b9760f)' } : {}) }}
+            >
+              {busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />} {Math.round(overBudget) >= 1 && overOk ? `Ship anyway, ${money(overBudget)} over budget` : 'Confirm & start campaign'}
+            </button>
           )}
         </div>
 
@@ -1325,11 +1339,12 @@ function ChipBtn({ label, onTap }: { label: string; onTap: () => void }) {
 const sheetInput: React.CSSProperties = { width: '100%', marginTop: 8, boxSizing: 'border-box', border: `1px solid ${C.line}`, borderRadius: 10, padding: '9px 11px', fontSize: 13, outline: 'none' }
 
 /* ── Order summary (step 3) — the price ─────────────────────── */
-function Summary({ creatives, services, bill, sched, onPiece, monthlyCap, firstMonth, overBudget, canTrim, onTrim }: {
+function Summary({ creatives, services, bill, sched, doneSetup, onPiece, monthlyCap, firstMonth, overBudget, canTrim, onTrim }: {
   creatives: { key: string; type: string; label: string; producer: PieceProducer; cents: number; creatorName?: string }[]
   services: LineItem[]
   bill: BillingSummary
   sched: ReturnType<typeof deriveSchedule>
+  doneSetup?: string[]
   onPiece: (c: { key: string; type: string; producer: PieceProducer; creatorName?: string }) => void
   monthlyCap: number
   firstMonth: number
@@ -1337,30 +1352,69 @@ function Summary({ creatives, services, bill, sched, onPiece, monthlyCap, firstM
   canTrim: boolean
   onTrim: () => void
 }) {
+  // Honest go-live estimate (critical path over the plan's services + content). Drives the timeline headline.
+  const go = aggregateGoLive(services, sched, new Date().toISOString().slice(0, 10), { doneSetupIds: doneSetup ?? [] })
+  // Condensed pricing: group the lines into Setup (one-time) / Content (per-piece) / Monthly (recurring),
+  // each a collapsible subtotal. The three always sum to the same bill (setup + content = oneTime; monthly = perMonth).
+  const [openG, setOpenG] = useState<Record<string, boolean>>({})
+  const setupSvc = services.filter((it) => it.cadence.kind === 'one-time')
+  const monthlySvc = services.filter((it) => it.cadence.kind === 'recurring')
+  const perOccSvc = services.filter((it) => it.cadence.kind === 'per-occurrence')
+  const setupTotal = setupSvc.reduce((s, it) => s + lineTotal(it), 0)
+  const contentTotal = Math.max(0, bill.oneTimeOnDelivery - setupTotal)
+  const priceGroups = ([
+    setupSvc.length ? { key: 'setup', Icon: Flag, fg: '#3f72c4', label: 'Setup', sub: 'One-time, to get you live', total: setupTotal, suffix: '' } : null,
+    (creatives.length || perOccSvc.length) ? { key: 'content', Icon: Sparkles, fg: C.greenDk, label: 'Content we make', sub: 'Charged as each piece ships', total: contentTotal, suffix: '' } : null,
+    monthlySvc.length ? { key: 'monthly', Icon: Repeat, fg: C.mute, label: 'Every month', sub: 'Ongoing, pause anytime', total: bill.perMonth, suffix: '/mo' } : null,
+  ].filter(Boolean) as { key: string; Icon: LucideIcon; fg: string; label: string; sub: string; total: number; suffix: string }[])
   return (
     <div>
       <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, margin: '0 0 3px' }}>What you&rsquo;re getting</div>
-      <div style={{ fontSize: 11.5, color: C.mute, marginBottom: 11 }}>Every piece we make, plus the ads. Tap one to choose who makes it.</div>
+      <div style={{ fontSize: 11.5, color: C.mute, marginBottom: 11 }}>Grouped by setup, the content we make, and what runs each month. Tap a group to see every piece.</div>
       <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, overflow: 'hidden' }}>
-        {creatives.map((c, i) => { const tt = tintFor(c.type); const Icon = TYPE_ICON[c.type]; return (
-          <button key={c.key} onClick={() => onPiece(c)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderTop: i === 0 ? 'none' : `1px solid ${C.line}`, background: '#fff', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
-            <span style={{ width: 30, height: 30, borderRadius: 8, background: tt.tint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{Icon ? <Icon size={15} color={tt.fg} /> : null}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 500, lineHeight: 1.3 }}>{c.label}</div>
-              <div style={{ fontSize: 11, color: C.greenDk, marginTop: 1 }}>Made by {serviceLabel(c.producer, c.creatorName)} ›</div>
+        {priceGroups.map((g, gi) => {
+          const isOpen = openG[g.key] ?? false
+          return (
+            <div key={g.key} style={{ borderTop: gi === 0 ? 'none' : `1px solid ${C.line}` }}>
+              <button onClick={() => setOpenG((o) => ({ ...o, [g.key]: !isOpen }))} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '12px 13px', background: '#fff', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                <span style={{ width: 30, height: 30, borderRadius: 8, background: `${g.fg}1a`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><g.Icon size={15} color={g.fg} /></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{g.label}</div>
+                  <div style={{ fontSize: 11, color: C.faint }}>{g.sub}</div>
+                </div>
+                <span style={{ fontSize: 14, fontWeight: 700, color: g.total === 0 ? C.green : C.ink, flexShrink: 0 }}>{g.total === 0 ? 'Free' : `${money(g.total)}${g.suffix}`}</span>
+                <ChevronDown size={16} color={C.faint} style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+              </button>
+              {isOpen && (
+                <div style={{ background: '#fafafa', borderTop: `1px solid ${C.line}` }}>
+                  {g.key === 'content' && creatives.map((c) => { const tt = tintFor(c.type); const Icon = TYPE_ICON[c.type]; return (
+                    <button key={c.key} onClick={() => onPiece(c)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 13px 9px 26px', background: 'transparent', border: 'none', borderTop: `1px solid ${C.line}`, cursor: 'pointer', textAlign: 'left' }}>
+                      <span style={{ width: 25, height: 25, borderRadius: 7, background: tt.tint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{Icon ? <Icon size={13} color={tt.fg} /> : null}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 500, lineHeight: 1.3 }}>{c.label}</div>
+                        <div style={{ fontSize: 10.5, color: C.greenDk, marginTop: 1 }}>Made by {serviceLabel(c.producer, c.creatorName)} ›</div>
+                      </div>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: c.cents === 0 ? C.green : C.ink, flexShrink: 0 }}>{c.cents === 0 ? 'Free' : money(c.cents / 100)}</span>
+                    </button>
+                  ) })}
+                  {(g.key === 'setup' ? setupSvc : g.key === 'monthly' ? monthlySvc : perOccSvc).map((it) => (
+                    <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 13px 10px 26px', borderTop: `1px solid ${C.line}` }}>
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.plain || it.name}</div>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{it.cadence.kind === 'recurring' ? `${money(it.price)}/mo` : money(lineTotal(it))}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <span style={{ fontSize: 13, fontWeight: 600, color: c.cents === 0 ? C.green : C.ink, flexShrink: 0 }}>{money(c.cents / 100)}</span>
-          </button>
-        ) })}
-        {services.map((it) => (
-          <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderTop: `1px solid ${C.line}`, background: '#fafafa' }}>
-            <span style={{ width: 30, height: 30, borderRadius: 8, background: '#E1F5EE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={15} color="#0f6e56" /></span>
-            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 500 }}>{it.plain || it.name}</div><div style={{ fontSize: 11, color: C.faint }}>Paid reach · running the whole time</div></div>
-            <span style={{ fontSize: 13, fontWeight: 600, flexShrink: 0 }}>{it.cadence.kind === 'recurring' ? `${money(it.price)}/mo` : money(it.price)}</span>
+          )
+        })}
+        {bill.optedOutCount > 0 && (
+          <div style={{ borderTop: `1px dashed ${C.line}`, padding: '8px 13px', fontSize: 11, color: C.faint }}>
+            You skipped {bill.optedOutCount} {bill.optedOutCount === 1 ? 'piece' : 'pieces'}, saved {money(bill.optedOutSaved)}
           </div>
-        ))}
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 13px', borderTop: `1.5px solid ${C.line}`, fontSize: 13, fontWeight: 700 }}>
-          <span>As it ships</span><span>{money(bill.oneTimeOnDelivery)}{bill.perMonth > 0 ? ` + ${money(bill.perMonth)}/mo` : ''}</span>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '13px', borderTop: `1.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 700 }}>
+          <span>Total</span><span>{money(bill.oneTimeOnDelivery)}{bill.perMonth > 0 ? ` + ${money(bill.perMonth)}/mo` : ''}</span>
         </div>
       </div>
       {monthlyCap > 0 && (Math.round(overBudget) >= 1 ? (
@@ -1369,7 +1423,7 @@ function Summary({ creatives, services, bill, sched, onPiece, monthlyCap, firstM
           <div style={{ fontSize: 12, color: '#8A5A12', lineHeight: 1.5 }}>This plan runs about <b style={{ fontWeight: 700 }}>{money(firstMonth)}</b>, around <b style={{ fontWeight: 700 }}>{money(overBudget)}</b> over your {money(monthlyCap)}/mo budget.</div>
           {canTrim
             ? <button onClick={onTrim} style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #E3B873', color: '#8A5A12', borderRadius: 9, padding: '7px 12px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}><Scissors size={13} /> Trim to fit</button>
-            : <div style={{ marginTop: 7, fontSize: 11, color: '#A07A3A' }}>{bill.perMonth > monthlyCap ? `Most of this is ads at ${money(bill.perMonth)}/mo. Lower the ads or shorten the run to fit.` : `Trimming the extras won't fully fit this. Drop a core piece or raise your budget.`}</div>}
+            : <div style={{ marginTop: 7, fontSize: 11, color: '#A07A3A' }}>{bill.perMonth > monthlyCap ? `Most of this is ads at ${money(bill.perMonth)}/mo. Lower the ads or shorten the run to fit.` : `Trimming the extras won't fully fit this. You can ship at this price, or ask your team to resize it.`}</div>}
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: C.greenDk, margin: '11px 2px 0' }}><Check size={13} /> Fits your {money(monthlyCap)}/mo budget{firstMonth < monthlyCap ? `, ${money(monthlyCap - firstMonth)} to spare` : ''}.</div>
@@ -1385,16 +1439,43 @@ function Summary({ creatives, services, bill, sched, onPiece, monthlyCap, firstM
         // a date too soon for the full runway, these floor to today ("we start right away").
         const tISO = new Date().toISOString().slice(0, 10)
         const floor = (iso: string) => (iso < tISO ? tISO : iso)
-        type Row = { iso: string; kind: 'work' | 'draft' | 'post'; title: string; sub?: string }
+        type Row = { iso: string; kind: 'setup' | 'work' | 'draft' | 'post'; title: string; sub?: string }
         const rows: Row[] = []
+        // Setup runs in parallel with creative; show its own deadline ("Setup done · by <date>").
+        if (go.setup.present && go.setup.byISO) {
+          const more = go.setup.services.length > 2 ? ` +${go.setup.services.length - 2} more` : ''
+          rows.push({ iso: go.setup.byISO, kind: 'setup', title: 'Setup done', sub: go.setup.services.slice(0, 2).join(', ') + more })
+        }
         if (firstDraft) {
           rows.push({ iso: floor(shiftISO(firstDraft, -3)), kind: 'work', title: hasShots ? 'Photo + video shoot' : 'We start creating', sub: hasShots ? 'We come film + shoot your dishes' : 'We write and design everything' })
           rows.push({ iso: floor(firstDraft), kind: 'draft', title: 'First drafts for your OK', sub: 'Approve before anything goes live' })
         }
         for (const b of posts) rows.push({ iso: b.postISO, kind: 'post', title: b.label || cap(b.type) })
-        const color = (k: Row['kind']) => (k === 'work' ? '#ba7517' : k === 'draft' ? C.greenDk : C.green)
+        // Services-only (system) plans carry no content beats, so the only dated row would be "Setup done".
+        // Fill the timeline with ESTIMATED milestones from the go-live estimate so it tells the whole story.
+        if (!firstDraft && go.hasGoLive) {
+          rows.push({ iso: addBusinessDays(tISO, 2), kind: 'work', title: 'We get to work', sub: go.creative.present ? 'Setup, plus filming and creating your content' : 'Getting your foundations set up' })
+          if (go.creative.present) rows.push({ iso: addBusinessDays(tISO, Math.max(go.daysToFirstPost.max, 1)), kind: 'post', title: 'First content goes live', sub: 'Estimate, give or take a few days' })
+        }
+        rows.sort((a, b) => a.iso.localeCompare(b.iso))
+        const color = (k: Row['kind']) => (k === 'setup' ? '#3f72c4' : k === 'work' ? '#ba7517' : k === 'draft' ? C.greenDk : C.green)
+        const hasDate = sched.mode === 'start' || sched.mode === 'event'
+        const headline = hasDate && sched.firstPostLabel ? `First posts ${sched.firstPostLabel}`
+          : go.hasGoLive && go.phrase ? `Live in ${go.phrase}`
+          : go.phrase ? `Starts in ${go.phrase}`
+          : ''
+        const headlineSub = sched.tooSoon ? 'That date is tight for the full build — we start right away.'
+          : sched.mode === 'estimate' ? 'Estimate. Lock a start date to confirm.'
+          : sched.mode === 'none' && go.hasGoLive ? 'Rough estimate — we confirm exact dates once you start.'
+          : ''
         return (
           <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, padding: '14px 14px 4px' }}>
+            {headline && (
+              <div style={{ marginBottom: 13 }}>
+                <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, color: C.ink, letterSpacing: '-.01em' }}>{headline}</div>
+                {headlineSub && <div style={{ fontSize: 11.5, color: sched.tooSoon ? '#b8860b' : C.mute, marginTop: 2 }}>{headlineSub}</div>}
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 12 }}><CalendarDays size={12} /> How it rolls out</div>
             {rows.length === 0 ? <div style={{ fontSize: 12, color: C.faint, paddingBottom: 10 }}>Dates set once it&rsquo;s live.</div> : rows.map((r, i) => (
               <div key={i} style={{ display: 'flex', gap: 10 }}>
@@ -1409,10 +1490,17 @@ function Summary({ creatives, services, bill, sched, onPiece, monthlyCap, firstM
                 </div>
               </div>
             ))}
+            {go.recurring.present && (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', paddingBottom: 10 }}>
+                <span style={{ width: 42, flexShrink: 0 }} />
+                <div style={{ width: 12, flexShrink: 0, display: 'flex', justifyContent: 'center' }}><Repeat size={11} color={C.faint} /></div>
+                <div style={{ fontSize: 12, color: C.mute }}>Then runs every month</div>
+              </div>
+            )}
           </div>
         )
       })()}
-      <div style={{ fontSize: 11, color: C.mute, margin: '13px 2px 0', lineHeight: 1.5 }}><b style={{ color: C.ink, fontWeight: 600 }}>When you start:</b> every piece lands in Content for your approval first. Nothing posts until you say so.{sched.firstDraftLabel ? ` First draft around ${sched.firstDraftLabel}.` : ''}</div>
+      <div style={{ fontSize: 11, color: C.mute, margin: '13px 2px 0', lineHeight: 1.5 }}><b style={{ color: C.ink, fontWeight: 600 }}>When you start:</b> every piece lands in Content for your approval first. Nothing posts until you say so.{sched.firstDraftLabel ? ` First draft around ${sched.firstDraftLabel}.` : ''}{go.gates.filter((g) => !/approval/i.test(g)).slice(0, 2).map((g) => ` ${g}`).join('')}</div>
     </div>
   )
 }

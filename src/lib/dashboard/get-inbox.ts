@@ -107,14 +107,18 @@ export async function getInbox(clientId: string, userId?: string): Promise<Inbox
       .in('status', ['todo', 'doing'])
       .order('due_at', { ascending: true, nullsFirst: false })
       .limit(20),
-    // Approved drafts that originated from a client_request — these
-    // are waiting for the client's final sign-off / review.
+    // Approved drafts waiting for the client's final sign-off / review.
+    // Two ways in: the draft originated from a client_request, OR it was
+    // minted by a shipped campaign (proposed_via='strategist' with a
+    // campaign_id) — the publish gate holds both until the owner signs off.
     admin
       .from('content_drafts')
-      .select('id, idea, caption, status, proposed_via, updated_at, approved_at, client_signed_off_at')
+      .select('id, idea, caption, status, proposed_via, campaign_id, updated_at, approved_at, client_signed_off_at')
       .eq('client_id', clientId)
-      .eq('proposed_via', 'client_request')
-      .eq('status', 'approved')
+      .or('proposed_via.eq.client_request,campaign_id.not.is.null')
+      // 'scheduled' included: staff can schedule before the owner signs, and the
+      // publish cron holds that slot until sign-off — still the owner's turn.
+      .in('status', ['approved', 'scheduled'])
       .is('client_signed_off_at', null)
       .order('approved_at', { ascending: false })
       .limit(20),
@@ -245,9 +249,9 @@ export async function getInbox(clientId: string, userId?: string): Promise<Inbox
   }
 
   // Approved drafts awaiting client sign-off — the natural next step
-  // after staff hits "approve" on a draft originated from a client
-  // request. Click-through goes to the preview page where the owner
-  // can read the caption and approve in one tap.
+  // after staff hits "approve" on a client-request or campaign draft.
+  // Click-through goes to the preview page where the owner can read
+  // the caption and approve in one tap.
   for (const d of draftApprovalsRow.data ?? []) {
     const idea = (d.idea as string) ?? 'Approval ready'
     const caption = (d.caption as string) ?? ''

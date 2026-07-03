@@ -7,6 +7,10 @@
  *
  * The brief is structured JSON stored in content_drafts.media_brief.
  * The shoots system (/work/shoots) reads it when crew picks up a job.
+ *
+ * Save sends only the designer-owned keys; the lifecycle route merges
+ * them over the stored brief so keys other writers own (instructions,
+ * owner_note, from_creator, source_delivery_url) survive a save here.
  */
 
 'use client'
@@ -125,14 +129,18 @@ function QueueCard({ draft, onSaved }: { draft: DraftWithBrief; onSaved: (id: st
   const [error, setError] = useState<string | null>(null)
 
   function currentBrief(): Record<string, unknown> {
-    return {
-      composition: composition.trim() || undefined,
-      lighting: lighting.trim() || undefined,
+    // Only the keys this editor owns. Empty strings are sent on
+    // purpose: the server merges over the stored brief, so a cleared
+    // field has to arrive as '' to actually clear.
+    const b: Record<string, unknown> = {
+      composition: composition.trim(),
+      lighting: lighting.trim(),
       props: propsList.split(',').map(s => s.trim()).filter(Boolean),
-      mood: mood.trim() || undefined,
+      mood: mood.trim(),
       shot_list: shotList.split('\n').map(s => s.trim()).filter(Boolean),
-      why: why ?? undefined,
     }
+    if (why) b.why = why
+    return b
   }
 
   async function generate() {
@@ -158,13 +166,13 @@ function QueueCard({ draft, onSaved }: { draft: DraftWithBrief; onSaved: (id: st
 
   async function save() {
     setBusy('save'); setError(null)
-    const mediaBrief = currentBrief()
+    const edited = currentBrief()
     const res = await fetch(`/api/work/drafts/${draft.id}/lifecycle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'edit',
-        mediaBrief,
+        mediaBrief: edited,
         note: why ? `Visual brief: ${why}` : 'Visual brief saved',
       }),
     })
@@ -174,11 +182,23 @@ function QueueCard({ draft, onSaved }: { draft: DraftWithBrief; onSaved: (id: st
       return
     }
     const { draft: updated } = await res.json()
-    onSaved(draft.id, mediaBrief, updated.status)
+    // Mirror the server's merge so owner_note / instructions / creator
+    // keys stay visible in local state after a save.
+    onSaved(draft.id, { ...draft.mediaBrief, ...edited }, updated.status)
   }
 
   const richness = briefRichness(currentBrief())
   const isCarousel = (draft.idea ?? '').toLowerCase().includes('carousel')
+
+  // Read-only context from other writers: the owner's revision note
+  // (revise-request route) and the campaign work-order instructions.
+  // Makers act on these; they are never editable here.
+  const ownerNote = typeof draft.mediaBrief.owner_note === 'string' && draft.mediaBrief.owner_note.trim().length > 0
+    ? (draft.mediaBrief.owner_note as string)
+    : null
+  const instructions = Array.isArray(draft.mediaBrief.instructions)
+    ? (draft.mediaBrief.instructions as unknown[]).filter((s): s is string => typeof s === 'string')
+    : []
 
   return (
     <li className="rounded-2xl border bg-white p-4" style={{ borderColor: 'var(--db-border, #e5e5e5)' }}>
@@ -205,6 +225,24 @@ function QueueCard({ draft, onSaved }: { draft: DraftWithBrief; onSaved: (id: st
         <p className="text-[11px] text-ink-3 mt-0.5 leading-snug line-clamp-2 mb-3">
           {draft.caption}
         </p>
+      )}
+
+      {(ownerNote || instructions.length > 0) && (
+        <div className="rounded-lg bg-amber-50 ring-1 ring-amber-100 p-2.5 space-y-1.5">
+          {ownerNote && (
+            <p className="text-[12px] text-amber-900 leading-snug">
+              <span className="font-semibold">Owner&rsquo;s note:</span> {ownerNote}
+            </p>
+          )}
+          {instructions.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-800 mb-0.5">Campaign brief</p>
+              <ul className="text-[11px] text-amber-900/90 leading-snug list-disc pl-4 space-y-0.5">
+                {instructions.map((s, i) => <li key={i}>{s}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">

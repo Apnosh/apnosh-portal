@@ -15,8 +15,10 @@ import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
 import { resolveBrainGoal } from '@/lib/campaigns/builder/compose-plan'
 import { CREATE_CATALOG_IDS } from '@/lib/campaigns/data/create-catalog'
 import type { CampaignProfile } from '@/lib/campaigns/builder/campaign-profile'
-import { summarize, type LineItem, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
+import { summarize, type LineItem, type CampaignDraft, type PieceProducer, type CampaignReceipt } from '@/lib/campaigns/types'
 import CampaignPlanFlow from '@/components/campaigns/plan-flow/campaign-plan-flow'
+import PlanAnalyzing from '@/components/campaigns/plan-flow/plan-analyzing'
+import OrderConfirmed from '@/components/campaigns/plan-flow/order-confirmed'
 // apnosh-campaign is intentionally .jsx (untyped design code). TS infers a
 // narrow props type from its defaults, so re-type it to the real prop surface.
 import ApnoshCampaignRaw from './apnosh-campaign'
@@ -45,6 +47,15 @@ const CATALOG_IDS = new Set(CREATE_CATALOG_IDS)
 // offers 'reviewsplan' (the lighter content version) instead of the 'reviews' system goal, so route
 // it to the system reviews plan the other three system goals already use.
 const SYSTEM_GOAL_ALIAS: Record<string, string> = { reviewsplan: 'reviews' }
+// Owner-facing goal phrase for the "analyzing" screen ("Locking onto your goal: …"). Falls back to a
+// plain truthful label for any catalog id not listed.
+const GOAL_PHRASE: Record<string, string> = {
+  firstvisit: 'More first-time guests', reach: 'Getting discovered nearby', nights: 'Filling your slow nights',
+  regulars: 'Bringing guests back', reviews: 'More 5-star reviews', reviewsplan: 'More 5-star reviews',
+  winback: 'Winning back past guests', launch: 'Launching something new', promoevent: 'Promoting your event',
+  dish: 'Showing off a dish', reel: 'A scroll-stopping reel',
+}
+const goalPhrase = (id: string) => GOAL_PHRASE[id] ?? 'Your goal'
 function resolveInitialItem(template?: string): string | undefined {
   if (!template) return undefined
   return TEMPLATE_MAP[template] ?? (CATALOG_IDS.has(template) ? template : undefined)
@@ -94,6 +105,11 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
   const [planError, setPlanError] = useState<string | null>(null)
   const [planOutcome, setPlanOutcome] = useState<string | null>(null)
   const [planLead, setPlanLead] = useState<string | null>(null)
+  // The "AI is analyzing your business" screen plays over the plan while the brain tailors it. It
+  // reveals the plan (sets false) when the staged steps finish AND the plan-mix call has resolved.
+  const [analyzing, setAnalyzing] = useState(false)
+  // After approve+ship: the "you're all set" confirmation screen (holds the new campaign id + its draft).
+  const [confirmed, setConfirmed] = useState<{ id: string; draft: CampaignDraft; receipt: CampaignReceipt } | null>(null)
 
   // The owner's monthly marketing budget (from their profile), used as a soft
   // spend cap: the builder warns when the running total would go over it.
@@ -216,6 +232,7 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
     const brainGoal = resolveBrainGoal(goalId)
     const vals = applyProfile(applyList(p.vals))
     setPlan({ itemId: goalId, vals })
+    setAnalyzing(true)
     setPlanOutcome(null)
     setPlanLead(null)
     if (!brainGoal || !client?.id) return
@@ -241,7 +258,10 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
 
   // Confirm the order: create the campaign with the owner's edited pieces + service
   // choices, then ship it (the team starts), and land on the live campaign.
-  const onConfirm = async ({ draft, producerChoices }: { draft: CampaignDraft; producerChoices: Record<string, PieceProducer> }) => {
+  // Owner-facing copy when the confirm fails partway: the campaign is at most a saved
+  // draft (status never flipped), so nothing was ordered and tapping Confirm again is safe.
+  const SHIP_FAIL = "That didn't go through. Nothing was ordered. Try again."
+  const onConfirm = async ({ draft, producerChoices, receipt }: { draft: CampaignDraft; producerChoices: Record<string, PieceProducer>; receipt: CampaignReceipt }) => {
     if (!client?.id) return
     setPlanBusy(true); setPlanError(null)
     const h = { 'Content-Type': 'application/json' }
@@ -249,15 +269,26 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
       const res = await fetch('/api/campaigns', { method: 'POST', headers: h, body: JSON.stringify({ clientId: client.id, draft }) })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not create the campaign')
       const { id } = (await res.json()) as { id?: string }
-      if (id) {
-        if (Object.keys(producerChoices).length) await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify({ fields: { producer_choices: producerChoices } }) }).catch(() => {})
-        await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: new Date().toISOString() } }) }).catch(() => {})
+      if (!id) throw new Error('Could not create the campaign')
+      // Both PATCHes must land before the receipt shows. The producer picks decide who
+      // makes each piece (and what it bills), and the status flip IS the order: swallowing
+      // a failure here would show "you're all set" over a campaign still sitting in draft.
+      if (Object.keys(producerChoices).length) {
+        const pr = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify({ fields: { producer_choices: producerChoices } }) }).catch(() => null)
+        if (!pr || !pr.ok) throw new Error(SHIP_FAIL)
       }
-      router.push(id ? `/dashboard/campaigns/${id}` : '/dashboard/campaigns')
+      const sr = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: new Date().toISOString() } }) }).catch(() => null)
+      if (!sr || !sr.ok) throw new Error(SHIP_FAIL)
+      // Show the "you're all set" receipt (with a handoff to setup) instead of jumping straight in.
+      setConfirmed({ id, draft, receipt }); setPlanBusy(false)
     } catch (e) {
       setPlanError(e instanceof Error ? e.message : 'Something went wrong'); setPlanBusy(false)
     }
   }
+
+  // From the "you're all set" screen: head to the canonical "Get it ready" needs page, or skip to the campaign.
+  const goToSetup = () => router.push(confirmed?.id ? `/dashboard/campaigns/${confirmed.id}/ready` : '/dashboard/campaigns')
+  const goToCampaign = () => router.push(confirmed?.id ? `/dashboard/campaigns/${confirmed.id}` : '/dashboard/campaigns')
 
   return (
     <>
@@ -276,7 +307,17 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
         onClose={onClose}
         onPlan={handlePlan}
       />
-      {plan && client?.id && (
+      {analyzing && plan && client?.id && (
+        <PlanAnalyzing
+          restaurant={client.name || 'your restaurant'}
+          itemId={plan.itemId}
+          profile={profile}
+          goalLabel={goalPhrase(plan.itemId)}
+          ready={!planBusy}
+          onDone={() => setAnalyzing(false)}
+        />
+      )}
+      {plan && !analyzing && client?.id && (
         <CampaignPlanFlow
           itemId={plan.itemId}
           vals={plan.vals}
@@ -287,8 +328,20 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
           monthlyCap={monthlyCap}
           outcome={planOutcome}
           lead={planLead}
+          doneSetup={profile?.doneSetup ?? []}
           onConfirm={onConfirm}
           onBack={() => { setPlan(null); setPlanError(null); setPlanOutcome(null); setPlanLead(null) }}
+        />
+      )}
+      {confirmed && client?.id && (
+        <OrderConfirmed
+          restaurant={client.name || 'your restaurant'}
+          orderId={confirmed.id}
+          draft={confirmed.draft}
+          receipt={confirmed.receipt}
+          doneSetupIds={profile?.doneSetup ?? []}
+          onSetup={goToSetup}
+          onSkip={goToCampaign}
         />
       )}
     </>

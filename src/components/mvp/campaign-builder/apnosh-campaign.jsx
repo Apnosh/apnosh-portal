@@ -2036,7 +2036,7 @@ const TYPE_G = {
   task: ["#28b3a6", "#149088"],
   automation: ["#8a5cf0", "#6a39de"],
 };
-const gType = (t) => `linear-gradient(135deg, ${(TYPE_G[t] || TYPE_G.plan)[0]}, ${(TYPE_G[t] || TYPE_G.plan)[1]})`;
+export const gType = (t) => `linear-gradient(135deg, ${(TYPE_G[t] || TYPE_G.plan)[0]}, ${(TYPE_G[t] || TYPE_G.plan)[1]})`;
 
 const ICONS = {
   video: <><rect x="3.5" y="4.5" width="17" height="15" rx="3" /><path d="M10 9l5 3-5 3z" /></>,
@@ -2103,7 +2103,7 @@ const CATALOG = [
 
   { id: "winback", type: "automation", icon: "heart", title: "Win back quiet guests", sub: "Reach people who haven't been in a while", cad: "auto", hot: true },
 ];
-const catGet = (id) => CATALOG.find((x) => x.id === id);
+export const catGet = (id) => CATALOG.find((x) => x.id === id);
 // Every card now has its own bespoke builder + price (promoevent got its own
 // free-event madlib + playbook). Identity map, kept as a single seam in case a
 // future card needs to borrow another's builder.
@@ -2164,7 +2164,7 @@ const PICK = {
   listgrow: "auto", segment: "auto", utm: "chart", winback: "winback",
   graphic: "carousel", promoevent: "ticket",
 };
-function Art({ id, size = 62 }) {
+export function Art({ id, size = 62 }) {
   const key = PICK[id] || "offer";
   return <svg viewBox="0 0 56 56" width={size} height={size} fill="none">{PIC[key]}</svg>;
 }
@@ -2594,7 +2594,7 @@ const QL = {
   dish: { lead: "Feature {subject} as {format}.", slots: { subject: { k: "menu", v: "Spicy Chicken Sandwich" }, format: { k: "multi", v: ["a photo"], o: ["a photo", "a short video", "a graphic", "a carousel"], custom: true } }, extras: [{ id: "boost", k: "pick", label: "Boost it", o: ["yes, boost it to nearby people", "no thanks"], clause: (v) => (v.startsWith("yes") ? ", boosted to nearby people" : "") }] },
   gpost: { lead: "Post about {subject} on your Google listing.", slots: { subject: { k: "menu", v: "Lemon Olive Oil Cake" } } },
   launch: { lead: "Launch {subject} with {special} on {date}, {list}.", slots: { subject: { k: "menu", v: "Avocado Toast" }, special: { k: "pick", v: "20% off", o: ["20% off", "$5 off the new item", "a free side with it", "buy one, get one", "just introduce it, no discount"], custom: true }, date: { k: "date", v: 21 }, list: { k: "pick", v: "reaching your email + text list", o: ["reaching your email + text list", "social only"] } }, extras: [{ id: "intensity", k: "pick", label: "Make it a big launch", o: ["a soft launch", "a big launch"], clause: (v) => `, as ${v}` }, { id: "boost", k: "pick", label: "Add paid reach", o: ["yes, add paid ads", "no thanks"], clause: (v) => (v.startsWith("yes") ? ", with paid ads to reach new people" : "") }, { id: "limits", k: "text", label: "Add any limits", ph: "dine-in only, one per person", clause: (v) => `, ${v}` }, { id: "code", k: "text", label: "Add a code", ph: "like NEW20", clause: (v) => `, code ${v}` }] },
-  promoevent: { lead: "Promote {event} on {date}, {list}.", slots: { event: { k: "text", v: "a special night" }, date: { k: "date", v: 14 }, list: { k: "pick", v: "reaching your email + text list", o: ["reaching your email + text list", "social only"] } }, extras: [{ id: "intensity", k: "pick", label: "Make it a big push", o: ["a soft push", "a big push"], clause: (v) => `, as ${v}` }, { id: "boost", k: "pick", label: "Add paid reach", o: ["yes, add paid ads", "no thanks"], clause: (v) => (v.startsWith("yes") ? ", with paid ads to reach new people" : "") }, { id: "details", k: "text", label: "Add details", ph: "who's hosting, what's included", clause: (v) => `, plus ${v}` }] },
+  promoevent: { lead: "Promote {event} on {date}, {list}.", slots: { event: { k: "text", v: "", ph: "the event name, like Jazz Trivia Thursday" }, date: { k: "date", v: 14 }, list: { k: "pick", v: "reaching your email + text list", o: ["reaching your email + text list", "social only"] } }, extras: [{ id: "intensity", k: "pick", label: "Make it a big push", o: ["a soft push", "a big push"], clause: (v) => `, as ${v}` }, { id: "boost", k: "pick", label: "Add paid reach", o: ["yes, add paid ads", "no thanks"], clause: (v) => (v.startsWith("yes") ? ", with paid ads to reach new people" : "") }, { id: "details", k: "text", label: "Add details", ph: "who's hosting, what's included", clause: (v) => `, plus ${v}` }] },
   creator: { lead: "Partner with {tier} to feature {subject}.", slots: { tier: { k: "pick", v: "a micro creator (10k-50k)", o: ["a nano creator (1k-10k)", "a micro creator (10k-50k)", "a mid-tier creator (50k-200k)", "any size, no preference"] }, subject: { k: "menu", v: "Spicy Chicken Sandwich" } }, extras: [{ id: "boost", k: "pick", label: "Boost their post", o: ["yes, put spend behind it", "no thanks"], clause: (v) => (v.startsWith("yes") ? ", boosting their post to new people" : "") }, { id: "budget", k: "text", label: "Add a budget", ph: "like $200 or a free meal", clause: (v) => `, budget ${v}` }] },
   welcome: { lead: "Send new subscribers a welcome with {message}.", slots: { message: { k: "multi", v: ["a warm hello"], o: ["a warm hello", "your story", "your best dishes", "a first-order treat"] } } },
   second: { lead: "Email first-timers {offer} to come back.", slots: { offer: { k: "pick", v: "a small reward", o: ["a small reward", "a discount", "a free item", "free delivery"], custom: true } }, extras: [{ id: "limits", k: "text", label: "Add any limits", ph: "one per person, dine-in only", clause: (v) => `, ${v}` }, { id: "code", k: "text", label: "Add a code", ph: "like BACK10", clause: (v) => `, code ${v}` }] },
@@ -2608,7 +2608,7 @@ const QL = {
   qr: { lead: "Add a table QR that {action}.", slots: { action: { k: "pick", v: "grows your list", o: ["grows your list", "collects reviews", "links your menu", "links your socials", "takes orders"] } } },
   friction: { lead: "Make {channel} easier for guests.", slots: { channel: { k: "pick", v: "online ordering", o: ["online ordering", "booking a table", "finding your menu", "joining your list"] } } },
   giftcard: { lead: "Promote {kind} gift cards for {occasion}, in {amounts}, order by {date}, {list}.", slots: { kind: { k: "pick", v: "digital", o: ["digital", "physical", "digital and physical"] }, occasion: { k: "pick", v: "the holidays", o: ["the holidays", "Mother's Day", "Father's Day", "the season", "slow months", "graduation"], custom: true }, amounts: { k: "pick", v: "set amounts ($25, $50, $100)", o: ["set amounts ($25, $50, $100)", "any amount"] }, date: { k: "date", v: 21 }, list: { k: "pick", v: "reaching your email + text list", o: ["reaching your email + text list", "social only"] } }, extras: [{ id: "offer", k: "text", label: "Add a bonus", ph: "like $10 bonus on $50", clause: (v) => `, with ${v}` }, { id: "intensity", k: "pick", label: "Make it a big push", o: ["a soft push", "a big push"], clause: (v) => `, as ${v}` }, { id: "boost", k: "pick", label: "Add paid reach", o: ["yes, add paid ads", "no thanks"], clause: (v) => (v.startsWith("yes") ? ", with paid ads" : "") }] },
-  ticket: { lead: "Sell tickets to {event} for {price}, on {date} at {time}, {list}.", slots: { event: { k: "text", v: "a tasting night" }, price: { k: "num", v: "$45" }, date: { k: "date", v: 30 }, time: { k: "time", v: { h: 7, m: "00", ap: "pm" } }, list: { k: "pick", v: "reaching your email + text list", o: ["reaching your email + text list", "social only"] } }, extras: [{ id: "intensity", k: "pick", label: "Make it a big push", o: ["a soft push", "a big push"], clause: (v) => `, as ${v}` }, { id: "boost", k: "pick", label: "Add paid reach", o: ["yes, add paid ads", "no thanks"], clause: (v) => (v.startsWith("yes") ? ", with paid ads to fill seats" : "") }, { id: "cap", k: "text", label: "Add capacity", ph: "a number, like 40", clause: (v) => `, room for ${v}` }, { id: "details", k: "text", label: "Add details", ph: "who's hosting, 21+, includes a drink", clause: (v) => `, plus ${v}` }] },
+  ticket: { lead: "Sell tickets to {event} for {price}, on {date} at {time}, {list}.", slots: { event: { k: "text", v: "", ph: "the event name, like Wine Pairing Dinner" }, price: { k: "num", v: "" }, date: { k: "date", v: 30 }, time: { k: "time", v: { h: 7, m: "00", ap: "pm" } }, list: { k: "pick", v: "reaching your email + text list", o: ["reaching your email + text list", "social only"] } }, extras: [{ id: "intensity", k: "pick", label: "Make it a big push", o: ["a soft push", "a big push"], clause: (v) => `, as ${v}` }, { id: "boost", k: "pick", label: "Add paid reach", o: ["yes, add paid ads", "no thanks"], clause: (v) => (v.startsWith("yes") ? ", with paid ads to fill seats" : "") }, { id: "cap", k: "text", label: "Add capacity", ph: "a number, like 40", clause: (v) => `, room for ${v}` }, { id: "details", k: "text", label: "Add details", ph: "who's hosting, 21+, includes a drink", clause: (v) => `, plus ${v}` }] },
   winback: { lead: "When a guest hasn't visited in {time}, send {offer}.", slots: { time: { k: "pick", v: "30 days", o: ["30 days", "45 days", "60 days", "90 days"], custom: true }, offer: { k: "pick", v: "a come-back deal", o: ["a come-back deal", "a free item", "a discount", "a we-miss-you note"], custom: true } }, extras: [{ id: "limits", k: "text", label: "Add any limits", ph: "one per person, dine-in only", clause: (v) => `, ${v}` }, { id: "code", k: "text", label: "Add a code", ph: "like MISSYOU", clause: (v) => `, code ${v}` }] },
 };
 
@@ -2703,6 +2703,8 @@ function profileDefaults(profile, cfg) {
   for (const k in slots) {
     if (k === "who" && profile.targetAudience) o[k] = profile.targetAudience;
     if (k === "offer" && profile.currentSpecial) o[k] = profile.currentSpecial;
+    // the days the owner marked SLOW in onboarding beat the static Monday+Tuesday default
+    if (k === "days" && Array.isArray(profile.slowDays) && profile.slowDays.length) o[k] = profile.slowDays;
   }
   return o;
 }

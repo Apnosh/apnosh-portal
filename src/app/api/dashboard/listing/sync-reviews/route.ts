@@ -6,7 +6,7 @@
  * NOT write anything to the live Google listing.
  */
 
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { syncClientGbp } from '@/lib/gbp-client-sync'
 import { syncPlacesReviewsForClient } from '@/lib/places-reviews'
@@ -15,8 +15,8 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-export async function POST() {
-  const { user, clientId } = await resolveCurrentClient()
+export async function POST(req: NextRequest) {
+  const { user, clientId } = await resolveCurrentClient(req.nextUrl.searchParams.get('clientId'))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 

@@ -27,6 +27,13 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// A simulated staff send never actually went out, so any recipient/open/click
+// numbers on the row are placeholders — never render them as results. The
+// marker string matches what /api/work/campaigns/[id]/lifecycle writes.
+function isSimulatedSend(c: EmailCampaign): boolean {
+  return (c.notes ?? '').includes('[simulated send]')
+}
+
 export default function EmailCampaignsPage() {
   const supabase = createClient()
   const { client, loading: clientLoading } = useClient()
@@ -162,6 +169,7 @@ function CampaignCard({
   const statusCfg = STATUS_CONFIG[campaign.status]
   const StatusIcon = statusCfg.icon
   const canReview = campaign.status === 'in_review'
+  const simulated = isSimulatedSend(campaign)
 
   async function handleApprove() {
     setApproving(true)
@@ -223,24 +231,30 @@ function CampaignCard({
             )}
           </div>
 
-          {/* Recipient + segment */}
+          {/* Recipient + segment — a simulated send has no real recipients */}
           <div className="flex items-center gap-4 text-xs text-ink-3">
-            {campaign.recipient_count > 0 && (
+            {campaign.recipient_count > 0 && !simulated && (
               <span>{campaign.recipient_count.toLocaleString()} recipients</span>
             )}
             {campaign.segment_name && <span>Segment: {campaign.segment_name}</span>}
           </div>
 
-          {/* Metrics (if sent) */}
-          {campaign.status === 'sent' && campaign.recipient_count > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <MetricPill label="Opens" value={`${campaign.opens.toLocaleString()} (${openRate}%)`} />
-              <MetricPill label="Clicks" value={`${campaign.clicks.toLocaleString()} (${clickRate}%)`} />
-              <MetricPill label="Unsubs" value={campaign.unsubscribes.toLocaleString()} />
-              {campaign.revenue != null && (
-                <MetricPill label="Revenue" value={`$${campaign.revenue.toLocaleString()}`} />
-              )}
-            </div>
+          {/* Metrics (if sent). Simulated sends show nothing; a sent campaign
+              with no recipient data has no tracking yet, so say that instead
+              of rendering zeros as results. */}
+          {campaign.status === 'sent' && !simulated && (
+            campaign.recipient_count > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <MetricPill label="Opens" value={`${campaign.opens.toLocaleString()} (${openRate}%)`} />
+                <MetricPill label="Clicks" value={`${campaign.clicks.toLocaleString()} (${clickRate}%)`} />
+                <MetricPill label="Unsubs" value={campaign.unsubscribes.toLocaleString()} />
+                {campaign.revenue != null && (
+                  <MetricPill label="Revenue" value={`$${campaign.revenue.toLocaleString()}`} />
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-ink-4">Not tracked yet</p>
+            )
           )}
 
           {/* Full preview link */}

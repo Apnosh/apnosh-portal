@@ -24,10 +24,11 @@ import type { CampaignTemplate, CampaignCategory, ContentBeatSpec } from '../dat
 import { AUDIENCES } from '../data/campaign-templates'
 import type { GoalKey, PlanMove, PlanStage } from '../types'
 import { playsForGoal } from '../catalog'
-import type { SystemGoal, Tier } from '../data/priced-catalog'
+import { PRICED_CATALOG, type SystemGoal, type Tier } from '../data/priced-catalog'
 import { playsForGoalAtoms, DIALED_STAGES, type PlanGoal } from '../data/atom-plays'
 import { dialedContentBeats, enforceInfraDeps } from './build-from-atoms'
 import { classifyPlay, leadHeadline, movedHeadline } from '../brain/signal-fit'
+import { isNoOfferSentinel } from '../campaign-composer'
 import type { BrainSignals } from '../brain/signals'
 
 export type Goal = 'acquire' | 'capacity' | 'retain' | 'reviews'
@@ -376,6 +377,26 @@ const SPEC_SHAPED_PIECES: Record<string, (spec: Record<string, string>, shape: I
     email: ['email', 'email', 'Birthday treat email'],
     text: ['sms', 'sms', 'Birthday treat text'],
   }),
+  // The graphic goes WHERE the owner said. The type system has no print type, so a print pick keeps
+  // the designed-graphic pricing but the LABEL names the real deliverable (and specInstructions
+  // carries "Format / where it goes" to the maker) — never a generic "social post" for a flyer.
+  graphic: (spec, shape) => {
+    const w = (spec.where || '').toLowerCase()
+    const head = spec.headline?.trim()
+    if (/flyer|print/.test(w)) return [['post', 'social', head ? `Print-ready flyer — ${head}` : 'Print-ready flyer design']]
+    if (/menu board/.test(w)) return [['post', 'social', head ? `Menu board design — ${head}` : 'Menu board design']]
+    if (/story/.test(w)) return [['story', 'stories', head ? `Story graphic — ${head}` : 'Story graphic']]
+    return shape.seed
+  },
+}
+
+/** The owner's own words name the campaign when they gave them (event name, launch subject) — so
+ *  "Jazz Trivia Thursday" never renders as "Promote an event" in lists, briefs, or work orders. */
+function specName(itemId: string, spec: Record<string, string>): string | null {
+  const v = (k: string) => (spec[k]?.trim() ? spec[k].trim() : null)
+  if (itemId === 'promoevent' || itemId === 'ticket') return v('event')
+  if (itemId === 'launch') { const s = v('subject'); return s ? `Launch: ${s}` : null }
+  return null
 }
 
 /* ── Programs that lean on the owner's list ────────────────────────────────
@@ -488,9 +509,43 @@ export function seedFromItem(itemId: string): { name: string; pieces: Array<{ ty
 const TIER_RANK: Record<Tier, number> = { lean: 0, standard: 1, aggressive: 2 }
 
 
+// Catalog price index, built once, for the fit-to-plan tier math below.
+const CATALOG_BY_ID = new Map(PRICED_CATALOG.map((s) => [s.id, s]))
+
+/** The fixed cost of a goal's plan at an EXPLICIT tier: sums the catalog's one-time and monthly
+ *  prices for every service the plan includes. Per-unit (volume-dependent) prices are left out of
+ *  the fixed floor. Pass an explicit tier so tierFor short-circuits on spec.tier and never re-enters
+ *  budget-based selection (the recursion this path must avoid). Non-system goals price at 0 here. */
+export function planCostForGoal(itemId: string, tier: Tier): { oneTime: number; monthly: number; firstMonth: number } {
+  if (!isSystemGoal(itemId)) return { oneTime: 0, monthly: 0, firstMonth: 0 }
+  const { moves } = buildSystem(itemId, { tier })
+  let oneTime = 0, monthly = 0
+  for (const m of moves) {
+    const svc = CATALOG_BY_ID.get(m.serviceId)
+    if (!svc) continue
+    for (const p of svc.prices) {
+      if (p.kind === 'monthly') monthly += p.amount
+      else if (p.kind === 'one-time') oneTime += p.amount
+    }
+  }
+  return { oneTime, monthly, firstMonth: oneTime + monthly }
+}
+
+/** Fit to the real plan (owner decision 2026-07-02): pick the BIGGEST tier whose ongoing monthly
+ *  cost fits the stated budget, instead of the old fixed cutoffs that mapped $300/mo to an $8k plan.
+ *  If even lean overshoots, return lean and let the trim / over-budget ship flow handle the gap. */
+export function fitTierToMonthlyBudget(itemId: string, monthlyBudget: number): Tier {
+  if (monthlyBudget <= 0) return 'standard'
+  for (const tier of ['aggressive', 'standard', 'lean'] as Tier[]) {
+    if (planCostForGoal(itemId, tier).monthly <= monthlyBudget) return tier
+  }
+  return 'lean'
+}
+
 /** Budget → tier (ask-budget-then-scale). An explicit spec.tier wins; else a monthly budget number
- *  scales it; absent budget defaults to the recommended Standard. */
-export function tierFor(spec: Record<string, string>): Tier {
+ *  scales it; absent budget defaults to the recommended Standard. When the goal is known (itemId),
+ *  a numeric budget FITS to the real plan; without it, the legacy cutoffs apply (event goals). */
+export function tierFor(spec: Record<string, string>, itemId?: string): Tier {
   // Accept an explicit tier, a friendly madlib label ("a lean start" / "the full plan" / "an all-in
   // push"), or a raw monthly budget number; default to the recommended Standard.
   const t = `${spec.tier || ''} ${spec.budget || ''}`.toLowerCase()
@@ -499,6 +554,8 @@ export function tierFor(spec: Record<string, string>): Tier {
   if (/\bfull\b|standard|recommend/.test(t)) return 'standard'
   const b = parseInt(`${spec.budget || spec.monthlyBudget || spec.budgetMonthly || ''}`.replace(/[^0-9]/g, ''), 10) || 0
   if (!b) return 'standard'
+  // Fit to the real plan when we know a system goal; otherwise fall back to the legacy cutoffs.
+  if (itemId && isSystemGoal(itemId)) return fitTierToMonthlyBudget(itemId, b)
   if (b < 250) return 'lean'
   if (b < 700) return 'standard'
   return 'aggressive'
@@ -608,7 +665,7 @@ function parseAiMix(raw?: string): Map<string, number> | null {
  *  otherwise keep every affordable service ordered by stage then within-stage weight (the
  *  deterministic default + offline fallback). Returns the moves + the stages that populated. */
 export function buildSystem(goal: SystemGoal, spec: Record<string, string>): { moves: PlanMove[]; stages: PlanStage[] } {
-  const rank = TIER_RANK[tierFor(spec)]
+  const rank = TIER_RANK[tierFor(spec, goal)]
   const stages = SYSTEM_STAGES[goal]
   const stageOrder = new Map(stages.map((s, i) => [s.stage, i] as const))
   const affordable = playsForGoal(goal)
@@ -723,14 +780,15 @@ export function composePlanForGoal(itemId: string, spec: Record<string, string>)
   const channels = Array.from(new Set([...beats.map(([, ch]) => ch), ...(managedAds ? ['ads'] : [])]))
   // Geo comes from the owner's real profile (their neighborhood) when we have it, else a radius;
   // it drives the "near me" framing + the ad targeting, so the brief reads like their actual area.
-  const objectiveBase = spec.offer ? `${meta.objective} with ${spec.offer}` : meta.objective
+  // never paste a no-offer sentinel into the owner-visible objective ("... with No offer")
+  const objectiveBase = spec.offer && !isNoOfferSentinel(spec.offer) ? `${meta.objective} with ${spec.offer}` : meta.objective
   const geo = spec.neighborhood ? ` in ${spec.neighborhood}` : (spec.radius ? ` within ${spec.radius} miles` : '')
   const objective = `${objectiveBase}${geo}`
 
   const tpl: CampaignTemplate = {
     id: `builder-${itemId}`,
     icon: '✨',
-    name: shape.title,
+    name: specName(itemId, spec) ?? shape.title,
     tagline: '',
     category: meta.category,
     goalKey: meta.goalKey,

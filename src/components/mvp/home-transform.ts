@@ -26,10 +26,13 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
 // Per-metric copy for the switcher + hero. Falls back to the metric's own
-// label / sub for anything not listed.
+// label / sub for anything not listed. These two are BLENDED numbers —
+// interactions mixes GBP actions with social likes, reach counts GBP
+// impressions (views, not unique people) — so the copy must say what they
+// actually are, not "customers" or "people".
 const META: Record<string, { tab: string; heroLabel: string; heroSub: string; unit: string }> = {
-  interactions: { tab: 'Customers', heroLabel: 'Customers who took action', heroSub: 'called, got directions, or visited your site', unit: 'took action' },
-  reach: { tab: 'Reach', heroLabel: 'People reached', heroSub: 'saw your posts, profile, or listings', unit: 'reached' },
+  interactions: { tab: 'Actions', heroLabel: 'Actions on your business', heroSub: 'calls, directions, clicks, and likes', unit: 'actions' },
+  reach: { tab: 'Views', heroLabel: 'Views on Google and social', heroSub: 'times your posts, profile, and listings were seen', unit: 'views' },
   bookings: { tab: 'Bookings', heroLabel: 'Bookings', heroSub: 'reserved a table from your profile', unit: 'booked' },
   loyalty: { tab: 'Email', heroLabel: 'Email engagement', heroSub: 'opened or clicked your emails', unit: 'engaged' },
   reputation: { tab: 'Reviews', heroLabel: 'New reviews', heroSub: 'left a review this period', unit: 'reviews' },
@@ -146,7 +149,7 @@ export function transformHome(
 
   const down = (primary?.weekPct ?? 0) < 0
   const signal: MvpHomeData['signal'] = down
-    ? { state: 'recommendation', metric: primary?.tabLabel.toLowerCase() ?? 'numbers', message: 'Fewer customers took action this week than last. A fresh post can bring it back up.' }
+    ? { state: 'recommendation', metric: primary?.tabLabel.toLowerCase() ?? 'numbers', message: 'Fewer actions on your business this week than last. A fresh post can bring it back up.' }
     : { state: 'ontrack' }
 
   const planner = (comingUp ?? []).slice(0, 4).map((e, i) => {

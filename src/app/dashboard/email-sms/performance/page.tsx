@@ -8,6 +8,13 @@ import { useRealtimeRefresh } from '@/lib/realtime'
 import { useClient } from '@/lib/client-context'
 import type { EmailCampaign } from '@/types/database'
 
+// A simulated staff send never actually went out, so its row carries no real
+// delivery numbers — it must not feed the averages here. The marker string
+// matches what /api/work/campaigns/[id]/lifecycle writes.
+function isSimulatedSend(c: EmailCampaign): boolean {
+  return (c.notes ?? '').includes('[simulated send]')
+}
+
 export default function EmailPerformancePage() {
   const supabase = createClient()
   const { client, loading: clientLoading } = useClient()
@@ -31,27 +38,31 @@ export default function EmailPerformancePage() {
   useEffect(() => { load() }, [load])
   useRealtimeRefresh(['email_campaigns'], load)
 
+  // Only rows with real delivery data count: simulated staff sends and rows
+  // with no recipients recorded have nothing honest to chart, and including
+  // them would poison every average below.
+  const tracked = campaigns.filter(c => !isSimulatedSend(c) && c.recipient_count > 0)
+
   // Aggregates
-  const totalRecipients = campaigns.reduce((sum, c) => sum + c.recipient_count, 0)
-  const totalOpens = campaigns.reduce((sum, c) => sum + c.opens, 0)
-  const totalClicks = campaigns.reduce((sum, c) => sum + c.clicks, 0)
-  const totalRevenue = campaigns.reduce((sum, c) => sum + (c.revenue ?? 0), 0)
+  const totalRecipients = tracked.reduce((sum, c) => sum + c.recipient_count, 0)
+  const totalOpens = tracked.reduce((sum, c) => sum + c.opens, 0)
+  const totalClicks = tracked.reduce((sum, c) => sum + c.clicks, 0)
+  const totalRevenue = tracked.reduce((sum, c) => sum + (c.revenue ?? 0), 0)
 
   const avgOpenRate = totalRecipients > 0 ? ((totalOpens / totalRecipients) * 100).toFixed(1) : '0.0'
   const avgClickRate = totalOpens > 0 ? ((totalClicks / totalOpens) * 100).toFixed(1) : '0.0'
 
   // Top campaigns by open rate
-  const topByOpenRate = [...campaigns]
-    .filter(c => c.recipient_count > 0)
+  const topByOpenRate = [...tracked]
     .sort((a, b) => (b.opens / b.recipient_count) - (a.opens / a.recipient_count))
     .slice(0, 5)
 
   // Recent 6 for trend
-  const recentSix = [...campaigns].slice(0, 6).reverse()
+  const recentSix = [...tracked].slice(0, 6).reverse()
 
   // Compare last 3 vs prior 3
-  const last3 = campaigns.slice(0, 3)
-  const prior3 = campaigns.slice(3, 6)
+  const last3 = tracked.slice(0, 3)
+  const prior3 = tracked.slice(3, 6)
   const last3OpenRate = last3.length > 0
     ? last3.reduce((s, c) => s + (c.recipient_count > 0 ? c.opens / c.recipient_count : 0), 0) / last3.length * 100
     : 0
@@ -82,12 +93,12 @@ export default function EmailPerformancePage() {
           </div>
           <div className="bg-white rounded-xl border border-ink-6 h-64 animate-pulse" />
         </div>
-      ) : campaigns.length === 0 ? (
+      ) : tracked.length === 0 ? (
         <div className="bg-white rounded-xl border border-ink-6 p-12 text-center">
           <TrendingUp className="w-6 h-6 text-ink-4 mx-auto mb-3" />
           <p className="text-sm font-medium text-ink-2">No performance data yet</p>
           <p className="text-xs text-ink-4 mt-1 max-w-sm mx-auto">
-            Once your first campaign sends, performance metrics will appear here.
+            Numbers show up here once a campaign sends with tracking on.
           </p>
         </div>
       ) : (
@@ -110,7 +121,7 @@ export default function EmailPerformancePage() {
             <PerfCard
               icon={Mail}
               label="Total Sent"
-              value={campaigns.length.toString()}
+              value={tracked.length.toString()}
               sub={`${totalRecipients.toLocaleString()} recipients`}
             />
             <PerfCard

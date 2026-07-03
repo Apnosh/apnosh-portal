@@ -11,14 +11,14 @@ import 'server-only'
  * ledger and does not feed the planner's learning (per-post readings do that).
  */
 import { createAdminClient } from '@/lib/supabase/admin'
-import { maturedWindow, channelLift } from './window-lift-math'
+import { maturedWindow, channelLift, GBP_METRIC_LAG_DAYS } from './window-lift-math'
 
 // Baselines high enough that ordinary variance on a small denominator can't read as a big swing.
 const GBP_MIN_BASELINE = 30      // Google actions over the matured window
 const SOCIAL_MIN_BASELINE = 500  // reach over the matured window
 
-export interface ChannelLift { hasData: boolean; metricLabel: string; metricDelta: number }
-const NONE: ChannelLift = { hasData: false, metricLabel: 'activity', metricDelta: 0 }
+export interface ChannelLift { hasData: boolean; metricLabel: string; metricDelta: number; before: number; after: number; days: number }
+const NONE: ChannelLift = { hasData: false, metricLabel: 'activity', metricDelta: 0, before: 0, after: 0, days: 0 }
 
 function sumField(rows: Record<string, unknown>[] | null, fields: string[]): number {
   let n = 0
@@ -32,30 +32,39 @@ function sumField(rows: Record<string, unknown>[] | null, fields: string[]): num
 export async function campaignChannelLift(clientId: string, anchorISO: string, channels: string[]): Promise<ChannelLift> {
   if (!clientId || !anchorISO) return NONE
   const today = new Date().toISOString().slice(0, 10)
-  const w = maturedWindow(anchorISO, today)
-  if (!w) return NONE  // too soon to read a lift honestly (post-window not settled yet)
+  // The matured window is per source: GBP interaction metrics (calls/website_clicks)
+  // back-fill for ~7 days (live probe on do-si: zeros until ~7 days back), so the GBP
+  // read must ignore a longer unsettled tail than social — otherwise a fresh window
+  // counts structurally-empty days as real data and reads a sign-flipped negative lift.
+  // A null window means too soon to read that source honestly.
 
   // GBP first — its posts never get a per-post row, so this is the clearest window-lift case.
   if (channels.includes('gbp')) {
-    const admin = createAdminClient()
-    const f = ['directions', 'calls', 'website_clicks']
-    const [post, pre] = await Promise.all([
-      admin.from('gbp_metrics').select('directions, calls, website_clicks').eq('client_id', clientId).gte('date', w.postStart).lt('date', w.postEnd),
-      admin.from('gbp_metrics').select('directions, calls, website_clicks').eq('client_id', clientId).gte('date', w.preStart).lt('date', w.preEnd),
-    ])
-    const r = channelLift(sumField(post.data, f), sumField(pre.data, f), GBP_MIN_BASELINE)
-    if (r.hasData) return { hasData: true, metricLabel: 'Google actions', metricDelta: r.delta }
+    const w = maturedWindow(anchorISO, today, GBP_METRIC_LAG_DAYS)
+    if (w) {
+      const admin = createAdminClient()
+      const f = ['directions', 'calls', 'website_clicks']
+      const [post, pre] = await Promise.all([
+        admin.from('gbp_metrics').select('directions, calls, website_clicks').eq('client_id', clientId).gte('date', w.postStart).lt('date', w.postEnd),
+        admin.from('gbp_metrics').select('directions, calls, website_clicks').eq('client_id', clientId).gte('date', w.preStart).lt('date', w.preEnd),
+      ])
+      const r = channelLift(sumField(post.data, f), sumField(pre.data, f), GBP_MIN_BASELINE)
+      if (r.hasData) return { hasData: true, metricLabel: 'Google actions', metricDelta: r.delta, before: r.pre, after: r.post, days: w.elapsed }
+    }
   }
 
   // Social reach next.
   if (channels.some((c) => c === 'reels' || c === 'social')) {
-    const admin = createAdminClient()
-    const [post, pre] = await Promise.all([
-      admin.from('social_metrics').select('reach').eq('client_id', clientId).gte('date', w.postStart).lt('date', w.postEnd),
-      admin.from('social_metrics').select('reach').eq('client_id', clientId).gte('date', w.preStart).lt('date', w.preEnd),
-    ])
-    const r = channelLift(sumField(post.data, ['reach']), sumField(pre.data, ['reach']), SOCIAL_MIN_BASELINE)
-    if (r.hasData) return { hasData: true, metricLabel: 'reach', metricDelta: r.delta }
+    const w = maturedWindow(anchorISO, today)
+    if (w) {
+      const admin = createAdminClient()
+      const [post, pre] = await Promise.all([
+        admin.from('social_metrics').select('reach').eq('client_id', clientId).gte('date', w.postStart).lt('date', w.postEnd),
+        admin.from('social_metrics').select('reach').eq('client_id', clientId).gte('date', w.preStart).lt('date', w.preEnd),
+      ])
+      const r = channelLift(sumField(post.data, ['reach']), sumField(pre.data, ['reach']), SOCIAL_MIN_BASELINE)
+      if (r.hasData) return { hasData: true, metricLabel: 'reach', metricDelta: r.delta, before: r.pre, after: r.post, days: w.elapsed }
+    }
   }
 
   return NONE

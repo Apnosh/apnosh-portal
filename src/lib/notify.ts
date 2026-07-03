@@ -156,6 +156,40 @@ export async function notifyDeliverableApproved(
   }
 }
 
+export async function notifyCampaignOrderShipped(
+  supabase: SupabaseClient,
+  adminUserIds: string[],
+  clientName: string,
+  campaignName: string
+) {
+  for (const adminId of adminUserIds) {
+    await createNotification({
+      supabase,
+      userId: adminId,
+      type: 'order_confirmed',
+      title: 'New campaign order',
+      body: `${clientName} shipped "${campaignName}". Review and confirm it.`,
+      link: '/admin/campaign-orders',
+    })
+  }
+}
+
+export async function notifyCampaignOrderConfirmed(
+  supabase: SupabaseClient,
+  ownerUserId: string,
+  campaignName: string,
+  campaignId: string
+) {
+  await createNotification({
+    supabase,
+    userId: ownerUserId,
+    type: 'order_confirmed',
+    title: 'Order confirmed',
+    body: `Your team took on "${campaignName}". It is moving now.`,
+    link: `/dashboard/campaigns/${campaignId}`,
+  })
+}
+
 export async function notifyOrderCreated(
   supabase: SupabaseClient,
   adminUserIds: string[],

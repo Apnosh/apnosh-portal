@@ -9,8 +9,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getMarketingCalendar, daysUntil } from '@/lib/dashboard/marketing-calendar'
 import { assemblePlanningContext, fallbackPlanningContext } from '@/lib/campaigns/planning/context'
-import { recommendCreateItems, rulesRecommend } from '@/lib/campaigns/planning/recommend-create-items'
+import { recommendCreateItems, rulesRecommend, type ActivePlans } from '@/lib/campaigns/planning/recommend-create-items'
 import type { PlanRequest, UpcomingMoment } from '@/lib/campaigns/planning/types'
+import { listCampaigns } from '@/lib/campaigns/server'
+import type { GoalKey } from '@/lib/campaigns/types'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -33,11 +35,20 @@ export async function GET(req: NextRequest) {
   const moment: UpcomingMoment | undefined = mt ? { label: mt.label, daysLabel: planLabel(daysUntil(mt.date)) } : undefined
 
   const request: PlanRequest = { intent: 'full-plan', budgetMonthly: 0, spec: {} }
+
+  // What the account already runs, so we never re-recommend a live campaign. A shipped standing plan
+  // (intent 'ongoing') marks its goal covered; shipped campaign names let the AI avoid exact repeats.
+  const shipped = (await listCampaigns(clientId).catch(() => [])).filter((c) => c.status === 'shipped')
+  const active: ActivePlans = {
+    goals: Array.from(new Set(shipped.filter((c) => c.draft.intent === 'ongoing').map((c) => c.draft.goalKey).filter((g): g is GoalKey => !!g))),
+    names: shipped.map((c) => c.draft.name).filter((n): n is string => !!n),
+  }
+
   try {
     const ctx = await assemblePlanningContext(clientId, request)
-    const { recommended, source } = await recommendCreateItems(ctx, moment)
+    const { recommended, source } = await recommendCreateItems(ctx, moment, active)
     return NextResponse.json({ recommended, source })
   } catch {
-    return NextResponse.json({ recommended: rulesRecommend(fallbackPlanningContext(clientId, request), moment), source: 'rules' })
+    return NextResponse.json({ recommended: rulesRecommend(fallbackPlanningContext(clientId, request), moment, active), source: 'rules' })
   }
 }

@@ -40,7 +40,24 @@ export interface PieceOutcome {
   state: 'live' | 'gathering'
   reach: number | null
   interactions: number | null
+  /** the real published post URL (social_posts.permalink), when the platform gives one — null for
+   *  GBP posts (no social row) and for any piece whose row has no permalink. Never synthesized. */
+  link: string | null
+  /** production stage from the piece's real content_drafts.status (never a metric state). */
+  lifecycle: 'making' | 'scheduled' | 'posted'
+  /** when the piece actually posted (content_drafts.published_at), null until it posts. Real, per-piece. */
+  publishedAtISO: string | null
   readout: VerdictReadout
+}
+
+/** A campaign-scoped before/after proof — the channel metric in the settled window AFTER the campaign
+ *  vs a matched window before. Correlation, not causation (client-level daily metrics), so it is only
+ *  ever set on the window_lift path and always labeled "since this campaign started". */
+export interface WindowProof {
+  metricLabel: string
+  before: number
+  after: number
+  days: number
 }
 
 export interface CampaignOutcomes {
@@ -48,15 +65,18 @@ export interface CampaignOutcomes {
   /** True once at least one piece has a real reading — drives "results are in" vs "still gathering". */
   anyData: boolean
   rollup: VerdictReadout
+  /** Concrete before/after context for the window_lift path only; null otherwise (per_post has no baseline). */
+  proof: WindowProof | null
 }
 
 // Conservative starting thresholds (tunable in one place). Engagement-rate bands
 // reflect typical social benchmarks; bias to 'watch' so a line is never condemned early.
 const ENGAGEMENT_WORKING = 0.06
 const ENGAGEMENT_DROP = 0.015
+const MIN_REACH_SAMPLE = 200   // below this, too few people to judge — hold at 'watch' whatever the ER
 const LIFT_WORKING = 0.10
 
-function fmt(n: number): string {
+export function fmt(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
   if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'k'
   return String(Math.round(n))
@@ -69,9 +89,12 @@ export function computeVerdict(r: OutcomeReading): VerdictReadout {
     const reach = r.reach ?? 0
     const interactions = r.interactions ?? 0
     const er = r.engagementRate ?? (reach > 0 ? interactions / reach : 0)
-    // 'drop' requires real reach to judge against — a 0-reach reading (often just
-    // un-synced metrics) holds at 'watch', honoring the bias-to-watch intent.
-    const verdict: Verdict = er >= ENGAGEMENT_WORKING ? 'working' : (reach > 0 && er <= ENGAGEMENT_DROP) ? 'drop' : 'watch'
+    // Sample floor: too few people to judge — 6% ER on 85 reach is a handful of taps,
+    // not a signal, so below the floor the verdict holds at 'watch' regardless of ER.
+    // Zero-reach behavior is unchanged (it sat at 'watch' before the floor too): a
+    // 0-reach reading is often just un-synced metrics, and 'drop' still requires real
+    // reach to judge against, honoring the bias-to-watch intent.
+    const verdict: Verdict = reach < MIN_REACH_SAMPLE ? 'watch' : er >= ENGAGEMENT_WORKING ? 'working' : er <= ENGAGEMENT_DROP ? 'drop' : 'watch'
     const value = reach > 0 ? `${fmt(reach)} reached` : `${fmt(interactions)} interactions`
     const plain = verdict === 'working' ? 'Landing well. Strong engagement.'
       : verdict === 'drop' ? 'Quiet so far. Low engagement for the reach it got.'

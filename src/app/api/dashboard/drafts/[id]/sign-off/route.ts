@@ -41,7 +41,10 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  if (draft.status !== 'approved') {
+  // 'scheduled' is signable too: staff can schedule before the owner signs, and the
+  // publish cron then holds the slot ('awaiting_signoff') until this stamp lands —
+  // without accepting it here, a scheduled-unsigned draft could never publish.
+  if (draft.status !== 'approved' && draft.status !== 'scheduled') {
     return NextResponse.json({ error: `draft is ${draft.status}, must be approved to sign off` }, { status: 409 })
   }
   if (draft.client_signed_off_at) {

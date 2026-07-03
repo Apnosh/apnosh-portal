@@ -13,7 +13,7 @@ import {
   FileText, Sparkles, CheckCircle2, XCircle, Loader2, Clock,
   Send, Eye, ArrowRight, ListTodo, MessageSquare, Pencil,
   CalendarClock, ExternalLink, RotateCcw, Plus, AlertCircle,
-  Image as ImageIcon,
+  Image as ImageIcon, Megaphone,
 } from 'lucide-react'
 import type { DraftRow, DraftStatus } from '@/lib/work/get-drafts'
 import DraftMediaAttach from '@/components/work/draft-media-attach'
@@ -315,6 +315,16 @@ function DraftCard({
   const schedulable = r.status === 'approved'
   const publishable = r.status === 'approved' || r.status === 'scheduled'
   const showUnschedule = r.status === 'scheduled'
+  // Cross-writer context stored on media_brief: the owner's revision
+  // note (revise-request route) + campaign work-order instructions.
+  // Read-only here so staff see them without digging in human_judgments.
+  const brief = r.mediaBrief ?? {}
+  const ownerNote = typeof brief.owner_note === 'string' && brief.owner_note.trim().length > 0
+    ? (brief.owner_note as string)
+    : null
+  const briefInstructions = Array.isArray(brief.instructions)
+    ? (brief.instructions as unknown[]).filter((s): s is string => typeof s === 'string')
+    : []
   const ref = useRef<HTMLLIElement>(null)
   useEffect(() => {
     if (!focused) return
@@ -340,6 +350,14 @@ function DraftCard({
                   · {r.themeName}
                 </span>
               )}
+              {r.campaignId && (
+                <span
+                  className="text-[10px] text-violet-700 uppercase tracking-wider inline-flex items-center gap-1"
+                  title={`Campaign ${r.campaignId}`}
+                >
+                  · <Megaphone className="w-3 h-3" /> campaign
+                </span>
+              )}
               <ProvenanceChip via={r.proposedVia} aiCount={r.aiGenerationCount} />
               {r.revisionCount > 0 && (
                 <span className="text-[10px] text-amber-700 uppercase tracking-wider">
@@ -354,6 +372,23 @@ function DraftCard({
               <p className="text-[12px] text-ink-3 mt-1.5 leading-snug whitespace-pre-wrap line-clamp-3">
                 {r.caption}
               </p>
+            )}
+            {(ownerNote || briefInstructions.length > 0) && (
+              <div className="rounded-lg bg-amber-50 ring-1 ring-amber-100 p-2.5 mt-2 space-y-1.5">
+                {ownerNote && (
+                  <p className="text-[12px] text-amber-900 leading-snug">
+                    <span className="font-semibold">Owner&rsquo;s note:</span> {ownerNote}
+                  </p>
+                )}
+                {briefInstructions.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-800 mb-0.5">Campaign brief</p>
+                    <ul className="text-[11px] text-amber-900/90 leading-snug list-disc pl-4 space-y-0.5">
+                      {briefInstructions.map((s, i) => <li key={i}>{s}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
             )}
             {r.targetPublishDate && (
               <p className="text-[10px] text-ink-4 mt-2 inline-flex items-center gap-1">

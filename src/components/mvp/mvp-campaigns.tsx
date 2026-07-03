@@ -14,7 +14,7 @@ import {
   Plus, Repeat, Check, TrendingUp, TrendingDown, Minus, ArrowRight, Clock,
   CalendarDays, Eye, ChevronLeft, ChevronRight, Loader2,
 } from 'lucide-react'
-import { campaignCardVM, type CampCard, type SavedCampaign } from '@/lib/campaigns/view'
+import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
@@ -36,6 +36,7 @@ type Tab = 'all' | 'live' | 'production' | 'draft' | 'done'
 export default function MvpCampaigns() {
   const { client, loading: clientLoading } = useClient()
   const [saved, setSaved] = useState<SavedCampaign[] | null>(null)
+  const [progress, setProgress] = useState<Record<string, CampaignProgress>>({})
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<'list' | 'calendar'>('list')
   const [tab, setTab] = useState<Tab>('all')
@@ -46,12 +47,12 @@ export default function MvpCampaigns() {
     setError(null)
     fetch(`/api/campaigns?clientId=${client.id}`)
       .then(async (r) => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Load failed (${r.status})`); return r.json() })
-      .then((j) => { if (live) setSaved((j.campaigns ?? []) as SavedCampaign[]) })
+      .then((j) => { if (live) { setSaved((j.campaigns ?? []) as SavedCampaign[]); setProgress((j.progress ?? {}) as Record<string, CampaignProgress>) } })
       .catch((e) => { if (live) setError(e.message) })
     return () => { live = false }
   }, [client?.id])
 
-  const cards: CampCard[] = (saved ?? []).map(campaignCardVM)
+  const cards: CampCard[] = (saved ?? []).map((c) => campaignCardVM(c, progress[c.draft.id]))
   const counts: Record<Tab, number> = {
     all: cards.length,
     live: cards.filter((c) => c.kind === 'live').length,
@@ -142,11 +143,13 @@ function Spark({ values, color }: { values: number[]; color: string }) {
 }
 
 function CampaignCard({ c }: { c: CampCard }) {
+  const needsYou = c.kind !== 'draft' && c.review   // shipped but waiting on the owner's setup
   const tone = c.kind === 'draft'
     ? { bar: '#cfd4d1', dot: '#aeb4b0', pillBg: '#eef0ef', pillC: C.mute }
-    : { bar: C.green, dot: C.green, pillBg: C.greenSoft, pillC: C.greenDk }
+    : needsYou
+      ? { bar: '#e0a13a', dot: '#e0a13a', pillBg: '#FEF4E4', pillC: '#8A5A12' }   // amber: waiting on you
+      : { bar: C.green, dot: C.green, pillBg: C.greenSoft, pillC: C.greenDk }
   const ts = (t: 'up' | 'down' | 'flat') => t === 'up' ? { c: C.green, bg: C.greenSoft, I: TrendingUp } : t === 'down' ? { c: C.red, bg: C.redBg, I: TrendingDown } : { c: C.mute, bg: '#f0f0ee', I: Minus }
-  const fmtReach = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 
   return (
     <Link href={c.href} style={{ display: 'block', textDecoration: 'none', color: 'inherit', position: 'relative', overflow: 'hidden', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '11px 13px 10px', marginBottom: 9, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
@@ -187,10 +190,6 @@ function CampaignCard({ c }: { c: CampCard }) {
           <span style={{ fontSize: 12.5 }}><b style={{ fontWeight: 700 }}>{c.perf.ready} parts ready</b> <span style={{ color: C.faint }}>· waiting to go live</span></span>
         </div>
       )}
-      {c.perf?.type === 'lift' && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.greenSoft, color: C.greenDk, borderRadius: 7, padding: '3px 8px', fontWeight: 700, fontSize: 11.5, marginBottom: 8 }}><TrendingUp size={12} /> +{c.perf.pct}% actions · {fmtReach(c.perf.reach)} reached</div>
-      )}
-
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: C.greenDk, fontWeight: 700, fontSize: 12.5 }}>See how it&apos;s doing <ArrowRight size={14} /></span>
         {c.review && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.amberBg, border: `0.5px solid ${C.amberLine}`, color: C.amber, borderRadius: 99, padding: '4px 10px', fontWeight: 700, fontSize: 11.5 }}><Eye size={12} /> Needs your OK</span>}

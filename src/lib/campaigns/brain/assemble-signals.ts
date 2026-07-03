@@ -75,6 +75,8 @@ export async function assembleBrain(clientId: string): Promise<AssembledBrain> {
     s.ratingCount = reading(profile.ratingCount)
     // A named top segment implies a real list.
     s.hasList = reading(profile.topSegment != null ? true : null)
+    // The onboarding rhythm: days the owner marked slow (a real answer, never a default).
+    s.slowNights = reading(profile.slowDays.length ? profile.slowDays : null)
   }
 
   if (planning) {
@@ -104,7 +106,7 @@ export async function assembleBrain(clientId: string): Promise<AssembledBrain> {
 
   if (priceRange) s.priceRange = reading(priceRange)
 
-  // searchTerms, monthlyVisitors, slowNights are not surfaced by any reader yet, so they stay
+  // searchTerms, monthlyVisitors are not surfaced by any reader yet, so they stay
   // honestly missing until a reader provides them (a later enrichment).
 
   // Measured lift from this business's own outcomes (win-rate per service). Partial by nature

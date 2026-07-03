@@ -20,6 +20,12 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'www.instagram.com' },
     ],
   },
+  // The campaign "Needs you" intake consolidated onto /ready; keep old /setup links working.
+  async redirects() {
+    return [
+      { source: '/dashboard/campaigns/:id/setup', destination: '/dashboard/campaigns/:id/ready', permanent: false },
+    ]
+  },
 }
 
 // withSentryConfig wires Sentry's webpack plugin so we get readable stack

@@ -1,10 +1,14 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+// Share links are token-gated public artifacts: the /production/[token] page has no logged-in user,
+// so these run as the service role. The TOKEN is the credential, and the revoked/expiry checks below
+// are the gate. This is required for migration 194, which enables RLS + revokes the anon/authenticated
+// grants on production_share_links (previously world-readable — anyone could list every client's tokens).
+import { createAdminClient } from '@/lib/supabase/admin'
 import crypto from 'crypto'
 
 export async function createShareLink(cycleId: string, clientId: string, roleFilter: string) {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const token = crypto.randomBytes(24).toString('hex')
   const expires = new Date()
   expires.setDate(expires.getDate() + 30)
@@ -26,7 +30,7 @@ export async function createShareLink(cycleId: string, clientId: string, roleFil
 }
 
 export async function getShareLinkData(token: string) {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   // Fetch the share link
   const { data: link } = await supabase

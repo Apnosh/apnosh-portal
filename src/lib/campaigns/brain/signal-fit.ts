@@ -92,13 +92,14 @@ export function signalFit(play: AtomPlay, signals: BrainSignals): { delta: numbe
     }
   }
 
-  // R3/R4 — listing completeness drives discovery.
+  // R3/R4 — listing completeness drives discovery. The signal is a 0-100 SCORE (listing-health score,
+  // citation coarse 90/70/50) — same unit MixSignals.presence uses — NOT a 0-1 fraction.
   if (usable(signals.listingCompleteness) && cls === 'discovery') {
     const c = signals.listingCompleteness.value
-    if (c <= 0.7) {
-      const boost = c < 0.4 ? 45 : c < 0.6 ? 30 : 20
-      fire(boost, `Fixed your Google listing first because it is ${Math.round(c * 100)}% complete.`)
-    } else if (c >= 0.9) {
+    if (c <= 70) {
+      const boost = c < 40 ? 45 : c < 60 ? 30 : 20
+      fire(boost, `Fixed your Google listing first because it is ${Math.round(c)}% complete.`)
+    } else if (c >= 90) {
       fire(-20, 'Your listing is in good shape, so we lead elsewhere.')
     }
   }
@@ -152,8 +153,8 @@ export function signalFit(play: AtomPlay, signals: BrainSignals): { delta: numbe
 export function leadHeadline(leadClass: FitClass, signals: BrainSignals): string | null {
   if (leadClass === 'reputation' && usable(signals.rating) && signals.rating.value < 4.3)
     return `Led with reviews because your rating is ${signals.rating.value.toFixed(1)}, below the 4.3 norm.`
-  if (leadClass === 'discovery' && usable(signals.listingCompleteness) && signals.listingCompleteness.value <= 0.7)
-    return `Started with your Google listing because it is ${Math.round(signals.listingCompleteness.value * 100)}% complete.`
+  if (leadClass === 'discovery' && usable(signals.listingCompleteness) && signals.listingCompleteness.value <= 70)
+    return `Started with your Google listing because it is ${Math.round(signals.listingCompleteness.value)}% complete.`
   if (leadClass === 'capture-build' && usable(signals.hasList) && signals.hasList.value === false)
     return 'Built your capture page first because you do not have a list yet.'
   if (leadClass === 'content' && usable(signals.complaintThemes) && signals.complaintThemes.value.some((t) => /photo|menu|pic/i.test(t)))
@@ -167,6 +168,10 @@ export function leadHeadline(leadClass: FitClass, signals: BrainSignals): string
 export function movedHeadline(signals: BrainSignals, present: { reputation: boolean; captureBuild: boolean }): string | null {
   if (present.reputation && usable(signals.rating) && signals.rating.value < 4.3)
     return `Moved reviews earlier because your rating is ${signals.rating.value.toFixed(1)}, below the 4.3 norm.`
+  // The complaint-theme rule (R7) moves review work forward even at a healthy rating — say so, or
+  // the tailoring is invisible and the plan looks untouched by the owner's real reviews.
+  if (present.reputation && usable(signals.complaintThemes) && signals.complaintThemes.value.length)
+    return `Moved review work earlier because your reviews mention ${signals.complaintThemes.value[0].toLowerCase()}.`
   if (present.captureBuild && usable(signals.hasList) && signals.hasList.value === false)
     return 'Put building your list first because you do not have one yet.'
   return null

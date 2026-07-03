@@ -11,7 +11,11 @@
  * publish failure we restore scheduled_for so the next tick retries
  * — unless it was a hard failure (preflight error like missing
  * media), in which case the draft moves to status='approved' and a
- * staff notification fires so a human handles it.
+ * staff notification fires so a human handles it. An 'awaiting_signoff'
+ * result is a consent hold, not a failure: the draft stays scheduled
+ * and publishes on the first tick after the owner signs. A claim whose
+ * run died mid-flight (scheduled_for null, updated_at stale) is
+ * re-armed by the sweep at the top of each tick.
  *
  * We use scheduled_for instead of a fake 'publishing' status to
  * avoid bumping the content_drafts.status CHECK enum (idea, draft,
@@ -24,7 +28,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { attemptPublish } from '@/lib/publish/attempt-publish'
-import { notifyStaffForClient } from '@/lib/notifications'
+import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -34,7 +38,7 @@ const CRON_SECRET = process.env.CRON_SECRET
 interface PublishOutcome {
   draftId: string
   clientId: string
-  status: 'published' | 'reverted' | 'failed_hard'
+  status: 'published' | 'reverted' | 'failed_hard' | 'awaiting_signoff'
   error?: string
 }
 
@@ -45,6 +49,10 @@ const HARD_FAIL_CODES = new Set([
   'no_connections',
   'missing_platform_connection',
 ])
+
+// A claim older than this can't belong to a live invocation (maxDuration is
+// 60s and ticks are 5 minutes apart), so the run that made it must have died.
+const STALE_CLAIM_MS = 10 * 60 * 1000
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
@@ -59,6 +67,22 @@ export async function GET(req: Request) {
   const admin = createAdminClient()
   const nowIso = new Date().toISOString()
 
+  // Strand sweep: a crash between the claim (scheduled_for NULLed below) and
+  // the outcome write leaves status='scheduled' with a null slot, which the
+  // due query can never see again. The claim stamps updated_at, so a
+  // scheduled row with no slot whose updated_at predates the stale window
+  // was claimed by a run that died — re-arm it as due now so this tick's
+  // query picks it back up.
+  const staleBefore = new Date(Date.now() - STALE_CLAIM_MS).toISOString()
+  const { data: sweptRows } = await admin
+    .from('content_drafts')
+    .update({ scheduled_for: nowIso })
+    .eq('status', 'scheduled')
+    .is('scheduled_for', null)
+    .lt('updated_at', staleBefore)
+    .select('id')
+  const swept = sweptRows?.length ?? 0
+
   // Pull due drafts. We claim them one-at-a-time to keep the cron's
   // happy path simple; volumes are tiny at our scale (a handful of
   // scheduled posts per hour, max).
@@ -71,7 +95,7 @@ export async function GET(req: Request) {
     .limit(50)
 
   if (!due || due.length === 0) {
-    return NextResponse.json({ ok: true, considered: 0, outcomes: [] })
+    return NextResponse.json({ ok: true, considered: 0, swept, outcomes: [] })
   }
 
   const outcomes: PublishOutcome[] = []
@@ -120,7 +144,34 @@ export async function GET(req: Request) {
         .from('content_drafts')
         .update({ status: 'published' })
         .eq('id', draftId)
+      // Mirror the manual publish path: the owner hears their post went live
+      // (with the real link) and any linked to-do closes — the cron was the
+      // one publish path that told nobody.
+      await admin
+        .from('client_tasks')
+        .update({ status: 'done', completed_at: nowIso })
+        .eq('draft_id', draftId)
+        .in('status', ['todo', 'doing'])
+      await notifyClientOwners(clientId, {
+        kind: 'draft_published',
+        title: 'Your post is live',
+        body: result.publishedUrl ? 'Open to see it in the wild.' : 'It just went out on your feed.',
+        link: result.publishedUrl ?? '/dashboard',
+      }).catch(() => ({ notified: 0 }))
       outcomes.push({ draftId, clientId, status: 'published' })
+      continue
+    }
+
+    // Consent hold, not a failure: the owner hasn't signed off yet. Leave
+    // the draft scheduled (restore its slot) so it goes out automatically
+    // on the first tick after the owner signs — never kick it back to
+    // 'approved', which would make a staffer re-schedule by hand.
+    if (result.errorCode === 'awaiting_signoff') {
+      await admin
+        .from('content_drafts')
+        .update({ scheduled_for: originalScheduledFor })
+        .eq('id', draftId)
+      outcomes.push({ draftId, clientId, status: 'awaiting_signoff' })
       continue
     }
 
@@ -145,6 +196,18 @@ export async function GET(req: Request) {
         },
       ).catch(() => ({ notified: 0 }))
 
+      // A missing connection is the OWNER'S fix (connect the account), and
+      // most clients have none — without this, their scheduled posts just
+      // silently fall off the calendar.
+      if (result.errorCode === 'no_connections' || result.errorCode === 'missing_platform_connection') {
+        await notifyClientOwners(clientId, {
+          kind: 'client_signoff',
+          title: 'Connect your account so posts can go out',
+          body: 'A post was ready but no social account is connected. Connect one and your team will reschedule it.',
+          link: '/dashboard/connected-accounts',
+        }).catch(() => ({ notified: 0 }))
+      }
+
       outcomes.push({ draftId, clientId, status: 'failed_hard', error: result.error })
       continue
     }
@@ -161,6 +224,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     ok: true,
     considered: due.length,
+    swept,
     outcomes,
   })
 }

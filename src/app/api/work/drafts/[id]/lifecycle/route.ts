@@ -68,8 +68,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       const priorCaption = (draft.caption as string) ?? null
       const priorBrief = (draft.media_brief as Record<string, unknown>) ?? {}
 
+      // Merge, never replace: media_brief also carries keys other
+      // writers own (instructions, owner_note, from_creator, from_menu,
+      // source_delivery_url), so an editor payload only overwrites the
+      // keys it actually sends.
+      const newBrief = body?.mediaBrief !== undefined
+        ? { ...priorBrief, ...body.mediaBrief }
+        : undefined
+
       if (typeof body?.caption === 'string') updates.caption = body.caption.slice(0, 4000)
-      if (body?.mediaBrief !== undefined) updates.media_brief = body.mediaBrief
+      if (newBrief !== undefined) updates.media_brief = newBrief
       if (Array.isArray(body?.hashtags)) updates.hashtags = body.hashtags.slice(0, 30)
       // Editing always moves a 'revising' draft back to 'draft' for
       // re-review. 'idea' stays as 'draft' once captioned.
@@ -85,7 +93,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         prior_caption: priorCaption,
         new_caption: typeof body?.caption === 'string' ? body.caption.slice(0, 4000) : priorCaption,
         prior_brief: priorBrief,
-        new_brief: body?.mediaBrief !== undefined ? body.mediaBrief : priorBrief,
+        new_brief: newBrief !== undefined ? newBrief : priorBrief,
         note: body?.note ?? null,
       })
       break
@@ -188,11 +196,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       .eq('draft_id', draftId)
       .in('status', ['todo', 'doing'])
 
+    // Prefer the real live-post link: the manual backfill sends one in the body,
+    // and attemptPublish stamps published_url on the row before the status flip.
+    const liveUrl = body?.publishedUrl ?? ((updated?.published_url as string | null) || undefined)
     await notifyClientOwners(draft.client_id as string, {
       kind: 'draft_published',
       title: 'Your post is live',
-      body: body?.publishedUrl ? 'Open to see it in the wild.' : 'It just went out on your feed.',
-      link: body?.publishedUrl ?? '/dashboard',
+      body: liveUrl ? 'Open to see it in the wild.' : 'It just went out on your feed.',
+      link: liveUrl ?? '/dashboard',
     }).catch(() => ({ notified: 0 }))
   }
 

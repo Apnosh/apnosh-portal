@@ -10,29 +10,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCampaign, getCampaignProgress } from './server'
 import { listWorkOrdersForCampaign } from './work-orders'
 import { deriveSchedule } from './schedule'
+import { deriveServiceNeeds } from './service-needs'
 
-export interface ReadinessItem {
-  id: string
-  kind: 'input' | 'action'
-  title: string
-  why: string
-  done: boolean
-  optional?: boolean
-  // input
-  field?: keyof import('./view').CampaignExecution
-  inputType?: 'text' | 'textarea'
-  placeholder?: string
-  value?: string
-  // action
-  actionLabel?: string
-  href?: string
-}
-
-export interface ReadinessReport {
-  items: ReadinessItem[]
-  done: number
-  total: number   // required (non-optional) items
-}
+// Types + GROUP_ORDER live in the client-safe readiness-types.ts (this module is 'server-only').
+import type { ReadinessItem, ReadinessReport } from './readiness-types'
+export type { NeedGroup, ReadinessItem, ReadinessReport } from './readiness-types'
 
 export async function getCampaignReadiness(campaignId: string): Promise<ReadinessReport | null> {
   const admin = createAdminClient()
@@ -43,7 +25,7 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   const detailHref = `/dashboard/campaigns/${campaignId}`
 
   const [bizRes, orders, progress] = await Promise.all([
-    admin.from('businesses').select('hours, phone, website_url, brand_voice_words, brand_tone, brand_colors').eq('client_id', clientId).maybeSingle(),
+    admin.from('businesses').select('hours, phone, website_url, address, brand_voice_words, brand_tone, brand_colors').eq('client_id', clientId).maybeSingle(),
     listWorkOrdersForCampaign(campaignId),
     getCampaignProgress(campaignId),
   ])
@@ -66,32 +48,69 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
     } catch { socialConnected = true }
   }
 
+  // Best-effort "already set up" signals + menu presence, so we skip needs that are handled and
+  // pre-satisfy others. Never block the report on these — mirror the socialConnected try/catch.
+  const doneSetup = new Set<string>()
+  let hasMenuItems = false
+  try {
+    const [chanRes, socRes, menuRes] = await Promise.all([
+      admin.from('channel_connections').select('channel').eq('client_id', clientId).eq('status', 'active'),
+      admin.from('social_connections').select('platform').eq('client_id', clientId).eq('sync_status', 'active'),
+      admin.from('menu_items').select('id', { count: 'exact', head: true }).eq('client_id', clientId),
+    ])
+    if (((chanRes.data ?? []) as { channel?: string }[]).some((c) => c.channel === 'google_business_profile')) { doneSetup.add('gbp-setup'); doneSetup.add('review-claim') }
+    if (((socRes.data ?? []) as { platform?: string }[]).some((s) => s.platform === 'instagram' || s.platform === 'facebook')) doneSetup.add('channel-connect')
+    hasMenuItems = (menuRes.count ?? 0) > 0
+  } catch { /* best-effort */ }
+  const hasAddress = typeof biz?.address === 'string' && (biz.address as string).trim().length > 0
+
   const items: ReadinessItem[] = []
 
-  // ── inputs (persist to campaigns.execution, feed the brief) ──────────
+  // ── content inputs (persist to campaigns.execution, feed the brief) ──────────
   // DIY campaigns mint no creator orders/brief, so these inputs would be dead
   // data — DIY readiness is action-only (schedule, channels, brand/contact).
   const isDiy = campaign.draft.path === 'diy'
   if (!isDiy) {
-    items.push({ id: 'featuring', kind: 'input', field: 'featuring', inputType: 'text', title: 'What should we feature?', why: 'The exact dish or item the content should show off.', placeholder: 'e.g. our birria tacos', value: exec.featuring ?? '', done: !!exec.featuring })
+    // Seed from the madlib answers so these read as a CONFIRM, not a from-scratch re-ask — the owner
+    // already named the dish and offer once. done still requires the saved execution value.
+    const specFeature = campaign.draft.brief?.spec?.feature?.trim() || ''
+    items.push({ id: 'featuring', kind: 'input', group: 'Content', field: 'featuring', inputType: 'text', title: 'What should we feature?', why: 'The exact dish or item the content should show off.', placeholder: 'e.g. our birria tacos', value: exec.featuring ?? specFeature, done: !!exec.featuring })
     if (offerLabel) {
-      items.push({ id: 'offerText', kind: 'input', field: 'offerText', inputType: 'text', title: 'Confirm the offer wording', why: 'The exact text + any terms, so the copy is right.', placeholder: offerLabel, value: exec.offerText ?? '', done: !!exec.offerText })
+      items.push({ id: 'offerText', kind: 'input', group: 'Content', field: 'offerText', inputType: 'text', title: 'Confirm the offer wording', why: 'The exact text + any terms, so the copy is right.', placeholder: offerLabel, value: exec.offerText ?? offerLabel, done: !!exec.offerText })
     }
-    items.push({ id: 'mustSay', kind: 'input', field: 'mustSay', inputType: 'textarea', title: 'Anything we must include?', why: 'A tagline, a hashtag, a date — anything that has to be in it.', placeholder: 'Optional', value: exec.mustSay ?? '', done: !!exec.mustSay, optional: true })
-    items.push({ id: 'avoid', kind: 'input', field: 'avoid', inputType: 'textarea', title: 'Anything to avoid?', why: 'Words, claims, or looks to keep out.', placeholder: 'Optional', value: exec.avoid ?? '', done: !!exec.avoid, optional: true })
+    items.push({ id: 'mustSay', kind: 'input', group: 'Content', field: 'mustSay', inputType: 'textarea', title: 'Anything we must include?', why: 'A tagline, a hashtag, a date — anything that has to be in it.', placeholder: 'Optional', value: exec.mustSay ?? '', done: !!exec.mustSay, optional: true })
+    items.push({ id: 'avoid', kind: 'input', group: 'Content', field: 'avoid', inputType: 'textarea', title: 'Anything to avoid?', why: 'Words, claims, or looks to keep out.', placeholder: 'Optional', value: exec.avoid ?? '', done: !!exec.avoid, optional: true })
   }
 
-  // ── actions (only when needed) ───────────────────────────────────────
-  if (!scheduleSet) items.push({ id: 'schedule', kind: 'action', title: 'Lock the schedule', why: 'Pick a start date so the team has runway to produce.', actionLabel: 'Set a date', href: detailHref, done: false })
-  if (pendingConcepts > 0) items.push({ id: 'concepts', kind: 'action', title: `Approve ${pendingConcepts} concept${pendingConcepts > 1 ? 's' : ''}`, why: 'The creators are waiting on your OK before they produce.', actionLabel: 'Review', href: detailHref, done: false })
-  if (awaiting > 0) items.push({ id: 'review', kind: 'action', title: `Review ${awaiting} piece${awaiting > 1 ? 's' : ''}`, why: 'Pieces are ready for your approval before they post.', actionLabel: 'Review', href: detailHref, done: false })
-  if (usesSocial && !socialConnected) items.push({ id: 'connect', kind: 'action', title: 'Connect Instagram', why: 'So this campaign can actually post to your feed.', actionLabel: 'Connect', href: '/dashboard/connect-accounts', done: false })
+  // ── scheduling: set the go-live date right here (replaces the old "go set a date" hop) ──
+  items.push({ id: 'go_live', kind: 'input', group: 'Scheduling', field: 'go_live', inputType: 'date', saveTo: 'target_date', title: 'When do you want to go live?', why: 'Pick a target so the team has runway to produce.', value: campaign.draft.targetDate ?? '', done: scheduleSet })
+
+  // ── service-driven needs: only what THIS campaign's services require ──
+  for (const n of deriveServiceNeeds(campaign, { doneSetup, hasMenuItems, hasAddress, exec })) {
+    if (items.some((i) => i.id === n.id || (n.field && i.field === n.field))) continue
+    items.push(n)
+  }
+
+  // ── computed actions (only when needed) ───────────────────────────────────────
+  if (pendingConcepts > 0) items.push({ id: 'concepts', kind: 'action', group: 'Anything else', title: `Approve ${pendingConcepts} concept${pendingConcepts > 1 ? 's' : ''}`, why: 'The creators are waiting on your OK before they produce.', actionLabel: 'Review', href: detailHref, done: false })
+  if (awaiting > 0) items.push({ id: 'review', kind: 'action', group: 'Anything else', title: `Review ${awaiting} piece${awaiting > 1 ? 's' : ''}`, why: 'Pieces are ready for your approval before they post.', actionLabel: 'Review', href: detailHref, done: false })
+  if (usesSocial && !socialConnected && !doneSetup.has('channel-connect') && !items.some((i) => i.id === 'gbp-access')) items.push({ id: 'connect', kind: 'action', group: 'Access', title: 'Connect Instagram', why: 'So this campaign can actually post to your feed.', actionLabel: 'Connect', href: '/dashboard/connected-accounts', done: false })
 
   const brandThin = !((Array.isArray(biz?.brand_voice_words) && (biz!.brand_voice_words as unknown[]).length) || biz?.brand_tone || Object.keys((biz?.brand_colors as object) ?? {}).length)
-  if (brandThin) items.push({ id: 'brand', kind: 'action', title: 'Add your brand details', why: 'Your voice + colors so the content matches you.', actionLabel: 'Add', href: '/dashboard/business-info', done: false })
+  if (brandThin) items.push({ id: 'brand', kind: 'action', group: 'Content', title: 'Add your brand details', why: 'Your voice + colors so the content matches you.', actionLabel: 'Add', href: '/dashboard/business-info', done: false })
   const contactThin = !(biz?.hours && (biz?.phone || biz?.website_url))
-  if (contactThin) items.push({ id: 'contact', kind: 'action', title: 'Add your hours + link', why: 'So the content can point people where + when to find you.', actionLabel: 'Add', href: '/dashboard/business-info', done: false })
+  if (contactThin) items.push({ id: 'contact', kind: 'action', group: 'Info', title: 'Add your hours + link', why: 'So the content can point people where + when to find you.', actionLabel: 'Add', href: '/dashboard/business-info', done: false })
 
-  const required = items.filter((i) => !i.optional)
-  return { items, done: required.filter((i) => i.done).length, total: required.length }
+  // Setup actions the owner chose to defer ("Skip for now") drop out of the required count, so they can
+  // finish their part without connecting accounts right now — each stays visible to undo. The in-campaign
+  // work actions (approve concepts / review pieces) are the real work and are never skippable.
+  const skipped = new Set((exec.setupSkipped ?? '').split(',').map((s) => s.trim()).filter(Boolean))
+  for (const it of items) {
+    if (it.kind !== 'action') continue
+    if (it.id !== 'concepts' && it.id !== 'review') it.skippable = true
+    if (it.skippable && skipped.has(it.id)) it.skipped = true
+  }
+
+  const required = items.filter((i) => !i.optional && !i.skipped)
+  return { campaignName: campaign.draft.name, items, done: required.filter((i) => i.done).length, total: required.length, doneSetupIds: Array.from(doneSetup) }
 }

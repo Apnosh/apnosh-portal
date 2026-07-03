@@ -15,6 +15,9 @@ export interface DraftRow {
   clientId: string
   clientName: string | null
   clientSlug: string | null
+  // Optional because /work/queue projects this shape by hand from its
+  // own select, which doesn't include campaign_id.
+  campaignId?: string | null
   sourceThemeId: string | null
   themeName: string | null
   serviceLine: string
@@ -40,6 +43,9 @@ export interface DraftRow {
   } | null
   publishedUrl: string | null
   mediaUrls: string[]
+  // Raw media_brief JSON: visual brief fields plus cross-writer keys
+  // (instructions, owner_note, from_creator, source_delivery_url).
+  mediaBrief: Record<string, unknown>
   createdAt: string
   updatedAt: string
 }
@@ -49,7 +55,7 @@ export async function getMyDrafts(opts: { status?: DraftStatus[] } = {}): Promis
 
   let q = supabase
     .from('content_drafts')
-    .select('id, client_id, source_theme_id, service_line, status, idea, caption, proposed_by, proposed_via, target_platforms, target_publish_date, revision_count, approved_by, approved_at, rejection_reason, ai_generation_ids, published_post_id, outcome_summary, published_url, media_urls, created_at, updated_at')
+    .select('id, client_id, campaign_id, source_theme_id, service_line, status, idea, caption, proposed_by, proposed_via, target_platforms, target_publish_date, revision_count, approved_by, approved_at, rejection_reason, ai_generation_ids, published_post_id, outcome_summary, published_url, media_urls, media_brief, created_at, updated_at')
     .order('updated_at', { ascending: false })
     .limit(200)
 
@@ -81,6 +87,7 @@ export async function getMyDrafts(opts: { status?: DraftStatus[] } = {}): Promis
       clientId: d.client_id as string,
       clientName: (c?.name as string) ?? null,
       clientSlug: (c?.slug as string) ?? null,
+      campaignId: (d.campaign_id as string) ?? null,
       sourceThemeId: (d.source_theme_id as string) ?? null,
       themeName: (t?.theme_name as string) ?? null,
       serviceLine: (d.service_line as string) ?? 'social',
@@ -100,6 +107,7 @@ export async function getMyDrafts(opts: { status?: DraftStatus[] } = {}): Promis
       outcomeSummary: (d.outcome_summary as DraftRow['outcomeSummary']) ?? null,
       publishedUrl: (d.published_url as string) ?? null,
       mediaUrls: Array.isArray(d.media_urls) ? (d.media_urls as string[]) : [],
+      mediaBrief: (d.media_brief as Record<string, unknown>) ?? {},
       createdAt: (d.created_at as string) ?? new Date().toISOString(),
       updatedAt: (d.updated_at as string) ?? new Date().toISOString(),
     }

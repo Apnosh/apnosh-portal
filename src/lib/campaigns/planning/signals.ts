@@ -21,7 +21,7 @@ async function reputation(clientId: string): Promise<ReputationSignal> {
   const [reviews, impact, themesRes] = await Promise.all([
     getRecentReviews(clientId, 1).catch(() => null),
     getImpactSummary(clientId).catch(() => null),
-    getCachedThemes(clientId).catch(() => null),
+    getCachedThemes(clientId, undefined, 30).catch(() => null),   // planners tolerate month-old themes over running blind
   ])
   const rating = impact?.rating ?? reviews?.avgRating ?? null
   const ratingCount = impact?.ratingCount ?? reviews?.total ?? null

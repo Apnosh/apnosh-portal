@@ -53,7 +53,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   // get a not-found rather than an error.
   const { data: draft } = await supabase
     .from('content_drafts')
-    .select('id, client_id, status, revision_count, media_urls')
+    .select('id, client_id, status, revision_count, media_urls, campaign_id')
     .eq('id', draftId)
     .maybeSingle()
   if (!draft) return NextResponse.json({ error: 'draft not found' }, { status: 404 })
@@ -127,6 +127,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       title: 'A post is ready for your review',
       body: 'Your team approved the draft. Tap to read it and give the green light.',
       link: `/dashboard/preview/${draftId}`,
+    }).catch(() => ({ notified: 0 }))
+  }
+  // Rejecting a CAMPAIGN piece removes something the owner ordered — that must never
+  // be silent (their plan quietly shrinks otherwise). Non-campaign drafts stay internal.
+  if (judgment === 'rejected' && draft.campaign_id) {
+    await notifyClientOwners(draft.client_id as string, {
+      kind: 'client_signoff',
+      title: 'One piece of your campaign was dropped',
+      body: 'Your team stopped one piece. Tap to see your plan and ask about it.',
+      link: `/dashboard/campaigns/${draft.campaign_id as string}`,
     }).catch(() => ({ notified: 0 }))
   }
 

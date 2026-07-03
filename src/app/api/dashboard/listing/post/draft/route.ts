@@ -14,7 +14,7 @@ export const maxDuration = 30
 const MODEL = 'claude-sonnet-4-20250514'
 
 export async function POST(req: NextRequest) {
-  const { user, clientId } = await resolveCurrentClient()
+  const { user, clientId } = await resolveCurrentClient(req.nextUrl.searchParams.get('clientId'))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
   if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })

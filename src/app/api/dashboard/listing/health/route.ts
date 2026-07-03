@@ -3,7 +3,7 @@
  * for the signed-in owner's client.
  */
 
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { getListingHealth } from '@/lib/dashboard/get-listing-health'
 
@@ -11,8 +11,8 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
-export async function GET() {
-  const { user, clientId } = await resolveCurrentClient()
+export async function GET(req: NextRequest) {
+  const { user, clientId } = await resolveCurrentClient(req.nextUrl.searchParams.get('clientId'))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 

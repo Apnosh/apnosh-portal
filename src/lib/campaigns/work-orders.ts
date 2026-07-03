@@ -6,14 +6,16 @@
  */
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { notifyStaffForClient } from '@/lib/notifications'
+import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
 import { creatorById } from './creators'
-import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
+import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, PLAN_REMOVED_NOTE, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
 import { feePercentForCreator } from './vendor-supply'
 import type { SavedCampaign, CampaignCharges, CreatorEarnings } from './view'
 
 export type { WorkOrderStatus }
 export { IllegalTransition } from './work-orders-core'
+
+export { PLAN_REMOVED_NOTE } from './work-orders-core'
 
 export interface WorkOrder {
   id: string
@@ -146,15 +148,18 @@ export async function listWorkOrdersForCampaign(campaignId: string): Promise<Wor
  *  or resurrect a terminal one. Throws IllegalTransition on a bad move. */
 export async function updateWorkOrder(id: string, patch: { status?: WorkOrderStatus; delivered_url?: string; note?: string; concept_status?: 'approved' | 'pending' | 'changes' }): Promise<void> {
   const admin = createAdminClient()
+  type CurOrder = { status: string; campaign_id: string | null; client_id: string; title: string | null }
+  let cur: CurOrder | null = null
   if (patch.status) {
-    const { data: cur, error: readErr } = await admin
+    const { data, error: readErr } = await admin
       .from('creator_work_orders')
-      .select('status, delivered_url, concept_status')
+      .select('status, delivered_url, concept_status, campaign_id, client_id, title')
       .eq('id', id)
       .single()
-    if (readErr || !cur) throw new IllegalTransition('work order not found')
-    const effectiveUrl = patch.delivered_url ?? (cur.delivered_url as string | null)
-    const v = validateTransition(cur.status as WorkOrderStatus, patch.status, effectiveUrl, cur.concept_status as string | null)
+    if (readErr || !data) throw new IllegalTransition('work order not found')
+    cur = data as unknown as CurOrder
+    const effectiveUrl = patch.delivered_url ?? (data.delivered_url as string | null)
+    const v = validateTransition(data.status as WorkOrderStatus, patch.status, effectiveUrl, data.concept_status as string | null)
     if (!v.ok) throw new IllegalTransition(v.reason)
   }
   const { error } = await admin
@@ -169,6 +174,25 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
     await bridgeApprovedOrderToDraft(id).catch((e) => { console.error('bridge threw', id, e); return null })
     await accrueChargeForApprovedOrder(id).catch((e) => { console.error('accrueCharge threw', id, e); return null })
     await accruePayoutForApprovedOrder(id).catch((e) => { console.error('accruePayout threw', id, e); return null })
+  }
+  // A creator saying no is terminal and reaches a human on BOTH sides, or the piece
+  // silently strands: no reassignment path exists, so the signal IS the recovery.
+  if (patch.status === 'declined' && cur) {
+    const piece = cur.title || 'a piece'
+    await notifyStaffForClient(cur.client_id, ['strategist'], {
+      kind: 'client_signoff',
+      title: 'A creator declined a piece',
+      body: `${piece}${patch.note ? `: "${patch.note}"` : ''}. Assign a new maker or move it to the team.`,
+      link: `/work/today?focus=${cur.campaign_id ?? ''}`,
+    }).catch(() => ({ notified: 0 }))
+    if (cur.campaign_id) {
+      await notifyClientOwners(cur.client_id, {
+        kind: 'client_signoff',
+        title: 'A piece needs a new maker',
+        body: `The creator could not take on ${piece}. Your team is finding a new maker.`,
+        link: `/dashboard/campaigns/${cur.campaign_id}`,
+      }).catch(() => ({ notified: 0 }))
+    }
   }
 }
 
@@ -206,7 +230,7 @@ export async function accruePayoutForApprovedOrder(orderId: string): Promise<boo
       kind: 'client_signoff',
       title: 'Approved piece has no creator to pay',
       body: 'A creator piece was approved with no assigned creator. Assign one and accrue the payout manually.',
-      link: `/work/campaigns?focus=${row.campaign_id ?? ''}`,
+      link: `/work/today?focus=${row.campaign_id ?? ''}`,
     }).catch(() => ({ notified: 0 }))
     return false
   }
@@ -215,7 +239,7 @@ export async function accruePayoutForApprovedOrder(orderId: string): Promise<boo
       kind: 'client_signoff',
       title: 'Approved piece has no price to pay out',
       body: 'A creator piece was approved with no amount. Set its price and accrue the payout manually.',
-      link: `/work/campaigns?focus=${row.campaign_id ?? ''}`,
+      link: `/work/today?focus=${row.campaign_id ?? ''}`,
     }).catch(() => ({ notified: 0 }))
     return false
   }
@@ -227,7 +251,7 @@ export async function accruePayoutForApprovedOrder(orderId: string): Promise<boo
       kind: 'client_signoff',
       title: 'Creator payout failed to record',
       body: `Approving a creator piece didn't record its $${Math.round(row.net_cents / 100)} payout (${insErr.message}). Accrue it manually.`,
-      link: `/work/campaigns?focus=${row.campaign_id ?? ''}`,
+      link: `/work/today?focus=${row.campaign_id ?? ''}`,
     }).catch(() => ({ notified: 0 }))
     return false
   }
@@ -312,12 +336,27 @@ export async function reconcileCampaignProduction(campaign: SavedCampaign): Prom
     }
     if (error) failures++; else minted = orderRows.length
   }
+  // Only revive orders WE voided when the owner removed the piece (stamped with
+  // PLAN_REMOVED_NOTE). A creator's own decline is terminal here: silently re-offering
+  // it to the same creator who said no (wiping their note) helps nobody — a human
+  // reassigns instead (flagged below).
+  let staleDeclines = 0
   for (const u of rec.reviveOrderIds) {
-    const { error } = await admin.from('creator_work_orders').update({ status: 'offered', due_date: u.dueISO, note: null, updated_at: ts() }).eq('id', u.id).eq('status', 'declined')
-    if (error) failures++; else revived++
+    const { data, error } = await admin.from('creator_work_orders').update({ status: 'offered', due_date: u.dueISO, note: null, updated_at: ts() }).eq('id', u.id).eq('status', 'declined').eq('note', PLAN_REMOVED_NOTE).select('id')
+    if (error) failures++
+    else if (data?.length) revived++
+    else staleDeclines++
+  }
+  if (staleDeclines > 0) {
+    await notifyStaffForClient(campaign.clientId, ['strategist'], {
+      kind: 'client_signoff',
+      title: 'A plan edit needs a new maker',
+      body: `${campaign.draft.name}: ${staleDeclines} piece${staleDeclines === 1 ? '' : 's'} came back into the plan, but the creator declined it earlier. Assign someone else.`,
+      link: `/work/today?focus=${campaignId}`,
+    }).catch(() => ({ notified: 0 }))
   }
   if (rec.voidOrderIds.length) {
-    const { data, error } = await admin.from('creator_work_orders').update({ status: 'declined', note: 'Removed from the plan', updated_at: ts() }).in('id', rec.voidOrderIds).in('status', ['offered', 'accepted']).select('id')
+    const { data, error } = await admin.from('creator_work_orders').update({ status: 'declined', note: PLAN_REMOVED_NOTE, updated_at: ts() }).in('id', rec.voidOrderIds).in('status', ['offered', 'accepted']).select('id')
     if (error) failures++; else voided = data?.length ?? 0
   }
   for (const u of rec.redateOrders) { const { error } = await admin.from('creator_work_orders').update({ due_date: u.dueISO, updated_at: ts() }).eq('id', u.id).in('status', ['offered', 'accepted']); if (error) failures++; else redated++ }
@@ -349,7 +388,7 @@ export async function reconcileCampaignProduction(campaign: SavedCampaign): Prom
       kind: 'client_signoff',
       title: 'Campaign edit needs a manual review',
       body: `${campaign.draft.name}: ${conflicts} in-flight piece${conflicts === 1 ? '' : 's'} were removed from the plan but kept (cancel or reschedule by hand)${failures ? `; ${failures} sync action${failures === 1 ? '' : 's'} failed and need redoing` : ''}.`,
-      link: `/work/campaigns?focus=${campaignId}`,
+      link: `/work/today?focus=${campaignId}`,
     }).catch(() => ({ notified: 0 }))
   }
   return { minted, revived, materialized, voided, archived, redated, conflicts }
@@ -428,7 +467,7 @@ export async function accrueChargeForApprovedOrder(orderId: string): Promise<boo
       kind: 'client_signoff',
       title: 'Approved piece has no price to bill',
       body: 'A creator piece was approved with no amount. Set its price and accrue the charge manually.',
-      link: `/work/campaigns?focus=${row.campaign_id ?? ''}`,
+      link: `/work/today?focus=${row.campaign_id ?? ''}`,
     }).catch(() => ({ notified: 0 }))
     return false
   }
@@ -441,7 +480,7 @@ export async function accrueChargeForApprovedOrder(orderId: string): Promise<boo
       kind: 'client_signoff',
       title: 'Owner charge failed to record',
       body: `Approving a creator piece didn't record its $${Math.round(row.amount_cents / 100)} charge (${insErr.message}). Accrue it manually.`,
-      link: `/work/campaigns?focus=${row.campaign_id ?? ''}`,
+      link: `/work/today?focus=${row.campaign_id ?? ''}`,
     }).catch(() => ({ notified: 0 }))
     return false
   }
@@ -485,17 +524,32 @@ export async function bridgeApprovedOrderToDraft(orderId: string): Promise<strin
     delivered_url: o.delivered_url as string | null,
     brief_details: o.brief_details as { creative?: { caption?: unknown; hashtags?: unknown } } | null,
   })
+  // A failed bridge means paid, approved work never enters the publish queue and no
+  // sweep retries it — the dead-letter is the only recovery signal, like the money paths.
+  const bridgeDeadLetter = () => notifyStaffForClient(o.client_id as string, ['strategist'], {
+    kind: 'client_signoff',
+    title: 'An approved delivery did not reach the publish queue',
+    body: `${(o.title as string) || 'An approved creator piece'} was approved but its publish draft failed to create. Add it to the drafts queue by hand.`,
+    link: `/work/today?focus=${(o.campaign_id as string) ?? ''}`,
+  }).catch(() => ({ notified: 0 }))
   const { data: draft, error: insErr } = await admin
     .from('content_drafts')
     .insert(row)
     .select('id').single()
-  if (insErr || !draft) return null
+  if (insErr || !draft) {
+    await bridgeDeadLetter()
+    return null
+  }
   // Link only if still unlinked; if the link fails (lost race, or the FK column is
   // absent pre-179), delete the orphan draft so we never double-produce the piece.
   const { data: linked, error: linkErr } = await admin.from('creator_work_orders')
     .update({ content_draft_id: draft.id }).eq('id', orderId).is('content_draft_id', null).select('id').maybeSingle()
   if (linkErr || !linked) {
     await admin.from('content_drafts').delete().eq('id', draft.id as string)
+    // A lost race is benign (the other bridge won and the piece has a draft). Only a
+    // still-unlinked order after cleanup is a real drop worth a human.
+    const { data: after } = await admin.from('creator_work_orders').select('content_draft_id').eq('id', orderId).maybeSingle()
+    if (!after?.content_draft_id) await bridgeDeadLetter()
     return null
   }
   return draft.id as string

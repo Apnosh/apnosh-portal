@@ -4,12 +4,14 @@
  * Drives email_campaigns through the state machine:
  *   - save: update subject / previewText / bodyText (status stays)
  *   - schedule: draft|in_review|approved → scheduled (sets scheduled_for)
- *   - send: any pre-send → sent (simulated dispatch + simulated metrics)
+ *   - send: any pre-send → sent (simulated dispatch, NO metrics)
  *   - cancel: scheduled|sending → cancelled
  *
- * The actual ESP wiring (Postmark/Resend) is downstream; for now
- * 'send' simulates dispatch with a recipient count and ~20% open
- * rate / ~3% click rate seeded on the row.
+ * The actual ESP wiring (Postmark/Resend) is downstream; until it lands,
+ * 'send' only flips status and flags the row as a simulated send. It must
+ * NOT invent recipients/opens/clicks — the owner email pages render those
+ * columns as real performance, so metrics stay at their defaults (0 =
+ * never tracked) until a real ESP writes them.
  */
 
 import { NextResponse, type NextRequest } from 'next/server'
@@ -36,6 +38,12 @@ const SEND_FROM: Record<Action, string[]> = {
   cancel:   ['scheduled', 'sending'],
 }
 
+// Simulated sends are flagged in notes (the only free-text column the row
+// has) so every reader can tell the campaign never really went out. The
+// owner email pages look for this exact marker and hide metrics for it —
+// keep the string in sync with src/app/dashboard/email-sms/*.
+const SIMULATED_NOTE = '[simulated send]'
+
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -51,7 +59,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const { data: existing } = await supabase
     .from('email_campaigns')
-    .select('id, client_id, status, segment_name')
+    .select('id, client_id, status, notes')
     .eq('id', id)
     .maybeSingle()
   if (!existing) return NextResponse.json({ error: 'campaign not found' }, { status: 404 })
@@ -74,28 +82,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (body.action === 'cancel') {
     patch.status = 'cancelled'
   }
-  let simulatedMetrics: { recipients: number; opens: number; clicks: number } | null = null
   if (body.action === 'send') {
-    // Simulate dispatch: recipient count keyed off segment, then metrics
-    // seeded with rough industry rates so the Sent rail shows something.
-    const segmentSize: Record<string, number> = {
-      'all-subscribers': 1840,
-      'lapsed': 420,
-      'loyalty': 310,
-      'new-local': 95,
-    }
-    const seg = (existing.segment_name as string) ?? 'all-subscribers'
-    const recipients = segmentSize[seg] ?? 1000
-    const opens = Math.round(recipients * (0.18 + Math.random() * 0.06))   // 18-24%
-    const clicks = Math.round(opens * (0.06 + Math.random() * 0.04))        // 6-10% CTR of opens
+    // Simulated dispatch: nothing actually goes out, so nothing is written
+    // to recipient_count/opens/clicks/unsubscribes/bounces — those stay at
+    // their column defaults until a real ESP fills them. The row is flagged
+    // in notes (appended, so an existing admin note survives).
+    const priorNotes = (existing.notes as string | null) ?? ''
     patch.status = 'sent'
     patch.sent_at = new Date().toISOString()
-    patch.recipient_count = recipients
-    patch.opens = opens
-    patch.clicks = clicks
-    patch.unsubscribes = Math.max(0, Math.round(recipients * 0.002))
-    patch.bounces = Math.max(0, Math.round(recipients * 0.01))
-    simulatedMetrics = { recipients, opens, clicks }
+    if (!priorNotes.includes(SIMULATED_NOTE)) {
+      patch.notes = priorNotes ? `${priorNotes}\n${SIMULATED_NOTE}` : SIMULATED_NOTE
+    }
   }
 
   const { error } = await admin.from('email_campaigns').update(patch).eq('id', id)
@@ -108,15 +105,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     subject_id: id,
     actor_id: user.id,
     actor_role: 'staff',
-    summary: body.action === 'send' && simulatedMetrics
-      ? `Sent ${simulatedMetrics.recipients} (${simulatedMetrics.opens} open / ${simulatedMetrics.clicks} click — simulated)`
+    summary: body.action === 'send'
+      ? 'Sent (simulated dispatch, no delivery metrics)'
       : `Campaign ${body.action}`,
-    payload: simulatedMetrics ? simulatedMetrics : {},
+    payload: body.action === 'send' ? { simulated: true } : {},
   })
 
   return NextResponse.json({
     ok: true,
     status: patch.status ?? existing.status,
-    ...(simulatedMetrics ? { recipientCount: simulatedMetrics.recipients, opens: simulatedMetrics.opens, clicks: simulatedMetrics.clicks } : {}),
+    ...(body.action === 'send' ? { simulated: true } : {}),
   })
 }
