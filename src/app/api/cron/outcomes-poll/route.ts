@@ -7,9 +7,10 @@
  */
 import { NextResponse } from 'next/server'
 import { pollOutcomes } from '@/lib/campaigns/outcomes/reconcile'
+import { sweepCampaignCompletions } from '@/lib/campaigns/completion'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 120
 
 const CRON_SECRET = process.env.CRON_SECRET
 
@@ -24,5 +25,8 @@ export async function GET(req: Request) {
   }
 
   const result = await pollOutcomes().catch((e) => ({ error: e instanceof Error ? e.message : 'poll failed', campaigns: 0, written: 0 }))
-  return NextResponse.json({ ok: true, ...result })
+  // After fresh outcome snapshots land: wrap any campaign whose every piece is
+  // done (stamps execution.wrapUpSentAt + sends the owner the grounded letter).
+  const completions = await sweepCampaignCompletions().catch((e) => ({ error: e instanceof Error ? e.message : 'completion sweep failed', checked: 0, completed: 0, notified: 0 }))
+  return NextResponse.json({ ok: true, ...result, completions })
 }

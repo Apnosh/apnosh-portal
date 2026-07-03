@@ -425,26 +425,55 @@ export async function campaignHasAccruedMoney(campaignId: string): Promise<boole
  * deferred here. Idempotent (the accrue fns no-op if already present), best-effort,
  * and a no-op pre-180/181. Run by the reconcile cron, or scoped to one campaign.
  */
-export async function reconcileAccruals(opts?: { campaignId?: string }): Promise<{ ordersChecked: number; chargesRecovered: number; payoutsRecovered: number }> {
+export async function reconcileAccruals(opts?: { campaignId?: string }): Promise<{ ordersChecked: number; chargesRecovered: number; payoutsRecovered: number; draftsChecked: number; teamChargesRecovered: number }> {
   const admin = createAdminClient()
-  const ZERO = { ordersChecked: 0, chargesRecovered: 0, payoutsRecovered: 0 }
+  const ZERO = { ordersChecked: 0, chargesRecovered: 0, payoutsRecovered: 0, draftsChecked: 0, teamChargesRecovered: 0 }
   let oq = admin.from('creator_work_orders').select('id, amount_cents').eq('status', 'approved')
   if (opts?.campaignId) oq = oq.eq('campaign_id', opts.campaignId)
   const { data: orders, error } = await oq          // pre-180: amount_cents absent → error → no-op
-  if (error || !orders || !orders.length) return ZERO
-  const approved = orders.map((o) => ({ id: o.id as string, amount_cents: (o.amount_cents as number) ?? 0 }))
-  const ids = approved.map((o) => o.id)
-  const [{ data: ch }, { data: po }] = await Promise.all([
-    admin.from('campaign_charges').select('work_order_id').in('work_order_id', ids),
-    admin.from('creator_payouts').select('work_order_id').in('work_order_id', ids),
-  ])
-  const charged = new Set((ch ?? []).map((r) => r.work_order_id as string))
-  const paid = new Set((po ?? []).map((r) => r.work_order_id as string))
-  const { needCharge, needPayout } = findUnaccrued(approved, charged, paid)
-  let chargesRecovered = 0, payoutsRecovered = 0
-  for (const id of needCharge) if (await accrueChargeForApprovedOrder(id).catch(() => false)) chargesRecovered++
-  for (const id of needPayout) if (await accruePayoutForApprovedOrder(id).catch(() => false)) payoutsRecovered++
-  return { ordersChecked: approved.length, chargesRecovered, payoutsRecovered }
+  let ordersChecked = 0, chargesRecovered = 0, payoutsRecovered = 0
+  if (!error && orders && orders.length) {
+    const approved = orders.map((o) => ({ id: o.id as string, amount_cents: (o.amount_cents as number) ?? 0 }))
+    const ids = approved.map((o) => o.id)
+    const [{ data: ch }, { data: po }] = await Promise.all([
+      admin.from('campaign_charges').select('work_order_id').in('work_order_id', ids),
+      admin.from('creator_payouts').select('work_order_id').in('work_order_id', ids),
+    ])
+    const charged = new Set((ch ?? []).map((r) => r.work_order_id as string))
+    const paid = new Set((po ?? []).map((r) => r.work_order_id as string))
+    const { needCharge, needPayout } = findUnaccrued(approved, charged, paid)
+    for (const id of needCharge) if (await accrueChargeForApprovedOrder(id).catch(() => false)) chargesRecovered++
+    for (const id of needPayout) if (await accruePayoutForApprovedOrder(id).catch(() => false)) payoutsRecovered++
+    ordersChecked = approved.length
+  }
+
+  // Team/AI lane: published campaign drafts missing their charge. Bridge drafts
+  // (from_creator) are excluded — those billed via their work order; charging the
+  // draft too would double-bill the piece. Pre-182 (no campaign_piece_key) the
+  // select errors → the branch no-ops, same degradation posture as the creator lane.
+  let draftsChecked = 0, teamChargesRecovered = 0
+  let dq = admin.from('content_drafts')
+    .select('id')
+    .eq('status', 'published')
+    .not('campaign_id', 'is', null)
+    .not('campaign_piece_key', 'is', null)
+    .or('media_brief->>from_creator.is.null,media_brief->>from_creator.neq.true')
+    .limit(500)
+  if (opts?.campaignId) dq = dq.eq('campaign_id', opts.campaignId)
+  const { data: drafts, error: dErr } = await dq
+  if (!dErr && drafts && drafts.length) {
+    const draftIds = drafts.map((d) => d.id as string)
+    const { data: dch } = await admin.from('campaign_charges').select('content_draft_id').in('content_draft_id', draftIds)
+    const chargedDrafts = new Set((dch ?? []).map((r) => r.content_draft_id as string))
+    for (const id of draftIds) {
+      if (chargedDrafts.has(id)) continue
+      if (await accrueChargeForPublishedDraft(id).catch(() => false)) teamChargesRecovered++
+    }
+    draftsChecked = draftIds.length
+  }
+
+  if (!ordersChecked && !draftsChecked) return ZERO
+  return { ordersChecked, chargesRecovered, payoutsRecovered, draftsChecked, teamChargesRecovered }
 }
 
 /**
@@ -492,6 +521,60 @@ export async function accrueChargeForApprovedOrder(orderId: string): Promise<boo
       title: 'Owner charge failed to record',
       body: `Approving a creator piece didn't record its $${Math.round(row.amount_cents / 100)} charge (${insErr.message}). Accrue it manually.`,
       link: `/work/today?focus=${row.campaign_id ?? ''}`,
+    }).catch(() => ({ notified: 0 }))
+    return false
+  }
+  return true
+}
+
+/**
+ * Money-in, TEAM/AI lane: when a campaign-minted content_draft actually PUBLISHES,
+ * accrue the owner charge for it — the trigger that matches the owner-facing copy
+ * ("each piece is charged only when it ships"). The creator lane accrues on delivery
+ * approval; team/AI pieces never accrued at all before this (migration 180 built the
+ * content_draft_id slot for exactly this — the first writer to use it).
+ *
+ * Price comes from planCampaignPieces at accrual time (team drafts carry no locked
+ * amount_cents, unlike creator orders). Bridge drafts (media_brief.from_creator) are
+ * EXCLUDED — those already billed via their work order; charging their draft too
+ * would double-bill the piece. Idempotent via the partial unique index on
+ * content_draft_id (23505 → already accrued). Degrades to a no-op pre-180.
+ */
+export async function accrueChargeForPublishedDraft(draftId: string): Promise<boolean> {
+  const admin = createAdminClient()
+  // select('*') so a missing campaign_piece_key column (pre-182) doesn't error the read.
+  const { data: d, error } = await admin.from('content_drafts').select('*').eq('id', draftId).single()
+  if (error || !d) return false
+  const campaignId = (d.campaign_id as string | null) ?? null
+  const pieceKey = 'campaign_piece_key' in d ? ((d.campaign_piece_key as string | null) ?? null) : null
+  if (!campaignId || !pieceKey) return false           // not a campaign piece → nothing to bill here
+  const brief = (d.media_brief && typeof d.media_brief === 'object' ? d.media_brief : {}) as Record<string, unknown>
+  if (brief.from_creator === true || brief.from_creator === 'true') return false  // bills via its work order
+  if (d.status !== 'published' && !d.published_at) return false
+  // Resolve the piece's price from the plan (dynamic import: server.ts consumes this
+  // module's minters, so a static import would be a cycle).
+  const { getCampaign } = await import('./server')
+  const campaign = await getCampaign(campaignId)
+  if (!campaign) return false
+  const piece = planCampaignPieces(campaign, new Date().toISOString()).find((p) => p.key === pieceKey)
+  if (!piece) return false                             // piece left the plan — reconcile flags that path
+  if ((piece.priceCents ?? 0) <= 0) return false       // DIY/free by design → nothing to bill, no dead-letter
+  const { error: insErr } = await admin.from('campaign_charges').insert({
+    client_id: d.client_id as string,
+    campaign_id: campaignId,
+    content_draft_id: draftId,
+    source: 'team',
+    amount_cents: piece.priceCents,
+    status: 'accrued',
+  })
+  if (insErr) {
+    if (insErr.code === '23505') return true           // already accrued (idempotent)
+    if (insErr.code === '42P01') return false          // pre-180 → silent no-op
+    await notifyStaffForClient(d.client_id as string, ['strategist'], {
+      kind: 'client_signoff',
+      title: 'Published piece charge failed to record',
+      body: `A published campaign piece didn't record its $${Math.round(piece.priceCents / 100)} charge (${insErr.message}). Accrue it manually.`,
+      link: `/work/today?focus=${campaignId}`,
     }).catch(() => ({ notified: 0 }))
     return false
   }

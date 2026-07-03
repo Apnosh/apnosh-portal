@@ -52,15 +52,23 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   // pre-satisfy others. Never block the report on these — mirror the socialConnected try/catch.
   const doneSetup = new Set<string>()
   let hasMenuItems = false
+  // Card on file? Pieces bill as they publish (campaign_charges accrual), so the ready
+  // page asks for a payment method up front. billing_customers is the webhook-fresh
+  // mirror of the Stripe default payment method. Default true on any read failure so
+  // a billing hiccup never nags the owner falsely.
+  let hasPaymentMethod = true
   try {
-    const [chanRes, socRes, menuRes] = await Promise.all([
+    const [chanRes, socRes, menuRes, payRes] = await Promise.all([
       admin.from('channel_connections').select('channel').eq('client_id', clientId).eq('status', 'active'),
       admin.from('social_connections').select('platform').eq('client_id', clientId).eq('sync_status', 'active'),
       admin.from('menu_items').select('id', { count: 'exact', head: true }).eq('client_id', clientId),
+      admin.from('billing_customers').select('default_payment_method_id, payment_method_last4').eq('client_id', clientId).maybeSingle(),
     ])
     if (((chanRes.data ?? []) as { channel?: string }[]).some((c) => c.channel === 'google_business_profile')) { doneSetup.add('gbp-setup'); doneSetup.add('review-claim') }
     if (((socRes.data ?? []) as { platform?: string }[]).some((s) => s.platform === 'instagram' || s.platform === 'facebook')) doneSetup.add('channel-connect')
     hasMenuItems = (menuRes.count ?? 0) > 0
+    const pay = payRes.data as { default_payment_method_id?: string | null; payment_method_last4?: string | null } | null
+    hasPaymentMethod = !!(pay && (pay.default_payment_method_id || pay.payment_method_last4))
   } catch { /* best-effort */ }
   const hasAddress = typeof biz?.address === 'string' && (biz.address as string).trim().length > 0
 
@@ -86,7 +94,7 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   items.push({ id: 'go_live', kind: 'input', group: 'Scheduling', field: 'go_live', inputType: 'date', saveTo: 'target_date', title: 'When do you want to go live?', why: 'Pick a target so the team has runway to produce.', value: campaign.draft.targetDate ?? '', done: scheduleSet })
 
   // ── service-driven needs: only what THIS campaign's services require ──
-  for (const n of deriveServiceNeeds(campaign, { doneSetup, hasMenuItems, hasAddress, exec })) {
+  for (const n of deriveServiceNeeds(campaign, { doneSetup, hasMenuItems, hasAddress, hasPaymentMethod, exec })) {
     if (items.some((i) => i.id === n.id || (n.field && i.field === n.field))) continue
     items.push(n)
   }

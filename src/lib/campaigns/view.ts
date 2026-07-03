@@ -72,6 +72,10 @@ export interface CampaignExecution {
   vendorInfo?: string    // ordering / POS / booking system (from a pos-vendor service)
   menuSource?: string    // where to find the current menu (from a menu service)
   setupSkipped?: string  // comma-separated readiness action ids the owner deferred ("Skip for now")
+  /** ISO stamp: the completion sweep sent the owner's wrap-up letter. System-written
+   *  (cron via admin client); NOT in the owner PATCH whitelist, so it cannot be forged
+   *  or cleared through the API. */
+  wrapUpSentAt?: string
 }
 
 /** Owner-facing rollup of a shipped campaign's pieces (content_drafts), so the

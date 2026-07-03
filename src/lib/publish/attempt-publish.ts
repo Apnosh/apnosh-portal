@@ -310,6 +310,18 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
     payload: { perPlatform, overall },
   })
 
+  // Money-in: a published TEAM/AI campaign piece accrues its owner charge here —
+  // this is the one success point every publish path shares (manual, cron,
+  // auto-on-signoff). Best-effort + idempotent; non-campaign drafts no-op inside.
+  // Dynamic import: work-orders pulls in the campaign server module, keeping this
+  // publish lib free of a static dependency cycle.
+  try {
+    const { accrueChargeForPublishedDraft } = await import('@/lib/campaigns/work-orders')
+    await accrueChargeForPublishedDraft(draftId)
+  } catch (e) {
+    console.error('publish charge accrual threw', draftId, e)
+  }
+
   // Suppress the "all failed" case (handled above). If we got here,
   // at least one platform succeeded — surface that as ok, with the
   // partial-failure visible in perPlatform.

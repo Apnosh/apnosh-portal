@@ -19,14 +19,22 @@ const LIST_SERVICES = new Set(['crm-list', 'email-found'])
 
 export function deriveServiceNeeds(
   campaign: SavedCampaign,
-  opts: { doneSetup: Set<string>; hasMenuItems: boolean; hasAddress: boolean; exec: CampaignExecution },
+  opts: { doneSetup: Set<string>; hasMenuItems: boolean; hasAddress: boolean; hasPaymentMethod?: boolean; exec: CampaignExecution },
 ): ReadinessItem[] {
-  const { doneSetup, hasMenuItems, hasAddress, exec } = opts
+  const { doneSetup, hasMenuItems, hasAddress, hasPaymentMethod = true, exec } = opts
   const svc = (campaign.draft.items ?? []).filter((it) => it.included && !isContent(it.serviceId))
   const ids = new Set(svc.map((s) => s.serviceId).filter((x): x is string => !!x))
   const out: ReadinessItem[] = []
   const seen = new Set<string>()
   const push = (it: ReadinessItem) => { if (!seen.has(it.id)) { seen.add(it.id); out.push(it) } }
+
+  // ── money: pieces bill as they publish, so a billable campaign needs a card on file.
+  // Only asked while missing (billing_customers has no default payment method) and only
+  // when this campaign actually bills anything. /dashboard/billing hosts the add-card rail.
+  const billsAnything = (campaign.draft.items ?? []).some((it) => it.included && !it.optOut && (it.price ?? 0) > 0)
+  if (!hasPaymentMethod && billsAnything && campaign.draft.path !== 'diy') {
+    push({ id: 'payment-method', kind: 'action', group: 'Info', title: 'Add a payment method', why: 'Each piece bills only when it ships. A card on file keeps the work moving.', actionLabel: 'Add card', href: '/dashboard/billing', done: false })
+  }
 
   // ── gate-driven needs: each setup service's external dependency implies one owner-facing ask ──
   for (const id of ids) {
