@@ -85,7 +85,9 @@ export interface MetricView {
   weekPct: number
   monthPct: number
   prevMonthLabel: string
-  chart: { label: string; value: number; prev: number }[]
+  // settled = fully reported (counted in the %); elapsed = has happened (counted
+  // in the total/average). The current week's not-yet-reported days are neither.
+  chart: { label: string; value: number; prev: number; settled?: boolean; elapsed?: boolean }[]
   chartStart?: string
   daily: { date: string; value: number }[]
   monthly: { label: string; value: number; ym: string }[]
@@ -577,8 +579,10 @@ export function isoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-type ChartSrc = { chart: { label: string; value: number; prev: number }[]; chartStart?: string; daily?: { date: string; value: number }[]; monthly?: { label: string; value: number; ym: string }[] }
-type Bar = { value: number; compare: number; label: string; tip: string; cmpLabel: string; cmpDate: string }
+type ChartSrc = { chart: { label: string; value: number; prev: number; settled?: boolean; elapsed?: boolean }[]; chartStart?: string; daily?: { date: string; value: number }[]; monthly?: { label: string; value: number; ym: string }[]; lastDataDate?: string }
+// settled = fully reported → counted in the %; elapsed = has happened → counted
+// in the total/average. A future/not-yet-reported day is neither (shown, empty).
+type Bar = { value: number; compare: number; label: string; tip: string; cmpLabel: string; cmpDate: string; settled: boolean; elapsed: boolean }
 export interface RangeSummary {
   bars: Bar[]; curLbl: string; cmpLbl: string; cmpFrame: string
   total: number; compareTotal: number; deltaPct: number
@@ -594,22 +598,31 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
   const parseISO = (s: string) => new Date(s + 'T00:00:00')
   const dmap = new Map(daily.map((d) => [d.date, d.value]))
   const start = chartStart ? parseISO(chartStart) : null
+  const frontier = src.lastDataDate ? parseISO(src.lastDataDate) : null
   const wk = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short' })
   const full = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
   let bars: Bar[] = []; let curLbl = ''; let cmpLbl = ''; let cmpFrame = ''; let periodDays = 7
 
   if (range === '7d') {
-    curLbl = 'Last 7 days'; cmpLbl = 'Last week'; cmpFrame = 'vs last week'; periodDays = 7
+    curLbl = 'This week'; cmpLbl = 'Last week'; cmpFrame = 'vs last week'; periodDays = 7
+    // The current Sun–Sat week; the transform already stamped settled/elapsed
+    // per day (future days elapsed=false; the still-filling frontier day
+    // settled=false). Carry them through so the trend/total honor them.
     bars = chart.map((b, i) => {
       const d = start ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + i) : null
       const prior = d ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 7) : null
-      return { value: b.value, compare: b.prev, label: d ? wk(d) : b.label, tip: d ? full(d) : b.label, cmpLabel: 'last week', cmpDate: prior ? full(prior) : '' }
+      const elapsed = b.elapsed ?? true
+      const settled = b.settled ?? (i < chart.length - 1)
+      return { value: b.value, compare: b.prev, label: d ? wk(d) : b.label, tip: d ? full(d) : b.label, cmpLabel: 'last week', cmpDate: prior ? full(prior) : '', settled, elapsed }
     })
   } else if (range === '30d') {
     curLbl = 'Last 30 days'; cmpLbl = 'Prior 30 days'; cmpFrame = 'vs prior 30 days'; periodDays = 30
-    bars = daily.slice(-30).map((d) => {
+    const rows = daily.slice(-30)
+    bars = rows.map((d, i) => {
       const dt = parseISO(d.date); const prior = new Date(dt); prior.setDate(prior.getDate() - 30)
-      return { value: d.value, compare: dmap.get(isoDate(prior)) ?? 0, label: String(dt.getDate()), tip: full(dt), cmpLabel: '30 days earlier', cmpDate: full(prior) }
+      // The `daily` series ends AT the frontier, so only the last row is the
+      // still-filling day → not settled; every day has elapsed.
+      return { value: d.value, compare: dmap.get(isoDate(prior)) ?? 0, label: String(dt.getDate()), tip: full(dt), cmpLabel: '30 days earlier', cmpDate: full(prior), settled: i < rows.length - 1, elapsed: true }
     })
   } else if (range === '1y') {
     curLbl = 'Last 12 months'; cmpLbl = 'Prior year'; cmpFrame = 'vs prior year'; periodDays = 365
@@ -619,10 +632,11 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
     // last year's data exists.
     const byKey = new Map(monthly.map((mo) => [mo.ym, mo.value]))
     const last12 = monthly.slice(-12)
-    bars = last12.map((mo) => {
+    bars = last12.map((mo, i) => {
       const yr = Number(mo.ym.slice(0, 4)); const mi = Number(mo.ym.slice(5, 7))
       const priorKey = `${yr - 1}-${String(mi).padStart(2, '0')}`
-      return { value: mo.value, compare: byKey.get(priorKey) ?? 0, label: mo.label.slice(0, 3), tip: `${mo.label} ${yr}`, cmpLabel: 'a year earlier', cmpDate: `${mo.label} ${yr - 1}` }
+      // The last month is the current, still-accruing one → not settled.
+      return { value: mo.value, compare: byKey.get(priorKey) ?? 0, label: mo.label.slice(0, 3), tip: `${mo.label} ${yr}`, cmpLabel: 'a year earlier', cmpDate: `${mo.label} ${yr - 1}`, settled: i < last12.length - 1, elapsed: true }
     })
   } else {
     curLbl = 'Custom'; cmpLbl = 'Prior period'; cmpFrame = 'vs prior period'
@@ -632,21 +646,26 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
     bars = Array.from({ length: span }, (_, i) => {
       const dt = new Date(lo.getFullYear(), lo.getMonth(), lo.getDate() + i)
       const prior = new Date(dt); prior.setDate(prior.getDate() - span)
-      return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpLabel: 'prior period', cmpDate: full(prior) }
+      // Date-aware: days past the frontier haven't happened; the frontier day
+      // itself is still filling in.
+      const elapsed = frontier ? dt.getTime() <= frontier.getTime() : true
+      const settled = frontier ? dt.getTime() < frontier.getTime() : i < span - 1
+      return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpLabel: 'prior period', cmpDate: full(prior), settled, elapsed }
     })
   }
 
-  const total = bars.reduce((s, b) => s + b.value, 0)
+  // total + average count ELAPSED bars (days/months that have happened); the %
+  // counts only SETTLED bars (fully reported) — so the still-filling latest
+  // period is shown but never tilts the up/down, and future days don't drag the
+  // average. max spans all bars so the axis is stable.
+  const elapsed = bars.filter((b) => b.elapsed)
+  const settled = bars.filter((b) => b.settled)
+  const total = elapsed.reduce((s, b) => s + b.value, 0)
   const compareTotal = bars.reduce((s, b) => s + b.compare, 0)
-  // The up/down % drops the NEWEST bar and its comparison: the latest day (or
-  // month) is still filling in — Google backfills it for a few days — so a
-  // half-reported period must never fake a trend. The bar is still SHOWN; it
-  // just isn't counted in the direction.
-  const trend = bars.length > 1 ? bars.slice(0, -1) : bars
-  const curTrend = trend.reduce((s, b) => s + b.value, 0)
-  const cmpTrend = trend.reduce((s, b) => s + b.compare, 0)
-  const deltaPct = cmpTrend === 0 ? (curTrend > 0 ? 100 : 0) : Math.round(((curTrend - cmpTrend) / cmpTrend) * 100)
-  const avg = bars.length ? Math.round(total / bars.length) : 0
+  const curTrend = settled.reduce((s, b) => s + b.value, 0)
+  const cmpTrend = settled.reduce((s, b) => s + b.compare, 0)
+  const deltaPct = settled.length === 0 ? 0 : (cmpTrend === 0 ? (curTrend > 0 ? 100 : 0) : Math.round(((curTrend - cmpTrend) / cmpTrend) * 100))
+  const avg = elapsed.length ? Math.round(total / elapsed.length) : 0
   const max = Math.max(1, ...bars.map((b) => Math.max(b.value, b.compare)), avg)
   return { bars, curLbl, cmpLbl, cmpFrame, total, compareTotal, deltaPct, avg, max, periodDays }
 }

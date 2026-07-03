@@ -73,41 +73,52 @@ function buildMetricView(m: HomeMetric): MetricView {
   const dmap = new Map(daily.map((d) => [d.date, d.value]))
   const lastDataDate = daily.length ? daily[daily.length - 1].date : ''
 
-  // Headline = the ROLLING last 7 settled days ending at the frontier (not the
-  // last calendar week — that hid ~a week of ready data). The newest day is SHOWN
-  // in the chart but EXCLUDED from the up/down %, because Google keeps filling in
-  // the most recent day for a few days and a half-reported day must never fake a
-  // trend. So: total counts all 7 days; the % compares only the settled days
-  // before the newest one, against the aligned prior week.
+  // The 7-day view is the CURRENT calendar week, Sunday → Saturday (7 bars),
+  // filling in day by day. It's anchored to the week that CONTAINS the data
+  // frontier (the latest day with data), so it's always the freshest week, not
+  // a week that ended days ago. Days past the frontier are shown as empty bars
+  // ("this week so far"). Two honesty flags per day drive the math below:
+  //   elapsed = the day has happened (<= frontier)     → counted in the total + average
+  //   settled = the day is fully reported (< frontier) → counted in the up/down %
+  // The still-filling frontier day is elapsed-but-not-settled: SHOWN and in the
+  // total, but never in the % (a half-reported day must not fake a trend).
   const DAY = 86400000
-  const roll: { value: number; prev: number; dow: number }[] = []
+  const week: { label: string; value: number; prev: number; settled: boolean; elapsed: boolean }[] = []
   if (lastDataDate) {
     const f = new Date(lastDataDate + 'T00:00:00')
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(f.getTime() - i * DAY)
+    const sun = new Date(f.getTime() - f.getDay() * DAY)   // Sunday of the frontier's week
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(sun.getTime() + i * DAY)
       const p = new Date(d.getTime() - 7 * DAY)
-      roll.push({ value: dmap.get(ymd(d)) ?? 0, prev: dmap.get(ymd(p)) ?? 0, dow: d.getDay() })
+      const elapsed = d.getTime() <= f.getTime()
+      week.push({
+        label: DOW[d.getDay()],
+        value: elapsed ? (dmap.get(ymd(d)) ?? 0) : 0,
+        prev: dmap.get(ymd(p)) ?? 0,
+        settled: d.getTime() < f.getTime(),
+        elapsed,
+      })
     }
   }
-  // Fallback (no daily data): the old last-complete-week path keeps working.
+  // Fallback (no daily data): the old last-populated-week path keeps working.
   let ti = Math.max(0, weeks.length - 2)
   while (ti > 0 && (weeks[ti]?.total ?? 0) === 0) ti--
   const thisWeek = weeks[ti]
   const lastWeek = weeks[ti - 1]
 
-  const chart = roll.length
-    ? roll.map((r) => ({ label: DOW[r.dow], value: r.value, prev: r.prev }))
-    : DOW.map((label, i) => ({ label, value: Number((thisWeek?.vals ?? [])[i] ?? 0), prev: Number((lastWeek?.vals ?? [])[i] ?? 0) }))
-  const chartStartISO = roll.length && lastDataDate
-    ? ymd(new Date(new Date(lastDataDate + 'T00:00:00').getTime() - 6 * DAY))
+  const chart = week.length
+    ? week.map((w) => ({ label: w.label, value: w.value, prev: w.prev, settled: w.settled, elapsed: w.elapsed }))
+    : DOW.map((label, i) => ({ label, value: Number((thisWeek?.vals ?? [])[i] ?? 0), prev: Number((lastWeek?.vals ?? [])[i] ?? 0), settled: true, elapsed: true }))
+  const chartStartISO = week.length && lastDataDate
+    ? ymd(new Date(new Date(lastDataDate + 'T00:00:00').getTime() - new Date(lastDataDate + 'T00:00:00').getDay() * DAY))
     : thisWeek?.start
-  const total = roll.length ? roll.reduce((s, r) => s + r.value, 0) : (thisWeek?.total ?? 0)
-  // Trend drops the newest day (roll[6]) and its comparison, so a still-filling
-  // latest day can't tilt up/down. Compares the 6 settled days before it to the
-  // same 6 days a week earlier.
-  const settledDays = roll.slice(0, -1)
-  const weekPct = roll.length
-    ? pct(settledDays.reduce((s, r) => s + r.value, 0), settledDays.reduce((s, r) => s + r.prev, 0))
+  const elapsedDays = week.filter((w) => w.elapsed)
+  const total = week.length ? elapsedDays.reduce((s, w) => s + w.value, 0) : (thisWeek?.total ?? 0)
+  // % over SETTLED days only (this week so far, minus the still-filling day),
+  // vs the same weekdays last week — so the newest partial day can't tilt it.
+  const settledDays = week.filter((w) => w.settled)
+  const weekPct = week.length
+    ? (settledDays.length ? pct(settledDays.reduce((s, w) => s + w.value, 0), settledDays.reduce((s, w) => s + w.prev, 0)) : 0)
     : pct(total, lastWeek?.total ?? 0)
 
   const thisMonth = months[months.length - 1]
