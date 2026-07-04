@@ -246,11 +246,12 @@ function Body({ data, sel, setSel, summary, topicsData, topicsLoading, detail }:
       {/* ─── Breakdowns below the graph are tailored to the selected metric ─── */}
       {mv.key === 'reputation' ? (
         <>
+          {/* Where reviews come from, right under the rating + histogram */}
+          {summary && <ReviewSources sources={summary.sources} />}
           {/* Reviews: what customers say + the latest ones */}
           <ReviewSentiment topics={topicsData} loading={topicsLoading} />
           {summary && summary.byMonth.length >= 2 && <RatingOverTime byMonth={summary.byMonth} />}
           {summary && summary.reply.total > 0 && <ReplyHealth reply={summary.reply} />}
-          {summary && <ReviewSources sources={summary.sources} />}
           {data.reviews.length > 0 && (
             <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
