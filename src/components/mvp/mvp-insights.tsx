@@ -28,7 +28,7 @@ import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Star,
   Eye, MousePointerClick, CalendarDays, Mail, BarChart3,
-  Search, ExternalLink, Image as ImageIcon,
+  Search, ExternalLink, Image as ImageIcon, Check,
 } from 'lucide-react'
 import { ActionsChart, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
 
@@ -41,7 +41,7 @@ const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
 export interface InsightsReview {
   id: string; authorName: string; rating: number; text: string | null
-  source: string; postedAt: string; replied: boolean; needsReply: boolean
+  source: string; postedAt: string; replied: boolean; needsReply: boolean; response: string | null
 }
 export interface InsightsData {
   businessName: string
@@ -264,12 +264,22 @@ function Body({ data, sel, setSel, summary, topicsData, topicsLoading, detail }:
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
                         <span style={{ fontWeight: 600, fontSize: 13 }}>{r.authorName}</span>
                         <Stars n={r.rating} />
-                        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3 }}>
-                          {r.needsReply && <span style={{ fontSize: 10, fontWeight: 700, color: C.coral, background: C.coralBg, borderRadius: 99, padding: '2px 8px' }}>Reply</span>}
+                        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {r.replied
+                            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 8px' }}><Check size={11} />Replied</span>
+                            : r.needsReply && <span style={{ fontSize: 10, fontWeight: 700, color: C.coral, background: C.coralBg, borderRadius: 99, padding: '2px 8px' }}>Reply</span>}
                           <ChevronRight size={15} color={C.faint} />
                         </span>
                       </div>
-                      {r.text && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.text}</div>}
+                      {r.text
+                        ? <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.text}</div>
+                        : <div style={{ fontSize: 12, color: C.faint, fontStyle: 'italic' }}>Rated {r.rating}&#9733;, no written comment.</div>}
+                      {r.response && (
+                        <div style={{ marginTop: 8, paddingLeft: 10, borderLeft: `2px solid ${C.greenLine}` }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 3 }}>Your reply</div>
+                          <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.response}</div>
+                        </div>
+                      )}
                     </Link>
                   )
                 })}

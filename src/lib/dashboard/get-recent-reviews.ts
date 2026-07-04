@@ -19,6 +19,8 @@ export interface RecentReviewItem {
   postedAt: string
   replied: boolean
   needsReply: boolean
+  /** The owner's reply (from Google or drafted in-app), if any. */
+  response: string | null
 }
 
 export interface RecentReviewsResult {
@@ -53,7 +55,9 @@ export async function getRecentReviews(
   ])
 
   const items: RecentReviewItem[] = (recentRes.data ?? [])
-    .filter(r => r.review_text && String(r.review_text).trim().length > 1)
+    // Keep reviews that actually have something to show — a written review OR a
+    // reply. Drops blank rating-only reviews, but keeps a rated-and-replied one.
+    .filter(r => (r.review_text && String(r.review_text).trim().length > 1) || (r.response_text && String(r.response_text).trim().length > 1))
     .slice(0, limit)
     .map(r => {
     const rating = Number(r.rating ?? 0)
@@ -67,6 +71,7 @@ export async function getRecentReviews(
       replied: !!r.response_text,
       /* Lower-star reviews need a reply prompt regardless of state. */
       needsReply: !r.response_text && rating <= 3,
+      response: (r.response_text as string) ?? null,
     }
   })
 
