@@ -680,8 +680,6 @@ function ReviewSources({ sources }: { sources: Record<string, number> }) {
     .filter((k) => !REVIEW_PLATFORMS.some((p) => p.key === k) && src[k] > 0)
     .map((k) => ({ key: k, label: EXTRA_SOURCE_LABEL[k] ?? k, count: src[k] }))
   const tiles = [...featured, ...extras]
-  const missing = featured.filter((f) => f.count === 0)
-  const top = tiles.filter((r) => r.count > 0).sort((a, b) => b.count - a.count)[0]
   return (
     <Section title="Where reviews come from" sub="the platforms diners check">
       {/* same tile look as "What feeds this": icon, count, label, dimmed with — when you're not on it yet */}
@@ -696,11 +694,6 @@ function ReviewSources({ sources }: { sources: Record<string, number> }) {
             </div>
           )
         })}
-      </div>
-      <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10, lineHeight: 1.45 }}>
-        {missing.length > 0
-          ? <>Most come in on <b style={{ color: C.mute, fontWeight: 600 }}>{top?.label ?? 'Google'}</b>. Claiming <b style={{ color: C.mute, fontWeight: 600 }}>{missing.map((m) => m.label).join(', ')}</b> puts you where more diners look.</>
-          : <>You&apos;re on every platform diners check most. Strong spread.</>}
       </div>
     </Section>
   )
