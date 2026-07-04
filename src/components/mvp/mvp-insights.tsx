@@ -60,6 +60,8 @@ interface ReviewSummary {
   byMonth: { ym: string; avg: number; count: number; cumAvg: number }[]
   reply: { total: number; replied: number; unanswered: number; unansweredNegative: number }
   sources: Record<string, number>
+  placeRating: number | null
+  placeRatingCount: number | null
 }
 // SLOW AI aspect analysis from /api/dashboard/review-topics — the per-topic
 // positive/negative breakdown + a plain summary. Loads a beat later.
@@ -554,15 +556,20 @@ function TopicBreakdown({ topics }: { topics: ReviewTopic[] }) {
 //    a review's day-to-day timing is noise; the trends that matter are monthly) ──
 function ReviewHero({ avgRating, totalReviews, summary }: { avgRating: number | null; totalReviews: number; summary: ReviewSummary | null }) {
   const stars = summary?.stars ?? null
-  // Once the histogram is in, derive the average + total from it so the number
-  // and the bars always agree; fall back to the load payload before then.
-  let shownAvg = avgRating
-  let shownTotal = totalReviews
+  // The sample we've actually pulled through the API (drives the histogram etc).
+  let sampleAvg = avgRating
+  let sampleTotal = summary?.split.total ?? totalReviews
   if (stars) {
     let sum = 0; let n = 0
     for (const k of [1, 2, 3, 4, 5]) { const c = stars[String(k)] ?? 0; sum += k * c; n += c }
-    if (n > 0) { shownAvg = Math.round((sum / n) * 10) / 10; shownTotal = n }
+    if (n > 0) { sampleAvg = Math.round((sum / n) * 10) / 10; sampleTotal = n }
   }
+  // Headline = Google's authoritative listing rating + count when we have it,
+  // since the API only hands back a subset of the actual reviews. Fall back to
+  // the sample when the place rating isn't synced.
+  const shownAvg = summary?.placeRating ?? sampleAvg
+  const shownTotal = summary?.placeRatingCount ?? sampleTotal
+  const partial = summary?.placeRatingCount != null && summary.placeRatingCount > sampleTotal && sampleTotal > 0
   return (
     <div>
       <div style={{ fontSize: 14, color: C.mute, fontWeight: 500 }}>Your rating</div>
@@ -570,11 +577,14 @@ function ReviewHero({ avgRating, totalReviews, summary }: { avgRating: number | 
         <span style={{ fontFamily: DISPLAY, fontSize: 46, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em' }}>{shownAvg != null ? shownAvg.toFixed(1) : '—'}</span>
         <span style={{ marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
           <Stars n={shownAvg ?? 0} />
-          <span style={{ fontSize: 12.5, color: C.faint }}>{shownTotal.toLocaleString()} review{shownTotal === 1 ? '' : 's'}</span>
+          <span style={{ fontSize: 12.5, color: C.faint }}>{shownTotal.toLocaleString()} review{shownTotal === 1 ? '' : 's'} on Google</span>
         </span>
       </div>
-      {stars && shownTotal > 0 ? (
-        <div style={{ marginTop: 18 }}><StarBars stars={stars} /></div>
+      {stars && sampleTotal > 0 ? (
+        <>
+          <div style={{ marginTop: 18 }}><StarBars stars={stars} /></div>
+          {partial && <div style={{ fontSize: 11, color: C.faint, marginTop: 10, lineHeight: 1.45 }}>Breakdowns below are from the {sampleTotal.toLocaleString()} reviews we&apos;ve read so far. Google only shares a portion through its feed.</div>}
+        </>
       ) : (
         <div style={{ marginTop: 16, fontSize: 12.5, color: C.faint }}>Loading your star breakdown&hellip;</div>
       )}

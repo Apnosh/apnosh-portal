@@ -114,5 +114,22 @@ export async function GET(req: NextRequest) {
   const sources: Record<string, number> = {}
   for (const r of rows) { const k = normSource(r.source); sources[k] = (sources[k] ?? 0) + 1 }
 
-  return NextResponse.json({ split, stars, byMonth, reply, sources })
+  // Google's authoritative listing rating + count (from the Places sync). This
+  // is the true rating customers see; the individual reviews we can pull through
+  // the API are only a subset, so the headline should use this, not the sample.
+  // Weighted-aggregate across a client's locations.
+  let placeRating: number | null = null
+  let placeRatingCount: number | null = null
+  try {
+    const { data: locs } = await admin.from('gbp_locations').select('place_rating, place_rating_count').eq('client_id', clientId)
+    const rated = (locs ?? []).filter((l) => l.place_rating != null && Number(l.place_rating_count) > 0)
+    if (rated.length) {
+      const totalCount = rated.reduce((s, l) => s + Number(l.place_rating_count), 0)
+      const weighted = rated.reduce((s, l) => s + Number(l.place_rating) * Number(l.place_rating_count), 0)
+      placeRatingCount = totalCount
+      placeRating = totalCount ? Math.round((weighted / totalCount) * 10) / 10 : null
+    }
+  } catch { /* leave null — hero falls back to the sample average */ }
+
+  return NextResponse.json({ split, stars, byMonth, reply, sources, placeRating, placeRatingCount })
 }
