@@ -28,7 +28,7 @@ import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Star,
   Eye, MousePointerClick, CalendarDays, Mail, BarChart3,
-  Search, ExternalLink, Image as ImageIcon, MessageSquare,
+  Search, ExternalLink, Image as ImageIcon,
 } from 'lucide-react'
 import { ActionsChart, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
 
@@ -254,7 +254,6 @@ function Body({ data, sel, setSel, summary, topicsData, topicsLoading, detail }:
           {/* Reviews: what customers say + the latest ones */}
           <ReviewSentiment topics={topicsData} loading={topicsLoading} />
           {summary && summary.byMonth.length >= 2 && <RatingOverTime byMonth={summary.byMonth} recent={summary.recent ?? []} />}
-          {summary && summary.reply.total > 0 && <ReplyHealth reply={summary.reply} />}
           {data.reviews.length > 0 && (
             <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -762,29 +761,6 @@ function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; count: num
         <CountBars months={byMonth} />
         <MonthAxis months={months} />
       </div>
-    </Section>
-  )
-}
-
-// ── Reply health: how many reviews have an owner reply ──
-function ReplyHealth({ reply }: { reply: { total: number; replied: number; unanswered: number; unansweredNegative: number } }) {
-  const pct = reply.total ? Math.round((reply.replied / reply.total) * 100) : 0
-  return (
-    <Section title="Replies" action={reply.unanswered > 0 ? { label: 'Reply now', href: '/dashboard/inbox?tab=reviews' } : undefined}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ width: 56, height: 56, borderRadius: '50%', background: `conic-gradient(${C.green} ${pct * 3.6}deg, ${C.bg} 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MessageSquare size={16} color={C.greenDk} /></div>
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 500, lineHeight: 1 }}>{pct}%</div>
-          <div style={{ fontSize: 12, color: C.mute, marginTop: 3 }}>{reply.replied.toLocaleString()} of {reply.total.toLocaleString()} replied to</div>
-        </div>
-      </div>
-      {reply.unanswered > 0 && (
-        <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, marginTop: 12 }}>
-          <b style={{ color: C.ink, fontWeight: 600 }}>{reply.unanswered.toLocaleString()}</b> still waiting{reply.unansweredNegative > 0 ? <>, including <b style={{ color: C.coral, fontWeight: 600 }}>{reply.unansweredNegative}</b> unhappy guest{reply.unansweredNegative === 1 ? '' : 's'}. A reply shows future diners you care.</> : '. A quick thanks goes a long way.'}
-        </div>
-      )}
     </Section>
   )
 }
