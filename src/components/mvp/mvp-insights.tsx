@@ -708,6 +708,7 @@ function TrendPill({ dir }: { dir: 'up' | 'down' | 'flat' }) {
 function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; count: number }[]; recent: { rating: number; date: string }[] }) {
   const months = byMonth.map((m) => m.ym)
   const total12 = byMonth.reduce((s, m) => s + m.count, 0)
+  const avgPerMonth = byMonth.length ? Math.round((total12 / byMonth.length) * 10) / 10 : 0
   const olderSum = byMonth.slice(0, Math.floor(byMonth.length / 2)).reduce((s, m) => s + m.count, 0)
   const newerSum = byMonth.slice(Math.floor(byMonth.length / 2)).reduce((s, m) => s + m.count, 0)
   const volDir: 'up' | 'down' | 'flat' = newerSum > olderSum ? 'up' : newerSum < olderSum ? 'down' : 'flat'
@@ -750,15 +751,15 @@ function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; count: num
       <div style={{ ...card, marginTop: scores.length > 0 ? 10 : 0 }}>
         <div style={head}>
           <span style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-            <span style={title}>New reviews</span>
-            <span style={big}>{total12}</span>
+            <span style={title}>Reviews a month</span>
+            <span style={big}>{avgPerMonth}</span>
           </span>
           <TrendPill dir={volDir} />
         </div>
         <CountBars months={byMonth} />
         <MonthAxis months={months} />
         <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
-          <b style={{ color: C.ink, fontWeight: 600 }}>{total12}</b> in the last 12 months{volDir === 'up' ? ', picking up lately.' : volDir === 'down' ? ', slower lately. A quick ask brings them back.' : '. A steady flow.'}
+          <b style={{ color: C.ink, fontWeight: 600 }}>{avgPerMonth}</b> a month on average, {total12} in the last year{volDir === 'up' ? '. Picking up lately.' : volDir === 'down' ? '. Slower lately, a quick ask brings them back.' : '. A steady flow.'}
         </div>
       </div>
     </Section>
