@@ -656,32 +656,34 @@ function ReplyHealth({ reply }: { reply: { total: number; replied: number; unans
 // ── Where reviews come from: the platforms that matter most for a restaurant,
 //    with the ones you're not on yet flagged as an opportunity ──
 const REVIEW_PLATFORMS = [
-  { key: 'google', label: 'Google', color: '#4285F4' },
-  { key: 'yelp', label: 'Yelp', color: '#d32323' },
-  { key: 'tripadvisor', label: 'Tripadvisor', color: '#00af87' },
-  { key: 'facebook', label: 'Facebook', color: '#1877f2' },
+  { key: 'google', label: 'Google' },
+  { key: 'yelp', label: 'Yelp' },
+  { key: 'tripadvisor', label: 'Tripadvisor' },
+  { key: 'facebook', label: 'Facebook' },
 ]
 const EXTRA_SOURCE_LABEL: Record<string, string> = { apple_maps: 'Apple Maps', other: 'Other sites' }
 function ReviewSources({ sources }: { sources: Record<string, number> }) {
-  const featured = REVIEW_PLATFORMS.map((p) => ({ ...p, count: sources[p.key] ?? 0 }))
+  const featured = REVIEW_PLATFORMS.map((p) => ({ key: p.key, label: p.label, count: sources[p.key] ?? 0 }))
   const extras = Object.keys(sources)
     .filter((k) => !REVIEW_PLATFORMS.some((p) => p.key === k) && sources[k] > 0)
-    .map((k) => ({ key: k, label: EXTRA_SOURCE_LABEL[k] ?? k, color: C.faint, count: sources[k] }))
-  const rows = [...featured, ...extras]
+    .map((k) => ({ key: k, label: EXTRA_SOURCE_LABEL[k] ?? k, count: sources[k] }))
+  const tiles = [...featured, ...extras]
   const missing = featured.filter((f) => f.count === 0)
-  const top = [...featured, ...extras].filter((r) => r.count > 0).sort((a, b) => b.count - a.count)[0]
+  const top = tiles.filter((r) => r.count > 0).sort((a, b) => b.count - a.count)[0]
   return (
     <Section title="Where reviews come from" sub="the platforms diners check">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        {rows.map((r) => (
-          <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', opacity: r.count > 0 ? 1 : 0.6 }}>
-            <span style={{ width: 9, height: 9, borderRadius: 99, background: r.count > 0 ? r.color : C.line, flexShrink: 0 }} />
-            <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.ink, fontWeight: 500 }}>{r.label}</span>
-            {r.count > 0
-              ? <span style={{ fontSize: 13, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{r.count.toLocaleString()}<span style={{ fontSize: 11, fontWeight: 500, color: C.faint }}> review{r.count === 1 ? '' : 's'}</span></span>
-              : <span style={{ fontSize: 11, fontWeight: 600, color: C.mute, background: C.bg, borderRadius: 99, padding: '3px 10px', flexShrink: 0 }}>Not yet</span>}
-          </div>
-        ))}
+      {/* same tile look as "What feeds this": icon, count, label, dimmed with — when you're not on it yet */}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, tiles.length)},1fr)`, gap: 8 }}>
+        {tiles.map((r) => {
+          const has = r.count > 0
+          return (
+            <div key={r.key} style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '11px 4px', textAlign: 'center', minHeight: 66, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, opacity: has ? 1 : 0.5 }}>
+              <Star size={14} color={has ? C.green : C.faint} fill={has ? C.green : 'transparent'} />
+              <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 500, lineHeight: 1, color: C.ink }}>{has ? r.count.toLocaleString() : '—'}</div>
+              <div style={{ fontSize: 10.5, color: C.faint }}>{r.label}</div>
+            </div>
+          )
+        })}
       </div>
       <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10, lineHeight: 1.45 }}>
         {missing.length > 0
