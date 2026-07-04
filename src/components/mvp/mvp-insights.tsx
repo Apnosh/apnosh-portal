@@ -663,10 +663,11 @@ const REVIEW_PLATFORMS = [
 ]
 const EXTRA_SOURCE_LABEL: Record<string, string> = { apple_maps: 'Apple Maps', other: 'Other sites' }
 function ReviewSources({ sources }: { sources: Record<string, number> }) {
-  const featured = REVIEW_PLATFORMS.map((p) => ({ key: p.key, label: p.label, count: sources[p.key] ?? 0 }))
-  const extras = Object.keys(sources)
-    .filter((k) => !REVIEW_PLATFORMS.some((p) => p.key === k) && sources[k] > 0)
-    .map((k) => ({ key: k, label: EXTRA_SOURCE_LABEL[k] ?? k, count: sources[k] }))
+  const src = sources ?? {}
+  const featured = REVIEW_PLATFORMS.map((p) => ({ key: p.key, label: p.label, count: src[p.key] ?? 0 }))
+  const extras = Object.keys(src)
+    .filter((k) => !REVIEW_PLATFORMS.some((p) => p.key === k) && src[k] > 0)
+    .map((k) => ({ key: k, label: EXTRA_SOURCE_LABEL[k] ?? k, count: src[k] }))
   const tiles = [...featured, ...extras]
   const missing = featured.filter((f) => f.count === 0)
   const top = tiles.filter((r) => r.count > 0).sort((a, b) => b.count - a.count)[0]
