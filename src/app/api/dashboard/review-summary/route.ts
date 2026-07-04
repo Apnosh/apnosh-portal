@@ -170,12 +170,13 @@ function buildTopics(raw: { name?: string; positive?: number[]; negative?: numbe
     if (quote && !grounded(quote, haystack)) quote = ''
     out.push({ name, positive: pos.length, negative: neg.length, mentions, direction, quote })
   }
-  // Positive-to-negative order: most-loved topics first, most-problematic last.
+  // Most-talked-about topics first (by how many reviews mention them); ties
+  // broken by net sentiment so the more-loved topic wins.
   out.sort((a, b) => {
+    if (b.mentions !== a.mentions) return b.mentions - a.mentions
     const na = (a.positive - a.negative) / a.mentions
     const nb = (b.positive - b.negative) / b.mentions
-    if (nb !== na) return nb - na
-    return b.mentions - a.mentions
+    return nb - na
   })
   return out.slice(0, 8)
 }
