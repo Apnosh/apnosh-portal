@@ -52,21 +52,19 @@ export interface InsightsData {
   unanswered: number
 }
 
-// "What customers are saying" — sentiment split (rating-derived) + an AI theme
-// summary. Lazy-fetched from /api/dashboard/review-summary when the page opens.
-interface ReviewTopic { name: string; positive: number; negative: number; mentions: number; direction: 'up' | 'down' | 'flat'; quote: string }
+// FAST deterministic reputation data from /api/dashboard/review-summary — paints
+// instantly (rating histogram, month trend, replies, sources).
 interface ReviewSummary {
-  split: { positive: number; neutral: number; negative: number; total: number; withText: number }
+  split: { positive: number; neutral: number; negative: number; total: number }
   stars: Record<string, number>
   byMonth: { ym: string; avg: number; count: number }[]
   reply: { total: number; replied: number; unanswered: number; unansweredNegative: number }
   sources: Record<string, number>
-  summary: string | null
-  topics: ReviewTopic[]
-  loved: string[]
-  improve: string[]
-  source: string
 }
+// SLOW AI aspect analysis from /api/dashboard/review-topics — the per-topic
+// positive/negative breakdown + a plain summary. Loads a beat later.
+interface ReviewTopic { name: string; positive: number; negative: number; mentions: number; direction: 'up' | 'down' | 'flat'; quote: string }
+interface ReviewTopicsData { summary: string | null; topics: ReviewTopic[] }
 
 // The "further breakdown" data that /api/dashboard/load doesn't carry.
 // Lazy-fetched from /api/dashboard/insights-detail.
@@ -90,24 +88,38 @@ export default function MvpInsights({ data, loading, error, clientId }: { data: 
   const router = useRouter()
   const [sel, setSel] = useState(0)
   const [summary, setSummary] = useState<ReviewSummary | null>(null)
-  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [topicsData, setTopicsData] = useState<ReviewTopicsData | null>(null)
+  const [topicsLoading, setTopicsLoading] = useState(false)
   const [detail, setDetail] = useState<InsightsDetail | null>(null)
 
   const clampedSel = data ? Math.min(sel, Math.max(0, data.metrics.length - 1)) : 0
 
-  // Prefetch the review sentiment + theme summary once the client is known, so
-  // the reviews section is instant. Keyed on the client id ONLY — never on its
-  // own loading/result state — so it can't self-trigger a loop or get stuck.
+  // FAST: the deterministic reputation data (rating, histogram, replies,
+  // sources) — no model call, so it paints almost immediately. Keyed on the
+  // client id ONLY so it can't self-trigger a loop or bleed across accounts.
   useEffect(() => {
     if (!clientId) return
     let live = true
     setSummary(null)
-    setSummaryLoading(true)
     fetch(`/api/dashboard/review-summary?clientId=${clientId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => { if (live && j) setSummary(j) })
       .catch(() => { /* leave the section quiet on failure */ })
-      .finally(() => { if (live) setSummaryLoading(false) })
+    return () => { live = false }
+  }, [clientId])
+
+  // SLOW: the AI topic breakdown + summary, fetched separately so it never
+  // holds up the fast data above.
+  useEffect(() => {
+    if (!clientId) return
+    let live = true
+    setTopicsData(null)
+    setTopicsLoading(true)
+    fetch(`/api/dashboard/review-topics?clientId=${clientId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (live && j) setTopicsData(j) })
+      .catch(() => { /* leave the topic section quiet on failure */ })
+      .finally(() => { if (live) setTopicsLoading(false) })
     return () => { live = false }
   }, [clientId])
 
@@ -147,7 +159,7 @@ export default function MvpInsights({ data, loading, error, clientId }: { data: 
         ) : !data || data.metrics.length === 0 ? (
           <EmptyState />
         ) : (
-          <Body data={data} sel={clampedSel} setSel={setSel} summary={summary} summaryLoading={summaryLoading} detail={detail} />
+          <Body data={data} sel={clampedSel} setSel={setSel} summary={summary} topicsData={topicsData} topicsLoading={topicsLoading} detail={detail} />
         )}
       </div>
       </div>
@@ -155,7 +167,7 @@ export default function MvpInsights({ data, loading, error, clientId }: { data: 
   )
 }
 
-function Body({ data, sel, setSel, summary, summaryLoading, detail }: { data: InsightsData; sel: number; setSel: (i: number) => void; summary: ReviewSummary | null; summaryLoading: boolean; detail: InsightsDetail | null }) {
+function Body({ data, sel, setSel, summary, topicsData, topicsLoading, detail }: { data: InsightsData; sel: number; setSel: (i: number) => void; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null }) {
   const metrics = data.metrics
   const byKey = new Map(metrics.map((m) => [m.key, m]))
   const mv = metrics[sel]
@@ -235,7 +247,7 @@ function Body({ data, sel, setSel, summary, summaryLoading, detail }: { data: In
       {mv.key === 'reputation' ? (
         <>
           {/* Reviews: what customers say + the latest ones */}
-          <ReviewSentiment summary={summary} loading={summaryLoading} />
+          <ReviewSentiment topics={topicsData} loading={topicsLoading} />
           {summary && summary.byMonth.length >= 2 && <RatingOverTime byMonth={summary.byMonth} />}
           {summary && summary.reply.total > 0 && <ReplyHealth reply={summary.reply} />}
           {summary && <ReviewSources sources={summary.sources} />}
@@ -486,8 +498,8 @@ function Section({ title, sub, action, children }: { title: string; sub?: string
   )
 }
 
-function ReviewSentiment({ summary, loading }: { summary: ReviewSummary | null; loading: boolean }) {
-  if (!summary) {
+function ReviewSentiment({ topics, loading }: { topics: ReviewTopicsData | null; loading: boolean }) {
+  if (!topics) {
     return (
       <Section title="What customers are saying">
         <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14, fontSize: 13, color: C.faint }}>
@@ -496,11 +508,11 @@ function ReviewSentiment({ summary, loading }: { summary: ReviewSummary | null; 
       </Section>
     )
   }
-  const hasContent = !!summary.summary || summary.topics.length > 0
+  const hasContent = !!topics.summary || topics.topics.length > 0
   return (
     <Section title="What customers are saying">
-      {summary.summary && <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5 }}>{summary.summary}</div>}
-      {summary.topics.length > 0 && <TopicBreakdown topics={summary.topics} />}
+      {topics.summary && <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5 }}>{topics.summary}</div>}
+      {topics.topics.length > 0 && <TopicBreakdown topics={topics.topics} />}
       {!hasContent && <div style={{ fontSize: 13, color: C.faint }}>A few more written reviews and we can pull out the topics guests mention.</div>}
     </Section>
   )
