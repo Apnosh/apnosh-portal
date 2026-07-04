@@ -183,42 +183,50 @@ function Body({ data, sel, setSel, summary, summaryLoading, detail }: { data: In
         })}
       </div>
 
-      {/* hero */}
-      <div style={{ fontSize: 14, color: C.mute, fontWeight: 500 }}>{mv.heroLabel}</div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
-        <span style={{ fontFamily: DISPLAY, fontSize: 46, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em' }}>{rc.summary.total ? rc.summary.total.toLocaleString() : '—'}</span>
-        {rc.summary.total > 0 && fresh && rc.summary.deltaPct !== 0 && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: dn ? C.coral : C.greenDk, background: dn ? C.coralBg : C.greenSoft, padding: '4px 11px', borderRadius: 99, marginBottom: 5 }}>
-            <span style={{ fontSize: 10 }}>{dn ? '▼' : '▲'}</span>{Math.abs(rc.summary.deltaPct)}% {rc.summary.cmpFrame}
-          </span>
-        )}
-        {rc.summary.total > 0 && !fresh && mv.lastDataDate && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: C.mute, background: C.bg, padding: '4px 11px', borderRadius: 99, marginBottom: 5 }}>
-            Updated {relDate(mv.lastDataDate)}
-          </span>
-        )}
-      </div>
-      <div style={{ fontSize: 13.5, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
-      {rc.summary.total > 0 && fresh && rc.summary.compareTotal > 0 && (
-        <div style={{ fontSize: 12.5, color: C.faint, marginTop: 3 }}>Was {rc.summary.compareTotal.toLocaleString()} {rc.summary.cmpFrame.replace(/^vs\s*/i, '')}</div>
-      )}
-      {fresh && rc.summary.yoyPct != null && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: rc.summary.yoyPct > 0 ? C.greenDk : rc.summary.yoyPct < 0 ? C.coral : C.mute }}>
-          {rc.summary.yoyPct > 0 ? <TrendingUp size={14} /> : rc.summary.yoyPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
-          {rc.summary.yoyPct > 0 ? `Up ${rc.summary.yoyPct}% ${rc.summary.yoyLabel}` : rc.summary.yoyPct < 0 ? `Down ${Math.abs(rc.summary.yoyPct)}% ${rc.summary.yoyLabel}` : `Even with last year`}
-        </div>
-      )}
-
-      {/* full chart with range chips (reused from the home) */}
-      <ActionsChart range={rc.range} setRange={rc.setRange} cStart={rc.cStart} setCStart={rc.setCStart} cEnd={rc.cEnd} setCEnd={rc.setCEnd} summary={rc.summary} noun={mv.unit} />
-
-      {/* what feeds this metric */}
-      {mv.tiles.length > 0 && (
+      {/* Reviews lead with the rating + star histogram (a review's day-to-day
+          timing is noise); every other metric leads with its time chart. */}
+      {mv.key === 'reputation' ? (
+        <ReviewHero avgRating={data.avgRating} totalReviews={data.totalReviews} summary={summary} />
+      ) : (
         <>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, margin: '16px 0 9px' }}>What feeds this</div>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, mv.tiles.length)},1fr)`, gap: 8 }}>
-            {mv.tiles.slice(0, 4).map((s) => <SourceCard key={s.key + s.label} s={s} />)}
+          {/* hero */}
+          <div style={{ fontSize: 14, color: C.mute, fontWeight: 500 }}>{mv.heroLabel}</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
+            <span style={{ fontFamily: DISPLAY, fontSize: 46, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em' }}>{rc.summary.total ? rc.summary.total.toLocaleString() : '—'}</span>
+            {rc.summary.total > 0 && fresh && rc.summary.deltaPct !== 0 && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: dn ? C.coral : C.greenDk, background: dn ? C.coralBg : C.greenSoft, padding: '4px 11px', borderRadius: 99, marginBottom: 5 }}>
+                <span style={{ fontSize: 10 }}>{dn ? '▼' : '▲'}</span>{Math.abs(rc.summary.deltaPct)}% {rc.summary.cmpFrame}
+              </span>
+            )}
+            {rc.summary.total > 0 && !fresh && mv.lastDataDate && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: C.mute, background: C.bg, padding: '4px 11px', borderRadius: 99, marginBottom: 5 }}>
+                Updated {relDate(mv.lastDataDate)}
+              </span>
+            )}
           </div>
+          <div style={{ fontSize: 13.5, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
+          {rc.summary.total > 0 && fresh && rc.summary.compareTotal > 0 && (
+            <div style={{ fontSize: 12.5, color: C.faint, marginTop: 3 }}>Was {rc.summary.compareTotal.toLocaleString()} {rc.summary.cmpFrame.replace(/^vs\s*/i, '')}</div>
+          )}
+          {fresh && rc.summary.yoyPct != null && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: rc.summary.yoyPct > 0 ? C.greenDk : rc.summary.yoyPct < 0 ? C.coral : C.mute }}>
+              {rc.summary.yoyPct > 0 ? <TrendingUp size={14} /> : rc.summary.yoyPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
+              {rc.summary.yoyPct > 0 ? `Up ${rc.summary.yoyPct}% ${rc.summary.yoyLabel}` : rc.summary.yoyPct < 0 ? `Down ${Math.abs(rc.summary.yoyPct)}% ${rc.summary.yoyLabel}` : `Even with last year`}
+            </div>
+          )}
+
+          {/* full chart with range chips (reused from the home) */}
+          <ActionsChart range={rc.range} setRange={rc.setRange} cStart={rc.cStart} setCStart={rc.setCStart} cEnd={rc.cEnd} setCEnd={rc.setCEnd} summary={rc.summary} noun={mv.unit} />
+
+          {/* what feeds this metric */}
+          {mv.tiles.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, margin: '16px 0 9px' }}>What feeds this</div>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, mv.tiles.length)},1fr)`, gap: 8 }}>
+                {mv.tiles.slice(0, 4).map((s) => <SourceCard key={s.key + s.label} s={s} />)}
+              </div>
+            </>
+          )}
         </>
       )}
 
@@ -226,8 +234,7 @@ function Body({ data, sel, setSel, summary, summaryLoading, detail }: { data: In
       {mv.key === 'reputation' ? (
         <>
           {/* Reviews: what customers say + the latest ones */}
-          <ReviewSentiment summary={summary} loading={summaryLoading} avgRating={data.avgRating} totalReviews={data.totalReviews} unanswered={data.unanswered} />
-          {summary && summary.split.total > 0 && <StarBreakdown stars={summary.stars} total={summary.split.total} />}
+          <ReviewSentiment summary={summary} loading={summaryLoading} />
           {summary && summary.byMonth.length >= 2 && <RatingOverTime byMonth={summary.byMonth} />}
           {summary && summary.reply.total > 0 && <ReplyHealth reply={summary.reply} />}
           {data.reviews.length > 0 && (
@@ -477,45 +484,22 @@ function Section({ title, sub, action, children }: { title: string; sub?: string
   )
 }
 
-function ReviewSentiment({ summary, loading, avgRating, totalReviews, unanswered }: { summary: ReviewSummary | null; loading: boolean; avgRating: number | null; totalReviews: number; unanswered: number }) {
-  const head = avgRating != null && (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-      <span style={{ fontFamily: DISPLAY, fontSize: 30, fontWeight: 500, lineHeight: 1 }}>{avgRating.toFixed(1)}</span>
-      <Stars n={avgRating} />
-      <span style={{ fontSize: 12, color: C.faint, marginLeft: 2 }}>{totalReviews.toLocaleString()} review{totalReviews === 1 ? '' : 's'}{unanswered > 0 ? `, ${unanswered} to reply` : ''}</span>
-    </div>
-  )
+function ReviewSentiment({ summary, loading }: { summary: ReviewSummary | null; loading: boolean }) {
   if (!summary) {
     return (
       <Section title="What customers are saying">
-        {head}
         <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14, fontSize: 13, color: C.faint }}>
-          {loading ? 'Reading your reviews…' : 'A few written reviews and we can pull out the themes guests mention.'}
+          {loading ? 'Reading your reviews…' : 'A few written reviews and we can pull out the topics guests mention.'}
         </div>
       </Section>
     )
   }
-  const s = summary.split
-  const total = s.total || 1
-  const pct = (n: number) => `${(n / total) * 100}%`
+  const hasContent = !!summary.summary || summary.topics.length > 0
   return (
     <Section title="What customers are saying">
-      {head}
-      {/* positive / neutral / negative split, from the star ratings */}
-      <div style={{ display: 'flex', height: 12, borderRadius: 99, overflow: 'hidden', background: C.bg }}>
-        {s.positive > 0 && <div style={{ width: pct(s.positive), background: C.green }} />}
-        {s.neutral > 0 && <div style={{ width: pct(s.neutral), background: C.faint }} />}
-        {s.negative > 0 && <div style={{ width: pct(s.negative), background: C.coral }} />}
-      </div>
-      <div style={{ display: 'flex', gap: 14, marginTop: 9, fontSize: 11.5, flexWrap: 'wrap' }}>
-        <Legend dot={C.green} label="Positive" n={s.positive} />
-        <Legend dot={C.faint} label="Neutral" n={s.neutral} />
-        <Legend dot={C.coral} label="Negative" n={s.negative} />
-      </div>
-
-      {summary.summary && <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5, marginTop: 14 }}>{summary.summary}</div>}
-
+      {summary.summary && <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5 }}>{summary.summary}</div>}
       {summary.topics.length > 0 && <TopicBreakdown topics={summary.topics} />}
+      {!hasContent && <div style={{ fontSize: 13, color: C.faint }}>A few more written reviews and we can pull out the topics guests mention.</div>}
     </Section>
   )
 }
@@ -553,29 +537,58 @@ function TopicBreakdown({ topics }: { topics: ReviewTopic[] }) {
   )
 }
 
-// ── Star histogram ──
-function StarBreakdown({ stars, total }: { stars: Record<string, number>; total: number }) {
+// ── Reviews hero: average rating + star histogram (replaces the time chart, since
+//    a review's day-to-day timing is noise; the trends that matter are monthly) ──
+function ReviewHero({ avgRating, totalReviews, summary }: { avgRating: number | null; totalReviews: number; summary: ReviewSummary | null }) {
+  const stars = summary?.stars ?? null
+  // Once the histogram is in, derive the average + total from it so the number
+  // and the bars always agree; fall back to the load payload before then.
+  let shownAvg = avgRating
+  let shownTotal = totalReviews
+  if (stars) {
+    let sum = 0; let n = 0
+    for (const k of [1, 2, 3, 4, 5]) { const c = stars[String(k)] ?? 0; sum += k * c; n += c }
+    if (n > 0) { shownAvg = Math.round((sum / n) * 10) / 10; shownTotal = n }
+  }
+  return (
+    <div>
+      <div style={{ fontSize: 14, color: C.mute, fontWeight: 500 }}>Your rating</div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginTop: 3 }}>
+        <span style={{ fontFamily: DISPLAY, fontSize: 46, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em' }}>{shownAvg != null ? shownAvg.toFixed(1) : '—'}</span>
+        <span style={{ marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <Stars n={shownAvg ?? 0} />
+          <span style={{ fontSize: 12.5, color: C.faint }}>{shownTotal.toLocaleString()} review{shownTotal === 1 ? '' : 's'}</span>
+        </span>
+      </div>
+      {stars && shownTotal > 0 ? (
+        <div style={{ marginTop: 18 }}><StarBars stars={stars} /></div>
+      ) : (
+        <div style={{ marginTop: 16, fontSize: 12.5, color: C.faint }}>Loading your star breakdown&hellip;</div>
+      )}
+    </div>
+  )
+}
+
+// ── Star histogram bars (5 → 1) ──
+function StarBars({ stars }: { stars: Record<string, number> }) {
   const rows = [5, 4, 3, 2, 1]
   const max = Math.max(1, ...rows.map((s) => stars[String(s)] ?? 0))
   return (
-    <Section title="Star breakdown">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-        {rows.map((s) => {
-          const n = stars[String(s)] ?? 0
-          const w = n > 0 ? Math.max(6, Math.round((n / max) * 100)) : 0
-          return (
-            <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, width: 32, flexShrink: 0, fontSize: 12, color: C.mute, fontWeight: 600 }}>{s}<Star size={11} color={C.amber} fill={C.amber} /></span>
-              <div style={{ flex: 1, height: 8, borderRadius: 99, background: C.bg, overflow: 'hidden' }}>
-                <div style={{ width: `${w}%`, height: '100%', borderRadius: 99, background: s >= 4 ? C.green : s === 3 ? C.faint : C.coral }} />
-              </div>
-              <span style={{ width: 30, textAlign: 'right', flexShrink: 0, fontSize: 11.5, color: C.mute, fontWeight: 600 }}>{n}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+      {rows.map((s) => {
+        const n = stars[String(s)] ?? 0
+        const w = n > 0 ? Math.max(6, Math.round((n / max) * 100)) : 0
+        return (
+          <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, width: 32, flexShrink: 0, fontSize: 12, color: C.mute, fontWeight: 600 }}>{s}<Star size={11} color={C.amber} fill={C.amber} /></span>
+            <div style={{ flex: 1, height: 8, borderRadius: 99, background: C.bg, overflow: 'hidden' }}>
+              <div style={{ width: `${w}%`, height: '100%', borderRadius: 99, background: s >= 4 ? C.green : s === 3 ? C.faint : C.coral }} />
             </div>
-          )
-        })}
-      </div>
-      <div style={{ fontSize: 11, color: C.faint, marginTop: 10 }}>{total.toLocaleString()} rated review{total === 1 ? '' : 's'} in all.</div>
-    </Section>
+            <span style={{ width: 30, textAlign: 'right', flexShrink: 0, fontSize: 11.5, color: C.mute, fontWeight: 600 }}>{n}</span>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -638,13 +651,6 @@ function ReplyHealth({ reply }: { reply: { total: number; replied: number; unans
   )
 }
 
-function Legend({ dot, label, n }: { dot: string; label: string; n: number }) {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: C.mute }}>
-      <span style={{ width: 8, height: 8, borderRadius: 99, background: dot }} />{label} <b style={{ color: C.ink, fontWeight: 600 }}>{n.toLocaleString()}</b>
-    </span>
-  )
-}
 
 function Stars({ n }: { n: number }) {
   return (
