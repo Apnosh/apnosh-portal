@@ -814,7 +814,7 @@ function ReviewSources({ sources, googleCount }: { sources: Record<string, numbe
     .map((k) => ({ key: k, label: EXTRA_SOURCE_LABEL[k] ?? k, count: src[k] }))
   const tiles = [...featured, ...extras]
   return (
-    <Section title="Where reviews come from" sub="the platforms diners check">
+    <Section title="Where reviews come from">
       {/* same tile look as "What feeds this": icon, count, label, dimmed with — when you're not on it yet */}
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, tiles.length)},1fr)`, gap: 8 }}>
         {tiles.map((r) => {
