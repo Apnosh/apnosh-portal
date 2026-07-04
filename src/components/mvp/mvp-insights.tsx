@@ -249,7 +249,7 @@ function Body({ data, sel, setSel, summary, topicsData, topicsLoading, detail }:
       {mv.key === 'reputation' ? (
         <>
           {/* Where reviews come from, right under the rating + histogram */}
-          {summary && <ReviewSources sources={summary.sources} />}
+          {summary && <ReviewSources sources={summary.sources} googleCount={summary.placeRatingCount} />}
           {/* Reviews: what customers say + the latest ones */}
           <ReviewSentiment topics={topicsData} loading={topicsLoading} />
           {summary && summary.byMonth.length >= 2 && <RatingOverTime byMonth={summary.byMonth} />}
@@ -758,9 +758,11 @@ const REVIEW_PLATFORMS = [
   { key: 'facebook', label: 'Facebook' },
 ]
 const EXTRA_SOURCE_LABEL: Record<string, string> = { apple_maps: 'Apple Maps', other: 'Other sites' }
-function ReviewSources({ sources }: { sources: Record<string, number> }) {
+function ReviewSources({ sources, googleCount }: { sources: Record<string, number>; googleCount?: number | null }) {
   const src = sources ?? {}
-  const featured = REVIEW_PLATFORMS.map((p) => ({ key: p.key, label: p.label, count: src[p.key] ?? 0 }))
+  // Google's real listing count (place_rating_count) when we have it, so this
+  // tile matches the headline instead of only the reviews we've synced.
+  const featured = REVIEW_PLATFORMS.map((p) => ({ key: p.key, label: p.label, count: p.key === 'google' && googleCount != null ? googleCount : (src[p.key] ?? 0) }))
   const extras = Object.keys(src)
     .filter((k) => !REVIEW_PLATFORMS.some((p) => p.key === k) && src[k] > 0)
     .map((k) => ({ key: k, label: EXTRA_SOURCE_LABEL[k] ?? k, count: src[k] }))
