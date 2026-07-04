@@ -25,7 +25,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const maxDuration = 25
 
-interface RevRow { rating: number; text: string | null; at: string; replied: boolean }
+interface RevRow { rating: number; text: string | null; at: string; replied: boolean; source: string }
 interface Split { positive: number; neutral: number; negative: number; total: number; withText: number }
 interface Topic { name: string; positive: number; negative: number; mentions: number; direction: 'up' | 'down' | 'flat'; quote: string }
 
@@ -64,6 +64,18 @@ function redact(s: string): string {
 
 // Keep a phrase only if at least one of its meaningful words actually appears in
 // the reviews, so a paraphrase survives but a fabricated one is dropped.
+// Normalize the many raw source strings to one platform key. GBP reviews come
+// in under both 'google' and 'gbp'; merge them.
+function normSource(s: string): string {
+  const v = (s || '').toLowerCase()
+  if (v === 'gbp' || v === 'google') return 'google'
+  if (v === 'yelp') return 'yelp'
+  if (v === 'tripadvisor') return 'tripadvisor'
+  if (v === 'facebook') return 'facebook'
+  if (v === 'apple_maps' || v === 'apple') return 'apple_maps'
+  return 'other'
+}
+
 function grounded(phrase: string, haystack: string): boolean {
   return phrase.toLowerCase().split(/[^a-z0-9]+/).some((w) => w.length >= 4 && haystack.includes(w))
 }
@@ -199,13 +211,13 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient()
   const [g, l] = await Promise.all([
-    fetchAll(admin, 'reviews', 'rating, review_text, posted_at, response_text', 'posted_at', clientId),
-    fetchAll(admin, 'local_reviews', 'rating, text, created_at_platform, reply_text', 'created_at_platform', clientId),
+    fetchAll(admin, 'reviews', 'rating, review_text, posted_at, response_text, source', 'posted_at', clientId),
+    fetchAll(admin, 'local_reviews', 'rating, text, created_at_platform, reply_text, source', 'created_at_platform', clientId),
   ])
 
   const rows: RevRow[] = [
-    ...g.map((r) => ({ rating: Number(r.rating ?? 0), text: (r.review_text as string) ?? null, at: String(r.posted_at ?? ''), replied: !!(r.response_text && String(r.response_text).trim()) })),
-    ...l.map((r) => ({ rating: Number(r.rating ?? 0), text: (r.text as string) ?? null, at: String(r.created_at_platform ?? ''), replied: !!(r.reply_text && String(r.reply_text).trim()) })),
+    ...g.map((r) => ({ rating: Number(r.rating ?? 0), text: (r.review_text as string) ?? null, at: String(r.posted_at ?? ''), replied: !!(r.response_text && String(r.response_text).trim()), source: String(r.source ?? '') })),
+    ...l.map((r) => ({ rating: Number(r.rating ?? 0), text: (r.text as string) ?? null, at: String(r.created_at_platform ?? ''), replied: !!(r.reply_text && String(r.reply_text).trim()), source: String(r.source ?? '') })),
   ].filter((r) => r.rating > 0)
 
   // Ranges, not equality, so every rating in [1,5] lands in exactly one bucket.
@@ -238,6 +250,10 @@ export async function GET(req: NextRequest) {
     unansweredNegative: rows.filter((r) => !r.replied && r.rating < 3).length,
   }
 
+  // Which platforms the reviews come from (gbp folded into google).
+  const sources: Record<string, number> = {}
+  for (const r of rows) { const k = normSource(r.source); sources[k] = (sources[k] ?? 0) + 1 }
+
   // The most recent reviews that carry text, for the topic analysis (redacted).
   const withTextRows = rows
     .filter((r) => r.text && r.text.trim().length > 1)
@@ -257,6 +273,7 @@ export async function GET(req: NextRequest) {
     stars,
     byMonth,
     reply,
+    sources,
     summary: ai?.summary ?? null,
     topics,
     loved,
