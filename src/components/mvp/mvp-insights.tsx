@@ -747,9 +747,6 @@ function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; count: num
             <span>{monLabel(recent[0].date)}</span>
             <span>Latest</span>
           </div>
-          <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
-            Your last {scores.length} review{scores.length === 1 ? '' : 's'}, oldest to newest. {ratingDir === 'up' ? 'Recent ones are picking up.' : ratingDir === 'down' ? 'Recent ones have dipped.' : 'Fairly steady lately.'}
-          </div>
         </div>
       )}
 
@@ -764,9 +761,6 @@ function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; count: num
         </div>
         <CountBars months={byMonth} />
         <MonthAxis months={months} />
-        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
-          <b style={{ color: C.ink, fontWeight: 600 }}>{avgPerMonth}</b> a month on average, {total12} in the last year{volDir === 'up' ? '. Picking up lately.' : volDir === 'down' ? '. Slower lately, a quick ask brings them back.' : '. A steady flow.'}
-        </div>
       </div>
     </Section>
   )
