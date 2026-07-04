@@ -28,7 +28,7 @@ import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Star,
   Eye, MousePointerClick, CalendarDays, Mail, BarChart3,
-  Search, ExternalLink, Image as ImageIcon,
+  Search, ExternalLink, Image as ImageIcon, MessageSquare,
 } from 'lucide-react'
 import { ActionsChart, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
 
@@ -54,9 +54,14 @@ export interface InsightsData {
 
 // "What customers are saying" — sentiment split (rating-derived) + an AI theme
 // summary. Lazy-fetched from /api/dashboard/review-summary when the page opens.
+interface ReviewTopic { name: string; positive: number; negative: number; mentions: number; direction: 'up' | 'down' | 'flat'; quote: string }
 interface ReviewSummary {
   split: { positive: number; neutral: number; negative: number; total: number; withText: number }
+  stars: Record<string, number>
+  byMonth: { ym: string; avg: number; count: number }[]
+  reply: { total: number; replied: number; unanswered: number; unansweredNegative: number }
   summary: string | null
+  topics: ReviewTopic[]
   loved: string[]
   improve: string[]
   source: string
@@ -222,6 +227,9 @@ function Body({ data, sel, setSel, summary, summaryLoading, detail }: { data: In
         <>
           {/* Reviews: what customers say + the latest ones */}
           <ReviewSentiment summary={summary} loading={summaryLoading} avgRating={data.avgRating} totalReviews={data.totalReviews} unanswered={data.unanswered} />
+          {summary && summary.split.total > 0 && <StarBreakdown stars={summary.stars} total={summary.split.total} />}
+          {summary && summary.byMonth.length >= 2 && <RatingOverTime byMonth={summary.byMonth} />}
+          {summary && summary.reply.total > 0 && <ReplyHealth reply={summary.reply} />}
           {data.reviews.length > 0 && (
             <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -507,10 +515,123 @@ function ReviewSentiment({ summary, loading, avgRating, totalReviews, unanswered
 
       {summary.summary && <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5, marginTop: 14 }}>{summary.summary}</div>}
 
-      {(summary.loved.length > 0 || summary.improve.length > 0) && (
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 11 }}>
-          {summary.loved.length > 0 && <ThemeRow label="Loved" items={summary.loved} fg={C.greenDk} bg={C.greenSoft} />}
-          {summary.improve.length > 0 && <ThemeRow label="Could improve" items={summary.improve} fg={C.coral} bg={C.coralBg} />}
+      {summary.topics.length > 0 && <TopicBreakdown topics={summary.topics} />}
+    </Section>
+  )
+}
+
+// ── Topic breakdown: each topic's positive-vs-negative split + where it's headed ──
+function TopicBreakdown({ topics }: { topics: ReviewTopic[] }) {
+  return (
+    <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint }}>By topic</div>
+      {topics.map((t, i) => {
+        const m = t.mentions || 1
+        const gp = (t.positive / m) * 100
+        return (
+          <div key={i}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+              {t.direction !== 'flat' && (
+                <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, color: t.direction === 'up' ? C.greenDk : C.coral, background: t.direction === 'up' ? C.greenSoft : C.coralBg, borderRadius: 99, padding: '2px 7px' }}>
+                  {t.direction === 'up' ? <TrendingUp size={11} /> : <TrendingDown size={11} />}{t.direction === 'up' ? 'Improving' : 'Slipping'}
+                </span>
+              )}
+              <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.mute, flexShrink: 0 }}>
+                <b style={{ color: C.greenDk, fontWeight: 600 }}>{t.positive}</b> liked{t.negative > 0 ? <> · <b style={{ color: C.coral, fontWeight: 600 }}>{t.negative}</b> not</> : ''}
+              </span>
+            </div>
+            <div style={{ display: 'flex', height: 9, borderRadius: 99, overflow: 'hidden', background: C.bg }}>
+              {t.positive > 0 && <div style={{ width: `${gp}%`, background: C.green }} />}
+              {t.negative > 0 && <div style={{ width: `${100 - gp}%`, background: C.coral }} />}
+            </div>
+            {t.quote && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 6, fontStyle: 'italic', lineHeight: 1.4 }}>&ldquo;{t.quote}&rdquo;</div>}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Star histogram ──
+function StarBreakdown({ stars, total }: { stars: Record<string, number>; total: number }) {
+  const rows = [5, 4, 3, 2, 1]
+  const max = Math.max(1, ...rows.map((s) => stars[String(s)] ?? 0))
+  return (
+    <Section title="Star breakdown">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {rows.map((s) => {
+          const n = stars[String(s)] ?? 0
+          const w = n > 0 ? Math.max(6, Math.round((n / max) * 100)) : 0
+          return (
+            <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, width: 32, flexShrink: 0, fontSize: 12, color: C.mute, fontWeight: 600 }}>{s}<Star size={11} color={C.amber} fill={C.amber} /></span>
+              <div style={{ flex: 1, height: 8, borderRadius: 99, background: C.bg, overflow: 'hidden' }}>
+                <div style={{ width: `${w}%`, height: '100%', borderRadius: 99, background: s >= 4 ? C.green : s === 3 ? C.faint : C.coral }} />
+              </div>
+              <span style={{ width: 30, textAlign: 'right', flexShrink: 0, fontSize: 11.5, color: C.mute, fontWeight: 600 }}>{n}</span>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ fontSize: 11, color: C.faint, marginTop: 10 }}>{total.toLocaleString()} rated review{total === 1 ? '' : 's'} in all.</div>
+    </Section>
+  )
+}
+
+// ── A tiny bar strip shared by the rating + velocity charts ──
+const MONTHS3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function monLabel(ym: string): string { const m = Number(ym.split('-')[1]); return MONTHS3[m - 1] ?? ym }
+function MiniBars({ values, colorFor, height = 46 }: { values: number[]; colorFor: (v: number, i: number) => string; height?: number }) {
+  const max = Math.max(1, ...values)
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height }}>
+      {values.map((v, i) => {
+        const h = Math.max(3, Math.round((v / max) * (height - 4)))
+        return <div key={i} style={{ flex: 1, minWidth: 0, height: h, borderRadius: 4, background: colorFor(v, i) }} />
+      })}
+    </div>
+  )
+}
+
+// ── Rating trend + review velocity over the recent months ──
+function RatingOverTime({ byMonth }: { byMonth: { ym: string; avg: number; count: number }[] }) {
+  const first = byMonth[0]; const last = byMonth[byMonth.length - 1]
+  const ratingDir = last.avg > first.avg + 0.15 ? 'up' : last.avg < first.avg - 0.15 ? 'down' : 'flat'
+  const volDir = last.count > first.count ? 'up' : last.count < first.count ? 'down' : 'flat'
+  return (
+    <Section title="Over time" sub={`${monLabel(first.ym)}–${monLabel(last.ym)}`}>
+      <div style={{ fontSize: 12, color: C.mute, fontWeight: 600, marginBottom: 8 }}>Average rating</div>
+      <MiniBars values={byMonth.map((m) => m.avg)} colorFor={(v) => (v >= 4 ? C.green : v >= 3 ? C.amber : C.coral)} />
+      <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
+        {ratingDir === 'up' ? <>Climbing, {first.avg}&#9733; to <b style={{ color: C.greenDk, fontWeight: 600 }}>{last.avg}&#9733;</b>.</> : ratingDir === 'down' ? <>Slipping, {first.avg}&#9733; to <b style={{ color: C.coral, fontWeight: 600 }}>{last.avg}&#9733;</b>.</> : <>Holding steady around <b style={{ color: C.ink, fontWeight: 600 }}>{last.avg}&#9733;</b>.</>}
+      </div>
+      <div style={{ fontSize: 12, color: C.mute, fontWeight: 600, margin: '18px 0 8px' }}>New reviews each month</div>
+      <MiniBars values={byMonth.map((m) => m.count)} colorFor={() => C.green} />
+      <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
+        <b style={{ color: C.ink, fontWeight: 600 }}>{last.count}</b> in {monLabel(last.ym)}{volDir === 'up' ? ', more than before. Keep asking happy guests.' : volDir === 'down' ? ', fewer than before. A quick ask brings them back.' : '.'}
+      </div>
+    </Section>
+  )
+}
+
+// ── Reply health: how many reviews have an owner reply ──
+function ReplyHealth({ reply }: { reply: { total: number; replied: number; unanswered: number; unansweredNegative: number } }) {
+  const pct = reply.total ? Math.round((reply.replied / reply.total) * 100) : 0
+  return (
+    <Section title="Replies" action={reply.unanswered > 0 ? { label: 'Reply now', href: '/dashboard/inbox?tab=reviews' } : undefined}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ width: 56, height: 56, borderRadius: '50%', background: `conic-gradient(${C.green} ${pct * 3.6}deg, ${C.bg} 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MessageSquare size={16} color={C.greenDk} /></div>
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 500, lineHeight: 1 }}>{pct}%</div>
+          <div style={{ fontSize: 12, color: C.mute, marginTop: 3 }}>{reply.replied.toLocaleString()} of {reply.total.toLocaleString()} replied to</div>
+        </div>
+      </div>
+      {reply.unanswered > 0 && (
+        <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, marginTop: 12 }}>
+          <b style={{ color: C.ink, fontWeight: 600 }}>{reply.unanswered.toLocaleString()}</b> still waiting{reply.unansweredNegative > 0 ? <>, including <b style={{ color: C.coral, fontWeight: 600 }}>{reply.unansweredNegative}</b> unhappy guest{reply.unansweredNegative === 1 ? '' : 's'}. A reply shows future diners you care.</> : '. A quick thanks goes a long way.'}
         </div>
       )}
     </Section>
@@ -522,17 +643,6 @@ function Legend({ dot, label, n }: { dot: string; label: string; n: number }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: C.mute }}>
       <span style={{ width: 8, height: 8, borderRadius: 99, background: dot }} />{label} <b style={{ color: C.ink, fontWeight: 600 }}>{n.toLocaleString()}</b>
     </span>
-  )
-}
-
-function ThemeRow({ label, items, fg, bg }: { label: string; items: string[]; fg: string; bg: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 7 }}>{label}</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {items.map((t, i) => <span key={i} style={{ fontSize: 12, fontWeight: 600, color: fg, background: bg, borderRadius: 99, padding: '5px 11px' }}>{t}</span>)}
-      </div>
-    </div>
   )
 }
 
