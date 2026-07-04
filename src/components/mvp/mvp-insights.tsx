@@ -57,7 +57,7 @@ export interface InsightsData {
 interface ReviewSummary {
   split: { positive: number; neutral: number; negative: number; total: number }
   stars: Record<string, number>
-  byMonth: { ym: string; avg: number; count: number }[]
+  byMonth: { ym: string; avg: number; count: number; cumAvg: number }[]
   reply: { total: number; replied: number; unanswered: number; unansweredNegative: number }
   sources: Record<string, number>
 }
@@ -661,16 +661,20 @@ function TrendPill({ dir }: { dir: 'up' | 'down' | 'flat' }) {
 }
 
 // ── Rating trend + review volume over the recent months ──
-function RatingOverTime({ byMonth }: { byMonth: { ym: string; avg: number; count: number }[] }) {
+function RatingOverTime({ byMonth }: { byMonth: { ym: string; avg: number; count: number; cumAvg: number }[] }) {
   const first = byMonth[0]; const last = byMonth[byMonth.length - 1]
   const months = byMonth.map((m) => m.ym)
-  const avgs = byMonth.map((m) => m.avg)
+  // Rating line is the RUNNING all-time average (the live star rating over time),
+  // not each month's own average — so a single review can't swing it and the last
+  // point equals the overall rating shown up top.
+  const cumAvgs = byMonth.map((m) => m.cumAvg)
   const counts = byMonth.map((m) => m.count)
-  const ratingDir: 'up' | 'down' | 'flat' = last.avg > first.avg + 0.15 ? 'up' : last.avg < first.avg - 0.15 ? 'down' : 'flat'
+  const rFirst = first.cumAvg; const rLast = last.cumAvg
+  const ratingDir: 'up' | 'down' | 'flat' = rLast > rFirst + 0.1 ? 'up' : rLast < rFirst - 0.1 ? 'down' : 'flat'
   const volDir: 'up' | 'down' | 'flat' = last.count > first.count ? 'up' : last.count < first.count ? 'down' : 'flat'
-  // Rating scale: floor a little below the lowest month, cap at a perfect 5, so
-  // the line uses the whole height and small swings read clearly.
-  const rBottom = Math.max(1, Math.floor((Math.min(...avgs) - 0.3) * 10) / 10)
+  // Scale a little below the lowest running value, cap at a perfect 5, so the
+  // gentle drift uses the height and reads clearly.
+  const rBottom = Math.max(1, Math.floor((Math.min(...cumAvgs) - 0.3) * 10) / 10)
   const card: React.CSSProperties = { background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14 }
   const head: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }
   const title: React.CSSProperties = { fontSize: 12.5, color: C.mute, fontWeight: 600 }
@@ -682,14 +686,14 @@ function RatingOverTime({ byMonth }: { byMonth: { ym: string; avg: number; count
         <div style={head}>
           <span style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
             <span style={title}>Average rating</span>
-            <span style={big}>{last.avg}&#9733;</span>
+            <span style={big}>{rLast}&#9733;</span>
           </span>
           <TrendPill dir={ratingDir} />
         </div>
-        <LineChart values={avgs} bottom={rBottom} top={5} color={ratingDir === 'down' ? C.coral : C.green} />
+        <LineChart values={cumAvgs} bottom={rBottom} top={5} color={ratingDir === 'down' ? C.coral : C.green} />
         <MonthAxis months={months} />
         <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
-          {ratingDir === 'up' ? <>Up from {first.avg}&#9733; back in {monLabel(first.ym)}.</> : ratingDir === 'down' ? <>Down from {first.avg}&#9733; back in {monLabel(first.ym)}.</> : <>Holding steady since {monLabel(first.ym)}.</>}
+          {ratingDir === 'up' ? <>Up from {rFirst}&#9733; back in {monLabel(first.ym)}.</> : ratingDir === 'down' ? <>Down from {rFirst}&#9733; back in {monLabel(first.ym)}.</> : <>Holding steady near {rLast}&#9733; since {monLabel(first.ym)}.</>}
         </div>
       </div>
 

@@ -90,9 +90,17 @@ export async function GET(req: NextRequest) {
     const m = monthMap.get(ym) ?? { sum: 0, count: 0 }
     m.sum += r.rating; m.count += 1; monthMap.set(ym, m)
   }
+  // avg = that month's own average; cumAvg = the running all-time average up to
+  // and including that month (the live star rating over time). cumAvg is built
+  // over the FULL history first, then we keep the last 12 — so a 2-review month
+  // can't whip the line around, and the last point equals the overall rating.
+  let runSum = 0; let runCount = 0
   const byMonth = [...monthMap.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([ym, m]) => ({ ym, avg: Math.round((m.sum / m.count) * 10) / 10, count: m.count }))
+    .map(([ym, m]) => {
+      runSum += m.sum; runCount += m.count
+      return { ym, avg: Math.round((m.sum / m.count) * 10) / 10, count: m.count, cumAvg: Math.round((runSum / runCount) * 10) / 10 }
+    })
     .slice(-12)
 
   const repliedCount = rows.filter((r) => r.replied).length
