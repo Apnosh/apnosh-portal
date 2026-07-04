@@ -202,7 +202,7 @@ function Body({ data, sel, setSel, summary, topicsData, topicsLoading, detail }:
       {/* Reviews lead with the rating + star histogram (a review's day-to-day
           timing is noise); every other metric leads with its time chart. */}
       {mv.key === 'reputation' ? (
-        <ReviewHero avgRating={data.avgRating} totalReviews={data.totalReviews} summary={summary} />
+        <ReviewHero avgRating={data.avgRating} summary={summary} />
       ) : (
         <>
           {/* hero */}
@@ -570,37 +570,28 @@ function TopicBreakdown({ topics }: { topics: ReviewTopic[] }) {
 
 // ── Reviews hero: average rating + star histogram (replaces the time chart, since
 //    a review's day-to-day timing is noise; the trends that matter are monthly) ──
-function ReviewHero({ avgRating, totalReviews, summary }: { avgRating: number | null; totalReviews: number; summary: ReviewSummary | null }) {
+function ReviewHero({ avgRating, summary }: { avgRating: number | null; summary: ReviewSummary | null }) {
   const stars = summary?.stars ?? null
-  // The sample we've actually pulled through the API (drives the histogram etc).
+  // Average from the histogram we've pulled; the headline prefers Google's
+  // authoritative place rating when we have it.
   let sampleAvg = avgRating
-  let sampleTotal = summary?.split.total ?? totalReviews
+  let sampleTotal = 0
   if (stars) {
     let sum = 0; let n = 0
     for (const k of [1, 2, 3, 4, 5]) { const c = stars[String(k)] ?? 0; sum += k * c; n += c }
-    if (n > 0) { sampleAvg = Math.round((sum / n) * 10) / 10; sampleTotal = n }
+    if (n > 0) sampleAvg = Math.round((sum / n) * 10) / 10
+    sampleTotal = n
   }
-  // Headline = Google's authoritative listing rating + count when we have it,
-  // since the API only hands back a subset of the actual reviews. Fall back to
-  // the sample when the place rating isn't synced.
   const shownAvg = summary?.placeRating ?? sampleAvg
-  const shownTotal = summary?.placeRatingCount ?? sampleTotal
-  const partial = summary?.placeRatingCount != null && summary.placeRatingCount > sampleTotal && sampleTotal > 0
   return (
     <div>
       <div style={{ fontSize: 14, color: C.mute, fontWeight: 500 }}>Your rating</div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginTop: 3 }}>
         <span style={{ fontFamily: DISPLAY, fontSize: 46, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em' }}>{shownAvg != null ? shownAvg.toFixed(1) : '—'}</span>
-        <span style={{ marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <Stars n={shownAvg ?? 0} />
-          <span style={{ fontSize: 12.5, color: C.faint }}>{shownTotal.toLocaleString()} review{shownTotal === 1 ? '' : 's'} on Google</span>
-        </span>
+        <span style={{ marginBottom: 8 }}><Stars n={shownAvg ?? 0} /></span>
       </div>
       {stars && sampleTotal > 0 ? (
-        <>
-          <div style={{ marginTop: 18 }}><StarBars stars={stars} /></div>
-          {partial && <div style={{ fontSize: 11, color: C.faint, marginTop: 10, lineHeight: 1.45 }}>Breakdowns below are from the {sampleTotal.toLocaleString()} reviews we&apos;ve read so far. Google only shares a portion through its feed.</div>}
-        </>
+        <div style={{ marginTop: 18 }}><StarBars stars={stars} /></div>
       ) : (
         <div style={{ marginTop: 16, fontSize: 12.5, color: C.faint }}>Loading your star breakdown&hellip;</div>
       )}
