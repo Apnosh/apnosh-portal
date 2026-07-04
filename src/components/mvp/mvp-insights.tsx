@@ -217,46 +217,47 @@ function Body({ data, sel, setSel, summary, summaryLoading, detail }: { data: In
         </>
       )}
 
-      {/* ─────────── 2. Busiest days ─────────── */}
-      <BusyDays daily={mv.daily} />
+      {/* ─── Breakdowns below the graph are tailored to the selected metric ─── */}
+      {mv.key === 'reputation' ? (
+        <>
+          {/* Reviews: what customers say + the latest ones */}
+          <ReviewSentiment summary={summary} loading={summaryLoading} avgRating={data.avgRating} totalReviews={data.totalReviews} unanswered={data.unanswered} />
+          {data.reviews.length > 0 && (
+            <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {data.reviews.slice(0, 3).map((r) => {
+                  const tint = r.rating >= 4 ? C.green : r.rating <= 2 ? C.coral : C.faint
+                  return (
+                    <Link key={r.id} href={`/dashboard/reviews/${r.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', background: '#fff', border: `0.5px solid ${C.line}`, borderLeft: `3px solid ${tint}`, borderRadius: 14, padding: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                        <span style={{ fontWeight: 600, fontSize: 13 }}>{r.authorName}</span>
+                        <Stars n={r.rating} />
+                        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3 }}>
+                          {r.needsReply && <span style={{ fontSize: 10, fontWeight: 700, color: C.coral, background: C.coralBg, borderRadius: 99, padding: '2px 8px' }}>Reply</span>}
+                          <ChevronRight size={15} color={C.faint} />
+                        </span>
+                      </div>
+                      {r.text && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.text}</div>}
+                    </Link>
+                  )
+                })}
+              </div>
+            </Section>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Views: the "who saw you" story — how they find you, what they search, best posts */}
+          {mv.key === 'reach' && detail?.findYou && <FindYou b={detail.findYou} />}
+          {mv.key === 'reach' && detail && detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
+          {mv.key === 'reach' && detail && detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} />}
 
-      {/* ─────────── 3. The path (funnel) ─────────── */}
-      <PathFunnel byKey={byKey} />
+          {/* When it happens — for every flow metric */}
+          <BusyDays daily={mv.daily} />
 
-      {/* ─────────── 4. How people find you on Google ─────────── */}
-      {detail?.findYou && <FindYou b={detail.findYou} />}
-
-      {/* ─────────── 5. What people search ─────────── */}
-      {detail && detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
-
-      {/* ─────────── 6. Your best posts ─────────── */}
-      {detail && detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} />}
-
-      {/* ─────────── 7. What customers are saying ─────────── */}
-      <ReviewSentiment summary={summary} loading={summaryLoading} avgRating={data.avgRating} totalReviews={data.totalReviews} unanswered={data.unanswered} />
-
-      {/* ─────────── 8. Latest reviews ─────────── */}
-      {data.reviews.length > 0 && (
-        <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {data.reviews.slice(0, 3).map((r) => {
-              const tint = r.rating >= 4 ? C.green : r.rating <= 2 ? C.coral : C.faint
-              return (
-                <Link key={r.id} href={`/dashboard/reviews/${r.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', background: '#fff', border: `0.5px solid ${C.line}`, borderLeft: `3px solid ${tint}`, borderRadius: 14, padding: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>{r.authorName}</span>
-                    <Stars n={r.rating} />
-                    <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 3 }}>
-                      {r.needsReply && <span style={{ fontSize: 10, fontWeight: 700, color: C.coral, background: C.coralBg, borderRadius: 99, padding: '2px 8px' }}>Reply</span>}
-                      <ChevronRight size={15} color={C.faint} />
-                    </span>
-                  </div>
-                  {r.text && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.text}</div>}
-                </Link>
-              )
-            })}
-          </div>
-        </Section>
+          {/* Where this metric sits in the customer journey, its own stage highlighted */}
+          <PathFunnel byKey={byKey} activeKey={mv.key} />
+        </>
       )}
     </div>
   )
@@ -310,7 +311,7 @@ const PATH_STAGES: { key: string; label: string; icon: React.ComponentType<{ siz
   { key: 'bookings', label: 'Booked a table', icon: CalendarDays },
   { key: 'loyalty', label: 'On your email list', icon: Mail },
 ]
-function PathFunnel({ byKey }: { byKey: Map<string, MetricView> }) {
+function PathFunnel({ byKey, activeKey }: { byKey: Map<string, MetricView>; activeKey?: string }) {
   const rows = PATH_STAGES.map((s) => ({ ...s, total: byKey.get(s.key)?.total ?? 0 })).filter((r) => r.total > 0)
   if (rows.length < 2) return null
   const top = rows[0].total
@@ -321,13 +322,14 @@ function PathFunnel({ byKey }: { byKey: Map<string, MetricView> }) {
     if (p < leakPct) { leakPct = p; leak = i }
   }
   return (
-    <Section title="The path" sub="found you to booked">
+    <Section title="The path" sub="where this fits">
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {rows.map((r, i) => {
           const Icon = r.icon
           const w = Math.max(16, Math.round(Math.min(1, r.total / top) * 100))
           const conv = i > 0 ? Math.round((r.total / rows[i - 1].total) * 100) : null
           const isLeak = i === leak
+          const isActive = r.key === activeKey
           return (
             <div key={r.key}>
               {conv != null && (
@@ -335,14 +337,17 @@ function PathFunnel({ byKey }: { byKey: Map<string, MetricView> }) {
                   <span style={{ fontSize: 12, lineHeight: 1 }}>↓</span>{conv > 100 ? '100+' : conv}% moved on
                 </div>
               )}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={14} color={C.greenDk} /></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: isActive ? C.greenSoft : 'transparent', borderRadius: 12, padding: isActive ? '7px 8px' : '0', margin: isActive ? '0 -8px' : '0' }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: isActive ? C.green : C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={14} color={isActive ? '#fff' : C.greenDk} /></div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                    <span style={{ fontSize: 12.5, color: C.mute, fontWeight: 500 }}>{r.label}</span>
-                    <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600 }}>{r.total.toLocaleString()}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, gap: 8 }}>
+                    <span style={{ fontSize: 12.5, color: isActive ? C.ink : C.mute, fontWeight: isActive ? 700 : 500, display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</span>
+                      {isActive && <span style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.greenDk, background: '#fff', border: `1px solid ${C.greenLine}`, borderRadius: 99, padding: '1px 7px' }}>This graph</span>}
+                    </span>
+                    <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, flexShrink: 0 }}>{r.total.toLocaleString()}</span>
                   </div>
-                  <div style={{ height: 9, borderRadius: 99, background: C.bg, overflow: 'hidden' }}>
+                  <div style={{ height: 9, borderRadius: 99, background: isActive ? '#fff' : C.bg, overflow: 'hidden' }}>
                     <div style={{ width: `${w}%`, height: '100%', borderRadius: 99, background: `linear-gradient(90deg, ${C.green}, ${C.greenDk})` }} />
                   </div>
                 </div>
