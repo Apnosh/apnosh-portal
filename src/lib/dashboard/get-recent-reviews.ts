@@ -39,7 +39,9 @@ export async function getRecentReviews(
       .select('id, author_name, rating, review_text, source, posted_at, response_text')
       .eq('client_id', clientId)
       .order('posted_at', { ascending: false })
-      .limit(limit),
+      // Over-fetch so we can drop rating-only reviews (no text) and still have
+      // `limit` real, quotable ones for the "Latest reviews" rail.
+      .limit(Math.max(limit * 6, 24)),
     admin
       .from('reviews')
       .select('rating', { count: 'exact' })
@@ -50,7 +52,10 @@ export async function getRecentReviews(
       .eq('client_id', clientId),
   ])
 
-  const items: RecentReviewItem[] = (recentRes.data ?? []).map(r => {
+  const items: RecentReviewItem[] = (recentRes.data ?? [])
+    .filter(r => r.review_text && String(r.review_text).trim().length > 1)
+    .slice(0, limit)
+    .map(r => {
     const rating = Number(r.rating ?? 0)
     return {
       id: r.id as string,
