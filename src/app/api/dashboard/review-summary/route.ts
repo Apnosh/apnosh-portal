@@ -84,24 +84,18 @@ export async function GET(req: NextRequest) {
   const stars: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
   for (const r of rows) { const s = Math.min(5, Math.max(1, Math.round(r.rating))); stars[s] += 1 }
 
-  const monthMap = new Map<string, { sum: number; count: number }>()
-  for (const r of rows) {
-    const ym = ymKey(r.at); if (!ym) continue
-    const m = monthMap.get(ym) ?? { sum: 0, count: 0 }
-    m.sum += r.rating; m.count += 1; monthMap.set(ym, m)
+  // Reviews per month, then the trailing 12 months (rolling, ending this month),
+  // zero-filled so months with no reviews still show — the honest cadence with
+  // its gaps.
+  const monthCount = new Map<string, number>()
+  for (const r of rows) { const ym = ymKey(r.at); if (ym) monthCount.set(ym, (monthCount.get(ym) ?? 0) + 1) }
+  const nowD = new Date()
+  const byMonth: { ym: string; count: number }[] = []
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(nowD.getFullYear(), nowD.getMonth() - i, 1)
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    byMonth.push({ ym, count: monthCount.get(ym) ?? 0 })
   }
-  // avg = that month's own average; cumAvg = the running all-time average up to
-  // and including that month (the live star rating over time). cumAvg is built
-  // over the FULL history first, then we keep the last 12 — so a 2-review month
-  // can't whip the line around, and the last point equals the overall rating.
-  let runSum = 0; let runCount = 0
-  const byMonth = [...monthMap.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([ym, m]) => {
-      runSum += m.sum; runCount += m.count
-      return { ym, avg: Math.round((m.sum / m.count) * 10) / 10, count: m.count, cumAvg: Math.round((runSum / runCount) * 10) / 10 }
-    })
-    .slice(-12)
 
   const repliedCount = rows.filter((r) => r.replied).length
   const reply = {

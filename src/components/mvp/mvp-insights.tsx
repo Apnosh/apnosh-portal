@@ -57,7 +57,7 @@ export interface InsightsData {
 interface ReviewSummary {
   split: { positive: number; neutral: number; negative: number; total: number }
   stars: Record<string, number>
-  byMonth: { ym: string; avg: number; count: number; cumAvg: number }[]
+  byMonth: { ym: string; count: number }[]
   reply: { total: number; replied: number; unanswered: number; unansweredNegative: number }
   sources: Record<string, number>
   recent: { rating: number; date: string }[]
@@ -616,16 +616,35 @@ function StarBars({ stars }: { stars: Record<string, number> }) {
   )
 }
 
-// ── A tiny bar strip shared by the rating + velocity charts ──
 const MONTHS3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 function monLabel(ym: string): string { const m = Number(ym.split('-')[1]); return MONTHS3[m - 1] ?? ym }
-function MiniBars({ values, colorFor, height = 46 }: { values: number[]; colorFor: (v: number, i: number) => string; height?: number }) {
-  const max = Math.max(1, ...values)
+
+// ── A bar per month (last 12), height = review count. Tap a bar to see the month
+//    + count. Zero-review months show as a faint stub so gaps are visible. ──
+function CountBars({ months }: { months: { ym: string; count: number }[] }) {
+  const [picked, setPicked] = useState<number | null>(null)
+  const H = 54
+  const n = months.length
+  const max = Math.max(1, ...months.map((m) => m.count))
+  const fmtMonth = (ym: string) => { const [y, mm] = ym.split('-'); return `${MONTHS3[Number(mm) - 1] ?? ym} ${y}` }
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height }}>
-      {values.map((v, i) => {
-        const h = Math.max(3, Math.round((v / max) * (height - 4)))
-        return <div key={i} style={{ flex: 1, minWidth: 0, height: h, borderRadius: 4, background: colorFor(v, i) }} />
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: H }}>
+      {months.map((mo, i) => {
+        const h = mo.count > 0 ? Math.max(4, Math.round((mo.count / max) * (H - 4))) : 2
+        const isPicked = picked === i
+        const color = mo.count === 0 ? C.line : i === n - 1 ? C.greenDk : C.green
+        const edge = i < 2 ? 'left' : i > n - 3 ? 'right' : 'mid'
+        return (
+          <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, minWidth: 0, height: '100%', position: 'relative', display: 'flex', alignItems: 'flex-end', cursor: 'pointer' }}>
+            <div style={{ width: '100%', height: h, borderRadius: 4, background: color, opacity: picked === null || isPicked ? 1 : 0.4, transition: 'opacity .15s' }} />
+            {isPicked && (
+              <div style={{ position: 'absolute', bottom: '100%', marginBottom: 6, ...(edge === 'mid' ? { left: '50%', transform: 'translateX(-50%)' } : edge === 'left' ? { left: 0 } : { right: 0 }), background: C.ink, color: '#fff', borderRadius: 8, padding: '7px 10px', whiteSpace: 'nowrap', zIndex: 5, lineHeight: 1.4, textAlign: 'left' }}>
+                <div style={{ fontSize: 12, fontWeight: 700 }}>{fmtMonth(mo.ym)}</div>
+                <div style={{ fontSize: 10.5, opacity: 0.8, marginTop: 1 }}>{mo.count} review{mo.count === 1 ? '' : 's'}</div>
+              </div>
+            )}
+          </div>
+        )
       })}
     </div>
   )
@@ -644,8 +663,6 @@ function MonthAxis({ months }: { months: string[] }) {
   )
 }
 
-// ── A line + soft area sparkline. Scaled to [bottom, top] so movement in a
-//    tight band (like a 1-5 rating) is actually visible; stroke stays crisp. ──
 // ── A bar per recent review, height = its star score (green 4-5, grey 3, coral
 //    1-2). Tap a bar to see that review's rating + date, like the home chart. ──
 function ScoreBars({ reviews }: { reviews: { rating: number; date: string }[] }) {
@@ -688,11 +705,12 @@ function TrendPill({ dir }: { dir: 'up' | 'down' | 'flat' }) {
 }
 
 // ── Rating trend (recent review scores) + review volume ──
-function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; avg: number; count: number; cumAvg: number }[]; recent: { rating: number; date: string }[] }) {
-  const first = byMonth[0]; const last = byMonth[byMonth.length - 1]
+function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; count: number }[]; recent: { rating: number; date: string }[] }) {
   const months = byMonth.map((m) => m.ym)
-  const counts = byMonth.map((m) => m.count)
-  const volDir: 'up' | 'down' | 'flat' = last.count > first.count ? 'up' : last.count < first.count ? 'down' : 'flat'
+  const total12 = byMonth.reduce((s, m) => s + m.count, 0)
+  const olderSum = byMonth.slice(0, Math.floor(byMonth.length / 2)).reduce((s, m) => s + m.count, 0)
+  const newerSum = byMonth.slice(Math.floor(byMonth.length / 2)).reduce((s, m) => s + m.count, 0)
+  const volDir: 'up' | 'down' | 'flat' = newerSum > olderSum ? 'up' : newerSum < olderSum ? 'down' : 'flat'
   // Recent ratings: each bar is one of the last 12 individual reviews, oldest to
   // newest. Direction compares the newer half of the 12 to the older half.
   const scores = recent.map((r) => r.rating)
@@ -728,19 +746,19 @@ function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; avg: numbe
         </div>
       )}
 
-      {/* New reviews a month */}
-      <div style={{ ...card, marginTop: 10 }}>
+      {/* New reviews — last 12 months, each bar a month (tap for the count) */}
+      <div style={{ ...card, marginTop: scores.length > 0 ? 10 : 0 }}>
         <div style={head}>
           <span style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-            <span style={title}>New reviews a month</span>
-            <span style={big}>{last.count}</span>
+            <span style={title}>New reviews</span>
+            <span style={big}>{total12}</span>
           </span>
           <TrendPill dir={volDir} />
         </div>
-        <MiniBars values={counts} height={54} colorFor={(_, i) => (i === counts.length - 1 ? C.greenDk : C.green)} />
+        <CountBars months={byMonth} />
         <MonthAxis months={months} />
         <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
-          <b style={{ color: C.ink, fontWeight: 600 }}>{last.count}</b> in {monLabel(last.ym)}{volDir === 'up' ? ', more than before. Keep asking happy guests.' : volDir === 'down' ? ', fewer than before. A quick ask brings them back.' : '. A steady flow.'}
+          <b style={{ color: C.ink, fontWeight: 600 }}>{total12}</b> in the last 12 months{volDir === 'up' ? ', picking up lately.' : volDir === 'down' ? ', slower lately. A quick ask brings them back.' : '. A steady flow.'}
         </div>
       </div>
     </Section>
