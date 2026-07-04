@@ -505,7 +505,7 @@ function Section({ title, sub, action, children }: { title: string; sub?: string
 function ReviewSentiment({ topics, loading }: { topics: ReviewTopicsData | null; loading: boolean }) {
   if (!topics) {
     return (
-      <Section title="What customers are saying" sub="from reviews we've read">
+      <Section title="What customers are saying">
         <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14, fontSize: 13, color: C.faint }}>
           {loading ? 'Reading your reviews…' : 'A few written reviews and we can pull out the topics guests mention.'}
         </div>
@@ -513,7 +513,7 @@ function ReviewSentiment({ topics, loading }: { topics: ReviewTopicsData | null;
     )
   }
   return (
-    <Section title="What customers are saying" sub="from reviews we've read">
+    <Section title="What customers are saying">
       {topics.topics.length > 0
         ? <TopicBreakdown topics={topics.topics} />
         : <div style={{ fontSize: 13, color: C.faint }}>A few more written reviews and we can pull out the topics guests mention.</div>}
