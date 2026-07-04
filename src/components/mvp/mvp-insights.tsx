@@ -620,22 +620,93 @@ function MiniBars({ values, colorFor, height = 46 }: { values: number[]; colorFo
   )
 }
 
-// ── Rating trend + review velocity over the recent months ──
+// ── A few month labels under a chart, so the timeline is legible ──
+function MonthAxis({ months }: { months: string[] }) {
+  if (months.length < 2) return null
+  const labels = months.length >= 3
+    ? [months[0], months[Math.floor((months.length - 1) / 2)], months[months.length - 1]]
+    : [months[0], months[months.length - 1]]
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10, color: C.faint }}>
+      {labels.map((ym, i) => <span key={i}>{monLabel(ym)}</span>)}
+    </div>
+  )
+}
+
+// ── A line + soft area sparkline. Scaled to [bottom, top] so movement in a
+//    tight band (like a 1-5 rating) is actually visible; stroke stays crisp. ──
+function LineChart({ values, bottom, top, color }: { values: number[]; bottom: number; top: number; color: string }) {
+  const W = 100; const H = 40
+  const n = values.length
+  const dom = top - bottom || 1
+  const pts = values.map((v, i): [number, number] => [n > 1 ? (i / (n - 1)) * W : W / 2, H - ((Math.max(bottom, Math.min(top, v)) - bottom) / dom) * H])
+  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')
+  const area = `M0 ${H} ${pts.map(([x, y]) => `L${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')} L${W} ${H} Z`
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 54, display: 'block' }}>
+      <path d={area} fill={color} opacity={0.1} />
+      <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  )
+}
+
+function TrendPill({ dir }: { dir: 'up' | 'down' | 'flat' }) {
+  const map = { up: { c: C.greenDk, bg: C.greenSoft, t: 'Going up' }, down: { c: C.coral, bg: C.coralBg, t: 'Going down' }, flat: { c: C.mute, bg: C.bg, t: 'Steady' } }
+  const m = map[dir]
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10.5, fontWeight: 700, color: m.c, background: m.bg, borderRadius: 99, padding: '2px 8px' }}>
+      {dir === 'up' ? <TrendingUp size={11} /> : dir === 'down' ? <TrendingDown size={11} /> : <Minus size={11} />}{m.t}
+    </span>
+  )
+}
+
+// ── Rating trend + review volume over the recent months ──
 function RatingOverTime({ byMonth }: { byMonth: { ym: string; avg: number; count: number }[] }) {
   const first = byMonth[0]; const last = byMonth[byMonth.length - 1]
-  const ratingDir = last.avg > first.avg + 0.15 ? 'up' : last.avg < first.avg - 0.15 ? 'down' : 'flat'
-  const volDir = last.count > first.count ? 'up' : last.count < first.count ? 'down' : 'flat'
+  const months = byMonth.map((m) => m.ym)
+  const avgs = byMonth.map((m) => m.avg)
+  const counts = byMonth.map((m) => m.count)
+  const ratingDir: 'up' | 'down' | 'flat' = last.avg > first.avg + 0.15 ? 'up' : last.avg < first.avg - 0.15 ? 'down' : 'flat'
+  const volDir: 'up' | 'down' | 'flat' = last.count > first.count ? 'up' : last.count < first.count ? 'down' : 'flat'
+  // Rating scale: floor a little below the lowest month, cap at a perfect 5, so
+  // the line uses the whole height and small swings read clearly.
+  const rBottom = Math.max(1, Math.floor((Math.min(...avgs) - 0.3) * 10) / 10)
+  const card: React.CSSProperties = { background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14 }
+  const head: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }
+  const title: React.CSSProperties = { fontSize: 12.5, color: C.mute, fontWeight: 600 }
+  const big: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 19, fontWeight: 500, color: C.ink }
   return (
-    <Section title="Over time" sub={`${monLabel(first.ym)}–${monLabel(last.ym)}`}>
-      <div style={{ fontSize: 12, color: C.mute, fontWeight: 600, marginBottom: 8 }}>Average rating</div>
-      <MiniBars values={byMonth.map((m) => m.avg)} colorFor={(v) => (v >= 4 ? C.green : v >= 3 ? C.amber : C.coral)} />
-      <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
-        {ratingDir === 'up' ? <>Climbing, {first.avg}&#9733; to <b style={{ color: C.greenDk, fontWeight: 600 }}>{last.avg}&#9733;</b>.</> : ratingDir === 'down' ? <>Slipping, {first.avg}&#9733; to <b style={{ color: C.coral, fontWeight: 600 }}>{last.avg}&#9733;</b>.</> : <>Holding steady around <b style={{ color: C.ink, fontWeight: 600 }}>{last.avg}&#9733;</b>.</>}
+    <Section title="Over time">
+      {/* Average rating */}
+      <div style={card}>
+        <div style={head}>
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+            <span style={title}>Average rating</span>
+            <span style={big}>{last.avg}&#9733;</span>
+          </span>
+          <TrendPill dir={ratingDir} />
+        </div>
+        <LineChart values={avgs} bottom={rBottom} top={5} color={ratingDir === 'down' ? C.coral : C.green} />
+        <MonthAxis months={months} />
+        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
+          {ratingDir === 'up' ? <>Up from {first.avg}&#9733; back in {monLabel(first.ym)}.</> : ratingDir === 'down' ? <>Down from {first.avg}&#9733; back in {monLabel(first.ym)}.</> : <>Holding steady since {monLabel(first.ym)}.</>}
+        </div>
       </div>
-      <div style={{ fontSize: 12, color: C.mute, fontWeight: 600, margin: '18px 0 8px' }}>New reviews each month</div>
-      <MiniBars values={byMonth.map((m) => m.count)} colorFor={() => C.green} />
-      <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
-        <b style={{ color: C.ink, fontWeight: 600 }}>{last.count}</b> in {monLabel(last.ym)}{volDir === 'up' ? ', more than before. Keep asking happy guests.' : volDir === 'down' ? ', fewer than before. A quick ask brings them back.' : '.'}
+
+      {/* New reviews a month */}
+      <div style={{ ...card, marginTop: 10 }}>
+        <div style={head}>
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+            <span style={title}>New reviews a month</span>
+            <span style={big}>{last.count}</span>
+          </span>
+          <TrendPill dir={volDir} />
+        </div>
+        <MiniBars values={counts} height={54} colorFor={(_, i) => (i === counts.length - 1 ? C.greenDk : C.green)} />
+        <MonthAxis months={months} />
+        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
+          <b style={{ color: C.ink, fontWeight: 600 }}>{last.count}</b> in {monLabel(last.ym)}{volDir === 'up' ? ', more than before. Keep asking happy guests.' : volDir === 'down' ? ', fewer than before. A quick ask brings them back.' : '. A steady flow.'}
+        </div>
       </div>
     </Section>
   )
