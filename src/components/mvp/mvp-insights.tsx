@@ -252,7 +252,8 @@ function Body({ data, sel, setSel, summary, topicsData, topicsLoading, detail }:
           {summary && <ReviewSources sources={summary.sources} googleCount={summary.placeRatingCount} />}
           {/* Reviews: what customers say + the latest ones */}
           <ReviewSentiment topics={topicsData} loading={topicsLoading} />
-          {summary && summary.byMonth.length >= 2 && <RatingOverTime byMonth={summary.byMonth} />}
+          {summary && summary.split.total > 0 && <RatingBreakdown stars={summary.stars} />}
+          {summary && summary.byMonth.length >= 2 && <ReviewVelocity byMonth={summary.byMonth} />}
           {summary && summary.reply.total > 0 && <ReplyHealth reply={summary.reply} />}
           {data.reviews.length > 0 && (
             <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
@@ -580,14 +581,7 @@ function ReviewHero({ avgRating, totalReviews, summary }: { avgRating: number | 
           <span style={{ fontSize: 12.5, color: C.faint }}>{shownTotal.toLocaleString()} review{shownTotal === 1 ? '' : 's'} on Google</span>
         </span>
       </div>
-      {stars && sampleTotal > 0 ? (
-        <>
-          <div style={{ marginTop: 18 }}><StarBars stars={stars} /></div>
-          {partial && <div style={{ fontSize: 11, color: C.faint, marginTop: 10, lineHeight: 1.45 }}>Breakdowns below are from the {sampleTotal.toLocaleString()} reviews we&apos;ve read so far. Google only shares a portion through its feed.</div>}
-        </>
-      ) : (
-        <div style={{ marginTop: 16, fontSize: 12.5, color: C.faint }}>Loading your star breakdown&hellip;</div>
-      )}
+      {partial && <div style={{ fontSize: 11, color: C.faint, marginTop: 10, lineHeight: 1.45 }}>Breakdowns below are from the {sampleTotal.toLocaleString()} reviews we&apos;ve read so far. Google only shares a portion through its feed.</div>}
     </div>
   )
 }
@@ -645,21 +639,6 @@ function MonthAxis({ months }: { months: string[] }) {
 
 // ── A line + soft area sparkline. Scaled to [bottom, top] so movement in a
 //    tight band (like a 1-5 rating) is actually visible; stroke stays crisp. ──
-function LineChart({ values, bottom, top, color }: { values: number[]; bottom: number; top: number; color: string }) {
-  const W = 100; const H = 40
-  const n = values.length
-  const dom = top - bottom || 1
-  const pts = values.map((v, i): [number, number] => [n > 1 ? (i / (n - 1)) * W : W / 2, H - ((Math.max(bottom, Math.min(top, v)) - bottom) / dom) * H])
-  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')
-  const area = `M0 ${H} ${pts.map(([x, y]) => `L${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')} L${W} ${H} Z`
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 54, display: 'block' }}>
-      <path d={area} fill={color} opacity={0.1} />
-      <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-    </svg>
-  )
-}
-
 function TrendPill({ dir }: { dir: 'up' | 'down' | 'flat' }) {
   const map = { up: { c: C.greenDk, bg: C.greenSoft, t: 'Going up' }, down: { c: C.coral, bg: C.coralBg, t: 'Going down' }, flat: { c: C.mute, bg: C.bg, t: 'Steady' } }
   const m = map[dir]
@@ -670,49 +649,32 @@ function TrendPill({ dir }: { dir: 'up' | 'down' | 'flat' }) {
   )
 }
 
-// ── Rating trend + review volume over the recent months ──
-function RatingOverTime({ byMonth }: { byMonth: { ym: string; avg: number; count: number; cumAvg: number }[] }) {
+// ── How you're rated: the 5-to-1 star histogram (moved out of the hero) ──
+function RatingBreakdown({ stars }: { stars: Record<string, number> }) {
+  const total = [1, 2, 3, 4, 5].reduce((s, k) => s + (stars[String(k)] ?? 0), 0)
+  if (total === 0) return null
+  return (
+    <Section title="How you're rated" sub="from reviews we've read">
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14 }}>
+        <StarBars stars={stars} />
+      </div>
+    </Section>
+  )
+}
+
+// ── Velocity: how often new reviews come in, month by month ──
+function ReviewVelocity({ byMonth }: { byMonth: { ym: string; avg: number; count: number; cumAvg: number }[] }) {
   const first = byMonth[0]; const last = byMonth[byMonth.length - 1]
   const months = byMonth.map((m) => m.ym)
-  // Rating line is the RUNNING all-time average (the live star rating over time),
-  // not each month's own average — so a single review can't swing it and the last
-  // point equals the overall rating shown up top.
-  const cumAvgs = byMonth.map((m) => m.cumAvg)
   const counts = byMonth.map((m) => m.count)
-  const rFirst = first.cumAvg; const rLast = last.cumAvg
-  const ratingDir: 'up' | 'down' | 'flat' = rLast > rFirst + 0.1 ? 'up' : rLast < rFirst - 0.1 ? 'down' : 'flat'
   const volDir: 'up' | 'down' | 'flat' = last.count > first.count ? 'up' : last.count < first.count ? 'down' : 'flat'
-  // Scale a little below the lowest running value, cap at a perfect 5, so the
-  // gentle drift uses the height and reads clearly.
-  const rBottom = Math.max(1, Math.floor((Math.min(...cumAvgs) - 0.3) * 10) / 10)
-  const card: React.CSSProperties = { background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14 }
-  const head: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }
-  const title: React.CSSProperties = { fontSize: 12.5, color: C.mute, fontWeight: 600 }
-  const big: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 19, fontWeight: 500, color: C.ink }
   return (
-    <Section title="Over time">
-      {/* Average rating */}
-      <div style={card}>
-        <div style={head}>
+    <Section title="Velocity" sub="how often reviews come in">
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <span style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-            <span style={title}>Average rating</span>
-            <span style={big}>{rLast}&#9733;</span>
-          </span>
-          <TrendPill dir={ratingDir} />
-        </div>
-        <LineChart values={cumAvgs} bottom={rBottom} top={5} color={ratingDir === 'down' ? C.coral : C.green} />
-        <MonthAxis months={months} />
-        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
-          {ratingDir === 'up' ? <>Up from {rFirst}&#9733; back in {monLabel(first.ym)}.</> : ratingDir === 'down' ? <>Down from {rFirst}&#9733; back in {monLabel(first.ym)}.</> : <>Holding steady near {rLast}&#9733; since {monLabel(first.ym)}.</>}
-        </div>
-      </div>
-
-      {/* New reviews a month */}
-      <div style={{ ...card, marginTop: 10 }}>
-        <div style={head}>
-          <span style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-            <span style={title}>New reviews a month</span>
-            <span style={big}>{last.count}</span>
+            <span style={{ fontSize: 12.5, color: C.mute, fontWeight: 600 }}>New reviews a month</span>
+            <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 500, color: C.ink }}>{last.count}</span>
           </span>
           <TrendPill dir={volDir} />
         </div>
