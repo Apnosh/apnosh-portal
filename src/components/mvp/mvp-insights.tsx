@@ -509,12 +509,11 @@ function ReviewSentiment({ topics, loading }: { topics: ReviewTopicsData | null;
       </Section>
     )
   }
-  const hasContent = !!topics.summary || topics.topics.length > 0
   return (
     <Section title="What customers are saying">
-      {topics.summary && <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5 }}>{topics.summary}</div>}
-      {topics.topics.length > 0 && <TopicBreakdown topics={topics.topics} />}
-      {!hasContent && <div style={{ fontSize: 13, color: C.faint }}>A few more written reviews and we can pull out the topics guests mention.</div>}
+      {topics.topics.length > 0
+        ? <TopicBreakdown topics={topics.topics} />
+        : <div style={{ fontSize: 13, color: C.faint }}>A few more written reviews and we can pull out the topics guests mention.</div>}
     </Section>
   )
 }
@@ -522,8 +521,7 @@ function ReviewSentiment({ topics, loading }: { topics: ReviewTopicsData | null;
 // ── Topic breakdown: each topic's positive-vs-negative split + where it's headed ──
 function TopicBreakdown({ topics }: { topics: ReviewTopic[] }) {
   return (
-    <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint }}>By topic</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {topics.map((t, i) => {
         const m = t.mentions || 1
         const gp = (t.positive / m) * 100

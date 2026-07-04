@@ -177,6 +177,25 @@ export async function GET(req: NextRequest) {
     ...l.map((r) => ({ rating: Number(r.rating ?? 0), text: (r.text as string) ?? null, at: String(r.created_at_platform ?? '') })),
   ].filter((r) => r.rating > 0)
 
+  // Signature of the review set — changes only when a new review arrives (count
+  // grows) or the newest date moves. Lets us skip the model call when nothing
+  // changed since we last analyzed.
+  const sig = `${rows.length}:${rows.reduce((m, r) => (r.at > m ? r.at : m), '')}`
+
+  // Cache hit → return the stored breakdown instantly, no model call. Wrapped so
+  // a missing cache table (migration not applied) just falls through to live.
+  try {
+    const { data: cached } = await admin
+      .from('review_topic_cache')
+      .select('payload, review_sig')
+      .eq('client_id', clientId)
+      .maybeSingle()
+    if (cached && cached.review_sig === sig && cached.payload) {
+      const p = cached.payload as { summary?: string | null; topics?: Topic[] }
+      return NextResponse.json({ summary: p.summary ?? null, topics: p.topics ?? [], source: 'cache' })
+    }
+  } catch { /* cache table absent — compute live */ }
+
   const counts = {
     positive: rows.filter((r) => r.rating >= 4).length,
     neutral: rows.filter((r) => r.rating >= 3 && r.rating < 4).length,
@@ -192,6 +211,17 @@ export async function GET(req: NextRequest) {
 
   const ai = items.length >= 3 ? await analyze(items, counts, readApiKey()) : null
   const topics = ai ? buildTopics(ai.rawTopics, items) : []
+
+  // Only cache a real (successful) analysis, so a transient model failure isn't
+  // frozen in until the next new review.
+  if (ai) {
+    try {
+      await admin.from('review_topic_cache').upsert(
+        { client_id: clientId, payload: { summary: ai.summary, topics }, review_sig: sig, computed_at: new Date().toISOString() },
+        { onConflict: 'client_id' },
+      )
+    } catch { /* ignore cache write failure */ }
+  }
 
   return NextResponse.json({ summary: ai?.summary ?? null, topics, source: ai ? 'ai' : 'none' })
 }
