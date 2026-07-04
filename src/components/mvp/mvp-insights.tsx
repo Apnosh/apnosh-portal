@@ -646,15 +646,32 @@ function MonthAxis({ months }: { months: string[] }) {
 
 // ── A line + soft area sparkline. Scaled to [bottom, top] so movement in a
 //    tight band (like a 1-5 rating) is actually visible; stroke stays crisp. ──
-// ── A bar per recent review, height = its star score (green 4-5, grey 3, coral 1-2) ──
-function ScoreBars({ scores }: { scores: number[] }) {
+// ── A bar per recent review, height = its star score (green 4-5, grey 3, coral
+//    1-2). Tap a bar to see that review's rating + date, like the home chart. ──
+function ScoreBars({ reviews }: { reviews: { rating: number; date: string }[] }) {
+  const [picked, setPicked] = useState<number | null>(null)
   const H = 54
+  const n = reviews.length
+  const fmtDate = (s: string) => { const d = new Date(s); return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: H }}>
-      {scores.map((s, i) => {
+      {reviews.map((r, i) => {
+        const s = r.rating
         const h = Math.max(4, Math.round((Math.min(5, Math.max(0, s)) / 5) * (H - 4)))
         const color = s >= 4 ? C.green : s >= 3 ? C.faint : C.coral
-        return <div key={i} style={{ flex: 1, minWidth: 0, height: h, borderRadius: 4, background: color }} />
+        const isPicked = picked === i
+        const edge = i < 2 ? 'left' : i > n - 3 ? 'right' : 'mid'
+        return (
+          <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, minWidth: 0, height: '100%', position: 'relative', display: 'flex', alignItems: 'flex-end', cursor: 'pointer' }}>
+            <div style={{ width: '100%', height: h, borderRadius: 4, background: color, opacity: picked === null || isPicked ? 1 : 0.4, transition: 'opacity .15s' }} />
+            {isPicked && (
+              <div style={{ position: 'absolute', bottom: '100%', marginBottom: 6, ...(edge === 'mid' ? { left: '50%', transform: 'translateX(-50%)' } : edge === 'left' ? { left: 0 } : { right: 0 }), background: C.ink, color: '#fff', borderRadius: 8, padding: '7px 10px', whiteSpace: 'nowrap', zIndex: 5, lineHeight: 1.4, textAlign: 'left' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700 }}>{s}<Star size={11} color={C.amber} fill={C.amber} /></div>
+                <div style={{ fontSize: 10.5, opacity: 0.8, marginTop: 1 }}>{fmtDate(r.date)}</div>
+              </div>
+            )}
+          </div>
+        )
       })}
     </div>
   )
@@ -700,7 +717,7 @@ function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; avg: numbe
             </span>
             <TrendPill dir={ratingDir} />
           </div>
-          <ScoreBars scores={scores} />
+          <ScoreBars reviews={recent} />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10, color: C.faint }}>
             <span>{monLabel(recent[0].date)}</span>
             <span>Latest</span>
