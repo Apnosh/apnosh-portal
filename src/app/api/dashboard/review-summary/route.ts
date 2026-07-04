@@ -114,6 +114,15 @@ export async function GET(req: NextRequest) {
   const sources: Record<string, number> = {}
   for (const r of rows) { const k = normSource(r.source); sources[k] = (sources[k] ?? 0) + 1 }
 
+  // The 12 most recent reviews' scores, oldest -> newest, so the rating trend
+  // reads left to right (each bar is one real review, not a monthly average).
+  const recent = rows
+    .filter((r) => r.at)
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, 12)
+    .reverse()
+    .map((r) => ({ rating: r.rating, date: r.at }))
+
   // Google's authoritative listing rating + count (from the Places sync). This
   // is the true rating customers see; the individual reviews we can pull through
   // the API are only a subset, so the headline should use this, not the sample.
@@ -131,5 +140,5 @@ export async function GET(req: NextRequest) {
     }
   } catch { /* leave null — hero falls back to the sample average */ }
 
-  return NextResponse.json({ split, stars, byMonth, reply, sources, placeRating, placeRatingCount })
+  return NextResponse.json({ split, stars, byMonth, reply, sources, recent, placeRating, placeRatingCount })
 }

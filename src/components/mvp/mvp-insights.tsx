@@ -60,6 +60,7 @@ interface ReviewSummary {
   byMonth: { ym: string; avg: number; count: number; cumAvg: number }[]
   reply: { total: number; replied: number; unanswered: number; unansweredNegative: number }
   sources: Record<string, number>
+  recent: { rating: number; date: string }[]
   placeRating: number | null
   placeRatingCount: number | null
 }
@@ -252,7 +253,7 @@ function Body({ data, sel, setSel, summary, topicsData, topicsLoading, detail }:
           {summary && <ReviewSources sources={summary.sources} googleCount={summary.placeRatingCount} />}
           {/* Reviews: what customers say + the latest ones */}
           <ReviewSentiment topics={topicsData} loading={topicsLoading} />
-          {summary && summary.byMonth.length >= 2 && <RatingOverTime byMonth={summary.byMonth} />}
+          {summary && summary.byMonth.length >= 2 && <RatingOverTime byMonth={summary.byMonth} recent={summary.recent ?? []} />}
           {summary && summary.reply.total > 0 && <ReplyHealth reply={summary.reply} />}
           {data.reviews.length > 0 && (
             <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
@@ -645,18 +646,17 @@ function MonthAxis({ months }: { months: string[] }) {
 
 // ── A line + soft area sparkline. Scaled to [bottom, top] so movement in a
 //    tight band (like a 1-5 rating) is actually visible; stroke stays crisp. ──
-function LineChart({ values, bottom, top, color }: { values: number[]; bottom: number; top: number; color: string }) {
-  const W = 100; const H = 40
-  const n = values.length
-  const dom = top - bottom || 1
-  const pts = values.map((v, i): [number, number] => [n > 1 ? (i / (n - 1)) * W : W / 2, H - ((Math.max(bottom, Math.min(top, v)) - bottom) / dom) * H])
-  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')
-  const area = `M0 ${H} ${pts.map(([x, y]) => `L${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')} L${W} ${H} Z`
+// ── A bar per recent review, height = its star score (green 4-5, grey 3, coral 1-2) ──
+function ScoreBars({ scores }: { scores: number[] }) {
+  const H = 54
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 54, display: 'block' }}>
-      <path d={area} fill={color} opacity={0.1} />
-      <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-    </svg>
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: H }}>
+      {scores.map((s, i) => {
+        const h = Math.max(4, Math.round((Math.min(5, Math.max(0, s)) / 5) * (H - 4)))
+        const color = s >= 4 ? C.green : s >= 3 ? C.faint : C.coral
+        return <div key={i} style={{ flex: 1, minWidth: 0, height: h, borderRadius: 4, background: color }} />
+      })}
+    </div>
   )
 }
 
@@ -670,42 +670,46 @@ function TrendPill({ dir }: { dir: 'up' | 'down' | 'flat' }) {
   )
 }
 
-// ── Rating trend + review volume over the recent months ──
-function RatingOverTime({ byMonth }: { byMonth: { ym: string; avg: number; count: number; cumAvg: number }[] }) {
+// ── Rating trend (recent review scores) + review volume ──
+function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; avg: number; count: number; cumAvg: number }[]; recent: { rating: number; date: string }[] }) {
   const first = byMonth[0]; const last = byMonth[byMonth.length - 1]
   const months = byMonth.map((m) => m.ym)
-  // Rating line is the RUNNING all-time average (the live star rating over time),
-  // not each month's own average — so a single review can't swing it and the last
-  // point equals the overall rating shown up top.
-  const cumAvgs = byMonth.map((m) => m.cumAvg)
   const counts = byMonth.map((m) => m.count)
-  const rFirst = first.cumAvg; const rLast = last.cumAvg
-  const ratingDir: 'up' | 'down' | 'flat' = rLast > rFirst + 0.1 ? 'up' : rLast < rFirst - 0.1 ? 'down' : 'flat'
   const volDir: 'up' | 'down' | 'flat' = last.count > first.count ? 'up' : last.count < first.count ? 'down' : 'flat'
-  // Scale a little below the lowest running value, cap at a perfect 5, so the
-  // gentle drift uses the height and reads clearly.
-  const rBottom = Math.max(1, Math.floor((Math.min(...cumAvgs) - 0.3) * 10) / 10)
+  // Recent ratings: each bar is one of the last 12 individual reviews, oldest to
+  // newest. Direction compares the newer half of the 12 to the older half.
+  const scores = recent.map((r) => r.rating)
+  const rAvg = scores.length ? Math.round((scores.reduce((s, x) => s + x, 0) / scores.length) * 10) / 10 : 0
+  const half = Math.floor(scores.length / 2)
+  const olderAvg = half ? scores.slice(0, half).reduce((s, x) => s + x, 0) / half : 0
+  const newerAvg = scores.length - half ? scores.slice(half).reduce((s, x) => s + x, 0) / (scores.length - half) : 0
+  const ratingDir: 'up' | 'down' | 'flat' = newerAvg > olderAvg + 0.3 ? 'up' : newerAvg < olderAvg - 0.3 ? 'down' : 'flat'
   const card: React.CSSProperties = { background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14 }
   const head: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }
   const title: React.CSSProperties = { fontSize: 12.5, color: C.mute, fontWeight: 600 }
   const big: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 19, fontWeight: 500, color: C.ink }
   return (
     <Section title="Over time">
-      {/* Average rating */}
-      <div style={card}>
-        <div style={head}>
-          <span style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-            <span style={title}>Average rating</span>
-            <span style={big}>{rLast}&#9733;</span>
-          </span>
-          <TrendPill dir={ratingDir} />
+      {/* Recent ratings — each bar is one of your last 12 reviews */}
+      {scores.length > 0 && (
+        <div style={card}>
+          <div style={head}>
+            <span style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+              <span style={title}>Recent ratings</span>
+              <span style={big}>{rAvg}&#9733;</span>
+            </span>
+            <TrendPill dir={ratingDir} />
+          </div>
+          <ScoreBars scores={scores} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10, color: C.faint }}>
+            <span>{monLabel(recent[0].date)}</span>
+            <span>Latest</span>
+          </div>
+          <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
+            Your last {scores.length} review{scores.length === 1 ? '' : 's'}, oldest to newest. {ratingDir === 'up' ? 'Recent ones are picking up.' : ratingDir === 'down' ? 'Recent ones have dipped.' : 'Fairly steady lately.'}
+          </div>
         </div>
-        <LineChart values={cumAvgs} bottom={rBottom} top={5} color={ratingDir === 'down' ? C.coral : C.green} />
-        <MonthAxis months={months} />
-        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
-          {ratingDir === 'up' ? <>Up from {rFirst}&#9733; back in {monLabel(first.ym)}.</> : ratingDir === 'down' ? <>Down from {rFirst}&#9733; back in {monLabel(first.ym)}.</> : <>Holding steady near {rLast}&#9733; since {monLabel(first.ym)}.</>}
-        </div>
-      </div>
+      )}
 
       {/* New reviews a month */}
       <div style={{ ...card, marginTop: 10 }}>
