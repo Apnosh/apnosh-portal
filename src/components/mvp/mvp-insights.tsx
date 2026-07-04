@@ -66,7 +66,7 @@ interface ReviewSummary {
 }
 // SLOW AI aspect analysis from /api/dashboard/review-topics — the per-topic
 // positive/negative breakdown + a plain summary. Loads a beat later.
-interface ReviewTopic { name: string; positive: number; negative: number; mentions: number; direction: 'up' | 'down' | 'flat'; quote: string }
+interface ReviewTopic { name: string; positive: number; negative: number; mentions: number; direction: 'up' | 'down' | 'flat'; quote: string; negQuote: string }
 interface ReviewTopicsData { summary: string | null; topics: ReviewTopic[] }
 
 // The "further breakdown" data that /api/dashboard/load doesn't carry.
@@ -545,7 +545,22 @@ function TopicBreakdown({ topics }: { topics: ReviewTopic[] }) {
               {t.positive > 0 && <div style={{ width: `${gp}%`, background: C.green }} />}
               {t.negative > 0 && <div style={{ width: `${100 - gp}%`, background: C.coral }} />}
             </div>
-            {t.quote && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 6, fontStyle: 'italic', lineHeight: 1.4 }}>&ldquo;{t.quote}&rdquo;</div>}
+            {(t.quote || (t.negQuote && t.negative > 0)) && (
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {t.quote && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 99, background: C.green, marginTop: 5, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11.5, color: C.faint, fontStyle: 'italic', lineHeight: 1.4 }}>&ldquo;{t.quote}&rdquo;</span>
+                  </div>
+                )}
+                {t.negQuote && t.negative > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, justifyContent: 'flex-end' }}>
+                    <span style={{ fontSize: 11.5, color: C.faint, fontStyle: 'italic', lineHeight: 1.4, textAlign: 'right' }}>&ldquo;{t.negQuote}&rdquo;</span>
+                    <span style={{ width: 6, height: 6, borderRadius: 99, background: C.coral, marginTop: 5, flexShrink: 0 }} />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )
       })}

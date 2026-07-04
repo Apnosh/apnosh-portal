@@ -19,7 +19,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const maxDuration = 25
 
-interface Topic { name: string; positive: number; negative: number; mentions: number; direction: 'up' | 'down' | 'flat'; quote: string }
+interface Topic { name: string; positive: number; negative: number; mentions: number; direction: 'up' | 'down' | 'flat'; quote: string; negQuote: string }
 
 function readApiKey(): string | null {
   if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY
@@ -68,14 +68,15 @@ const ANALYSIS_SCHEMA = {
           name: { type: 'string', description: '1-3 words, concrete. Name the dish when guests do, e.g. "Brisket", "Service", "Wait time", "Value".' },
           positive: { type: 'array', items: { type: 'integer' }, description: 'Review numbers that speak POSITIVELY about this topic.' },
           negative: { type: 'array', items: { type: 'integer' }, description: 'Review numbers that speak NEGATIVELY about this topic.' },
-          quote: { type: 'string', description: 'One short phrase a guest actually wrote about this topic, a few words, verbatim.' },
+          quotePos: { type: 'string', description: 'A few words a guest actually wrote speaking POSITIVELY about this topic, verbatim. Empty string if no positive mention.' },
+          quoteNeg: { type: 'string', description: 'A few words a guest actually wrote speaking NEGATIVELY about this topic, verbatim. Empty string if no negative mention.' },
         },
       },
     },
   },
 }
 
-async function analyze(items: { rating: number; text: string }[], counts: { positive: number; neutral: number; negative: number; total: number }, apiKey: string | null): Promise<{ summary: string; rawTopics: { name?: string; positive?: number[]; negative?: number[]; quote?: string }[] } | null> {
+async function analyze(items: { rating: number; text: string }[], counts: { positive: number; neutral: number; negative: number; total: number }, apiKey: string | null): Promise<{ summary: string; rawTopics: { name?: string; positive?: number[]; negative?: number[]; quotePos?: string; quoteNeg?: string }[] } | null> {
   if (!apiKey || items.length === 0) return null
   const list = items.map((r, i) => `${i + 1}. [${r.rating}-star] ${r.text}`).join('\n')
   const system = `You read a restaurant's customer reviews and break down what guests say by TOPIC, for the owner.
@@ -84,7 +85,7 @@ Rules:
 - A topic is a concrete thing guests mention: a specific dish, service, wait time, value, ambiance, cleanliness, portion size, etc. Name the dish when guests do.
 - For each topic, list the review numbers that speak POSITIVELY about it and the ones that speak NEGATIVELY about it. One review can appear under several topics, and can be positive on one topic and negative on another (e.g. "great food but slow service").
 - Only include a topic that at least two reviews mention.
-- quote: a few words a guest actually wrote about the topic, verbatim.
+- quotePos / quoteNeg: a few words a guest actually wrote about the topic, verbatim — one where they praise it, one where they knock it. Leave a side empty if there's no such mention.
 - summary must match the OVERALL picture from the rating counts you are given.
 - Warm, plain, owner-facing English. No em dashes. Never mention AI.`
   const user = `Overall across all ${counts.total} reviews: ${counts.positive} positive, ${counts.neutral} neutral, ${counts.negative} negative.
@@ -112,7 +113,7 @@ Break the topics down and give the overall summary.`
     if (!res.ok) return null
     const data = await res.json()
     const text = data.content?.find((b: { type: string }) => b.type === 'text')?.text ?? '{}'
-    const parsed = JSON.parse(text) as { summary?: string; topics?: { name?: string; positive?: number[]; negative?: number[]; quote?: string }[] }
+    const parsed = JSON.parse(text) as { summary?: string; topics?: { name?: string; positive?: number[]; negative?: number[]; quotePos?: string; quoteNeg?: string }[] }
     if (!parsed.summary) return null
     return { summary: parsed.summary.trim(), rawTopics: parsed.topics ?? [] }
   } catch {
@@ -122,7 +123,7 @@ Break the topics down and give the overall summary.`
   }
 }
 
-function buildTopics(raw: { name?: string; positive?: number[]; negative?: number[]; quote?: string }[], items: { rating: number; text: string }[]): Topic[] {
+function buildTopics(raw: { name?: string; positive?: number[]; negative?: number[]; quotePos?: string; quoteNeg?: string }[], items: { rating: number; text: string }[]): Topic[] {
   const N = items.length
   const half = Math.max(1, Math.floor(N / 2))
   const haystack = items.map((i) => i.text.toLowerCase()).join(' ')
@@ -146,9 +147,11 @@ function buildTopics(raw: { name?: string; positive?: number[]; negative?: numbe
       if (rNet - oNet > 0.34) direction = 'up'
       else if (rNet - oNet < -0.34) direction = 'down'
     }
-    let quote = String(t.quote ?? '').trim()
+    let quote = String(t.quotePos ?? '').trim()
     if (quote && !grounded(quote, haystack)) quote = ''
-    out.push({ name, positive: pos.length, negative: neg.length, mentions, direction, quote })
+    let negQuote = String(t.quoteNeg ?? '').trim()
+    if (negQuote && !grounded(negQuote, haystack)) negQuote = ''
+    out.push({ name, positive: pos.length, negative: neg.length, mentions, direction, quote, negQuote })
   }
   // Most-talked-about topics first; ties broken by net sentiment.
   out.sort((a, b) => {
@@ -180,7 +183,9 @@ export async function GET(req: NextRequest) {
   // Signature of the review set — changes only when a new review arrives (count
   // grows) or the newest date moves. Lets us skip the model call when nothing
   // changed since we last analyzed.
-  const sig = `${rows.length}:${rows.reduce((m, r) => (r.at > m ? r.at : m), '')}`
+  // v2: bump when the analysis payload shape changes (added negQuote) so cached
+  // rows recompute even though the reviews are unchanged.
+  const sig = `v2:${rows.length}:${rows.reduce((m, r) => (r.at > m ? r.at : m), '')}`
 
   // Cache hit → return the stored breakdown instantly, no model call. Wrapped so
   // a missing cache table (migration not applied) just falls through to live.
