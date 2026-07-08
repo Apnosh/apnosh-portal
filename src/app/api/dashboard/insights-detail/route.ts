@@ -13,15 +13,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
-import { getGbpAnalytics } from '@/lib/dashboard/get-gbp-analytics'
+import { getGbpAnalytics, type AnalyticsRange } from '@/lib/dashboard/get-gbp-analytics'
 import { getSocialPosts } from '@/lib/dashboard/get-social-posts'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const maxDuration = 15
 
 type FindYou = { searchMobile: number; searchDesktop: number; mapsMobile: number; mapsDesktop: number }
 type TopPost = {
   id: string; platform: string; permalink: string | null; thumbnailUrl: string | null
-  type: string; reach: number; likes: number; saves: number
+  type: string; reach: number; likes: number; saves: number; postedAt: string | null
 }
 
 // Plain-English post type from the raw IG/FB media fields.
@@ -44,24 +45,76 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status })
   }
 
-  const [gbp, posts] = await Promise.allSettled([
-    getGbpAnalytics(clientId, '30d'),
+  // the funnel + visibility tabs pick the window; default to 30 days
+  const rp = req.nextUrl.searchParams.get('range')
+  const range: AnalyticsRange = rp === '7d' || rp === '90d' || rp === '12m' ? rp : '30d'
+
+  const admin = createAdminClient()
+  const [gbp, posts, primaryLoc] = await Promise.allSettled([
+    getGbpAnalytics(clientId, range),
     getSocialPosts(clientId, 90),
+    // the business's primary city → the funnel's "target audience" label
+    admin.from('client_locations').select('city, state').eq('client_id', clientId).eq('is_primary', true).maybeSingle(),
   ])
 
   let findYou: FindYou | null = null
   let topQueries: { query: string; impressions: number }[] = []
+  // Brand-awareness view: how many times we showed up, split Maps vs Search, and
+  // what people did after seeing us. Same 30d window as findYou so the numbers
+  // on the Visibility tab agree with each other.
+  let views: { total: number; maps: number; search: number } | null = null
+  let actions: { directions: number; calls: number; websiteClicks: number } | null = null
+  // the most recent day Google actually has data for (its Performance API runs a few
+  // days behind); surfaced as "as of ‹date›" so an owner reads the lag honestly.
+  let asOf: string | null = null
+  let windowStart: string | null = null // first day of the selected window → shown as "start – asOf"
+  // signed year-over-year % change per funnel stage (same calendar window last year);
+  // null where there's no prior-year baseline to compare against.
+  let yoy: { awareness: number | null; interest: number | null; actions: number | null; orders: number | null } | null = null
   if (gbp.status === 'fulfilled' && gbp.value) {
     const b = gbp.value.impressionBreakdown
-    const anyImpr = b.searchMobile + b.searchDesktop + b.mapsMobile + b.mapsDesktop
+    const maps = b.mapsMobile + b.mapsDesktop
+    const search = b.searchMobile + b.searchDesktop
+    const anyImpr = maps + search
     findYou = anyImpr > 0 ? b : null
+    views = anyImpr > 0 ? { total: anyImpr, maps, search } : null
+    const t = gbp.value.totals
+    actions = { directions: t.directions ?? 0, calls: t.calls ?? 0, websiteClicks: t.websiteClicks ?? 0 }
     topQueries = (gbp.value.topQueries ?? [])
       .filter((q) => q.query && q.impressions > 0)
       .slice(0, 6)
+    // getGbpAnalytics trims trailing all-zero days, so the last daily point is the
+    // freshest day with real numbers; fall back to the window end if the series is empty.
+    const dl = gbp.value.daily
+    asOf = dl.length ? dl[dl.length - 1].date : gbp.value.end
+    windowStart = gbp.value.start // the window's first day (today−3 − (rangeDays−1))
+    // per-stage YoY, computed on the SAME fields both years so each % is like-for-like
+    const p = gbp.value.prevTotals
+    const chg = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null)
+    yoy = {
+      awareness: chg(t.impressions, p.impressions),
+      interest: chg(t.directions + t.calls + t.websiteClicks, p.directions + p.calls + p.websiteClicks),
+      actions: chg(t.directions + t.calls, p.directions + p.calls),
+      orders: chg(t.directions, p.directions), // Orders = directions × rate → its % equals the directions %
+    }
+  }
+
+  // the funnel's "target audience" = the primary location's city (owner-editable later)
+  let audience: string | null = null
+  if (primaryLoc.status === 'fulfilled') {
+    const loc = (primaryLoc.value as { data: { city: string | null } | null } | null)?.data
+    if (loc?.city) audience = loc.city
   }
 
   let topPosts: TopPost[] = []
+  // Social reach + whether any social account is even connected. The Visibility
+  // tab always shows the social channel in its data flow; these stay 0 / false
+  // (an honest "connect to unlock") until an Instagram/Facebook sync exists.
+  let socialReach = 0
+  let socialConnected = false
   if (posts.status === 'fulfilled' && Array.isArray(posts.value)) {
+    socialConnected = posts.value.length > 0
+    socialReach = posts.value.reduce((s, p) => s + (p.reach ?? 0), 0)
     topPosts = posts.value
       .filter((p) => (p.reach ?? 0) > 0)
       .sort((a, b) => (b.reach ?? 0) - (a.reach ?? 0))
@@ -75,8 +128,9 @@ export async function GET(req: NextRequest) {
         reach: p.reach ?? 0,
         likes: p.likes ?? 0,
         saves: p.saves ?? 0,
+        postedAt: p.posted_at ?? null,
       }))
   }
 
-  return NextResponse.json({ findYou, topQueries, topPosts })
+  return NextResponse.json({ findYou, topQueries, topPosts, views, actions, socialReach, socialConnected, asOf, windowStart, audience, yoy })
 }

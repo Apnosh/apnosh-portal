@@ -72,7 +72,11 @@ function writeCache(client: Client | null, isAdmin: boolean, userId: string | nu
 }
 
 export function ClientProvider({ children }: { children: React.ReactNode }) {
-  const supabase = createClient()
+  // One browser client for the provider's whole life. Re-creating it every
+  // render made `refresh` a new identity each render, which re-ran the resolve
+  // effect on every render once the cache went stale — thrash that could leave
+  // the app spinning. A stable client keeps `refresh` stable.
+  const [supabase] = useState(() => createClient())
   const searchParams = useSearchParams()
   // Admins pick a client via this query param; non-admins ignore it.
   // Re-resolving when it changes is how the picker hands control back
@@ -90,6 +94,7 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
   const [availableClients, setAvailableClients] = useState<{ id: string; name: string }[]>([])
 
   const refresh = useCallback(async () => {
+   try {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       setClient(null); setIsAdmin(false); setLoading(false)
@@ -193,7 +198,14 @@ export function ClientProvider({ children }: { children: React.ReactNode }) {
       setClient(null)
       writeCache(null, admin, user.id)
     }
+   } catch {
+    // A transient auth/network error must NEVER strand the app in a loading
+    // spinner (the "home stuck at loading dashboard" bug). Whatever happens,
+    // settle loading in `finally` so the UI recovers — a fresh cached client
+    // keeps showing, and the next navigation / refresh re-resolves cleanly.
+   } finally {
     setLoading(false)
+   }
   }, [supabase])
 
   useEffect(() => {

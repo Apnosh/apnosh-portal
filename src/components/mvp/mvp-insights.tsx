@@ -7,19 +7,17 @@
  * so the two surfaces feel like one app.
  *
  * Layout is a top-to-bottom ladder: the main graph the owner already trusts on
- * top, then each scroll answers one plainer question —
- *   1. the range-aware graph (metric switcher + hero + chart + source tiles)
- *   2. your busiest days (weekday rhythm from the daily series)
- *   3. the path (Views -> Actions -> Bookings -> Email, with drop-off)
- *   4. how people find you on Google (search vs maps, phone vs computer)
- *   5. what people search to find you (top queries)
- *   6. your best posts (top social by reach)
- *   7. what customers are saying (rating + sentiment + themes)
- *   8. latest reviews (tap to reply)
+ * top, then each scroll answers one plainer question. The breakdown below the
+ * graph is tailored to the selected metric:
+ *   - Views (brand awareness): where people find you (Maps vs Search + social),
+ *     did being seen turn into anything (saw you -> made a move + action mix),
+ *     the one lever to be seen more (reviews lift Maps rank), connect social.
+ *   - Reviews (reputation): rating + sentiment themes + latest reviews.
+ *   - Other flow metrics: busiest days + where it sits in the customer path.
  *
- * Numbers 1-3 and 7-8 come from /api/dashboard/load (same source as the home).
- * Numbers 4-6 lazy-load from /api/dashboard/insights-detail, keyed on clientId,
- * so the shared home load stays lean.
+ * The hero, chart, and reviews come from /api/dashboard/load (same source as the
+ * home). The Views deep-dive (channel split, actions, social reach) lazy-loads
+ * from /api/dashboard/insights-detail, keyed on clientId, so the home stays lean.
  */
 
 import { useEffect, useState } from 'react'
@@ -29,8 +27,12 @@ import {
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Star,
   Eye, MousePointerClick, CalendarDays, Mail, BarChart3,
   Search, ExternalLink, Image as ImageIcon, Check,
+  Share2, ArrowRight,
+  Footprints, ShoppingBag, Repeat, Lock, SlidersHorizontal,
+  Route, Heart, Megaphone,
 } from 'lucide-react'
-import { ActionsChart, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
+import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
+import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
@@ -71,11 +73,15 @@ interface ReviewTopicsData { summary: string | null; topics: ReviewTopic[] }
 
 // The "further breakdown" data that /api/dashboard/load doesn't carry.
 // Lazy-fetched from /api/dashboard/insights-detail.
-export interface InsightsPost { id: string; platform: string; permalink: string | null; thumbnailUrl: string | null; type: string; reach: number; likes: number; saves: number }
+export interface InsightsPost { id: string; platform: string; permalink: string | null; thumbnailUrl: string | null; type: string; reach: number; likes: number; saves: number; postedAt: string | null }
 interface InsightsDetail {
   findYou: { searchMobile: number; searchDesktop: number; mapsMobile: number; mapsDesktop: number } | null
   topQueries: { query: string; impressions: number }[]
   topPosts: InsightsPost[]
+  views: { total: number; maps: number; search: number } | null
+  actions: { directions: number; calls: number; websiteClicks: number } | null
+  socialReach: number
+  socialConnected: boolean
 }
 
 // Short icon per metric key, for the metric switcher + the journey stages.
@@ -83,19 +89,68 @@ const METRIC_ICON: Record<string, React.ComponentType<{ size?: number; color?: s
   reach: Eye, interactions: MousePointerClick, bookings: CalendarDays, loyalty: Mail, reputation: Star,
 }
 
-// Hide the native scrollbar on the horizontally-scrolling metric pills, matching
-// the home (.mvp-swipe) and review-detail surfaces.
-const INSIGHTS_CSS = '.mvp-insights-pills{scrollbar-width:none;-ms-overflow-style:none}.mvp-insights-pills::-webkit-scrollbar{display:none}'
+// The insights page is organized around the customer journey, not raw metrics.
+// Each stage is a tab; `metric` names the underlying MetricView (if any) that
+// drives that stage's hero + chart. The stages, in order:
+//   journey     — the whole path in one view (placeholder for now)
+//   discovery   — how people find you (Google reach)
+//   engagement  — who looked closer (posts, photos, social)
+//   intent      — who made a move (directions, calls, clicks)
+//   conversion  — what it turned into (the funnel: visits, spend)
+//   retention   — who comes back (reviews, loyalty)
+const JOURNEY: { key: string; label: string; icon: React.ComponentType<{ size?: number; color?: string }>; metric?: string }[] = [
+  { key: 'journey', label: 'Journey', icon: Route },
+  { key: 'discovery', label: 'Discovery', icon: Eye, metric: 'reach' },
+  { key: 'engagement', label: 'Engagement', icon: Heart },
+  { key: 'intent', label: 'Intent', icon: MousePointerClick, metric: 'interactions' },
+  { key: 'conversion', label: 'Conversion', icon: ShoppingBag },
+  { key: 'retention', label: 'Retention', icon: Repeat },
+]
+const STAGE_SUB: Record<string, string> = {
+  journey: '',
+  discovery: 'How people find you',
+  engagement: 'Who looked closer',
+  intent: 'Who made a move',
+  conversion: 'What it turned into',
+  retention: 'Who comes back',
+}
 
-export default function MvpInsights({ data, loading, error, clientId }: { data: InsightsData | null; loading: boolean; error: string | null; clientId?: string }) {
+// One funnel-stage tap drives this page (no in-page selector). Map the tapped
+// stage — the funnel's own key (shown/engaged/moved/camein/back), or a legacy
+// insights-stage key — to the TITLE (the funnel's own name), the home METRIC
+// whose clean graph we show, and a one-line sub. Interest has no Google metric,
+// so it uses the special 'engagement' key → the social/content view instead.
+function resolveFocus(key?: string): { title: string; metric: string; sub: string; stageKey: string } {
+  switch (key) {
+    case 'shown': case 'discovery': return { title: 'Awareness', metric: 'reach', sub: 'People who saw you on Google and social', stageKey: 'shown' }
+    case 'engaged': case 'engagement': return { title: 'Interest', metric: 'engagement', sub: 'People who looked closer at your posts and profile', stageKey: 'engaged' }
+    case 'moved': case 'intent': return { title: 'Customer actions', metric: 'interactions', sub: 'Calls, directions, clicks, and likes', stageKey: 'moved' }
+    case 'camein': case 'conversion': return { title: 'Orders', metric: 'bookings', sub: 'Tables booked and orders placed', stageKey: 'camein' }
+    case 'back': case 'retention': return { title: 'Retention', metric: 'reputation', sub: 'Reviews and how people rate you', stageKey: 'back' }
+    default: return { title: 'Awareness', metric: 'reach', sub: 'People who saw you on Google and social', stageKey: 'shown' }
+  }
+}
+
+// Compact "Jun 27" / "Jun 27, 2025" date for a review card. Shows the year only
+// when the review isn't from the current calendar year, so most cards stay short.
+function reviewDate(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const now = new Date()
+  const opts: Intl.DateTimeFormatOptions = d.getFullYear() === now.getFullYear()
+    ? { month: 'short', day: 'numeric' }
+    : { month: 'short', day: 'numeric', year: 'numeric' }
+  return d.toLocaleDateString('en-US', opts)
+}
+
+export default function MvpInsights({ data, loading, error, clientId, initialStageKey }: { data: InsightsData | null; loading: boolean; error: string | null; clientId?: string; initialStageKey?: string }) {
   const router = useRouter()
-  const [sel, setSel] = useState(0)
   const [summary, setSummary] = useState<ReviewSummary | null>(null)
   const [topicsData, setTopicsData] = useState<ReviewTopicsData | null>(null)
   const [topicsLoading, setTopicsLoading] = useState(false)
   const [detail, setDetail] = useState<InsightsDetail | null>(null)
-
-  const clampedSel = data ? Math.min(sel, Math.max(0, data.metrics.length - 1)) : 0
+  // active (shipped) campaigns grouped by the stage they work on → "campaigns working on this"
+  const [campaigns, setCampaigns] = useState<Record<string, StageCampaign[]> | null>(null)
 
   // FAST: the deterministic reputation data (rating, histogram, replies,
   // sources) — no model call, so it paints almost immediately. Keyed on the
@@ -139,11 +194,23 @@ export default function MvpInsights({ data, loading, error, clientId }: { data: 
     return () => { live = false }
   }, [clientId])
 
+  // Active campaigns grouped by stage → the "campaigns working on this" section
+  // under each stage's graph. Same client-id-only keying; a quiet failure hides it.
+  useEffect(() => {
+    if (!clientId) return
+    let live = true
+    setCampaigns(null)
+    fetch(`/api/dashboard/insights-campaigns?clientId=${clientId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (live && j) setCampaigns(j.stages) })
+      .catch(() => { /* leave the section quiet on failure */ })
+    return () => { live = false }
+  }, [clientId])
+
   const back = () => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard') }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#f0f0f3', display: 'flex', justifyContent: 'center' }}>
-      <style>{INSIGHTS_CSS}</style>
       <div style={{ width: '100%', maxWidth: 480, height: '100dvh', background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
       {/* sticky back header */}
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 12px 6px', borderBottom: `1px solid ${C.line}`, background: '#fff' }}>
@@ -162,7 +229,7 @@ export default function MvpInsights({ data, loading, error, clientId }: { data: 
         ) : !data || data.metrics.length === 0 ? (
           <EmptyState />
         ) : (
-          <Body data={data} sel={clampedSel} setSel={setSel} summary={summary} topicsData={topicsData} topicsLoading={topicsLoading} detail={detail} />
+          <Body data={data} focusKey={initialStageKey} summary={summary} topicsData={topicsData} topicsLoading={topicsLoading} detail={detail} clientId={clientId} campaigns={campaigns} />
         )}
       </div>
       </div>
@@ -170,238 +237,187 @@ export default function MvpInsights({ data, loading, error, clientId }: { data: 
   )
 }
 
-function Body({ data, sel, setSel, summary, topicsData, topicsLoading, detail }: { data: InsightsData; sel: number; setSel: (i: number) => void; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null }) {
+function Body({ data, focusKey, detail, campaigns }: { data: InsightsData; focusKey?: string; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null; clientId?: string; campaigns: Record<string, StageCampaign[]> | null }) {
   const metrics = data.metrics
   const byKey = new Map(metrics.map((m) => [m.key, m]))
-  const mv = metrics[sel]
-
-  // Selected metric's chart shares its range with the hero, so the range chips
-  // move the headline number + delta (not just the bars); the delta goes honest
-  // ("Updated <when>") when the data is too stale to claim a current trend.
-  const rc = useChartRange(mv)
-  const fresh = isFresh(mv?.lastDataDate ?? '', rc.summary.periodDays)
-  const dn = rc.summary.deltaPct < 0
+  // one tapped funnel stage drives the whole page (no in-page selector). Each stage
+  // shows the SAME clean graph the home uses (MetricCard) for its metric; Interest
+  // has no Google metric, so it shows the social/content engagement view instead.
+  const focus = resolveFocus(focusKey)
+  const mv = byKey.get(focus.metric)
 
   return (
-    <div style={{ padding: '10px 18px 44px' }}>
+    <div style={{ padding: '14px 18px 44px' }}>
 
-      {/* ─────────── 1. The main graph (on top) ─────────── */}
-      {/* metric switcher */}
-      <div className="mvp-insights-pills" style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 4, marginBottom: 16 }}>
-        {metrics.map((m, i) => {
-          const on = i === sel
-          const Icon = METRIC_ICON[m.key] ?? BarChart3
-          return (
-            <button key={m.key} onClick={() => setSel(i)} style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '7px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              <Icon size={14} color={on ? C.greenDk : C.faint} />{m.tabLabel}
-            </button>
-          )
-        })}
-      </div>
+      {/* the tapped stage's own name — reflects the funnel stage you came from */}
+      <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1 }}>{focus.title}</div>
+      {focus.sub && <div style={{ fontSize: 13, color: C.faint, margin: '5px 0 18px' }}>{focus.sub}</div>}
 
-      {/* Reviews lead with the rating + star histogram (a review's day-to-day
-          timing is noise); every other metric leads with its time chart. */}
-      {mv.key === 'reputation' ? (
-        <ReviewHero avgRating={data.avgRating} summary={summary} />
-      ) : (
-        <>
-          {/* hero */}
-          <div style={{ fontSize: 14, color: C.mute, fontWeight: 500 }}>{mv.heroLabel}</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
-            <span style={{ fontFamily: DISPLAY, fontSize: 46, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em' }}>{rc.summary.total ? rc.summary.total.toLocaleString() : '—'}</span>
-            {rc.summary.total > 0 && fresh && rc.summary.deltaPct !== 0 && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: dn ? C.coral : C.greenDk, background: dn ? C.coralBg : C.greenSoft, padding: '4px 11px', borderRadius: 99, marginBottom: 5 }}>
-                <span style={{ fontSize: 10 }}>{dn ? '▼' : '▲'}</span>{Math.abs(rc.summary.deltaPct)}% {rc.summary.cmpFrame}
-              </span>
-            )}
-            {rc.summary.total > 0 && !fresh && mv.lastDataDate && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: C.mute, background: C.bg, padding: '4px 11px', borderRadius: 99, marginBottom: 5 }}>
-                Updated {relDate(mv.lastDataDate)}
-              </span>
-            )}
-          </div>
-          <div style={{ fontSize: 13.5, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
-          {rc.summary.total > 0 && fresh && rc.summary.compareTotal > 0 && (
-            <div style={{ fontSize: 12.5, color: C.faint, marginTop: 3 }}>Was {rc.summary.compareTotal.toLocaleString()} {rc.summary.cmpFrame.replace(/^vs\s*/i, '')}</div>
-          )}
-          {fresh && rc.summary.yoyPct != null && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: rc.summary.yoyPct > 0 ? C.greenDk : rc.summary.yoyPct < 0 ? C.coral : C.mute }}>
-              {rc.summary.yoyPct > 0 ? <TrendingUp size={14} /> : rc.summary.yoyPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
-              {rc.summary.yoyPct > 0 ? `Up ${rc.summary.yoyPct}% ${rc.summary.yoyLabel}` : rc.summary.yoyPct < 0 ? `Down ${Math.abs(rc.summary.yoyPct)}% ${rc.summary.yoyLabel}` : `Even with last year`}
-            </div>
-          )}
+      {focus.metric === 'engagement'
+        ? <EngagementView detail={detail} />
+        : mv
+          ? <MetricCard mv={mv} />
+          : <NoMetricYet title={focus.title} />}
 
-          {/* full chart with range chips (reused from the home) */}
-          <ActionsChart range={rc.range} setRange={rc.setRange} cStart={rc.cStart} setCStart={rc.setCStart} cEnd={rc.cEnd} setCEnd={rc.setCEnd} summary={rc.summary} noun={mv.unit} />
+      {/* the live campaigns pushing on THIS stage's number */}
+      <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
+    </div>
+  )
+}
 
-          {/* what feeds this metric */}
-          {mv.tiles.length > 0 && (
-            <>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, margin: '16px 0 9px' }}>What feeds this</div>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, mv.tiles.length)},1fr)`, gap: 8 }}>
-                {mv.tiles.slice(0, 4).map((s) => <SourceCard key={s.key + s.label} s={s} />)}
+// ── "Campaigns working on this" — the shipped campaigns whose live pieces push on
+//    this stage's number, each a tap into its campaign. A calm prompt when none. ──
+function StageCampaigns({ list }: { list: StageCampaign[] | null }) {
+  if (list === null) return null // stay quiet until the fetch lands
+  const MAX = 3
+  const shown = list.slice(0, MAX)
+  const extra = list.length - shown.length
+  return (
+    <div style={{ marginTop: 28 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 12 }}>Campaigns working on this</div>
+      {list.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {shown.map((c) => (
+            <Link key={c.id} href={`/dashboard/campaigns/${c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, textDecoration: 'none', color: 'inherit' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 9, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={C.greenDk} /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
+                <div style={{ fontSize: 11, color: C.greenDk, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 1 }}><span style={{ width: 6, height: 6, borderRadius: 99, background: C.green }} />Live</div>
               </div>
-            </>
+              <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
+            </Link>
+          ))}
+          {extra > 0 && (
+            <Link href="/dashboard/campaigns" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 2, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>{extra} more working on this <ChevronRight size={15} /></Link>
           )}
-        </>
-      )}
-
-      {/* ─── Breakdowns below the graph are tailored to the selected metric ─── */}
-      {mv.key === 'reputation' ? (
-        <>
-          {/* Where reviews come from, right under the rating + histogram */}
-          {summary && <ReviewSources sources={summary.sources} googleCount={summary.placeRatingCount} />}
-          {/* Reviews: what customers say + the latest ones */}
-          <ReviewSentiment topics={topicsData} loading={topicsLoading} />
-          {summary && summary.byMonth.length >= 2 && <RatingOverTime byMonth={summary.byMonth} recent={summary.recent ?? []} />}
-          {data.reviews.length > 0 && (
-            <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {data.reviews.slice(0, 3).map((r) => {
-                  const tint = r.rating >= 4 ? C.green : r.rating <= 2 ? C.coral : C.faint
-                  return (
-                    <Link key={r.id} href={`/dashboard/reviews/${r.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', background: '#fff', border: `0.5px solid ${C.line}`, borderLeft: `3px solid ${tint}`, borderRadius: 14, padding: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                        <span style={{ fontWeight: 600, fontSize: 13 }}>{r.authorName}</span>
-                        <Stars n={r.rating} />
-                        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {r.replied
-                            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 8px' }}><Check size={11} />Replied</span>
-                            : r.needsReply && <span style={{ fontSize: 10, fontWeight: 700, color: C.coral, background: C.coralBg, borderRadius: 99, padding: '2px 8px' }}>Reply</span>}
-                          <ChevronRight size={15} color={C.faint} />
-                        </span>
-                      </div>
-                      {r.text
-                        ? <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.text}</div>
-                        : <div style={{ fontSize: 12, color: C.faint, fontStyle: 'italic' }}>Rated {r.rating}&#9733;, no written comment.</div>}
-                      {r.response && (
-                        <div style={{ marginTop: 8, paddingLeft: 10, borderLeft: `2px solid ${C.greenLine}` }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 3 }}>Your reply</div>
-                          <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.response}</div>
-                        </div>
-                      )}
-                    </Link>
-                  )
-                })}
-              </div>
-            </Section>
-          )}
-        </>
+        </div>
       ) : (
-        <>
-          {/* Views: the "who saw you" story — how they find you, what they search, best posts */}
-          {mv.key === 'reach' && detail?.findYou && <FindYou b={detail.findYou} />}
-          {mv.key === 'reach' && detail && detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
-          {mv.key === 'reach' && detail && detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} />}
-
-          {/* When it happens — for every flow metric */}
-          <BusyDays daily={mv.daily} />
-
-          {/* Where this metric sits in the customer journey, its own stage highlighted */}
-          <PathFunnel byKey={byKey} activeKey={mv.key} />
-        </>
+        <Link href="/dashboard/campaigns" style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fbfcfb', border: `1px dashed ${C.greenLine}`, borderRadius: 14, padding: 14, textDecoration: 'none', color: 'inherit' }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={C.greenDk} /></div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>No live campaign on this yet. <span style={{ color: C.greenDk, fontWeight: 600 }}>Start one →</span></div>
+        </Link>
       )}
     </div>
   )
 }
 
-// ── Busiest days: average per weekday from the metric's daily series ──
-const DOW2 = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
-const DOWFULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-function BusyDays({ daily }: { daily: { date: string; value: number }[] }) {
-  if (!daily || daily.length < 14) return null
-  const sums = [0, 0, 0, 0, 0, 0, 0]
-  const counts = [0, 0, 0, 0, 0, 0, 0]
-  for (const d of daily) {
-    const g = new Date(d.date + 'T00:00:00').getDay()
-    sums[g] += d.value
-    counts[g] += 1
-  }
-  const avgs = sums.map((s, i) => (counts[i] ? s / counts[i] : 0))
-  const max = Math.max(1, ...avgs)
-  let peak = 0; let quiet = 0; let pv = -1; let qv = Infinity
-  avgs.forEach((a, i) => {
-    if (counts[i] === 0) return
-    if (a > pv) { pv = a; peak = i }
-    if (a < qv) { qv = a; quiet = i }
-  })
+// Clean empty state for a stage whose metric has no data yet (e.g. no bookings or
+// no reviews) — keeps the page reading as present instead of blank.
+function NoMetricYet({ title }: { title: string }) {
   return (
-    <Section title="Your busiest days">
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 90 }}>
-        {avgs.map((a, i) => {
-          const h = Math.max(6, Math.round((a / max) * 78))
-          const isPeak = i === peak
-          return (
-            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
-              <div style={{ width: '100%', height: h, borderRadius: 7, background: isPeak ? `linear-gradient(180deg, ${C.green}, ${C.greenDk})` : C.greenSoft }} />
-              <span style={{ fontSize: 10.5, color: isPeak ? C.greenDk : C.faint, fontWeight: isPeak ? 700 : 500 }}>{DOW2[i]}</span>
+    <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+      <div style={{ width: 52, height: 52, borderRadius: 14, background: C.greenSoft, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><BarChart3 size={24} color={C.greenDk} /></div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginTop: 14 }}>No {title.toLowerCase()} numbers yet</div>
+      <div style={{ fontSize: 12.5, color: C.faint, marginTop: 6, lineHeight: 1.5, maxWidth: 260, margin: '6px auto 0' }}>This graph fills in as soon as there&apos;s data for this stage.</div>
+    </div>
+  )
+}
+
+// ── Journey overview — placeholder until the whole-path view is designed. ──
+function JourneyEmpty() {
+  return (
+    <div style={{ textAlign: 'center', padding: '52px 24px' }}>
+      <div style={{ width: 52, height: 52, borderRadius: 14, background: C.greenSoft, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Route size={26} color={C.greenDk} /></div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginTop: 14 }}>Your full customer journey</div>
+      <div style={{ fontSize: 12.5, color: C.faint, marginTop: 6, lineHeight: 1.5, maxWidth: 260, margin: '6px auto 0' }}>The whole path in one view, from first showing up to coming back. Coming soon.</div>
+    </div>
+  )
+}
+
+// ── Engagement (interest) — who looked closer before acting: posts, photos,
+//    social. Thin until social is connected, so it leans on posts + a prompt. ──
+function EngagementView({ detail }: { detail: InsightsDetail | null }) {
+  const posts = detail?.topPosts ?? []
+  return (
+    <>
+      {posts.length > 0 && <BestPosts posts={posts} />}
+      <Section title="Who looked closer">
+        <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.5 }}>Engagement is the middle of the journey: people who looked closer before acting. Your posts, photos, and profile taps live here.</div>
+      </Section>
+      {!detail?.socialConnected && <ConnectSocial connected={false} />}
+    </>
+  )
+}
+
+// ── Intent — the real buy signals people leave on Google: directions, website
+//    taps, calls. Directions means someone is coming. ──
+function IntentView({ detail }: { detail: InsightsDetail | null }) {
+  const a = detail?.actions
+  if (!a) return null
+  const moves = a.directions + a.calls + a.websiteClicks
+  if (moves <= 0) return null
+  const items = [
+    { label: 'Asked for directions', value: a.directions },
+    { label: 'Tapped your website', value: a.websiteClicks },
+    { label: 'Called you', value: a.calls },
+  ].filter((x) => x.value > 0).sort((x, y) => y.value - x.value)
+  const max = Math.max(1, ...items.map((x) => x.value))
+  return (
+    <Section title="Who made a move" sub="last 30 days">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {items.map((x) => (
+          <div key={x.label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 12.5, color: C.ink }}>{x.label}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, fontFamily: DISPLAY }}>{x.value.toLocaleString()}</span>
             </div>
-          )
-        })}
+            <div style={{ height: 8, borderRadius: 99, background: C.bg, overflow: 'hidden' }}>
+              <div style={{ width: `${Math.max(6, Math.round((x.value / max) * 100))}%`, height: '100%', borderRadius: 99, background: `linear-gradient(90deg, ${C.green}, ${C.greenDk})` }} />
+            </div>
+          </div>
+        ))}
       </div>
-      <div style={{ fontSize: 12.5, color: C.mute, marginTop: 11, lineHeight: 1.45 }}>
-        <b style={{ color: C.ink, fontWeight: 600 }}>{DOWFULL[peak]}s</b> run hottest{peak !== quiet ? <>, <b style={{ color: C.ink, fontWeight: 600 }}>{DOWFULL[quiet]}s</b> are quietest</> : ''}. A good day to post or run a special.
-      </div>
+      <div style={{ fontSize: 11.5, color: C.faint, marginTop: 12, lineHeight: 1.45 }}>These are the strongest buy signals Google gives you. Directions means someone is on their way.</div>
     </Section>
   )
 }
 
-// ── The path: Views -> Actions -> Bookings -> Email, with drop-off ──
-const PATH_STAGES: { key: string; label: string; icon: React.ComponentType<{ size?: number; color?: string }> }[] = [
-  { key: 'reach', label: 'Saw you', icon: Eye },
-  { key: 'interactions', label: 'Took an action', icon: MousePointerClick },
-  { key: 'bookings', label: 'Booked a table', icon: CalendarDays },
-  { key: 'loyalty', label: 'On your email list', icon: Mail },
-]
-function PathFunnel({ byKey, activeKey }: { byKey: Map<string, MetricView>; activeKey?: string }) {
-  const rows = PATH_STAGES.map((s) => ({ ...s, total: byKey.get(s.key)?.total ?? 0 })).filter((r) => r.total > 0)
-  if (rows.length < 2) return null
-  const top = rows[0].total
-  // Biggest leak = the smallest step-to-step share.
-  let leak = -1; let leakPct = 101
-  for (let i = 1; i < rows.length; i++) {
-    const p = (rows[i].total / rows[i - 1].total) * 100
-    if (p < leakPct) { leakPct = p; leak = i }
-  }
+// ── Retention (loyalty) — reviews are the clearest repeat-customer signal we
+//    have: happy regulars leave them, and reputation drives who comes back. ──
+function RetentionView({ data, summary, topicsData, topicsLoading }: { data: InsightsData; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean }) {
   return (
-    <Section title="The path" sub="where this fits">
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {rows.map((r, i) => {
-          const Icon = r.icon
-          const w = Math.max(16, Math.round(Math.min(1, r.total / top) * 100))
-          const conv = i > 0 ? Math.round((r.total / rows[i - 1].total) * 100) : null
-          const isLeak = i === leak
-          const isActive = r.key === activeKey
-          return (
-            <div key={r.key}>
-              {conv != null && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 0 4px 9px', fontSize: 11, fontWeight: isLeak ? 700 : 500, color: isLeak ? C.coral : C.faint }}>
-                  <span style={{ fontSize: 12, lineHeight: 1 }}>↓</span>{conv > 100 ? '100+' : conv}% moved on
-                </div>
-              )}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: isActive ? C.greenSoft : 'transparent', borderRadius: 12, padding: isActive ? '7px 8px' : '0', margin: isActive ? '0 -8px' : '0' }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: isActive ? C.green : C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={14} color={isActive ? '#fff' : C.greenDk} /></div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, gap: 8 }}>
-                    <span style={{ fontSize: 12.5, color: isActive ? C.ink : C.mute, fontWeight: isActive ? 700 : 500, display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</span>
-                      {isActive && <span style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.greenDk, background: '#fff', border: `1px solid ${C.greenLine}`, borderRadius: 99, padding: '1px 7px' }}>This graph</span>}
-                    </span>
-                    <span style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, flexShrink: 0 }}>{r.total.toLocaleString()}</span>
-                  </div>
-                  <div style={{ height: 9, borderRadius: 99, background: isActive ? '#fff' : C.bg, overflow: 'hidden' }}>
-                    <div style={{ width: `${w}%`, height: '100%', borderRadius: 99, background: `linear-gradient(90deg, ${C.green}, ${C.greenDk})` }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>
-        {leak > 0 ? <>Biggest drop is at <b style={{ color: C.mute, fontWeight: 600 }}>{rows[leak].label.toLowerCase()}</b>. </> : ''}Each % is how many from the step above moved on. These counts come from different tools, so read it as a rough path.
-      </div>
-    </Section>
+    <>
+      <ReviewHero avgRating={data.avgRating} summary={summary} />
+      {summary && <ReviewSources sources={summary.sources} googleCount={summary.placeRatingCount} />}
+      <ReviewSentiment topics={topicsData} loading={topicsLoading} />
+      {summary && summary.byMonth.length >= 2 && <RatingOverTime byMonth={summary.byMonth} recent={summary.recent ?? []} />}
+      {data.reviews.length > 0 && (
+        <Section title="Latest reviews" action={{ label: 'See all', href: '/dashboard/inbox?tab=reviews' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[...data.reviews]
+              .sort((a, b) => String(b.postedAt).localeCompare(String(a.postedAt)))
+              .slice(0, 3)
+              .map((r) => {
+                const tint = r.rating >= 4 ? C.green : r.rating <= 2 ? C.coral : C.faint
+                return (
+                  <Link key={r.id} href={`/dashboard/reviews/${r.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', background: '#fff', border: `0.5px solid ${C.line}`, borderLeft: `3px solid ${tint}`, borderRadius: 14, padding: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{r.authorName}</span>
+                      <Stars n={r.rating} />
+                      <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {reviewDate(r.postedAt) && <span style={{ fontSize: 11, color: C.faint, whiteSpace: 'nowrap' }}>{reviewDate(r.postedAt)}</span>}
+                        {r.replied
+                          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 8px' }}><Check size={11} />Replied</span>
+                          : r.needsReply && <span style={{ fontSize: 10, fontWeight: 700, color: C.coral, background: C.coralBg, borderRadius: 99, padding: '2px 8px' }}>Reply</span>}
+                        <ChevronRight size={15} color={C.faint} />
+                      </span>
+                    </div>
+                    {r.text
+                      ? <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.text}</div>
+                      : <div style={{ fontSize: 12, color: C.faint, fontStyle: 'italic' }}>Rated {r.rating}&#9733;, no written comment.</div>}
+                    {r.response && (
+                      <div style={{ marginTop: 8, paddingLeft: 10, borderLeft: `2px solid ${C.greenLine}` }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 3 }}>Your reply</div>
+                        <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.response}</div>
+                      </div>
+                    )}
+                  </Link>
+                )
+              })}
+          </div>
+        </Section>
+      )}
+    </>
   )
 }
 
@@ -421,23 +437,237 @@ function SplitBar({ left, right, total }: { left: { label: string; value: number
     </div>
   )
 }
-function FindYou({ b }: { b: { searchMobile: number; searchDesktop: number; mapsMobile: number; mapsDesktop: number } }) {
-  const search = b.searchMobile + b.searchDesktop
-  const maps = b.mapsMobile + b.mapsDesktop
-  const mobile = b.searchMobile + b.mapsMobile
-  const desktop = b.searchDesktop + b.mapsDesktop
-  const total = search + maps
-  if (total <= 0) return null
-  const chan = search >= maps ? 'Search' : 'Maps'
-  const dev = mobile >= desktop ? 'phone' : 'computer'
+// ── Where people find you: Google Maps vs Search (the one split that is real
+//    brand-awareness insight), the mobile fact folded to a caption, and the
+//    social channel wired in but quiet until a social account syncs. ──
+function ReachChannels({ detail }: { detail: InsightsDetail | null }) {
+  const v = detail?.views
+  if (!v || v.total <= 0) return null
+  const mapsPct = Math.round((v.maps / v.total) * 100)
+  const fy = detail?.findYou
+  const mobile = fy ? fy.searchMobile + fy.mapsMobile : 0
+  const desktop = fy ? fy.searchDesktop + fy.mapsDesktop : 0
+  const mobilePct = mobile + desktop > 0 ? Math.round((mobile / (mobile + desktop)) * 100) : null
+  const social = detail?.socialReach ?? 0
   return (
-    <Section title="How people find you on Google">
-      <SplitBar left={{ label: 'Search', value: search, color: C.green }} right={{ label: 'Maps', value: maps, color: C.greenDk }} total={total} />
-      <div style={{ height: 12 }} />
-      <SplitBar left={{ label: 'On a phone', value: mobile, color: C.amber }} right={{ label: 'On a computer', value: desktop, color: C.faint }} total={total} />
+    <Section title="Where people find you" sub="last 30 days">
+      <SplitBar left={{ label: 'Google Maps', value: v.maps, color: C.green }} right={{ label: 'Search', value: v.search, color: C.greenDk }} total={v.total} />
       <div style={{ fontSize: 12.5, color: C.mute, marginTop: 12, lineHeight: 1.45 }}>
-        Most people find you on <b style={{ color: C.ink, fontWeight: 600 }}>{chan}</b>, on their <b style={{ color: C.ink, fontWeight: 600 }}>{dev}</b>.
+        <b style={{ color: C.ink, fontWeight: 600 }}>{mapsPct}%</b> of the time people find you on Google Maps. Your spot on the map is how new people discover you.
       </div>
+      {mobilePct != null && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 4 }}>Almost all on a phone ({mobilePct}%).</div>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, paddingTop: 12, borderTop: `0.5px solid ${C.line}` }}>
+        <Share2 size={14} color={C.faint} />
+        <span style={{ fontSize: 12.5, color: C.mute }}>Social reach</span>
+        <span style={{ marginLeft: 'auto', fontSize: 12.5, fontWeight: 600, color: social > 0 ? C.ink : C.faint }}>{social > 0 ? social.toLocaleString() : 'Not connected'}</span>
+      </div>
+    </Section>
+  )
+}
+
+// ── The full funnel bridge: "Did being seen turn into anything?"
+//    A vertical spine with three honesty zones the owner can tell apart at a
+//    glance: a MEASURED green top read straight from Google (Showed up -> Made a
+//    move), an owner-built ESTIMATE middle in a dashed style driven by two dials
+//    the owner sets (walk-in rate + average spend), and a LOCKED grey bottom
+//    (Came back) that shows the stage exists but never a number until a register
+//    connects. Honest by construction: money is only ever the product of the
+//    owner's own two inputs (shown as a spelled-out "about"), retention has no
+//    estimate path, and every unmeasured stage carries a "measure it for real"
+//    door. "Came in" is framed as visits FROM GOOGLE (the slice Google can see),
+//    not total footfall, and is driven by directions only — the clearest
+//    intent-to-visit signal. ──
+function round100(n: number): number { return Math.round(n / 100) * 100 }
+
+function FunnelSpine({ detail, storageKey }: { detail: InsightsDetail | null; storageKey: string }) {
+  const rateKey = `apnosh.funnel.rate.${storageKey}`
+  const ticketKey = `apnosh.funnel.ticket.${storageKey}`
+  const [walkInRate, setWalkInRate] = useState(0.5)
+  const [avgTicket, setAvgTicket] = useState<number | null>(null)
+  useEffect(() => {
+    try {
+      const r = localStorage.getItem(rateKey)
+      if (r != null && r !== '') setWalkInRate(Math.min(0.9, Math.max(0.1, Number(r) || 0.5)))
+      const t = localStorage.getItem(ticketKey)
+      if (t != null && t !== '') setAvgTicket(Number(t) || null)
+    } catch { /* no storage — defaults stand */ }
+  }, [rateKey, ticketKey])
+  const saveRate = (v: number) => { setWalkInRate(v); try { localStorage.setItem(rateKey, String(v)) } catch { /* ignore */ } }
+  const saveTicket = (v: number | null) => { setAvgTicket(v); try { localStorage.setItem(ticketKey, v == null ? '' : String(v)) } catch { /* ignore */ } }
+
+  const v = detail?.views
+  const a = detail?.actions
+  if (!v || !a || v.total <= 0) return null
+  const { directions, calls, websiteClicks } = a
+  const madeMove = directions + calls + websiteClicks
+  const actRate = v.total > 0 ? Math.round((madeMove / v.total) * 100) : 0
+  const ratePct = Math.round(walkInRate * 100)
+  const visits = Math.round(directions * walkInRate)
+  const revenue = avgTicket != null && avgTicket > 0 ? round100(visits * avgTicket) : null
+
+  const row = (w: string): React.CSSProperties => ({ width: w, margin: '0 auto' })
+  const cardBase: React.CSSProperties = { borderRadius: 14, padding: 12, display: 'flex', alignItems: 'center', gap: 11 }
+  const measured: React.CSSProperties = { ...cardBase, background: C.greenSoft, border: `1px solid ${C.greenLine}` }
+  const estimate: React.CSSProperties = { ...cardBase, background: '#fff', border: `1px dashed ${C.faint}` }
+  const locked: React.CSSProperties = { ...cardBase, background: C.bg, border: `1px dashed ${C.line}` }
+  const tile = (bg: string): React.CSSProperties => ({ width: 34, height: 34, borderRadius: 9, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 })
+  const bignum: React.CSSProperties = { fontFamily: DISPLAY, fontSize: 22, fontWeight: 500, lineHeight: 1, color: C.ink }
+  const realPill = <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, color: C.greenDk }}><Check size={11} />Real · Google</span>
+  const aboutPill = <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, color: C.mute }}><SlidersHorizontal size={10} />About · your math</span>
+  const arrow = <div style={{ textAlign: 'center', color: C.faint, fontSize: 12, padding: '4px 0' }}>↓</div>
+
+  return (
+    <Section title="Did being seen turn into anything?" sub="last 30 days">
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+
+        {/* 1 — Showed up (measured) */}
+        <div style={row('100%')}>
+          <div style={measured}>
+            <div style={tile('#fff')}><Eye size={18} color={C.greenDk} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>Showed up</div>
+              <div style={{ fontSize: 11, color: C.mute }}>how many times you popped up</div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={bignum}>{v.total.toLocaleString()}</div>
+              <div style={{ marginTop: 3 }}>{realPill}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ textAlign: 'center', fontSize: 11, color: C.faint, padding: '5px 0' }}>↓ about {actRate} in 100 did something next</div>
+
+        {/* 2 — Made a move (measured) */}
+        <div style={row('96%')}>
+          <div style={measured}>
+            <div style={tile('#fff')}><MousePointerClick size={18} color={C.greenDk} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>Made a move</div>
+              <div style={{ fontSize: 11, color: C.mute }}>directions {directions.toLocaleString()} · site {websiteClicks.toLocaleString()} · calls {calls.toLocaleString()}</div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={bignum}>{madeMove.toLocaleString()}</div>
+              <div style={{ marginTop: 3 }}>{realPill}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* seam — the owner's two dials */}
+        <div style={{ ...row('92%'), marginTop: 12, marginBottom: 12 }}>
+          <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, padding: '13px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 11 }}>
+              <SlidersHorizontal size={15} color={C.mute} />
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>Your numbers, your call</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: C.mute, marginBottom: 6 }}>Walk-in rate · share who got directions that came in</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 13 }}>
+              <input type="range" min={10} max={90} value={ratePct} onChange={(e) => saveRate(Number(e.target.value) / 100)} style={{ flex: 1, accentColor: C.green }} aria-label="Walk-in rate" />
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.ink, width: 40, textAlign: 'right' }}>{ratePct}%</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: C.mute, marginBottom: 6 }}>Average spend per visit</div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${C.line}`, borderRadius: 10, padding: '6px 11px' }}>
+              <span style={{ fontSize: 14, color: C.faint }}>$</span>
+              <input type="number" inputMode="numeric" placeholder="—" value={avgTicket ?? ''} onChange={(e) => saveTicket(e.target.value === '' ? null : Math.max(0, Number(e.target.value)))} style={{ width: 60, border: 'none', outline: 'none', fontSize: 14, fontWeight: 600, color: C.ink, background: 'transparent', padding: 0 }} aria-label="Average spend per visit" />
+            </div>
+            <div style={{ fontSize: 10.5, color: C.faint, marginTop: 10, lineHeight: 1.45 }}>Starting guesses. Set them to what you see on your floor.</div>
+          </div>
+        </div>
+
+        {/* 3 — Came in from Google (estimate) */}
+        <div style={row('88%')}>
+          <div style={estimate}>
+            <div style={tile(C.bg)}><Footprints size={18} color={C.mute} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>Came in</div>
+              <div style={{ fontSize: 11, color: C.faint }}>{directions.toLocaleString()} directions × {ratePct}%</div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={bignum}>~{visits.toLocaleString()}</div>
+              <div style={{ marginTop: 3 }}>{aboutPill}</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ textAlign: 'center', padding: '5px 0' }}>
+          <Link href="/campaigns/new" style={{ fontSize: 11, color: C.greenDk, textDecoration: 'none', fontWeight: 600 }}>Measure it for real with a check-in offer →</Link>
+        </div>
+
+        {/* 4 — Spent money (estimate, or prompt if no ticket) */}
+        <div style={row('82%')}>
+          <div style={estimate}>
+            <div style={tile(C.bg)}><ShoppingBag size={18} color={C.mute} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>Spent money</div>
+              <div style={{ fontSize: 11, color: C.faint }}>{revenue != null ? <>~{visits.toLocaleString()} visits × ${avgTicket}</> : 'add your average spend above'}</div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              {revenue != null
+                ? <><div style={bignum}>~${revenue.toLocaleString()}</div><div style={{ marginTop: 3 }}>{aboutPill}</div></>
+                : <span style={{ fontSize: 11, color: C.mute, fontStyle: 'italic' }}>set spend ↑</span>}
+            </div>
+          </div>
+        </div>
+
+        {arrow}
+
+        {/* 5 — Came back (locked) */}
+        <div style={row('76%')}>
+          <Link href="/dashboard/connect-accounts" style={{ ...locked, textDecoration: 'none', color: 'inherit' }}>
+            <div style={tile('#fff')}><Repeat size={17} color={C.faint} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>Came back</div>
+              <div style={{ fontSize: 11, color: C.faint }}>connect a register to measure this</div>
+            </div>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: C.mute, border: `1px solid ${C.line}`, borderRadius: 99, padding: '3px 10px', flexShrink: 0 }}><Lock size={11} />Connect</span>
+          </Link>
+        </div>
+
+      </div>
+
+      <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 14, fontSize: 10, color: C.mute }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Check size={11} color={C.greenDk} />real</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><SlidersHorizontal size={11} />about (your math)</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Lock size={11} color={C.faint} />locked</span>
+      </div>
+    </Section>
+  )
+}
+
+// ── The one lever: more reviews lift your Maps rank, which is how new people
+//    find you. Bridges the numbers to a real action (the review-request kit). ──
+function GrowAwareness({ rating, reviewCount, detail }: { rating: number | null; reviewCount: number; detail: InsightsDetail | null }) {
+  const v = detail?.views
+  const mapsPct = v && v.total > 0 ? Math.round((v.maps / v.total) * 100) : null
+  return (
+    <Section title="Get seen by more people">
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 16 }}>
+        <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5 }}>
+          {mapsPct != null && <>Most of your views come from Google Maps ({mapsPct}%). </>}
+          On Maps, fresh reviews push you up the list, and that is the biggest driver of new people finding you.
+          {rating != null && reviewCount > 0 && <> You are at <b style={{ color: C.ink, fontWeight: 600 }}>{rating}&#9733; from {reviewCount.toLocaleString()} reviews</b>.</>}
+        </div>
+        <Link href="/dashboard/local-seo/reviews/get" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 14, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, borderRadius: 99, padding: '10px 16px', textDecoration: 'none' }}>
+          Ask for more reviews <ArrowRight size={15} />
+        </Link>
+      </div>
+    </Section>
+  )
+}
+
+// ── Connect social to add that channel to this tab. Only shows when no social
+//    account is synced yet, so the data flow is ready the moment it connects. ──
+function ConnectSocial({ connected }: { connected: boolean }) {
+  if (connected) return null
+  return (
+    <Section title="See your social reach here">
+      <Link href="/dashboard/connect-accounts" style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 14, textDecoration: 'none', color: 'inherit' }}>
+        <div style={{ width: 38, height: 38, borderRadius: 10, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Share2 size={18} color={C.greenDk} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>Connect Instagram</div>
+          <div style={{ fontSize: 12, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>Right now this counts Google only. Connect your socials to add their reach here.</div>
+        </div>
+        <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
+      </Link>
     </Section>
   )
 }
@@ -483,6 +713,7 @@ function BestPosts({ posts }: { posts: InsightsPost[] }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 8px' }}>{p.type}</span>
                 <span style={{ fontSize: 11, color: C.faint, textTransform: 'capitalize' }}>{p.platform}</span>
+                {p.postedAt && reviewDate(p.postedAt) && <span style={{ marginLeft: 'auto', fontSize: 11, color: C.faint, whiteSpace: 'nowrap' }}>{reviewDate(p.postedAt)}</span>}
               </div>
               <div style={{ display: 'flex', gap: 14, fontSize: 12 }}>
                 <span style={{ color: C.mute }}><b style={{ color: C.ink, fontWeight: 600, fontFamily: DISPLAY }}>{p.reach.toLocaleString()}</b> reached</span>

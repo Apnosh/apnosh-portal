@@ -55,9 +55,11 @@ export async function getRecentReviews(
   ])
 
   const items: RecentReviewItem[] = (recentRes.data ?? [])
-    // Keep reviews that actually have something to show — a written review OR a
-    // reply. Drops blank rating-only reviews, but keeps a rated-and-replied one.
-    .filter(r => (r.review_text && String(r.review_text).trim().length > 1) || (r.response_text && String(r.response_text).trim().length > 1))
+    // "Latest reviews" is about what customers actually WROTE, so keep only
+    // reviews with real text. A rating-only review (even a replied one) says
+    // nothing, so it shouldn't take a slot here. Reply state still renders on
+    // any written review that's been answered.
+    .filter(r => r.review_text && String(r.review_text).trim().length > 1)
     .slice(0, limit)
     .map(r => {
     const rating = Number(r.rating ?? 0)

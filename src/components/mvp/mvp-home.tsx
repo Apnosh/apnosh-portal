@@ -22,14 +22,9 @@ import Link from 'next/link'
 import type { Suggestion } from '@/lib/dashboard/suggestions'
 import type { TimelineEvent } from '@/lib/dashboard/get-since-last-checked'
 import type { UpcomingWorkItem } from '@/lib/dashboard/get-upcoming-work'
+import { HomeFunnelLive } from './home-funnel'
+import { MvpThemeProvider, useMvpTheme } from './mvp-theme'
 
-/* Theme tokens lifted from the design's `C` palette. */
-const C = {
-  green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
-  ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', ghost: '#e6e6ea',
-  amber: '#8a5a0c', amberBtn: '#bd7e16', amberBg: '#fbf3e4', amberLine: '#eed9b3',
-  coral: '#a85c3c', coralBg: '#f8efe9', bg: '#f5f5f7',
-}
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
 /* Banner animations — ported verbatim from the design (apnosh-mvp App.tsx):
@@ -141,7 +136,28 @@ const TILE_ICON: Record<string, React.ComponentType<{ size?: number; color?: str
   message: MessageCircle, mail: Mail, calendar: CalendarDays, eye: Eye, users: Users,
 }
 
-export default function MvpHome({ data, showHeader = true, clientId, suggestionsReady = true }: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
+// Each home metric graph deep-links into its matching funnel stage on the Insights
+// page (same clean graph, now the stage's own page). Loyalty/email has no funnel
+// stage, so its card stays unlinked.
+const METRIC_STAGE: Record<string, { key: string; label: string }> = {
+  reach: { key: 'shown', label: 'Awareness' },
+  interactions: { key: 'moved', label: 'Customer actions' },
+  bookings: { key: 'camein', label: 'Orders' },
+  reputation: { key: 'back', label: 'Retention' },
+}
+
+export default function MvpHome(props: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
+  // One theme provider wraps the whole Home tree, so the funnel and every card
+  // below read the same light/dark skin and the one toggle flips all of it.
+  return (
+    <MvpThemeProvider>
+      <MvpHomeInner {...props} />
+    </MvpThemeProvider>
+  )
+}
+
+function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = true }: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
+  const { C } = useMvpTheme()
   const metrics = data.metrics ?? []
   const [reviewHidden, setReviewHidden] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -154,12 +170,12 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
   const goTo = (i: number) => { const el = scrollRef.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' }) }
 
   return (
-    <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: 'radial-gradient(135% 55% at 50% 0%, rgba(74,189,152,0.10), rgba(255,255,255,0) 52%), #fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
+    <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: C.pageBg, minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{MVP_ANIM_CSS}</style>
       {/* sticky greeting bar — suppressed when embedded under the portal's
           own top bar (the design's full chrome lands in the nav-shell step). */}
       {showHeader && (
-      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', padding: '14px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}` }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: C.card, padding: '14px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 15, color: C.mute }}>{data.greeting}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ position: 'relative' }}><Bell size={20} color={C.ink} /><div style={{ position: 'absolute', top: -1, right: -1, width: 7, height: 7, borderRadius: 4, background: C.green }} /></div>
@@ -195,10 +211,19 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
 
         {/* Everything below the banner cascades in on load (staggered rise). */}
         <div className="mvp-stagger">
+        {/* THE MARKETING FUNNEL — the whole-business hero: your real Google
+            funnel (Awareness → Interest → Customer actions → Orders → Retention)
+            in the glass-vessel view. Renders only when the business has Google data. */}
+        <div style={{ margin: '-16px -18px 0' }}>
+          <HomeFunnelLive clientId={clientId} height={620} fill />
+        </div>
         {/* SWIPEABLE METRIC CARDS — swipe left/right to change which graph
             you're looking at; dots show where you are. No tabs. */}
         <div ref={scrollRef} onScroll={onScroll} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory' }}>
-          {metrics.map((mv) => <MetricCard key={mv.key} mv={mv} />)}
+          {metrics.map((mv) => {
+            const st = METRIC_STAGE[mv.key]
+            return <MetricCard key={mv.key} mv={mv} stage={st ? { href: `/dashboard/insights?stage=${st.key}`, label: st.label } : undefined} />
+          })}
         </div>
 
         {/* dots — current metric + tap to jump */}
@@ -232,7 +257,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
             (data.upcomingWork ?? []).map((w) => {
               const t = WORK_TONE[w.tone] ?? WORK_TONE.planning
               return (
-                <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
+                <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: C.card, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
                   <span className={w.tone === 'scheduled' ? 'mvp-ping' : undefined} style={{ width: 9, height: 9, borderRadius: 99, background: t.fg, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.title}</div>
@@ -257,7 +282,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
             {(data.activity?.length ?? 0) > 0 && <Link href="/dashboard/inbox" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>}
           </div>
           {(data.activity?.length ?? 0) > 0 ? (
-            <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '16px 15px 9px', boxShadow: '0 1px 3px rgba(0,0,0,.03)' }}>
+            <div style={{ background: C.card, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '16px 15px 9px', boxShadow: '0 1px 3px rgba(0,0,0,.03)' }}>
               {(data.activity ?? []).map((e, i, arr) => {
                 const last = i === arr.length - 1
                 const Icon = ACT_ICON[e.icon ?? 'dot'] ?? Sparkles
@@ -290,7 +315,7 @@ export default function MvpHome({ data, showHeader = true, clientId, suggestions
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 12 }}>Quick links</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {QUICK_LINKS.map((q) => (
-              <Link key={q.href} href={q.href} className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 13, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '15px 14px', textDecoration: 'none', color: 'inherit' }}>
+              <Link key={q.href} href={q.href} className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 13, background: C.card, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '15px 14px', textDecoration: 'none', color: 'inherit' }}>
                 <div style={{ width: 40, height: 40, borderRadius: 11, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 10px rgba(74,189,152,0.18)' }}><q.Icon size={19} color={C.greenDk} /></div>
                 <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600, lineHeight: 1.2 }}>{q.label}</span>
                 <ChevronRight size={17} color={C.faint} />
@@ -334,6 +359,7 @@ function markLeadLocal(list: Suggestion[]): Suggestion[] {
 }
 
 function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[]; clientId?: string; ready?: boolean }) {
+  const { C } = useMvpTheme()
   const key = `apnosh:dismissed-suggestions:${clientId || 'default'}`
   const [dismissed, setDismissed] = useState<Record<string, number>>({})
   const [loaded, setLoaded] = useState(false)
@@ -385,7 +411,7 @@ function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[
     // flash "all caught up" before a real card has had a chance to arrive.
     if (!ready) {
       return (
-        <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: 16, marginBottom: 22, display: 'flex', gap: 13, alignItems: 'center' }}>
+        <div style={{ background: C.cardSoft, border: `0.5px solid ${C.line}`, borderRadius: 18, padding: 16, marginBottom: 22, display: 'flex', gap: 13, alignItems: 'center' }}>
           <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={18} color={C.greenDk} /></div>
           <div style={{ fontSize: 13.5, lineHeight: 1.4, color: C.faint }}>Looking over what needs you&hellip;</div>
         </div>
@@ -394,7 +420,7 @@ function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[
     // Honest now: obligations can't be dismissed, so an empty deck means there
     // genuinely is nothing waiting — only soft tips were cleared.
     return (
-      <div style={{ background: '#fbfcfb', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: 16, marginBottom: 22, display: 'flex', gap: 13, alignItems: 'center' }}>
+      <div style={{ background: C.cardSoft, border: `0.5px solid ${C.line}`, borderRadius: 18, padding: 16, marginBottom: 22, display: 'flex', gap: 13, alignItems: 'center' }}>
         <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Check size={19} color={C.greenDk} /></div>
         <div style={{ fontSize: 13.5, lineHeight: 1.4, color: C.mute }}><b style={{ color: C.ink }}>You&apos;re all caught up.</b> Nothing needs you right now.</div>
       </div>
@@ -434,8 +460,9 @@ function SuggestionStack({ items, clientId, ready = true }: { items: Suggestion[
 }
 
 function StepBtn({ children, onClick, disabled, label }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; label: string }) {
+  const { C } = useMvpTheme()
   return (
-    <button onClick={onClick} disabled={disabled} aria-label={label} style={{ width: 32, height: 32, borderRadius: '50%', border: `1px solid ${C.line}`, background: '#fff', color: disabled ? C.faint : C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'default' : 'pointer', padding: 0, opacity: disabled ? 0.45 : 1, transition: 'opacity .15s' }}>
+    <button onClick={onClick} disabled={disabled} aria-label={label} style={{ width: 32, height: 32, borderRadius: '50%', border: `1px solid ${C.line}`, background: C.card, color: disabled ? C.faint : C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'default' : 'pointer', padding: 0, opacity: disabled ? 0.45 : 1, transition: 'opacity .15s' }}>
       {children}
     </button>
   )
@@ -453,6 +480,9 @@ function deckDepth(pos: number): React.CSSProperties {
 function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }: { s: Suggestion; pos: number; isFront: boolean; onAdvance: () => void; onClose: () => void; canClose?: boolean }) {
   const a = ACCENT[s.accent] ?? ACCENT.amber
   const Icon = SUG_ICON[s.icon] ?? Sparkles
+  // The card sits on a bright pastel accent in BOTH skins, so its own text stays
+  // dark-on-pastel regardless of theme (a colour chip that pops on the dark home).
+  const INK = '#1d1d1f', MUTE = '#6e6e73', FAINT = '#aeaeb2'
   // Cards behind take the deck's full height (= front + peek) so their bottom
   // strip is always empty colored card, never clipped content.
   const style: React.CSSProperties = {
@@ -475,14 +505,14 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
       style={style}
     >
       {isFront && canClose && (
-        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose() }} aria-label={s.obligation ? 'Next' : 'Dismiss'} style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,0.05)', color: C.faint, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 2 }}><X size={14} /></button>
+        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose() }} aria-label={s.obligation ? 'Next' : 'Dismiss'} style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,0.05)', color: FAINT, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 2 }}><X size={14} /></button>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 9 }}>
         <div style={{ width: 38, height: 38, borderRadius: 11, background: '#fff', border: `0.5px solid ${a.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={18} color={a.fg} /></div>
         <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.07em', color: a.fg }}>{s.eyebrow}</span>
       </div>
-      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.22, color: C.ink, marginBottom: 5, paddingRight: 14, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.title}</div>
-      <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, marginBottom: s.cta ? 13 : 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.body}</div>
+      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.22, color: INK, marginBottom: 5, paddingRight: 14, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.title}</div>
+      <div style={{ fontSize: 12.5, color: MUTE, lineHeight: 1.45, marginBottom: s.cta ? 13 : 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.body}</div>
       {s.cta && (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: a.fg, color: '#fff', borderRadius: 99, padding: '9px 15px', fontWeight: 700, fontSize: 12.5 }}>{s.cta} <ChevronRight size={14} /></span>
       )}
@@ -494,10 +524,11 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
    home never collapses) when there's nothing to show yet. Centered, soft,
    with a haloed icon so it feels designed rather than blank. */
 function EmptySection({ icon, title, text }: { icon?: React.ReactNode; title?: string; text: string }) {
+  const { C } = useMvpTheme()
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'linear-gradient(180deg,#fbfdfc,#f5f9f7)', border: `1px dashed ${C.greenLine}`, borderRadius: 18, padding: '22px 20px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: C.cardSoft, border: `1px dashed ${C.greenLine}`, borderRadius: 18, padding: '22px 20px' }}>
       {icon && (
-        <div style={{ width: 46, height: 46, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, boxShadow: '0 2px 10px rgba(74,189,152,0.18)' }}>{icon}</div>
+        <div style={{ width: 46, height: 46, borderRadius: '50%', background: C.card, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, boxShadow: '0 2px 10px rgba(74,189,152,0.18)' }}>{icon}</div>
       )}
       {title && <div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink, marginBottom: 3 }}>{title}</div>}
       <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.5, maxWidth: 230 }}>{text}</div>
@@ -506,10 +537,11 @@ function EmptySection({ icon, title, text }: { icon?: React.ReactNode; title?: s
 }
 
 export function SourceCard({ s }: { s: { key: string; label: string; value: string; configured: boolean } }) {
+  const { C } = useMvpTheme()
   const Icon = TILE_ICON[s.key] ?? MousePointerClick
   const zero = !s.value || s.value === '0' || s.value === '—'
   return (
-    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '7px 4px', textAlign: 'center', minHeight: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: zero ? 0.5 : 1 }}>
+    <div style={{ background: C.card, border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '7px 4px', textAlign: 'center', minHeight: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: zero ? 0.5 : 1 }}>
       <Icon size={14} color={C.green} />
       <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 500, lineHeight: 1, color: C.ink }}>{s.value}</div>
       <div style={{ fontSize: 10, color: C.faint }}>{s.label}</div>
@@ -522,7 +554,8 @@ export function SourceCard({ s }: { s: { key: string; label: string; value: stri
    range chips move the big number + delta, not just the bars. The delta is honest
    about staleness: when the freshest data is too old for a "this period vs last"
    claim, it shows "Updated <when>" instead of a frozen arrow. */
-function MetricCard({ mv }: { mv: MetricView }) {
+export function MetricCard({ mv, stage }: { mv: MetricView; stage?: { href: string; label: string } }) {
+  const { C } = useMvpTheme()
   const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
   const fresh = isFresh(mv.lastDataDate, summary.periodDays)
   const dn = summary.deltaPct < 0
@@ -561,6 +594,10 @@ function MetricCard({ mv }: { mv: MetricView }) {
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, mv.tiles.length)},1fr)`, gap: 8, margin: '10px 0 0' }}>
           {mv.tiles.slice(0, 4).map((s) => <SourceCard key={s.key + s.label} s={s} />)}
         </div>
+      )}
+      {/* deep-link into this metric's matching funnel stage on the Insights page */}
+      {stage && (
+        <Link href={stage.href} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 14, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>See {stage.label} <ChevronRight size={15} /></Link>
       )}
     </div>
   )
@@ -735,12 +772,13 @@ export function ActionsChart({
   summary: RangeSummary
   noun?: string
 }) {
+  const { C } = useMvpTheme()
   const H = 62
   const [picked, setPicked] = useState<number | null>(null)
   const { bars, curLbl, cmpLbl, total, avg, max } = summary
   const avgY = (avg / max) * H
   const dense = bars.length > 8
-  const dateInput: React.CSSProperties = { border: `1px solid ${C.line}`, borderRadius: 8, padding: '5px 8px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', background: '#fff' }
+  const dateInput: React.CSSProperties = { border: `1px solid ${C.line}`, borderRadius: 8, padding: '5px 8px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', background: C.card }
 
   return (
     <div style={{ margin: '8px 0 0' }}>
@@ -748,7 +786,7 @@ export function ActionsChart({
         {CHART_RANGES.map(([k, l]) => {
           const on = range === k
           return (
-            <button key={k} onClick={() => { setRange(k); setPicked(null) }} style={{ flexShrink: 0, whiteSpace: 'nowrap', border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer' }}>{l}</button>
+            <button key={k} onClick={() => { setRange(k); setPicked(null) }} style={{ flexShrink: 0, whiteSpace: 'nowrap', border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : C.card, color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer' }}>{l}</button>
           )
         })}
       </div>
@@ -776,7 +814,7 @@ export function ActionsChart({
                   const dpct = b.compare ? Math.round((delta / b.compare) * 100) : null
                   const dCol = delta > 0 ? '#6fe3bf' : delta < 0 ? '#ef9a9a' : 'rgba(255,255,255,.6)'
                   return (
-                    <div style={{ position: 'absolute', bottom: '100%', marginBottom: 6, ...(edge === 'mid' ? { left: '50%', transform: 'translateX(-50%)' } : edge === 'left' ? { left: 0 } : { right: 0 }), background: C.ink, color: '#fff', borderRadius: 8, padding: '8px 11px', fontSize: 11, whiteSpace: 'nowrap', zIndex: 5, lineHeight: 1.45, textAlign: 'left' }}>
+                    <div style={{ position: 'absolute', bottom: '100%', marginBottom: 6, ...(edge === 'mid' ? { left: '50%', transform: 'translateX(-50%)' } : edge === 'left' ? { left: 0 } : { right: 0 }), background: '#12211b', color: '#fff', borderRadius: 8, padding: '8px 11px', fontSize: 11, whiteSpace: 'nowrap', zIndex: 5, lineHeight: 1.45, textAlign: 'left' }}>
                       <div style={{ fontWeight: 700 }}>{b.tip}</div>
                       <div style={{ opacity: 0.9 }}>{b.value.toLocaleString()} {noun}</div>
                       <div style={{ borderTop: '1px solid rgba(255,255,255,.22)', marginTop: 6, paddingTop: 6 }}>

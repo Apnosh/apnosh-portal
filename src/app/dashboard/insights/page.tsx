@@ -19,6 +19,12 @@ export default function InsightsPage() {
   const { client, loading: clientLoading } = useClient()
   const [data, setData] = useState<InsightsData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // deep-link: the home funnel's stages link here as /dashboard/insights?stage=<key>
+  // so tapping a stage jumps straight to its matching journey tab.
+  const [stageKey, setStageKey] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    try { setStageKey(new URLSearchParams(window.location.search).get('stage') ?? undefined) } catch { /* ignore */ }
+  }, [])
 
   useEffect(() => {
     if (!client?.id) return
@@ -47,5 +53,5 @@ export default function InsightsPage() {
     return () => { live = false }
   }, [client?.id, client?.name])
 
-  return <MvpInsights data={data} loading={clientLoading || (!data && !error)} error={error} clientId={client?.id} />
+  return <MvpInsights data={data} loading={clientLoading || (!data && !error)} error={error} clientId={client?.id} initialStageKey={stageKey} />
 }
