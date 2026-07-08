@@ -257,7 +257,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           ))}
         </nav>
 
-        <div className="p-3 border-t border-white/8 relative">
+        {/* extra bottom padding on mobile so the profile + Sign out menu clears the fixed bottom tab bar
+            (which otherwise paints over this footer at the same z-index). Desktop has no tab bar → pb-3. */}
+        <div className="px-3 pt-3 pb-[calc(72px+env(safe-area-inset-bottom))] lg:pb-3 border-t border-white/8 relative">
           <button onClick={() => setUserMenuOpen(!userMenuOpen)} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors min-h-[44px]">
             {userLoading ? (
               <div className="w-8 h-8 rounded-full bg-white/10 animate-pulse" />
