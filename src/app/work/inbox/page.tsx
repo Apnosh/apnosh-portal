@@ -1,7 +1,7 @@
 /**
  * /work/inbox — staff's incoming queue.
  *
- * Primary rail: client_request tasks (someone hit /dashboard/social/request).
+ * Primary rail: client_request tasks (someone hit /dashboard/insights/request).
  * Secondary rail: internal action items (invoice chases, system tasks).
  * Tertiary rail: recently closed (last 7 days).
  *

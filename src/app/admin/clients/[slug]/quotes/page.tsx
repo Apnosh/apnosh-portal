@@ -97,7 +97,7 @@ export default async function ClientQuotesPage({ params }: PageProps) {
             return (
               <li key={q.id as string}>
                 <Link
-                  href={`/dashboard/social/quotes/${q.id}?clientId=${encodeURIComponent(client.id as string)}`}
+                  href={`/dashboard/insights/quotes/${q.id}?clientId=${encodeURIComponent(client.id as string)}`}
                   className="block rounded-xl border bg-white p-4 hover:shadow-sm transition-shadow"
                   style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
                 >

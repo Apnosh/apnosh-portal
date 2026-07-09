@@ -167,7 +167,7 @@ export async function createMySpecial(input: SpecialInput): Promise<
   if (error || !data) return { success: false, error: error?.message ?? 'Insert failed' }
 
   await fireDeployHook(auth.clientId)
-  revalidatePath('/dashboard/website/manage')
+  revalidatePath('/dashboard/insights/manage')
   return { success: true, data: rowToSpecial(data) }
 }
 
@@ -203,7 +203,7 @@ export async function updateMySpecial(
   if (error || !data) return { success: false, error: error?.message ?? 'Update failed' }
 
   await fireDeployHook(auth.clientId)
-  revalidatePath('/dashboard/website/manage')
+  revalidatePath('/dashboard/insights/manage')
   return { success: true, data: rowToSpecial(data) }
 }
 
@@ -222,6 +222,6 @@ export async function deleteMySpecial(id: string): Promise<
   if (error) return { success: false, error: error.message }
 
   await fireDeployHook(auth.clientId)
-  revalidatePath('/dashboard/website/manage')
+  revalidatePath('/dashboard/insights/manage')
   return { success: true }
 }

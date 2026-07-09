@@ -107,19 +107,19 @@ export async function getListingHealth(clientId: string): Promise<ListingHealth>
       key: 'has-reviews', label: 'You have Google reviews', weight: 10,
       status: placeCount == null ? 'unknown' : placeCount > 0 ? 'pass' : 'fail',
       detail: 'Start collecting reviews with your review link and QR code.',
-      fixLabel: 'Get reviews', fixHref: '/dashboard/local-seo/reviews/get',
+      fixLabel: 'Get reviews', fixHref: '/dashboard/insights/reviews/get',
     },
     {
       key: 'rating', label: 'Rating is 4.0 or higher', weight: 10,
       status: placeRating == null ? 'unknown' : placeRating >= 4.0 ? 'pass' : 'fail',
       detail: 'Earn more positive reviews from happy customers to lift your average.',
-      fixLabel: 'Get reviews', fixHref: '/dashboard/local-seo/reviews/get',
+      fixLabel: 'Get reviews', fixHref: '/dashboard/insights/reviews/get',
     },
     {
       key: 'replies', label: 'Replying to your reviews', weight: 15,
       status: replyRate == null ? 'unknown' : replyRate >= 0.5 ? 'pass' : 'fail',
       detail: 'Reply to your reviews — especially the critical ones. Google and customers both reward it.',
-      fixLabel: 'Reply to reviews', fixHref: '/dashboard/local-seo/reviews',
+      fixLabel: 'Reply to reviews', fixHref: '/dashboard/insights/reviews',
     },
   ]
 

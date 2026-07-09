@@ -41,7 +41,7 @@ export async function POST() {
      traditional submission so a 303 to the heatmaps page is the
      cleanest UX — page reloads with fresh data. */
   return NextResponse.redirect(
-    new URL('/dashboard/website/heatmaps?verified=1', process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.apnosh.com'),
+    new URL('/dashboard/insights/heatmaps?verified=1', process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.apnosh.com'),
     303,
   )
 }

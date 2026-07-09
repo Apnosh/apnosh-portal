@@ -92,7 +92,7 @@ export default function ActionSheet({ open, onClose, strategistId }: ActionSheet
       icon: Star,
       label: 'Reply to reviews',
       description: 'Respond to recent customer reviews',
-      href: '/dashboard/local-seo/reviews',
+      href: '/dashboard/insights/reviews',
       tint: 'bg-amber-50 text-amber-700',
     },
     {

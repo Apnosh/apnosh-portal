@@ -106,7 +106,7 @@ export default function TonightStrip({ clientId }: { clientId: string }) {
               </Link>
             ) : (
               <Link
-                href="/dashboard/social"
+                href="/dashboard/insights"
                 className="text-[12px] italic hover:text-emerald-700"
                 style={{ color: 'var(--db-ink-3, #888)' }}
               >

@@ -1,7 +1,7 @@
 /**
  * POST /api/social/boost
  *
- * Owner approves a boost spec in /dashboard/social/boost. We write a
+ * Owner approves a boost spec in /dashboard/insights/boost. We write a
  * row to ad_campaigns with status='pending' so the strategist sees it
  * in their queue and launches it in Meta Ads Manager. The same table
  * stores the live campaign id and cached metrics once the strategist

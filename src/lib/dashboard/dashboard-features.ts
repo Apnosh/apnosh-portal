@@ -9,8 +9,8 @@
  *
  * Adding a new feature:
  *   1. Add the literal here.
- *   2. Add a tile case in /dashboard/website/manage/page.tsx.
- *   3. Build the editor sub-page under /dashboard/website/manage/<feature>.
+ *   2. Add a tile case in /dashboard/insights/manage/page.tsx.
+ *   3. Build the editor sub-page under /dashboard/insights/manage/<feature>.
  *   4. Document in docs/INTEGRATION-PLAYBOOK.md.
  */
 export type DashboardFeature = 'menu' | 'specials' | 'copy' | 'photos'

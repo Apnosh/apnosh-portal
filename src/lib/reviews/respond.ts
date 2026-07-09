@@ -8,7 +8,7 @@
  * reviews row with the response text + responded_at.
  *
  * The strategist UI in /admin/reviews calls this; the public-facing
- * /dashboard/local-seo/reviews page is read-only (clients see the
+ * /dashboard/insights/reviews page is read-only (clients see the
  * response after the AM posts it).
  */
 

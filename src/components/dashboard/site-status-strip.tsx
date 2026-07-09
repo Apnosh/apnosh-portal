@@ -4,7 +4,7 @@
  * Single-line site status strip — answers the question owners ask
  * most: "is my site working?" — in under a second of glance.
  *
- * Replaces the dedicated /dashboard/website/health page. When
+ * Replaces the dedicated /dashboard/insights/health page. When
  * something needs attention (uptime degraded, SSL expired, analytics
  * not connected, etc.) the strip's color shifts and a small punch
  * list renders inline below.
@@ -36,7 +36,7 @@ export default function SiteStatusStrip({ clientId }: Props) {
     setLoading(true)
     Promise.all([
       getWebsiteHealth(clientId).catch(() => null),
-      fetch(`/api/dashboard/website/status-strip?clientId=${clientId}`)
+      fetch(`/api/dashboard/insights/status-strip?clientId=${clientId}`)
         .then(r => r.ok ? r.json() : null)
         .catch(() => null),
     ]).then(([h, s]) => {

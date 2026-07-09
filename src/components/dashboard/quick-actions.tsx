@@ -53,16 +53,16 @@ export default function QuickActions({
   }, [clientId, initialCounts])
 
   const actions: { href: string; label: string; icon: React.ReactNode; count?: number }[] = [
-    { href: '/dashboard/social', label: 'New post', icon: <Plus className="w-4 h-4" /> },
+    { href: '/dashboard/insights', label: 'New post', icon: <Plus className="w-4 h-4" /> },
     {
       href: '/dashboard/approvals',
       label: 'Review approvals',
       icon: <MessageSquare className="w-4 h-4" />,
       count: counts.pendingApprovals,
     },
-    { href: '/dashboard/social/campaigns', label: 'Launch campaign', icon: <Target className="w-4 h-4" /> },
+    { href: '/dashboard/insights/campaigns', label: 'Launch campaign', icon: <Target className="w-4 h-4" /> },
     {
-      href: '/dashboard/website/specials',
+      href: '/dashboard/insights/specials',
       label: 'Update specials',
       icon: <Utensils className="w-4 h-4" />,
     },

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
 
 export default function NewRequestRedirect() {
-  redirect('/dashboard/social/requests/new')
+  redirect('/dashboard/insights/requests/new')
 }

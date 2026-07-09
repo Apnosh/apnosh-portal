@@ -90,7 +90,7 @@ export async function getAgenda(clientId: string): Promise<AgendaItem[]> {
         ? `${r.rating}★ review from ${author} needs reply`
         : `New ${r.rating}★ review from ${author} — reply ready`,
       detail: snippet,
-      href: '/dashboard/local-seo/reviews',
+      href: '/dashboard/insights/reviews',
       actionLabel: 'Reply',
     })
   }
@@ -139,7 +139,7 @@ export async function getAgenda(clientId: string): Promise<AgendaItem[]> {
       urgency: 'low',
       label: 'Draft post — not scheduled',
       detail: snippet ? `"${snippet}${text.length > 60 ? '…' : ''}"` : undefined,
-      href: '/dashboard/social',
+      href: '/dashboard/insights',
       actionLabel: 'Schedule',
     })
   }
@@ -166,7 +166,7 @@ export async function getAgenda(clientId: string): Promise<AgendaItem[]> {
       type: 'suggestion',
       urgency: 'low',
       label: "You're caught up — want me to draft your next post?",
-      href: '/dashboard/social/new?ai=1',
+      href: '/dashboard/insights/new?ai=1',
       actionLabel: 'Draft',
     })
   }

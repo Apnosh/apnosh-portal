@@ -128,7 +128,7 @@ export function ClientRequestDetail({ requestId, backHref, backLabel = 'Back to 
       // "I'm done" state. Previously we just closed the confirm bar and
       // left the user on the cancelled detail page, which looked broken.
       setCancelConfirm(false)
-      router.push('/dashboard/social/requests')
+      router.push('/dashboard/insights/requests')
     } else {
       setCancelling(false)
       setError(result.error)

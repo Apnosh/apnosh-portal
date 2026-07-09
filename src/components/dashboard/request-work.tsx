@@ -22,19 +22,19 @@ const ACTIONS = [
   {
     label: 'New post',
     detail: 'Caption + creative',
-    href: '/dashboard/social/requests/new',
+    href: '/dashboard/insights/requests/new',
     Icon: Sparkles,
   },
   {
     label: 'Design',
     detail: 'Graphic / poster / menu',
-    href: '/dashboard/social/requests/new?type=graphic',
+    href: '/dashboard/insights/requests/new?type=graphic',
     Icon: ImageIcon,
   },
   {
     label: 'Video',
     detail: 'Reel / short form',
-    href: '/dashboard/social/requests/new?type=video',
+    href: '/dashboard/insights/requests/new?type=video',
     Icon: Video,
   },
   {

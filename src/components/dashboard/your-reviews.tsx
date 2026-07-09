@@ -5,7 +5,7 @@
  * Restaurant owners' #1 anxiety is reviews; this card surfaces the
  * recent five with star, snippet, source, time, and a one-tap "Reply"
  * affordance for any unanswered ones (AI-drafted reply lives on the
- * /dashboard/social/reviews page).
+ * /dashboard/insights/reviews page).
  */
 
 import { useEffect, useState } from 'react'
@@ -111,7 +111,7 @@ export default function YourReviews({
         </h3>
         {unrespondedCount > 0 && (
           <Link
-            href="/dashboard/social/reviews"
+            href="/dashboard/insights/reviews"
             className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-800"
           >
             {unrespondedCount} unanswered →
@@ -145,7 +145,7 @@ export default function YourReviews({
               </div>
               {!r.responded_at && (
                 <Link
-                  href="/dashboard/social/reviews"
+                  href="/dashboard/insights/reviews"
                   className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 mt-0.5"
                   title="Reply with AI-drafted response"
                 >

@@ -16,8 +16,8 @@ import type {
  *   - Reviews across all sources (Google, Yelp, Facebook, TripAdvisor)
  *
  * Rendered with the same shared components (StatusBanner, HeroMetric,
- * TrendChart, MetricGrid, InsightCard, AMNote) used by /dashboard/social
- * and /dashboard/website so all three channels feel consistent.
+ * TrendChart, MetricGrid, InsightCard, AMNote) used by /dashboard/insights
+ * and /dashboard/insights so all three channels feel consistent.
  *
  * Primary metric is "interactions" -- directions + calls + website clicks
  * from the GBP listing. That's what drives actual business outcomes for a

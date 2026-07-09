@@ -85,7 +85,7 @@ export default function RequestStatusFeed() {
           Anything you want updated on your site — menu prices, holiday banner, hero photo, typos. Pick a template and we&rsquo;ll handle it.
         </p>
         <Link
-          href="/dashboard/website/requests/new"
+          href="/dashboard/insights/requests/new"
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12.5px] font-semibold text-white bg-brand hover:bg-brand-dark"
         >
           <Plus className="w-3 h-3" />
@@ -107,7 +107,7 @@ export default function RequestStatusFeed() {
             </span>
           )}
         </div>
-        <Link href="/dashboard/website/requests" className="text-[11px] font-medium text-brand-dark hover:underline">
+        <Link href="/dashboard/insights/requests" className="text-[11px] font-medium text-brand-dark hover:underline">
           See all →
         </Link>
       </div>
@@ -133,7 +133,7 @@ function RequestRow({ req, dim }: { req: ContentQueueItem; dim?: boolean }) {
   return (
     <li>
       <Link
-        href={`/dashboard/website/requests/${req.id}`}
+        href={`/dashboard/insights/requests/${req.id}`}
         className={`flex items-center gap-3 px-5 py-3 hover:bg-bg-2/40 transition-colors ${
           isReview ? 'bg-amber-50/40' : ''
         } ${dim ? 'opacity-70' : ''}`}

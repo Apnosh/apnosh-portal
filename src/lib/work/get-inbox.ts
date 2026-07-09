@@ -1,7 +1,7 @@
 /**
  * Staff inbox: open client_tasks across the assigned book, scoped by
  * RLS. The most important rail is "client_request" — actual content
- * requests submitted by clients via /dashboard/social/request.
+ * requests submitted by clients via /dashboard/insights/request.
  * Secondary rails: internal action items (finance chases, etc).
  *
  * Each row carries enough context that the strategist can either

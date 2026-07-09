@@ -93,7 +93,7 @@ export async function GET(req: Request) {
             kind: 'holiday_hours_reminder',
             title,
             body,
-            link: '/dashboard/local-seo/listing#special-hours',
+            link: '/dashboard/insights/listing#special-hours',
           })
           notified++
         }

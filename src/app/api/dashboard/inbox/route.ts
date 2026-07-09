@@ -104,7 +104,7 @@ export async function GET(req: NextRequest) {
       items.push({
         id: `review-${r.id}`, kind: 'review', chip: 'reviews', band: rating <= 3 ? 'today' : 'week',
         icon: ICON.review, title: `${author} · ${rating}★`, subtitle: (r.review_text as string)?.slice(0, 90) || 'No comment left',
-        time: timeAgo(r.posted_at as string), whenIso: r.posted_at as string, href: '/dashboard/local-seo/reviews', status: `${rating}★`, unread: true,
+        time: timeAgo(r.posted_at as string), whenIso: r.posted_at as string, href: '/dashboard/insights/reviews', status: `${rating}★`, unread: true,
         review: {
           reviewId: r.id as string, rating, author, source, text: (r.review_text as string) ?? '',
           suggestedReply: rating >= 4
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
         },
       })
     } else {
-      history.push({ id: `review-${r.id}`, icon: ICON.review, chip: 'reviews', title: `Replied to ${author}`, subtitle: `${rating}★ on ${source === 'instagram' ? 'Instagram' : source === 'yelp' ? 'Yelp' : 'Google'}`, outcome: 'Reply sent', day: dayBucket((r.responded_at as string) ?? null), whenIso: (r.responded_at as string) ?? (r.posted_at as string), href: '/dashboard/local-seo/reviews' })
+      history.push({ id: `review-${r.id}`, icon: ICON.review, chip: 'reviews', title: `Replied to ${author}`, subtitle: `${rating}★ on ${source === 'instagram' ? 'Instagram' : source === 'yelp' ? 'Yelp' : 'Google'}`, outcome: 'Reply sent', day: dayBucket((r.responded_at as string) ?? null), whenIso: (r.responded_at as string) ?? (r.posted_at as string), href: '/dashboard/insights/reviews' })
     }
   }
 

@@ -127,7 +127,7 @@ export async function getCalendar(
       allDay: false,
       status: postStatusLabel(p.status as string),
       statusTone: postStatusTone(p.status as string),
-      href: '/dashboard/social/calendar',
+      href: '/dashboard/insights/calendar',
       platforms,
     })
   }
@@ -143,7 +143,7 @@ export async function getCalendar(
       allDay: false,
       status: emailStatusLabel(e.status as string),
       statusTone: emailStatusTone(e.status as string),
-      href: '/dashboard/email-sms',
+      href: '/dashboard/insights',
     })
   }
 

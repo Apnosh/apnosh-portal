@@ -88,7 +88,7 @@ export function buildCandidates(f: SuggestionFacts): Suggestion[] {
     const { channel, gap } = f.quickWins.listingFix
     out.push({ id: 'fix-listing', eyebrow: 'QUICK WIN', accent: 'amber', icon: 'mapPin', priority: 64,
       title: `Tidy up your ${channel} listing`, body: `${gap}. A two minute fix so guests find the right info.`,
-      cta: 'Fix it', href: '/dashboard/local-seo/listing' })
+      cta: 'Fix it', href: '/dashboard/insights/listing' })
   }
   if (f.quickWins?.fixTheme) {
     out.push({ id: 'fix-theme', eyebrow: 'WORTH A LOOK', accent: 'coral', icon: 'message', priority: 58,

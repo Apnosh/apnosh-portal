@@ -191,7 +191,7 @@ function QuotesRail({ quotes }: { quotes: SentQuote[] }) {
         {quotes.slice(0, 5).map(q => (
           <li key={q.id}>
             <Link
-              href={q.client ? `/dashboard/social/quotes/${q.id}?clientId=${q.client_id}` : `/dashboard/social/quotes/${q.id}`}
+              href={q.client ? `/dashboard/insights/quotes/${q.id}?clientId=${q.client_id}` : `/dashboard/insights/quotes/${q.id}`}
               className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2 hover:shadow-sm transition-shadow"
               style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
             >

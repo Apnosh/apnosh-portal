@@ -179,7 +179,7 @@ export async function createMyMenuItem(input: MenuItemInput): Promise<
   if (error || !data) return { success: false, error: error?.message ?? 'Insert failed' }
 
   await fireDeployHook(auth.clientId)
-  revalidatePath('/dashboard/website/manage')
+  revalidatePath('/dashboard/insights/manage')
   return { success: true, data: rowToItem(data) }
 }
 
@@ -216,7 +216,7 @@ export async function updateMyMenuItem(
   if (error || !data) return { success: false, error: error?.message ?? 'Update failed' }
 
   await fireDeployHook(auth.clientId)
-  revalidatePath('/dashboard/website/manage')
+  revalidatePath('/dashboard/insights/manage')
   return { success: true, data: rowToItem(data) }
 }
 
@@ -235,7 +235,7 @@ export async function deleteMyMenuItem(id: string): Promise<
   if (error) return { success: false, error: error.message }
 
   await fireDeployHook(auth.clientId)
-  revalidatePath('/dashboard/website/manage')
+  revalidatePath('/dashboard/insights/manage')
   return { success: true }
 }
 

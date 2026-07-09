@@ -122,7 +122,7 @@ export async function GET(req: Request) {
         userId: uid,
         kind: 'traffic_anomaly',
         title, body,
-        link: '/dashboard/website/traffic',
+        link: '/dashboard/insights/traffic',
       })
       notified++
     }

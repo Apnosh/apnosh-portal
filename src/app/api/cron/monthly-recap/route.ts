@@ -3,7 +3,7 @@
  *
  * Late each month (28th), for every active client that has real Google
  * performance data, drops an in-app notification — "Your {Month} recap is
- * ready" — that deep-links into /dashboard/local-seo/impact. A free,
+ * ready" — that deep-links into /dashboard/insights/impact. A free,
  * once-a-month reason to come back and see what their presence drove.
  *
  * In-app only for now (no email provider wired). Idempotent per month: it
@@ -23,7 +23,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const CRON_SECRET = process.env.CRON_SECRET
-const IMPACT_LINK = '/dashboard/local-seo/impact'
+const IMPACT_LINK = '/dashboard/insights/impact'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)

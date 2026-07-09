@@ -485,6 +485,6 @@ export async function updateMyContent(args: {
     }
   }
 
-  revalidatePath('/dashboard/website/manage')
+  revalidatePath('/dashboard/insights/manage')
   return { success: true, data: { hasOverride: true } }
 }

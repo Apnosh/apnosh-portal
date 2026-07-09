@@ -2,7 +2,7 @@
 
 /**
  * Server actions for the Connect-your-website wizard at
- * /dashboard/website/setup. Each step writes a small piece of state
+ * /dashboard/insights/setup. Each step writes a small piece of state
  * to the clients (URL, Clarity) or channel_connections (GA, GSC)
  * tables so progress survives a page refresh + the wizard knows
  * which step to resume on next visit.
@@ -10,7 +10,7 @@
  * OAuth flows for Google Analytics + Google Search Console are not
  * triggered from here -- the wizard hands off to the existing
  * /api/auth/google and /api/auth/google-search-console routes with
- * returnTo=/dashboard/website/setup. The callbacks redirect to the
+ * returnTo=/dashboard/insights/setup. The callbacks redirect to the
  * existing property pickers, which finish with returnTo too.
  */
 
@@ -103,8 +103,8 @@ export async function saveWebsiteUrl(url: string): Promise<{ success: true } | {
     .update({ website: normalized })
     .eq('id', ctx.clientId)
   if (error) return { success: false, error: error.message }
-  revalidatePath('/dashboard/website')
-  revalidatePath('/dashboard/website/setup')
+  revalidatePath('/dashboard/insights')
+  revalidatePath('/dashboard/insights/setup')
   return { success: true }
 }
 
@@ -161,8 +161,8 @@ export async function refreshWebsiteData(): Promise<
     gscResult.error = 'not connected'
   }
 
-  revalidatePath('/dashboard/website')
-  revalidatePath('/dashboard/website/traffic')
+  revalidatePath('/dashboard/insights')
+  revalidatePath('/dashboard/insights/traffic')
   return { success: true, ga: gaResult, gsc: gscResult }
 }
 
@@ -181,7 +181,7 @@ export async function saveClarityProjectId(projectId: string): Promise<{ success
     .update({ clarity_project_id: trimmed || null })
     .eq('id', ctx.clientId)
   if (error) return { success: false, error: error.message }
-  revalidatePath('/dashboard/website')
-  revalidatePath('/dashboard/website/setup')
+  revalidatePath('/dashboard/insights')
+  revalidatePath('/dashboard/insights/setup')
   return { success: true }
 }

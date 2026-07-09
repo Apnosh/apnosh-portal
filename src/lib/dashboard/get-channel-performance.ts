@@ -99,7 +99,7 @@ export async function getPostsPerformance(clientId: string): Promise<PostsPerfor
       metrics: [
         { label: 'Reach', state: 'no-data', subtitle: 'People who saw your content', href: '/dashboard/connected-accounts', connectLabel: 'Connect socials' },
         { label: 'Impressions', state: 'no-data', subtitle: 'Times your content was shown', href: '/dashboard/connected-accounts', connectLabel: 'Connect socials' },
-        { label: 'Posts published', state: 'no-data', subtitle: 'Last 7 days', href: '/dashboard/social/calendar', connectLabel: 'Schedule a post' },
+        { label: 'Posts published', state: 'no-data', subtitle: 'Last 7 days', href: '/dashboard/insights/calendar', connectLabel: 'Schedule a post' },
       ],
     }
   }

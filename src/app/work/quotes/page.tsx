@@ -2,7 +2,7 @@
  * /work/quotes — cross-client quote pipeline for the strategist.
  *
  * Bucketed by status. Click a quote to land on the same-client quote
- * detail page (which the client owns at /dashboard/social/quotes/[id]).
+ * detail page (which the client owns at /dashboard/insights/quotes/[id]).
  */
 
 import Link from 'next/link'
@@ -86,7 +86,7 @@ function Bucket({ label, tone, rows }: { label: string; tone: 'amber'|'sky'|'eme
 function QuoteRow({ q }: { q: StrategistQuoteRow }) {
   const tone = STATUS[q.status] ?? STATUS.draft
   const ToneIcon = tone.Icon
-  const detailHref = `/dashboard/social/quotes/${q.id}?clientId=${q.clientId}`
+  const detailHref = `/dashboard/insights/quotes/${q.id}?clientId=${q.clientId}`
   return (
     <li>
       <Link

@@ -140,7 +140,7 @@ export async function requestInstallHelp(
   })
   if (error) return { success: false, error: error.message }
 
-  revalidatePath('/dashboard/website/setup')
+  revalidatePath('/dashboard/insights/setup')
   revalidatePath('/admin/website-installs')
   return { success: true, alreadyRequested: false }
 }

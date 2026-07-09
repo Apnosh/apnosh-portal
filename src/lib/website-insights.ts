@@ -3,7 +3,7 @@
  *
  * Pure functions that turn daily/monthly analytics rows into a narrative-shaped
  * insight object. Used by:
- * - /dashboard/website/traffic (live view, any time range)
+ * - /dashboard/insights/traffic (live view, any time range)
  * - generate-weekly-brief Edge Function (persisted weekly snapshot)
  * - /dashboard/briefs/[id] (rendering saved briefs)
  *

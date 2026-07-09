@@ -52,14 +52,14 @@ const GOAL_SIGNAL_LABEL: Record<GoalSlug, string> = {
 }
 
 const GOAL_HREF: Record<GoalSlug, string> = {
-  more_foot_traffic: '/dashboard/local-seo',
-  better_reputation: '/dashboard/local-seo/reviews',
-  be_known_for: '/dashboard/social',
-  regulars_more_often: '/dashboard/email-sms',
-  more_online_orders: '/dashboard/website',
-  more_reservations: '/dashboard/website',
-  fill_slow_times: '/dashboard/email-sms',
-  grow_catering: '/dashboard/website',
+  more_foot_traffic: '/dashboard/insights',
+  better_reputation: '/dashboard/insights/reviews',
+  be_known_for: '/dashboard/insights',
+  regulars_more_often: '/dashboard/insights',
+  more_online_orders: '/dashboard/insights',
+  more_reservations: '/dashboard/insights',
+  fill_slow_times: '/dashboard/insights',
+  grow_catering: '/dashboard/insights',
 }
 
 export async function getGoalCards(clientId: string): Promise<GoalCardData[]> {
