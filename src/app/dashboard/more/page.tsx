@@ -6,7 +6,9 @@
  * proper account-and-everything-else hub (MvpMore).
  */
 
+import { LogOut } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
+import { signOut } from '@/lib/supabase/hooks'
 import MvpShell from '@/components/mvp/mvp-shell'
 import MvpMore from '@/components/mvp/mvp-more'
 
@@ -19,7 +21,20 @@ export default function MorePage() {
       ) : client ? (
         <MvpMore name={client.name || 'Your restaurant'} location={client.location} tier={client.tier} />
       ) : (
-        <Centered>Sign in as a client to see this.</Centered>
+        <Centered>
+          <div>
+            <div style={{ marginBottom: 16 }}>Sign in as a client to see this.</div>
+            <button
+              type="button"
+              onClick={() => { void signOut() }}
+              className="mvp-row"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '12px 18px', background: '#fff', border: '0.5px solid #e6e6ea', borderRadius: 14, cursor: 'pointer', font: 'inherit', fontSize: 15, fontWeight: 600, color: '#c0564f' }}
+            >
+              <LogOut size={17} color="#c0564f" />
+              Sign out
+            </button>
+          </div>
+        </Centered>
       )}
     </MvpShell>
   )
