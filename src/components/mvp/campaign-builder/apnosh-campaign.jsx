@@ -2044,6 +2044,29 @@ const TYPE_G = {
   automation: ["#8a5cf0", "#6a39de"],
 };
 export const gType = (t) => `linear-gradient(135deg, ${(TYPE_G[t] || TYPE_G.plan)[0]}, ${(TYPE_G[t] || TYPE_G.plan)[1]})`;
+/** Soft rgba from a catalog hex, for the tinted glow under a card's art tile. */
+function hexA(hex, a) {
+  const h = String(hex || "#2e9a78").replace("#", "");
+  const n = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+/** Google-style star rating. Fills to the REAL rating (partial via a width clip); render
+ *  ONLY when a live rating exists — the caller omits it entirely otherwise (never faked). */
+function GStars({ value }) {
+  const pct = Math.max(0, Math.min(1, (Number(value) || 0) / 5)) * 100;
+  const star = "M7 0.6l1.7 3.9 4.2.4-3.2 2.8 1 4.1L7 9.6 3.3 11.8l1-4.1L1.1 4.9l4.2-.4z";
+  const row = (fill) => (
+    <svg width="74" height="13" viewBox="0 0 74 13" fill={fill} style={{ display: "block" }}>
+      {[0, 15, 30, 45, 60].map((x) => <path key={x} d={star} transform={`translate(${x},0.5)`} />)}
+    </svg>
+  );
+  return (
+    <span style={{ position: "relative", display: "inline-block", width: 74, height: 13, lineHeight: 0 }}>
+      {row("#e3e6e4")}
+      <span style={{ position: "absolute", left: 0, top: 0, width: `${pct}%`, height: "100%", overflow: "hidden" }}>{row("#fbbc04")}</span>
+    </span>
+  );
+}
 
 const ICONS = {
   video: <><rect x="3.5" y="4.5" width="17" height="15" rx="3" /><path d="M10 9l5 3-5 3z" /></>,
@@ -2813,7 +2836,7 @@ function similarCards(itemId) {
     .map((x) => x.c);
 }
 
-function ProductPage({ itemId, signals, tier, clientId, initialDoer, initialOptions, onBack, onContinue, onOpenCard }) {
+function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer, initialOptions, onBack, onContinue, onOpenCard }) {
   const p = catGet(itemId) || CATALOG[0];
   const copy = pdpCopy(itemId) || { promise: p.sub, why: p.sub, expect: "" };
   const derived = whatYouGet(itemId);
@@ -2856,6 +2879,21 @@ function ProductPage({ itemId, signals, tier, clientId, initialDoer, initialOpti
   }, [itemId, clientId]);
   const { state: gbpState, problems: gbpProblems, sectionCount: gbpSections } = decideGbpState(itemId, gbpDiag);
   const views30d = signals && typeof signals.views30d === "number" && signals.views30d > 0 ? signals.views30d : null;
+  // Real rating pair — BOTH the live rating and its count must exist, else the listing card
+  // shows no stars at all (never a faked or half rating). The business name is the real client name.
+  const ratingPair = signals && typeof signals.rating === "number" && signals.rating > 0 && typeof signals.ratingCount === "number" && signals.ratingCount > 0
+    ? { rating: signals.rating, count: signals.ratingCount } : null;
+  const bizName = (typeof restaurant === "string" && restaurant.trim()) ? restaurant.trim() : null;
+  // The bold outcome headline: uses the owner's REAL monthly views when the card's job is about
+  // being found, else a confident non-numeric line. Aspirational, never a guaranteed result.
+  const isGbp = p.id === "gbp";
+  const heroHeadline = (() => {
+    const v = views30d ? views30d.toLocaleString("en-US") : null;
+    if (isGbp) return v ? `Help more of the ${v} who find you each month walk in.` : "Be the easy yes when neighbors search you.";
+    const seen = (ITEM_STAGES[p.id] || []).includes("aware");
+    if (seen && v) return `Get in front of more of the ${v} who find you each month.`;
+    return copy.promise || p.sub;
+  })();
 
   // ── ZONE 4 options: this card's REAL add-on services (validated against the live catalog). ──
   const optServices = (CARD_OPTIONS[itemId] || []).map((id) => serviceById(id)).filter(Boolean);
@@ -2902,28 +2940,68 @@ function ProductPage({ itemId, signals, tier, clientId, initialDoer, initialOpti
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-      <div style={{ flex: 1, overflowY: "auto" }}>
-        {/* Art band — the card's own gradient + PICK art, with the back button on it. */}
-        <div style={{ position: "relative", background: gType(p.type), padding: "14px 20px 22px" }}>
-          <button onClick={onBack} aria-label="Back" style={{ width: 36, height: 36, borderRadius: 18, border: "none", background: "rgba(255,255,255,0.25)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+      <div style={{ flex: 1, overflowY: "auto", paddingBottom: 12 }}>
+        {/* ── HERO — premium, warm, light. gbp shows the owner's REAL Google listing as the product
+              shot; every other card lifts its own art. One bold outcome headline + a confident price,
+              with a single decisive green accent. Rises gently on load (respects reduced-motion). ── */}
+        <div style={{ position: "relative", background: "linear-gradient(168deg, #fbfaf4 0%, #f2f8f4 54%, #e7f3ed 100%)", padding: "14px 20px 26px", overflow: "hidden" }}>
+          <div aria-hidden style={{ position: "absolute", top: -80, right: -60, width: 240, height: 240, borderRadius: "50%", background: "radial-gradient(circle, rgba(74,189,152,0.22), rgba(74,189,152,0))", pointerEvents: "none" }} />
+          <button onClick={onBack} aria-label="Back" className="apnpress" style={{ position: "relative", width: 36, height: 36, borderRadius: 18, border: "none", background: "rgba(20,35,28,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
           </button>
-          <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 2px" }}><Art id={p.id} size={92} /></div>
-        </div>
-        <div style={{ padding: "18px 20px 8px" }}>
-          {/* Chips: the funnel stage(s) this moves (Home's own words) + the cadence. */}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-            {(ITEM_STAGES[p.id] || []).map((s) => (
-              <span key={s} style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, color: TOKENS.mintDark, background: TOKENS.mintTint, borderRadius: 8, padding: "4px 9px" }}>{STAGE_TAG_LABEL[s] || s}</span>
-            ))}
-            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: "#7c837e", background: "#f0f2f0", borderRadius: 8, padding: "4px 9px" }}>{CADENCE_TAG[p.cad] || "Plan"}</span>
-          </div>
-          <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 25, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.12, letterSpacing: -0.3, margin: 0 }}>{p.title}</h1>
-          <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.sub, lineHeight: 1.5, margin: "8px 0 0" }}>{copy.promise}</p>
-          {/* ZONE 1 price — shown up top like a shop, from the real estimate (priceLabel/pdpPrice). */}
-          <div style={{ display: "flex", alignItems: "baseline", gap: 7, marginTop: 12 }}>
-            <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 600, color: TOKENS.ink }}>{price || "Free"}</span>
-            {price && price !== "Free" && <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.faint }}>to start</span>}
+          <div className="apnrise" style={{ position: "relative", marginTop: 14 }}>
+            {/* Chips: the funnel stage(s) this moves + the cadence. */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {(ITEM_STAGES[p.id] || []).map((s) => (
+                <span key={s} style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, color: TOKENS.mintDark, background: "rgba(74,189,152,0.14)", borderRadius: 8, padding: "4px 9px" }}>{STAGE_TAG_LABEL[s] || s}</span>
+              ))}
+              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: "#7c837e", background: "rgba(20,30,26,0.05)", borderRadius: 8, padding: "4px 9px" }}>{CADENCE_TAG[p.cad] || "Plan"}</span>
+            </div>
+            {/* Product name eyebrow, then the BIG bold outcome headline. */}
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.mintDark, marginBottom: 6 }}>{p.title}</div>
+            <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 26, fontWeight: 700, color: TOKENS.ink, lineHeight: 1.16, letterSpacing: -0.5, margin: 0, textWrap: "balance" }}>{heroHeadline}</h1>
+            {/* Confident price moment, live from the selected version. */}
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 14 }}>
+              <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 27, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.5 }}>{price || "Free"}</span>
+              {(!price || price === "Free")
+                ? (moneyLabel(baseP.oneTime, baseP.perMonth) !== "Free" && <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub }}>or {moneyLabel(baseP.oneTime, baseP.perMonth)} done for you</span>)
+                : <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub }}>to start</span>}
+            </div>
+            {/* Product shot: the REAL Google listing (gbp only) or the lifted card art. */}
+            {isGbp ? (
+              <div className="apnrise2" style={{ marginTop: 20, background: "#fff", borderRadius: 18, padding: "15px 16px 14px", boxShadow: "0 14px 34px rgba(20,45,33,0.14), 0 2px 6px rgba(20,45,33,0.05)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" /><path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06L5.84 9.9C6.71 7.3 9.14 5.38 12 5.38z" /></svg>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: TOKENS.faint, letterSpacing: 0.2 }}>Your Google listing</span>
+                </div>
+                <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 700, color: TOKENS.ink, lineHeight: 1.2 }}>{bizName || "Your business"}</div>
+                {ratingPair && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6 }}>
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: "#a5670a" }}>{ratingPair.rating.toFixed(1)}</span>
+                    <GStars value={ratingPair.rating} />
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub }}>({ratingPair.count.toLocaleString("en-US")})</span>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, marginTop: 13 }}>
+                  {[
+                    { l: "Directions", d: "M21.4 10.6 13.4 2.6a2 2 0 0 0-2.8 0l-8 8a2 2 0 0 0 0 2.8l8 8a2 2 0 0 0 2.8 0l8-8a2 2 0 0 0 0-2.8zM12 8v3h4v3" },
+                    { l: "Call", d: "M21 15.5a8.4 8.4 0 0 1-4 1 8.4 8.4 0 0 1-8.4-8.4 8.4 8.4 0 0 1 1-4L12 6l-2 2a10 10 0 0 0 4 4l2-2z" },
+                    { l: "Website", d: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3a13 13 0 0 1 0 18 13 13 0 0 1 0-18z" },
+                  ].map((a) => (
+                    <span key={a.l} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "#f4f7fb", borderRadius: 12, padding: "9px 4px" }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4a7fd0" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d={a.d} /></svg>
+                      <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 600, color: "#4a7fd0" }}>{a.l}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="apnrise2" style={{ marginTop: 20, display: "flex", justifyContent: "center" }}>
+                <div style={{ width: 128, height: 128, borderRadius: 30, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 16px 34px ${hexA((TYPE_G[p.type] || TYPE_G.plan)[1], 0.34)}, 0 3px 8px rgba(20,40,30,0.12)` }}>
+                  <Art id={p.id} size={76} />
+                </div>
+              </div>
+            )}
           </div>
         </div>
         {gbpState === "A" ? (
@@ -3005,7 +3083,7 @@ function ProductPage({ itemId, signals, tier, clientId, initialDoer, initialOpti
                 const d = doerDisplay(opt, tier);
                 const on = doer === opt;
                 return (
-                  <button key={opt} onClick={() => setDoer(opt)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: on ? TOKENS.mintTint : "#fff", border: on ? `1.5px solid ${TOKENS.mint}` : `1.5px solid ${TOKENS.line}`, borderRadius: 16, padding: "13px 14px", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+                  <button key={opt} onClick={() => setDoer(opt)} className="apnpress" style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: on ? TOKENS.mintTint : "#fff", border: on ? `1.5px solid ${TOKENS.mint}` : `1.5px solid ${TOKENS.line}`, borderRadius: 16, padding: "13px 14px", cursor: "pointer", boxShadow: on ? "0 4px 16px rgba(74,189,152,0.18)" : "0 1px 2px rgba(20,40,30,0.03)", WebkitTapHighlightColor: "transparent" }}>
                     <span style={{ width: 20, height: 20, borderRadius: 10, border: on ? "none" : `1.5px solid ${TOKENS.dash}`, background: on ? TOKENS.mint : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                       {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
                     </span>
@@ -3048,7 +3126,7 @@ function ProductPage({ itemId, signals, tier, clientId, initialDoer, initialOpti
                 const open = openOpt === s.id;
                 const del = s.deliverables && Array.isArray(s.deliverables.included) ? s.deliverables.included : [];
                 return (
-                  <div key={s.id} style={{ border: on ? `1.5px solid ${TOKENS.mint}` : `1.5px solid ${TOKENS.line}`, borderRadius: 16, background: on ? TOKENS.mintTint : "#fff", overflow: "hidden" }}>
+                  <div key={s.id} style={{ border: on ? `1.5px solid ${TOKENS.mint}` : `1.5px solid ${TOKENS.line}`, borderRadius: 16, background: on ? TOKENS.mintTint : "#fff", overflow: "hidden", boxShadow: on ? "0 4px 16px rgba(74,189,152,0.16)" : "0 1px 2px rgba(20,40,30,0.03)" }}>
                     <button onClick={() => { toggleOpt(s.id); setOpenOpt(open && on ? null : s.id); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: "transparent", border: "none", padding: "13px 14px", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
                       <span style={{ width: 20, height: 20, borderRadius: 6, border: on ? "none" : `1.5px solid ${TOKENS.dash}`, background: on ? TOKENS.mint : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
@@ -3064,7 +3142,7 @@ function ProductPage({ itemId, signals, tier, clientId, initialDoer, initialOpti
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? "rotate(180deg)" : "none" }}><path d="M6 9l6 6 6-6" /></svg>
                     </button>
                     {open && (
-                      <div style={{ padding: "4px 16px 14px" }}>
+                      <div className="apnexpand" style={{ padding: "4px 16px 14px" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                           {del.map((d, i) => (
                             <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
@@ -3140,8 +3218,8 @@ function ProductPage({ itemId, signals, tier, clientId, initialDoer, initialOpti
             <div style={sectionLabel}>Goes well with</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
               {similar.map((c) => (
-                <button key={c.id} onClick={() => onOpenCard && onOpenCard(c.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: "#fff", border: `1.5px solid ${TOKENS.line}`, borderRadius: 16, padding: "11px 13px", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
-                  <span style={{ width: 44, height: 44, borderRadius: 12, background: gType(c.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Art id={c.id} size={30} /></span>
+                <button key={c.id} onClick={() => onOpenCard && onOpenCard(c.id)} className="apnpress" style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: "#fff", border: `1.5px solid ${TOKENS.line}`, borderRadius: 16, padding: "11px 13px", cursor: "pointer", boxShadow: "0 2px 8px rgba(20,40,30,0.04)", WebkitTapHighlightColor: "transparent" }}>
+                  <span style={{ width: 44, height: 44, borderRadius: 12, background: gType(c.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 4px 10px ${hexA((TYPE_G[c.type] || TYPE_G.plan)[1], 0.28)}` }}><Art id={c.id} size={30} /></span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: "block", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink }}>{c.title}</span>
                     <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{priceLabel(c.id) || "Free"}</span>
@@ -3154,31 +3232,28 @@ function ProductPage({ itemId, signals, tier, clientId, initialDoer, initialOpti
         )}
       </div>
 
-      {/* ── BUY BOX — the live total (version + options, recurring vs one-time kept right) and two
-            actions. "Add to plan" collects to a local draft (Section 2 formalizes it); "Buy now"
-            carries the version + options into today's existing Continue/plan flow. ── */}
-      <div style={{ flexShrink: 0, padding: "12px 20px 16px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 11 }}>
+      {/* ── BUY BOX — live total up top. "Add to plan" is the bold PRIMARY (collect-only to a local
+            draft; ships and bills nothing). "Buy now" drops to a quiet secondary link that carries the
+            version + options into today's Continue/plan flow. The AI-lane upsell keeps its Pro path. ── */}
+      <div style={{ flexShrink: 0, padding: "13px 20px 16px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff", boxShadow: "0 -8px 22px rgba(20,40,30,0.05)" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
-          <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 600, color: TOKENS.ink }}>{totalLabel}</span>
+          <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{totalLabel}</span>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={onAddToPlan} style={{ flex: 1, height: 52, borderRadius: 26, border: `1.5px solid ${TOKENS.mint}`, cursor: "pointer", background: "#fff", color: TOKENS.mintDark, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, WebkitTapHighlightColor: "transparent" }}>
-            {added ? (
-              <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>Added</>
-            ) : "Add to plan"}
-          </button>
-          {upsellAi ? (
-            <a href="/dashboard/billing" style={{ flex: 1, height: 52, borderRadius: 26, textDecoration: "none", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, WebkitTapHighlightColor: "transparent" }}>Upgrade to Pro</a>
+        <button onClick={onAddToPlan} className="apnpress" style={{ width: "100%", height: 54, borderRadius: 27, border: "none", cursor: "pointer", background: added ? TOKENS.mintDark : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
+          {added ? (
+            <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>Added to your plan</>
           ) : (
-            <button onClick={() => onContinue(buildPreset())} style={{ flex: 1, height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, WebkitTapHighlightColor: "transparent" }}>
-              Buy now
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
-            </button>
+            <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Add to plan</>
           )}
-        </div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, textAlign: "center", marginTop: 9 }}>
-          {upsellAi ? "Apnosh AI is on the Pro plan. Or pick one of the other two." : "Add to plan saves it. Nothing ships or bills until you say so."}
+        </button>
+        {upsellAi ? (
+          <a href="/dashboard/billing" className="apnpress" style={{ display: "block", textAlign: "center", textDecoration: "none", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 13 }}>Upgrade to Pro to use Apnosh AI</a>
+        ) : (
+          <button onClick={() => onContinue(buildPreset())} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 13, WebkitTapHighlightColor: "transparent" }}>Buy now instead</button>
+        )}
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, textAlign: "center", marginTop: 10 }}>
+          {upsellAi ? "Apnosh AI is on the Pro plan. Or pick one of the other two." : "Nothing ships or bills until you say so."}
         </div>
       </div>
     </div>
@@ -3949,6 +4024,14 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           .apncreate textarea::placeholder { color: #b7bdb9; }
           @keyframes apndot { 0%, 100% { opacity: 0.35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
           @keyframes aspin { to { transform: rotate(360deg); } }
+          @keyframes apnrise { from { opacity: 0; transform: translateY(11px); } to { opacity: 1; transform: none; } }
+          @keyframes apnexpand { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+          .apnrise { animation: apnrise 500ms cubic-bezier(.2,.7,.2,1) both; }
+          .apnrise2 { animation: apnrise 620ms cubic-bezier(.2,.7,.2,1) both; }
+          .apnexpand { animation: apnexpand 200ms ease both; }
+          .apnpress { transition: transform 120ms ease, box-shadow 160ms ease; }
+          .apnpress:active { transform: scale(0.975); }
+          @media (prefers-reduced-motion: reduce) { .apnrise, .apnrise2, .apnexpand { animation: none; } .apnpress:active { transform: none; } }
         `}</style>
 
         {/* Screen content sits above the persistent bottom nav, so the create
@@ -3975,6 +4058,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
               signals={whySignals}
               tier={tier}
               clientId={clientId}
+              restaurant={restaurant}
               initialDoer={route.preset && route.preset.doer}
               initialOptions={route.preset && route.preset.options}
               onBack={backToSource}
