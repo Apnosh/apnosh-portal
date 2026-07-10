@@ -146,6 +146,11 @@ const METRIC_STAGE: Record<string, { key: string; label: string }> = {
   reputation: { key: 'back', label: 'Retention' },
 }
 
+// The funnel (the people animation) IS the home now. The old chart-home below it — the swipeable metric/chart
+// slides, suggestion stack, "Coming up next", "Recent activity", quick links — is SHELVED: kept in this file but
+// NOT rendered. Flip this to `true` to bring the whole old home back exactly as it was.
+const LEGACY_HOME = false
+
 export default function MvpHome(props: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
   // One theme provider wraps the whole Home tree, so the funnel and every card
   // below read the same light/dark skin and the one toggle flips all of it.
@@ -217,6 +222,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
         <div style={{ margin: '-16px -18px 0' }}>
           <HomeFunnelLive clientId={clientId} height={620} fill />
         </div>
+        {LEGACY_HOME && (<>
         {/* SWIPEABLE METRIC CARDS — swipe left/right to change which graph
             you're looking at; dots show where you are. No tabs. */}
         <div ref={scrollRef} onScroll={onScroll} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory' }}>
@@ -323,6 +329,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             ))}
           </div>
         </div>
+        </>)}
         </div>
       </div>
     </div>

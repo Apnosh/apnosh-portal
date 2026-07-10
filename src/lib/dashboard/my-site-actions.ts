@@ -168,7 +168,7 @@ export async function createMyUpdate(args: {
     return {
       success: false,
       error: perm === 'request'
-        ? `${args.type} changes need to go through a change request -- /dashboard/website/requests/new`
+        ? `${args.type} changes need to go through a change request -- /dashboard/insights/requests/new`
         : `${args.type} is not allowed for self-serve`,
     }
   }
@@ -186,7 +186,7 @@ export async function createMyUpdate(args: {
   const published = await publishUpdate(created.data.id)
   if (!published.success) return { success: false, error: published.error }
 
-  revalidatePath('/dashboard/website/manage')
+  revalidatePath('/dashboard/insights/manage')
   revalidatePath(`/sites/${auth.clientId}`)
 
   return { success: true, data: { updateId: created.data.id } }

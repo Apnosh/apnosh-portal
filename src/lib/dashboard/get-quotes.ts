@@ -6,7 +6,7 @@
  * - getPendingQuotes: 'sent' or 'revising' status — these are the
  *   quotes the client needs to act on. Drives the hub card.
  * - getQuote: single quote with full line-item detail. Drives
- *   /dashboard/social/quotes/[id].
+ *   /dashboard/insights/quotes/[id].
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'

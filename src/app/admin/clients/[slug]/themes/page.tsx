@@ -3,7 +3,7 @@
  * themes for the client.
  *
  * Shows current + next 2 months. Each month is either 'planning' (only
- * strategist sees), 'shared' (client sees on /dashboard/social/plan), or
+ * strategist sees), 'shared' (client sees on /dashboard/insights/plan), or
  * 'archived'. Strategist can edit theme name/blurb/pillars/key dates and
  * toggle status.
  */
@@ -94,7 +94,7 @@ export default async function ThemesPage({ params }: PageProps) {
         <p className="text-[14px] text-ink-2 mt-2 leading-relaxed max-w-2xl">
           Set the story of the month — main theme, pillars, key dates. Mark a month as
           <span className="font-medium"> shared</span> when ready and the client sees it on
-          <span className="font-medium"> /dashboard/social/plan</span>.
+          <span className="font-medium"> /dashboard/insights/plan</span>.
         </p>
       </header>
 

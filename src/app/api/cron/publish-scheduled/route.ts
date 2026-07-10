@@ -54,6 +54,11 @@ const HARD_FAIL_CODES = new Set([
 // 60s and ticks are 5 minutes apart), so the run that made it must have died.
 const STALE_CLAIM_MS = 10 * 60 * 1000
 
+// Default posting hour for auto-scheduled campaign pieces whose target is a
+// bare date: 18:00 UTC ≈ late morning across US time zones (10am PT / 1pm ET),
+// a solid restaurant posting window. Staff can still hand-schedule any exact time.
+const AUTO_POST_HOUR_UTC = '18'
+
 export async function GET(req: Request) {
   const url = new URL(req.url)
   const querySecret = url.searchParams.get('secret')
@@ -83,6 +88,46 @@ export async function GET(req: Request) {
     .select('id')
   const swept = sweptRows?.length ?? 0
 
+  // Auto-schedule sweep (the campaign publish bridge, migration 201): a shipped
+  // campaign's approved pieces already carry target_publish_date, but before
+  // this sweep only a manual staff click moved them to 'scheduled' — the
+  // campaign calendar never self-executed. Approved + campaign-linked + dated +
+  // owner-signed drafts get scheduled at their target date (or as due now, if
+  // the date passed while the piece sat in review). Guards:
+  //  - client_signed_off_at required: review-mode clients are never scheduled
+  //    before their OK (handoff mode auto-signs at mint); attemptPublish's
+  //    consent gate stays the last line of defense regardless.
+  //  - auto_scheduled_at stamps each draft ONCE, so a deliberate staff
+  //    unschedule (status back to 'approved') is never bounced back here.
+  //  - a target date more than 7 days gone is left alone: pre-existing
+  //    backlog and stale content must not mass-publish on deploy — those
+  //    stay 'approved' for a human to re-date or drop.
+  const staleDateCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const { data: bridgeable } = await admin
+    .from('content_drafts')
+    .select('id, target_publish_date')
+    .eq('status', 'approved')
+    .not('campaign_id', 'is', null)
+    .not('target_publish_date', 'is', null)
+    .not('client_signed_off_at', 'is', null)
+    .is('auto_scheduled_at', null)
+    .gte('target_publish_date', staleDateCutoff)
+    .limit(100)
+
+  let autoScheduled = 0
+  for (const b of bridgeable ?? []) {
+    const target = new Date(`${b.target_publish_date as string}T${AUTO_POST_HOUR_UTC}:00:00.000Z`)
+    const when = isNaN(target.getTime()) || target.getTime() < Date.now() ? nowIso : target.toISOString()
+    const { data: bridged } = await admin
+      .from('content_drafts')
+      .update({ status: 'scheduled', scheduled_for: when, auto_scheduled_at: nowIso })
+      .eq('id', b.id as string)
+      .eq('status', 'approved')          // race-safe: skip if staff acted meanwhile
+      .is('auto_scheduled_at', null)
+      .select('id')
+    if (bridged && bridged.length > 0) autoScheduled++
+  }
+
   // Pull due drafts. We claim them one-at-a-time to keep the cron's
   // happy path simple; volumes are tiny at our scale (a handful of
   // scheduled posts per hour, max).
@@ -95,7 +140,7 @@ export async function GET(req: Request) {
     .limit(50)
 
   if (!due || due.length === 0) {
-    return NextResponse.json({ ok: true, considered: 0, swept, outcomes: [] })
+    return NextResponse.json({ ok: true, considered: 0, swept, autoScheduled, outcomes: [] })
   }
 
   const outcomes: PublishOutcome[] = []
@@ -225,6 +270,7 @@ export async function GET(req: Request) {
     ok: true,
     considered: due.length,
     swept,
+    autoScheduled,
     outcomes,
   })
 }

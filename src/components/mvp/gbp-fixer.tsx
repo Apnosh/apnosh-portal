@@ -19,7 +19,7 @@
  *    with a plain line saying one-tap apply is not built yet.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { Loader2, Check, ChevronDown, Sparkles, Copy, ExternalLink, Plug } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
@@ -71,12 +71,40 @@ const STATUS: Record<Exclude<GbpSectionStatus, 'good'>, { word: string; dot: str
 
 const DRAFT_FAIL = 'Could not write a draft right now. Try again in a minute.'
 
-export default function GbpFixer() {
+/**
+ * campaignId: when the walkthrough is a CAMPAIGN task (the gbp card's free self-serve
+ * version), the campaign id rides in via ?campaignId=. On a fresh diagnosis where EVERY
+ * section is 'good' (connected, no read failure), the task self-completes: one POST to
+ * /api/campaigns/:id/gbp-fixed, where the SERVER re-runs the diagnosis and stamps
+ * execution.gbpFixedAt only on its own all-good read (the client check here is just a
+ * pre-filter so we never call on a failed or partial read). The stamp is first-write-wins
+ * on the server, so a later visit can never overwrite when the task was finished.
+ * Without campaignId nothing changes.
+ */
+export default function GbpFixer({ campaignId }: { campaignId?: string }) {
   const { client, loading: clientLoading } = useClient()
   const [diag, setDiag] = useState<GbpDiagnosis | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [reload, setReload] = useState(0)
   const [openKey, setOpenKey] = useState<string | null>(null)
+  // The campaign task was marked done (the PATCH landed) — drives the plain success line.
+  const [taskDone, setTaskDone] = useState(false)
+  const markingRef = useRef(false)
+
+  useEffect(() => {
+    if (!campaignId || markingRef.current || taskDone) return
+    // HONESTY GATE: only a fully successful read where every section is good may complete
+    // the task. A load error, a disconnected profile, a failed read, or any section that
+    // still needs work leaves the task open.
+    if (!diag || loadError || !diag.connected || diag.readFailed) return
+    const allGood = (diag.sections?.length ?? 0) > 0 && diag.sections.every((s) => s.status === 'good')
+    if (!allGood) return
+    markingRef.current = true
+    // The server verifies for itself (fresh diagnosis) before stamping; already-done returns ok.
+    fetch(`/api/campaigns/${campaignId}/gbp-fixed`, { method: 'POST' })
+      .then((r) => { if (r.ok) setTaskDone(true); else markingRef.current = false })
+      .catch(() => { markingRef.current = false })
+  }, [campaignId, diag, loadError, taskDone])
 
   // Description draft (the only section with a built AI draft).
   const [drafting, setDrafting] = useState(false)
@@ -194,6 +222,7 @@ export default function GbpFixer() {
       {!loading && !loadError && diag && diag.connected && !diag.readFailed && (
         <Walkthrough
           diag={diag}
+          taskDone={taskDone}
           openKey={openKey}
           onToggle={(k) => setOpenKey((cur) => (cur === k ? null : k))}
           drafting={drafting}
@@ -233,8 +262,10 @@ function NotConnected() {
 
 /* ── The section walkthrough ───────────────────────────────────── */
 
-function Walkthrough({ diag, openKey, onToggle, drafting, draft, draftError, copied, onDraft, onCopy }: {
+function Walkthrough({ diag, taskDone, openKey, onToggle, drafting, draft, draftError, copied, onDraft, onCopy }: {
   diag: GbpDiagnosis
+  /** The campaign task tied to this walkthrough was just marked done (all-good + PATCH landed). */
+  taskDone?: boolean
   openKey: string | null
   onToggle: (key: string) => void
   drafting: boolean
@@ -266,6 +297,12 @@ function Walkthrough({ diag, openKey, onToggle, drafting, draft, draftError, cop
         <div style={{ background: C.greenSoft, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 16px', marginBottom: 12 }}>
           <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>Every section looks good</div>
           <div style={{ fontSize: 13, color: C.mute, marginTop: 2, lineHeight: 1.45 }}>Nothing needs fixing right now. Come back after big changes to check again.</div>
+          {/* Only shown after the campaign PATCH actually landed — never claimed on a failed save. */}
+          {taskDone && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 13, fontWeight: 600, color: C.greenDk }}>
+              <Check size={14} strokeWidth={3} /> All done. This campaign task is complete.
+            </div>
+          )}
         </div>
       )}
 

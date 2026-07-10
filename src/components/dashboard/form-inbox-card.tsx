@@ -45,7 +45,7 @@ export default function FormInboxCard() {
             </span>
           )}
         </div>
-        <Link href="/dashboard/website/forms" className="text-[11px] font-medium text-brand-dark hover:underline">
+        <Link href="/dashboard/insights/forms" className="text-[11px] font-medium text-brand-dark hover:underline">
           See all →
         </Link>
       </div>
@@ -53,7 +53,7 @@ export default function FormInboxCard() {
         {items.slice(0, 3).map(s => (
           <li key={s.id}>
             <Link
-              href={`/dashboard/website/forms?id=${s.id}`}
+              href={`/dashboard/insights/forms?id=${s.id}`}
               className={`flex items-center gap-3 px-5 py-3 hover:bg-bg-2/40 transition-colors ${
                 s.status === 'new' ? 'font-medium' : ''
               }`}

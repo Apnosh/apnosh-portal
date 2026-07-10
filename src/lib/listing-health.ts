@@ -65,7 +65,7 @@ export async function getListingHealth(
       : desc.length < 200
         ? `Description is ${desc.length} characters. Aim for 200+ to cover what makes you different.`
         : `${desc.length} characters — looks good.`,
-    fixLink: '/dashboard/local-seo/listing#description',
+    fixLink: '/dashboard/insights/listing#description',
   })
 
   /* Primary category. Lower-weight because it's almost always set,
@@ -79,7 +79,7 @@ export async function getListingHealth(
     message: primaryCategory
       ? `Set to "${primaryCategory.displayName}".`
       : 'No primary category. Google needs this to know what kind of business you are.',
-    fixLink: '/dashboard/local-seo/listing#categories',
+    fixLink: '/dashboard/insights/listing#categories',
   })
 
   /* Additional categories — 2 to 9 is the sweet spot. */
@@ -94,7 +94,7 @@ export async function getListingHealth(
       : additionalCount < 2
         ? `${additionalCount} additional category. Add a couple more to expand reach.`
         : `${additionalCount} additional categories.`,
-    fixLink: '/dashboard/local-seo/listing#categories',
+    fixLink: '/dashboard/insights/listing#categories',
   })
 
   /* Phone number. */
@@ -105,7 +105,7 @@ export async function getListingHealth(
     weight: 8,
     status: phone ? 'pass' : 'fail',
     message: phone ? 'Set.' : 'No primary phone. Customers can\'t tap-to-call.',
-    fixLink: '/dashboard/local-seo/listing#phone',
+    fixLink: '/dashboard/insights/listing#phone',
   })
 
   /* Website. */
@@ -116,7 +116,7 @@ export async function getListingHealth(
     weight: 8,
     status: website ? 'pass' : 'fail',
     message: website ? 'Set.' : 'No website URL. Customers can\'t click through.',
-    fixLink: '/dashboard/local-seo/listing#website',
+    fixLink: '/dashboard/insights/listing#website',
   })
 
   /* Regular hours — every day should have something. */
@@ -133,7 +133,7 @@ export async function getListingHealth(
       : daysWithHours > 0
         ? `Hours set for ${daysWithHours} of 7 days. Set the rest (or mark them closed).`
         : 'No regular hours set. Listing shows as "Hours not available".',
-    fixLink: '/dashboard/local-seo/listing#hours',
+    fixLink: '/dashboard/insights/listing#hours',
   })
 
   /* Holiday / special hours — checked for upcoming dates. */
@@ -152,7 +152,7 @@ export async function getListingHealth(
       : coveredHolidays.length === upcoming.length
         ? `${upcoming.length} upcoming holiday${upcoming.length === 1 ? '' : 's'} covered.`
         : `${upcoming.length - coveredHolidays.length} upcoming holiday${upcoming.length - coveredHolidays.length === 1 ? ' is' : 's are'} missing custom hours: ${upcoming.filter(h => !specialDates.has(h.date)).map(h => h.label).join(', ')}.`,
-    fixLink: '/dashboard/local-seo/listing#special-hours',
+    fixLink: '/dashboard/insights/listing#special-hours',
   })
 
   /* Attributes — count of toggled-on attributes. Restaurants
@@ -170,7 +170,7 @@ export async function getListingHealth(
         : attrCount < 8
           ? `${attrCount} attributes on. A few more would help (especially payments + offerings).`
           : `${attrCount} attributes on.`,
-    fixLink: '/dashboard/local-seo/listing#attributes',
+    fixLink: '/dashboard/insights/listing#attributes',
   })
 
   /* Menu link. */
@@ -182,7 +182,7 @@ export async function getListingHealth(
     message: menuUrl
       ? 'Menu link set.'
       : 'No menu link. The "Menu" button on your Google listing will be missing.',
-    fixLink: '/dashboard/local-seo/menu',
+    fixLink: '/dashboard/insights/menu',
   })
 
   /* Final score: weighted sum where pass = 1.0, warn = 0.5, fail = 0. */

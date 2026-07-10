@@ -41,7 +41,7 @@ const SEND_FROM: Record<Action, string[]> = {
 // Simulated sends are flagged in notes (the only free-text column the row
 // has) so every reader can tell the campaign never really went out. The
 // owner email pages look for this exact marker and hide metrics for it —
-// keep the string in sync with src/app/dashboard/email-sms/*.
+// keep the string in sync with src/app/dashboard/insights/*.
 const SIMULATED_NOTE = '[simulated send]'
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

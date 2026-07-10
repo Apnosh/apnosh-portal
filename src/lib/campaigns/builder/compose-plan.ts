@@ -55,6 +55,10 @@ export interface ItemShape {
   seed: Beat[]
   /** add a local-ads line (paid-ads service) to the plan */
   ads?: boolean
+  /** REAL catalog services this item includes (the 2026-07-09 hollow-card recompose):
+   *  priced as real line items by the adapter, the same rail system moves ride — so a
+   *  setup-titled card contains the actual setup work, not a $70 post wearing its name. */
+  services?: string[]
   /** override default audience ids */
   audiences?: string[]
   /** When the picked date is a moment the campaign builds TOWARD (a launch, an event),
@@ -75,12 +79,12 @@ export const DUR_WEEKS: Record<Dur, number | null> = { ongoing: null, once: 1, s
  * plan reads like a real campaign, not a content checklist. */
 export const ITEM_SHAPE: Record<string, ItemShape> = {
   // Programs (ongoing, goal-driven — these get funnel completion)
-  reach: { title: 'Reach new locals', kind: 'program', goal: 'acquire', dur: 'ongoing', ads: true, seed: [['reel', 'reels', 'Discovery reel — a reason to stop scrolling'], ['post', 'gbp', 'Google post for nearby searches']] },
+  reach: { title: 'Run local ads', kind: 'program', goal: 'acquire', dur: 'ongoing', ads: true, seed: [['reel', 'reels', 'Discovery reel — a reason to stop scrolling'], ['post', 'gbp', 'Google post for nearby searches']] },
   nights: { title: 'Fill your slow nights', kind: 'program', goal: 'capacity', dur: 'ongoing', seed: [['post', 'social', 'Slow-night offer post'], ['sms', 'sms', 'Day-before text to your regulars'], ['email', 'email', 'Slow-night offer email']] },
   firstvisit: { title: 'Win first-time visits', kind: 'program', goal: 'acquire', dur: 'ongoing', seed: [['reel', 'reels', 'Teaser reel — your signature dish, up close'], ['post', 'social', 'First-visit offer post']] },
   regulars: { title: 'Turn first-timers into regulars', kind: 'program', goal: 'retain', dur: 'ongoing', seed: [['email', 'email', 'Come-back reward email'], ['sms', 'sms', 'Thank-you text with a reason to return']] },
-  catering: { title: 'Catering and big orders', kind: 'program', goal: 'acquire', dur: 'ongoing', seed: [['photo', 'social', 'Hero photo of your catering spread'], ['post', 'social', 'Catering & big-order post'], ['email', 'email', 'Catering outreach email']] },
-  reviewsplan: { title: 'Boost reviews and rating', kind: 'program', goal: 'reviews', dur: 'ongoing', seed: [['post', 'gbp', 'Review-ask Google post'], ['email', 'email', 'Follow-up review request']] },
+  catering: { title: 'Promote your catering', kind: 'piece', goal: 'acquire', dur: 'once', seed: [['photo', 'social', 'Hero photo of your catering spread'], ['post', 'social', 'Catering & big-order post'], ['email', 'email', 'Catering outreach email']] },
+  reviewsplan: { title: 'Boost reviews and rating', kind: 'setup', goal: 'reviews', dur: 'setup', services: ['review-engine'], seed: [['post', 'gbp', 'Review-ask Google post'], ['email', 'email', 'Follow-up review request']] },
   // The SYSTEM 'reviews' goal (staged services, like firstvisit/nights/regulars). isSystemGoal
   // routes itemId 'reviews' to buildSystem; the seed is unused for system goals.
   reviews: { title: 'Raise your rating', kind: 'program', goal: 'reviews', dur: 'ongoing', seed: [['post', 'gbp', 'Review-ask Google post']] },
@@ -91,6 +95,9 @@ export const ITEM_SHAPE: Record<string, ItemShape> = {
   carousel: { title: 'A carousel post', kind: 'piece', goal: 'acquire', dur: 'once', seed: [['post', 'social', 'Swipeable carousel post']] },
   graphic: { title: 'A designed graphic', kind: 'piece', goal: 'acquire', dur: 'once', seed: [['post', 'social', 'Designed graphic post']] },
   dish: { title: 'Feature a dish', kind: 'piece', goal: 'acquire', dur: 'once', seed: [['photo', 'social', 'Hero photo of the dish'], ['post', 'social', 'Dish feature post']] },
+  // Production-only (2026-07-09, the "Just need content" shelf): the owner already has
+  // footage/photos — we cut and polish. No campaign frame, no outcome tracking.
+  edit: { title: 'Edit my footage', kind: 'piece', goal: 'acquire', dur: 'once', seed: [['reel', 'reels', 'Reel cut from your footage'], ['photo', 'social', 'Photos edited from your shots']] },
   gpost: { title: 'A Google Business post', kind: 'piece', goal: 'acquire', dur: 'once', seed: [['post', 'gbp', 'Google Business post']] },
 
   // Events (build toward a date — verbatim seed + occasionName)
@@ -98,22 +105,35 @@ export const ITEM_SHAPE: Record<string, ItemShape> = {
   launch: { title: 'Launch a special', kind: 'event', goal: 'acquire', dur: 'short', occasionName: 'your launch', seed: [['reel', 'reels', 'Teaser reel — the new item, up close'], ['post', 'social', 'Launch-day announcement post'], ['story', 'social', 'Launch-day story']] },
   // The creator films on THEIR timeline (no date you control → no playbook). The team's real
   // pieces are amplification + reuse, not making the creator's reel: repost, reshare, reuse-cut.
-  creator: { title: 'Work with a creator', kind: 'event', goal: 'acquire', dur: 'short', seed: [['post', 'social', 'Repost the creator with your caption'], ['story', 'social', 'Reshare to your story, tag them'], ['reel', 'reels', 'Cut a short from their footage']] },
+  creator: { title: 'Work with a creator', kind: 'event', goal: 'acquire', dur: 'short', services: ['creator-collab'], seed: [['post', 'social', 'Repost the creator with your caption']] },
 
   // Email / SMS sends (small fixed sequences — verbatim, not funnel-grown)
-  welcome: { title: 'Welcome new subscribers', kind: 'piece', goal: 'retain', dur: 'ongoing', seed: [['email', 'email', 'Welcome email to new subscribers']] },
+  // Recomposed (2026-07-09): a one-shot welcome email made no sense — signups arrive
+  // continuously. Now the real welcome-seq automation: set up once, runs forever, and
+  // its closing message IS the second-visit nudge (the old 'second' card, merged here).
+  welcome: { title: 'Welcome new subscribers', kind: 'setup', goal: 'retain', dur: 'setup', services: ['welcome-seq'], seed: [] },
   second: { title: 'Nudge a second visit', kind: 'piece', goal: 'retain', dur: 'ongoing', seed: [['email', 'email', 'Come-back email — a reason to return'], ['sms', 'sms', 'Come-back text']] },
-  news: { title: 'Monthly newsletter', kind: 'piece', goal: 'retain', dur: 'ongoing', seed: [['email', 'email', "What's-new monthly newsletter"]] },
+  news: { title: 'Monthly newsletter', kind: 'setup', goal: 'retain', dur: 'ongoing', services: ['newsletter'], seed: [] },
   slowoffer: { title: 'Slow-night offer', kind: 'piece', goal: 'capacity', dur: 'ongoing', seed: [['email', 'email', 'Slow-night offer email'], ['sms', 'sms', 'Slow-night offer text']] },
-  birthday: { title: 'Birthday treat', kind: 'piece', goal: 'retain', dur: 'ongoing', seed: [['email', 'email', 'Birthday treat email'], ['sms', 'sms', 'Birthday treat text']] },
+  birthday: { title: 'Birthday treat', kind: 'setup', goal: 'retain', dur: 'setup', services: ['birthday'], seed: [] },
   earlyaccess: { title: 'Early access for regulars', kind: 'piece', goal: 'retain', dur: 'once', seed: [['email', 'email', 'Early-access email for regulars']] },
 
-  // Tasks / setup (fixed deliverables — verbatim)
-  shoot: { title: 'Book a shoot', kind: 'setup', goal: 'acquire', dur: 'setup', seed: [['photo', 'social', 'On-site photo + video shoot'], ['reel', 'reels', 'Reel cut from the shoot']] },
-  gbp: { title: 'Polish your Google profile', kind: 'setup', goal: 'reviews', dur: 'setup', seed: [['post', 'gbp', 'Profile refresh + Google post']] },
-  reviewsreply: { title: 'Reply to reviews', kind: 'setup', goal: 'reviews', dur: 'ongoing', seed: [['post', 'gbp', 'Drafted replies to your reviews']] },
-  qr: { title: 'Add a table QR', kind: 'setup', goal: 'retain', dur: 'setup', seed: [['post', 'social', 'QR table-card design']] },
-  friction: { title: 'Smooth out ordering', kind: 'setup', goal: 'acquire', dur: 'setup', seed: [['post', 'social', 'Order-now post with your links']] },
+  // Tasks / setup (fixed deliverables — verbatim). Recomposed 2026-07-09: these titles
+  // promise real setup/ongoing work, so they now carry the REAL catalog service (via
+  // `services`) instead of a $70 content post wearing the title (the hollow-card audit).
+  shoot: { title: 'Book a shoot', kind: 'setup', goal: 'acquire', dur: 'setup', services: ['photo-library'], seed: [['reel', 'reels', 'Reel cut from the shoot']] },
+  gbp: { title: 'Polish your Google profile', kind: 'setup', goal: 'reviews', dur: 'setup', services: ['gbp-setup'], seed: [] },
+  reviewsreply: { title: 'Reply to reviews', kind: 'setup', goal: 'reviews', dur: 'ongoing', services: ['review-responses'], seed: [] },
+  qr: { title: 'Add a table QR', kind: 'setup', goal: 'retain', dur: 'setup', services: ['capture-kit'], seed: [] },
+  friction: { title: 'Smooth out ordering', kind: 'setup', goal: 'acquire', dur: 'setup', services: ['google-food-order'], seed: [] },
+
+  // Discovery foundations (2026-07-09): the real "set up your profiles so you can be
+  // found" work — previously buyable ONLY inside the $4k+ programs — surfaced as cards.
+  listings: { title: 'Get listed everywhere', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['listings-sync'], seed: [] },
+  website: { title: 'Fix your website and menu', kind: 'setup', goal: 'acquire', dur: 'setup', services: ['site-menu'], seed: [] },
+  localseo: { title: 'Show up in local search', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['local-seo'], seed: [] },
+  delivery: { title: 'Tune up your delivery apps', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['delivery-opt'], seed: [] },
+  nextdoor: { title: 'Get known on Nextdoor', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['nextdoor-local'], seed: [] },
 
   // Events (offers around a moment)
   giftcard: { title: 'Push gift cards', kind: 'event', goal: 'acquire', dur: 'short', occasionName: 'the gifting date', seed: [['post', 'social', 'Gift-card post'], ['email', 'email', 'Gift-card email']] },
@@ -123,7 +143,13 @@ export const ITEM_SHAPE: Record<string, ItemShape> = {
   deal: { title: 'Run a deal', kind: 'event', goal: 'acquire', dur: 'short', occasionName: 'your deal', seed: [['post', 'social', 'Deal announcement post'], ['email', 'email', 'Deal email to your list']] },
 
   // Automation (a send — verbatim)
-  winback: { title: 'Win back quiet guests', kind: 'piece', goal: 'retain', dur: 'ongoing', audiences: ['lapsed'], seed: [['email', 'email', 'We-miss-you email'], ['sms', 'sms', 'Win-back text with an offer']] },
+  // Honest one-shot (audit fix): this is one blast pair, not an always-on automation.
+  winback: { title: 'Win back quiet guests', kind: 'piece', goal: 'retain', dur: 'once', audiences: ['lapsed'], seed: [['email', 'email', 'We-miss-you email'], ['sms', 'sms', 'Win-back text with an offer']] },
+  // PROTECTED-MONEY card (2026-07-09 brainstorm): delivery apps take ~15-30% of every
+  // order. This moves regulars to ordering direct: the switch perk is a real designed +
+  // margin-checked offer (so it always costs less than the fee it replaces), announced
+  // to the list and channels.
+  direct: { title: 'Get orders direct', kind: 'piece', goal: 'retain', dur: 'once', audiences: ['regulars'], services: ['offer-eng'], seed: [['email', 'email', 'Order-direct offer email'], ['sms', 'sms', 'Order-direct text with the perk'], ['post', 'social', 'Order direct post'], ['post', 'gbp', 'Google post: order direct and save']] },
 }
 
 function fallbackShape(): ItemShape {
@@ -698,7 +724,7 @@ export function buildSystem(goal: SystemGoal, spec: Record<string, string>): { m
 
 /** THE CANONICAL ENTRY. Pure, total on an empty spec. Builds the CampaignTemplate the
  *  adapter hands to composeCampaign, plus the occasion (gated on a picked date) and goalKey. */
-export function composePlanForGoal(itemId: string, spec: Record<string, string>): { tpl: CampaignTemplate; occasion?: string; goalKey: GoalKey; ads: boolean; heldAds?: boolean; leadMove?: { serviceId: string; title: string; because: string }; moves?: PlanMove[]; stages?: PlanStage[] } {
+export function composePlanForGoal(itemId: string, spec: Record<string, string>): { tpl: CampaignTemplate; occasion?: string; goalKey: GoalKey; ads: boolean; heldAds?: boolean; leadMove?: { serviceId: string; title: string; because: string }; moves?: PlanMove[]; stages?: PlanStage[]; serviceIds?: string[] } {
   const shape = ITEM_SHAPE[itemId] || fallbackShape()
   const meta = GOAL_META[shape.goal]
   // Needs-aware: the funnel responds to who the owner is ACTUALLY targeting (their mapped
@@ -818,5 +844,5 @@ export function composePlanForGoal(itemId: string, spec: Record<string, string>)
   // move (the staged moves replace all three). Non-system goals are unchanged.
   return sys
     ? { tpl, occasion, goalKey: meta.goalKey, ads: false, heldAds: false, leadMove: undefined, moves: sys.moves, stages: sys.stages }
-    : { tpl, occasion, goalKey: meta.goalKey, ads: managedAds, heldAds, leadMove }
+    : { tpl, occasion, goalKey: meta.goalKey, ads: managedAds, heldAds, leadMove, ...(shape.services?.length ? { serviceIds: shape.services } : {}) }
 }

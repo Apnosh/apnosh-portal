@@ -143,7 +143,7 @@ export async function getMySetupState(): Promise<
       label: 'Take your first action',
       hint: 'Edit your site copy, upload a photo, or send us a message.',
       ctaLabel: 'Open my website',
-      ctaHref: '/dashboard/website/manage',
+      ctaHref: '/dashboard/insights/manage',
       done: contentDone,
     },
   ]

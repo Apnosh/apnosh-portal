@@ -136,7 +136,7 @@ async function detectUnrespondedReviews(clientId: string): Promise<SuggestionWri
     body: isUrgent
       ? `Apnosh AI can draft responses for you in the agent chat. Low-rating reviews especially benefit from a fast, thoughtful reply.`
       : `Drafted replies are one click away in the agent chat -- "draft me a response to my latest review".`,
-    link: '/dashboard/local-seo/reviews',
+    link: '/dashboard/inbox?tab=reviews',
     payload: {
       review_count: rows.length,
       low_rating_count: lowRating,
@@ -165,7 +165,7 @@ async function detectFeaturedItemsMissingPhoto(clientId: string): Promise<Sugges
     type: 'agent_suggestion',
     title: `${rows.length} signature dish${rows.length === 1 ? '' : 'es'} missing photos`,
     body: `${names}${rows.length > 3 ? `, +${rows.length - 3} more` : ''} are flagged signature but have no photo. Photos drive 2-3x more menu clicks on Google.`,
-    link: '/dashboard/website/manage',
+    link: '/dashboard/business-info/menu',
     payload: {
       item_count: rows.length,
       item_ids: rows.map(r => r.id),
@@ -197,7 +197,7 @@ async function detectStaleGbpPosts(clientId: string): Promise<SuggestionWrite[]>
       type: 'agent_suggestion',
       title: `It's been ${daysSince} days since your last Google post`,
       body: `Posts boost local search ranking + drive direct customer actions. Apnosh AI can draft 3 ideas tailored to your menu in seconds.`,
-      link: '/dashboard/local-seo',
+      link: '/dashboard/insights',
       payload: {
         days_since_last_post: daysSince,
         action_prompt: 'Generate 3 Google post ideas I could publish today',
@@ -212,7 +212,7 @@ async function detectStaleGbpPosts(clientId: string): Promise<SuggestionWrite[]>
     type: 'agent_suggestion',
     title: `You haven't posted to Google Business Profile yet`,
     body: `Restaurants that post weekly see 2-3x more direction requests. Apnosh AI can generate post ideas grounded in your actual menu.`,
-    link: '/dashboard/local-seo',
+    link: '/dashboard/insights',
     payload: {
       action_prompt: 'Generate 3 Google post ideas to get me started',
     },
@@ -247,7 +247,7 @@ async function detectReviewRatingDrop(clientId: string): Promise<SuggestionWrite
     type: 'agent_suggestion',
     title: `Your review rating dropped this week (${prevAvg.toFixed(1)}★ → ${thisAvg.toFixed(1)}★)`,
     body: `Drafted responses to recent low ratings + a Google post acknowledging the feedback can rebuild trust fast.`,
-    link: '/dashboard/local-seo/reviews',
+    link: '/dashboard/inbox?tab=reviews',
     payload: {
       prev_avg: Number(prevAvg.toFixed(2)),
       this_avg: Number(thisAvg.toFixed(2)),

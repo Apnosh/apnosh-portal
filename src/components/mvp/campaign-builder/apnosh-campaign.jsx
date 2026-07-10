@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import BottomNav from "../bottom-nav";
 import AppHeader from "../app-header";
 import { priceLabel, ITEM_PRICES } from "@/lib/campaigns/builder/item-prices";
+import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
 import { getMarketingCalendar, daysUntil } from "@/lib/dashboard/marketing-calendar";
 
 /* ============================================================
@@ -2069,39 +2070,44 @@ function TagPill({ children, accent }) {
 }
 
 const CATALOG = [
-  { id: "reach", type: "plan", icon: "pin", title: "Reach new locals", sub: "Get in front of nearby people who haven't been", cad: "recurring" },
+  { id: "reach", type: "plan", icon: "pin", title: "Run local ads", sub: "Ads run and tuned for you, plus a reel and post to start", cad: "recurring" },
   { id: "nights", type: "plan", icon: "moon", title: "Fill your slow nights", sub: "Drive guests on your quiet days", cad: "recurring" },
   { id: "firstvisit", type: "plan", icon: "people", title: "Win first-time visits", sub: "Give new people a reason to come in", cad: "recurring" },
   { id: "regulars", type: "plan", icon: "heart", title: "Turn first-timers into regulars", sub: "Win the all-important second visit", cad: "recurring", hot: true },
-  { id: "catering", type: "plan", icon: "people", title: "Catering and big orders", sub: "Land group and office orders", cad: "recurring" },
-  { id: "reviewsplan", type: "plan", icon: "chat", title: "Boost reviews and rating", sub: "More fresh reviews, a higher star", cad: "recurring" },
+  { id: "catering", type: "plan", icon: "people", title: "Promote your catering", sub: "1 styled photo, 1 post, 1 outreach email to nearby offices", cad: "once" },
+  { id: "reviewsplan", type: "plan", icon: "chat", title: "Boost reviews and rating", sub: "Review-request system set up, plus the first asks", cad: "setup" },
 
   { id: "reel", type: "content", icon: "video", title: "A short video", sub: "A reel for Instagram and TikTok", cad: "once", hot: true },
   { id: "story", type: "content", icon: "story", title: "A story", sub: "A quick post to stay top of mind", cad: "once" },
-  { id: "carousel", type: "content", icon: "image", title: "A carousel post", sub: "A swipeable set of photos or tips", cad: "once" },
-  { id: "graphic", type: "content", icon: "image", title: "A designed graphic", sub: "A custom graphic for a post, story, or flyer", cad: "once" },
+  { id: "graphic", type: "content", icon: "image", title: "A social media post", sub: "A designed post: graphic, carousel, or photo", cad: "once" },
   { id: "dish", type: "content", icon: "image", title: "Feature a dish", sub: "Show off one of your best plates", cad: "once", hot: true },
+  { id: "edit", type: "content", icon: "video", title: "Edit my footage", sub: "Send us your clips and photos, we cut and polish them", cad: "once" },
   { id: "gpost", type: "content", icon: "store", title: "A Google Business post", sub: "An update on your listing, seen in Search and Maps", cad: "once" },
   { id: "promoevent", type: "content", icon: "ticket", title: "Promote an event", sub: "Fill seats for a night, a holiday, a tasting", cad: "group" },
   { id: "launch", type: "content", icon: "tag", title: "Launch a special", sub: "Roll out a limited-time or seasonal item", cad: "group", season: true },
-  { id: "creator", type: "content", icon: "people", title: "Work with a creator", sub: "Get a local creator to post about you", cad: "once" },
+  { id: "creator", type: "content", icon: "people", title: "Work with a creator", sub: "A local food creator visits and posts to their audience", cad: "once" },
 
-  { id: "welcome", type: "email", icon: "mail", title: "Welcome new subscribers", sub: "Greet people the moment they join", cad: "auto" },
-  { id: "second", type: "email", icon: "mail", title: "Nudge a second visit", sub: "Bring first-timers back for round two", cad: "auto" },
-  { id: "news", type: "email", icon: "mail", title: "Monthly newsletter", sub: "A regular update to your regulars", cad: "recurring", hot: true },
+  { id: "welcome", type: "email", icon: "mail", title: "Welcome new subscribers", sub: "Greets every signup automatically, ends with a come-back nudge", cad: "auto" },
+  { id: "news", type: "email", icon: "mail", title: "Monthly newsletter", sub: "We write and send one good email every month", cad: "recurring", hot: true },
   { id: "slowoffer", type: "email", icon: "tag", title: "Slow-night offer", sub: "An email and text to fill quiet days", cad: "recurring", hot: true },
-  { id: "birthday", type: "email", icon: "gift", title: "Birthday treat", sub: "Send a little something on their birthday", cad: "auto" },
+  { id: "birthday", type: "email", icon: "gift", title: "Birthday treat", sub: "Set up once, every guest gets a treat automatically", cad: "auto" },
   { id: "earlyaccess", type: "email", icon: "mail", title: "Early access for regulars", sub: "Let your list get first dibs", cad: "once" },
 
-  { id: "shoot", type: "task", icon: "camera", title: "Book a shoot", sub: "Get fresh photos and video of your food and space", cad: "setup" },
-  { id: "gbp", type: "task", icon: "store", title: "Polish your Google profile", sub: "Fix the hours, photos, and info people see", cad: "setup" },
-  { id: "reviewsreply", type: "task", icon: "chat", title: "Reply to reviews", sub: "We draft replies, you approve them", cad: "recurring" },
-  { id: "qr", type: "task", icon: "qr", title: "Add a table QR", sub: "Turn diners into followers and subscribers", cad: "setup" },
-  { id: "friction", type: "task", icon: "cart", title: "Smooth out ordering", sub: "Make it easier to order or book online", cad: "setup" },
+  { id: "shoot", type: "task", icon: "camera", title: "Book a shoot", sub: "A pro comes to you. A photo library plus a reel, yours to keep", cad: "setup" },
+  { id: "gbp", type: "task", icon: "store", title: "Polish your Google profile", sub: "Profile fixed top to bottom: photos, hours, menu, info", cad: "setup" },
+  { id: "reviewsreply", type: "task", icon: "chat", title: "Reply to reviews", sub: "Every review gets a drafted reply, monthly", cad: "recurring" },
+  { id: "qr", type: "task", icon: "qr", title: "Add a table QR", sub: "Design, print files, and a signup page wired to your list", cad: "setup" },
+  { id: "friction", type: "task", icon: "cart", title: "Smooth out ordering", sub: "Get the order button working on your Google listing", cad: "setup" },
+  { id: "listings", type: "task", icon: "pin", title: "Get listed everywhere", sub: "Yelp, Apple Maps and more: synced and correct", cad: "recurring" },
+  { id: "website", type: "task", icon: "store", title: "Fix your website and menu", sub: "Fast, correct, and easy to order from", cad: "setup" },
+  { id: "localseo", type: "task", icon: "pin", title: "Show up in local search", sub: "Be the answer when neighbors search food near me", cad: "recurring" },
+  { id: "delivery", type: "task", icon: "cart", title: "Tune up your delivery apps", sub: "Photos, menu and hours fixed on your delivery pages", cad: "recurring" },
+  { id: "nextdoor", type: "task", icon: "people", title: "Get known on Nextdoor", sub: "Your neighborhood feed, kept active for you", cad: "recurring" },
   { id: "giftcard", type: "task", icon: "gift", title: "Push gift cards", sub: "Sell gift cards for gifts and slow seasons", cad: "once", season: true },
   { id: "ticket", type: "task", icon: "ticket", title: "Run a ticketed event", sub: "Sell spots to a dinner or class", cad: "group" },
 
-  { id: "winback", type: "automation", icon: "heart", title: "Win back quiet guests", sub: "Reach people who haven't been in a while", cad: "auto", hot: true },
+  { id: "winback", type: "automation", icon: "heart", title: "Win back quiet guests", sub: "One email and one text to guests you haven't seen lately", cad: "once", hot: true },
+  { id: "direct", type: "task", icon: "cart", title: "Get orders direct", sub: "Delivery apps take a cut of every order. Move regulars to direct", cad: "once", hot: true },
 ];
 export const catGet = (id) => CATALOG.find((x) => x.id === id);
 // Every card now has its own bespoke builder + price (promoevent got its own
@@ -2158,10 +2164,10 @@ const PICK = {
   reviewsplan: "reviews", reviewsreply: "reviews", reviewreq: "reviews",
   launch: "offer", slowoffer: "offer", giftcard: "offer",
   reel: "reel", videoplan: "reel", story: "story", carousel: "carousel", dish: "dish",
-  gpost: "listing", gbp: "listing",
+  gpost: "listing", gbp: "listing", listings: "listing", localseo: "map", website: "ordering", delivery: "ordering", nextdoor: "people",
   welcome: "mail", second: "mail", news: "mail", referral: "mail", earlyaccess: "mail",
   birthday: "birthday", shoot: "camera", qr: "qr", friction: "ordering", ticket: "ticket",
-  listgrow: "auto", segment: "auto", utm: "chart", winback: "winback",
+  listgrow: "auto", segment: "auto", utm: "chart", winback: "winback", edit: "reel", direct: "ordering",
   graphic: "carousel", promoevent: "ticket",
 };
 export function Art({ id, size = 62 }) {
@@ -2181,36 +2187,69 @@ const FEATURED = {
 
 const ROWS = [
   { id: "suggested", title: "Suggested for you", note: "Based on your menu and what's coming up", big: true, ids: ["nights", "reach", "gpost", "reviewsreply", "dish", "winback", "slowoffer"] },
-  { id: "popular", title: "Popular with spots like yours", ids: ["reel", "dish", "slowoffer", "news", "winback", "regulars"] },
-  { id: "oneoff", title: "One-off content", ids: ["reel", "story", "carousel", "graphic", "dish", "gpost", "creator"] },
-  { id: "bring", title: "Bring people in", ids: ["reach", "nights", "firstvisit", "promoevent", "ticket", "catering", "slowoffer"] },
-  { id: "keep", title: "Keep them coming back", ids: ["second", "welcome", "birthday", "winback", "earlyaccess", "regulars"] },
-  // Goal lenses for jobs beyond foot traffic, so goal-mismatched owners see their
-  // core job (the UX study's lowest-momentum segment), reusing existing plays.
-  { id: "online", title: "Drive online orders", ids: ["friction", "qr", "gpost", "giftcard"] },
-  { id: "bigorders", title: "Land catering and big orders", ids: ["catering", "ticket", "earlyaccess", "news"] },
-  { id: "brandnew", title: "Just opened or relaunching", ids: ["launch", "gbp", "shoot", "reach", "reviewsplan"] },
-  { id: "auto", title: "Runs on its own", ids: ["winback", "welcome", "second", "birthday"] },
-  { id: "tasks", title: "Quick tasks", ids: ["gbp", "reviewsreply", "qr", "friction", "shoot"] },
+  // TWO LAYERS, ONE SYSTEM: section headers say what the campaigns DO (verb-first,
+  // across-the-counter words); the funnel-stage words the Home dashboard teaches
+  // (Awareness → Interest → Customer actions → Orders → Retention) live as TAGS on
+  // each card (planTags + CREATE_CATALOG.stages). So the shelf sells the action and
+  // the card names the exact Home number it moves. Rows still key by stage id — the
+  // Home funnel's weak-leg deep link (?lens=) lands on the matching shelf unchanged.
+  // The goal shelves hold TOOLS AND FIXES (concrete, one price, one job); the big
+  // multi-month programs live on their own "Full campaigns" shelf below, so a $70
+  // fix never sits next to an $8k system (the audit's price-cliff finding).
+  { id: "aware", title: "Get discovered", note: "Set up your profiles and get seen by new people", ids: ["gbp", "listings", "website", "localseo", "nextdoor", "delivery", "creator", "gpost"] },
+  { id: "interest", title: "Create interest", note: "Make people want your food once they see you", ids: ["reel", "dish", "story", "graphic", "shoot", "reviewsplan", "reviewsreply"] },
+  { id: "actions", title: "Make it easy to order", note: "Working buttons, right info, easy ways to act", ids: ["friction", "direct", "website", "gbp", "qr"] },
+  { id: "orders", title: "Fill your seats", note: "Events, deals, and pushes that ring the register", ids: ["promoevent", "launch", "ticket", "catering", "giftcard", "slowoffer"] },
+  { id: "back", title: "Bring guests back", note: "Turn one visit into two, three, ten", ids: ["welcome", "news", "birthday", "earlyaccess", "winback", "direct", "qr"] },
+  // The heavy hitters, separated on purpose: multi-month programs we run end to end.
+  { id: "programs", title: "Full campaigns", note: "We plan it, make it, and run it for you, month after month", ids: ["firstvisit", "nights", "regulars", "reach"] },
+  // Production-only shelf: shoots, edits, and single pieces bought as GOODS, not
+  // campaigns — no outcome promise, no tracking, the deliverable is the product.
+  { id: "content", title: "Just need content", note: "Shoots, edits, and pieces. No campaign, just the goods", ids: ["shoot", "edit", "reel", "story", "graphic", "dish", "gpost"] },
 ];
 
-// Goal-first lenses: let the owner filter the catalog by the job they came to do
-// (the UX study's ask). Each maps to a ROW id; "all" is the full browse.
+// Lenses mirror the rows: filter by what the owner wants done. "all" is the full browse.
 const LENS_CHIPS = [
   { id: "all", label: "All" },
-  { id: "bring", label: "Bring people in" },
-  { id: "keep", label: "Keep regulars" },
-  { id: "online", label: "Online orders" },
-  { id: "bigorders", label: "Catering" },
-  { id: "brandnew", label: "New or relaunch" },
-  { id: "auto", label: "Autopilot" },
+  { id: "aware", label: "Get discovered" },
+  { id: "interest", label: "Create interest" },
+  { id: "actions", label: "Easy to order" },
+  { id: "orders", label: "Fill seats" },
+  { id: "back", label: "Bring back" },
+  { id: "programs", label: "Full campaigns" },
+  { id: "content", label: "Just content" },
 ];
+
+// Which funnel legs each item genuinely moves (audited per real composed lines) —
+// from the single-source catalog, shown as tags in Home's own stage words so a
+// card answers "which of my numbers does this move" at a glance.
+const ITEM_STAGES = Object.fromEntries(CREATE_CATALOG.map((c) => [c.id, c.stages || []]));
 
 function planTags(p) {
   const t = [];
-  const price = priceLabel(buildIdFor(p.id));
-  if (price) t.push({ label: price, accent: true });
-  t.push({ label: CADENCE_TAG[p.cad] || "Plan" });
+  // Price split into plain parts instead of one dense "$X + $Y/mo" string (the owner's
+  // "hard to understand" flag): what you pay once reads "Setup $X", what repeats reads
+  // "$Y/mo". Creative work scales with scope, so its price is a floor: "Starting $X".
+  const pr = ITEM_PRICES[buildIdFor(p.id)];
+  const creative = p.type === "content" || p.id === "shoot";
+  let priceSaysCadence = false;
+  if (pr && (pr.oneTime > 0 || pr.perMonth > 0)) {
+    if (pr.oneTime > 0 && pr.perMonth > 0) {
+      t.push({ label: `Setup $${pr.oneTime.toLocaleString()}`, accent: true });
+      t.push({ label: `$${pr.perMonth.toLocaleString()}/mo`, accent: true });
+      priceSaysCadence = p.cad === "recurring";
+    } else if (pr.perMonth > 0) {
+      t.push({ label: `$${pr.perMonth.toLocaleString()}/mo`, accent: true });
+      priceSaysCadence = p.cad === "recurring";
+    } else {
+      t.push({ label: creative ? `Starting $${pr.oneTime.toLocaleString()}` : `$${pr.oneTime.toLocaleString()} one time`, accent: true });
+      priceSaysCadence = p.cad === "once";
+    }
+  }
+  // Skip the cadence chip when the price chip already says it ("$165/mo" + "Recurring"
+  // was double-telling); keep it for the cadences a price can't express (auto/setup/group).
+  if (!priceSaysCadence) t.push({ label: CADENCE_TAG[p.cad] || "Plan" });
+  for (const s of ITEM_STAGES[p.id] || []) t.push({ label: STAGE_TAG_LABEL[s] || s });
   if (p.season) t.push({ label: "Seasonal", accent: true });
   return t;
 }
@@ -2224,9 +2263,10 @@ function PlanCardV({ p, onOpen, full }) {
         <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={62} /></div>
       </div>
       <div style={{ padding: "10px 11px 12px" }}>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, marginBottom: 3, minHeight: 33 }}>{p.title}</div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.sub, lineHeight: 1.35, marginBottom: 8, minHeight: 30, overflow: "hidden" }}>{p.sub}</div>
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
+        {/* Fixed 2-line blocks + a fixed tag band = every card in a row lands the same height. */}
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, marginBottom: 3, height: 33, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.title}</div>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.sub, lineHeight: 1.35, marginBottom: 8, height: 30, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.sub}</div>
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignContent: "flex-start", height: 44, overflow: "hidden" }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
       </div>
     </button>
   );
@@ -2246,17 +2286,22 @@ function PlanCardH({ p, onOpen }) {
 }
 
 function PlanCardBig({ p, onOpen, full }) {
+  // Sized so TWO suggested cards fit a 375px phone fully (2×160 + 12 gap + 40 padding =
+  // 372): the "Suggested for you" row must read as a choice, not a single verdict.
+  // Title/sub are clamped to fixed 2-line blocks and the tag area to a fixed band so
+  // every card in the row lands at the same height regardless of copy length.
+  const clamp2 = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" };
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 270, textAlign: "left", background: "#fff", border: "none", borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 3px 10px rgba(20,30,26,0.07), 0 0 0 1px rgba(20,30,26,0.05)" }}>
-      <div style={{ position: "relative", height: 120, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
-        <div style={{ position: "absolute", width: 150, height: 150, borderRadius: 75, background: "rgba(255,255,255,0.12)", bottom: -50, right: -30 }} />
-        <div style={{ position: "absolute", width: 92, height: 92, borderRadius: 46, background: "rgba(0,0,0,0.05)", bottom: -30, left: -26 }} />
-        <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={86} /></div>
+    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 160, textAlign: "left", background: "#fff", border: "none", borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 3px 10px rgba(20,30,26,0.07), 0 0 0 1px rgba(20,30,26,0.05)" }}>
+      <div style={{ position: "relative", height: 96, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
+        <div style={{ position: "absolute", width: 120, height: 120, borderRadius: 60, background: "rgba(255,255,255,0.12)", bottom: -40, right: -26 }} />
+        <div style={{ position: "absolute", width: 70, height: 70, borderRadius: 35, background: "rgba(0,0,0,0.05)", bottom: -24, left: -18 }} />
+        <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={64} /></div>
       </div>
-      <div style={{ padding: "13px 15px 15px" }}>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 17, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.15, marginBottom: 4, minHeight: 40 }}>{p.title}</div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.4, marginBottom: 10, minHeight: 35 }}>{p.sub}</div>
-        <div style={{ display: "flex", gap: 6 }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
+      <div style={{ padding: "11px 12px 12px" }}>
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, marginBottom: 3, height: 34, ...clamp2 }}>{p.title}</div>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.sub, lineHeight: 1.35, marginBottom: 8, height: 30, ...clamp2 }}>{p.sub}</div>
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignContent: "flex-start", height: 44, overflow: "hidden" }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
       </div>
     </button>
   );
@@ -2359,10 +2404,11 @@ function SearchBar({ value, onChange }) {
   );
 }
 
-function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading }) {
+function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, initialLens }) {
   const [q, setQ] = useState("");
   const [featHidden, setFeatHidden] = useState(false);
-  const [lens, setLens] = useState("all");
+  // A funnel-stage deep link (Home's weak-leg tap) lands with its shelf pre-filtered.
+  const [lens, setLens] = useState(() => (initialLens && LENS_CHIPS.some((c) => c.id === initialLens) ? initialLens : "all"));
   const query = q.trim().toLowerCase();
   const results = query ? CATALOG.filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
   // AI recommendations (fetched by the wrapper): drive the featured card + the
@@ -2449,15 +2495,11 @@ function CategoryAll({ rowId, onBack, onOpen }) {
           </CircleBtn>
           <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 600, color: TOKENS.ink }}>{row.title}</div>
         </div>
-        {row.big ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {items.map((p) => <PlanCardBig key={p.id} p={p} onOpen={onOpen} full />)}
-          </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {items.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} full />)}
-          </div>
-        )}
+        {/* Every see-all view is the same two-up grid — including Suggested, which
+            used to stack full-width cards (one per row read as a verdict, not a browse). */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          {items.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} full />)}
+        </div>
       </div>
     </div>
   );
@@ -2580,6 +2622,13 @@ const MENU = [
   { l: "Cold Brew", p: "$5" },
   { l: "Lemon Olive Oil Cake", p: "$7" },
 ];
+// The gbp card's two "Who does it" versions, priced right on the option so the choice is a real
+// decision. The Apnosh price reads from ITEM_PRICES so it can never drift from the real bill.
+// The self-serve option ALWAYS contains "step by step": the adapter (draftFromBuilder) keys on
+// that phrase to mark the gbp-setup line owner-run (producer 'diy', $0, no staff work order).
+const GBP_DOER_APNOSH = `done for you by Apnosh, $${(ITEM_PRICES.gbp && ITEM_PRICES.gbp.oneTime) || 365}`;
+const GBP_DOER_SELF = "done by you, step by step, free";
+
 const QL = {
   reach: { lead: "Help new locals within {radius} discover you.", slots: { radius: { k: "slider", v: 5, min: 1, max: 50, unit: "mile" } }, extras: [{ id: "paidreach", k: "pick", label: "Paid reach", o: ["yes, run paid ads", "no, keep it organic"], clause: (v) => (v.startsWith("no") ? ", organic only" : ", with paid ads") }] },
   nights: { lead: "Bring guests in on your {days}, with {offer}, {list}, on {budget}.", slots: { days: { k: "days", v: ["Monday", "Tuesday"] }, offer: { k: "pick", v: "a small deal", o: ["a small deal", "a featured dish", "a happy hour", "a free side with any entree"], custom: true }, list: { k: "pick", v: "reaching your email + text list", o: ["reaching your email + text list", "social only"] }, budget: { k: "pick", v: "the full plan", o: ["a lean start", "the full plan", "an all-in push"] } }, extras: [{ id: "limits", k: "text", label: "Add any limits", ph: "dine-in only, those nights only", clause: (v) => `, ${v}` }] },
@@ -2603,10 +2652,17 @@ const QL = {
   birthday: { lead: "Send {treat} on a guest's birthday, by {channel}.", slots: { treat: { k: "pick", v: "a free dessert", o: ["a free dessert", "a free drink", "a free appetizer", "10% off the table", "a free birthday combo"], custom: true }, channel: { k: "multi", v: ["email", "text"], o: ["email", "text"] } }, extras: [{ id: "limits", k: "text", label: "Add any limits", ph: "dine-in only, valid that week", clause: (v) => `, ${v}` }, { id: "code", k: "text", label: "Add a code", ph: "like BDAY", clause: (v) => `, code ${v}` }] },
   earlyaccess: { lead: "Give subscribers early access to {what}, {timing} before everyone.", slots: { what: { k: "multi", v: ["new menu items"], o: ["new menu items", "events", "specials", "reservations"] }, timing: { k: "pick", v: "a few days", o: ["a day", "a few days", "a week"] } } },
   shoot: { lead: "Book a {kind} shoot of {what}, on {date}.", slots: { kind: { k: "pick", v: "photo and video", o: ["photo", "video", "photo and video"] }, what: { k: "pick", v: "a few key dishes", o: ["your whole menu", "a few key dishes", "one dish", "your space inside", "your storefront", "your team"], custom: true }, date: { k: "date", v: 14 } }, extras: [{ id: "notes", k: "text", label: "Add a note", ph: "must-have shots, the vibe, props, parking", clause: (v) => `, plus ${v}` }] },
-  gbp: { lead: "Update your Google profile: {what}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] } } },
+  gbp: { lead: "Update your Google profile: {what}, {doer}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] }, doer: { k: "pick", label: "Who does it", v: GBP_DOER_APNOSH, o: [GBP_DOER_APNOSH, GBP_DOER_SELF] } } },
   reviewsreply: { lead: "Reply to {which} reviews.", slots: { which: { k: "pick", v: "all", o: ["all", "just critical ones", "4 stars and below", "unanswered ones"] } } },
   qr: { lead: "Add a table QR that {action}.", slots: { action: { k: "pick", v: "grows your list", o: ["grows your list", "collects reviews", "links your menu", "links your socials", "takes orders"] } } },
   friction: { lead: "Make {channel} easier for guests.", slots: { channel: { k: "pick", v: "online ordering", o: ["online ordering", "booking a table", "finding your menu", "joining your list"] } } },
+  listings: { lead: "Get {where} listed and synced.", slots: { where: { k: "multi", v: ["Yelp", "Apple Maps"], o: ["Yelp", "Apple Maps", "Bing", "TripAdvisor", "Facebook"] } } },
+  website: { lead: "Fix {what} on your site.", slots: { what: { k: "multi", v: ["the menu", "speed"], o: ["the menu", "speed", "buttons and links", "photos", "hours"] } } },
+  localseo: { lead: "Show up when neighbors search {term}.", slots: { term: { k: "text", v: "food near me", ph: "e.g. korean bbq near me" } } },
+  delivery: { lead: "Tune up {apps}.", slots: { apps: { k: "multi", v: ["DoorDash"], o: ["DoorDash", "Uber Eats", "Grubhub", "your own site"] } } },
+  nextdoor: { lead: "Get known on Nextdoor for {vibe}.", slots: { vibe: { k: "text", v: "your specials", ph: "e.g. best happy hour nearby" } } },
+  edit: { lead: "Edit my {what}.", slots: { what: { k: "multi", v: ["videos"], o: ["videos", "photos", "menu shots", "old footage"] } } },
+  direct: { lead: "Move {who} to direct orders with {perk}.", slots: { who: { k: "pick", v: "your regulars", o: ["your regulars", "delivery-app customers", "everyone"] }, perk: { k: "text", v: "10% off direct orders", ph: "e.g. free drink when you order direct" } } },
   giftcard: { lead: "Promote {kind} gift cards for {occasion}, in {amounts}, order by {date}, {list}.", slots: { kind: { k: "pick", v: "digital", o: ["digital", "physical", "digital and physical"] }, occasion: { k: "pick", v: "the holidays", o: ["the holidays", "Mother's Day", "Father's Day", "the season", "slow months", "graduation"], custom: true }, amounts: { k: "pick", v: "set amounts ($25, $50, $100)", o: ["set amounts ($25, $50, $100)", "any amount"] }, date: { k: "date", v: 21 }, list: { k: "pick", v: "reaching your email + text list", o: ["reaching your email + text list", "social only"] } }, extras: [{ id: "offer", k: "text", label: "Add a bonus", ph: "like $10 bonus on $50", clause: (v) => `, with ${v}` }, { id: "intensity", k: "pick", label: "Make it a big push", o: ["a soft push", "a big push"], clause: (v) => `, as ${v}` }, { id: "boost", k: "pick", label: "Add paid reach", o: ["yes, add paid ads", "no thanks"], clause: (v) => (v.startsWith("yes") ? ", with paid ads" : "") }] },
   ticket: { lead: "Sell tickets to {event} for {price}, on {date} at {time}, {list}.", slots: { event: { k: "text", v: "", ph: "the event name, like Wine Pairing Dinner" }, price: { k: "num", v: "" }, date: { k: "date", v: 30 }, time: { k: "time", v: { h: 7, m: "00", ap: "pm" } }, list: { k: "pick", v: "reaching your email + text list", o: ["reaching your email + text list", "social only"] } }, extras: [{ id: "intensity", k: "pick", label: "Make it a big push", o: ["a soft push", "a big push"], clause: (v) => `, as ${v}` }, { id: "boost", k: "pick", label: "Add paid reach", o: ["yes, add paid ads", "no thanks"], clause: (v) => (v.startsWith("yes") ? ", with paid ads to fill seats" : "") }, { id: "cap", k: "text", label: "Add capacity", ph: "a number, like 40", clause: (v) => `, room for ${v}` }, { id: "details", k: "text", label: "Add details", ph: "who's hosting, 21+, includes a drink", clause: (v) => `, plus ${v}` }] },
   winback: { lead: "When a guest hasn't visited in {time}, send {offer}.", slots: { time: { k: "pick", v: "30 days", o: ["30 days", "45 days", "60 days", "90 days"], custom: true }, offer: { k: "pick", v: "a come-back deal", o: ["a come-back deal", "a free item", "a discount", "a we-miss-you note"], custom: true } }, extras: [{ id: "limits", k: "text", label: "Add any limits", ph: "one per person, dine-in only", clause: (v) => `, ${v}` }, { id: "code", k: "text", label: "Add a code", ph: "like MISSYOU", clause: (v) => `, code ${v}` }] },
@@ -2895,7 +2951,9 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
         )}
       </div>
       <div style={{ flexShrink: 0, padding: "12px 22px 20px" }}>
-        {priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You approve before anything runs, and only pay when each piece ships.</div>}
+        {itemId === "gbp" && /step by step/i.test(String(vals.doer || ""))
+          ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>Free. You do the work yourself, and we guide you step by step.</div>
+          : priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You approve before anything runs, and only pay when each piece ships.</div>}
         {(() => { const m = monthlyTotalLine(itemId, monthlyCommitment, liveCount, monthlyCap); if (!m) return null;
           return m.warn
             ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: "#fff", background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: "8px 12px", textAlign: "center", marginBottom: 10 }}>{m.text}</div>
@@ -3246,7 +3304,7 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, onCreate, onClose, onPlan } = {}) {
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, onCreate, onClose, onPlan } = {}) {
   const [route, setRoute] = useState(() => (initialItem ? { name: "build", itemId: buildIdFor(initialItem) } : { name: "browse" }));
 
   const exit = () => { if (onClose) onClose(); };
@@ -3299,7 +3357,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <>
               <AppHeader />
               <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-                <PlanBrowse restaurant={restaurant} recommended={recommended} recsLoading={recsLoading} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
+                <PlanBrowse restaurant={restaurant} recommended={recommended} recsLoading={recsLoading} initialLens={initialLens} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
               </div>
             </>
           )}

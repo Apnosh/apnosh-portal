@@ -74,6 +74,12 @@ export interface CampaignExecution {
   vendorInfo?: string    // ordering / POS / booking system (from a pos-vendor service)
   menuSource?: string    // where to find the current menu (from a menu service)
   setupSkipped?: string  // comma-separated readiness action ids the owner deferred ("Skip for now")
+  /** ISO stamp: the /dashboard/google-profile walkthrough came back ALL-GOOD on a fresh read
+   *  (the self-serve gbp version's completion). Server-written ONLY, by POST
+   *  /api/campaigns/:id/gbp-fixed, which re-runs the diagnosis itself and stamps only on a
+   *  full, successful, every-section-good read. NOT in the owner PATCH whitelist, so it
+   *  cannot be forged or cleared through the API — same guarantee as wrapUpSentAt. */
+  gbpFixedAt?: string
   /** ISO stamp: the completion sweep sent the owner's wrap-up letter. System-written
    *  (cron via admin client); NOT in the owner PATCH whitelist, so it cannot be forged
    *  or cleared through the API. */
@@ -152,6 +158,11 @@ export function ownerSetupComplete(s: SavedCampaign): boolean {
     if (hasShoot) need.push(filled(ex.shootTimes), filled(ex.onSiteContact), filled(ex.filmStaff))
   }
   if (['ordering-setup', 'delivery-opt', 'ai-phone', 'giftcards', 'google-food-order'].some((id) => svc.has(id))) need.push(filled(ex.vendorInfo))
+  // The self-serve Google-profile fix (the gbp card's free version): the campaign's deliverable
+  // IS the owner's walkthrough, so the campaign honestly needs them until the fixer's all-good
+  // diagnosis stamps execution.gbpFixedAt.
+  const diyGbp = (d.items ?? []).some((it) => it.included && !it.optOut && it.serviceId === 'gbp-setup' && it.producer === 'diy')
+  if (diyGbp) need.push(filled(ex.gbpFixedAt))
   return need.every(Boolean)
 }
 
@@ -169,7 +180,9 @@ export type ShippedPhase = 'setup' | 'production' | 'live' | 'done'
 export function servicesSetupWindowDays(items: LineItem[]): number {
   let maxBiz = 0
   for (const it of items) {
-    if (!it.included || it.optOut || !it.serviceId) continue
+    // Owner-run lines (producer 'diy', the self-serve gbp version) are not team work — they
+    // never put a campaign in "your team is setting things up".
+    if (!it.included || it.optOut || it.producer === 'diy' || !it.serviceId) continue
     const t = turnaroundFor(it.serviceId)
     if (!t) continue
     const d = t.class === 'setup' ? t.business.max + (t.gate?.addDays.max ?? 0)
@@ -185,7 +198,7 @@ export function servicesSetupWindowDays(items: LineItem[]): number {
 export function serviceClassWindowDays(items: LineItem[], cls: 'setup' | 'creative' | 'recurring'): number {
   let maxBiz = 0
   for (const it of items) {
-    if (!it.included || it.optOut || !it.serviceId) continue
+    if (!it.included || it.optOut || it.producer === 'diy' || !it.serviceId) continue
     const t = turnaroundFor(it.serviceId)
     if (!t || t.class !== cls) continue
     const d = t.class === 'setup' ? t.business.max + (t.gate?.addDays.max ?? 0)
@@ -209,12 +222,28 @@ export function servicesSettingUp(s: SavedCampaign, nowMs = Date.now()): boolean
   return elapsed >= 0 && elapsed < calDays
 }
 
+/** A pure owner-run plan, finished: every included, non-opted-out line is owner-run (producer
+ *  'diy') and every one carries its completion signal. Only the self-serve gbp walkthrough HAS
+ *  a completion signal today (execution.gbpFixedAt, server-verified by the gbp-fixed route),
+ *  so any other owner-run line keeps this false — we never claim Done on work nothing checked.
+ *  Feeds shippedStatus: such a plan mints no pieces or work orders (progress total stays 0),
+ *  so without this signal it would read "Live · running" forever after the owner finished
+ *  its only deliverable. */
+export function ownerRunWorkDone(s: SavedCampaign): boolean {
+  const lines = (s.draft.items ?? []).filter((it) => it.included && !it.optOut)
+  if (!lines.length || lines.some((it) => it.producer !== 'diy')) return false
+  const ex = s.execution ?? {}
+  return lines.every((it) => it.serviceId === 'gbp-setup' && !!ex.gbpFixedAt?.trim())
+}
+
 // Cells the detail page relies on being IMPOSSIBLE: diy never yields 'setup' (ownerSetupComplete is
 // true for diy). NOTE (services in progress): finite service work orders now count in total/live, so
 // a services-only campaign CAN reach 'done' once every service is delivered with proof — the old
 // "settles at 'live'" invariant only still holds for plans whose services are all recurring-class
 // (those are excluded from the counts, so total stays 0 and the settingUp branch below still runs).
-export function shippedStatus(progress: CampaignProgress | null | undefined, hasContentPlanned: boolean, setupComplete = true, settingUp = false): { phase: ShippedPhase; label: string; blurb: string; live: number; total: number } {
+// ownerRunDone (ownerRunWorkDone above): a pure owner-run plan whose deliverable checked out —
+// it also has total 0, and it DOES reach 'done'.
+export function shippedStatus(progress: CampaignProgress | null | undefined, hasContentPlanned: boolean, setupComplete = true, settingUp = false, ownerRunDone = false): { phase: ShippedPhase; label: string; blurb: string; live: number; total: number } {
   const p = progress ?? null
   const totalPieces = p?.total ?? 0
   // Once anything has actually posted, setup is moot — show the real state.
@@ -224,6 +253,10 @@ export function shippedStatus(progress: CampaignProgress | null | undefined, has
   }
   // Nothing live yet: the owner's unfinished setup is the honest blocker, ahead of "in production".
   if (!setupComplete) return { phase: 'setup', label: 'Needs you', blurb: 'Finish setup so your team can start', live: 0, total: totalPieces }
+  // A finished owner-run plan: its only deliverable was the owner's own (checked) work, and
+  // nothing else was ever minted to run — Done, not an immortal "Live · running". Guarded on
+  // total 0 so real pieces (impossible for an all-diy plan, but cheap to be safe) always win.
+  if (ownerRunDone && totalPieces === 0) return { phase: 'done', label: 'Done', blurb: 'Done · you finished it yourself', live: 0, total: 0 }
   if (totalPieces > 0) return { phase: 'production', label: 'In production', blurb: "In production · your team's on it", live: 0, total: totalPieces }
   if (hasContentPlanned) return { phase: 'production', label: 'In production', blurb: "In production · your team's on it", live: 0, total: 0 }
   // Services-only: right after ship the team is still SETTING UP the services (per the turnaround
@@ -252,7 +285,7 @@ export function campaignCardVM(s: SavedCampaign, progress?: CampaignProgress | n
     }
   }
 
-  const st = shippedStatus(progress, (s.draft.brief?.contentBeats?.length ?? 0) > 0, ownerSetupComplete(s), servicesSettingUp(s))
+  const st = shippedStatus(progress, (s.draft.brief?.contentBeats?.length ?? 0) > 0, ownerSetupComplete(s), servicesSettingUp(s), ownerRunWorkDone(s))
   return {
     ...base, kind: st.phase === 'done' ? 'done' : 'live', pill: st.label, pillIcon: st.phase === 'done' ? 'check' : 'dot', blurb: st.blurb,
     review: st.phase === 'setup',

@@ -55,19 +55,37 @@ const TONE: Record<Zone, { rgb: string; ink: string; dk: string }> = {
    A stage then reads red (very low) → amber (low) → green (average / high / very high). Owner-tunable —
    just edit the numbers here. */
 type HealthBand = 'veryLow' | 'low' | 'average' | 'high' | 'veryHigh'
+// owner-set per-leg conversion bands (each value = the upper bound of that band; above `high` = very high).
+// Keyed by the DESTINATION stage — every leg is graded on its OWN scale.
 const LEG_BANDS: Record<string, { veryLow: number; low: number; average: number; high: number }> = {
-  engaged: { veryLow: 0.02, low: 0.04, average: 0.06, high: 0.10 }, // Awareness → Interest (impressions→interactions) — owner-set: ≤2% very low, ~4% low, 4-6% avg, ~8% high, ≥10% very high
-  moved: { veryLow: 0.20, low: 0.35, average: 0.55, high: 0.75 },   // Interest → Customer actions — PLACEHOLDER, owner to confirm
+  engaged: { veryLow: 0.02, low: 0.04, average: 0.06, high: 0.08 }, // Awareness → Interest: 0-2 / 2-4 / 4-6 / 6-8 / 8%+
+  moved:   { veryLow: 0.03, low: 0.06, average: 0.09, high: 0.12 }, // Interest → Customer actions: 0-15%+ in 5
+  camein:  { veryLow: 0.10, low: 0.20, average: 0.30, high: 0.40 }, // Customer actions → Orders: 0-50%+ in 5
+  back:    { veryLow: 0.10, low: 0.20, average: 0.30, high: 0.40 }, // Orders → Retention: 0-50%+ in 5
 }
 const DEFAULT_BANDS = { veryLow: 0.10, low: 0.25, average: 0.45, high: 0.65 }
 function bandFor(rate: number, key: string): HealthBand {
   const b = LEG_BANDS[key] ?? DEFAULT_BANDS
   return rate <= b.veryLow ? 'veryLow' : rate <= b.low ? 'low' : rate <= b.average ? 'average' : rate <= b.high ? 'high' : 'veryHigh'
 }
-const bandToneOf = (b: HealthBand | null): 'red' | 'amber' | 'green' => (b === 'veryLow' ? 'red' : b === 'low' ? 'amber' : 'green')
-const bandVigor = (b: HealthBand | null): number => (b === 'veryHigh' ? 1 : b === 'high' ? 0.66 : 0.38) // green pulse liveliness by band
+// Funnel stage → the create page's matching shelf (its ROWS/lens ids). The store
+// speaks the funnel's words, so a weak leg taps straight into what fixes it.
+const STAGE_LENS: Record<string, string> = { shown: 'aware', engaged: 'interest', moved: 'actions', camein: 'orders', back: 'back' }
 const HEALTH_RED: [number, number, number] = [229, 72, 77]
-const HEALTH_AMBER: [number, number, number] = [216, 171, 83]
+// the 5-band health ramp: very low → very high = red → orange-red → yellow → light green → green.
+const BAND_RGB: Record<HealthBand, [number, number, number]> = {
+  veryLow: HEALTH_RED,      // red
+  low: [232, 110, 58],      // orange-red
+  average: [222, 176, 52],  // yellow
+  high: [116, 196, 122],    // light green
+  veryHigh: [46, 168, 124], // green
+}
+// darker variants for text/marks on the LIGHT ground (the bright ramp above is for dark, and for fills/rings/crowd on dark).
+const BAND_INK: Record<HealthBand, [number, number, number]> = {
+  veryLow: [201, 45, 50], low: [186, 78, 28], average: [150, 112, 14], high: [40, 140, 74], veryHigh: [28, 120, 86],
+}
+const BAND_WORD: Record<HealthBand, string> = { veryLow: 'very low', low: 'low', average: 'average', high: 'high', veryHigh: 'very high' }
+const bandVigor = (b: HealthBand | null): number => (b === 'veryHigh' ? 1 : b === 'high' ? 0.66 : 0.38) // pulse liveliness by band
 
 export interface Views { total: number; maps: number; search: number }
 export interface Actions { directions: number; calls: number; websiteClicks: number }
@@ -219,12 +237,13 @@ function computeHome(views: Views, actions: Actions, walkInRate: number, avgTick
 interface Traveler {
   state: 'orbit' | 'travel' | 'leak' | 'die' // die = flowing on toward the empty final stage, fading out AT its circle
   orb: number // orbit: current ring · travel: TARGET ring · leak: the ring just left · die: the dead ring it dies into
+  colorOrb: number // the stage whose COLOUR it currently wears (last stage reached); -1 = none yet (brand-new arrival)
   theta: number; omega: number; orbitR: number; orbitLife: number; orbitAge: number
   x: number; y: number; vx: number; vy: number // explicit position — used by travel + leak
   alpha: number; phase: number; sz: number // sz = per-person SIZE (0.82–1.2) → each reads as a distinct individual
 }
 const blankTraveler = (): Traveler => ({
-  state: 'travel', orb: 0, theta: 0, omega: 0, orbitR: 0, orbitLife: 0, orbitAge: 0,
+  state: 'travel', orb: 0, colorOrb: -1, theta: 0, omega: 0, orbitR: 0, orbitLife: 0, orbitAge: 0,
   x: 0, y: 0, vx: 0, vy: 0, alpha: 1, phase: Math.random() * 6, sz: 0.82 + Math.random() * 0.38,
 })
 
@@ -251,6 +270,7 @@ export default function HomeFunnel({
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const particlesRef = useRef<Traveler[]>([])
+  const seededRef = useRef(false) // first seed = flow-IN (circles start empty, fill); later reseeds seat in place (stay full)
   const rDispRef = useRef<number[]>([])
   const numDispRef = useRef<number[]>([]) // eased ledger numbers → count-up on load, smooth cross-fade on range change
   const entranceRef = useRef(0)           // 0→~1.5s considered draw-in; gates ring fade, number count-up, crowd cascade
@@ -419,20 +439,17 @@ export default function HomeFunnel({
     ctx.clearRect(0, 0, W, effH)
     if (!layout.length) return
 
-    // the single weakest step — the stage reached by the worst conversion (below
-    // 25%) — gets a concern colour, so an honestly-small number still reads as a
-    // red flag rather than being quietly overlooked or artificially inflated.
-    // per-stage HEALTH — graded from each stage's INCOMING conversion against the owner's benchmark bands,
-    // so a healthy-but-naturally-low-% leg reads green instead of a false red. The mouth has no incoming
-    // leg → always healthy; the estimate stage (owner's dial) + retention + any no-data (0) leg aren't graded.
+    // per-stage HEALTH — graded from each stage's INCOMING conversion against the owner's per-leg benchmark bands
+    // (5 bands per leg). The mouth (Awareness) has no incoming leg → always healthy; any leg with no data on either
+    // end → grey (null), so a 0/no-register retention reads as absent, not a false "very low".
     const health: (HealthBand | null)[] = stages.map((s, i) => {
       if (i === 0) return 'veryHigh'
-      if (s.zone === 'estimate' || s.key === 'back') return null
       const a = stages[i - 1].count, b = s.count
       if (a == null || b == null || a <= 0 || b <= 0) return null
       return bandFor(b / a, s.key)
     })
-    const toneOf = (i: number): 'red' | 'amber' | 'green' | null => (health[i] == null ? null : bandToneOf(health[i]))
+    const dark = theme === 'dark'
+    const bandCol = (b: HealthBand): [number, number, number] => (dark ? BAND_RGB[b] : BAND_INK[b]) // bright ramp on dark, darker ink on light so it stays readable
 
     // canvas letterSpacing shim (typed loosely; harmless where unsupported)
     const setLS = (v: string) => { (ctx as unknown as { letterSpacing: string }).letterSpacing = v }
@@ -476,10 +493,10 @@ export default function HomeFunnel({
       const L = layout[i]
       const ox = cx + L.dx, oy = L.y, r = rAt(i)
       const effZone: Zone = s.count === 0 ? 'locked' : s.zone
-      const gtone = s.zone === 'estimate' || s.count === 0 ? null : toneOf(i) // health tone tints the inner glow
+      const bd = s.count === 0 ? null : health[i] // the stage's health band tints the inner glow (grey when empty)
       const eIn = easeOutCubic(clamp01((entrance - i * 0.09) / 0.5))
-      const rgb = gtone === 'red' ? HEALTH_RED.join(',') : gtone === 'amber' ? HEALTH_AMBER.join(',') : TONE[effZone].rgb
-      const peak = (effZone === 'estimate' ? 0.20 : effZone === 'measured' ? 0.15 : 0.05) * (gtone === 'red' ? 1.2 : gtone === 'amber' ? 1.1 : 1)
+      const rgb = bd ? bandCol(bd).join(',') : TONE[effZone].rgb
+      const peak = (effZone === 'estimate' ? 0.20 : effZone === 'measured' ? 0.15 : 0.05) * (bd === 'veryLow' ? 1.2 : bd === 'low' ? 1.1 : 1)
       const g = ctx.createRadialGradient(ox, oy, r * 0.08, ox, oy, r * 1.02)
       g.addColorStop(0, `rgba(${rgb},${peak * eIn})`)
       g.addColorStop(0.7, `rgba(${rgb},${peak * 0.4 * eIn})`)
@@ -501,35 +518,34 @@ export default function HomeFunnel({
       const L = layout[i], ox = cx + L.dx, oy = L.y, r = rAt(i)
       const eIn = easeOutCubic(clamp01((entrance - i * 0.09) / 0.5))
 
+      const band = health[i]
+      if (band == null) continue // no-data leg → no pulse (the ring reads grey)
       const isEst = s.zone === 'estimate'
-      const tone = isEst ? 'amber' : toneOf(i) // estimate rides the amber (dashed) treatment
+      const rgb = bandCol(band).join(',')
 
-      if (tone === 'red') {
-        // a VERY-LOW leg (below the owner's floor for this step) → steady red ring + urgent red pulse
+      if (band === 'veryLow') {
+        // very low → steady red ring + urgent red pulse
         ctx.beginPath(); ctx.arc(ox, oy, r + 3, 0, 7)
-        ctx.lineWidth = 2.6; ctx.strokeStyle = `rgba(${HEALTH_RED.join(',')},${0.72 * eIn})`; ctx.stroke()
+        ctx.lineWidth = 2.6; ctx.strokeStyle = `rgba(${rgb},${0.72 * eIn})`; ctx.stroke()
         const rp = ((t / 1.5) + i * 0.3) % 1 // fast, continuous → urgent
         ctx.beginPath(); ctx.arc(ox, oy, r + 3 + rp * r * 0.7, 0, 7)
-        ctx.lineWidth = 2.2; ctx.strokeStyle = `rgba(${HEALTH_RED.join(',')},${0.6 * (1 - rp) * eIn})`; ctx.stroke()
+        ctx.lineWidth = 2.2; ctx.strokeStyle = `rgba(${rgb},${0.6 * (1 - rp) * eIn})`; ctx.stroke()
         continue
       }
-      if (tone == null) continue // a no-data leg → no pulse (the ring reads grey)
 
-      // amber (below-average, or the estimate dial) and green (average+) both breathe a soft ring. Green
-      // gets livelier the higher its band; the estimate stays a slow dashed "~about".
-      const amber = tone === 'amber'
-      const vigor = amber ? 0.4 : bandVigor(health[i])
-      const rgb = amber ? HEALTH_AMBER.join(',') : '74,189,152'
-      const period = isEst ? 5.5 : amber ? 3.6 : 2.0 + (1 - vigor) * 2.0 // healthier green → faster
-      const duty = isEst ? 0.85 : amber ? 0.5 : 0.42                     // estimate: slow near-continuous
-      const reach = r * (amber ? 0.42 : 0.34 + vigor * 0.34)            // green reaches further the healthier it is
-      const peakA = amber ? 0.5 : 0.5 + vigor * 0.4
+      // every other band breathes a soft ring in its OWN colour — livelier the healthier it is. The estimate
+      // stage (Orders) keeps the dashed "~about" treatment on top of its band colour.
+      const vigor = bandVigor(band)
+      const period = isEst ? 5.5 : 2.0 + (1 - vigor) * 2.0
+      const duty = isEst ? 0.85 : 0.42
+      const reach = r * (0.34 + vigor * 0.34)
+      const peakA = 0.5 + vigor * 0.4
       const cyc = ((t / period) + i * 0.3) % 1
       if (cyc < duty) {
         const ph = cyc / duty // 0→1 over the expansion window
         if (isEst) ctx.setLineDash([3, 5]) // dashed → echoes the "~about" estimate ring
         ctx.beginPath(); ctx.arc(ox, oy, r + ph * reach, 0, 7)
-        ctx.lineWidth = amber ? 1.9 : 2.2
+        ctx.lineWidth = 2.1
         ctx.strokeStyle = `rgba(${rgb},${peakA * (1 - ph) * eIn})`
         ctx.stroke()
         if (isEst) ctx.setLineDash([])
@@ -540,24 +556,31 @@ export default function HomeFunnel({
        travelling the path = a muted in-transit tone, scattering off = terracotta (fading) ── */
     const CC = CROWD_COLORS(theme === 'dark')
     const zoneCol = (z: Zone) => z === 'estimate' ? CC.estimate : z === 'locked' ? CC.locked : CC.measured
+    // an icon wears the COLOUR of the stage it belongs to right now (that ring's health band). It keeps that
+    // colour while it travels, and only recolours when it REACHES the next stage or walks out (leak = terracotta).
+    const stageCol = (i: number) => {
+      if (i < 0) return CC.wander
+      const b = health[i]
+      return b ? `rgb(${bandCol(b).join(',')})` : zoneCol(stages[i].count === 0 ? 'locked' : stages[i].zone)
+    }
     for (const tr of particlesRef.current) {
       let px: number, py: number, col: string, a = 1
       if (tr.state === 'orbit') {
-        // residents MILL — they wander to their own drifting spot inside the ring (position is tr.x/tr.y)
-        px = tr.x; py = tr.y
-        const s = stages[tr.orb]
-        col = zoneCol(s.count === 0 ? 'locked' : s.zone)
+        // residents MILL inside a ring → that stage's colour (position is tr.x/tr.y)
+        px = tr.x; py = tr.y; col = stageCol(tr.orb)
       } else if (tr.state === 'travel') {
-        px = tr.x; py = tr.y; col = CC.wander // in transit along the path
+        px = tr.x; py = tr.y; col = tr.colorOrb >= 0 ? stageCol(tr.colorOrb) : CC.wander // carry the stage it LEFT; neutral until it first reaches one
       } else if (tr.state === 'die') {
-        px = tr.x; py = tr.y; col = CC.wander; a = Math.max(0, tr.alpha) // flowing on to the dead final stage, fading out AT its circle
-      } else { // leak — scattering off the ring, fading
+        px = tr.x; py = tr.y; col = tr.colorOrb >= 0 ? stageCol(tr.colorOrb) : CC.wander; a = Math.max(0, tr.alpha) // keeps its last stage's colour as it dies off
+      } else { // leak — walked out → terracotta, fading
         px = tr.x; py = tr.y; col = CC.escape; a = Math.max(0, tr.alpha)
       }
+      // a gentle FLOAT — a slow per-person bob + sway so the crowd feels like it's floating, not pinned
+      const fx = Math.sin(t * 0.7 + tr.phase) * 1.7, fy = Math.cos(t * 0.5 + tr.phase * 1.4) * 1.9
       const reveal = clamp01((curtainY - py) / 44)
       a *= reveal
       if (a <= 0.01) continue
-      drawPerson(ctx, px, py, PERSON_U * tr.sz, col, a) // per-person size → the crowd reads as distinct individuals
+      drawPerson(ctx, px + fx, py + fy, PERSON_U * tr.sz, col, a) // per-person size + float → distinct, floating individuals
     }
     ctx.globalAlpha = 1
 
@@ -567,14 +590,11 @@ export default function HomeFunnel({
     stages.forEach((s, i) => {
       const L = layout[i]
       const ox = cx + L.dx, oy = L.y, r = rAt(i)
-      const tone = toneOf(i) // 'red' | 'amber' | 'green' | null (measured legs; estimate keeps its zone)
-      const alarm = s.count !== 0 && s.zone !== 'estimate' && (tone === 'red' || tone === 'amber')
+      const band = health[i] // the stage's health band → its ring/number colour on the 5-band ramp
       const pr = pressAmtRef.current[i] ?? 0 // press "settle" amount for this row
       const effZone: Zone = s.count === 0 ? 'locked' : s.zone // a 0 reads as empty → grey it like a no-data ring
-      const zoneRGB = TONE[effZone].rgb.split(',').map(Number)
-      const lerpRGB = (a: number[], b: number[], k: number) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]
-      // tint the ring toward its HEALTH tone: red for a very-low leg, amber for below-average; else its zone hue
-      const rc = alarm ? lerpRGB(zoneRGB, tone === 'red' ? HEALTH_RED : HEALTH_AMBER, tone === 'red' ? 0.66 : 0.5) : zoneRGB
+      // the ring IS its band colour (red→green); a no-data / empty ring falls back to its grey zone hue.
+      const rc: number[] = band ? bandCol(band) : TONE[effZone].rgb.split(',').map(Number)
       const ringStr = `${Math.round(rc[0])},${Math.round(rc[1])},${Math.round(rc[2])}`
       const baseRowStr = TONE[effZone].rgb // the row's OWN zone hue → press tint + chevron wake
       const baseA = effZone === 'measured' ? 0.82 : effZone === 'estimate' ? 0.52 : 0.32
@@ -584,7 +604,7 @@ export default function HomeFunnel({
       // entrance: each ring fades + settles in, staggered 90ms top-to-bottom
       const eIn = easeOutCubic(clamp01((entrance - i * 0.09) / 0.5))
       // a very-low (red) ring breathes slightly at rest (only its shadow) — the quiet alarm
-      const shBase = tone === 'red' ? 0.18 + 0.06 * Math.sin(t * 2.4166) : 0.14
+      const shBase = band === 'veryLow' ? 0.18 + 0.06 * Math.sin(t * 2.4166) : 0.14
 
       // press feedback (1): a faint same-hue plate behind the touched row — drawn UNSCALED, behind everything
       if (pr > 0.002) {
@@ -626,7 +646,8 @@ export default function HomeFunnel({
 
       const disp = numDispRef.current[i] != null ? numDispRef.current[i] : (s.count ?? 0)
       const num = s.count == null ? '—' : (s.zone === 'estimate' ? '~' : '') + Math.round(disp).toLocaleString()
-      ctx.fillStyle = s.count == null ? C.faint : s.zone === 'estimate' ? C.amberDk : tone === 'red' ? `rgb(${HEALTH_RED.join(',')})` : tone === 'amber' ? C.amberDk : C.ink
+      // green (healthy) numbers use the default ink (black on light / white on dark); only red/orange/yellow tint.
+      ctx.fillStyle = s.count == null ? C.faint : (band === 'veryHigh' || band === 'high') ? C.ink : band ? `rgb(${bandCol(band).join(',')})` : s.zone === 'estimate' ? C.amberDk : C.ink
       // as big as the room allows, from a bold 54px down to a floor of 24px; if a very long number
       // still won't fit at the floor (tiny embed × 8 digits), maxWidth compresses it to the room as a
       // last resort so it never spills into the orb or across the centre path.
@@ -651,7 +672,7 @@ export default function HomeFunnel({
           ctx.textAlign = numLeft ? 'left' : 'right'
           const tx = numLeft ? anchorX + drawnNumW + 8 : anchorX - drawnNumW - 8
           ctx.globalAlpha = tickIn
-          ctx.fillStyle = r0 > 0 ? C.greenDk : r0 < 0 ? (tone === 'red' ? C.faint : C.coral) : C.mute
+          ctx.fillStyle = r0 > 0 ? C.greenDk : r0 < 0 ? (band === 'veryLow' ? C.faint : C.coral) : C.mute
           ctx.fillText(tickStr, tx, oy + 5)
           ctx.globalAlpha = 1
         }
@@ -675,24 +696,25 @@ export default function HomeFunnel({
     setLS('0px')
     ctx.textAlign = 'center'
     for (let i = 0; i < n - 1; i++) {
-      if (stages[i + 1].key === 'back') continue // no repeat data yet — not a leg to rate
       const a = stages[i].count, b = stages[i + 1].count
-      if (a == null || b == null || a <= 0 || b <= 0) continue // a 0 at the destination is no-data (grey), not a rated leg — same as retention
+      if (a == null || b == null || a <= 0 || b <= 0) continue // a 0 at the destination is no-data (grey), not a rated leg
       const pillIn = easeOutCubic(clamp01((entrance - (i * 0.09 + 0.45)) / 0.4))
       if (pillIn < 0.01) continue
-      const destTone = toneOf(i + 1) // health of the stage this leg feeds → drives the pill colour
-      const bad = destTone === 'red' || destTone === 'amber'
+      const dband = health[i + 1] // the band of the stage this leg feeds → the pill's colour + word
+      if (dband == null) continue
+      const weak = dband === 'veryLow' || dband === 'low'
+      const cr = bandCol(dband) // theme-aware band colour for the text
       const pct = Math.round((b / a) * 100)
-      const label = (destTone === 'red' ? 'Only ' : '') + (pct >= 1 ? pct : '<1') + '%'
+      const label = (pct >= 1 ? pct : '<1') + '% · ' + BAND_WORD[dband] // e.g. "4% · average", "45% · very high"
       const midY = (layout[i].y + rAt(i) + (layout[i + 1].y - rAt(i + 1))) / 2
       const px = cx + (layout[i].dx + layout[i + 1].dx) / 2
-      ctx.font = bad ? '700 11px Inter, sans-serif' : '600 11px Inter, sans-serif'
+      ctx.font = weak ? '700 11px Inter, sans-serif' : '600 11px Inter, sans-serif'
       const pw = ctx.measureText(label).width + 20, ph = 18
       ctx.globalAlpha = pillIn
       roundRectP(px - pw / 2, midY - ph / 2, pw, ph, ph / 2)
-      ctx.fillStyle = bad ? C.pillWeakBg : C.pillGoodBg
+      ctx.fillStyle = `rgba(${BAND_RGB[dband].join(',')},${dark ? 0.22 : 0.15})` // a soft band-tinted background
       ctx.fill()
-      ctx.fillStyle = bad ? C.pillWeakInk : C.pillGoodInk
+      ctx.fillStyle = `rgb(${cr.join(',')})` // band-coloured text (bright on dark, dark ink on light)
       ctx.fillText(label, px, midY + 4)
       ctx.globalAlpha = 1
     }
@@ -725,7 +747,7 @@ export default function HomeFunnel({
     const firstLive = orbTarget.findIndex((v) => v > 0) // first stage that actually has people — new users stream into THIS (so a 0-count Awareness shows nobody)
 
     const seatOrbit = (tr: Traveler, i: number, mid: boolean) => {
-      tr.orb = i; tr.state = 'orbit'
+      tr.orb = i; tr.colorOrb = i; tr.state = 'orbit'
       const R = layout[i].r
       const a0 = Math.random() * 6.2832, r0 = R * (0.12 + 0.8 * Math.random())
       tr.x = orbXi(i) + Math.cos(a0) * r0
@@ -739,21 +761,21 @@ export default function HomeFunnel({
     }
 
     const ts: Traveler[] = []
-    // ONE UNIFIED people pool: every icon is a single PERSON that arrives, mills in a circle, then either
-    // moves on to the next stage OR walks away — so any icon can travel, orbit, OR disappear over its life
-    // (a real journey, not fixed roles). Seed each stage's proportional crowd already milling; a few extra
-    // stream in from the top so "new users arriving" is always happening.
+    // ONE UNIFIED people pool: every icon is a single PERSON that arrives, mills in a circle, then either moves
+    // on OR walks away. FIRST OPEN: the circles start EMPTY and FILL via the flow — seed each ring's proportional
+    // crowd as INCOMING from above its own ring, staggered up the spine, so on the very first paint they're
+    // streaming in and each circle fills over the first few seconds (rather than appearing pre-populated).
+    const firstOpen = !seededRef.current // only the FIRST mount flows in; later reseeds (data/range/resize) stay full
+    seededRef.current = true
     for (let i = 0; i <= botRing; i++) {
       for (let k = 0; k < orbTarget[i]; k++) {
         const tr = blankTraveler()
-        if (Math.random() < 0.8) {
-          seatOrbit(tr, i, true)
-        } else {
-          seatOrbit(tr, i, false)
-          tr.state = 'travel'
-          const fromY = (i === 0 ? flowTop : layout[i - 1].y) + Math.random() * 40
-          tr.x = orbXi(i) + (Math.random() * 2 - 1) * layout[i].r * 1.6
-          tr.y = Math.min(fromY, layout[i].y - 4); tr.vx = 0; tr.vy = 40
+        seatOrbit(tr, i, true) // seat it in its ring, already milling (mid-dwell)
+        if (firstOpen) {
+          tr.state = 'travel'; tr.colorOrb = -1 // …but on first open it ARRIVES from above → circles fill via the flow
+          tr.x = orbXi(i) + (Math.random() * 2 - 1) * layout[i].r * 1.9
+          tr.y = layout[i].y - layout[i].r - 30 - Math.random() * 170 // staggered above its own ring → a visible flow-in
+          tr.vx = 0; tr.vy = 26
         }
         ts.push(tr)
       }
@@ -800,7 +822,7 @@ export default function HomeFunnel({
       // a person RE-ENTERS as a fresh NEW user, streaming in from off-screen above the FIRST live stage
       const respawn = (tr: Traveler) => {
         const dest = firstLive < 0 ? 0 : firstLive
-        tr.state = 'travel'; tr.orb = dest
+        tr.state = 'travel'; tr.orb = dest; tr.colorOrb = -1 // a fresh user has no stage colour until it reaches one
         tr.sz = 0.82 + Math.random() * 0.38   // a different person each time
         tr.omega = 0.75 + 0.5 * Math.random() // fresh travel speed
         tr.orbitLife = 1.3 + 1.9 * Math.random()
@@ -833,7 +855,7 @@ export default function HomeFunnel({
           // spell (orbitLife) this person DECIDES what to do next: stay, move on to the next stage, or leave.
           const i = tr.orb, ox = orbX(i), oy = layout[i].y, R = layout[i].r
           const tgx = ox + tr.orbitR * Math.cos(tr.theta), tgy = oy + tr.orbitR * Math.sin(tr.theta)
-          tr.vx += (tgx - tr.x) * 3.0 * dt; tr.vy += (tgy - tr.y) * 3.0 * dt
+          tr.vx += (tgx - tr.x) * 2.4 * dt; tr.vy += (tgy - tr.y) * 2.4 * dt // gentler drift → floatier milling
           const dp = 1 - Math.min(0.9, 2.6 * dt); tr.vx *= dp; tr.vy *= dp
           tr.x += tr.vx * dt; tr.y += tr.vy * dt
           if (Math.hypot(tr.x - tgx, tr.y - tgy) < R * 0.14) { tr.orbitR = R * (0.12 + 0.8 * Math.random()); tr.theta = Math.random() * 6.2832 }
@@ -862,7 +884,7 @@ export default function HomeFunnel({
         if (tr.state === 'travel') {
           // a person walking toward ring `orb` — PULLED in faster as it nears — then it joins that circle.
           const R0 = layout[tr.orb].r
-          const SP = 100 * (tr.omega || 1)
+          const SP = 84 * (tr.omega || 1) // slightly slower travel
           const wob = Math.sin((tRef.current + tr.phase) * 1.2) * 14 // gentle lateral weave (per-person phase)
           const tx = orbX(tr.orb) + wob, ty = layout[tr.orb].y
           const dx = tx - tr.x, dy = ty - tr.y, d = Math.hypot(dx, dy) || 1
@@ -870,8 +892,8 @@ export default function HomeFunnel({
           tr.vx += (dx / d * SP * pull - tr.vx) * Math.min(1, dt * 5)
           tr.vy += (dy / d * SP * pull - tr.vy) * Math.min(1, dt * 5)
           tr.x += tr.vx * dt; tr.y += tr.vy * dt
-          if (d < R0 * 0.9) { // arrived → JOIN the circle (start milling)
-            tr.state = 'orbit'; tr.orbitR = R0 * (0.12 + 0.8 * Math.random()); tr.theta = Math.random() * 6.2832
+          if (d < R0 * 0.9) { // arrived → JOIN the circle (start milling) → now wears THIS stage's colour
+            tr.state = 'orbit'; tr.colorOrb = tr.orb; tr.orbitR = R0 * (0.12 + 0.8 * Math.random()); tr.theta = Math.random() * 6.2832
             tr.orbitLife = 1.3 + 1.9 * Math.random(); tr.orbitAge = 0
           }
           continue
@@ -880,7 +902,7 @@ export default function HomeFunnel({
           // flowing ON toward the empty final stage (e.g. Retention 0): drift down the path to that circle and
           // FADE OUT right at its rim → the flow visibly "dies off" there (nobody comes back). Then re-enter at the top.
           const R0 = layout[tr.orb].r
-          const SP = 64 * (tr.omega || 1)
+          const SP = 54 * (tr.omega || 1) // slightly slower drift toward the dead circle
           const wob = Math.sin((tRef.current + tr.phase) * 1.2) * 12
           const tx = orbX(tr.orb) + wob, ty = layout[tr.orb].y
           const dx = tx - tr.x, dy = ty - tr.y, d = Math.hypot(dx, dy) || 1
@@ -964,7 +986,20 @@ export default function HomeFunnel({
     const i = hitStage(p.mx, p.my)
     if (i < 0) return
     const key = stages[i].key
-    if (key) router.push(`/dashboard/insights?stage=${key}`) // straight to THIS stage's own named graph (funnel key → focused insights view)
+    if (!key) return
+    // Weak leg → the create-page shelf that moves this exact number (the store's
+    // rows use the funnel's own stage words); healthy or ungraded → the stage's
+    // own insights graph. Mirrors the drawn pill: only a leg the eye sees as
+    // red/orange re-routes, so the tap always matches what the owner is seeing.
+    const a = i > 0 ? stages[i].count : null
+    const b = i > 0 ? stages[i - 1].count : null
+    const band = a != null && b != null && a > 0 && b > 0 ? bandFor(a / b, key) : null
+    const lens = STAGE_LENS[key]
+    if ((band === 'veryLow' || band === 'low') && lens) {
+      router.push(`/dashboard/campaigns/new?lens=${lens}`)
+      return
+    }
+    router.push(`/dashboard/insights?stage=${key}`) // straight to THIS stage's own named graph (funnel key → focused insights view)
   }
   const onCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const p = ptFrom(e); if (p) pressRef.current.i = hitStage(p.mx, p.my)

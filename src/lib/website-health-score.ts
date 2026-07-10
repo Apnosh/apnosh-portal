@@ -60,7 +60,7 @@ export async function getWebsiteHealth(clientId: string): Promise<WebsiteHealthR
     weight: 12,
     status: websiteUrl ? 'pass' : 'fail',
     message: websiteUrl ? `Set to ${websiteUrl}.` : 'No website URL on file. Add it so we can monitor health.',
-    fixLink: '/dashboard/website/manage',
+    fixLink: '/dashboard/insights/manage',
   })
 
   /* 2. Uptime — the most damaging thing to be wrong. */
@@ -75,7 +75,7 @@ export async function getWebsiteHealth(clientId: string): Promise<WebsiteHealthR
       : uptime === 'degraded' ? 'Site is responding slowly or with errors.'
       : uptime === 'down' ? 'Site is offline. Customers can\'t reach you right now.'
       : 'Uptime monitoring not configured yet.',
-    fixLink: '/dashboard/website/health',
+    fixLink: '/dashboard/insights/health',
   })
 
   /* 3. SSL valid — a broken padlock kills credibility instantly. */
@@ -88,7 +88,7 @@ export async function getWebsiteHealth(clientId: string): Promise<WebsiteHealthR
     message: ssl === true ? 'Valid.'
       : ssl === false ? 'Certificate is invalid or expired. Customers see a "not secure" warning.'
       : 'Not checked yet.',
-    fixLink: '/dashboard/website/health',
+    fixLink: '/dashboard/insights/health',
   })
 
   /* 4. Mobile pagespeed — most restaurant traffic is mobile. */
@@ -106,7 +106,7 @@ export async function getWebsiteHealth(clientId: string): Promise<WebsiteHealthR
       : mobileSpeed >= 80 ? `Fast (${mobileSpeed}/100).`
       : mobileSpeed >= 50 ? `Moderate (${mobileSpeed}/100). Compress images and lazy-load below-the-fold content.`
       : `Slow (${mobileSpeed}/100). Big images or render-blocking scripts. Send a request for us to optimize.`,
-    fixLink: '/dashboard/website/health',
+    fixLink: '/dashboard/insights/health',
   })
 
   /* 5. Desktop pagespeed. */
@@ -123,7 +123,7 @@ export async function getWebsiteHealth(clientId: string): Promise<WebsiteHealthR
       ? 'Not measured yet.'
       : desktopSpeed >= 90 ? `Fast (${desktopSpeed}/100).`
       : `${desktopSpeed}/100.`,
-    fixLink: '/dashboard/website/health',
+    fixLink: '/dashboard/insights/health',
   })
 
   /* 6. Content freshness — restaurants need fresh content. */
@@ -142,7 +142,7 @@ export async function getWebsiteHealth(clientId: string): Promise<WebsiteHealthR
       : daysSinceEdit < 60
         ? `Updated ${daysSinceEdit} day${daysSinceEdit === 1 ? '' : 's'} ago.`
         : `Last update ${daysSinceEdit} days ago. Fresh content helps SEO; request a refresh.`,
-    fixLink: '/dashboard/website/requests/new',
+    fixLink: '/dashboard/insights/requests/new',
   })
 
   /* 7. Google Analytics connected — without it, owners can't see traffic. */

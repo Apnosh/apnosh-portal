@@ -2,17 +2,17 @@
 
 /**
  * Shared bottom nav for the apnosh-mvp owner experience:
- * Home / Campaigns / + Request / Notifications / More.
+ * Home / Campaigns / + Create / Orders / More.
  */
 
 import Link from 'next/link'
-import { Home as HomeIcon, CalendarDays, Plus, Inbox, Menu } from 'lucide-react'
+import { Home as HomeIcon, CalendarDays, Plus, ShoppingBag, Menu } from 'lucide-react'
 
 const C = { green: '#4abd98', greenDk: '#2e9a78', line: '#e6e6ea', navOff: '#aeaeb2' }
 
-// 'messages' is reached from the header (not a bottom tab), so when it's the
-// active key none of the bottom items highlight — that's intentional.
-export type NavKey = 'home' | 'campaigns' | 'inbox' | 'more' | 'messages'
+// 'inbox' (alerts) and 'messages' are reached from the HEADER now (not bottom tabs), so when either is
+// the active key none of the bottom items highlight — that's intentional.
+export type NavKey = 'home' | 'campaigns' | 'orders' | 'inbox' | 'more' | 'messages'
 
 export default function BottomNav({ active }: { active: NavKey }) {
   return (
@@ -23,7 +23,7 @@ export default function BottomNav({ active }: { active: NavKey }) {
         <span style={{ width: 52, height: 52, borderRadius: '50%', background: C.green, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px rgba(74,189,152,0.4)' }}><Plus size={26} /></span>
         <span style={{ fontSize: 10, fontWeight: 500, color: C.navOff }}>Create</span>
       </Link>
-      <Item href="/dashboard/inbox" icon={<Inbox size={21} />} label="Alerts" on={active === 'inbox'} />
+      <Item href="/dashboard/orders" icon={<ShoppingBag size={21} />} label="Orders" on={active === 'orders'} />
       <Item href="/dashboard/more" icon={<Menu size={21} />} label="More" on={active === 'more'} />
     </nav>
   )

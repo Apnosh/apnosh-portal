@@ -21,9 +21,21 @@ const nextConfig: NextConfig = {
     ],
   },
   // The campaign "Needs you" intake consolidated onto /ready; keep old /setup links working.
+  // Plus a safety net for legacy links stored in prod notification rows: the old
+  // /dashboard/{website,social,local-seo,email-sms}/... channel hubs were folded into
+  // /dashboard/insights (one page, no subroutes), and the requests concept folded
+  // into /dashboard/messages.
   async redirects() {
     return [
       { source: '/dashboard/campaigns/:id/setup', destination: '/dashboard/campaigns/:id/ready', permanent: false },
+      { source: '/dashboard/website/:path*', destination: '/dashboard/insights', permanent: false },
+      { source: '/dashboard/social/:path*', destination: '/dashboard/insights', permanent: false },
+      { source: '/dashboard/local-seo/:path*', destination: '/dashboard/insights', permanent: false },
+      { source: '/dashboard/email-sms/:path*', destination: '/dashboard/insights', permanent: false },
+      // :path+ requires at least one segment, so /dashboard/insights itself never
+      // matches and this cannot loop.
+      { source: '/dashboard/insights/:path+', destination: '/dashboard/insights', permanent: false },
+      { source: '/dashboard/requests/:path*', destination: '/dashboard/messages', permanent: false },
     ]
   },
 }

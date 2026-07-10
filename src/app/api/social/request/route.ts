@@ -2,7 +2,7 @@
  * POST /api/social/request
  *
  * Receives a streamlined content request from the client side
- * (src/app/dashboard/social/request) and lands it in the strategist's
+ * (src/app/dashboard/insights/request) and lands it in the strategist's
  * task queue as a `client_tasks` row.
  *
  * Keeping it on client_tasks (instead of the rich

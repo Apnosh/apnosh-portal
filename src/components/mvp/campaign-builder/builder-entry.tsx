@@ -28,7 +28,7 @@ type MenuOpt = { l: string; photo?: string; f?: boolean }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
 type PlanPayload = { itemId: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -66,7 +66,11 @@ function resolveInitialItem(template?: string): string | undefined {
   return TEMPLATE_MAP[template] ?? (CATALOG_IDS.has(template) ? template : undefined)
 }
 
-export default function CampaignBuilderEntry({ template }: { template?: string }) {
+// ?lens= deep-link targets (the browse's funnel-stage shelves). Kept as a closed
+// set so a garbled param falls back to the full browse instead of an empty grid.
+const LENS_IDS = new Set(['aware', 'interest', 'actions', 'orders', 'back', 'programs', 'content'])
+
+export default function CampaignBuilderEntry({ template, lens }: { template?: string; lens?: string }) {
   const router = useRouter()
   const { client } = useClient()
   const [menu, setMenu] = useState<MenuOpt[] | undefined>(undefined)
@@ -81,6 +85,7 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
   // arrives pre-filled from what onboarding already knew instead of static placeholders.
   const [profile, setProfile] = useState<CampaignProfile | null>(null)
   const initialItem = resolveInitialItem(template)
+  const initialLens = lens && LENS_IDS.has(lens) ? lens : undefined
   // Carry profile facts the composer should use into the spec, without asking the owner for what we
   // already know: the neighborhood drives "near me" copy + the ad geo, and the live rating + count
   // let the composer hold paid reach when a low rating is the real ceiling (the reputation move).
@@ -167,15 +172,30 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
   }, [])
 
   // AI recommendations for the catalog (the "Suggested for you" row + featured).
-  // Best-effort: the builder falls back to its static suggested row if this fails.
+  // INSTANT-FIRST: the last ranking renders from localStorage immediately (no
+  // wait, no "finding picks" banner), and we only re-rank in the background when
+  // it's stale — recommendations don't change hour to hour, and this also stops
+  // burning an AI call on every open. First-ever open shows the static suggested
+  // row right away while the first ranking runs. Best-effort all the way down.
   useEffect(() => {
     if (!client?.id) return
     let cancelled = false
-    setRecsLoading(true)
+    const cacheKey = `apnosh-recs-v1-${client.id}`
+    let cached: { recommended?: RecItem[]; ts?: number } | null = null
+    try { cached = JSON.parse(localStorage.getItem(cacheKey) ?? 'null') } catch { cached = null }
+    if (cached?.recommended?.length) setRecommended(cached.recommended)
+    const fresh = typeof cached?.ts === 'number' && Date.now() - cached.ts < 6 * 60 * 60 * 1000
+    if (fresh) return
+    // Banner only when there is nothing personalized to show yet (true first open).
+    setRecsLoading(!cached?.recommended?.length)
     fetch(`/api/campaigns/recommend-items?clientId=${client.id}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (!cancelled && j?.recommended?.length) setRecommended(j.recommended as RecItem[]) })
-      .catch(() => { /* keep the static suggested row */ })
+      .then((j) => {
+        if (cancelled || !j?.recommended?.length) return
+        setRecommended(j.recommended as RecItem[])
+        try { localStorage.setItem(cacheKey, JSON.stringify({ recommended: j.recommended, ts: Date.now() })) } catch { /* storage full/private — fine */ }
+      })
+      .catch(() => { /* keep the cached or static suggested row */ })
       .finally(() => { if (!cancelled) setRecsLoading(false) })
     return () => { cancelled = true }
   }, [client?.id])
@@ -350,6 +370,7 @@ export default function CampaignBuilderEntry({ template }: { template?: string }
         initialItem={initialItem}
         recommended={recommended}
         recsLoading={recsLoading}
+        initialLens={initialLens}
         monthlyCommitment={commitment.perMonth}
         liveCount={commitment.count}
         monthlyCap={monthlyCap}

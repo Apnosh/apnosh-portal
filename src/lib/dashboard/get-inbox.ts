@@ -175,7 +175,7 @@ export async function getInbox(clientId: string, userId?: string): Promise<Inbox
         ? `Scheduled for ${new Date(p.scheduled_for as string).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
         : undefined,
       urgency: 'medium',
-      href: '/dashboard/social/calendar',
+      href: '/dashboard/calendar',
       whenIso: (p.updated_at as string) ?? (p.created_at as string),
       status: 'In review',
       source: 'apnosh',
@@ -195,7 +195,7 @@ export async function getInbox(clientId: string, userId?: string): Promise<Inbox
       title: `New ${rating}-star review`,
       detail: excerpt ? excerpt.slice(0, 120) + (excerpt.length > 120 ? '...' : '') : 'No comment left',
       urgency,
-      href: '/dashboard/local-seo/reviews',
+      href: `/dashboard/reviews/${r.id}`,
       whenIso: r.posted_at as string,
       status: `${rating}★`,
       source: reviewSource,

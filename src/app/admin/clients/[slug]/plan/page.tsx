@@ -2,7 +2,7 @@
  * /admin/clients/[slug]/plan — strategist sets the client's plan tier,
  * monthly rate, and per-service-area monthly allotments.
  *
- * Once saved, the Plan card on /dashboard/social appears for that
+ * Once saved, the Plan card on /dashboard/insights appears for that
  * client showing "X of Y posts used this month" with a progress bar.
  */
 

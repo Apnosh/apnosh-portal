@@ -5,7 +5,7 @@
  *
  * Reads `gbp_metrics` (daily rows) and rolls them up to the requested
  * date range. Returns the raw daily series plus prior-period totals
- * for change comparisons. Powers /dashboard/local-seo/analytics.
+ * for change comparisons. Powers /dashboard/insights/analytics.
  *
  * Unlike the older /dashboard/analytics page (which reads
  * gbp_monthly_data from CSV uploads), this taps the per-client

@@ -2,7 +2,7 @@
  * /work/quotes — cross-client quote pipeline for the strategist.
  *
  * Bucketed by status. Click a quote to land on the same-client quote
- * detail page (which the client owns at /dashboard/social/quotes/[id]).
+ * detail page (which the client owns at /dashboard/insights/quotes/[id]).
  */
 
 import Link from 'next/link'
@@ -86,14 +86,10 @@ function Bucket({ label, tone, rows }: { label: string; tone: 'amber'|'sky'|'eme
 function QuoteRow({ q }: { q: StrategistQuoteRow }) {
   const tone = STATUS[q.status] ?? STATUS.draft
   const ToneIcon = tone.Icon
-  const detailHref = `/dashboard/social/quotes/${q.id}?clientId=${q.clientId}`
-  return (
-    <li>
-      <Link
-        href={detailHref}
-        className="block rounded-xl border bg-white p-3.5 hover:shadow-sm transition-shadow"
-        style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
-      >
+  // The owner-side quote detail page was pruned; the client's admin quotes
+  // list is the surface that still renders this quote.
+  const detailHref = q.clientSlug ? `/admin/clients/${q.clientSlug}/quotes` : null
+  const inner = (
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-0.5">
@@ -116,9 +112,22 @@ function QuoteRow({ q }: { q: StrategistQuoteRow }) {
           <p className="text-[15px] font-bold text-ink tabular-nums flex-shrink-0">
             ${q.total.toFixed(0)}
           </p>
-          <ArrowRight className="w-4 h-4 text-ink-4 flex-shrink-0 mt-1" />
+          {detailHref && <ArrowRight className="w-4 h-4 text-ink-4 flex-shrink-0 mt-1" />}
         </div>
-      </Link>
+  )
+  const rowClass = 'block rounded-xl border bg-white p-3.5'
+  const rowStyle = { borderColor: 'var(--db-border, #e5e5e5)' }
+  return (
+    <li>
+      {detailHref ? (
+        <Link href={detailHref} className={`${rowClass} hover:shadow-sm transition-shadow`} style={rowStyle}>
+          {inner}
+        </Link>
+      ) : (
+        <div className={rowClass} style={rowStyle}>
+          {inner}
+        </div>
+      )}
     </li>
   )
 }

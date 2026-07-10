@@ -63,7 +63,7 @@ export async function getDashboardData(
     actionItems.push({
       icon: 'inbox',
       title: `${pendingApprovals} post${pendingApprovals === 1 ? '' : 's'} ready for your review`,
-      href: '/dashboard/social/inbox',
+      href: '/dashboard/insights/inbox',
     })
   }
   // Flag metric drops > 10%
@@ -73,7 +73,7 @@ export async function getDashboardData(
     actionItems.push({
       icon: 'alert',
       title: `Social reach dropped ${Math.abs(visPct)}% in the last 30 days`,
-      href: '/dashboard/social/performance',
+      href: '/dashboard/insights/performance',
     })
   }
   if (!isNaN(ftPct) && ftPct < -10) {

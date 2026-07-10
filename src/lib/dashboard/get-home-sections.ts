@@ -169,7 +169,7 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
     const rows = (gbp as Record<string, unknown>[]).map(r => ({ date: String(r.date), v: num(r.search_views) + num(r.photo_views) }))
     const st = seriesStats(rows, today, 3)
     const d = pctDelta(st.last7, st.prev7)
-    out.push({ name: 'Local presence', sub: 'Profile views', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: gbpConnected, href: '/dashboard/local-seo' })
+    out.push({ name: 'Local presence', sub: 'Profile views', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: gbpConnected, href: '/dashboard/insights' })
   }
   // Social — reach, falling back to followers when reach insights aren't
   // available (e.g. an Instagram connected via direct login, which gives
@@ -180,7 +180,7 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
     const st = seriesStats(rows, today, 1)
     const d = pctDelta(st.last7, st.prev7)
     if (st.last7 > 0) {
-      out.push({ name: 'Social media', sub: 'Reach', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: socialConnected, href: '/dashboard/social' })
+      out.push({ name: 'Social media', sub: 'Reach', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: socialConnected, href: '/dashboard/insights' })
     } else {
       const latest = socialRows
         .filter(r => r.followers_total != null)
@@ -191,7 +191,7 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
         sub: followers > 0 ? 'Followers' : 'Reach',
         value: fmtCompact(followers),
         delta: '—', dir: 'up', spark: st.spark,
-        connected: socialConnected, href: '/dashboard/social',
+        connected: socialConnected, href: '/dashboard/insights',
       })
     }
   }
@@ -202,7 +202,7 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
     const d = pctDelta(st.last7, st.prev7)
     // Website analytics are script-based (no OAuth record), so a tracked
     // site (data present) counts as connected too, not just an Apnosh build.
-    out.push({ name: 'Website', sub: 'Visitors', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: websiteConnected || st.hasData, href: '/dashboard/website' })
+    out.push({ name: 'Website', sub: 'Visitors', value: fmtCompact(st.last7), delta: d.delta, dir: d.dir, spark: st.spark, connected: websiteConnected || st.hasData, href: '/dashboard/insights' })
   }
   // Reviews — avg rating + new this week (reviews + GBP local_reviews)
   {
@@ -221,7 +221,7 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
     const newCount = revs.filter(r => r.date && new Date(r.date).getTime() >= weekAgo).length
     const rows = revs.filter(r => r.date).map(r => ({ date: String(r.date).slice(0, 10), v: 1 }))
     const st = seriesStats(rows, today)
-    out.push({ name: 'Reviews', sub: 'Avg rating', value: displayRating != null ? displayRating.toFixed(1) + '★' : '—', delta: newCount > 0 ? `+${newCount} new` : '—', dir: 'up', spark: st.spark, connected: gbpConnected || placeRating != null, href: '/dashboard/local-seo/reviews' })
+    out.push({ name: 'Reviews', sub: 'Avg rating', value: displayRating != null ? displayRating.toFixed(1) + '★' : '—', delta: newCount > 0 ? `+${newCount} new` : '—', dir: 'up', spark: st.spark, connected: gbpConnected || placeRating != null, href: '/dashboard/insights/reviews' })
   }
 
   return out

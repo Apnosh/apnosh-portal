@@ -284,7 +284,7 @@ function MonthCard({
           )}
           {isShared && (
             <p className="text-[11px] text-ink-4 ml-2">
-              Client sees this on their /dashboard/social/plan page.
+              Client sees this on their /dashboard/insights/plan page.
             </p>
           )}
         </div>

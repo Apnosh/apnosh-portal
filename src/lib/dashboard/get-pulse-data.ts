@@ -141,7 +141,7 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
         value: fmtCompact(customersThis),
         ...(customersPrev >= 20 ? fmtDelta(customersThis, customersPrev) : { delta: null, up: null }),
         subtitle: 'Calls, directions, bookings',
-        href: '/dashboard/local-seo',
+        href: '/dashboard/insights',
         alert: customersPrev >= 20 && (customersThis / customersPrev) < 0.7,
         series: customersSeries,
       }
@@ -177,7 +177,7 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
         // When we show Google's overall rating, say so; the 30-day fallback
         // keeps its old label.
         subtitle: placeRating !== null ? 'Overall on Google' : 'Last 30 days',
-        href: '/dashboard/local-seo/reviews',
+        href: '/dashboard/insights/reviews',
         alert: displayRating < 3.8,
       }
 
@@ -202,7 +202,7 @@ export async function getPulseData(clientId: string): Promise<PulseData> {
         // from 5 to 0 doesn't deserve a "-100%" headline.
         ...(reachPrev >= 50 ? fmtDelta(reachThis, reachPrev) : { delta: null, up: null }),
         subtitle: 'People who saw your content',
-        href: '/dashboard/social',
+        href: '/dashboard/insights',
         // Only alarm if absolute volume is meaningful (≥100/week) AND it dropped >30%
         alert: reachPrev >= 100 && (reachThis / reachPrev) < 0.7,
         series: reachSeries,

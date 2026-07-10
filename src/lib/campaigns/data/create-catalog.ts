@@ -9,37 +9,58 @@ import type { GoalKey } from '../types'
  *      its own list, but scripts/verify-catalog-ids.ts asserts its ids equal this set.
  * Result: a recommendable id can never drift away from a renderable/plannable one without the guard
  * failing. `goal` is the GoalKey the rules ranker buckets the item under.
+ *
+ * `stages` = the 1-2 Home-funnel legs this item GENUINELY moves, audited against each item's real
+ * composed line items (2026-07-09 catalog audit — e.g. slow-nights is orders+back because half its
+ * plan is retention machinery). Rendered as tags on the campaign cards so owners see which of their
+ * funnel numbers a campaign moves, in the same words Home teaches.
  */
-export const CREATE_CATALOG: { id: string; title: string; goal: GoalKey }[] = [
-  { id: 'reach', title: 'Reach new locals', goal: 'new-customers' },
-  { id: 'nights', title: 'Fill your slow nights', goal: 'slow-nights' },
-  { id: 'firstvisit', title: 'Win first-time visits', goal: 'new-customers' },
-  { id: 'regulars', title: 'Turn first-timers into regulars', goal: 'regulars' },
-  { id: 'catering', title: 'Catering and big orders', goal: 'new-customers' },
-  { id: 'reviewsplan', title: 'Boost reviews and rating', goal: 'reviews' },
-  { id: 'reel', title: 'A short video reel', goal: 'new-customers' },
-  { id: 'story', title: 'A story post', goal: 'new-customers' },
-  { id: 'carousel', title: 'A carousel post', goal: 'new-customers' },
-  { id: 'graphic', title: 'A designed graphic', goal: 'new-customers' },
-  { id: 'dish', title: 'Feature a dish', goal: 'new-customers' },
-  { id: 'gpost', title: 'A Google Business post', goal: 'new-customers' },
-  { id: 'promoevent', title: 'Promote an event', goal: 'slow-nights' },
-  { id: 'launch', title: 'Launch a special', goal: 'new-customers' },
-  { id: 'creator', title: 'Work with a creator', goal: 'new-customers' },
-  { id: 'welcome', title: 'Welcome new subscribers', goal: 'regulars' },
-  { id: 'second', title: 'Nudge a second visit', goal: 'regulars' },
-  { id: 'news', title: 'Monthly newsletter', goal: 'regulars' },
-  { id: 'slowoffer', title: 'Slow-night offer email and text', goal: 'slow-nights' },
-  { id: 'birthday', title: 'Birthday treat', goal: 'regulars' },
-  { id: 'earlyaccess', title: 'Early access for regulars', goal: 'regulars' },
-  { id: 'shoot', title: 'Book a photo and video shoot', goal: 'new-customers' },
-  { id: 'gbp', title: 'Polish your Google profile', goal: 'reviews' },
-  { id: 'reviewsreply', title: 'Reply to reviews', goal: 'reviews' },
-  { id: 'qr', title: 'Add a table QR', goal: 'regulars' },
-  { id: 'friction', title: 'Smooth out ordering', goal: 'new-customers' },
-  { id: 'giftcard', title: 'Push gift cards', goal: 'new-customers' },
-  { id: 'ticket', title: 'Run a ticketed event', goal: 'new-customers' },
-  { id: 'winback', title: 'Win back quiet guests', goal: 'regulars' },
+export type FunnelStage = 'aware' | 'interest' | 'actions' | 'orders' | 'back'
+
+/** Owner-facing tag words — the home-funnel stage labels (short form for chips). */
+export const STAGE_TAG_LABEL: Record<FunnelStage, string> = {
+  aware: 'Awareness',
+  interest: 'Interest',
+  actions: 'Actions',
+  orders: 'Orders',
+  back: 'Retention',
+}
+
+export const CREATE_CATALOG: { id: string; title: string; goal: GoalKey; stages: FunnelStage[] }[] = [
+  { id: 'reach', title: 'Run local ads', goal: 'new-customers', stages: ['aware'] },
+  { id: 'nights', title: 'Fill your slow nights', goal: 'slow-nights', stages: ['orders', 'back'] },
+  { id: 'firstvisit', title: 'Win first-time visits', goal: 'new-customers', stages: ['aware', 'actions'] },
+  { id: 'regulars', title: 'Turn first-timers into regulars', goal: 'regulars', stages: ['back'] },
+  { id: 'catering', title: 'Promote your catering', goal: 'new-customers', stages: ['orders'] },
+  { id: 'reviewsplan', title: 'Boost reviews and rating', goal: 'reviews', stages: ['interest', 'aware'] },
+  { id: 'reel', title: 'A short video reel', goal: 'new-customers', stages: ['interest'] },
+  { id: 'story', title: 'A story post', goal: 'new-customers', stages: ['interest'] },
+  { id: 'graphic', title: 'A social media post', goal: 'new-customers', stages: ['interest'] },
+  { id: 'dish', title: 'Feature a dish', goal: 'new-customers', stages: ['interest'] },
+  { id: 'edit', title: 'Edit my footage', goal: 'new-customers', stages: ['interest'] },
+  { id: 'gpost', title: 'A Google Business post', goal: 'new-customers', stages: ['aware'] },
+  { id: 'listings', title: 'Get listed everywhere', goal: 'new-customers', stages: ['aware'] },
+  { id: 'website', title: 'Fix your website and menu', goal: 'new-customers', stages: ['aware', 'actions'] },
+  { id: 'localseo', title: 'Show up in local search', goal: 'new-customers', stages: ['aware'] },
+  { id: 'delivery', title: 'Tune up your delivery apps', goal: 'new-customers', stages: ['aware', 'orders'] },
+  { id: 'nextdoor', title: 'Get known on Nextdoor', goal: 'new-customers', stages: ['aware'] },
+  { id: 'promoevent', title: 'Promote an event', goal: 'slow-nights', stages: ['orders', 'aware'] },
+  { id: 'launch', title: 'Launch a special', goal: 'new-customers', stages: ['aware', 'orders'] },
+  { id: 'creator', title: 'Work with a creator', goal: 'new-customers', stages: ['aware'] },
+  { id: 'welcome', title: 'Welcome new subscribers', goal: 'regulars', stages: ['back'] },
+  { id: 'news', title: 'Monthly newsletter', goal: 'regulars', stages: ['back'] },
+  { id: 'slowoffer', title: 'Slow-night offer email and text', goal: 'slow-nights', stages: ['orders', 'back'] },
+  { id: 'birthday', title: 'Birthday treat', goal: 'regulars', stages: ['back'] },
+  { id: 'earlyaccess', title: 'Early access for regulars', goal: 'regulars', stages: ['back'] },
+  { id: 'shoot', title: 'Book a photo and video shoot', goal: 'new-customers', stages: ['interest'] },
+  { id: 'gbp', title: 'Polish your Google profile', goal: 'reviews', stages: ['aware', 'actions'] },
+  { id: 'reviewsreply', title: 'Reply to reviews', goal: 'reviews', stages: ['interest'] },
+  { id: 'qr', title: 'Add a table QR', goal: 'regulars', stages: ['actions', 'back'] },
+  { id: 'friction', title: 'Smooth out ordering', goal: 'new-customers', stages: ['actions'] },
+  { id: 'giftcard', title: 'Push gift cards', goal: 'new-customers', stages: ['orders'] },
+  { id: 'ticket', title: 'Run a ticketed event', goal: 'new-customers', stages: ['orders', 'aware'] },
+  { id: 'winback', title: 'Win back quiet guests', goal: 'regulars', stages: ['back'] },
+  { id: 'direct', title: 'Get orders direct', goal: 'regulars', stages: ['actions', 'back'] },
 ]
 
 /** Just the ids, for consumers that only need the closed set (e.g. the deep-link validator). */

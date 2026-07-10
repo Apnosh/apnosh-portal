@@ -2,7 +2,7 @@
 
 /**
  * Reads editorial_themes + the month's scheduled posts so the
- * /dashboard/social/plan page can show "story of the month" + the
+ * /dashboard/insights/plan page can show "story of the month" + the
  * content slated against it.
  */
 

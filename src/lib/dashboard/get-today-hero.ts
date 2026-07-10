@@ -174,7 +174,7 @@ export async function getTodayHero(clientId: string): Promise<TodayHeroData> {
     needsYou.push({
       label: `Reply to ${r.author_name ?? 'a customer'}'s ${rating}-star review`,
       detail: rating <= 3 ? 'Replying within 24 hours measurably improves perception.' : undefined,
-      href: '/dashboard/local-seo/reviews',
+      href: '/dashboard/insights/reviews',
       urgency,
       kind: 'review',
     })
@@ -239,7 +239,7 @@ export async function getTodayHero(clientId: string): Promise<TodayHeroData> {
       type: 'post',
       status: p.status === 'in_review' ? 'In review' : p.status === 'approved' ? 'Approved' : 'Scheduled',
       when: dayLabel,
-      href: '/dashboard/social/calendar',
+      href: '/dashboard/insights/calendar',
     })
     if (thisWeek.length >= 5) break
   }
@@ -314,10 +314,10 @@ export async function getTodayHero(clientId: string): Promise<TodayHeroData> {
       kind = 'strategist'
     } else if (eventType.startsWith('scheduled_post')) {
       kind = 'content'
-      href = '/dashboard/social/calendar'
+      href = '/dashboard/insights/calendar'
     } else if (eventType.startsWith('review')) {
       kind = 'review'
-      href = '/dashboard/local-seo/reviews'
+      href = '/dashboard/insights/reviews'
     }
     recentActivity.push({
       label: summary,

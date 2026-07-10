@@ -77,6 +77,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const clean: Record<string, string> = {}
     // Creative-brief keys + operational setup-intake keys (CampaignExecution). Only listed keys
     // persist; anything else is dropped, so unbounded/injected text can never accrete or reach a prompt.
+    // Deliberately NOT here (owner-forgery-proof, like wrapUpSentAt): gbpFixedAt — the self-serve
+    // Google-profile task's completion stamp is written only by POST /api/campaigns/:id/gbp-fixed,
+    // which re-runs the diagnosis server-side and stamps only on a fresh all-good read.
     for (const k of ['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'setupNotes', 'vendorInfo', 'menuSource', 'setupSkipped']) {
       const v = (e as Record<string, unknown>)[k]
       if (v === undefined) continue
@@ -184,18 +187,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // is what closes the audit's #1 gap: services used to mint NOTHING and had no "done". Idempotent
     // + best-effort; a failure here must never break the ship.
     const swo = await mintServiceWorkOrders(campaign, shipISO).catch(() => ({ minted: 0, expected: 0, error: 'threw' }))
-    // Every fresh order lands in the admin confirmation queue: notify the admins so a
-    // human reviews + confirms it (/admin/campaign-orders sets confirmed_at). Best-effort.
-    ;(async () => {
-      const { createAdminClient } = await import('@/lib/supabase/admin')
-      const { getAdminUserIds, notifyCampaignOrderShipped } = await import('@/lib/notify')
-      const svc = createAdminClient()
-      const [adminIds, client] = await Promise.all([
-        getAdminUserIds(svc),
-        svc.from('clients').select('name').eq('id', campaign.clientId).maybeSingle().then((r) => r.data),
-      ])
-      if (adminIds.length) await notifyCampaignOrderShipped(svc, adminIds, (client?.name as string) ?? 'A client', campaign.draft.name)
-    })().catch(() => {})
+    // Work this ship hands to Apnosh: any included, non-opted-out line the owner is NOT
+    // running themselves. A pure owner-run plan (every line producer 'diy', e.g. the free
+    // self-serve gbp version) creates no order to review and nothing for a team to build.
+    const teamWork = (campaign.draft.items ?? []).some((it) => it.included && !it.optOut && it.producer !== 'diy')
+    if (teamWork) {
+      // Every fresh REAL order lands in the admin confirmation queue: notify the admins so a
+      // human reviews + confirms it (/admin/campaign-orders sets confirmed_at). Best-effort.
+      ;(async () => {
+        const { createAdminClient } = await import('@/lib/supabase/admin')
+        const { getAdminUserIds, notifyCampaignOrderShipped } = await import('@/lib/notify')
+        const svc = createAdminClient()
+        const [adminIds, client] = await Promise.all([
+          getAdminUserIds(svc),
+          svc.from('clients').select('name').eq('id', campaign.clientId).maybeSingle().then((r) => r.data),
+        ])
+        if (adminIds.length) await notifyCampaignOrderShipped(svc, adminIds, (client?.name as string) ?? 'A client', campaign.draft.name)
+      })().catch(() => {})
+    } else {
+      // Nothing for a human to review or build: self-confirm at ship so admins are never
+      // paged about a $0 self-serve order and the owner never reads "your team is looking
+      // it over" about work only they will do. Guarded (first write only) + best-effort;
+      // pre-migration-189 rows without confirmed_at just stay unconfirmed.
+      ;(async () => {
+        const { createAdminClient } = await import('@/lib/supabase/admin')
+        await createAdminClient().from('campaigns').update({ confirmed_at: shipISO }).eq('id', id).is('confirmed_at', null)
+      })().catch(() => {})
+    }
     // Only hand off to staff when there is actually team/creator work to build. A menu
     // campaign whose pieces are all DIY (the owner makes them) is path 'ai' but produces
     // nothing for the team, so the path-based gate above isn't enough.
@@ -210,12 +228,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           link: `/work/drafts?focus=${id}`,
         },
       ).catch(() => ({ notified: 0 }))
-    } else if ((campaign.draft.items ?? []).some((it) => it.included)) {
+    } else if (teamWork) {
       // A service-only plan (SEO, listings, ads — the system goals sell mostly services,
       // not content pieces) mints nothing in either lane, so without this branch the ship
       // reached NOBODY on the Apnosh side: no work item, no handoff, a paid order in a
       // void. Until services get real work items, this handoff IS the work signal.
-      const n = (campaign.draft.items ?? []).filter((it) => it.included).length
+      // Opted-out and owner-run (producer 'diy', e.g. the free self-serve gbp version) lines
+      // are NOT team work — a pure owner-run plan must not page the staff.
+      const n = (campaign.draft.items ?? []).filter((it) => it.included && !it.optOut && it.producer !== 'diy').length
       await notifyStaffForClient(
         campaign.clientId,
         ['strategist', 'community_mgr'],
@@ -273,8 +293,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 // DELETE /api/campaigns/:id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { res } = await authorize(id)
+  const { campaign, res } = await authorize(id)
   if (res) return res
+  // Only a draft can be discarded. A launched campaign has minted real work
+  // (orders, drafts, staff notifications) — the owner path for those is Stop,
+  // which settles in-flight work honestly instead of erasing it.
+  if (campaign && campaign.status !== 'draft') {
+    return NextResponse.json({ error: 'only a draft can be deleted — stop a running campaign instead' }, { status: 409 })
+  }
   // Don't let a delete strand money: a campaign with accrued owner charges or
   // creator payouts has real work that was billed/owed. Deleting would erase the
   // charge (cascade) but orphan the payout (set-null), losing its provenance.

@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
   if (lowReview && lowReview.rating <= 3) {
     attention = {
       label: `${lowReview.rating}★ review needs reply`,
-      href: '/dashboard/local-seo/reviews',
+      href: '/dashboard/insights/reviews',
       urgency: 'high',
     }
   } else if (approvalCount > 0) {
@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
   } else if (lowReview) {
     attention = {
       label: `New ${lowReview.rating}★ review — reply ready`,
-      href: '/dashboard/local-seo/reviews',
+      href: '/dashboard/insights/reviews',
       urgency: 'medium',
     }
   }

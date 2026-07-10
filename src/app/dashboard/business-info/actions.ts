@@ -283,7 +283,7 @@ export async function saveBusinessInfo(input: Partial<BusinessInfo>, opts?: { sy
 
   /* Refresh surfaces that show this data. */
   revalidatePath('/dashboard/business-info')
-  revalidatePath('/dashboard/local-seo/listing')
+  revalidatePath('/dashboard/insights/listing')
   revalidatePath('/dashboard')
 
   return {

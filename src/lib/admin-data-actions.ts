@@ -88,7 +88,7 @@ export async function upsertSocialMetrics(
   if (error || !data) return { success: false, error: error?.message || 'Upsert failed' }
 
   revalidatePath('/admin/clients')
-  revalidatePath('/dashboard/social/performance')
+  revalidatePath('/dashboard/insights/performance')
   return { success: true, data: { id: data.id } }
 }
 
@@ -101,7 +101,7 @@ export async function deleteSocialMetrics(id: string): Promise<ActionResult> {
   if (error) return { success: false, error: error.message }
 
   revalidatePath('/admin/clients')
-  revalidatePath('/dashboard/social/performance')
+  revalidatePath('/dashboard/insights/performance')
   return { success: true }
 }
 
@@ -155,7 +155,7 @@ export async function createReview(
   if (error || !data) return { success: false, error: error?.message || 'Create failed' }
 
   revalidatePath('/admin/clients')
-  revalidatePath('/dashboard/local-seo/reviews')
+  revalidatePath('/dashboard/insights/reviews')
   return { success: true, data: { id: data.id } }
 }
 
@@ -171,7 +171,7 @@ export async function updateReview(
   if (error) return { success: false, error: error.message }
 
   revalidatePath('/admin/clients')
-  revalidatePath('/dashboard/local-seo/reviews')
+  revalidatePath('/dashboard/insights/reviews')
   return { success: true }
 }
 
@@ -184,7 +184,7 @@ export async function deleteReview(id: string): Promise<ActionResult> {
   if (error) return { success: false, error: error.message }
 
   revalidatePath('/admin/clients')
-  revalidatePath('/dashboard/local-seo/reviews')
+  revalidatePath('/dashboard/insights/reviews')
   return { success: true }
 }
 
@@ -283,6 +283,6 @@ export async function upsertWebsiteMetrics(
   if (error || !data) return { success: false, error: error?.message || 'Upsert failed' }
 
   revalidatePath('/admin/clients')
-  revalidatePath('/dashboard/website')
+  revalidatePath('/dashboard/insights')
   return { success: true, data: { id: data.id } }
 }

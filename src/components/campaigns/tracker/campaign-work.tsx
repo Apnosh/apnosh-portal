@@ -54,8 +54,12 @@ export default function CampaignWork({ pieces, nowPieceId, items, goLive, doneSe
 }) {
   const [nowMs] = useState(() => Date.now())   // one clock reading per mount keeps render pure
   const doneSet = new Set(doneSetupIds)
-  // setup already in place (Google connected...) never re-shows as pending — same rule aggregateGoLive uses
-  const services = items.filter((it) => it.included && !it.optOut && !(it.serviceId && doneSet.has(it.serviceId)))
+  // setup already in place (Google connected...) never re-shows as pending — same rule aggregateGoLive uses.
+  // Owner-run lines (producer 'diy', the free self-serve gbp version) are NOT team work: the readiness
+  // page owns them as the owner's own task. Showing one here would frame it as "your team setting up",
+  // and (since the class-window math skips diy) would strand a finished owner-run campaign at a
+  // forever-current "Setting up" node.
+  const services = items.filter((it) => it.included && !it.optOut && it.producer !== 'diy' && !(it.serviceId && doneSet.has(it.serviceId)))
 
   // Real SETUP owed (null = readiness unknown while the page itself says setup is owed).
   const owed: number | null = readiness ? setupOwed(readiness).length : phase === 'setup' ? null : 0

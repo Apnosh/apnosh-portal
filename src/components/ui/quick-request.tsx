@@ -261,7 +261,7 @@ export default function QuickRequest() {
                   {requestId && <p className="text-sm text-ink-3 mt-1">Reference <span className="font-mono font-medium text-ink-2">#{requestId.slice(0, 8)}</span></p>}
                 </div>
                 <p className="text-sm text-ink-3 leading-relaxed">Your team has it and will get started.{scheduled && addToCalendar && runStartDate() ? ' It’s on your calendar too.' : ''} Track it under your requests.</p>
-                <a href="/dashboard/social/requests" className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-dark hover:underline">View your requests <ArrowRight className="w-3.5 h-3.5" /></a>
+                <a href="/dashboard/insights/requests" className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-dark hover:underline">View your requests <ArrowRight className="w-3.5 h-3.5" /></a>
               </div>
             ) : step === 1 ? (
               <div className="p-4 grid grid-cols-2 gap-2.5">

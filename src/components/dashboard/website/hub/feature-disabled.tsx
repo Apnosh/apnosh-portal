@@ -17,7 +17,7 @@ export default function FeatureDisabled({ featureLabel }: Props) {
   return (
     <div className="max-w-[840px] mx-auto px-8 max-sm:px-4 pb-20">
       <Link
-        href="/dashboard/website/manage"
+        href="/dashboard/insights/manage"
         className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink mb-4"
       >
         <ArrowLeft className="w-4 h-4" /> Back to my website
@@ -32,7 +32,7 @@ export default function FeatureDisabled({ featureLabel }: Props) {
           If you&apos;d like to add it, send a quick request and we&apos;ll wire it up.
         </p>
         <Link
-          href="/dashboard/website/requests/new"
+          href="/dashboard/insights/requests/new"
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-ink text-white text-xs font-medium hover:bg-ink/90"
         >
           Send a request <ArrowRight className="w-3.5 h-3.5" />

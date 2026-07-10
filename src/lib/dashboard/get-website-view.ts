@@ -13,7 +13,7 @@ import { prettySource } from '@/lib/website-insights'
 /**
  * Returns a DashboardView-shaped object for Website data, so it can be rendered
  * with the same components (StatusBanner, HeroMetric, TrendChart, MetricGrid,
- * InsightCard, AMNote) used by /dashboard/social and /dashboard/analytics.
+ * InsightCard, AMNote) used by /dashboard/insights and /dashboard/analytics.
  *
  * Data sources:
  *  - website_metrics_monthly: authoritative monthly unique visitors (hero)

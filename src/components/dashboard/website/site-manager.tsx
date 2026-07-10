@@ -123,7 +123,7 @@ export default function SiteManager({ overview, locations }: Props) {
 
         <div className="mt-3 text-xs text-ink-3">
           Need bigger changes (new section, copy rewrite, design tweak)?{' '}
-          <Link href="/dashboard/website/requests/new" className="text-brand hover:underline">
+          <Link href="/dashboard/insights/requests/new" className="text-brand hover:underline">
             Send a change request <ArrowRight className="inline w-3 h-3" />
           </Link>
         </div>

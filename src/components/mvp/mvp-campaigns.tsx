@@ -1,17 +1,18 @@
 'use client'
 
 /**
- * MVP Campaigns — the design's campaign board, wired to real campaigns from
- * /api/campaigns. List + Calendar toggle, All/Live/In production/Drafts/Done
- * filters, and cards that open the campaign detail. Empty until the owner
- * creates one via ＋ New (the build flow).
+ * MVP Campaigns — the RESULTS story: launched campaigns only (in production /
+ * live / done), outcome-forward cards wired to real campaigns from /api/campaigns.
+ * The MONEY story (cart, plan prices, billed-so-far, receipts) lives on the
+ * Orders tab — cards here deliberately carry no dollar amounts. Both tabs open
+ * the same campaign detail page, where all actions (and the honest bill) live.
  */
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useClient } from '@/lib/client-context'
 import {
-  Plus, Repeat, Check, TrendingUp, TrendingDown, Minus, ArrowRight, Clock,
+  Plus, Check, TrendingUp, TrendingDown, Minus, ArrowRight, Clock,
   CalendarDays, Eye, ChevronLeft, ChevronRight, Loader2,
 } from 'lucide-react'
 import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
@@ -31,7 +32,7 @@ const ANIM = `
 @media (prefers-reduced-motion: reduce){.cc-stagger>*{animation:none}}
 `
 
-type Tab = 'all' | 'live' | 'production' | 'draft' | 'done'
+type Tab = 'all' | 'live' | 'production' | 'done'
 
 export default function MvpCampaigns() {
   const { client, loading: clientLoading } = useClient()
@@ -52,18 +53,17 @@ export default function MvpCampaigns() {
     return () => { live = false }
   }, [client?.id])
 
-  const cards: CampCard[] = (saved ?? []).map((c) => campaignCardVM(c, progress[c.draft.id]))
+  // Drafts (unshipped plans) live on the Orders tab now — Campaigns shows only shipped/live/done.
+  const cards: CampCard[] = (saved ?? []).map((c) => campaignCardVM(c, progress[c.draft.id])).filter((c) => c.kind !== 'draft')
   const counts: Record<Tab, number> = {
     all: cards.length,
     live: cards.filter((c) => c.kind === 'live').length,
     production: cards.filter((c) => c.pill === 'In production').length,
-    draft: cards.filter((c) => c.kind === 'draft').length,
     done: cards.filter((c) => c.kind === 'done').length,
   }
   const shown = tab === 'all' ? cards
     : tab === 'live' ? cards.filter((c) => c.kind === 'live')
     : tab === 'production' ? cards.filter((c) => c.pill === 'In production')
-    : tab === 'draft' ? cards.filter((c) => c.kind === 'draft')
     : cards.filter((c) => c.kind === 'done')
 
   const loading = clientLoading || saved === null
@@ -78,7 +78,7 @@ export default function MvpCampaigns() {
       </div>
 
       <div style={{ padding: '16px 18px 0' }}>
-        <p style={{ fontSize: 13.5, color: C.mute, margin: '0 0 16px' }}>Pick a play to run. Open any card to see what it costs and how it&apos;s doing.</p>
+        <p style={{ fontSize: 13.5, color: C.mute, margin: '0 0 16px' }}>How each campaign is doing. Costs and receipts live in <Link href="/dashboard/orders" style={{ color: C.greenDk, fontWeight: 600, textDecoration: 'none' }}>Orders</Link>.</p>
 
         {!empty && (
           <div style={{ display: 'inline-flex', background: '#f1f3f2', borderRadius: 10, padding: 3, marginBottom: 18 }}>
@@ -96,11 +96,11 @@ export default function MvpCampaigns() {
         ) : empty ? (
           <EmptyState />
         ) : view === 'calendar' ? (
-          <CampaignCalendar saved={saved ?? []} />
+          <CampaignCalendar saved={(saved ?? []).filter((c) => c.status !== 'draft')} />
         ) : (
           <>
             <div className="cc-scroll" style={{ display: 'flex', gap: 7, marginBottom: 16, overflowX: 'auto', paddingBottom: 2 }}>
-              {([['all', 'All'], ['live', 'Live'], ['production', 'In production'], ['draft', 'Drafts'], ['done', 'Done']] as const).map(([k, l]) => {
+              {([['all', 'All'], ['live', 'Live'], ['production', 'In production'], ['done', 'Done']] as const).map(([k, l]) => {
                 const on = tab === k; const n = counts[k]
                 return (
                   <button key={k} onClick={() => setTab(k)} style={{ flexShrink: 0, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 7, border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', transition: 'all .15s' }}>
@@ -159,11 +159,8 @@ function CampaignCard({ c }: { c: CampCard }) {
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: tone.pillBg, color: tone.pillC, borderRadius: 99, padding: '2px 8px', fontWeight: 700, fontSize: 11 }}>
             {c.pillIcon === 'check' ? <Check size={11} strokeWidth={3} /> : c.pillIcon === 'calendar' ? <CalendarDays size={11} /> : <span style={{ width: 6, height: 6, borderRadius: 99, background: tone.dot, display: 'inline-block' }} />}{c.pill}
           </span>
-          {c.kind !== 'done' && c.cost && (c.recurring
-            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#eef0ef', color: C.mute, borderRadius: 99, padding: '2px 8px', fontWeight: 700, fontSize: 10 }}><Repeat size={10} /> Recurring</span>
-            : <span style={{ background: '#eef0ef', color: C.mute, borderRadius: 99, padding: '2px 8px', fontWeight: 700, fontSize: 10 }}>One-time</span>)}
         </div>
-        {c.cost && <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 14.5, color: C.ink, flexShrink: 0 }}>{c.cost}</span>}
+        {/* No dollars here on purpose — cost + billed-so-far live on the Orders tab. */}
       </div>
 
       <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, color: C.ink, lineHeight: 1.15, marginBottom: 2 }}>{c.title}</div>

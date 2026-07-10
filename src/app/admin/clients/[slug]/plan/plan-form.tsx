@@ -177,7 +177,7 @@ export default function PlanForm({
           {saving ? 'Saving…' : saved ? 'Saved' : 'Save plan'}
         </button>
         <p className="text-[11px] text-ink-4">
-          Client sees the Plan card on /dashboard/social once allotments are set.
+          Client sees the Plan card on /dashboard/insights once allotments are set.
         </p>
       </div>
     </section>

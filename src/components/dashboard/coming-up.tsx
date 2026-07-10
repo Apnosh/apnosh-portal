@@ -80,7 +80,7 @@ export default function ComingUp({ items }: { items: ComingUpItem[] | null }) {
                   </p>
                 ) : (
                   <Link
-                    href={`/dashboard/social/new?occasion=${encodeURIComponent(item.label)}`}
+                    href={`/dashboard/insights/new?occasion=${encodeURIComponent(item.label)}`}
                     className="text-[11px] hover:underline"
                     style={{ color: 'var(--db-ink-3, #888)' }}
                   >

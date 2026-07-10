@@ -54,7 +54,7 @@ export async function GET(req: Request) {
               kind: 'site_audit',
               title: `Site audit found ${fails.length} issue${fails.length === 1 ? '' : 's'}`,
               body: fails.map(f => f.summary).join(' · '),
-              link: '/dashboard/website',
+              link: '/dashboard/insights',
             })
           }
         }
