@@ -2662,7 +2662,51 @@ function pdpPrice(p, doer) {
   return priceLabel(buildIdFor(p.id));
 }
 
-function ProductPage({ itemId, signals, tier, initialDoer, onBack, onContinue }) {
+/* ---- gbp DIAGNOSIS-led product page (gbp card only) ----
+   The gbp PDP swaps its generic "why this" + "what you get" for the owner's
+   REAL Google-profile status, read from /api/dashboard/gbp-diagnosis. Three
+   states (decideGbpState): A = real gaps, B = all good, C = honest fallback
+   (render today's generic template — never fake a gap or an all-good). */
+const GBP_AMBER = { ink: "#854f0b", bg: "#fdf6e9", line: "#f0dfb8", body: "#5c4a2a", soft: "#7a6534", chip: "#f6e8c9" };
+const GBP_GREEN = { line: "#cdeae0", body: "#3f7d6a", chip: "#d3efe6" };
+
+/** Short, plain gap phrase for one problem section, keyed by (key, status). Every phrase is
+ *  traceable to a real section that graded 'missing' or 'needs-work' in the live payload — we
+ *  never invent a gap. Unknown keys fall back to the section's own honest label so a new
+ *  diagnosis section can never crash or fabricate copy. */
+const GBP_GAP_PHRASE = {
+  hours: { missing: "Your hours are not on Google", "needs-work": "Some days are missing hours" },
+  categories: { missing: "Your main category is not set", "needs-work": "Add more categories to be found" },
+  description: { missing: "You have no description yet", "needs-work": "Your description is too short" },
+  photos: { missing: "You have no photos on Google", "needs-work": "Your photos need a refresh" },
+  menu: { missing: "Your menu is not on Google", "needs-work": "Your menu needs work" },
+  links: { missing: "No website or phone on Google", "needs-work": "Your website or phone is missing" },
+};
+function gbpGapPhrase(section) {
+  const byKey = GBP_GAP_PHRASE[section && section.key];
+  const phrase = byKey && byKey[section.status];
+  if (phrase) return phrase;
+  return `${(section && section.label) || "This part"} needs work`;
+}
+
+/** Decide the gbp PDP state from the live diagnosis payload. HONEST BY CONSTRUCTION:
+ *  A only from real problem sections for THIS client, B only when the read genuinely
+ *  succeeded and EVERY section is 'good', everything else (loading, not connected,
+ *  readFailed, partial read with no conclusive problems, error) → C fallback. */
+function decideGbpState(itemId, diag) {
+  if (itemId !== "gbp" || !diag || diag.error) return { state: "C", problems: [], sectionCount: 0 };
+  const connected = diag.connected === true && diag.readFailed !== true;
+  const sections = Array.isArray(diag.sections) ? diag.sections : [];
+  if (!connected || sections.length === 0) return { state: "C", problems: [], sectionCount: 0 };
+  const problems = sections.filter((s) => s && (s.status === "needs-work" || s.status === "missing"));
+  if (problems.length >= 1) return { state: "A", problems, sectionCount: sections.length };
+  // No problems: only claim "all good" when the read is COMPLETE (every section 'good').
+  // A partial read (some 'unknown') with no problems cannot claim completeness → fallback.
+  if (sections.every((s) => s && s.status === "good")) return { state: "B", problems: [], sectionCount: sections.length };
+  return { state: "C", problems: [], sectionCount: sections.length };
+}
+
+function ProductPage({ itemId, signals, tier, clientId, initialDoer, onBack, onContinue }) {
   const p = catGet(itemId) || CATALOG[0];
   const copy = pdpCopy(itemId) || { promise: p.sub, why: p.sub, expect: "" };
   const derived = whatYouGet(itemId);
@@ -2677,6 +2721,34 @@ function ProductPage({ itemId, signals, tier, initialDoer, onBack, onContinue })
   // Continue turns into "Upgrade to Pro" → billing instead of shipping. Lanes ① and ③ ship as usual.
   const upsellAi = doerCfg && gbpLaneOf(doer) === "ai" && !isProTier(tier);
   const sectionLabel = { fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 10 };
+
+  // gbp only: read the owner's real Google-profile diagnosis. RENDER-FIRST — the page shows the
+  // generic fallback (State C) instantly and swaps to A/B only when a conclusive read lands. Cached
+  // in localStorage with the same stale-while-revalidate idiom as the why-signals cache; keyed by
+  // clientId so a client switch never shows another client's gaps. ~30 min TTL.
+  const [gbpDiag, setGbpDiag] = useState(null);
+  useEffect(() => {
+    if (itemId !== "gbp" || !clientId) return;
+    let cancelled = false;
+    const cacheKey = `apnosh-gbpdiag-v1-${clientId}`;
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem(cacheKey) || "null"); } catch { cached = null; }
+    if (cached && cached.diag) setGbpDiag(cached.diag);
+    const fresh = cached && typeof cached.ts === "number" && Date.now() - cached.ts < 30 * 60 * 1000;
+    if (fresh) return;
+    fetch(`/api/dashboard/gbp-diagnosis?clientId=${clientId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        // An {error} body or a non-object leaves the state as-is → fallback stays honest.
+        if (cancelled || !j || typeof j !== "object" || j.error) return;
+        setGbpDiag(j);
+        try { localStorage.setItem(cacheKey, JSON.stringify({ diag: j, ts: Date.now() })); } catch { /* storage full/private — fine */ }
+      })
+      .catch(() => { /* fallback (State C) shows; nothing is ever faked */ });
+    return () => { cancelled = true; };
+  }, [itemId, clientId]);
+  const { state: gbpState, problems: gbpProblems, sectionCount: gbpSections } = decideGbpState(itemId, gbpDiag);
+  const views30d = signals && typeof signals.views30d === "number" && signals.views30d > 0 ? signals.views30d : null;
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
       <div style={{ flex: 1, overflowY: "auto" }}>
@@ -2698,28 +2770,79 @@ function ProductPage({ itemId, signals, tier, initialDoer, onBack, onContinue })
           <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 25, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.12, letterSpacing: -0.3, margin: 0 }}>{p.title}</h1>
           <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.sub, lineHeight: 1.5, margin: "8px 0 0" }}>{copy.promise}</p>
         </div>
-        {/* Why this, for you — tinted; swaps to the personalized line when signals land. */}
-        <div style={{ padding: "14px 20px 4px" }}>
-          <div style={{ background: TOKENS.mintTint, borderRadius: 16, padding: "14px 16px" }}>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.mintDark, textTransform: "uppercase", marginBottom: 6 }}>Why this, for you</div>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.55 }}>{why}</div>
-          </div>
-        </div>
-        <div style={{ padding: "20px 20px 4px" }}>
-          <div style={sectionLabel}>What you get</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {get.map((g, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
-                <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+        {gbpState === "A" ? (
+          /* STATE A — real gaps: amber card with the honest problem count + up to 4 traceable rows. */
+          <div style={{ padding: "14px 20px 4px" }}>
+            <div style={{ background: GBP_AMBER.bg, border: `1px solid ${GBP_AMBER.line}`, borderRadius: 16, padding: "15px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
+                <span style={{ width: 24, height: 24, borderRadius: 12, background: GBP_AMBER.chip, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={GBP_AMBER.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></svg>
                 </span>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{g}</span>
+                <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, color: GBP_AMBER.ink, lineHeight: 1.25 }}>We checked your profile. {gbpProblems.length} {gbpProblems.length === 1 ? "thing needs" : "things need"} fixing.</div>
               </div>
-            ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {gbpProblems.slice(0, 4).map((s, i) => (
+                  <div key={s.key || i} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 3, background: GBP_AMBER.ink, flexShrink: 0, marginTop: 7 }} />
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: GBP_AMBER.body, lineHeight: 1.45 }}>{gbpGapPhrase(s)}</span>
+                  </div>
+                ))}
+              </div>
+              {views30d != null && (
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: GBP_AMBER.soft, lineHeight: 1.5, marginTop: 13 }}>{views30d.toLocaleString("en-US")} people saw this profile last month. Fixing these turns more of them into visits.</div>
+              )}
+            </div>
           </div>
-        </div>
+        ) : gbpState === "B" ? (
+          /* STATE B — all good: green card, no manufactured urgency; the work now is keeping it fresh. */
+          <div style={{ padding: "14px 20px 4px" }}>
+            <div style={{ background: TOKENS.mintTint, border: `1px solid ${GBP_GREEN.line}`, borderRadius: 16, padding: "15px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: views30d != null ? 11 : 0 }}>
+                <span style={{ width: 24, height: 24, borderRadius: 12, background: GBP_GREEN.chip, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                </span>
+                <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, color: TOKENS.mintDark, lineHeight: 1.25 }}>Your profile looks strong. All {gbpSections} parts are set.</div>
+              </div>
+              {views30d != null && (
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: GBP_GREEN.body, lineHeight: 1.5 }}>{views30d.toLocaleString("en-US")} people saw it last month. The work now is keeping it fresh so you stay ahead.</div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Why this, for you — tinted; swaps to the personalized line when signals land. */}
+            <div style={{ padding: "14px 20px 4px" }}>
+              <div style={{ background: TOKENS.mintTint, borderRadius: 16, padding: "14px 16px" }}>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.mintDark, textTransform: "uppercase", marginBottom: 6 }}>Why this, for you</div>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.55 }}>{why}</div>
+              </div>
+            </div>
+            <div style={{ padding: "20px 20px 4px" }}>
+              <div style={sectionLabel}>What you get</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {get.map((g, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+                    <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                    </span>
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{g}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
         <div style={{ padding: "20px 20px 4px" }}>
-          <div style={sectionLabel}>Who does it</div>
+          {gbpState === "A" ? (
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ ...sectionLabel, marginBottom: 0 }}>How to fix it</div>
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 600, color: TOKENS.faint }}>Your time, or ours</div>
+            </div>
+          ) : gbpState === "B" ? (
+            <div style={sectionLabel}>Keep it fresh</div>
+          ) : (
+            <div style={sectionLabel}>Who does it</div>
+          )}
           {doerCfg ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
               {doerCfg.o.map((opt) => {
@@ -2773,7 +2896,13 @@ function ProductPage({ itemId, signals, tier, initialDoer, onBack, onContinue })
               Continue{price ? ` · ${price}` : ""}
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
             </button>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginTop: 9 }}>Next: make it yours</div>
+            {gbpState === "B" ? (
+              /* All-good state stays shippable (ongoing help) but must NOT manufacture urgency — the
+                 back-to-shelf action is visible and easy so the owner can leave without being pushed. */
+              <button onClick={onBack} style={{ display: "block", margin: "11px auto 0", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.sub, WebkitTapHighlightColor: "transparent" }}>Maybe later</button>
+            ) : (
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginTop: 9 }}>Next: make it yours</div>
+            )}
           </>
         )}
       </div>
@@ -3500,7 +3629,7 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, tier = null, onCreate, onClose, onPlan } = {}) {
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, tier = null, clientId = null, onCreate, onClose, onPlan } = {}) {
   // Deep links (Home suggestions, ?template=) land on the PRODUCT PAGE too, never the bare madlib.
   const [route, setRoute] = useState(() => (initialItem ? { name: "pdp", itemId: buildIdFor(initialItem) } : { name: "browse" }));
 
@@ -3570,6 +3699,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
               itemId={route.itemId}
               signals={whySignals}
               tier={tier}
+              clientId={clientId}
               initialDoer={route.preset && route.preset.doer}
               onBack={backToSource}
               onContinue={(preset) => setRoute({ name: "build", itemId: buildIdFor(route.itemId), from: route.from, rowId: route.rowId, preset: preset || undefined, fromPdp: true })}
