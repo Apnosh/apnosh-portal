@@ -98,7 +98,7 @@ function HeaderLocationSelector() {
 const MVP_EXACT = new Set([
   '/dashboard', '/dashboard/orders', '/dashboard/inbox', '/dashboard/messages', '/dashboard/insights',
   '/dashboard/more', '/dashboard/billing',
-  '/dashboard/assets', '/dashboard/goals', '/dashboard/help',
+  '/dashboard/assets', '/dashboard/goals', '/dashboard/help', '/dashboard/google-profile',
   '/dashboard/insights', '/dashboard/insights', '/dashboard/insights', '/dashboard/insights',
 ])
 const MVP_PREFIX = [
