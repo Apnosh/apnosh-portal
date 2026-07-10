@@ -61,6 +61,17 @@ function specFromVals(vals: Record<string, unknown>): Record<string, string> {
   return spec
 }
 
+/** The gbp "Who does it" lane, decoded from the doer slot string the builder round-trips.
+ *  The single source of the lane→(producer, price, ownerMode) mapping (the jsx renders the same
+ *  strings; the adapter decides what they MEAN). Disjoint by construction: only the AI option
+ *  carries "apnosh ai", only the self option carries "myself"/"yourself", "apnosh" alone is team. */
+export function gbpLaneFromDoer(doer?: string): 'diy' | 'ai' | 'team' {
+  const s = (doer ?? '').toLowerCase()
+  if (/apnosh ai|with ai\b/.test(s)) return 'ai'
+  if (/myself|yourself|by you\b|step by step/.test(s)) return 'diy'
+  return 'team'
+}
+
 export interface BuilderInput { itemId: string; status: string; vals: Record<string, unknown> }
 
 /** Build a real CampaignDraft from the builder output. */
@@ -84,15 +95,24 @@ export function draftFromBuilder({ itemId, vals }: BuilderInput): CampaignDraft 
   // real catalog service priced as a line item, same rail as system moves — so a setup-titled
   // card ("Polish your Google profile") bills the actual setup work, not a $70 post. They lead
   // the item list because they ARE the substance; any content pieces follow as support.
-  // The gbp card's "Who does it" choice (spec.doer, from the madlib): the free self-serve
-  // version keeps the deliverable IN the plan but hands the work to the owner. The marker is
-  // PER-LINE (producer 'diy' + price 0), never campaign-wide, so bundling gbp with billable
-  // lines can never de-bill them. Downstream, that marker means: bills $0 (lineTotal),
-  // no staff work order at ship (service-work-orders.ts skips it), no payment-method ask,
-  // and the shipped campaign asks the owner to run the walkthrough (service-needs.ts).
-  const gbpSelf = itemId === 'gbp' && /step by step/i.test(spec.doer ?? '')
+  // The gbp card's "Who does it" choice (spec.doer, from the madlib / product page). THREE lanes:
+  //   'diy'  — "I'll do it myself": owner-run, plain checklist walkthrough
+  //   'ai'   — "Do it with Apnosh AI": owner-run, AI drafts each fix (Pro-gated post-ship)
+  //   'team' — "Apnosh does it": done-for-you, the team's $365 work order (default)
+  // The two owner-run lanes keep the deliverable IN the plan but hand the work to the owner.
+  // The marker is PER-LINE (producer 'diy' + price 0 + ownerMode), never campaign-wide, so
+  // bundling gbp with billable lines can never de-bill them. Downstream, that marker means:
+  // bills $0 (lineTotal), no staff work order at ship (service-work-orders.ts skips producer
+  // 'diy'), no payment-method ask, and the shipped campaign asks the owner to run the
+  // walkthrough (service-needs.ts) — in the mode ownerMode records. The AI lane's Pro gate is
+  // enforced at run time (the fixer + the gbp-draft endpoint re-check the live tier), never here.
+  const gbpLane = itemId === 'gbp' ? gbpLaneFromDoer(spec.doer) : 'team'
   const svcLines = (serviceIds ?? []).flatMap((id, i) => { const s = serviceById(id); return s ? serviceToLines(s, `li-svc-${i}`) : [] })
-    .map((li): LineItem => (gbpSelf && li.serviceId === 'gbp-setup' ? { ...li, producer: 'diy', price: 0, does: 'You fix it yourself, step by step' } : li))
+    .map((li): LineItem => (
+      (gbpLane === 'diy' || gbpLane === 'ai') && li.serviceId === 'gbp-setup'
+        ? { ...li, producer: 'diy', price: 0, ownerMode: gbpLane, does: gbpLane === 'ai' ? 'You fix it with Apnosh AI, step by step' : 'You fix it yourself, step by step' }
+        : li
+    ))
   // The lead move (non-system goals) is a real, costed operational service (e.g. GBP setup) the plan
   // LEADS with — it rides as the first line item, ahead of the content, surfaced on top by the flow.
   const leadSvc = leadMove ? serviceById(leadMove.serviceId) : undefined

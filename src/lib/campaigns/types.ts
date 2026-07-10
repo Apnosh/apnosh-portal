@@ -127,6 +127,11 @@ export interface LineItem {
   qty?: number
   /** Who makes this piece (Content Menu, per-piece). Undefined on legacy lines. */
   producer?: PieceProducer
+  /** For an OWNER-RUN service line (producer 'diy'): which walkthrough mode the owner
+   *  chose. Today only the gbp-setup line: 'diy' = plain checklist, 'ai' = Apnosh AI
+   *  drafts each fix (Pro-gated). Undefined on team lines and legacy owner-run lines
+   *  (which resolve to the checklist). Persists on campaign_line_items.owner_mode. */
+  ownerMode?: 'diy' | 'ai'
   /** The add-piece brief for this piece (Content Menu). */
   brief?: PieceBrief
   /** This piece's own post date, ISO (Content Menu). v1 uses the campaign date. */

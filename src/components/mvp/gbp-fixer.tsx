@@ -23,6 +23,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { Loader2, Check, ChevronDown, Sparkles, Copy, ExternalLink, Plug } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
+import { isProTier } from '@/lib/entitlements'
 
 /* Wire types for GET /api/dashboard/gbp-diagnosis — mirrors GbpDiagnosis in
    src/lib/gbp-diagnose.ts (that module is server-only, so the shapes are
@@ -80,9 +81,19 @@ const DRAFT_FAIL = 'Could not write a draft right now. Try again in a minute.'
  * pre-filter so we never call on a failed or partial read). The stamp is first-write-wins
  * on the server, so a later visit can never overwrite when the task was finished.
  * Without campaignId nothing changes.
+ *
+ * mode: which walkthrough the owner runs. 'ai' = the section-by-section experience WITH the
+ * "Draft it for me" AI drafting (Pro only). 'diy' = the plain checklist: same diagnosis, no
+ * drafting — each problem section gets a "Fix it on Google" link + the honest self-check.
+ * Defaults to 'ai' (legacy/standalone), but AI is ALSO gated on the LIVE client tier here, so a
+ * non-Pro owner can never see a draft button (belt-and-suspenders with the server mode-resolution
+ * on the /dashboard/google-profile page and the tier gate on the gbp-draft endpoint).
  */
-export default function GbpFixer({ campaignId }: { campaignId?: string }) {
+export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: string; mode?: 'diy' | 'ai' }) {
   const { client, loading: clientLoading } = useClient()
+  // The AI lane unlocks only when the resolved mode is 'ai' AND this client is still Pro; anything
+  // else runs the checklist. A URL/prop alone can never unlock AI without the live Pro entitlement.
+  const effectiveMode: 'diy' | 'ai' = mode === 'ai' && isProTier(client?.tier) ? 'ai' : 'diy'
   const [diag, setDiag] = useState<GbpDiagnosis | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [reload, setReload] = useState(0)
@@ -222,6 +233,7 @@ export default function GbpFixer({ campaignId }: { campaignId?: string }) {
       {!loading && !loadError && diag && diag.connected && !diag.readFailed && (
         <Walkthrough
           diag={diag}
+          mode={effectiveMode}
           taskDone={taskDone}
           openKey={openKey}
           onToggle={(k) => setOpenKey((cur) => (cur === k ? null : k))}
@@ -262,8 +274,10 @@ function NotConnected() {
 
 /* ── The section walkthrough ───────────────────────────────────── */
 
-function Walkthrough({ diag, taskDone, openKey, onToggle, drafting, draft, draftError, copied, onDraft, onCopy }: {
+function Walkthrough({ diag, mode, taskDone, openKey, onToggle, drafting, draft, draftError, copied, onDraft, onCopy }: {
   diag: GbpDiagnosis
+  /** 'ai' = the "Draft it for me" experience; 'diy' = the plain checklist (Fix-it-on-Google links). */
+  mode: 'diy' | 'ai'
   /** The campaign task tied to this walkthrough was just marked done (all-good + PATCH landed). */
   taskDone?: boolean
   openKey: string | null
@@ -313,6 +327,7 @@ function Walkthrough({ diag, taskDone, openKey, onToggle, drafting, draft, draft
             <ProblemCard
               key={s.key}
               section={s}
+              mode={mode}
               open={openKey === s.key}
               onToggle={() => onToggle(s.key)}
               drafting={drafting}
@@ -348,8 +363,9 @@ function DoneRow({ section }: { section: GbpDiagnosisSection }) {
 }
 
 /** A missing / needs-work / unknown section: a card, one expanded at a time. */
-function ProblemCard({ section, open, onToggle, drafting, draft, draftError, copied, onDraft, onCopy }: {
+function ProblemCard({ section, mode, open, onToggle, drafting, draft, draftError, copied, onDraft, onCopy }: {
   section: GbpDiagnosisSection
+  mode: 'diy' | 'ai'
   open: boolean
   onToggle: () => void
   drafting: boolean
@@ -361,9 +377,13 @@ function ProblemCard({ section, open, onToggle, drafting, draft, draftError, cop
 }) {
   const meta = STATUS[section.status as Exclude<GbpSectionStatus, 'good'>] ?? STATUS.unknown
   const wordColor = section.status === 'unknown' ? C.mute : meta.dot
-  // "Draft it for me" exists ONLY for the description (the one AI draft that
+  const actionable = section.status === 'needs-work' || section.status === 'missing'
+  // "Draft it for me" exists ONLY in ai mode, ONLY for the description (the one AI draft that
   // is actually built). Other aiFixable sections get no button yet.
-  const canDraft = section.key === 'description' && (section.status === 'needs-work' || section.status === 'missing')
+  const canDraft = mode === 'ai' && section.key === 'description' && actionable
+  // Checklist (diy) mode: every problem section gets a "Fix it on Google" link + the honest
+  // self-check line instead of an AI draft. AI mode's non-description sections stay as they were.
+  const showFixOnGoogle = mode === 'diy' && actionable
 
   return (
     <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, marginBottom: 10, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
@@ -403,6 +423,7 @@ function ProblemCard({ section, open, onToggle, drafting, draft, draftError, cop
                   onCopy={onCopy}
                 />
               )}
+              {showFixOnGoogle && <FixOnGoogleBlock />}
             </>
           )}
         </div>
@@ -464,6 +485,27 @@ function DraftBlock({ drafting, draft, draftError, copied, onDraft, onCopy }: {
           {draftError}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Checklist (diy) mode: no AI. A link to fix this section on Google + the honest self-check line
+ *  (the walkthrough re-checks your live profile itself, so there is nothing to mark done by hand). */
+function FixOnGoogleBlock() {
+  return (
+    <div style={{ marginTop: 12 }}>
+      <a
+        href="https://business.google.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mvp-row"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', height: 44, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 14.5, fontWeight: 700, textDecoration: 'none' }}
+      >
+        Fix it on Google <ExternalLink size={15} />
+      </a>
+      <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '9px 0 0' }}>
+        Fix this in your Google profile, then come back. We check it for you when you refresh.
+      </p>
     </div>
   )
 }

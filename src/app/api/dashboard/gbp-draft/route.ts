@@ -27,6 +27,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { callStructuredOutput } from '@/lib/campaigns/planning/anthropic'
 import { validateDescription, truncateAtBoundary, DESCRIPTION_MAX } from '@/lib/gbp-apply/validate'
+import { isProTier } from '@/lib/entitlements'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -76,16 +77,23 @@ export async function POST(req: NextRequest) {
   }
 
   const [clientRes, menuRes, bizRes] = await Promise.all([
-    admin.from('clients').select('name, shape_concept').eq('id', clientId).maybeSingle(),
+    admin.from('clients').select('name, shape_concept, tier').eq('id', clientId).maybeSingle(),
     admin.from('menu_items').select('name')
       .eq('client_id', clientId).eq('is_available', true)
       .order('is_featured', { ascending: false }).limit(3),
     admin.from('businesses').select('city, target_location').eq('client_id', clientId).maybeSingle(),
   ])
 
+  const row = clientRes.data as { name?: string | null; shape_concept?: string | null; tier?: string | null } | null
+
+  // Pro gate, enforced at the SERVER (never trust the client UI alone): Apnosh AI drafting is a
+  // Pro/Internal feature. A non-Pro request is refused here even if the button somehow renders.
+  if (!isProTier(row?.tier)) {
+    return NextResponse.json({ error: 'Apnosh AI drafting is on the Pro plan.' }, { status: 403 })
+  }
+
   const facts: Record<string, string | string[]> = {}
 
-  const row = clientRes.data as { name?: string | null; shape_concept?: string | null } | null
   if (row?.name?.trim()) facts.business_name = row.name.trim()
   const concept = row?.shape_concept ? CONCEPT_LABEL[row.shape_concept] : undefined
   if (concept) facts.kind_of_place = concept

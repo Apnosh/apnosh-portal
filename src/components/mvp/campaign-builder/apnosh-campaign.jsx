@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import BottomNav from "../bottom-nav";
 import AppHeader from "../app-header";
 import { priceLabel, ITEM_PRICES } from "@/lib/campaigns/builder/item-prices";
+import { isProTier } from "@/lib/entitlements";
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
 import { pdpCopy } from "@/lib/campaigns/data/create-catalog-content";
 import { whyFor } from "@/lib/campaigns/data/why-for";
@@ -2625,28 +2626,43 @@ function FeaturedDetail({ onClose, onEvent, onDeal, onPost }) {
  *  Derived from QL so a future versioned item renders the picker automatically. */
 const doerSlotFor = (itemId) => (QL[itemId] && QL[itemId].slots && QL[itemId].slots.doer) || null;
 
-/** Pretty display for a doer option string (the QL option stays the source of truth —
- *  the adapter keys on its exact phrasing). Falls back to the raw string. */
-function doerDisplay(opt) {
+/** The gbp lane a doer option string encodes. MUST match gbpLaneFromDoer in the adapter
+ *  (that is the source of truth for what each lane MEANS; this only mirrors the decode so
+ *  the UI can label + gate the same three strings). */
+function gbpLaneOf(opt) {
+  const s = String(opt || "").toLowerCase();
+  if (/apnosh ai|with ai\b/.test(s)) return "ai";
+  if (/myself|yourself|by you\b|step by step/.test(s)) return "diy";
+  return "team";
+}
+
+/** Pretty display for a doer option string. The three gbp lanes get plain, tier-aware copy;
+ *  the AI lane carries a PRO badge and, for non-Pro owners, an "Included in Pro" sub + no price
+ *  (the row still selects — the Continue CTA becomes Upgrade to Pro). Falls back to the raw string. */
+function doerDisplay(opt, tier) {
+  const lane = gbpLaneOf(opt);
+  if (lane === "diy") return { lane, title: "I'll do it myself", sub: "Free. We show you what to fix.", price: "Free", pro: false };
+  if (lane === "ai") {
+    const pro = isProTier(tier);
+    return { lane, title: "Do it with Apnosh AI", sub: pro ? "Free on your plan. AI writes each fix." : "Included in Pro.", price: pro ? "Free" : null, pro: true };
+  }
   const m = String(opt).match(/\$\s?([\d,]+)/);
-  const price = /free/i.test(opt) ? "Free" : m ? `$${m[1]}` : null;
-  if (/apnosh/i.test(opt)) return { title: "Apnosh does it", sub: "The team handles it for you", price };
-  if (/step by step/i.test(opt)) return { title: "You do it, step by step", sub: "We guide you through each step", price: price || "Free" };
-  return { title: String(opt), sub: null, price };
+  return { lane, title: "Apnosh does it", sub: "We fix it all for you.", price: m ? `$${m[1]}` : null, pro: false };
 }
 
 /** The CTA's price label. Reuses ITEM_PRICES/priceLabel; the only extra rule mirrors
- *  planTags exactly: creative work prices as a floor ("Starting $X"). A self-serve doer
- *  pick reads Free, matching the madlib's own free line. */
+ *  planTags exactly: creative work prices as a floor ("Starting $X"). Either owner-run gbp
+ *  lane (diy or ai) reads Free, matching the madlib's own free line. */
 function pdpPrice(p, doer) {
-  if (doer && /step by step/i.test(doer)) return "Free";
+  const lane = doer ? gbpLaneOf(doer) : null;
+  if (lane === "diy" || lane === "ai") return "Free";
   const pr = ITEM_PRICES[buildIdFor(p.id)];
   const creative = p.type === "content" || p.id === "shoot";
   if (creative && pr && pr.oneTime > 0 && !(pr.perMonth > 0)) return `Starting $${pr.oneTime.toLocaleString()}`;
   return priceLabel(buildIdFor(p.id));
 }
 
-function ProductPage({ itemId, signals, initialDoer, onBack, onContinue }) {
+function ProductPage({ itemId, signals, tier, initialDoer, onBack, onContinue }) {
   const p = catGet(itemId) || CATALOG[0];
   const copy = pdpCopy(itemId) || { promise: p.sub, why: p.sub, expect: "" };
   const derived = whatYouGet(itemId);
@@ -2657,6 +2673,9 @@ function ProductPage({ itemId, signals, initialDoer, onBack, onContinue }) {
   const personalWhy = whyFor(itemId, signals);
   const why = personalWhy || copy.why;
   const price = pdpPrice(p, doerCfg ? doer : null);
+  // The AI lane is Pro-only. A non-Pro owner may still SELECT it (the row highlights), but
+  // Continue turns into "Upgrade to Pro" → billing instead of shipping. Lanes ① and ③ ship as usual.
+  const upsellAi = doerCfg && gbpLaneOf(doer) === "ai" && !isProTier(tier);
   const sectionLabel = { fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 10 };
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
@@ -2704,7 +2723,7 @@ function ProductPage({ itemId, signals, initialDoer, onBack, onContinue }) {
           {doerCfg ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
               {doerCfg.o.map((opt) => {
-                const d = doerDisplay(opt);
+                const d = doerDisplay(opt, tier);
                 const on = doer === opt;
                 return (
                   <button key={opt} onClick={() => setDoer(opt)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: on ? TOKENS.mintTint : "#fff", border: on ? `1.5px solid ${TOKENS.mint}` : `1.5px solid ${TOKENS.line}`, borderRadius: 16, padding: "13px 14px", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
@@ -2712,7 +2731,15 @@ function ProductPage({ itemId, signals, initialDoer, onBack, onContinue }) {
                       {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
                     </span>
                     <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: "block", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink }}>{d.title}</span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                        <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink }}>{d.title}</span>
+                        {d.pro && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#eaf7f3", color: "#2e9a78", fontFamily: "Inter, sans-serif", fontSize: 10, fontWeight: 800, letterSpacing: 0.5, borderRadius: 6, padding: "2px 6px" }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="#2e9a78"><path d="M12 2l2.4 6.9L21.6 9l-5.8 4.4 2.2 7-6-4.3-6 4.3 2.2-7L2.4 9l7.2-.1z" /></svg>
+                            PRO
+                          </span>
+                        )}
+                      </span>
                       {d.sub && <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 1 }}>{d.sub}</span>}
                     </span>
                     {d.price && <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: on ? TOKENS.mintDark : TOKENS.ink, flexShrink: 0 }}>{d.price}</span>}
@@ -2731,11 +2758,24 @@ function ProductPage({ itemId, signals, initialDoer, onBack, onContinue }) {
         )}
       </div>
       <div style={{ flexShrink: 0, padding: "12px 20px 16px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-        <button onClick={() => onContinue(doerCfg && doer ? { doer } : null)} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
-          Continue{price ? ` · ${price}` : ""}
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
-        </button>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginTop: 9 }}>Next: make it yours</div>
+        {upsellAi ? (
+          <>
+            {/* Non-Pro picked the AI lane: it does not ship — it points to the upgrade. */}
+            <a href="/dashboard/billing" style={{ width: "100%", height: 52, borderRadius: 26, textDecoration: "none", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
+              Upgrade to Pro
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+            </a>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginTop: 9 }}>Apnosh AI is on the Pro plan. Or pick one of the other two.</div>
+          </>
+        ) : (
+          <>
+            <button onClick={() => onContinue(doerCfg && doer ? { doer } : null)} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
+              Continue{price ? ` · ${price}` : ""}
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+            </button>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginTop: 9 }}>Next: make it yours</div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -2756,12 +2796,14 @@ const MENU = [
   { l: "Cold Brew", p: "$5" },
   { l: "Lemon Olive Oil Cake", p: "$7" },
 ];
-// The gbp card's two "Who does it" versions, priced right on the option so the choice is a real
+// The gbp card's THREE "Who does it" lanes, priced right on the option so the choice is a real
 // decision. The Apnosh price reads from ITEM_PRICES so it can never drift from the real bill.
-// The self-serve option ALWAYS contains "step by step": the adapter (draftFromBuilder) keys on
-// that phrase to mark the gbp-setup line owner-run (producer 'diy', $0, no staff work order).
+// The exact phrasing is load-bearing: the adapter (gbpLaneFromDoer) keys on it to map each lane
+// to (producer, price, ownerMode). "yourself" => diy checklist, "Apnosh AI" => ai drafts (Pro),
+// plain "Apnosh" => the $365 done-for-you team lane. Keep the tokens when editing copy.
+const GBP_DOER_SELF = "done by you yourself, step by step, free";
+const GBP_DOER_AI = "done with Apnosh AI, step by step, free";
 const GBP_DOER_APNOSH = `done for you by Apnosh, $${(ITEM_PRICES.gbp && ITEM_PRICES.gbp.oneTime) || 365}`;
-const GBP_DOER_SELF = "done by you, step by step, free";
 
 const QL = {
   reach: { lead: "Help new locals within {radius} discover you.", slots: { radius: { k: "slider", v: 5, min: 1, max: 50, unit: "mile" } }, extras: [{ id: "paidreach", k: "pick", label: "Paid reach", o: ["yes, run paid ads", "no, keep it organic"], clause: (v) => (v.startsWith("no") ? ", organic only" : ", with paid ads") }] },
@@ -2786,7 +2828,7 @@ const QL = {
   birthday: { lead: "Send {treat} on a guest's birthday, by {channel}.", slots: { treat: { k: "pick", v: "a free dessert", o: ["a free dessert", "a free drink", "a free appetizer", "10% off the table", "a free birthday combo"], custom: true }, channel: { k: "multi", v: ["email", "text"], o: ["email", "text"] } }, extras: [{ id: "limits", k: "text", label: "Add any limits", ph: "dine-in only, valid that week", clause: (v) => `, ${v}` }, { id: "code", k: "text", label: "Add a code", ph: "like BDAY", clause: (v) => `, code ${v}` }] },
   earlyaccess: { lead: "Give subscribers early access to {what}, {timing} before everyone.", slots: { what: { k: "multi", v: ["new menu items"], o: ["new menu items", "events", "specials", "reservations"] }, timing: { k: "pick", v: "a few days", o: ["a day", "a few days", "a week"] } } },
   shoot: { lead: "Book a {kind} shoot of {what}, on {date}.", slots: { kind: { k: "pick", v: "photo and video", o: ["photo", "video", "photo and video"] }, what: { k: "pick", v: "a few key dishes", o: ["your whole menu", "a few key dishes", "one dish", "your space inside", "your storefront", "your team"], custom: true }, date: { k: "date", v: 14 } }, extras: [{ id: "notes", k: "text", label: "Add a note", ph: "must-have shots, the vibe, props, parking", clause: (v) => `, plus ${v}` }] },
-  gbp: { lead: "Update your Google profile: {what}, {doer}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] }, doer: { k: "pick", label: "Who does it", v: GBP_DOER_APNOSH, o: [GBP_DOER_APNOSH, GBP_DOER_SELF] } } },
+  gbp: { lead: "Update your Google profile: {what}, {doer}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] }, doer: { k: "pick", label: "Who does it", v: GBP_DOER_APNOSH, o: [GBP_DOER_SELF, GBP_DOER_AI, GBP_DOER_APNOSH] } } },
   reviewsreply: { lead: "Reply to {which} reviews.", slots: { which: { k: "pick", v: "all", o: ["all", "just critical ones", "4 stars and below", "unanswered ones"] } } },
   qr: { lead: "Add a table QR that {action}.", slots: { action: { k: "pick", v: "grows your list", o: ["grows your list", "collects reviews", "links your menu", "links your socials", "takes orders"] } } },
   friction: { lead: "Make {channel} easier for guests.", slots: { channel: { k: "pick", v: "online ordering", o: ["online ordering", "booking a table", "finding your menu", "joining your list"] } } },
@@ -3105,7 +3147,7 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
         )}
       </div>
       <div style={{ flexShrink: 0, padding: "12px 22px 20px" }}>
-        {itemId === "gbp" && /step by step/i.test(String(vals.doer || ""))
+        {itemId === "gbp" && (gbpLaneOf(vals.doer) === "diy" || gbpLaneOf(vals.doer) === "ai")
           ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>Free. You do the work yourself, and we guide you step by step.</div>
           : priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You approve before anything runs, and only pay when each piece ships.</div>}
         {(() => { const m = monthlyTotalLine(itemId, monthlyCommitment, liveCount, monthlyCap); if (!m) return null;
@@ -3458,7 +3500,7 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, onCreate, onClose, onPlan } = {}) {
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, tier = null, onCreate, onClose, onPlan } = {}) {
   // Deep links (Home suggestions, ?template=) land on the PRODUCT PAGE too, never the bare madlib.
   const [route, setRoute] = useState(() => (initialItem ? { name: "pdp", itemId: buildIdFor(initialItem) } : { name: "browse" }));
 
@@ -3527,6 +3569,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <ProductPage
               itemId={route.itemId}
               signals={whySignals}
+              tier={tier}
               initialDoer={route.preset && route.preset.doer}
               onBack={backToSource}
               onContinue={(preset) => setRoute({ name: "build", itemId: buildIdFor(route.itemId), from: route.from, rowId: route.rowId, preset: preset || undefined, fromPdp: true })}
