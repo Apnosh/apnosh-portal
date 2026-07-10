@@ -81,8 +81,9 @@ function rowToSWO(r: Record<string, unknown>): ServiceWorkOrder {
 export async function mintServiceWorkOrders(campaign: SavedCampaign, shipISO: string): Promise<{ minted: number; expected: number; error?: string }> {
   // Same honest-bill filter every other consumer uses: included, NOT opted out (owner already has it /
   // does it themselves), and a real service (not a content piece). An opted-out line is not billed, so
-  // it must never mint phantom work.
-  const items = (campaign.draft.items ?? []).filter((it) => it.included && !it.optOut && isServiceLine(it.serviceId))
+  // it must never mint phantom work. An owner-run line (producer 'diy' — the free self-serve gbp
+  // version) bills $0 and the OWNER does the work, so it must never mint a staff order either.
+  const items = (campaign.draft.items ?? []).filter((it) => it.included && !it.optOut && it.producer !== 'diy' && isServiceLine(it.serviceId))
   if (!items.length) return { minted: 0, expected: 0 }
 
   const rows = items.map((it) => {

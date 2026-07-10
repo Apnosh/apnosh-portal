@@ -2622,6 +2622,13 @@ const MENU = [
   { l: "Cold Brew", p: "$5" },
   { l: "Lemon Olive Oil Cake", p: "$7" },
 ];
+// The gbp card's two "Who does it" versions, priced right on the option so the choice is a real
+// decision. The Apnosh price reads from ITEM_PRICES so it can never drift from the real bill.
+// The self-serve option ALWAYS contains "step by step": the adapter (draftFromBuilder) keys on
+// that phrase to mark the gbp-setup line owner-run (producer 'diy', $0, no staff work order).
+const GBP_DOER_APNOSH = `done for you by Apnosh, $${(ITEM_PRICES.gbp && ITEM_PRICES.gbp.oneTime) || 365}`;
+const GBP_DOER_SELF = "done by you, step by step, free";
+
 const QL = {
   reach: { lead: "Help new locals within {radius} discover you.", slots: { radius: { k: "slider", v: 5, min: 1, max: 50, unit: "mile" } }, extras: [{ id: "paidreach", k: "pick", label: "Paid reach", o: ["yes, run paid ads", "no, keep it organic"], clause: (v) => (v.startsWith("no") ? ", organic only" : ", with paid ads") }] },
   nights: { lead: "Bring guests in on your {days}, with {offer}, {list}, on {budget}.", slots: { days: { k: "days", v: ["Monday", "Tuesday"] }, offer: { k: "pick", v: "a small deal", o: ["a small deal", "a featured dish", "a happy hour", "a free side with any entree"], custom: true }, list: { k: "pick", v: "reaching your email + text list", o: ["reaching your email + text list", "social only"] }, budget: { k: "pick", v: "the full plan", o: ["a lean start", "the full plan", "an all-in push"] } }, extras: [{ id: "limits", k: "text", label: "Add any limits", ph: "dine-in only, those nights only", clause: (v) => `, ${v}` }] },
@@ -2645,7 +2652,7 @@ const QL = {
   birthday: { lead: "Send {treat} on a guest's birthday, by {channel}.", slots: { treat: { k: "pick", v: "a free dessert", o: ["a free dessert", "a free drink", "a free appetizer", "10% off the table", "a free birthday combo"], custom: true }, channel: { k: "multi", v: ["email", "text"], o: ["email", "text"] } }, extras: [{ id: "limits", k: "text", label: "Add any limits", ph: "dine-in only, valid that week", clause: (v) => `, ${v}` }, { id: "code", k: "text", label: "Add a code", ph: "like BDAY", clause: (v) => `, code ${v}` }] },
   earlyaccess: { lead: "Give subscribers early access to {what}, {timing} before everyone.", slots: { what: { k: "multi", v: ["new menu items"], o: ["new menu items", "events", "specials", "reservations"] }, timing: { k: "pick", v: "a few days", o: ["a day", "a few days", "a week"] } } },
   shoot: { lead: "Book a {kind} shoot of {what}, on {date}.", slots: { kind: { k: "pick", v: "photo and video", o: ["photo", "video", "photo and video"] }, what: { k: "pick", v: "a few key dishes", o: ["your whole menu", "a few key dishes", "one dish", "your space inside", "your storefront", "your team"], custom: true }, date: { k: "date", v: 14 } }, extras: [{ id: "notes", k: "text", label: "Add a note", ph: "must-have shots, the vibe, props, parking", clause: (v) => `, plus ${v}` }] },
-  gbp: { lead: "Update your Google profile: {what}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] } } },
+  gbp: { lead: "Update your Google profile: {what}, {doer}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] }, doer: { k: "pick", label: "Who does it", v: GBP_DOER_APNOSH, o: [GBP_DOER_APNOSH, GBP_DOER_SELF] } } },
   reviewsreply: { lead: "Reply to {which} reviews.", slots: { which: { k: "pick", v: "all", o: ["all", "just critical ones", "4 stars and below", "unanswered ones"] } } },
   qr: { lead: "Add a table QR that {action}.", slots: { action: { k: "pick", v: "grows your list", o: ["grows your list", "collects reviews", "links your menu", "links your socials", "takes orders"] } } },
   friction: { lead: "Make {channel} easier for guests.", slots: { channel: { k: "pick", v: "online ordering", o: ["online ordering", "booking a table", "finding your menu", "joining your list"] } } },
@@ -2944,7 +2951,9 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
         )}
       </div>
       <div style={{ flexShrink: 0, padding: "12px 22px 20px" }}>
-        {priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You approve before anything runs, and only pay when each piece ships.</div>}
+        {itemId === "gbp" && /step by step/i.test(String(vals.doer || ""))
+          ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>Free. You do the work yourself, and we guide you step by step.</div>
+          : priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You approve before anything runs, and only pay when each piece ships.</div>}
         {(() => { const m = monthlyTotalLine(itemId, monthlyCommitment, liveCount, monthlyCap); if (!m) return null;
           return m.warn
             ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: "#fff", background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: "8px 12px", textAlign: "center", marginBottom: 10 }}>{m.text}</div>

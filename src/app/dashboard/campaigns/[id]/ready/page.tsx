@@ -75,7 +75,8 @@ export default function ReadyPage() {
   if (state === 'loading') return shell(<Center><Loader2 size={16} className="animate-spin" /> Loading…</Center>)
   if (state === 'error' || !report) return shell(<Center>Couldn&rsquo;t load this.</Center>)
 
-  const actionsLeft = report.items.filter((i) => i.kind === 'action' && !i.skipped).length
+  // Actions can now finish (the self-checking walkthrough sets done) — a done action is not "left".
+  const actionsLeft = report.items.filter((i) => i.kind === 'action' && !i.skipped && !i.done).length
   const pct = report.total > 0 ? Math.round((report.done / report.total) * 100) : 100
   const allDone = report.done >= report.total && actionsLeft === 0
   const groups = GROUP_ORDER
@@ -167,6 +168,20 @@ function InputCard({ item, value, saving, onChange, onSave }: { item: ReadinessI
 }
 
 function ActionCard({ item, onSkipToggle }: { item: ReadinessItem; onSkipToggle: () => void }) {
+  // A finished action (e.g. the self-checking Google-profile walkthrough) shows a green check
+  // and a quiet link back in, instead of still shouting "Start".
+  if (item.done) {
+    return (
+      <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ width: 16, height: 16, borderRadius: 99, display: 'inline-grid', placeItems: 'center', background: C.green, flexShrink: 0 }}><Check size={11} color="#fff" strokeWidth={3} /></span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>{item.title}</div>
+          <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>Done.</div>
+        </div>
+        {item.href && <a href={item.href} style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: C.greenDk, textDecoration: 'none' }}>{item.actionLabel ?? 'Open'}</a>}
+      </div>
+    )
+  }
   return (
     <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, padding: 14, opacity: item.skipped ? 0.72 : 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>

@@ -614,6 +614,35 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
         })
       }
 
+      // Pure-service cards (Polish your Google profile, listings, welcome emails, …) compose
+      // NO content beats and no lead move, so this review used to render an empty "being
+      // shaped" placeholder. Show the real service line(s) instead — the same card the system
+      // branch uses — so the owner sees exactly what they are buying. An owner-run line
+      // (producer 'diy', the free self-serve gbp version) says so plainly and reads Free.
+      if (!initial.leadMove && beats.length === 0 && services.length > 0) {
+        out.push({ kind: 'chapter', id: 'svc-only', badge: 1, tone: TONE_NOTICE, title: 'What you get', caption: lead || undefined })
+        const seenSvc = new Set<string>()
+        for (const it of services) {
+          const sid = it.serviceId ?? ''
+          if (!sid || seenSvc.has(sid)) continue
+          seenSvc.add(sid)
+          const info = moveInfo(sid)
+          const ownerRun = services.filter((l) => l.serviceId === sid).every((l) => l.producer === 'diy')
+          out.push({
+            kind: 'card', id: `svc-${sid}`,
+            node: {
+              variant: 'service', Icon: moveIcon(sid), title: info.plain,
+              deliverable: ownerRun ? 'You do this one yourself. We walk you through it, step by step.' : info.deliverable,
+              priceShort: ownerRun ? 'Free' : info.priceShort,
+              spine: false, included: ownerRun ? [] : info.included, pieces: ownerRun ? undefined : info.pieces,
+              channels: SERVICE_CHANNELS[sid],
+              // Expandable (tap shows the detail) but not removable — this card IS the plan.
+              onOpen: noop,
+            },
+          })
+        }
+      }
+
       const pushBeat = (b: Beat, key: string) => {
         const tint = tintFor(b.type)
         out.push({

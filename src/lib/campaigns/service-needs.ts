@@ -22,7 +22,10 @@ export function deriveServiceNeeds(
   opts: { doneSetup: Set<string>; hasMenuItems: boolean; hasAddress: boolean; hasPaymentMethod?: boolean; exec: CampaignExecution },
 ): ReadinessItem[] {
   const { doneSetup, hasMenuItems, hasAddress, hasPaymentMethod = true, exec } = opts
-  const svc = (campaign.draft.items ?? []).filter((it) => it.included && !isContent(it.serviceId))
+  // Team-need asks derive only from work the TEAM will actually do: an opted-out line or an
+  // owner-run line (producer 'diy') mints no staff work, so it must never generate "so we can
+  // set it up" asks (the owner-run gbp line gets its own walkthrough task below instead).
+  const svc = (campaign.draft.items ?? []).filter((it) => it.included && !it.optOut && it.producer !== 'diy' && !isContent(it.serviceId))
   const ids = new Set(svc.map((s) => s.serviceId).filter((x): x is string => !!x))
   const out: ReadinessItem[] = []
   const seen = new Set<string>()
@@ -34,6 +37,22 @@ export function deriveServiceNeeds(
   const billsAnything = (campaign.draft.items ?? []).some((it) => it.included && !it.optOut && (it.price ?? 0) > 0)
   if (!hasPaymentMethod && billsAnything && campaign.draft.path !== 'diy') {
     push({ id: 'payment-method', kind: 'action', group: 'Info', title: 'Add a payment method', why: 'Each piece bills only when it ships. A card on file keeps the work moving.', actionLabel: 'Add card', href: '/dashboard/billing', done: false })
+  }
+
+  // ── the self-serve Google profile fix (the gbp card's free "I do it myself" version) ──
+  // The deliverable IS the owner's own walkthrough, so the ask is the work itself. `done` flips
+  // only when the SERVER's own fresh ALL-GOOD diagnosis stamps execution.gbpFixedAt (POST
+  // /api/campaigns/:id/gbp-fixed; the key is not owner-writable) — self-checking, never self-claimed.
+  const diyGbp = (campaign.draft.items ?? []).some((it) => it.included && !it.optOut && it.serviceId === 'gbp-setup' && it.producer === 'diy')
+  if (diyGbp) {
+    push({
+      id: 'gbp-fix', kind: 'action', group: 'Access',
+      title: 'Fix your Google profile',
+      why: 'We walk you through it section by section, in plain words. It checks itself as you go.',
+      actionLabel: exec.gbpFixedAt ? 'Open' : 'Start',
+      href: `/dashboard/google-profile?campaignId=${campaign.draft.id}`,
+      done: !!exec.gbpFixedAt,
+    })
   }
 
   // ── gate-driven needs: each setup service's external dependency implies one owner-facing ask ──

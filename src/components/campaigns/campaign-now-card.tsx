@@ -89,7 +89,9 @@ export default function CampaignNowCard({ diy, phase, progress, outcomes, nowPie
       )}
 
       {phase === 'done' && !hasVerdict && (
-        <div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>{rollup?.plain ?? `All ${total} pieces posted. Numbers land a few days after each one.`}</div>
+        // total 0 done = a finished owner-run plan (nothing was minted to post) — "All 0
+        // pieces posted" would be false and weird, so say what actually happened.
+        <div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>{rollup?.plain ?? (total > 0 ? `All ${total} pieces posted. Numbers land a few days after each one.` : 'You finished every task in this campaign.')}</div>
       )}
 
       {/* approvals with no inline door (team-lane reviews) — this link is their ONE door */}

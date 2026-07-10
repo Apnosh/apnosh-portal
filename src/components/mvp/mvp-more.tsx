@@ -13,7 +13,7 @@
 
 import Link from 'next/link'
 import {
-  Store, Palette, Plug, Image as ImageIcon, Target, MapPin,
+  Store, Palette, Plug, Image as ImageIcon, Target,
   Headset, HelpCircle,
   CreditCard, FileText, Settings,
   ChevronRight, LogOut,
@@ -42,7 +42,8 @@ const GROUPS: { title: string; rows: Row[] }[] = [
       { label: 'Business info & hours', sub: 'Hours, menu, photos', href: '/dashboard/business-info', Icon: Store },
       { label: 'Brand & audience', sub: 'Voice, audience, competitors', href: '/dashboard/business-info/brand', Icon: Palette },
       { label: 'Connected accounts', sub: 'Instagram, Google, Yelp', href: '/dashboard/connected-accounts', Icon: Plug },
-      { label: 'Fix your Google profile', sub: 'Check it section by section', href: '/dashboard/google-profile', Icon: MapPin },
+      // 'Fix your Google profile' moved out of settings: it is now a campaign deliverable
+      // (the gbp card's free self-serve version links to /dashboard/google-profile?campaignId=).
       { label: 'Photos & files', sub: 'Logo, photos, videos', href: '/dashboard/assets', Icon: ImageIcon },
       { label: 'Your goals', sub: 'What to focus on', href: '/dashboard/goals', Icon: Target },
     ],

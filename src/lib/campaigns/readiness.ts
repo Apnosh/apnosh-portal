@@ -77,8 +77,12 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   // ── content inputs (persist to campaigns.execution, feed the brief) ──────────
   // DIY campaigns mint no creator orders/brief, so these inputs would be dead
   // data — DIY readiness is action-only (schedule, channels, brand/contact).
+  // Same for service-only plans (a Google-profile fix, listings sync): nothing
+  // creative is being made, so "what should we feature" would be a dead ask.
   const isDiy = campaign.draft.path === 'diy'
-  if (!isDiy) {
+  const hasContentWork = (campaign.draft.brief?.contentBeats?.length ?? 0) > 0
+    || (campaign.draft.items ?? []).some((it) => it.included && !it.optOut && /^content-/.test(it.serviceId ?? ''))
+  if (!isDiy && hasContentWork) {
     // Seed from the madlib answers so these read as a CONFIRM, not a from-scratch re-ask — the owner
     // already named the dish and offer once. done still requires the saved execution value.
     const specFeature = campaign.draft.brief?.spec?.feature?.trim() || ''
@@ -113,9 +117,11 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   // finish their part without connecting accounts right now — each stays visible to undo. The in-campaign
   // work actions (approve concepts / review pieces) are the real work and are never skippable.
   const skipped = new Set((exec.setupSkipped ?? '').split(',').map((s) => s.trim()).filter(Boolean))
+  // gbp-fix (the self-serve Google-profile walkthrough) is the campaign's actual deliverable —
+  // skipping it would skip the campaign, so it is never deferrable.
   for (const it of items) {
     if (it.kind !== 'action') continue
-    if (it.id !== 'concepts' && it.id !== 'review') it.skippable = true
+    if (it.id !== 'concepts' && it.id !== 'review' && it.id !== 'gbp-fix') it.skippable = true
     if (it.skippable && skipped.has(it.id)) it.skipped = true
   }
 

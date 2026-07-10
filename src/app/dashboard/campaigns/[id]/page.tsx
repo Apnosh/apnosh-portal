@@ -17,7 +17,7 @@ import { aggregateGoLive } from '@/lib/campaigns/aggregate-golive'
 import { reconcileBeatsToLines } from '@/lib/campaigns/catalog'
 import { vibeForCampaign, creativeRolesForCampaign } from '@/lib/campaigns/creators'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
-import { shippedStatus, ownerSetupComplete, servicesSettingUp, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
+import { shippedStatus, ownerSetupComplete, servicesSettingUp, ownerRunWorkDone, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
 import { AUDIENCES, CHANNELS } from '@/lib/campaigns/data/campaign-templates'
 import PlayCard from '@/components/campaigns/play-card'
 import LineCard from '@/components/campaigns/line-card'
@@ -236,7 +236,7 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReloa
   const shipped = camp.status === 'shipped' || stopped   // stopped renders the shipped-style view
   const inReview = !shipped && camp.phase === 'review'
   const diy = camp.draft.path === 'diy'
-  const st = shipped ? shippedStatus(progress, (camp.draft.brief?.contentBeats?.length ?? 0) > 0, ownerSetupComplete(camp), servicesSettingUp(camp)) : null
+  const st = shipped ? shippedStatus(progress, (camp.draft.brief?.contentBeats?.length ?? 0) > 0, ownerSetupComplete(camp), servicesSettingUp(camp), ownerRunWorkDone(camp)) : null
 
   // One narrator: pick the piece the Now card embeds (a genuinely approvable ready piece first, then in
   // production the top piece), the honest when-line inputs, and hand the same ids to the bands so

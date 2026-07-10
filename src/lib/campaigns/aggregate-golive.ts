@@ -67,6 +67,9 @@ export function aggregateGoLive(
   const today = fromISO.slice(0, 10)
   const gates = new Set<string>()
   const done = new Set(opts?.doneSetupIds ?? [])
+  // A line the team will NOT do (opted out, or owner-run producer 'diy' like the free
+  // self-serve gbp version) can never gate "we're live" — the estimate times OUR work only.
+  services = services.filter((it) => !it.optOut && it.producer !== 'diy')
 
   // ── 1. setup track: slowest REMAINING setup wins (they run concurrently), incl. its external gate.
   //      Anything already in place (passed in `done`) is skipped — 0 time, listed under alreadyDone. ──
