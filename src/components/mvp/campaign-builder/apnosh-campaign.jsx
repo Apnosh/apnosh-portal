@@ -2839,8 +2839,6 @@ function similarCards(itemId) {
 function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer, initialOptions, onBack, onContinue, onOpenCard }) {
   const p = catGet(itemId) || CATALOG[0];
   const copy = pdpCopy(itemId) || { promise: p.sub, why: p.sub, expect: "" };
-  const derived = whatYouGet(itemId);
-  const get = derived.length ? derived : (DETAIL_GET[p.type] || DETAIL_GET.plan);
   const doerCfg = doerSlotFor(itemId);
   const [doer, setDoer] = useState(initialDoer || (doerCfg ? doerCfg.v : null));
   // Personalized only from THIS client's real signals; otherwise the authored fallback.
@@ -2887,9 +2885,17 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   // The bold outcome headline: uses the owner's REAL monthly views when the card's job is about
   // being found, else a confident non-numeric line. Aspirational, never a guaranteed result.
   const isGbp = p.id === "gbp";
+  // The headline AGREES with the live diagnosis state so it never claims gaps when the profile
+  // is all-good (or the reverse): A = fix framing, B = maintain framing, C = neutral aspiration.
+  // The real monthly-views number lives HERE (the zone-2 line no longer repeats it). Never a
+  // guaranteed result or an invented percentage.
   const heroHeadline = (() => {
     const v = views30d ? views30d.toLocaleString("en-US") : null;
-    if (isGbp) return v ? `Help more of the ${v} who find you each month walk in.` : "Be the easy yes when neighbors search you.";
+    if (isGbp) {
+      if (gbpState === "A") return v ? `Fix what's missing so more of the ${v} who find you walk in.` : "Fix what's missing so more people walk in.";
+      if (gbpState === "B") return v ? `Keep showing up for the ${v} who already find you.` : "Keep showing up for the people who already find you.";
+      return v ? `Help more of the ${v} who find you each month walk in.` : "Be the easy yes when neighbors search you.";
+    }
     const seen = (ITEM_STAGES[p.id] || []).includes("aware");
     if (seen && v) return `Get in front of more of the ${v} who find you each month.`;
     return copy.promise || p.sub;
@@ -2909,6 +2915,16 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   const aiOpt = doerCfg ? doerCfg.o.find((o) => gbpLaneOf(o) === "ai") : null;
   const teamOpt = doerCfg ? doerCfg.o.find((o) => gbpLaneOf(o) === "team") : null;
   const gbpLane = doerCfg ? gbpLaneOf(doer) : "team";
+  // "What you get" recomposes LIVE from the chosen version + the toggled options — the same
+  // state that drives the price — so switching lane or adding an option updates it at once.
+  // A base group (framed by version for gbp) + one titled group per selected add-on service.
+  const getSections = (() => {
+    const secs = whatYouGet(itemId, { version: doerCfg ? gbpLane : null, optionServiceIds: selected });
+    // Honest fallback: a card that derives no base rows keeps a plain by-type promise so the
+    // sell page is never empty (the option groups, if any, still carry real bullets).
+    if (secs[0] && secs[0].rows.length === 0) secs[0] = { ...secs[0], rows: DETAIL_GET[p.type] || DETAIL_GET.plan };
+    return secs;
+  })();
 
   // ── Live buy-box math. Base comes from the selected VERSION (owner-run gbp lanes are Free);
   //    options add their REAL catalog price (recurring vs one-time kept separate). ──
@@ -3023,7 +3039,7 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
                 ))}
               </div>
               {views30d != null && (
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: GBP_AMBER.soft, lineHeight: 1.5, marginTop: 13 }}>{views30d.toLocaleString("en-US")} people saw this profile last month. Fixing these turns more of them into visits.</div>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: GBP_AMBER.soft, lineHeight: 1.5, marginTop: 13 }}>You already get found. Fixing these turns more of those views into visits.</div>
               )}
             </div>
           </div>
@@ -3038,33 +3054,53 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
                 <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, color: TOKENS.mintDark, lineHeight: 1.25 }}>Your profile looks strong. All {gbpSections} parts are set.</div>
               </div>
               {views30d != null && (
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: GBP_GREEN.body, lineHeight: 1.5 }}>{views30d.toLocaleString("en-US")} people saw it last month. The work now is keeping it fresh so you stay ahead.</div>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: GBP_GREEN.body, lineHeight: 1.5 }}>You showed up plenty last month. The work now is keeping it fresh so you stay ahead.</div>
               )}
             </div>
           </div>
         ) : (
-          <>
-            {/* Why this, for you — tinted; swaps to the personalized line when signals land. */}
-            <div style={{ padding: "14px 20px 4px" }}>
-              <div style={{ background: TOKENS.mintTint, borderRadius: 16, padding: "14px 16px" }}>
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.mintDark, textTransform: "uppercase", marginBottom: 6 }}>Why this, for you</div>
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.55 }}>{why}</div>
-              </div>
+          /* State C — no diagnosis-led card: the generic "why this, for you". "What you get"
+             is rendered separately below for EVERY state (it is core to the shopping choice). */
+          <div style={{ padding: "14px 20px 4px" }}>
+            <div style={{ background: TOKENS.mintTint, borderRadius: 16, padding: "14px 16px" }}>
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.mintDark, textTransform: "uppercase", marginBottom: 6 }}>Why this, for you</div>
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.55 }}>{why}</div>
             </div>
-            <div style={{ padding: "20px 20px 4px" }}>
-              <div style={sectionLabel}>What you get</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {get.map((g, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
-                    <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-                    </span>
-                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{g}</span>
-                  </div>
-                ))}
-              </div>
+          </div>
+        )}
+        {/* ── WHAT YOU GET — LIVE from the version + options, shown for EVERY state (gbp too).
+              Base group first, then one titled sub-group per selected add-on with its REAL
+              catalog bullets and a "/mo" hint when the option is recurring. ── */}
+        {getSections.some((s) => s.rows.length > 0) && (
+          <div style={{ padding: "20px 20px 4px" }}>
+            <div style={sectionLabel}>What you get</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {getSections[0].rows.map((g, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+                  <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                  </span>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{g}</span>
+                </div>
+              ))}
             </div>
-          </>
+            {getSections.slice(1).map((sec, si) => (
+              <div key={si} style={{ marginTop: 15, background: TOKENS.mintTint, borderRadius: 14, padding: "12px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 9 }}>
+                  <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.mintDark }}>{sec.title}</span>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, color: TOKENS.mintDark, textTransform: "uppercase" }}>{sec.recurring ? "Added /mo" : "Added"}</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {sec.rows.map((r, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 3 }}><path d="M20 6L9 17l-5-5" /></svg>
+                      <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink, lineHeight: 1.45 }}>{r}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
         <div style={{ padding: "20px 20px 4px" }}>
           {gbpState === "A" ? (
