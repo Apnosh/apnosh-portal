@@ -22,7 +22,6 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
-import { CartProvider } from '@/lib/cart-context'
 import { ToastProvider } from '@/components/ui/toast'
 import { RealtimeProvider } from '@/lib/realtime'
 import { ClientProvider, useClient } from '@/lib/client-context'
@@ -37,7 +36,6 @@ const AgentChat = dynamic(() => import('@/components/dashboard/agent-chat'), { s
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <CartProvider>
       <ToastProvider>
         <RealtimeProvider>
           {/* ClientProvider reads useSearchParams (admin ?clientId= handoff),
@@ -53,7 +51,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Suspense>
         </RealtimeProvider>
       </ToastProvider>
-    </CartProvider>
   )
 }
 
@@ -99,7 +96,7 @@ function HeaderLocationSelector() {
    so this layout adds nothing. Everything else under /dashboard is a legacy
    desktop deep tool and gets the thin back-header. */
 const MVP_EXACT = new Set([
-  '/dashboard', '/dashboard/inbox', '/dashboard/messages', '/dashboard/insights',
+  '/dashboard', '/dashboard/orders', '/dashboard/inbox', '/dashboard/messages', '/dashboard/insights',
   '/dashboard/more', '/dashboard/billing',
   '/dashboard/assets', '/dashboard/goals', '/dashboard/help',
   '/dashboard/insights', '/dashboard/insights', '/dashboard/insights', '/dashboard/insights',

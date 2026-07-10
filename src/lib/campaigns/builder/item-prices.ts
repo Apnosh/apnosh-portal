@@ -8,15 +8,13 @@
  */
 import { draftFromBuilder } from './adapter'
 import { summarize } from '@/lib/campaigns/types'
+import { CREATE_CATALOG_IDS } from '@/lib/campaigns/data/create-catalog'
 
 export interface ItemPrice { oneTime: number; perMonth: number }
 
-const IDS = [
-  'reach', 'nights', 'firstvisit', 'regulars', 'catering', 'reviewsplan', 'reel', 'story',
-  'carousel', 'graphic', 'dish', 'gpost', 'promoevent', 'launch', 'creator', 'welcome',
-  'second', 'news', 'slowoffer', 'birthday', 'earlyaccess', 'shoot', 'gbp', 'reviewsreply',
-  'qr', 'friction', 'giftcard', 'ticket', 'winback',
-]
+// Priced ids come from the single-source catalog — a hardcoded copy here once
+// drifted the moment items were merged/renamed (the 2026-07-09 recompose).
+const IDS = CREATE_CATALOG_IDS
 
 function compute(): Record<string, ItemPrice> {
   const out: Record<string, ItemPrice> = {}

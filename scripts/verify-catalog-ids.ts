@@ -30,11 +30,14 @@ console.log('\n== every recommendable id composes a real plan ==')
 let allReal = true
 const bad: string[] = []
 for (const id of CREATE_CATALOG_IDS) {
-  const p = composePlanForGoal(id, {}) as { tpl?: { name?: string; contentPlan?: unknown[] }; moves?: unknown[] }
+  const p = composePlanForGoal(id, {}) as { tpl?: { name?: string; contentPlan?: unknown[] }; moves?: unknown[]; serviceIds?: string[] }
   const beats = p.tpl?.contentPlan?.length ?? 0
   const moves = p.moves?.length ?? 0
+  // Real included services (ItemShape.services, the hollow-card recompose) are a
+  // valid plan body: the adapter prices each as a real line item.
+  const services = p.serviceIds?.length ?? 0
   const named = !!p.tpl?.name && p.tpl.name !== 'New campaign'
-  if (!((beats > 0 || moves > 0) && named)) { allReal = false; bad.push(`${id}(name=${p.tpl?.name},beats=${beats},moves=${moves})`) }
+  if (!((beats > 0 || moves > 0 || services > 0) && named)) { allReal = false; bad.push(`${id}(name=${p.tpl?.name},beats=${beats},moves=${moves},services=${services})`) }
 }
 ok(allReal, `all ${CREATE_CATALOG_IDS.length} compose a named, non-empty plan${bad.length ? ` (broken: ${bad.join('; ')})` : ''}`)
 

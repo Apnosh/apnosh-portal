@@ -2,7 +2,8 @@
 
 /**
  * /dashboard/campaigns — the Campaigns board, full-screen owner experience.
- * Runs on sample campaign data (no campaign model yet); see mvp-campaigns.tsx.
+ * Wired to real campaigns via GET /api/campaigns; see mvp-campaigns.tsx. Shows
+ * shipped / live / done only — unshipped drafts live on the Orders tab.
  */
 
 import MvpCampaigns from '@/components/mvp/mvp-campaigns'

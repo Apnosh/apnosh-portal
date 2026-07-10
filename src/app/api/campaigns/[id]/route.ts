@@ -273,8 +273,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 // DELETE /api/campaigns/:id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const { res } = await authorize(id)
+  const { campaign, res } = await authorize(id)
   if (res) return res
+  // Only a draft can be discarded. A launched campaign has minted real work
+  // (orders, drafts, staff notifications) — the owner path for those is Stop,
+  // which settles in-flight work honestly instead of erasing it.
+  if (campaign && campaign.status !== 'draft') {
+    return NextResponse.json({ error: 'only a draft can be deleted — stop a running campaign instead' }, { status: 409 })
+  }
   // Don't let a delete strand money: a campaign with accrued owner charges or
   // creator payouts has real work that was billed/owed. Deleting would erase the
   // charge (cascade) but orphan the payout (set-null), losing its provenance.

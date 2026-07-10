@@ -66,7 +66,7 @@ export interface BuilderInput { itemId: string; status: string; vals: Record<str
 /** Build a real CampaignDraft from the builder output. */
 export function draftFromBuilder({ itemId, vals }: BuilderInput): CampaignDraft {
   const spec = specFromVals(vals)
-  const { tpl, occasion, goalKey, ads, heldAds, leadMove, moves, stages } = composePlanForGoal(itemId, spec)
+  const { tpl, occasion, goalKey, ads, heldAds, leadMove, moves, stages, serviceIds } = composePlanForGoal(itemId, spec)
 
   const composed = composeCampaign(tpl, spec)
   // Targeting drives WHO, not paid spend. An audience reached via paid 'ads' (new-locals,
@@ -80,11 +80,17 @@ export function draftFromBuilder({ itemId, vals }: BuilderInput): CampaignDraft 
   // (multi-price services like Nextdoor → a setup line + a monthly line). These ARE the plan, so they
   // lead the item list; a system plan has no content beats, so baseItems is empty.
   const moveLines = (moves ?? []).flatMap((m, i) => { const s = serviceById(m.serviceId); return s ? serviceToLines(s, `li-mv-${i}`) : [] })
+  // An item's REAL included services (ItemShape.services, the hollow-card recompose): each is a
+  // real catalog service priced as a line item, same rail as system moves — so a setup-titled
+  // card ("Polish your Google profile") bills the actual setup work, not a $70 post. They lead
+  // the item list because they ARE the substance; any content pieces follow as support.
+  const svcLines = (serviceIds ?? []).flatMap((id, i) => { const s = serviceById(id); return s ? serviceToLines(s, `li-svc-${i}`) : [] })
   // The lead move (non-system goals) is a real, costed operational service (e.g. GBP setup) the plan
   // LEADS with — it rides as the first line item, ahead of the content, surfaced on top by the flow.
   const leadSvc = leadMove ? serviceById(leadMove.serviceId) : undefined
   const leadLine = leadSvc ? serviceToLine(leadSvc, 'li-lead') : undefined
-  const items = moveLines.length ? [...moveLines, ...baseItems] : (leadLine ? [leadLine, ...baseItems] : baseItems)
+  const withServices = svcLines.length ? [...svcLines, ...baseItems] : baseItems
+  const items = moveLines.length ? [...moveLines, ...withServices] : (leadLine ? [leadLine, ...withServices] : withServices)
   const bill = summarize(items)
   const path: BuildPath = 'strategist'  // owner approves, Apnosh builds
 

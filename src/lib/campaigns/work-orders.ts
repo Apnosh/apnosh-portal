@@ -891,6 +891,29 @@ export async function getCampaignCharges(campaignId: string): Promise<CampaignCh
   return { accruedCents: data.reduce((s, c) => s + ((c.amount_cents as number) ?? 0), 0), count: data.length }
 }
 
+/** Batch form of getCampaignCharges for list surfaces (the Orders money view):
+ *  one query across all launched campaigns; ids with no charges get no key.
+ *  Returns NULL on query failure (not {}) so callers can render "unknown"
+ *  instead of asserting a false "$0 billed". */
+export async function getCampaignChargesBatch(campaignIds: string[]): Promise<Record<string, CampaignCharges> | null> {
+  if (campaignIds.length === 0) return {}
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('campaign_charges')
+    .select('campaign_id, amount_cents, status')
+    .in('campaign_id', campaignIds)
+    .in('status', ['accrued', 'invoiced', 'paid'])
+  if (error || !data) return null
+  const out: Record<string, CampaignCharges> = {}
+  for (const c of data) {
+    const id = c.campaign_id as string
+    const cur = out[id] ?? (out[id] = { accruedCents: 0, count: 0 })
+    cur.accruedCents += (c.amount_cents as number) ?? 0
+    cur.count += 1
+  }
+  return out
+}
+
 /**
  * Publish bridge: when the owner approves a creator delivery, materialize the
  * piece as a content_draft (status 'draft' — a team finalization to-do) carrying

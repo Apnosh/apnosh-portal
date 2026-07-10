@@ -11,8 +11,11 @@ import CampaignBuilderEntry from '@/components/mvp/campaign-builder/builder-entr
 
 export const dynamic = 'force-dynamic'
 
-export default async function NewCampaignPage({ searchParams }: { searchParams: Promise<{ template?: string | string[] }> }) {
+export default async function NewCampaignPage({ searchParams }: { searchParams: Promise<{ template?: string | string[]; lens?: string | string[] }> }) {
   const sp = await searchParams
   const template = typeof sp.template === 'string' ? sp.template : undefined
-  return <CampaignBuilderEntry template={template} />
+  // ?lens=<stage> opens the browse pre-filtered to one funnel-stage shelf — the
+  // Home funnel's weak-leg tap lands here (aware/interest/actions/orders/back).
+  const lens = typeof sp.lens === 'string' ? sp.lens : undefined
+  return <CampaignBuilderEntry template={template} lens={lens} />
 }

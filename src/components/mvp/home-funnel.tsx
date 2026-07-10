@@ -68,6 +68,9 @@ function bandFor(rate: number, key: string): HealthBand {
   const b = LEG_BANDS[key] ?? DEFAULT_BANDS
   return rate <= b.veryLow ? 'veryLow' : rate <= b.low ? 'low' : rate <= b.average ? 'average' : rate <= b.high ? 'high' : 'veryHigh'
 }
+// Funnel stage → the create page's matching shelf (its ROWS/lens ids). The store
+// speaks the funnel's words, so a weak leg taps straight into what fixes it.
+const STAGE_LENS: Record<string, string> = { shown: 'aware', engaged: 'interest', moved: 'actions', camein: 'orders', back: 'back' }
 const HEALTH_RED: [number, number, number] = [229, 72, 77]
 // the 5-band health ramp: very low → very high = red → orange-red → yellow → light green → green.
 const BAND_RGB: Record<HealthBand, [number, number, number]> = {
@@ -983,7 +986,20 @@ export default function HomeFunnel({
     const i = hitStage(p.mx, p.my)
     if (i < 0) return
     const key = stages[i].key
-    if (key) router.push(`/dashboard/insights?stage=${key}`) // straight to THIS stage's own named graph (funnel key → focused insights view)
+    if (!key) return
+    // Weak leg → the create-page shelf that moves this exact number (the store's
+    // rows use the funnel's own stage words); healthy or ungraded → the stage's
+    // own insights graph. Mirrors the drawn pill: only a leg the eye sees as
+    // red/orange re-routes, so the tap always matches what the owner is seeing.
+    const a = i > 0 ? stages[i].count : null
+    const b = i > 0 ? stages[i - 1].count : null
+    const band = a != null && b != null && a > 0 && b > 0 ? bandFor(a / b, key) : null
+    const lens = STAGE_LENS[key]
+    if ((band === 'veryLow' || band === 'low') && lens) {
+      router.push(`/dashboard/campaigns/new?lens=${lens}`)
+      return
+    }
+    router.push(`/dashboard/insights?stage=${key}`) // straight to THIS stage's own named graph (funnel key → focused insights view)
   }
   const onCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const p = ptFrom(e); if (p) pressRef.current.i = hitStage(p.mx, p.my)
