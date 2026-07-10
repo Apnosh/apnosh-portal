@@ -5,6 +5,8 @@ import BottomNav from "../bottom-nav";
 import AppHeader from "../app-header";
 import { priceLabel, ITEM_PRICES } from "@/lib/campaigns/builder/item-prices";
 import { isProTier } from "@/lib/entitlements";
+import { serviceById, cadenceOf, plainNameOf } from "@/lib/campaigns/catalog";
+import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-turnaround";
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
 import { pdpCopy } from "@/lib/campaigns/data/create-catalog-content";
 import { whyFor } from "@/lib/campaigns/data/why-for";
@@ -2706,7 +2708,112 @@ function decideGbpState(itemId, diag) {
   return { state: "C", problems: [], sectionCount: sections.length };
 }
 
-function ProductPage({ itemId, signals, tier, clientId, initialDoer, onBack, onContinue }) {
+/* ============================================================
+   Section 1 — the product page as an Amazon+Fiverr shop: sell → pick a version →
+   add priced options → see when you'll have it → cross-sell + a buy box. Every
+   option, price, deliverable, and time traces to REAL catalog/pricing data. No
+   invented options, prices, deliverables, or numbers.
+   ============================================================ */
+
+/** REAL, curated add-on services per card. Every id is a real catalog serviceId — the option row
+ *  reads its label, price, and deliverables straight from the catalog (serviceById), so we never
+ *  invent an option, a price, or a deliverable. A card not listed here honestly shows NO options.
+ *  Each id is a genuine ADJACENT service, never the card's own already-included service. */
+const CARD_OPTIONS = {
+  gbp: ["gbp-posts", "review-responses"],
+  gpost: ["gbp-posts"],
+  reviewsplan: ["review-responses"],
+};
+
+/** cadence-aware price-delta label for one option row (e.g. "+$85/mo", "+$120"). */
+function optionDelta(s) {
+  const { price, cadence } = cadenceOf(s);
+  if (cadence.kind === "recurring") return `+$${price.toLocaleString()}/mo`;
+  if (cadence.kind === "per-occurrence") return `+$${price.toLocaleString()} each`;
+  return `+$${price.toLocaleString()}`;
+}
+function optionIsRecurring(s) { return cadenceOf(s).cadence.kind === "recurring"; }
+
+/** Sum selected options into {oneTime, perMonth} from each service's REAL catalog price. */
+function optionsMoney(ids) {
+  let oneTime = 0, perMonth = 0;
+  for (const id of ids) {
+    const s = serviceById(id); if (!s) continue;
+    const { price, cadence } = cadenceOf(s);
+    if (cadence.kind === "recurring") perMonth += price; else oneTime += price;
+  }
+  return { oneTime, perMonth };
+}
+
+/** Plain money label for a {oneTime, perMonth} pair ("$365 + $250/mo", "$250/mo", "Free"). */
+function moneyLabel(oneTime, perMonth) {
+  const parts = [];
+  if (oneTime > 0) parts.push(`$${oneTime.toLocaleString()}`);
+  if (perMonth > 0) parts.push(`$${perMonth.toLocaleString()}/mo`);
+  return parts.length ? parts.join(" + ") : "Free";
+}
+
+/* Minimal local plan-draft store (Section 1). COLLECT-ONLY: it saves the owner's picks to
+   localStorage so nothing is lost, but ships and bills NOTHING. Section 2 formalizes the cart. */
+const PLAN_DRAFT_KEY = "apnosh-plan-draft-v1";
+function addToPlanDraft(entry) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PLAN_DRAFT_KEY) || "[]");
+    const list = Array.isArray(raw) ? raw : [];
+    list.push(entry);
+    localStorage.setItem(PLAN_DRAFT_KEY, JSON.stringify(list));
+    return true;
+  } catch { return false; }
+}
+
+/** An honest, clearly-labeled delivery estimate for the selected config. Uses the REAL
+ *  service-turnaround data where we have it (gbp's setup window + Google's own review gate),
+ *  else a plain range from the card's cadence. Owner-run gbp lanes have no work order. */
+function configTimeline(p, gbpLane, optionIds) {
+  const lines = [];
+  if (gbpLane === "diy" || gbpLane === "ai") {
+    lines.push("You can start today and go at your own pace.");
+  } else if (p.id === "gbp") {
+    const t = SERVICE_TURNAROUND["gbp-setup"];
+    lines.push(`Most of your profile is fixed in about ${etaLabelFor("gbp-setup")} after you approve.`);
+    if (t && t.gate && t.gate.note) lines.push(t.gate.note);
+  } else {
+    const byCad = {
+      setup: "About 1 to 2 weeks after you approve.",
+      once: "About 3 to 7 days after you approve.",
+      group: "Built around the date you pick.",
+      recurring: "Starts within about a week, then runs on its own.",
+      auto: "Set up in a few days, then runs on its own.",
+    };
+    lines.push(byCad[p.cad] || "About 1 week after you approve.");
+  }
+  for (const id of optionIds) {
+    const s = serviceById(id); if (!s || !optionIsRecurring(s)) continue;
+    const t = SERVICE_TURNAROUND[id];
+    if (t && t.class === "recurring") lines.push(`${plainNameOf(s)} starts within ${t.startsWithin.min} to ${t.startsWithin.max} days, then runs every month.`);
+  }
+  return lines;
+}
+
+/** 2-3 related cards for cross-sell, chosen by a shared funnel stage (real adjacency from
+ *  ITEM_STAGES); falls back to the same card type when no stage overlaps. Excludes the current card. */
+function similarCards(itemId) {
+  const mine = ITEM_STAGES[itemId] || [];
+  const self = catGet(itemId);
+  return CATALOG
+    .filter((c) => c.id !== itemId)
+    .map((c) => {
+      const stages = ITEM_STAGES[c.id] || [];
+      const shared = stages.filter((s) => mine.includes(s)).length;
+      return { c, shared, sameType: !!(self && c.type === self.type) };
+    })
+    .filter((x) => x.shared > 0 || x.sameType)
+    .sort((a, b) => (b.shared - a.shared) || (Number(b.sameType) - Number(a.sameType)))
+    .slice(0, 3)
+    .map((x) => x.c);
+}
+
+function ProductPage({ itemId, signals, tier, clientId, initialDoer, initialOptions, onBack, onContinue, onOpenCard }) {
   const p = catGet(itemId) || CATALOG[0];
   const copy = pdpCopy(itemId) || { promise: p.sub, why: p.sub, expect: "" };
   const derived = whatYouGet(itemId);
@@ -2749,6 +2856,50 @@ function ProductPage({ itemId, signals, tier, clientId, initialDoer, onBack, onC
   }, [itemId, clientId]);
   const { state: gbpState, problems: gbpProblems, sectionCount: gbpSections } = decideGbpState(itemId, gbpDiag);
   const views30d = signals && typeof signals.views30d === "number" && signals.views30d > 0 ? signals.views30d : null;
+
+  // ── ZONE 4 options: this card's REAL add-on services (validated against the live catalog). ──
+  const optServices = (CARD_OPTIONS[itemId] || []).map((id) => serviceById(id)).filter(Boolean);
+  const [selected, setSelected] = useState(() => {
+    const seed = Array.isArray(initialOptions) ? initialOptions : [];
+    return seed.filter((id) => optServices.some((s) => s.id === id));
+  });
+  const [openOpt, setOpenOpt] = useState(null);
+  const toggleOpt = (id) => setSelected((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
+  const pro = isProTier(tier);
+  // The gbp AI lane, if this card has one — the zone-4 "Add Apnosh AI" row selects THIS version so
+  // the account upgrade and the picked version stay one state (never two conflicting truths).
+  const aiOpt = doerCfg ? doerCfg.o.find((o) => gbpLaneOf(o) === "ai") : null;
+  const teamOpt = doerCfg ? doerCfg.o.find((o) => gbpLaneOf(o) === "team") : null;
+  const gbpLane = doerCfg ? gbpLaneOf(doer) : "team";
+
+  // ── Live buy-box math. Base comes from the selected VERSION (owner-run gbp lanes are Free);
+  //    options add their REAL catalog price (recurring vs one-time kept separate). ──
+  const laneFree = doerCfg && (gbpLane === "diy" || gbpLane === "ai");
+  const baseP = ITEM_PRICES[buildIdFor(p.id)] || { oneTime: 0, perMonth: 0 };
+  const base = laneFree ? { oneTime: 0, perMonth: 0 } : baseP;
+  const optM = optionsMoney(selected);
+  const totalOneTime = base.oneTime + optM.oneTime;
+  const totalPerMonth = base.perMonth + optM.perMonth;
+  const creative = p.type === "content" || p.id === "shoot";
+  const totalLabel = (totalOneTime === 0 && totalPerMonth === 0) ? "Free" : `${creative && totalOneTime > 0 ? "From " : ""}${moneyLabel(totalOneTime, totalPerMonth)}`;
+
+  const [added, setAdded] = useState(false);
+  const [rushOpen, setRushOpen] = useState(false);
+  // Section 1 handoffs: version + options ride into the passthrough exactly as `doer` does today.
+  const buildPreset = () => {
+    const pr = {};
+    if (doerCfg && doer) pr.doer = doer;
+    if (selected.length) pr.options = selected;
+    return Object.keys(pr).length ? pr : null;
+  };
+  const onAddToPlan = () => {
+    addToPlanDraft({ itemId, version: doerCfg ? doer : null, options: selected, at: Date.now() });
+    setAdded(true);
+    setTimeout(() => setAdded(false), 1800);
+  };
+  const timeline = configTimeline(p, gbpLane, selected);
+  const similar = similarCards(itemId);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
       <div style={{ flex: 1, overflowY: "auto" }}>
@@ -2769,6 +2920,11 @@ function ProductPage({ itemId, signals, tier, clientId, initialDoer, onBack, onC
           </div>
           <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 25, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.12, letterSpacing: -0.3, margin: 0 }}>{p.title}</h1>
           <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.sub, lineHeight: 1.5, margin: "8px 0 0" }}>{copy.promise}</p>
+          {/* ZONE 1 price — shown up top like a shop, from the real estimate (priceLabel/pdpPrice). */}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 7, marginTop: 12 }}>
+            <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 600, color: TOKENS.ink }}>{price || "Free"}</span>
+            {price && price !== "Free" && <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.faint }}>to start</span>}
+          </div>
         </div>
         {gbpState === "A" ? (
           /* STATE A — real gaps: amber card with the honest problem count + up to 4 traceable rows. */
@@ -2875,36 +3031,155 @@ function ProductPage({ itemId, signals, tier, clientId, initialDoer, onBack, onC
           )}
         </div>
         {copy.expect && (
-          <div style={{ padding: "18px 20px 24px" }}>
+          <div style={{ padding: "16px 20px 4px" }}>
             <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.faint, lineHeight: 1.5 }}>{copy.expect}</div>
           </div>
         )}
-      </div>
-      <div style={{ flexShrink: 0, padding: "12px 20px 16px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
-        {upsellAi ? (
-          <>
-            {/* Non-Pro picked the AI lane: it does not ship — it points to the upgrade. */}
-            <a href="/dashboard/billing" style={{ width: "100%", height: 52, borderRadius: 26, textDecoration: "none", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
-              Upgrade to Pro
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
-            </a>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginTop: 9 }}>Apnosh AI is on the Pro plan. Or pick one of the other two.</div>
-          </>
-        ) : (
-          <>
-            <button onClick={() => onContinue(doerCfg && doer ? { doer } : null)} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
-              Continue{price ? ` · ${price}` : ""}
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
-            </button>
-            {gbpState === "B" ? (
-              /* All-good state stays shippable (ongoing help) but must NOT manufacture urgency — the
-                 back-to-shelf action is visible and easy so the owner can leave without being pushed. */
-              <button onClick={onBack} style={{ display: "block", margin: "11px auto 0", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.sub, WebkitTapHighlightColor: "transparent" }}>Maybe later</button>
-            ) : (
-              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginTop: 9 }}>Next: make it yours</div>
-            )}
-          </>
+
+        {/* ── ZONE 4 — options: real add-on services, each expands to its catalog deliverables.
+              Toggling one genuinely adds/removes its serviceId from the composed draft (svcLines),
+              so the live total + the plan update for real. Cards with no honest options skip this. ── */}
+        {(optServices.length > 0 || (doerCfg && aiOpt)) && (
+          <div style={{ padding: "20px 20px 4px" }}>
+            <div style={sectionLabel}>Add options</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {optServices.map((s) => {
+                const on = selected.includes(s.id);
+                const open = openOpt === s.id;
+                const del = s.deliverables && Array.isArray(s.deliverables.included) ? s.deliverables.included : [];
+                return (
+                  <div key={s.id} style={{ border: on ? `1.5px solid ${TOKENS.mint}` : `1.5px solid ${TOKENS.line}`, borderRadius: 16, background: on ? TOKENS.mintTint : "#fff", overflow: "hidden" }}>
+                    <button onClick={() => { toggleOpt(s.id); setOpenOpt(open && on ? null : s.id); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: "transparent", border: "none", padding: "13px 14px", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+                      <span style={{ width: 20, height: 20, borderRadius: 6, border: on ? "none" : `1.5px solid ${TOKENS.dash}`, background: on ? TOKENS.mint : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
+                      </span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink }}>{plainNameOf(s)}</span>
+                        {s.deliverables && s.deliverables.summary && <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 1, lineHeight: 1.4 }}>{s.deliverables.summary}</span>}
+                      </span>
+                      <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: on ? TOKENS.mintDark : TOKENS.ink, flexShrink: 0 }}>{optionDelta(s)}</span>
+                    </button>
+                    <button onClick={() => setOpenOpt(open ? null : s.id)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, background: "transparent", border: "none", borderTop: `1px solid ${on ? "rgba(74,189,152,0.25)" : TOKENS.line}`, padding: "8px 14px", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: TOKENS.sub, WebkitTapHighlightColor: "transparent" }}>
+                      {open ? "Hide what's included" : "See what's included"}
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? "rotate(180deg)" : "none" }}><path d="M6 9l6 6 6-6" /></svg>
+                    </button>
+                    {open && (
+                      <div style={{ padding: "4px 16px 14px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                          {del.map((d, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                              <span style={{ width: 5, height: 5, borderRadius: 3, background: TOKENS.mint, flexShrink: 0, marginTop: 7 }} />
+                              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink, lineHeight: 1.45 }}>{d}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {optionIsRecurring(s) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, marginTop: 9 }}>Runs every month. Stop anytime.</div>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* AI Pro — an ACCOUNT upgrade, not a per-campaign line. It ties to the real Pro
+                  entitlement: for a Pro/Internal client it is already included; otherwise it selects
+                  the AI version and points to billing. No fabricated monthly price (none is modeled). */}
+              {doerCfg && aiOpt && (
+                pro ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, border: `1.5px solid ${TOKENS.line}`, borderRadius: 16, background: "#fff", padding: "13px 14px" }}>
+                    <span style={{ width: 20, height: 20, borderRadius: 10, background: TOKENS.mint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink }}>Apnosh AI</span>
+                      <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 1 }}>Included in your plan.</span>
+                    </span>
+                  </div>
+                ) : (
+                  <button onClick={() => setDoer(gbpLane === "ai" ? (teamOpt || doerCfg.v) : aiOpt)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", border: gbpLane === "ai" ? `1.5px solid ${TOKENS.mint}` : `1.5px solid ${TOKENS.line}`, borderRadius: 16, background: gbpLane === "ai" ? TOKENS.mintTint : "#fff", padding: "13px 14px", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+                    <span style={{ width: 20, height: 20, borderRadius: 6, border: gbpLane === "ai" ? "none" : `1.5px solid ${TOKENS.dash}`, background: gbpLane === "ai" ? TOKENS.mint : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {gbpLane === "ai" && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                        <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink }}>Add Apnosh AI to your plan</span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#eaf7f3", color: "#2e9a78", fontFamily: "Inter, sans-serif", fontSize: 10, fontWeight: 800, letterSpacing: 0.5, borderRadius: 6, padding: "2px 6px" }}>
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="#2e9a78"><path d="M12 2l2.4 6.9L21.6 9l-5.8 4.4 2.2 7-6-4.3-6 4.3 2.2-7L2.4 9l7.2-.1z" /></svg>
+                          PRO
+                        </span>
+                      </span>
+                      <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 1, lineHeight: 1.4 }}>Unlocks AI on this and every campaign. AI writes each fix, free.</span>
+                    </span>
+                  </button>
+                )
+              )}
+            </div>
+          </div>
         )}
+
+        {/* ── ZONE 5 — when you'll have it: an honest, labeled estimate from real turnaround data.
+              Rush is a click, not a toggle: no rush uplift is modeled, so it opens a talk-to-us note
+              rather than inventing a price. ── */}
+        <div style={{ padding: "20px 20px 4px" }}>
+          <div style={sectionLabel}>When you'll have it</div>
+          <div style={{ background: "#f7f9f8", borderRadius: 16, padding: "13px 15px" }}>
+            {timeline.map((t, i) => (
+              <div key={i} style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: i === 0 ? TOKENS.ink : TOKENS.sub, lineHeight: 1.5, marginTop: i === 0 ? 0 : 6 }}>{t}</div>
+            ))}
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint, marginTop: 9 }}>This is an estimate.</div>
+            <button onClick={() => setRushOpen((v) => !v)} style={{ marginTop: 10, background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Need it faster?</button>
+            {rushOpen && (
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.5, marginTop: 8 }}>Rush timing depends on the work. Add it to your plan or buy now, then tell your team you need it sooner and they will confirm what is possible.</div>
+            )}
+          </div>
+        </div>
+
+        {/* ── ZONE 6 — similar campaigns: real adjacency (shared funnel stage), each deep-links to
+              its own product page. ── */}
+        {similar.length > 0 && (
+          <div style={{ padding: "22px 20px 26px" }}>
+            <div style={sectionLabel}>Goes well with</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {similar.map((c) => (
+                <button key={c.id} onClick={() => onOpenCard && onOpenCard(c.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: "#fff", border: `1.5px solid ${TOKENS.line}`, borderRadius: 16, padding: "11px 13px", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+                  <span style={{ width: 44, height: 44, borderRadius: 12, background: gType(c.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Art id={c.id} size={30} /></span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink }}>{c.title}</span>
+                    <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{priceLabel(c.id) || "Free"}</span>
+                  </span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 5l7 7-7 7" /></svg>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── BUY BOX — the live total (version + options, recurring vs one-time kept right) and two
+            actions. "Add to plan" collects to a local draft (Section 2 formalizes it); "Buy now"
+            carries the version + options into today's existing Continue/plan flow. ── */}
+      <div style={{ flexShrink: 0, padding: "12px 20px 16px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 11 }}>
+          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
+          <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 600, color: TOKENS.ink }}>{totalLabel}</span>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onAddToPlan} style={{ flex: 1, height: 52, borderRadius: 26, border: `1.5px solid ${TOKENS.mint}`, cursor: "pointer", background: "#fff", color: TOKENS.mintDark, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, WebkitTapHighlightColor: "transparent" }}>
+            {added ? (
+              <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>Added</>
+            ) : "Add to plan"}
+          </button>
+          {upsellAi ? (
+            <a href="/dashboard/billing" style={{ flex: 1, height: 52, borderRadius: 26, textDecoration: "none", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, WebkitTapHighlightColor: "transparent" }}>Upgrade to Pro</a>
+          ) : (
+            <button onClick={() => onContinue(buildPreset())} style={{ flex: 1, height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, WebkitTapHighlightColor: "transparent" }}>
+              Buy now
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+            </button>
+          )}
+        </div>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, textAlign: "center", marginTop: 9 }}>
+          {upsellAi ? "Apnosh AI is on the Pro plan. Or pick one of the other two." : "Add to plan saves it. Nothing ships or bills until you say so."}
+        </div>
       </div>
     </div>
   );
@@ -3701,7 +3976,9 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
               tier={tier}
               clientId={clientId}
               initialDoer={route.preset && route.preset.doer}
+              initialOptions={route.preset && route.preset.options}
               onBack={backToSource}
+              onOpenCard={(id) => setRoute({ name: "pdp", itemId: id, from: route.from, rowId: route.rowId })}
               onContinue={(preset) => setRoute({ name: "build", itemId: buildIdFor(route.itemId), from: route.from, rowId: route.rowId, preset: preset || undefined, fromPdp: true })}
             />
           )}

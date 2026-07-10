@@ -840,9 +840,16 @@ export function composePlanForGoal(itemId: string, spec: Record<string, string>)
   // that a lead move suppressed paid reach the owner would otherwise have had (drives the override).
   // `leadMove` is the operational move the plan LEADS with; the adapter costs it + the plan flow
   // shows it above the content (which is now the support slot).
+  // Add-on services the owner picked on the product page (Section 1 options). Each is a REAL
+  // catalog serviceId carried in spec.options (comma-joined). We merge them with the item's own
+  // included services (deduped), so toggling an option genuinely adds/removes a priced line via
+  // the SAME svcLines rail — the adapter drops any id that is not a real service, so junk can never
+  // reach the plan. Empty vals (the price-estimate pass) carry no options, so base prices are unchanged.
+  const optionServiceIds = (spec.options ? spec.options.split(',').map((s) => s.trim()).filter(Boolean) : [])
+  const mergedServiceIds = Array.from(new Set([...(shape.services ?? []), ...optionServiceIds]))
   // A system plan overrides the content-era outputs: no content ads, no held-ads, no single lead
   // move (the staged moves replace all three). Non-system goals are unchanged.
   return sys
     ? { tpl, occasion, goalKey: meta.goalKey, ads: false, heldAds: false, leadMove: undefined, moves: sys.moves, stages: sys.stages }
-    : { tpl, occasion, goalKey: meta.goalKey, ads: managedAds, heldAds, leadMove, ...(shape.services?.length ? { serviceIds: shape.services } : {}) }
+    : { tpl, occasion, goalKey: meta.goalKey, ads: managedAds, heldAds, leadMove, ...(mergedServiceIds.length ? { serviceIds: mergedServiceIds } : {}) }
 }
