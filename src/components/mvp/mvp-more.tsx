@@ -52,6 +52,7 @@ const GROUPS: { title: string; rows: Row[] }[] = [
       { label: 'Business info & hours', sub: 'Hours, menu, photos', href: '/dashboard/business-info', Icon: Store },
       { label: 'Brand & audience', sub: 'Voice, audience, competitors', href: '/dashboard/business-info/brand', Icon: Palette },
       { label: 'Connected accounts', sub: 'Instagram, Google, Yelp', href: '/dashboard/connected-accounts', Icon: Plug },
+      { label: 'Fix your Google profile', sub: 'Check it section by section', href: '/dashboard/google-profile', Icon: MapPin },
       { label: 'Photos & files', sub: 'Logo, photos, videos', href: '/dashboard/assets', Icon: ImageIcon },
       { label: 'Your goals', sub: 'What to focus on', href: '/dashboard/goals', Icon: Target },
     ],
