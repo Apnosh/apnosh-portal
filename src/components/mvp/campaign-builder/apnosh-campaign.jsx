@@ -4,7 +4,11 @@ import React, { useState, useRef, useEffect } from "react";
 import BottomNav from "../bottom-nav";
 import AppHeader from "../app-header";
 import { priceLabel, ITEM_PRICES } from "@/lib/campaigns/builder/item-prices";
+import { isProTier } from "@/lib/entitlements";
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
+import { pdpCopy } from "@/lib/campaigns/data/create-catalog-content";
+import { whyFor } from "@/lib/campaigns/data/why-for";
+import { whatYouGet } from "@/lib/campaigns/builder/what-you-get";
 import { getMarketingCalendar, daysUntil } from "@/lib/dashboard/marketing-calendar";
 
 /* ============================================================
@@ -2607,6 +2611,305 @@ function FeaturedDetail({ onClose, onEvent, onDeal, onPost }) {
     </div>
   );
 }
+/* ============================================================
+   Product page (the sell) — between tapping a card and the madlib.
+   One template for all 34 cards: art band, stage + cadence chips,
+   promise, a personalized "why this, for you" (real signals via
+   whyFor, authored fallback otherwise), what-you-get rows DERIVED
+   from the item's real composition (whatYouGet), a who-does-it
+   picker for versioned items (today: gbp's doer slot — the choice
+   flows into the madlib so it is never asked twice), an honest
+   expectation line, and a Continue CTA with the existing price.
+   ============================================================ */
+
+/** An item "has versions" when its madlib carries a doer slot (who does the work).
+ *  Derived from QL so a future versioned item renders the picker automatically. */
+const doerSlotFor = (itemId) => (QL[itemId] && QL[itemId].slots && QL[itemId].slots.doer) || null;
+
+/** The gbp lane a doer option string encodes. MUST match gbpLaneFromDoer in the adapter
+ *  (that is the source of truth for what each lane MEANS; this only mirrors the decode so
+ *  the UI can label + gate the same three strings). */
+function gbpLaneOf(opt) {
+  const s = String(opt || "").toLowerCase();
+  if (/apnosh ai|with ai\b/.test(s)) return "ai";
+  if (/myself|yourself|by you\b|step by step/.test(s)) return "diy";
+  return "team";
+}
+
+/** Pretty display for a doer option string. The three gbp lanes get plain, tier-aware copy;
+ *  the AI lane carries a PRO badge and, for non-Pro owners, an "Included in Pro" sub + no price
+ *  (the row still selects — the Continue CTA becomes Upgrade to Pro). Falls back to the raw string. */
+function doerDisplay(opt, tier) {
+  const lane = gbpLaneOf(opt);
+  if (lane === "diy") return { lane, title: "I'll do it myself", sub: "Free. We show you what to fix.", price: "Free", pro: false };
+  if (lane === "ai") {
+    const pro = isProTier(tier);
+    return { lane, title: "Do it with Apnosh AI", sub: pro ? "Free on your plan. AI writes each fix." : "Included in Pro.", price: pro ? "Free" : null, pro: true };
+  }
+  const m = String(opt).match(/\$\s?([\d,]+)/);
+  return { lane, title: "Apnosh does it", sub: "We fix it all for you.", price: m ? `$${m[1]}` : null, pro: false };
+}
+
+/** The CTA's price label. Reuses ITEM_PRICES/priceLabel; the only extra rule mirrors
+ *  planTags exactly: creative work prices as a floor ("Starting $X"). Either owner-run gbp
+ *  lane (diy or ai) reads Free, matching the madlib's own free line. */
+function pdpPrice(p, doer) {
+  const lane = doer ? gbpLaneOf(doer) : null;
+  if (lane === "diy" || lane === "ai") return "Free";
+  const pr = ITEM_PRICES[buildIdFor(p.id)];
+  const creative = p.type === "content" || p.id === "shoot";
+  if (creative && pr && pr.oneTime > 0 && !(pr.perMonth > 0)) return `Starting $${pr.oneTime.toLocaleString()}`;
+  return priceLabel(buildIdFor(p.id));
+}
+
+/* ---- gbp DIAGNOSIS-led product page (gbp card only) ----
+   The gbp PDP swaps its generic "why this" + "what you get" for the owner's
+   REAL Google-profile status, read from /api/dashboard/gbp-diagnosis. Three
+   states (decideGbpState): A = real gaps, B = all good, C = honest fallback
+   (render today's generic template — never fake a gap or an all-good). */
+const GBP_AMBER = { ink: "#854f0b", bg: "#fdf6e9", line: "#f0dfb8", body: "#5c4a2a", soft: "#7a6534", chip: "#f6e8c9" };
+const GBP_GREEN = { line: "#cdeae0", body: "#3f7d6a", chip: "#d3efe6" };
+
+/** Short, plain gap phrase for one problem section, keyed by (key, status). Every phrase is
+ *  traceable to a real section that graded 'missing' or 'needs-work' in the live payload — we
+ *  never invent a gap. Unknown keys fall back to the section's own honest label so a new
+ *  diagnosis section can never crash or fabricate copy. */
+const GBP_GAP_PHRASE = {
+  hours: { missing: "Your hours are not on Google", "needs-work": "Some days are missing hours" },
+  categories: { missing: "Your main category is not set", "needs-work": "Add more categories to be found" },
+  description: { missing: "You have no description yet", "needs-work": "Your description is too short" },
+  photos: { missing: "You have no photos on Google", "needs-work": "Your photos need a refresh" },
+  menu: { missing: "Your menu is not on Google", "needs-work": "Your menu needs work" },
+  links: { missing: "No website or phone on Google", "needs-work": "Your website or phone is missing" },
+};
+function gbpGapPhrase(section) {
+  const byKey = GBP_GAP_PHRASE[section && section.key];
+  const phrase = byKey && byKey[section.status];
+  if (phrase) return phrase;
+  return `${(section && section.label) || "This part"} needs work`;
+}
+
+/** Decide the gbp PDP state from the live diagnosis payload. HONEST BY CONSTRUCTION:
+ *  A only from real problem sections for THIS client, B only when the read genuinely
+ *  succeeded and EVERY section is 'good', everything else (loading, not connected,
+ *  readFailed, partial read with no conclusive problems, error) → C fallback. */
+function decideGbpState(itemId, diag) {
+  if (itemId !== "gbp" || !diag || diag.error) return { state: "C", problems: [], sectionCount: 0 };
+  const connected = diag.connected === true && diag.readFailed !== true;
+  const sections = Array.isArray(diag.sections) ? diag.sections : [];
+  if (!connected || sections.length === 0) return { state: "C", problems: [], sectionCount: 0 };
+  const problems = sections.filter((s) => s && (s.status === "needs-work" || s.status === "missing"));
+  if (problems.length >= 1) return { state: "A", problems, sectionCount: sections.length };
+  // No problems: only claim "all good" when the read is COMPLETE (every section 'good').
+  // A partial read (some 'unknown') with no problems cannot claim completeness → fallback.
+  if (sections.every((s) => s && s.status === "good")) return { state: "B", problems: [], sectionCount: sections.length };
+  return { state: "C", problems: [], sectionCount: sections.length };
+}
+
+function ProductPage({ itemId, signals, tier, clientId, initialDoer, onBack, onContinue }) {
+  const p = catGet(itemId) || CATALOG[0];
+  const copy = pdpCopy(itemId) || { promise: p.sub, why: p.sub, expect: "" };
+  const derived = whatYouGet(itemId);
+  const get = derived.length ? derived : (DETAIL_GET[p.type] || DETAIL_GET.plan);
+  const doerCfg = doerSlotFor(itemId);
+  const [doer, setDoer] = useState(initialDoer || (doerCfg ? doerCfg.v : null));
+  // Personalized only from THIS client's real signals; otherwise the authored fallback.
+  const personalWhy = whyFor(itemId, signals);
+  const why = personalWhy || copy.why;
+  const price = pdpPrice(p, doerCfg ? doer : null);
+  // The AI lane is Pro-only. A non-Pro owner may still SELECT it (the row highlights), but
+  // Continue turns into "Upgrade to Pro" → billing instead of shipping. Lanes ① and ③ ship as usual.
+  const upsellAi = doerCfg && gbpLaneOf(doer) === "ai" && !isProTier(tier);
+  const sectionLabel = { fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 10 };
+
+  // gbp only: read the owner's real Google-profile diagnosis. RENDER-FIRST — the page shows the
+  // generic fallback (State C) instantly and swaps to A/B only when a conclusive read lands. Cached
+  // in localStorage with the same stale-while-revalidate idiom as the why-signals cache; keyed by
+  // clientId so a client switch never shows another client's gaps. ~30 min TTL.
+  const [gbpDiag, setGbpDiag] = useState(null);
+  useEffect(() => {
+    if (itemId !== "gbp" || !clientId) return;
+    let cancelled = false;
+    const cacheKey = `apnosh-gbpdiag-v1-${clientId}`;
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem(cacheKey) || "null"); } catch { cached = null; }
+    if (cached && cached.diag) setGbpDiag(cached.diag);
+    const fresh = cached && typeof cached.ts === "number" && Date.now() - cached.ts < 30 * 60 * 1000;
+    if (fresh) return;
+    fetch(`/api/dashboard/gbp-diagnosis?clientId=${clientId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        // An {error} body or a non-object leaves the state as-is → fallback stays honest.
+        if (cancelled || !j || typeof j !== "object" || j.error) return;
+        setGbpDiag(j);
+        try { localStorage.setItem(cacheKey, JSON.stringify({ diag: j, ts: Date.now() })); } catch { /* storage full/private — fine */ }
+      })
+      .catch(() => { /* fallback (State C) shows; nothing is ever faked */ });
+    return () => { cancelled = true; };
+  }, [itemId, clientId]);
+  const { state: gbpState, problems: gbpProblems, sectionCount: gbpSections } = decideGbpState(itemId, gbpDiag);
+  const views30d = signals && typeof signals.views30d === "number" && signals.views30d > 0 ? signals.views30d : null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        {/* Art band — the card's own gradient + PICK art, with the back button on it. */}
+        <div style={{ position: "relative", background: gType(p.type), padding: "14px 20px 22px" }}>
+          <button onClick={onBack} aria-label="Back" style={{ width: 36, height: 36, borderRadius: 18, border: "none", background: "rgba(255,255,255,0.25)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+          </button>
+          <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 2px" }}><Art id={p.id} size={92} /></div>
+        </div>
+        <div style={{ padding: "18px 20px 8px" }}>
+          {/* Chips: the funnel stage(s) this moves (Home's own words) + the cadence. */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            {(ITEM_STAGES[p.id] || []).map((s) => (
+              <span key={s} style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, color: TOKENS.mintDark, background: TOKENS.mintTint, borderRadius: 8, padding: "4px 9px" }}>{STAGE_TAG_LABEL[s] || s}</span>
+            ))}
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: "#7c837e", background: "#f0f2f0", borderRadius: 8, padding: "4px 9px" }}>{CADENCE_TAG[p.cad] || "Plan"}</span>
+          </div>
+          <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 25, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.12, letterSpacing: -0.3, margin: 0 }}>{p.title}</h1>
+          <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.sub, lineHeight: 1.5, margin: "8px 0 0" }}>{copy.promise}</p>
+        </div>
+        {gbpState === "A" ? (
+          /* STATE A — real gaps: amber card with the honest problem count + up to 4 traceable rows. */
+          <div style={{ padding: "14px 20px 4px" }}>
+            <div style={{ background: GBP_AMBER.bg, border: `1px solid ${GBP_AMBER.line}`, borderRadius: 16, padding: "15px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
+                <span style={{ width: 24, height: 24, borderRadius: 12, background: GBP_AMBER.chip, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={GBP_AMBER.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></svg>
+                </span>
+                <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, color: GBP_AMBER.ink, lineHeight: 1.25 }}>We checked your profile. {gbpProblems.length} {gbpProblems.length === 1 ? "thing needs" : "things need"} fixing.</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {gbpProblems.slice(0, 4).map((s, i) => (
+                  <div key={s.key || i} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 3, background: GBP_AMBER.ink, flexShrink: 0, marginTop: 7 }} />
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: GBP_AMBER.body, lineHeight: 1.45 }}>{gbpGapPhrase(s)}</span>
+                  </div>
+                ))}
+              </div>
+              {views30d != null && (
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: GBP_AMBER.soft, lineHeight: 1.5, marginTop: 13 }}>{views30d.toLocaleString("en-US")} people saw this profile last month. Fixing these turns more of them into visits.</div>
+              )}
+            </div>
+          </div>
+        ) : gbpState === "B" ? (
+          /* STATE B — all good: green card, no manufactured urgency; the work now is keeping it fresh. */
+          <div style={{ padding: "14px 20px 4px" }}>
+            <div style={{ background: TOKENS.mintTint, border: `1px solid ${GBP_GREEN.line}`, borderRadius: 16, padding: "15px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: views30d != null ? 11 : 0 }}>
+                <span style={{ width: 24, height: 24, borderRadius: 12, background: GBP_GREEN.chip, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                </span>
+                <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, color: TOKENS.mintDark, lineHeight: 1.25 }}>Your profile looks strong. All {gbpSections} parts are set.</div>
+              </div>
+              {views30d != null && (
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: GBP_GREEN.body, lineHeight: 1.5 }}>{views30d.toLocaleString("en-US")} people saw it last month. The work now is keeping it fresh so you stay ahead.</div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Why this, for you — tinted; swaps to the personalized line when signals land. */}
+            <div style={{ padding: "14px 20px 4px" }}>
+              <div style={{ background: TOKENS.mintTint, borderRadius: 16, padding: "14px 16px" }}>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.mintDark, textTransform: "uppercase", marginBottom: 6 }}>Why this, for you</div>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.55 }}>{why}</div>
+              </div>
+            </div>
+            <div style={{ padding: "20px 20px 4px" }}>
+              <div style={sectionLabel}>What you get</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {get.map((g, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+                    <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                    </span>
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{g}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+        <div style={{ padding: "20px 20px 4px" }}>
+          {gbpState === "A" ? (
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ ...sectionLabel, marginBottom: 0 }}>How to fix it</div>
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 600, color: TOKENS.faint }}>Your time, or ours</div>
+            </div>
+          ) : gbpState === "B" ? (
+            <div style={sectionLabel}>Keep it fresh</div>
+          ) : (
+            <div style={sectionLabel}>Who does it</div>
+          )}
+          {doerCfg ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {doerCfg.o.map((opt) => {
+                const d = doerDisplay(opt, tier);
+                const on = doer === opt;
+                return (
+                  <button key={opt} onClick={() => setDoer(opt)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: on ? TOKENS.mintTint : "#fff", border: on ? `1.5px solid ${TOKENS.mint}` : `1.5px solid ${TOKENS.line}`, borderRadius: 16, padding: "13px 14px", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+                    <span style={{ width: 20, height: 20, borderRadius: 10, border: on ? "none" : `1.5px solid ${TOKENS.dash}`, background: on ? TOKENS.mint : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                        <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink }}>{d.title}</span>
+                        {d.pro && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#eaf7f3", color: "#2e9a78", fontFamily: "Inter, sans-serif", fontSize: 10, fontWeight: 800, letterSpacing: 0.5, borderRadius: 6, padding: "2px 6px" }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="#2e9a78"><path d="M12 2l2.4 6.9L21.6 9l-5.8 4.4 2.2 7-6-4.3-6 4.3 2.2-7L2.4 9l7.2-.1z" /></svg>
+                            PRO
+                          </span>
+                        )}
+                      </span>
+                      {d.sub && <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 1 }}>{d.sub}</span>}
+                    </span>
+                    {d.price && <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: on ? TOKENS.mintDark : TOKENS.ink, flexShrink: 0 }}>{d.price}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub }}>The Apnosh team does this for you.</div>
+          )}
+        </div>
+        {copy.expect && (
+          <div style={{ padding: "18px 20px 24px" }}>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.faint, lineHeight: 1.5 }}>{copy.expect}</div>
+          </div>
+        )}
+      </div>
+      <div style={{ flexShrink: 0, padding: "12px 20px 16px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
+        {upsellAi ? (
+          <>
+            {/* Non-Pro picked the AI lane: it does not ship — it points to the upgrade. */}
+            <a href="/dashboard/billing" style={{ width: "100%", height: 52, borderRadius: 26, textDecoration: "none", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
+              Upgrade to Pro
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+            </a>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginTop: 9 }}>Apnosh AI is on the Pro plan. Or pick one of the other two.</div>
+          </>
+        ) : (
+          <>
+            <button onClick={() => onContinue(doerCfg && doer ? { doer } : null)} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
+              Continue{price ? ` · ${price}` : ""}
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+            </button>
+            {gbpState === "B" ? (
+              /* All-good state stays shippable (ongoing help) but must NOT manufacture urgency — the
+                 back-to-shelf action is visible and easy so the owner can leave without being pushed. */
+              <button onClick={onBack} style={{ display: "block", margin: "11px auto 0", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.sub, WebkitTapHighlightColor: "transparent" }}>Maybe later</button>
+            ) : (
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginTop: 9 }}>Next: make it yours</div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ---- Pre-filled mad-libs per plan ---- */
 const DAYS_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAY_LETTER = ["S", "M", "T", "W", "T", "F", "S"];
@@ -2622,12 +2925,14 @@ const MENU = [
   { l: "Cold Brew", p: "$5" },
   { l: "Lemon Olive Oil Cake", p: "$7" },
 ];
-// The gbp card's two "Who does it" versions, priced right on the option so the choice is a real
+// The gbp card's THREE "Who does it" lanes, priced right on the option so the choice is a real
 // decision. The Apnosh price reads from ITEM_PRICES so it can never drift from the real bill.
-// The self-serve option ALWAYS contains "step by step": the adapter (draftFromBuilder) keys on
-// that phrase to mark the gbp-setup line owner-run (producer 'diy', $0, no staff work order).
+// The exact phrasing is load-bearing: the adapter (gbpLaneFromDoer) keys on it to map each lane
+// to (producer, price, ownerMode). "yourself" => diy checklist, "Apnosh AI" => ai drafts (Pro),
+// plain "Apnosh" => the $365 done-for-you team lane. Keep the tokens when editing copy.
+const GBP_DOER_SELF = "done by you yourself, step by step, free";
+const GBP_DOER_AI = "done with Apnosh AI, step by step, free";
 const GBP_DOER_APNOSH = `done for you by Apnosh, $${(ITEM_PRICES.gbp && ITEM_PRICES.gbp.oneTime) || 365}`;
-const GBP_DOER_SELF = "done by you, step by step, free";
 
 const QL = {
   reach: { lead: "Help new locals within {radius} discover you.", slots: { radius: { k: "slider", v: 5, min: 1, max: 50, unit: "mile" } }, extras: [{ id: "paidreach", k: "pick", label: "Paid reach", o: ["yes, run paid ads", "no, keep it organic"], clause: (v) => (v.startsWith("no") ? ", organic only" : ", with paid ads") }] },
@@ -2652,7 +2957,7 @@ const QL = {
   birthday: { lead: "Send {treat} on a guest's birthday, by {channel}.", slots: { treat: { k: "pick", v: "a free dessert", o: ["a free dessert", "a free drink", "a free appetizer", "10% off the table", "a free birthday combo"], custom: true }, channel: { k: "multi", v: ["email", "text"], o: ["email", "text"] } }, extras: [{ id: "limits", k: "text", label: "Add any limits", ph: "dine-in only, valid that week", clause: (v) => `, ${v}` }, { id: "code", k: "text", label: "Add a code", ph: "like BDAY", clause: (v) => `, code ${v}` }] },
   earlyaccess: { lead: "Give subscribers early access to {what}, {timing} before everyone.", slots: { what: { k: "multi", v: ["new menu items"], o: ["new menu items", "events", "specials", "reservations"] }, timing: { k: "pick", v: "a few days", o: ["a day", "a few days", "a week"] } } },
   shoot: { lead: "Book a {kind} shoot of {what}, on {date}.", slots: { kind: { k: "pick", v: "photo and video", o: ["photo", "video", "photo and video"] }, what: { k: "pick", v: "a few key dishes", o: ["your whole menu", "a few key dishes", "one dish", "your space inside", "your storefront", "your team"], custom: true }, date: { k: "date", v: 14 } }, extras: [{ id: "notes", k: "text", label: "Add a note", ph: "must-have shots, the vibe, props, parking", clause: (v) => `, plus ${v}` }] },
-  gbp: { lead: "Update your Google profile: {what}, {doer}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] }, doer: { k: "pick", label: "Who does it", v: GBP_DOER_APNOSH, o: [GBP_DOER_APNOSH, GBP_DOER_SELF] } } },
+  gbp: { lead: "Update your Google profile: {what}, {doer}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] }, doer: { k: "pick", label: "Who does it", v: GBP_DOER_APNOSH, o: [GBP_DOER_SELF, GBP_DOER_AI, GBP_DOER_APNOSH] } } },
   reviewsreply: { lead: "Reply to {which} reviews.", slots: { which: { k: "pick", v: "all", o: ["all", "just critical ones", "4 stars and below", "unanswered ones"] } } },
   qr: { lead: "Add a table QR that {action}.", slots: { action: { k: "pick", v: "grows your list", o: ["grows your list", "collects reviews", "links your menu", "links your socials", "takes orders"] } } },
   friction: { lead: "Make {channel} easier for guests.", slots: { channel: { k: "pick", v: "online ordering", o: ["online ordering", "booking a table", "finding your menu", "joining your list"] } } },
@@ -2764,9 +3069,26 @@ function profileDefaults(profile, cfg) {
   }
   return o;
 }
-function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, onBack, onGenerate }) {
+/** Slots already answered upstream (the product page's who-does-it) are hidden from the
+ *  madlib so the owner is never asked twice: the slot leaves cfg + its {token} leaves the
+ *  lead (with the joining comma), while the preset VALUE still rides in vals so the
+ *  composed draft receives it exactly as if the slot had been tapped here. */
+function hidePresetSlots(cfg, preset) {
+  const keys = Object.keys(preset || {}).filter((k) => cfg.slots && cfg.slots[k]);
+  if (!keys.length) return cfg;
+  const slots = { ...cfg.slots };
+  let lead = cfg.lead;
+  for (const k of keys) {
+    delete slots[k];
+    lead = lead.replace(new RegExp(`(,\\s*)?\\{${k}\\}`), "").replace(/\s+([.,])/g, "$1");
+  }
+  return { ...cfg, lead, slots };
+}
+
+function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, preset, onBack, onGenerate }) {
   const p = catGet(itemId) || CATALOG[0];
-  const rawCfg = QL[itemId] || { lead: "Set up {thing}.", slots: { thing: { k: "text", v: p.title.toLowerCase() } } };
+  const baseCfg = QL[itemId] || { lead: "Set up {thing}.", slots: { thing: { k: "text", v: p.title.toLowerCase() } } };
+  const rawCfg = preset ? hidePresetSlots(baseCfg, preset) : baseCfg;
   // Any campaign with a "list" slot (launch, promoevent, ticket, giftcard) only offers
   // the "email + text list" option when the owner actually has a connected list. When we
   // know there is none, lock that slot to social-only so the plan never promises a send
@@ -2786,6 +3108,9 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
     // Pre-fill the rest from the real account profile (their audience, their current special) over the static defaults.
     const pd = profileDefaults(profile, cfg);
     for (const k in pd) if (pd[k] && cfg.slots[k]) o[k] = pd[k];
+    // Upstream answers (the product page's doer pick) ride along even though their slot
+    // is hidden here — onGenerate(vals) carries them into the composed draft unchanged.
+    for (const k in (preset || {})) o[k] = preset[k];
     return o;
   });
   const [editing, setEditing] = useState(null);
@@ -2951,7 +3276,7 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
         )}
       </div>
       <div style={{ flexShrink: 0, padding: "12px 22px 20px" }}>
-        {itemId === "gbp" && /step by step/i.test(String(vals.doer || ""))
+        {itemId === "gbp" && (gbpLaneOf(vals.doer) === "diy" || gbpLaneOf(vals.doer) === "ai")
           ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>Free. You do the work yourself, and we guide you step by step.</div>
           : priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You approve before anything runs, and only pay when each piece ships.</div>}
         {(() => { const m = monthlyTotalLine(itemId, monthlyCommitment, liveCount, monthlyCap); if (!m) return null;
@@ -3304,15 +3629,18 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, onCreate, onClose, onPlan } = {}) {
-  const [route, setRoute] = useState(() => (initialItem ? { name: "build", itemId: buildIdFor(initialItem) } : { name: "browse" }));
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, tier = null, clientId = null, onCreate, onClose, onPlan } = {}) {
+  // Deep links (Home suggestions, ?template=) land on the PRODUCT PAGE too, never the bare madlib.
+  const [route, setRoute] = useState(() => (initialItem ? { name: "pdp", itemId: buildIdFor(initialItem) } : { name: "browse" }));
 
   const exit = () => { if (onClose) onClose(); };
 
-  // Catalog card -> Builder. buildIdFor is the identity map now (every card has
-  // its own builder); kept as a single seam for future borrowing.
+  // Catalog card -> PRODUCT PAGE (the sell) -> Continue -> Builder (the madlib). Every
+  // open path (shelf tap, see-all grid, suggested/featured cards, deep links) funnels
+  // through here. Non-catalog pseudo-items ("__else") keep going straight to the builder.
   const openCard = (id, from, rowId) => {
-    setRoute({ name: "build", itemId: buildIdFor(id), from, rowId });
+    if (catGet(id)) setRoute({ name: "pdp", itemId: id, from, rowId });
+    else setRoute({ name: "build", itemId: buildIdFor(id), from, rowId });
   };
   const backToBrowse = () => setRoute({ name: "browse" });
   const backToSource = () => (route.from === "catall" ? setRoute({ name: "catall", rowId: route.rowId }) : backToBrowse());
@@ -3366,8 +3694,20 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <CategoryAll rowId={route.rowId} onBack={backToBrowse} onOpen={(id) => openCard(id, "catall", route.rowId)} />
           )}
 
+          {route.name === "pdp" && (
+            <ProductPage
+              itemId={route.itemId}
+              signals={whySignals}
+              tier={tier}
+              clientId={clientId}
+              initialDoer={route.preset && route.preset.doer}
+              onBack={backToSource}
+              onContinue={(preset) => setRoute({ name: "build", itemId: buildIdFor(route.itemId), from: route.from, rowId: route.rowId, preset: preset || undefined, fromPdp: true })}
+            />
+          )}
+
           {route.name === "build" && (
-            <Builder itemId={route.itemId} menu={menu} monthlyCommitment={monthlyCommitment} liveCount={liveCount} monthlyCap={monthlyCap} hasList={hasList} profile={profile} onBack={backToSource} onGenerate={(vals) => (onPlan ? onPlan({ itemId: route.itemId, vals }) : setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId }))} />
+            <Builder itemId={route.itemId} menu={menu} monthlyCommitment={monthlyCommitment} liveCount={liveCount} monthlyCap={monthlyCap} hasList={hasList} profile={profile} preset={route.preset} onBack={route.fromPdp ? () => setRoute({ name: "pdp", itemId: route.itemId, from: route.from, rowId: route.rowId, preset: route.preset }) : backToSource} onGenerate={(vals) => (onPlan ? onPlan({ itemId: route.itemId, vals }) : setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId }))} />
           )}
 
           {route.name === "generating" && (

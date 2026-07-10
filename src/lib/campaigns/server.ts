@@ -40,6 +40,7 @@ function rowToLineItem(r: Record<string, unknown>): LineItem {
     paused: (r.paused as boolean) ?? undefined,
     qty: (r.qty as number) ?? undefined,
     producer: (r.producer as LineItem['producer']) ?? undefined,
+    ownerMode: (r.owner_mode as LineItem['ownerMode']) ?? undefined,
     brief: (r.brief as LineItem['brief']) ?? undefined,
     postISO: (r.post_iso as string) ?? undefined,
     lock: (r.lock as LineItem['lock']) ?? 'editable',
@@ -122,6 +123,9 @@ function lineItemToRow(campaignId: string, clientId: string, it: LineItem, posit
   // Content Menu per-piece fields (migration 183). Only written when SET, so a legacy
   // line never references these columns and inserts work unchanged pre-183.
   if (it.producer !== undefined) row.producer = it.producer
+  // owner_mode (migration 202): only the owner-run gbp lanes set it, so a legacy line
+  // never references the column and inserts work unchanged pre-202.
+  if (it.ownerMode !== undefined) row.owner_mode = it.ownerMode
   if (it.brief !== undefined) row.brief = it.brief ?? null
   if (it.postISO !== undefined) row.post_iso = it.postISO ?? null
   return row
