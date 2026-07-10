@@ -12,8 +12,8 @@ import { callStructuredOutput } from './anthropic'
 import type { GoalKey } from '@/lib/campaigns/types'
 import { CREATE_CATALOG } from '@/lib/campaigns/data/create-catalog'
 
-const VALID = new Set(CREATE_CATALOG.map((c) => c.id))
-const GOAL_OF = new Map(CREATE_CATALOG.map((c) => [c.id, c.goal]))
+const VALID = new Set<string>(CREATE_CATALOG.map((c) => c.id))
+const GOAL_OF = new Map<string, GoalKey>(CREATE_CATALOG.map((c) => [c.id, c.goal]))
 
 export interface ItemRec { id: string; reason: string }
 /** What the account already has live, so we never re-recommend a running campaign as the top pick. */

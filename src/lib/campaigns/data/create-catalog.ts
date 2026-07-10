@@ -26,7 +26,10 @@ export const STAGE_TAG_LABEL: Record<FunnelStage, string> = {
   back: 'Retention',
 }
 
-export const CREATE_CATALOG: { id: string; title: string; goal: GoalKey; stages: FunnelStage[] }[] = [
+// Literal source (as const) so the id set exists as a TYPE (CreateCatalogId). Per-card
+// content maps (product-page copy, why templates) key on that union, so adding a card
+// here without authoring its content is a COMPILE error, not a silent fallback.
+const SOURCE = [
   { id: 'reach', title: 'Run local ads', goal: 'new-customers', stages: ['aware'] },
   { id: 'nights', title: 'Fill your slow nights', goal: 'slow-nights', stages: ['orders', 'back'] },
   { id: 'firstvisit', title: 'Win first-time visits', goal: 'new-customers', stages: ['aware', 'actions'] },
@@ -61,7 +64,14 @@ export const CREATE_CATALOG: { id: string; title: string; goal: GoalKey; stages:
   { id: 'ticket', title: 'Run a ticketed event', goal: 'new-customers', stages: ['orders', 'aware'] },
   { id: 'winback', title: 'Win back quiet guests', goal: 'regulars', stages: ['back'] },
   { id: 'direct', title: 'Get orders direct', goal: 'regulars', stages: ['actions', 'back'] },
-]
+] as const satisfies readonly { id: string; title: string; goal: GoalKey; stages: readonly FunnelStage[] }[]
+
+/** The closed union of create-catalog ids. Per-card maps (product-page content, why
+ *  templates) are typed Record<CreateCatalogId, …> so coverage is checked at compile time. */
+export type CreateCatalogId = (typeof SOURCE)[number]['id']
+
+export const CREATE_CATALOG: { id: CreateCatalogId; title: string; goal: GoalKey; stages: FunnelStage[] }[] =
+  SOURCE.map((c) => ({ ...c, stages: [...c.stages] }))
 
 /** Just the ids, for consumers that only need the closed set (e.g. the deep-link validator). */
 export const CREATE_CATALOG_IDS: readonly string[] = CREATE_CATALOG.map((c) => c.id)

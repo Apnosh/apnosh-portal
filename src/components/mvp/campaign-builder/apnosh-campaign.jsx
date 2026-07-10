@@ -5,6 +5,9 @@ import BottomNav from "../bottom-nav";
 import AppHeader from "../app-header";
 import { priceLabel, ITEM_PRICES } from "@/lib/campaigns/builder/item-prices";
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
+import { pdpCopy } from "@/lib/campaigns/data/create-catalog-content";
+import { whyFor } from "@/lib/campaigns/data/why-for";
+import { whatYouGet } from "@/lib/campaigns/builder/what-you-get";
 import { getMarketingCalendar, daysUntil } from "@/lib/dashboard/marketing-calendar";
 
 /* ============================================================
@@ -2607,6 +2610,137 @@ function FeaturedDetail({ onClose, onEvent, onDeal, onPost }) {
     </div>
   );
 }
+/* ============================================================
+   Product page (the sell) — between tapping a card and the madlib.
+   One template for all 34 cards: art band, stage + cadence chips,
+   promise, a personalized "why this, for you" (real signals via
+   whyFor, authored fallback otherwise), what-you-get rows DERIVED
+   from the item's real composition (whatYouGet), a who-does-it
+   picker for versioned items (today: gbp's doer slot — the choice
+   flows into the madlib so it is never asked twice), an honest
+   expectation line, and a Continue CTA with the existing price.
+   ============================================================ */
+
+/** An item "has versions" when its madlib carries a doer slot (who does the work).
+ *  Derived from QL so a future versioned item renders the picker automatically. */
+const doerSlotFor = (itemId) => (QL[itemId] && QL[itemId].slots && QL[itemId].slots.doer) || null;
+
+/** Pretty display for a doer option string (the QL option stays the source of truth —
+ *  the adapter keys on its exact phrasing). Falls back to the raw string. */
+function doerDisplay(opt) {
+  const m = String(opt).match(/\$\s?([\d,]+)/);
+  const price = /free/i.test(opt) ? "Free" : m ? `$${m[1]}` : null;
+  if (/apnosh/i.test(opt)) return { title: "Apnosh does it", sub: "The team handles it for you", price };
+  if (/step by step/i.test(opt)) return { title: "You do it, step by step", sub: "We guide you through each step", price: price || "Free" };
+  return { title: String(opt), sub: null, price };
+}
+
+/** The CTA's price label. Reuses ITEM_PRICES/priceLabel; the only extra rule mirrors
+ *  planTags exactly: creative work prices as a floor ("Starting $X"). A self-serve doer
+ *  pick reads Free, matching the madlib's own free line. */
+function pdpPrice(p, doer) {
+  if (doer && /step by step/i.test(doer)) return "Free";
+  const pr = ITEM_PRICES[buildIdFor(p.id)];
+  const creative = p.type === "content" || p.id === "shoot";
+  if (creative && pr && pr.oneTime > 0 && !(pr.perMonth > 0)) return `Starting $${pr.oneTime.toLocaleString()}`;
+  return priceLabel(buildIdFor(p.id));
+}
+
+function ProductPage({ itemId, signals, initialDoer, onBack, onContinue }) {
+  const p = catGet(itemId) || CATALOG[0];
+  const copy = pdpCopy(itemId) || { promise: p.sub, why: p.sub, expect: "" };
+  const derived = whatYouGet(itemId);
+  const get = derived.length ? derived : (DETAIL_GET[p.type] || DETAIL_GET.plan);
+  const doerCfg = doerSlotFor(itemId);
+  const [doer, setDoer] = useState(initialDoer || (doerCfg ? doerCfg.v : null));
+  // Personalized only from THIS client's real signals; otherwise the authored fallback.
+  const personalWhy = whyFor(itemId, signals);
+  const why = personalWhy || copy.why;
+  const price = pdpPrice(p, doerCfg ? doer : null);
+  const sectionLabel = { fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 10 };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        {/* Art band — the card's own gradient + PICK art, with the back button on it. */}
+        <div style={{ position: "relative", background: gType(p.type), padding: "14px 20px 22px" }}>
+          <button onClick={onBack} aria-label="Back" style={{ width: 36, height: 36, borderRadius: 18, border: "none", background: "rgba(255,255,255,0.25)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+          </button>
+          <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 2px" }}><Art id={p.id} size={92} /></div>
+        </div>
+        <div style={{ padding: "18px 20px 8px" }}>
+          {/* Chips: the funnel stage(s) this moves (Home's own words) + the cadence. */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            {(ITEM_STAGES[p.id] || []).map((s) => (
+              <span key={s} style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, color: TOKENS.mintDark, background: TOKENS.mintTint, borderRadius: 8, padding: "4px 9px" }}>{STAGE_TAG_LABEL[s] || s}</span>
+            ))}
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: "#7c837e", background: "#f0f2f0", borderRadius: 8, padding: "4px 9px" }}>{CADENCE_TAG[p.cad] || "Plan"}</span>
+          </div>
+          <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 25, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.12, letterSpacing: -0.3, margin: 0 }}>{p.title}</h1>
+          <p style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.sub, lineHeight: 1.5, margin: "8px 0 0" }}>{copy.promise}</p>
+        </div>
+        {/* Why this, for you — tinted; swaps to the personalized line when signals land. */}
+        <div style={{ padding: "14px 20px 4px" }}>
+          <div style={{ background: TOKENS.mintTint, borderRadius: 16, padding: "14px 16px" }}>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: 0.8, color: TOKENS.mintDark, textTransform: "uppercase", marginBottom: 6 }}>Why this, for you</div>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.55 }}>{why}</div>
+          </div>
+        </div>
+        <div style={{ padding: "20px 20px 4px" }}>
+          <div style={sectionLabel}>What you get</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {get.map((g, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+                <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                </span>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{g}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ padding: "20px 20px 4px" }}>
+          <div style={sectionLabel}>Who does it</div>
+          {doerCfg ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {doerCfg.o.map((opt) => {
+                const d = doerDisplay(opt);
+                const on = doer === opt;
+                return (
+                  <button key={opt} onClick={() => setDoer(opt)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: on ? TOKENS.mintTint : "#fff", border: on ? `1.5px solid ${TOKENS.mint}` : `1.5px solid ${TOKENS.line}`, borderRadius: 16, padding: "13px 14px", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+                    <span style={{ width: 20, height: 20, borderRadius: 10, border: on ? "none" : `1.5px solid ${TOKENS.dash}`, background: on ? TOKENS.mint : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "block", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink }}>{d.title}</span>
+                      {d.sub && <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 1 }}>{d.sub}</span>}
+                    </span>
+                    {d.price && <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: on ? TOKENS.mintDark : TOKENS.ink, flexShrink: 0 }}>{d.price}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub }}>The Apnosh team does this for you.</div>
+          )}
+        </div>
+        {copy.expect && (
+          <div style={{ padding: "18px 20px 24px" }}>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.faint, lineHeight: 1.5 }}>{copy.expect}</div>
+          </div>
+        )}
+      </div>
+      <div style={{ flexShrink: 0, padding: "12px 20px 16px", borderTop: `1px solid ${TOKENS.line}`, background: "#fff" }}>
+        <button onClick={() => onContinue(doerCfg && doer ? { doer } : null)} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
+          Continue{price ? ` · ${price}` : ""}
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+        </button>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, textAlign: "center", marginTop: 9 }}>Next: make it yours</div>
+      </div>
+    </div>
+  );
+}
+
 /* ---- Pre-filled mad-libs per plan ---- */
 const DAYS_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAY_LETTER = ["S", "M", "T", "W", "T", "F", "S"];
@@ -2764,9 +2898,26 @@ function profileDefaults(profile, cfg) {
   }
   return o;
 }
-function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, onBack, onGenerate }) {
+/** Slots already answered upstream (the product page's who-does-it) are hidden from the
+ *  madlib so the owner is never asked twice: the slot leaves cfg + its {token} leaves the
+ *  lead (with the joining comma), while the preset VALUE still rides in vals so the
+ *  composed draft receives it exactly as if the slot had been tapped here. */
+function hidePresetSlots(cfg, preset) {
+  const keys = Object.keys(preset || {}).filter((k) => cfg.slots && cfg.slots[k]);
+  if (!keys.length) return cfg;
+  const slots = { ...cfg.slots };
+  let lead = cfg.lead;
+  for (const k of keys) {
+    delete slots[k];
+    lead = lead.replace(new RegExp(`(,\\s*)?\\{${k}\\}`), "").replace(/\s+([.,])/g, "$1");
+  }
+  return { ...cfg, lead, slots };
+}
+
+function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, preset, onBack, onGenerate }) {
   const p = catGet(itemId) || CATALOG[0];
-  const rawCfg = QL[itemId] || { lead: "Set up {thing}.", slots: { thing: { k: "text", v: p.title.toLowerCase() } } };
+  const baseCfg = QL[itemId] || { lead: "Set up {thing}.", slots: { thing: { k: "text", v: p.title.toLowerCase() } } };
+  const rawCfg = preset ? hidePresetSlots(baseCfg, preset) : baseCfg;
   // Any campaign with a "list" slot (launch, promoevent, ticket, giftcard) only offers
   // the "email + text list" option when the owner actually has a connected list. When we
   // know there is none, lock that slot to social-only so the plan never promises a send
@@ -2786,6 +2937,9 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
     // Pre-fill the rest from the real account profile (their audience, their current special) over the static defaults.
     const pd = profileDefaults(profile, cfg);
     for (const k in pd) if (pd[k] && cfg.slots[k]) o[k] = pd[k];
+    // Upstream answers (the product page's doer pick) ride along even though their slot
+    // is hidden here — onGenerate(vals) carries them into the composed draft unchanged.
+    for (const k in (preset || {})) o[k] = preset[k];
     return o;
   });
   const [editing, setEditing] = useState(null);
@@ -3304,15 +3458,18 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, onCreate, onClose, onPlan } = {}) {
-  const [route, setRoute] = useState(() => (initialItem ? { name: "build", itemId: buildIdFor(initialItem) } : { name: "browse" }));
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, onCreate, onClose, onPlan } = {}) {
+  // Deep links (Home suggestions, ?template=) land on the PRODUCT PAGE too, never the bare madlib.
+  const [route, setRoute] = useState(() => (initialItem ? { name: "pdp", itemId: buildIdFor(initialItem) } : { name: "browse" }));
 
   const exit = () => { if (onClose) onClose(); };
 
-  // Catalog card -> Builder. buildIdFor is the identity map now (every card has
-  // its own builder); kept as a single seam for future borrowing.
+  // Catalog card -> PRODUCT PAGE (the sell) -> Continue -> Builder (the madlib). Every
+  // open path (shelf tap, see-all grid, suggested/featured cards, deep links) funnels
+  // through here. Non-catalog pseudo-items ("__else") keep going straight to the builder.
   const openCard = (id, from, rowId) => {
-    setRoute({ name: "build", itemId: buildIdFor(id), from, rowId });
+    if (catGet(id)) setRoute({ name: "pdp", itemId: id, from, rowId });
+    else setRoute({ name: "build", itemId: buildIdFor(id), from, rowId });
   };
   const backToBrowse = () => setRoute({ name: "browse" });
   const backToSource = () => (route.from === "catall" ? setRoute({ name: "catall", rowId: route.rowId }) : backToBrowse());
@@ -3366,8 +3523,18 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <CategoryAll rowId={route.rowId} onBack={backToBrowse} onOpen={(id) => openCard(id, "catall", route.rowId)} />
           )}
 
+          {route.name === "pdp" && (
+            <ProductPage
+              itemId={route.itemId}
+              signals={whySignals}
+              initialDoer={route.preset && route.preset.doer}
+              onBack={backToSource}
+              onContinue={(preset) => setRoute({ name: "build", itemId: buildIdFor(route.itemId), from: route.from, rowId: route.rowId, preset: preset || undefined, fromPdp: true })}
+            />
+          )}
+
           {route.name === "build" && (
-            <Builder itemId={route.itemId} menu={menu} monthlyCommitment={monthlyCommitment} liveCount={liveCount} monthlyCap={monthlyCap} hasList={hasList} profile={profile} onBack={backToSource} onGenerate={(vals) => (onPlan ? onPlan({ itemId: route.itemId, vals }) : setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId }))} />
+            <Builder itemId={route.itemId} menu={menu} monthlyCommitment={monthlyCommitment} liveCount={liveCount} monthlyCap={monthlyCap} hasList={hasList} profile={profile} preset={route.preset} onBack={route.fromPdp ? () => setRoute({ name: "pdp", itemId: route.itemId, from: route.from, rowId: route.rowId, preset: route.preset }) : backToSource} onGenerate={(vals) => (onPlan ? onPlan({ itemId: route.itemId, vals }) : setRoute({ name: "generating", itemId: route.itemId, vals, from: route.from, rowId: route.rowId }))} />
           )}
 
           {route.name === "generating" && (

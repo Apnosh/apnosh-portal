@@ -14,6 +14,7 @@ import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
 import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
 import { resolveBrainGoal } from '@/lib/campaigns/builder/compose-plan'
 import { CREATE_CATALOG_IDS } from '@/lib/campaigns/data/create-catalog'
+import type { WhySignals } from '@/lib/campaigns/data/why-for'
 import type { CampaignProfile } from '@/lib/campaigns/builder/campaign-profile'
 import type { Diagnosis } from '@/lib/campaigns/planning/types'
 import { summarize, type LineItem, type CampaignDraft, type PieceProducer, type CampaignReceipt } from '@/lib/campaigns/types'
@@ -28,7 +29,7 @@ type MenuOpt = { l: string; photo?: string; f?: boolean }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
 type PlanPayload = { itemId: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -127,6 +128,31 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
   const [analyzing, setAnalyzing] = useState(false)
   // After approve+ship: the "you're all set" confirmation screen (holds the new campaign id + its draft).
   const [confirmed, setConfirmed] = useState<{ id: string; draft: CampaignDraft; receipt: CampaignReceipt } | null>(null)
+
+  // Real signals for the product page's "why this, for you" line. Same instant-first
+  // pattern as the rec cache: last bundle renders immediately from localStorage, a
+  // stale-while-revalidate refetch swaps in fresh numbers. The page never blocks on
+  // this — with nothing cached the PDP simply shows its authored fallback lines.
+  const [whySignals, setWhySignals] = useState<WhySignals | null>(null)
+  useEffect(() => {
+    if (!client?.id) return
+    let cancelled = false
+    const cacheKey = `apnosh-why-v1-${client.id}`
+    let cached: { signals?: WhySignals; ts?: number } | null = null
+    try { cached = JSON.parse(localStorage.getItem(cacheKey) ?? 'null') } catch { cached = null }
+    if (cached?.signals) setWhySignals(cached.signals)
+    const fresh = typeof cached?.ts === 'number' && Date.now() - cached.ts < 6 * 60 * 60 * 1000
+    if (fresh) return
+    fetch(`/api/dashboard/why-signals?clientId=${client.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (cancelled || !j || typeof j !== 'object') return
+        setWhySignals(j as WhySignals)
+        try { localStorage.setItem(cacheKey, JSON.stringify({ signals: j, ts: Date.now() })) } catch { /* storage full/private — fine */ }
+      })
+      .catch(() => { /* fallback copy shows; nothing personalized is ever faked */ })
+    return () => { cancelled = true }
+  }, [client?.id])
 
   // The owner's monthly marketing budget (from their profile), used as a soft
   // spend cap: the builder warns when the running total would go over it.
@@ -376,6 +402,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
         monthlyCap={monthlyCap}
         hasList={hasList}
         profile={profile}
+        whySignals={whySignals}
         onCreate={onCreate}
         onClose={onClose}
         onPlan={handlePlan}
