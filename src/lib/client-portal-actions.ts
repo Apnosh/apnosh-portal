@@ -803,7 +803,7 @@ export async function sendForReview(queueId: string): Promise<ActionResult> {
         type: 'content_ready',
         title: 'Content ready for review',
         body: (queueItem.input_text || 'A new draft is ready for your review').slice(0, 120),
-        link: `/dashboard/requests/${queueId}`,
+        link: '/dashboard/messages',
       }))
     )
   }
@@ -884,7 +884,7 @@ export async function confirmContentRequest(queueId: string): Promise<ActionResu
         type: 'request_confirmed',
         title: 'Your request was confirmed',
         body: `We received your request and our team is queuing it up. You'll hear from us when the draft is ready.`,
-        link: `/dashboard/insights/requests/${queueId}`,
+        link: '/dashboard/messages',
       }))
     )
   }
@@ -994,7 +994,7 @@ export async function cancelContentRequest(
           type: 'request_cancelled',
           title: 'Your request was cancelled',
           body: reason || (queueItem.input_text || '').slice(0, 120),
-          link: `/dashboard/insights/requests/${queueId}`,
+          link: '/dashboard/messages',
         }))
       )
     }

@@ -37,11 +37,11 @@ export async function POST() {
   }
 
   await verifyClarityInstallation(cu.client_id)
-  /* Redirect back to where they came from. The form posts as a
-     traditional submission so a 303 to the heatmaps page is the
-     cleanest UX — page reloads with fresh data. */
+  /* Redirect back to the insights hub (the standalone heatmaps page was
+     folded into it). The form posts as a traditional submission so a 303
+     is the cleanest UX — page reloads with fresh data. */
   return NextResponse.redirect(
-    new URL('/dashboard/insights/heatmaps?verified=1', process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.apnosh.com'),
+    new URL('/dashboard/insights?verified=1', process.env.NEXT_PUBLIC_APP_URL ?? 'https://portal.apnosh.com'),
     303,
   )
 }

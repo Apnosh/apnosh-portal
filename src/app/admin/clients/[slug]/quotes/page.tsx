@@ -96,9 +96,9 @@ export default async function ClientQuotesPage({ params }: PageProps) {
             const ToneIcon = tone.Icon
             return (
               <li key={q.id as string}>
-                <Link
-                  href={`/dashboard/insights/quotes/${q.id}?clientId=${encodeURIComponent(client.id as string)}`}
-                  className="block rounded-xl border bg-white p-4 hover:shadow-sm transition-shadow"
+                {/* No quote detail page exists on this branch; the row itself is the full summary. */}
+                <div
+                  className="block rounded-xl border bg-white p-4"
                   style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
                 >
                   <div className="flex items-start gap-4">
@@ -127,7 +127,7 @@ export default async function ClientQuotesPage({ params }: PageProps) {
                       ${Number(q.total ?? 0).toFixed(0)}
                     </p>
                   </div>
-                </Link>
+                </div>
               </li>
             )
           })}

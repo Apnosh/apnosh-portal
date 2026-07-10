@@ -646,8 +646,8 @@ function GrowAwareness({ rating, reviewCount, detail }: { rating: number | null;
           On Maps, fresh reviews push you up the list, and that is the biggest driver of new people finding you.
           {rating != null && reviewCount > 0 && <> You are at <b style={{ color: C.ink, fontWeight: 600 }}>{rating}&#9733; from {reviewCount.toLocaleString()} reviews</b>.</>}
         </div>
-        <Link href="/dashboard/insights/reviews/get" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 14, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, borderRadius: 99, padding: '10px 16px', textDecoration: 'none' }}>
-          Ask for more reviews <ArrowRight size={15} />
+        <Link href="/dashboard/inbox?tab=reviews" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 14, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, borderRadius: 99, padding: '10px 16px', textDecoration: 'none' }}>
+          See your reviews <ArrowRight size={15} />
         </Link>
       </div>
     </Section>

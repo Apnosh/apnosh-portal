@@ -23,7 +23,7 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const CRON_SECRET = process.env.CRON_SECRET
-const IMPACT_LINK = '/dashboard/insights/impact'
+const IMPACT_LINK = '/dashboard/insights'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)

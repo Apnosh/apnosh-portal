@@ -99,7 +99,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ slug: stri
     for (const userId of ownerIds) {
       await createNotification({
         userId, kind: 'client_request', title, body,
-        link: `/dashboard/insights/forms?id=${row.id}`,
+        link: '/dashboard/inbox',
       })
     }
   } catch { /* never block the webhook response on notification errors */ }

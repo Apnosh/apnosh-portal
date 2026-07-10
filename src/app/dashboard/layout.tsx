@@ -99,7 +99,6 @@ const MVP_EXACT = new Set([
   '/dashboard', '/dashboard/orders', '/dashboard/inbox', '/dashboard/messages', '/dashboard/insights',
   '/dashboard/more', '/dashboard/billing',
   '/dashboard/assets', '/dashboard/goals', '/dashboard/help', '/dashboard/google-profile',
-  '/dashboard/insights', '/dashboard/insights', '/dashboard/insights', '/dashboard/insights',
 ])
 const MVP_PREFIX = [
   '/dashboard/campaigns', '/dashboard/reviews', '/dashboard/business-info',
@@ -113,10 +112,7 @@ function isMvpRoute(path: string): boolean {
 /* Where a legacy deep tool's "back" goes: to its channel hub when it lives
    under one, otherwise to the More hub. */
 function backTarget(path: string): { href: string; label: string } {
-  if (path.startsWith('/dashboard/insights/')) return { href: '/dashboard/insights', label: 'Website' }
-  if (path.startsWith('/dashboard/insights/')) return { href: '/dashboard/insights', label: 'Social media' }
-  if (path.startsWith('/dashboard/insights/')) return { href: '/dashboard/insights', label: 'Local SEO' }
-  if (path.startsWith('/dashboard/insights/')) return { href: '/dashboard/insights', label: 'Email & SMS' }
+  if (path.startsWith('/dashboard/insights/')) return { href: '/dashboard/insights', label: 'Insights' }
   return { href: '/dashboard/more', label: 'More' }
 }
 

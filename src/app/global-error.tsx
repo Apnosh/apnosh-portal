@@ -47,7 +47,7 @@ export default function GlobalError({
             Reload
           </button>
           <a
-            href="/dashboard/insights/requests/new"
+            href="/dashboard/messages"
             style={{
               padding: '0.5rem 1rem', borderRadius: 6,
               background: 'transparent', color: '#1a1a1a',

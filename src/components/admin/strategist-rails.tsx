@@ -191,7 +191,9 @@ function QuotesRail({ quotes }: { quotes: SentQuote[] }) {
         {quotes.slice(0, 5).map(q => (
           <li key={q.id}>
             <Link
-              href={q.client ? `/dashboard/insights/quotes/${q.id}?clientId=${q.client_id}` : `/dashboard/insights/quotes/${q.id}`}
+              // The owner-side quote detail was pruned; the client's admin
+              // quotes list is where this quote still renders.
+              href={q.client ? `/admin/clients/${q.client.slug}/quotes` : '/work/quotes'}
               className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2 hover:shadow-sm transition-shadow"
               style={{ borderColor: 'var(--db-border, #e5e5e5)' }}
             >

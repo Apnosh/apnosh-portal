@@ -136,7 +136,7 @@ async function detectUnrespondedReviews(clientId: string): Promise<SuggestionWri
     body: isUrgent
       ? `Apnosh AI can draft responses for you in the agent chat. Low-rating reviews especially benefit from a fast, thoughtful reply.`
       : `Drafted replies are one click away in the agent chat -- "draft me a response to my latest review".`,
-    link: '/dashboard/insights/reviews',
+    link: '/dashboard/inbox?tab=reviews',
     payload: {
       review_count: rows.length,
       low_rating_count: lowRating,
@@ -165,7 +165,7 @@ async function detectFeaturedItemsMissingPhoto(clientId: string): Promise<Sugges
     type: 'agent_suggestion',
     title: `${rows.length} signature dish${rows.length === 1 ? '' : 'es'} missing photos`,
     body: `${names}${rows.length > 3 ? `, +${rows.length - 3} more` : ''} are flagged signature but have no photo. Photos drive 2-3x more menu clicks on Google.`,
-    link: '/dashboard/insights/manage',
+    link: '/dashboard/business-info/menu',
     payload: {
       item_count: rows.length,
       item_ids: rows.map(r => r.id),
@@ -247,7 +247,7 @@ async function detectReviewRatingDrop(clientId: string): Promise<SuggestionWrite
     type: 'agent_suggestion',
     title: `Your review rating dropped this week (${prevAvg.toFixed(1)}★ → ${thisAvg.toFixed(1)}★)`,
     body: `Drafted responses to recent low ratings + a Google post acknowledging the feedback can rebuild trust fast.`,
-    link: '/dashboard/insights/reviews',
+    link: '/dashboard/inbox?tab=reviews',
     payload: {
       prev_avg: Number(prevAvg.toFixed(2)),
       this_avg: Number(thisAvg.toFixed(2)),

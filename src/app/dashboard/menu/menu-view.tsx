@@ -56,7 +56,7 @@ const SECTIONS: NavGroup[] = [
       { label: 'Google & Maps', href: '/dashboard/insights',  icon: MapPin,   color: 'bg-red-500', keywords: 'local seo search maps gbp google business listing reviews' },
       { label: 'Social media',  href: '/dashboard/insights',     icon: Sparkles, color: 'bg-fuchsia-500', keywords: 'instagram facebook tiktok posts reels' },
       { label: 'Website',       href: '/dashboard/insights',    icon: Globe,    color: 'bg-teal-500', keywords: 'site traffic pages forms' },
-      { label: 'Reviews',       href: '/dashboard/insights/reviews', icon: Star, color: 'bg-amber-500', keywords: 'ratings reputation respond' },
+      { label: 'Reviews',       href: '/dashboard/inbox?tab=reviews', icon: Star, color: 'bg-amber-500', keywords: 'ratings reputation respond' },
       { label: 'Email & SMS',   href: '/dashboard/insights',  icon: Mail,     color: 'bg-indigo-500', keywords: 'campaigns newsletter list texts' },
       { label: 'Calendar',      href: '/dashboard/calendar',   icon: Calendar, color: 'bg-emerald-500', keywords: 'schedule content posts' },
     ],
