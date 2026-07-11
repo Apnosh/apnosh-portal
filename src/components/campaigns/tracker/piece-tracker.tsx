@@ -8,7 +8,7 @@
  * /api/creator/work then re-fetch via onReload.
  */
 import { useState } from 'react'
-import { FileText, Film, Camera, Smartphone, Palette, Eye, Send, TrendingUp, Check, Sparkles, ExternalLink } from 'lucide-react'
+import { FileText, Film, Camera, Smartphone, Palette, Eye, Send, TrendingUp, Check, Sparkles, ExternalLink, Star } from 'lucide-react'
 import { C, DISPLAY, EYEBROW, GRAD, SHADOW_CARD } from '@/components/campaigns/ui'
 import { stageRank, type Stage } from '@/lib/campaigns/tracker/stages'
 import type { TrackerPiece } from '@/lib/campaigns/tracker/types'
@@ -47,6 +47,73 @@ export function pieceChip(p: TrackerPiece): string | null {
 type NodeState = 'done' | 'current' | 'future'
 type LNode = { key: string; title: string; sub: string; Icon: typeof FileText; state: NodeState }
 
+/** "★ 4.8 (12)" for a maker with a real profile and real ratings — null otherwise.
+ *  The honest fallback (team work, unrated creators) is showing nothing extra. */
+export function creatorRatingChip(p: TrackerPiece): string | null {
+  const r = p.creatorRating
+  if (!r || r.count < 1) return null
+  return `★ ${r.avg} (${r.count})`
+}
+
+/**
+ * The one rating capture: 5 stars + an optional comment for a delivered piece of
+ * creator work. Renders on the piece spine's review step only (never sprinkled).
+ * POSTs /api/dashboard/work-rating; one rating per order, server-enforced.
+ */
+function RateWork({ orderId, onRated }: { orderId: string; onRated: () => void }) {
+  const [stars, setStars] = useState(0)
+  const [comment, setComment] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function send() {
+    if (!stars || busy) return
+    setBusy(true); setErr(null)
+    try {
+      const r = await fetch('/api/dashboard/work-rating', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ orderId, stars, ...(comment.trim() ? { comment: comment.trim() } : {}) }),
+      })
+      if (r.ok || r.status === 409) { setDone(true); onRated() }   // 409 = already rated: same end state
+      else setErr(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? 'Could not save your rating. Try again.')
+    } catch { setErr('Could not save your rating. Try again.') }
+    finally { setBusy(false) }
+  }
+
+  if (done) return <div style={{ fontSize: 12, fontWeight: 600, color: C.greenDk, marginTop: 8 }}>Thanks. Your rating helps us match you with the right makers.</div>
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: C.ink2 }}>How was this work?</div>
+      <div style={{ display: 'flex', gap: 2, marginTop: 4 }}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} aria-label={`${n} ${n === 1 ? 'star' : 'stars'}`} disabled={busy} onClick={() => setStars(n)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, lineHeight: 0 }}>
+            <Star size={20} fill={n <= stars ? '#f5a93f' : 'none'} color={n <= stars ? '#f5a93f' : C.faint} />
+          </button>
+        ))}
+      </div>
+      {stars > 0 && (
+        <div style={{ marginTop: 6 }}>
+          <input
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Anything to add? (optional)"
+            maxLength={1000}
+            style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${C.line}`, borderRadius: 10, padding: '9px 11px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', outline: 'none', background: '#fff' }}
+          />
+          <button disabled={busy} onClick={send} className="cw-press" style={{ marginTop: 6, height: 38, padding: '0 16px', borderRadius: 10, border: 'none', background: GRAD, color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Saving…' : 'Send rating'}
+          </button>
+        </div>
+      )}
+      {err && <div style={{ fontSize: 11.5, color: '#be123c', marginTop: 6 }}>{err}</div>}
+    </div>
+  )
+}
+
 function stageNodeKey(stage: Stage): string {
   if (stage === 'ready_for_you') return 'ok'
   if (stage === 'approved' || stage === 'scheduled') return 'live'
@@ -79,12 +146,17 @@ function lifecycle(p: TrackerPiece): LNode[] {
  *  no footer note) so the Now card can host it as its body without a second narrator. */
 export function PieceSpine({ piece, onReload, embed }: { piece: TrackerPiece; onReload: () => Promise<void> | void; embed?: boolean }) {
   const [busy, setBusy] = useState(false)
+  // The rating moment: after the owner approves a ratable creator piece, hold the
+  // reload and ask "How was this work?" once — skip or send, then the page moves on.
+  const [rateAfterApprove, setRateAfterApprove] = useState(false)
+  const [rated, setRated] = useState(false)
   const p = piece
   async function act(patch: { status?: string; note?: string; concept_status?: 'approved' | 'changes' }) {
     if (!p.orderId) return
     setBusy(true)
     try {
-      await fetch('/api/creator/work', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: p.orderId, ...patch }) })
+      const r = await fetch('/api/creator/work', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: p.orderId, ...patch }) })
+      if (r.ok && patch.status === 'approved' && p.ratable && !rated) { setRateAfterApprove(true); return }   // rate first, reload after
       await onReload()
     } finally { setBusy(false) }
   }
@@ -105,7 +177,7 @@ export function PieceSpine({ piece, onReload, embed }: { piece: TrackerPiece; on
         <span style={{ display: 'grid', placeItems: 'center', width: 32, height: 32, borderRadius: 10, background: C.greenSoft, flexShrink: 0 }}><ChannelIcon size={16} color={C.greenDk} /></span>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.label}</div>
-          <div style={{ fontSize: 11.5, color: C.mute, textTransform: 'capitalize' }}>{friendlyType(p.channel)}{p.who !== 'Your team' ? ` · ${p.who}` : ''}</div>
+          <div style={{ fontSize: 11.5, color: C.mute, textTransform: 'capitalize' }}>{friendlyType(p.channel)}{p.who !== 'Your team' ? ` · ${p.who}` : ''}{creatorRatingChip(p) ? <span style={{ textTransform: 'none', color: C.amberFg }}> · {creatorRatingChip(p)}</span> : ''}</div>
         </div>
       </div>
 
@@ -120,12 +192,25 @@ export function PieceSpine({ piece, onReload, embed }: { piece: TrackerPiece; on
             <div style={{ paddingBottom: last ? 0 : 16, minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 13.5, fontWeight: n.state === 'future' ? 500 : 600, color: n.state === 'future' ? C.mute : C.ink }}>{n.title}</div>
               <div style={{ fontSize: 11.5, color: C.mute, marginTop: 1 }}>{n.sub}</div>
-              {n.key === 'ok' && n.state === 'current' && p.canApprove && p.orderId && (
+              {n.key === 'ok' && n.state === 'current' && p.canApprove && p.orderId && !rateAfterApprove && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                   {p.previewUrl && <a href={p.previewUrl} target="_blank" rel="noopener noreferrer" style={{ alignSelf: 'center', fontSize: 12, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '12px 4px', margin: '-12px 0' }}>View <ExternalLink size={11} /></a>}
                   <button disabled={busy} onClick={() => act({ status: 'approved' })} className="cw-press" style={{ flex: 1, height: 44, borderRadius: 10, border: 'none', background: GRAD, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>Approve</button>
                   <button disabled={busy} onClick={askChanges} style={{ flex: 1, height: 44, borderRadius: 10, border: `1px solid ${C.line}`, background: '#fff', color: C.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Changes</button>
                 </div>
+              )}
+              {n.key === 'ok' && rateAfterApprove && p.orderId && (
+                // The one rating capture, right where the owner just reviewed the delivery.
+                <div style={{ marginTop: 8, background: C.bg, borderRadius: 12, padding: '10px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: C.greenDk }}><Check size={13} strokeWidth={3} /> Approved</div>
+                  <RateWork orderId={p.orderId} onRated={() => setRated(true)} />
+                  <button onClick={() => onReload()} style={{ marginTop: 8, background: 'none', border: 'none', padding: 0, fontSize: 11.5, fontWeight: 600, color: C.mute, cursor: 'pointer', textDecoration: 'underline' }}>
+                    {rated ? 'Continue' : 'Skip for now'}
+                  </button>
+                </div>
+              )}
+              {n.key === 'ok' && n.state === 'done' && !rateAfterApprove && p.myStars != null && (
+                <div style={{ fontSize: 11.5, color: C.mute, marginTop: 4 }}>You rated this work {p.myStars}/5.</div>
               )}
               {n.key === 'prod' && n.state === 'current' && p.canReviewConcept && p.orderId && (
                 // "Run the idea by me first": the maker cannot start until the owner OKs the
@@ -159,7 +244,7 @@ export function PieceCompactRow({ p, rightOverride }: { p: TrackerPiece; rightOv
       <span style={{ display: 'grid', placeItems: 'center', width: 28, height: 28, borderRadius: 8, background: C.greenSoft, flexShrink: 0 }}><ChannelIcon size={14} color={C.greenDk} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.label}</div>
-        <div style={{ fontSize: 11, color: C.mute, textTransform: 'capitalize' }}>{friendlyType(p.channel)}{p.who !== 'Your team' ? ` · ${p.who}` : ''}</div>
+        <div style={{ fontSize: 11, color: C.mute, textTransform: 'capitalize' }}>{friendlyType(p.channel)}{p.who !== 'Your team' ? ` · ${p.who}` : ''}{creatorRatingChip(p) ? <span style={{ textTransform: 'none', color: C.amberFg }}> · {creatorRatingChip(p)}</span> : ''}</div>
       </div>
       {p.readoutValue ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>

@@ -1,14 +1,16 @@
 /**
- * Admin vendor list. Click a vendor to manage their profile +
- * portfolio. Phase 1 supports portfolio uploads; Phase 3 will add
- * vendor-self upload.
+ * Admin creators/vendors list. Click one to manage their profile, portfolio,
+ * and see their delivered-work ratings. The rating shown per row is the live
+ * aggregate from real work_ratings rows — creators with none show "No ratings
+ * yet" (never a fabricated number).
  */
 
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Building2, User, ShieldCheck, ArrowRight } from 'lucide-react'
+import { Building2, User, ShieldCheck, ArrowRight, Star } from 'lucide-react'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { creatorRatingAggregates } from '@/lib/campaigns/work-ratings'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +19,7 @@ interface VendorRow {
   slug: string
   name: string
   vendor_type: 'individual' | 'company' | 'apnosh'
+  craft: string | null
   verified: boolean
   tier: string
   bookable: boolean
@@ -41,24 +44,26 @@ export default async function AdminVendorsPage() {
 
   const { data } = await admin
     .from('vendors')
-    .select('id, slug, name, vendor_type, verified, tier, bookable, total_bookings, created_at')
+    .select('id, slug, name, vendor_type, craft, verified, tier, bookable, total_bookings, created_at')
     .order('is_apnosh', { ascending: false })
     .order('verified', { ascending: false })
     .order('created_at', { ascending: false }) as { data: VendorRow[] | null }
 
   const vendors = data ?? []
+  const ratings = await creatorRatingAggregates(vendors.map(v => v.id))
 
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-6 pt-6 pb-20 space-y-6">
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">Admin</p>
-        <h1 className="text-[24px] font-semibold text-ink mt-1">Vendors</h1>
-        <p className="text-ink-3 text-sm mt-1">{vendors.length} total · manage profiles + portfolios</p>
+        <h1 className="text-[24px] font-semibold text-ink mt-1">Creators</h1>
+        <p className="text-ink-3 text-sm mt-1">{vendors.length} total · profiles, portfolios, and delivered-work ratings</p>
       </div>
 
       <div className="space-y-2">
         {vendors.map(v => {
           const Icon = v.vendor_type === 'individual' ? User : Building2
+          const agg = ratings.get(v.id) ?? null
           return (
             <Link
               key={v.id}
@@ -77,15 +82,31 @@ export default async function AdminVendorsPage() {
                   <span className="text-[9px] font-bold uppercase tracking-wider bg-ink-7 text-ink-2 px-1.5 py-0.5 rounded">
                     {v.vendor_type}
                   </span>
+                  {v.craft && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">
+                      {v.craft}
+                    </span>
+                  )}
                   {!v.bookable && (
                     <span className="text-[9px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded">
-                      Hidden
+                      Paused
                     </span>
                   )}
                 </div>
                 <p className="text-[11px] text-ink-3 mt-0.5">
                   /marketplace/{v.slug} · {v.total_bookings} bookings · {v.tier}
                 </p>
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0 text-[12px]">
+                {agg ? (
+                  <>
+                    <Star className="w-3.5 h-3.5 text-amber-500 fill-current" />
+                    <span className="font-semibold text-ink tabular-nums">{agg.avg}</span>
+                    <span className="text-ink-3">({agg.count})</span>
+                  </>
+                ) : (
+                  <span className="text-ink-3 text-[11px]">No ratings yet</span>
+                )}
               </div>
               <ArrowRight className="w-4 h-4 text-ink-3" />
             </Link>
