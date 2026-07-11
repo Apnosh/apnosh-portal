@@ -1,5 +1,21 @@
 import 'server-only'
 /**
+ * ── DEAD RAIL — Google closed this feature for apps ──────────────────────
+ * Verified by a live probe on 2026-07-11: GET
+ * https://mybusinessqanda.googleapis.com/v1/locations/{l}/questions returns
+ * 501 UNIMPLEMENTED, reason API_UNSUPPORTED, message "My Business Q&A API is
+ * no longer supported." No app can list or answer listing questions anymore,
+ * on any OAuth project. listGbpQuestions and upsertGbpAnswer below can never
+ * work against Google again; they are kept only as reference for the honesty
+ * contract they implemented (validate-first, pace, read-back proof). The two
+ * routes that called them (GET /api/dashboard/gbp-questions and POST
+ * /api/dashboard/gbp-answer) now return 410 { code: 'api_removed' } without
+ * touching this module. The owner UI hands off to business.google.com and
+ * keeps the AI drafter (POST /api/dashboard/gbp-answer-draft), which never
+ * touched this API — it only reads our own DB facts and calls the model.
+ * validateAnswer IS still live: the draft route uses it as its backstop.
+ * ──────────────────────────────────────────────────────────────────────────
+ *
  * gbp-qanda — read and answer the customer Questions & Answers on a client's
  * Google Business Profile listing (the owner "Your Google helper" hub).
  *

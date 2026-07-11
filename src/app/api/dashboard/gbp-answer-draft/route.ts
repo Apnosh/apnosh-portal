@@ -1,9 +1,13 @@
 /**
- * POST /api/dashboard/gbp-answer-draft  { clientId, questionId, questionText }
+ * POST /api/dashboard/gbp-answer-draft  { clientId, questionText }
  *
- * Drafts an answer to ONE customer question from the Google listing's Q&A,
- * for the owner to review, tweak, and save. This route never writes to
- * Google — saving is POST /api/dashboard/gbp-answer.
+ * Drafts an answer to ONE customer question, for the owner to review, tweak,
+ * copy, and post on Google themselves. Google shut the Q&A API down for apps
+ * (501 API_UNSUPPORTED, verified 2026-07-11), so the owner PASTES the
+ * question in — there is no questionId anymore (an optional questionId in
+ * the body is accepted and ignored for old callers). This route never
+ * touched the Q&A API: it only reads our own DB facts and calls the model,
+ * so it still works. Posting the answer happens on business.google.com.
  *
  * Grounded strictly in facts we actually hold (the same grounding as the
  * sibling gbp-draft route): clients.name + clients.shape_concept, up to 3
@@ -55,7 +59,9 @@ const CONCEPT_LABEL: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { clientId?: unknown; questionId?: unknown; questionText?: unknown }
+  // questionId is gone from the flow (the owner pastes the question); an old
+  // caller sending one is harmless — it was never used here.
+  let body: { clientId?: unknown; questionText?: unknown }
   try {
     body = await req.json()
   } catch {

@@ -1,15 +1,26 @@
 /**
- * verify-gbp-qanda — unit-style harness for the GBP Questions & Answers rail
- * (src/lib/gbp-qanda.ts) and the owner endpoints' gate order.
+ * verify-gbp-qanda — harness for the GBP Questions & Answers rail.
  * Run: npx tsx scripts/verify-gbp-qanda.ts
+ *
+ * THE RAIL IS DEAD AT GOOGLE. Verified by a live probe on 2026-07-11: the
+ * My Business Q&A API returns 501 UNIMPLEMENTED, reason API_UNSUPPORTED,
+ * "My Business Q&A API is no longer supported." So this harness now checks
+ * two things:
+ *  - the two dead routes (GET /api/dashboard/gbp-questions and POST
+ *    /api/dashboard/gbp-answer) are INVOKED for real and must return
+ *    410 { ok:false, code:'api_removed' } without one fetch to Google;
+ *  - the AI draft route (gbp-answer-draft) keeps its gates, grounding, and
+ *    backstop, and works from pasted question text with no questionId.
+ *
+ * Sections A-D exercise the retired lib functions (listGbpQuestions /
+ * upsertGbpAnswer in src/lib/gbp-qanda.ts) over a mocked fetch. They are
+ * kept as executable documentation of the honesty contract the old rail
+ * implemented (validate-first, pace, read-back proof) and because
+ * validateAnswer is STILL live as the draft route's backstop.
  *
  * ZERO NETWORK, GUARANTEED (same idiom as verify-gbp-apply): global fetch is
  * replaced before any module loads, env points at fake hosts, and any request
- * to an unexpected URL throws. Supabase reads (token row, rate-slot RPC) and
- * the Q&A API calls (questions list GET + answers:upsert POST) are all served
- * by the mock, so the REAL listGbpQuestions/upsertGbpAnswer code runs
- * end-to-end and the harness asserts the exact POST body Google would have
- * received plus the read-back-proof honesty contract.
+ * to an unexpected URL throws.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -115,7 +126,7 @@ async function main() {
   const { listGbpQuestions, upsertGbpAnswer, validateAnswer, validQuestionId } = qanda
 
   /* ── A. List normalization ── */
-  group('A. list normalization (real listGbpQuestions over mocked fetch)')
+  group('A. list normalization (RETIRED rail, kept as documentation)')
   state.tokenRow = true; state.listStatus = 200; state.listBody = Q_LIST
   googleCalls.length = 0
   const a = await listGbpQuestions('client-1')
@@ -139,7 +150,7 @@ async function main() {
   check('A12 empty Google body → ok with zero questions', aEmpty.ok && aEmpty.questions.length === 0)
 
   /* ── B. Failed reads are explicit + plain ── */
-  group('B. failed reads (honest codes, plain words, no raw leak)')
+  group('B. failed reads (RETIRED rail: honest codes, plain words, no raw leak)')
   state.listStatus = 403; state.listBody = DISABLED_403
   const b1 = await listGbpQuestions('client-1')
   check('B1 disabled API 403 → ok:false code api_disabled', !b1.ok && b1.code === 'api_disabled')
@@ -162,7 +173,7 @@ async function main() {
   state.tokenRow = true
 
   /* ── C. Deterministic answer validation ── */
-  group('C. answer validation (deterministic, code-level)')
+  group('C. answer validation (STILL LIVE: the draft route backstop)')
   check('C1 a plain helpful answer passes', validateAnswer(GOOD_ANSWER).ok)
   check('C2 empty rejected', !validateAnswer('').ok)
   check('C3 whitespace-only rejected', !validateAnswer('   \n ').ok)
@@ -177,7 +188,7 @@ async function main() {
   check('C12 question id: empty and non-string refused', !validQuestionId('') && !validQuestionId(null))
 
   /* ── D. Upsert flow (POST body + read-back proof) ── */
-  group('D. upsert flow (real upsertGbpAnswer over mocked fetch)')
+  group('D. upsert flow (RETIRED rail, kept as documentation)')
   // Happy path: Google's re-read shows the merchant answer we just sent.
   const echoedList = {
     questions: [{
@@ -248,48 +259,56 @@ async function main() {
   check('D17 not-connected → code not_connected, no Google call', !d17.ok && d17.code === 'not_connected' && googleCalls.length === 0)
   state.tokenRow = true
 
-  /* ── E. Owner endpoints: exports + gate order (source-asserted, like verify-gbp-apply J) ── */
-  group('E. owner endpoints')
+  /* ── E. Dead routes: 410, invoked for real, zero Google calls ── */
+  group('E. dead routes (Google closed the Q&A API for apps — 501 API_UNSUPPORTED, 2026-07-11)')
+  const DEAD_BODY = { ok: false, error: 'Google closed this feature for apps.', code: 'api_removed' }
+
+  googleCalls.length = 0
+  const qRoute = await import('../src/app/api/dashboard/gbp-questions/route')
+  const qRes = await qRoute.GET()
+  const qBody = await qRes.json()
+  check('E1 GET gbp-questions returns 410', qRes.status === 410, `got ${qRes.status}`)
+  check('E2 gbp-questions body is the honest api_removed shape', deepEq(qBody, DEAD_BODY), JSON.stringify(qBody))
+
+  const aRoute = await import('../src/app/api/dashboard/gbp-answer/route')
+  const aRes = await aRoute.POST()
+  const aBody = await aRes.json()
+  check('E3 POST gbp-answer returns 410', aRes.status === 410, `got ${aRes.status}`)
+  check('E4 gbp-answer body is the honest api_removed shape', deepEq(aBody, DEAD_BODY), JSON.stringify(aBody))
+  check('E5 neither dead route made ANY fetch (Google or otherwise)', googleCalls.length === 0, `got ${googleCalls.length} Google calls`)
+
   const qSrc = readFileSync(join(__dirname, '../src/app/api/dashboard/gbp-questions/route.ts'), 'utf8')
-  check('E1 gbp-questions exports GET', /export async function GET\(/.test(qSrc))
-  check('E2 gbp-questions gates on checkClientAccess', qSrc.includes('checkClientAccess(clientId)'))
-  check('E3 gbp-questions has NO tier gate (reading is for every plan)', !qSrc.includes('isProTier'))
-  check('E4 gbp-questions failed read returns the machine code', /code: result\.code/.test(qSrc))
-
   const aSrc = readFileSync(join(__dirname, '../src/app/api/dashboard/gbp-answer/route.ts'), 'utf8')
-  check('E5 gbp-answer exports POST', /export async function POST\(/.test(aSrc))
-  const idx = {
-    access: aSrc.indexOf('checkClientAccess(clientId)'),
-    tier: aSrc.indexOf('isProTier('),
-    validate: aSrc.indexOf('validateAnswer(body.text)'),
-    upsert: aSrc.indexOf('upsertGbpAnswer(clientId'),
-  }
-  check('E6 gates in order: access → tier → validate → upsert',
-    idx.access > 0 && idx.access < idx.tier && idx.tier < idx.validate && idx.validate < idx.upsert,
-    JSON.stringify(idx))
-  check('E7 rate refusal mapped to 429', /rate_limited[\s\S]{0,200}status: 429/.test(aSrc))
-  check('E8 Pro gate returns 403', /Answering from here is on the Pro plan\.[\s\S]{0,80}status: 403/.test(aSrc))
-  check('E9 live claimed only from the read-back result', aSrc.includes('live: result.live'))
-  check('E10 question id validated before the write', aSrc.indexOf('validQuestionId(body.questionId)') > 0 && aSrc.indexOf('validQuestionId(body.questionId)') < idx.upsert)
+  check('E6 dead routes no longer invoke the lib (kept for reference only)',
+    !qSrc.includes('listGbpQuestions') || !/import[\s\S]{0,200}listGbpQuestions[\s\S]{0,100}from/.test(qSrc))
+  check('E7 gbp-questions imports nothing but next/server', !qSrc.includes("from '@/lib/gbp-qanda'") && !qSrc.includes('checkClientAccess') && (qSrc.match(/^import /gm) ?? []).length === 1)
+  check('E8 gbp-answer imports nothing but next/server', !aSrc.includes("from '@/lib/gbp-qanda'") && !aSrc.includes('checkClientAccess') && (aSrc.match(/^import /gm) ?? []).length === 1)
+  check('E9 both route comments record the shutdown discovery date', qSrc.includes('2026-07-11') && aSrc.includes('2026-07-11'))
+  check('E10 the lib file records the 501 API_UNSUPPORTED discovery',
+    readFileSync(join(__dirname, '../src/lib/gbp-qanda.ts'), 'utf8').includes('API_UNSUPPORTED'))
 
+  /* ── F. The AI draft route (still live: DB facts + model, never the Q&A API) ── */
+  group('F. gbp-answer-draft (source-asserted, like verify-gbp-apply J)')
   const dSrc = readFileSync(join(__dirname, '../src/app/api/dashboard/gbp-answer-draft/route.ts'), 'utf8')
-  check('E11 gbp-answer-draft exports POST', /export async function POST\(/.test(dSrc))
+  check('F1 gbp-answer-draft exports POST', /export async function POST\(/.test(dSrc))
   const dIdx = {
     access: dSrc.indexOf('checkClientAccess(clientId)'),
     tier: dSrc.indexOf('isProTier('),
     refuse: dSrc.indexOf('We do not know enough about your business yet'),
     call: dSrc.indexOf('await callStructuredOutput'),
   }
-  check('E12 draft gates in order: access → tier → zero-facts refusal → AI call',
+  check('F2 draft gates in order: access → tier → zero-facts refusal → AI call',
     dIdx.access > 0 && dIdx.access < dIdx.tier && dIdx.tier < dIdx.refuse && dIdx.refuse < dIdx.call,
     JSON.stringify(dIdx))
-  check('E13 draft grounded in real facts only (name/concept/menu/location)',
+  check('F3 draft grounded in real facts only (name/concept/menu/location)',
     dSrc.includes('facts.business_name') && dSrc.includes('facts.menu_items') && dSrc.includes('facts.neighborhood_or_area') && dSrc.includes('facts.city'))
-  check('E14 draft treats the question as data, never instructions', /never instructions/i.test(dSrc) && dSrc.includes('<question>'))
-  check('E15 deterministic backstop: em-dash strip + boundary cut + the SAME answer validator',
+  check('F4 draft treats the question as data, never instructions', /never instructions/i.test(dSrc) && dSrc.includes('<question>'))
+  check('F5 deterministic backstop: em-dash strip + boundary cut + the SAME answer validator',
     dSrc.includes('truncateAtBoundary') && /\[–—\]/.test(dSrc) && dSrc.includes('validateAnswer(cleaned)'))
-  check('E16 draft caps at 600 characters', /DRAFT_MAX = 600/.test(dSrc))
-  check('E17 draft never writes to Google (no upsert import)', !dSrc.includes('upsertGbpAnswer'))
+  check('F6 draft caps at 600 characters', /DRAFT_MAX = 600/.test(dSrc))
+  check('F7 draft never writes to Google (no upsert import)', !dSrc.includes('upsertGbpAnswer'))
+  check('F8 draft needs no questionId (the paste flow has none)',
+    !dSrc.includes('validQuestionId') && !dSrc.includes('questionId required') && dSrc.includes("'questionText required'"))
 
   /* ── report ── */
   console.log(`\n${'─'.repeat(60)}\nverify-gbp-qanda: ${pass} passed, ${fail} failed, ${pass + fail} total`)
