@@ -1760,12 +1760,12 @@ function Nav({ onCreate, onHome, onCampaigns, active = "home" }) {
     <div style={{ flexShrink: 0, height: 74, borderTop: `1px solid ${TOKENS.line}`, background: "#fff", display: "flex", alignItems: "center", padding: "0 4px 12px" }}>
       {cell("home", "Home", "home", onHome)}
       {cell("campaigns", "Campaigns", "calendar", onCampaigns)}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <button onClick={onCreate} style={{ width: 54, height: 54, borderRadius: 27, border: "none", cursor: "pointer", background: `linear-gradient(150deg, ${TOKENS.mint}, ${TOKENS.mintDark})`, display: "flex", alignItems: "center", justifyContent: "center", marginTop: -20, boxShadow: `0 8px 18px ${TOKENS.mintDark}55`, WebkitTapHighlightColor: "transparent" }}>
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-        </button>
-        <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 600, color: "#aeb4b0", marginTop: 2 }}>Create</span>
-      </div>
+      <button onClick={onCreate} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0, WebkitTapHighlightColor: "transparent" }}>
+        <span style={{ width: 22, height: 22, borderRadius: 7, background: TOKENS.mint, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+        </span>
+        <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 600, color: "#aeb4b0" }}>Create</span>
+      </button>
       {cell("inbox", "Inbox", "inbox", undefined)}
       {cell("more", "More", "more", undefined)}
     </div>
