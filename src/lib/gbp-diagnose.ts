@@ -29,7 +29,7 @@ import 'server-only'
  * strings only ever contain numbers we actually read from Google.
  */
 
-import { getClientListing } from '@/lib/gbp-listing'
+import { getClientListing, type DayKey } from '@/lib/gbp-listing'
 import { getClientMenus, getClientMenuLink, getActiveTokenForClient } from '@/lib/gbp-menu'
 import { getListingHealth } from '@/lib/dashboard/get-listing-health'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -37,6 +37,43 @@ import { createAdminClient } from '@/lib/supabase/admin'
 const V4_BASE = 'https://mybusiness.googleapis.com/v4'
 
 export type GbpSectionStatus = 'good' | 'needs-work' | 'missing' | 'unknown'
+
+/**
+ * Per-section CONTENT detail so the review can show the owner the actual
+ * values on Google (the real hours, the real category names, the photo
+ * thumbnails), not just a summary line. Same honesty rules as `current`:
+ * every value here was read from Google on this diagnosis. When a read
+ * failed or the data is absent, `detail` is simply omitted (or its fields
+ * are null) — never guessed, and never a raw error string. Arrays are
+ * capped (12 photos, 12 menu items) so the payload stays small enough for
+ * the PDP's localStorage cache.
+ */
+export type GbpSectionDetail =
+  | {
+      kind: 'hours'
+      /** All 7 days, Monday first. Closed days say "Closed". */
+      days: Array<{ day: string; hours: string }>
+      /** Only present when the owner set special hours. */
+      specialCount?: number
+    }
+  | { kind: 'categories'; primary: string | null; additional: string[] }
+  | { kind: 'description'; text: string | null }
+  | {
+      kind: 'photos'
+      count: number
+      /** e.g. "about 2 months old" — only when Google gave a timestamp. */
+      newestLabel?: string
+      /** Up to 12 thumbnail URLs, newest first when timestamps exist. */
+      items: Array<{ url: string }>
+    }
+  | {
+      kind: 'menu'
+      itemCount: number
+      /** Up to 12 items; price only when Google has one (e.g. "$8.99"). */
+      items: Array<{ name: string; price?: string }>
+      menuLink?: string | null
+    }
+  | { kind: 'links'; website: string | null; phone: string | null }
 
 export interface GbpDiagnosisSection {
   key: string
@@ -49,6 +86,9 @@ export interface GbpDiagnosisSection {
   why: string
   /** Can the premium AI lane draft a fix for this section? */
   aiFixable: boolean
+  /** The actual content on Google (see GbpSectionDetail). Absent when the
+   *  read failed — the UI falls back to `current`. */
+  detail?: GbpSectionDetail
 }
 
 export interface GbpDiagnosis {
@@ -74,6 +114,10 @@ export interface GbpDiagnosis {
 interface MediaItem {
   mediaFormat?: string
   createTime?: string
+  /** Small rendition Google serves for thumbnails. */
+  thumbnailUrl?: string
+  /** Full-size Google-hosted URL (fallback when no thumbnail). */
+  googleUrl?: string
 }
 
 interface PhotoSummary {
@@ -83,6 +127,9 @@ interface PhotoSummary {
   newestDays: number | null
   /** True when Google reported more pages than we read. */
   partial: boolean
+  /** Up to 12 thumbnail URLs (newest first when timestamps exist). Only
+   *  URLs Google actually returned — items without one are skipped. */
+  items: Array<{ url: string }>
 }
 
 async function listGbpPhotos(
@@ -106,7 +153,7 @@ async function listGbpPhotos(
   }
   /* v4 returns 404 for a location with no media at all — that is an
      empty state, not an error (same convention as foodMenus). */
-  if (res.status === 404) return { ok: true, count: 0, newestDays: null, partial: false }
+  if (res.status === 404) return { ok: true, count: 0, newestDays: null, partial: false, items: [] }
   if (!res.ok) return { ok: false, error: body?.error?.message || `HTTP ${res.status}` }
 
   const photos = (body.mediaItems ?? []).filter(m => (m.mediaFormat ?? 'PHOTO') === 'PHOTO')
@@ -120,7 +167,18 @@ async function listGbpPhotos(
   const newestDays = newest == null
     ? null
     : Math.max(0, Math.floor((Date.now() - newest) / 86_400_000))
-  return { ok: true, count: photos.length, newestDays, partial: !!body.nextPageToken }
+  /* Thumbnails for the review: newest first (undated last), capped at 12,
+     and only items where Google actually returned a URL. */
+  const items = photos
+    .map(p => {
+      const t = p.createTime ? new Date(p.createTime).getTime() : NaN
+      return { url: (p.thumbnailUrl || p.googleUrl || '').trim(), t: Number.isFinite(t) ? t : -Infinity }
+    })
+    .filter(x => x.url)
+    .sort((a, b) => b.t - a.t)
+    .slice(0, 12)
+    .map(x => ({ url: x.url }))
+  return { ok: true, count: photos.length, newestDays, partial: !!body.nextPageToken, items }
 }
 
 /** "12 days old", "about 8 months old", "about 2 years old" — always from a real timestamp. */
@@ -130,6 +188,35 @@ function ageWords(days: number): string {
   if (days < 60) return `${days} days old`
   if (days < 730) return `about ${Math.floor(days / 30)} months old`
   return `about ${Math.floor(days / 365)} years old`
+}
+
+/* ── Hours detail formatting ────────────────────────────────────────
+   gbp-listing gives each day as ranges of "HH:MM" (24h; "24:00" =
+   closes at midnight). The review shows them the way the owner reads
+   them: "8:00 AM to 9:00 PM". */
+
+const DAY_ORDER: DayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+const DAY_LABEL: Record<DayKey, string> = {
+  mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday',
+  fri: 'Friday', sat: 'Saturday', sun: 'Sunday',
+}
+
+/** "08:00" → "8:00 AM"; "21:30" → "9:30 PM"; "24:00"/"00:00" → "12:00 AM". */
+function fmtTime(t: string): string {
+  const [hRaw, mRaw] = t.split(':')
+  const h = Number(hRaw)
+  const m = Number(mRaw)
+  const h24 = Number.isFinite(h) ? ((h % 24) + 24) % 24 : 0
+  const mm = Number.isFinite(m) ? Math.min(Math.max(m, 0), 59) : 0
+  const ampm = h24 < 12 ? 'AM' : 'PM'
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12
+  return `${h12}:${String(mm).padStart(2, '0')} ${ampm}`
+}
+
+/** One day's ranges as owner words; multiple ranges join with a comma. */
+function dayHoursWords(ranges: Array<{ open: string; close: string }>): string {
+  if (ranges.length === 0) return 'Closed'
+  return ranges.map(r => `${fmtTime(r.open)} to ${fmtTime(r.close)}`).join(', ')
 }
 
 /* ── Section builders ───────────────────────────────────────────── */
@@ -231,6 +318,11 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
         : `Hours set for ${days} of 7 days.${specialNote}`,
       why: WHY.hours,
       aiFixable: false,
+      detail: {
+        kind: 'hours',
+        days: DAY_ORDER.map(d => ({ day: DAY_LABEL[d], hours: dayHoursWords(hours[d] ?? []) })),
+        ...(specialCount > 0 ? { specialCount } : {}),
+      },
     })
   } else {
     sections.push(unknownSection('hours', 'Your hours', WHY.hours, false, 'We could not read your hours right now.'))
@@ -251,6 +343,11 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
           : `Main category is ${primary.displayName}. No extra categories yet.`,
       why: WHY.categories,
       aiFixable: true,
+      detail: {
+        kind: 'categories',
+        primary: primary?.displayName ?? null,
+        additional: (fields.categories?.additional ?? []).map(c => c.displayName),
+      },
     })
   } else {
     sections.push(unknownSection('categories', 'Your categories', WHY.categories, true, 'We could not read your categories right now.'))
@@ -273,6 +370,7 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
             : `Your description is ${len} characters. Google gives you room for 750.`,
       why: WHY.description,
       aiFixable: true,
+      detail: { kind: 'description', text: len > 0 ? desc : null },
     })
   } else {
     sections.push(unknownSection('description', 'Your description', WHY.description, true, 'We could not read your description right now.'))
@@ -295,6 +393,12 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
           : `${countWords}. Newest is ${ageWords(newestDays)}.`,
       why: WHY.photos,
       aiFixable: false,
+      detail: {
+        kind: 'photos',
+        count,
+        ...(newestDays != null ? { newestLabel: ageWords(newestDays) } : {}),
+        items: photosRes.items,
+      },
     })
   } else {
     sections.push(unknownSection('photos', 'Your photos', WHY.photos, false, 'We could not read your photos right now.'))
@@ -334,7 +438,31 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
       status = 'unknown'
       current = 'We could not read your menu right now.'
     }
-    sections.push({ key: 'menu', label: 'Your menu', status, current, why: WHY.menu, aiFixable: true })
+    /* Detail only when we actually read the menu (itemCount would be a
+       guess otherwise). Up to 12 items, in menu order; price only when
+       Google has one (gbp-menu already turned Money into "8.99"). */
+    let detail: GbpSectionDetail | undefined
+    if (menusRes.ok) {
+      const items: Array<{ name: string; price?: string }> = []
+      for (const m of menusRes.menus) {
+        for (const sec of m.sections) {
+          for (const it of sec.items) {
+            if (items.length >= 12) break
+            const name = (it.name ?? '').trim()
+            if (!name) continue
+            const price = (it.price ?? '').trim().replace(/^\$/, '')
+            items.push(price ? { name, price: `$${price}` } : { name })
+          }
+        }
+      }
+      detail = {
+        kind: 'menu',
+        itemCount,
+        items,
+        menuLink: menuLinkRes.ok ? (menuLink || null) : null,
+      }
+    }
+    sections.push({ key: 'menu', label: 'Your menu', status, current, why: WHY.menu, aiFixable: true, ...(detail ? { detail } : {}) })
   }
 
   /* Links: website + phone. */
@@ -354,6 +482,7 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
             : 'No website and no phone number.',
       why: WHY.links,
       aiFixable: false,
+      detail: { kind: 'links', website: website || null, phone: phone || null },
     })
   } else {
     sections.push(unknownSection('links', 'Website and phone', WHY.links, false, 'We could not read your website and phone right now.'))
