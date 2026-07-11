@@ -8,7 +8,7 @@ import { isProTier } from "@/lib/entitlements";
 import { serviceById, cadenceOf, plainNameOf } from "@/lib/campaigns/catalog";
 import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-turnaround";
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
-import { pdpCopy } from "@/lib/campaigns/data/create-catalog-content";
+import { pdpCopy, campaignContent } from "@/lib/campaigns/data/campaign-content";
 import { whyFor } from "@/lib/campaigns/data/why-for";
 import { whatYouGet } from "@/lib/campaigns/builder/what-you-get";
 import { getMarketingCalendar, daysUntil } from "@/lib/dashboard/marketing-calendar";
@@ -3057,7 +3057,7 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
               gbp as a plain paragraph; other cards use their personalized why. The live gaps/all-good
               check still runs, it just drives the walkthrough after you buy, not this product page. ── */}
         <div style={{ padding: "16px 20px 0" }}>
-          <p style={{ margin: 0, fontFamily: "Inter, sans-serif", fontSize: 14.5, color: "#4c554f", lineHeight: 1.55 }}>{isGbp ? "Your Google profile is the first thing most people check before they visit. A complete, current one is more likely to show up in search and makes it easy to pick you." : why}</p>
+          <p style={{ margin: 0, fontFamily: "Inter, sans-serif", fontSize: 14.5, color: "#4c554f", lineHeight: 1.55 }}>{isGbp ? campaignContent("gbp").description : why}</p>
         </div>
         {/* ── THE PRODUCT (grouping one) — the version pick and "what you get" flow as ONE
               continuous block, no numbered steps. First: choose how it's done (3-lane doer for gbp

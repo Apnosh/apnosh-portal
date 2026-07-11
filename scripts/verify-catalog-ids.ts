@@ -7,7 +7,8 @@
 import { readFileSync } from 'node:fs'
 import { CREATE_CATALOG_IDS } from '../src/lib/campaigns/data/create-catalog'
 import { composePlanForGoal } from '../src/lib/campaigns/builder/compose-plan'
-import { PDP_CONTENT } from '../src/lib/campaigns/data/create-catalog-content'
+import { CAMPAIGN_CONTENT, campaignContent, type CampaignContent } from '../src/lib/campaigns/data/campaign-content'
+import { requirementsFor } from '../src/lib/campaigns/data/campaign-requirements'
 import { whyFor } from '../src/lib/campaigns/data/why-for'
 import { whatYouGet, whatYouGetRowCount } from '../src/lib/campaigns/builder/what-you-get'
 import { serviceById, plainNameOf } from '../src/lib/campaigns/catalog'
@@ -55,9 +56,9 @@ const emDash: string[] = []
 const noRows: string[] = []
 const whyBroken: string[] = []
 for (const id of CREATE_CATALOG_IDS) {
-  const c = (PDP_CONTENT as Record<string, { promise?: string; why?: string; expect?: string } | undefined>)[id]
-  if (!c || !c.promise?.trim() || !c.why?.trim() || !c.expect?.trim()) noCopy.push(id)
-  else if (/—/.test(c.promise + c.why + c.expect)) emDash.push(id)
+  const c = campaignContent(id)
+  if (!c || !c.promise?.trim() || !c.why?.trim() || !c.expectation?.trim()) noCopy.push(id)
+  else if (/—/.test(c.promise + c.why + c.expectation)) emDash.push(id)
   // whatYouGet now returns grouped sections; count real ROWS across every group so an empty
   // base still fails here (a lone titleless group with no rows is not "something you get").
   if (whatYouGetRowCount(id) === 0) noRows.push(id)
@@ -81,6 +82,36 @@ const optGroup = withOpt.find((s) => !!s.title)
 ok(!!optGroup && optGroup.rows.length > 0, 'a selected option adds a titled group with real bullets')
 ok(!!optGroup && optGroup.title === plainNameOf(serviceById('gbp-posts')!), 'the added group is titled by the real service name')
 ok(!!optGroup && optGroup.rows.every((r) => (serviceById('gbp-posts')!.deliverables?.included ?? []).includes(r)), 'every added row is a real catalog deliverable')
+
+// 5) Canonical content record (Phase A of the catalog systemization): CAMPAIGN_CONTENT is the ONE
+// place a campaign's words live. Until the JSX CATALOG reads from it directly (Phase B), assert the
+// record and the render layer carry byte-identical title/tagline, that the gbp PDP description
+// renders FROM the record (no re-hardcoded literal), that requirementsFor derives cleanly for every
+// id, and that no record string smuggles in an em dash.
+console.log('\n== canonical content record (CAMPAIGN_CONTENT) ==')
+const jsxCards: Record<string, { title: string; sub: string }> = {}
+for (const m of block.matchAll(/id:\s*"([^"]+)"[^}]*?title:\s*"([^"]*)"[^}]*?sub:\s*"([^"]*)"/g)) jsxCards[m[1]] = { title: m[2], sub: m[3] }
+const missingContent: string[] = []
+const titleDrift: string[] = []
+const emDashRec: string[] = []
+const reqBroken: string[] = []
+for (const id of CREATE_CATALOG_IDS) {
+  const c = (CAMPAIGN_CONTENT as Record<string, CampaignContent | undefined>)[id]
+  if (!c || !c.title?.trim() || !c.tagline?.trim() || !c.description?.trim() || !c.why?.trim()) { missingContent.push(id); continue }
+  const card = jsxCards[id]
+  if (!card || card.title !== c.title || card.sub !== c.tagline) titleDrift.push(id)
+  const strings = [c.title, c.tagline, c.description, c.promise, c.why, c.expectation, c.bestFor ?? '', ...(c.faq ?? []).flatMap((f) => [f.q, f.a])]
+  if (strings.some((s) => /—/.test(s))) emDashRec.push(id)
+  try { const r = requirementsFor(id); if (!Array.isArray(r) || r.some((x) => typeof x !== 'string' || !x.trim())) reqBroken.push(id) } catch { reqBroken.push(id) }
+}
+ok(missingContent.length === 0, `every id carries a full canonical record (title/tagline/description/why)${missingContent.length ? ` (missing: ${missingContent.join(', ')})` : ''}`)
+ok(titleDrift.length === 0, `record title + tagline are byte-identical to the JSX CATALOG card${titleDrift.length ? ` (drifted: ${titleDrift.join(', ')})` : ''}`)
+// The gbp PDP description must RENDER from the record — the old hardcoded literal must be gone
+// from the JSX, replaced by a campaignContent("gbp") read (so editing the record edits the page).
+ok(jsx.includes('campaignContent("gbp").description'), 'the gbp PDP description renders from campaignContent("gbp")')
+ok(!jsx.includes('Your Google profile is the first thing most people check'), 'no re-hardcoded gbp description literal survives in the JSX')
+ok(emDashRec.length === 0, `no canonical record string has an em dash${emDashRec.length ? ` (offenders: ${emDashRec.join(', ')})` : ''}`)
+ok(reqBroken.length === 0, `requirementsFor derives a clean string list for all ${CREATE_CATALOG_IDS.length} ids${reqBroken.length ? ` (broken: ${reqBroken.join(', ')})` : ''}`)
 
 console.log('\n' + '='.repeat(52))
 if (fail) { console.log(`RESULT: ${fail} checks failed — the create catalog has drifted.`); process.exit(1) }
