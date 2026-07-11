@@ -8,7 +8,7 @@ import { isProTier } from "@/lib/entitlements";
 import { serviceById, cadenceOf, plainNameOf } from "@/lib/campaigns/catalog";
 import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-turnaround";
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
-import { pdpCopy, campaignContent } from "@/lib/campaigns/data/campaign-content";
+import { contentFor } from "@/lib/campaigns/data/content-overrides";
 import { requirementsFor } from "@/lib/campaigns/data/campaign-requirements";
 import { whyFor } from "@/lib/campaigns/data/why-for";
 import { whatYouGet } from "@/lib/campaigns/builder/what-you-get";
@@ -2139,7 +2139,21 @@ const CATALOG = [
   { id: "winback", type: "automation", icon: "heart", title: "Win back quiet guests", sub: "One email and one text to guests you haven't seen lately", cad: "once", hot: true },
   { id: "direct", type: "task", icon: "cart", title: "Get orders direct", sub: "Delivery apps take a cut of every order. Move regulars to direct", cad: "once", hot: true },
 ];
-export const catGet = (id) => CATALOG.find((x) => x.id === id);
+// Admin CMS overlay (Phase C1): the sparse override map the wrapper fetched, set by
+// ApnoshCampaign each render. Only card title/tagline overlay HERE (catGet feeds every
+// card render path); the product page merges the full record via contentFor. Empty or
+// absent = the CATALOG literal below stays the source, byte-identical to the code record.
+let CONTENT_OVERRIDES = null;
+export const catGet = (id) => {
+  const p = CATALOG.find((x) => x.id === id);
+  const o = p && CONTENT_OVERRIDES ? CONTENT_OVERRIDES[id] : null;
+  if (!o) return p;
+  return {
+    ...p,
+    title: typeof o.title === "string" && o.title.trim() ? o.title.trim() : p.title,
+    sub: typeof o.tagline === "string" && o.tagline.trim() ? o.tagline.trim() : p.sub,
+  };
+};
 // Every card now has its own bespoke builder + price (promoevent got its own
 // free-event madlib + playbook). Identity map, kept as a single seam in case a
 // future card needs to borrow another's builder.
@@ -2440,7 +2454,8 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
   // A funnel-stage deep link (Home's weak-leg tap) lands with its shelf pre-filtered.
   const [lens, setLens] = useState(() => (initialLens && LENS_CHIPS.some((c) => c.id === initialLens) ? initialLens : "all"));
   const query = q.trim().toLowerCase();
-  const results = query ? CATALOG.filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
+  // Search over the resolved cards (catGet) so an admin-edited title both matches and renders.
+  const results = query ? CATALOG.map((x) => catGet(x.id)).filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
   // AI recommendations (fetched by the wrapper): drive the featured card + the
   // "Suggested for you" row when present; otherwise the static defaults show.
   const recList = (recommended || []).filter((r) => r && catGet(r.id));
@@ -2879,10 +2894,11 @@ function BlockLabel({ label, hint }) {
 
 function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer, initialOptions, onBack, onContinue, onOpenCard }) {
   const p = catGet(itemId) || CATALOG[0];
-  const copy = pdpCopy(itemId) || { promise: p.sub, why: p.sub, expect: "" };
-  // The ONE canonical content record (Phase B): the sell description, the longer why, and the
-  // (future) real product photo all render from here — no per-card copy lives in this JSX.
-  const content = campaignContent(itemId);
+  // The ONE canonical content record (Phase B) merged with any admin CMS edits (Phase C1):
+  // the sell description, the longer why, and the real product photo all render from here —
+  // no per-card copy lives in this JSX. An empty override field falls back to the code record.
+  const content = contentFor(itemId, CONTENT_OVERRIDES);
+  const copy = content ? { promise: content.promise, why: content.why, expect: content.expectation } : { promise: p.sub, why: p.sub, expect: "" };
   const doerCfg = doerSlotFor(itemId);
   const [doer, setDoer] = useState(initialDoer || (doerCfg ? doerCfg.v : null));
   // Personalized only from THIS client's real signals; otherwise the authored fallback.
@@ -4028,7 +4044,11 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, tier = null, clientId = null, onCreate, onClose, onPlan } = {}) {
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, tier = null, clientId = null, onCreate, onClose, onPlan } = {}) {
+  // Publish the CMS override map for catGet + the product page (see CONTENT_OVERRIDES above).
+  // Set during render so every child render below reads the current map; a late fetch just
+  // re-renders this tree with the fresh edits.
+  CONTENT_OVERRIDES = contentOverrides;
   // Deep links (Home suggestions, ?template=) land on the PRODUCT PAGE too, never the bare madlib.
   const [route, setRoute] = useState(() => (initialItem ? { name: "pdp", itemId: buildIdFor(initialItem) } : { name: "browse" }));
 
