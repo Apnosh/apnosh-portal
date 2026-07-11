@@ -83,16 +83,18 @@ ok(!!optGroup && optGroup.rows.length > 0, 'a selected option adds a titled grou
 ok(!!optGroup && optGroup.title === plainNameOf(serviceById('gbp-posts')!), 'the added group is titled by the real service name')
 ok(!!optGroup && optGroup.rows.every((r) => (serviceById('gbp-posts')!.deliverables?.included ?? []).includes(r)), 'every added row is a real catalog deliverable')
 
-// 5) Canonical content record (Phase A of the catalog systemization): CAMPAIGN_CONTENT is the ONE
-// place a campaign's words live. Until the JSX CATALOG reads from it directly (Phase B), assert the
-// record and the render layer carry byte-identical title/tagline, that the gbp PDP description
-// renders FROM the record (no re-hardcoded literal), that requirementsFor derives cleanly for every
-// id, and that no record string smuggles in an em dash.
+// 5) Canonical content record (Phase A + B of the catalog systemization): CAMPAIGN_CONTENT is the
+// ONE place a campaign's words live and the product page RENDERS from it for every card. Assert the
+// record and the render layer carry byte-identical title/tagline, that description and why are
+// DISTINCT for every id (no card copies one into the other), that the PDP sell/why/headline carry
+// no re-hardcoded per-card literals, that requirementsFor derives cleanly for every id, and that
+// no record string smuggles in an em dash.
 console.log('\n== canonical content record (CAMPAIGN_CONTENT) ==')
 const jsxCards: Record<string, { title: string; sub: string }> = {}
 for (const m of block.matchAll(/id:\s*"([^"]+)"[^}]*?title:\s*"([^"]*)"[^}]*?sub:\s*"([^"]*)"/g)) jsxCards[m[1]] = { title: m[2], sub: m[3] }
 const missingContent: string[] = []
 const titleDrift: string[] = []
+const sameDescWhy: string[] = []
 const emDashRec: string[] = []
 const reqBroken: string[] = []
 for (const id of CREATE_CATALOG_IDS) {
@@ -100,18 +102,24 @@ for (const id of CREATE_CATALOG_IDS) {
   if (!c || !c.title?.trim() || !c.tagline?.trim() || !c.description?.trim() || !c.why?.trim()) { missingContent.push(id); continue }
   const card = jsxCards[id]
   if (!card || card.title !== c.title || card.sub !== c.tagline) titleDrift.push(id)
+  if (c.description.trim() === c.why.trim()) sameDescWhy.push(id)
   const strings = [c.title, c.tagline, c.description, c.promise, c.why, c.expectation, c.bestFor ?? '', ...(c.faq ?? []).flatMap((f) => [f.q, f.a])]
   if (strings.some((s) => /—/.test(s))) emDashRec.push(id)
   try { const r = requirementsFor(id); if (!Array.isArray(r) || r.some((x) => typeof x !== 'string' || !x.trim())) reqBroken.push(id) } catch { reqBroken.push(id) }
 }
 ok(missingContent.length === 0, `every id carries a full canonical record (title/tagline/description/why)${missingContent.length ? ` (missing: ${missingContent.join(', ')})` : ''}`)
 ok(titleDrift.length === 0, `record title + tagline are byte-identical to the JSX CATALOG card${titleDrift.length ? ` (drifted: ${titleDrift.join(', ')})` : ''}`)
-// The gbp PDP description must RENDER from the record — the old hardcoded literal must be gone
-// from the JSX, replaced by a campaignContent("gbp") read (so editing the record edits the page).
-ok(jsx.includes('campaignContent("gbp").description'), 'the gbp PDP description renders from campaignContent("gbp")')
+ok(sameDescWhy.length === 0, `description and why are distinct for every id${sameDescWhy.length ? ` (copies: ${sameDescWhy.join(', ')})` : ''}`)
+// Phase B: the PDP sell paragraph + longer why render from the record for EVERY card, and no
+// per-card sell/why/headline literal survives in the JSX (editing the record edits the page).
+ok(jsx.includes('content.description') && jsx.includes('content.why'), 'the PDP sell + why paragraphs render from the canonical record for every card')
 ok(!jsx.includes('Your Google profile is the first thing most people check'), 'no re-hardcoded gbp description literal survives in the JSX')
+ok(!jsx.includes('Clean up your Google profile to rank higher'), 'the gbp hero headline is no longer hardcoded in the JSX')
+ok(campaignContent('gbp')?.promise === 'Clean up your Google profile to rank higher and get seen by more people.', 'the gbp record promise carries the exact former headline (headline unchanged on screen)')
 ok(emDashRec.length === 0, `no canonical record string has an em dash${emDashRec.length ? ` (offenders: ${emDashRec.join(', ')})` : ''}`)
 ok(reqBroken.length === 0, `requirementsFor derives a clean string list for all ${CREATE_CATALOG_IDS.length} ids${reqBroken.length ? ` (broken: ${reqBroken.join(', ')})` : ''}`)
+ok(requirementsFor('gbp').includes('Connect your Google profile'), "the gbp requirements ask includes 'Connect your Google profile'")
+ok(jsx.includes('requirementsFor(itemId)'), 'the PDP renders its requirements section from requirementsFor(itemId)')
 
 console.log('\n' + '='.repeat(52))
 if (fail) { console.log(`RESULT: ${fail} checks failed — the create catalog has drifted.`); process.exit(1) }

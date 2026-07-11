@@ -40,6 +40,8 @@ export function requirementsFor(itemId: string): string[] {
   if (!shape) return []
   const out: string[] = []
   const push = (ask: string) => { if (!out.includes(ask)) out.push(ask) }
+  // 'edit' cuts the OWNER's footage — its reel/photo beats need their files, not a camera visit.
+  const shootAsk = itemId === 'edit' ? 'Send us your clips and photos' : SHOOT_ASK
 
   for (const serviceId of shape.services ?? []) {
     const t = turnaroundFor(serviceId)
@@ -47,13 +49,13 @@ export function requirementsFor(itemId: string): string[] {
       const ask = GATE_ASK[t.gate.kind]
       if (ask) push(ask)
     }
-    if (t?.class === 'creative' && t.needsShoot) push(SHOOT_ASK)
+    if (t?.class === 'creative' && t.needsShoot) push(shootAsk)
     if (MENU_SERVICES.has(serviceId)) push('Send us your current menu')
     if (LIST_SERVICES.has(serviceId)) push('Share your customer list')
   }
 
   // Any seed piece that needs filming or a photographer implies the shoot ask too.
-  if ((shape.seed ?? []).some(([type]) => SHOOT_BEATS.has(type))) push(SHOOT_ASK)
+  if ((shape.seed ?? []).some(([type]) => SHOOT_BEATS.has(type))) push(shootAsk)
 
   return out
 }

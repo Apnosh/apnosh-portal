@@ -9,6 +9,7 @@ import { serviceById, cadenceOf, plainNameOf } from "@/lib/campaigns/catalog";
 import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-turnaround";
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
 import { pdpCopy, campaignContent } from "@/lib/campaigns/data/campaign-content";
+import { requirementsFor } from "@/lib/campaigns/data/campaign-requirements";
 import { whyFor } from "@/lib/campaigns/data/why-for";
 import { whatYouGet } from "@/lib/campaigns/builder/what-you-get";
 import { getMarketingCalendar, daysUntil } from "@/lib/dashboard/marketing-calendar";
@@ -2879,6 +2880,9 @@ function BlockLabel({ label, hint }) {
 function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer, initialOptions, onBack, onContinue, onOpenCard }) {
   const p = catGet(itemId) || CATALOG[0];
   const copy = pdpCopy(itemId) || { promise: p.sub, why: p.sub, expect: "" };
+  // The ONE canonical content record (Phase B): the sell description, the longer why, and the
+  // (future) real product photo all render from here — no per-card copy lives in this JSX.
+  const content = campaignContent(itemId);
   const doerCfg = doerSlotFor(itemId);
   const [doer, setDoer] = useState(initialDoer || (doerCfg ? doerCfg.v : null));
   // Personalized only from THIS client's real signals; otherwise the authored fallback.
@@ -2929,10 +2933,11 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   // is all-good (or the reverse): A = fix framing, B = maintain framing, C = neutral aspiration.
   // The headline is a plain description of what the campaign DOES (not a state claim or a promised
   // result). The real monthly-views number and the state-aware "why" live in the zone-2 sell line
-  // below. gbp gets a fixed description; other cards use their authored promise.
+  // below. Every card's headline is its authored record promise (gbp skips the views line so its
+  // headline stays the plain fixed description it has always shown).
   const heroHeadline = (() => {
     const v = views30d ? views30d.toLocaleString("en-US") : null;
-    if (isGbp) return "Clean up your Google profile to rank higher and get seen by more people.";
+    if (isGbp) return copy.promise || p.sub;
     const seen = (ITEM_STAGES[p.id] || []).includes("aware");
     if (seen && v) return `Get in front of more of the ${v} who find you each month.`;
     return copy.promise || p.sub;
@@ -2989,6 +2994,12 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
     setTimeout(() => setAdded(false), 1800);
   };
   const timeline = configTimeline(p, gbpLane, selected);
+  // What the OWNER must provide, derived from the card's REAL composition (services + seed
+  // beats → turnaround gates). Hidden when nothing is genuinely needed. On a versioned card's
+  // self-serve (diy) lane the owner IS the worker, so the asks don't apply — hidden there too
+  // (the team and AI lanes keep it: someone else needs these things from the owner).
+  const requirements = requirementsFor(itemId);
+  const showRequirements = requirements.length > 0 && !(doerCfg && gbpLane === "diy");
   // The "Add extras" block at the bottom only exists when this card has REAL add-ons or a
   // Pro AI row to offer. When it has neither, the whole block is hidden (renders nothing).
   const hasExtras = optServices.length > 0 || (doerCfg && !!aiOpt);
@@ -3044,6 +3055,12 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
                   ))}
                 </div>
               </div>
+            ) : content && content.heroImage ? (
+              /* Real product photo from the canonical record — same footprint as the art tile.
+                 (All records carry null today; this branch lights up as photos get authored.) */
+              <div className="apnrise2" style={{ marginTop: 20, display: "flex", justifyContent: "center" }}>
+                <img src={content.heroImage} alt={p.title} style={{ width: 128, height: 128, borderRadius: 30, objectFit: "cover", boxShadow: "0 16px 34px rgba(20,45,33,0.24), 0 3px 8px rgba(20,40,30,0.12)" }} />
+              </div>
             ) : (
               <div className="apnrise2" style={{ marginTop: 20, display: "flex", justifyContent: "center" }}>
                 <div style={{ width: 128, height: 128, borderRadius: 30, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 16px 34px ${hexA((TYPE_G[p.type] || TYPE_G.plan)[1], 0.34)}, 0 3px 8px rgba(20,40,30,0.12)` }}>
@@ -3053,11 +3070,15 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             )}
           </div>
         </div>
-        {/* ── SELL — one clean description right under the hero (what it is and why). Always shown for
-              gbp as a plain paragraph; other cards use their personalized why. The live gaps/all-good
-              check still runs, it just drives the walkthrough after you buy, not this product page. ── */}
+        {/* ── SELL — every card sells from the canonical record, in one order: the authored
+              description (what this is and does), then the personalized why line ONLY when this
+              client's real signals back it (whyFor never invents a number), then the authored
+              longer why (why it matters), slightly quieter. The live gaps/all-good check still
+              runs, it just drives the walkthrough after you buy, not this product page. ── */}
         <div style={{ padding: "16px 20px 0" }}>
-          <p style={{ margin: 0, fontFamily: "Inter, sans-serif", fontSize: 14.5, color: "#4c554f", lineHeight: 1.55 }}>{isGbp ? campaignContent("gbp").description : why}</p>
+          <p style={{ margin: 0, fontFamily: "Inter, sans-serif", fontSize: 14.5, color: "#4c554f", lineHeight: 1.55 }}>{(content && content.description) || why}</p>
+          {content && personalWhy && <p style={{ margin: "10px 0 0", fontFamily: "Inter, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.5 }}>{personalWhy}</p>}
+          {content && content.why && <p style={{ margin: "10px 0 0", fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.55 }}>{content.why}</p>}
         </div>
         {/* ── THE PRODUCT (grouping one) — the version pick and "what you get" flow as ONE
               continuous block, no numbered steps. First: choose how it's done (3-lane doer for gbp
@@ -3126,6 +3147,22 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             )}
           </div>
         </div>
+        {/* What we'll need from you — the logistics sibling of the timeline, directly below it.
+              Simple derived rows (requirementsFor): what the owner provides so the work can start.
+              Hidden when the list is empty, and on the gbp diy lane (the owner does the work). ── */}
+        {showRequirements && (
+          <div style={{ padding: "20px 20px 0" }}>
+            <BlockLabel label="What we'll need from you" />
+            <div style={{ background: "#f7f9f8", borderRadius: 14, padding: "13px 15px" }}>
+              {requirements.map((r, i) => (
+                <div key={r} style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: i === 0 ? 0 : 10 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 4, background: TOKENS.mint, flexShrink: 0, marginTop: 6 }} />
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.4 }}>{r}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {/* What you get — flows directly under the version pick as part of the SAME product block
               (minimal separation, no numbered step). Recomposes LIVE from the chosen version +
               toggled options (the same state that drives the price, and that the extras block below
