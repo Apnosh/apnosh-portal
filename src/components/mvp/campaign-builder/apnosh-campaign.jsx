@@ -3079,7 +3079,7 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
           /* State C — a plain description of the campaign (gbp), else the card's personalized why.
              Clean paragraph text (no tinted callout box — that reads as an alert, not a description). */
           <div style={{ padding: "16px 20px 0" }}>
-            <p style={{ margin: 0, fontFamily: "Inter, sans-serif", fontSize: 14.5, color: TOKENS.sub, lineHeight: 1.55 }}>{isGbp ? "Your Google profile is the first thing most people check before they visit. A complete, current one is more likely to show up in search and makes it easy to pick you." : why}</p>
+            <p style={{ margin: 0, fontFamily: "Inter, sans-serif", fontSize: 14.5, color: "#4c554f", lineHeight: 1.55 }}>{isGbp ? "Your Google profile is the first thing most people check before they visit. A complete, current one is more likely to show up in search and makes it easy to pick you." : why}</p>
           </div>
         )}
         {/* ── THE PRODUCT (grouping one) — the version pick and "what you get" flow as ONE
