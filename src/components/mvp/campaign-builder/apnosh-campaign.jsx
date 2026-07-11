@@ -2675,6 +2675,21 @@ function doerDisplay(opt, tier) {
   return { lane, title: "Apnosh does it", sub: "We fix it all for you.", price: m ? `$${m[1]}` : null, pro: false };
 }
 
+/** Compact presentation of a doer option for the SEGMENTED (tab) version picker: a SHORT name and
+ *  a comparable price (all three read at a glance), the PRO flag for the AI tab, and a plain detail
+ *  line shown for the SELECTED tab only. Same three lanes + Pro gate as doerDisplay — this only
+ *  reshapes the copy for a tab. Sentence case, 5th-grade plain, no em dashes. */
+function doerTab(opt, tier) {
+  const lane = gbpLaneOf(opt);
+  if (lane === "diy") return { lane, short: "I'll do it", price: "Free", pro: false, detail: "You do it yourself. We show you what to fix." };
+  if (lane === "ai") {
+    const pro = isProTier(tier);
+    return { lane, short: "Apnosh AI", price: "Free", pro: true, detail: pro ? "Apnosh AI writes each fix for you." : "Included in the Pro plan." };
+  }
+  const m = String(opt).match(/\$\s?([\d,]+)/);
+  return { lane, short: "Apnosh", price: m ? `$${m[1]}` : null, pro: false, detail: "We fix it all for you." };
+}
+
 /** The CTA's price label. Reuses ITEM_PRICES/priceLabel; the only extra rule mirrors
  *  planTags exactly: creative work prices as a floor ("Starting $X"). Either owner-run gbp
  *  lane (diy or ai) reads Free, matching the madlib's own free line. */
@@ -3083,32 +3098,32 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
         <div style={{ padding: "22px 20px 0" }}>
           <BlockLabel label={doerCfg ? "Choose how it's done" : "How it's done"} />
           {doerCfg ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-              {doerCfg.o.map((opt) => {
-                const d = doerDisplay(opt, tier);
-                const on = doer === opt;
-                return (
-                  <button key={opt} onClick={() => setDoer(opt)} className="apnpress" style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: on ? TOKENS.mintTint : "#fff", border: on ? `1.5px solid ${TOKENS.mint}` : `1.5px solid ${TOKENS.line}`, borderRadius: 16, padding: "13px 14px", cursor: "pointer", boxShadow: on ? "0 4px 16px rgba(74,189,152,0.18)" : "0 1px 2px rgba(20,40,30,0.03)", WebkitTapHighlightColor: "transparent" }}>
-                    <span style={{ width: 20, height: 20, borderRadius: 10, border: on ? "none" : `1.5px solid ${TOKENS.dash}`, background: on ? TOKENS.mint : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      {on && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
-                    </span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                        <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink }}>{d.title}</span>
-                        {d.pro && (
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#eaf7f3", color: "#2e9a78", fontFamily: "Inter, sans-serif", fontSize: 10, fontWeight: 800, letterSpacing: 0.5, borderRadius: 6, padding: "2px 6px" }}>
-                            <svg width="9" height="9" viewBox="0 0 24 24" fill="#2e9a78"><path d="M12 2l2.4 6.9L21.6 9l-5.8 4.4 2.2 7-6-4.3-6 4.3 2.2-7L2.4 9l7.2-.1z" /></svg>
-                            PRO
-                          </span>
+            <>
+              {/* A 3-segment TAB / segmented control — one equal-thirds tab per lane. Each tab shows
+                  a short name + its price so all three prices compare at a glance; the AI tab carries
+                  the PRO badge. The selected tab is filled green with white text; the others stay
+                  quiet. Tapping a tab calls the SAME setDoer(opt) as the old cards, so the price,
+                  "What you get", the buy box, and the Pro gate all update exactly as before. */}
+              <div style={{ display: "flex", gap: 7 }}>
+                {doerCfg.o.map((opt) => {
+                  const t = doerTab(opt, tier);
+                  const on = doer === opt;
+                  return (
+                    <button key={opt} onClick={() => setDoer(opt)} className="apnpress" aria-pressed={on} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, textAlign: "center", background: on ? TOKENS.mint : "#fff", border: on ? `1.5px solid ${TOKENS.mint}` : `1.5px solid ${TOKENS.line}`, borderRadius: 14, padding: "11px 6px", cursor: "pointer", boxShadow: on ? "0 4px 14px rgba(74,189,152,0.30)" : "0 1px 2px rgba(20,40,30,0.03)", WebkitTapHighlightColor: "transparent" }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
+                        <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13, fontWeight: 600, color: on ? "#fff" : TOKENS.ink, whiteSpace: "nowrap" }}>{t.short}</span>
+                        {t.pro && (
+                          <span style={{ display: "inline-flex", alignItems: "center", background: on ? "rgba(255,255,255,0.24)" : "#eaf7f3", color: on ? "#fff" : "#2e9a78", fontFamily: "Inter, sans-serif", fontSize: 8.5, fontWeight: 800, letterSpacing: 0.4, borderRadius: 5, padding: "1.5px 4px" }}>PRO</span>
                         )}
                       </span>
-                      {d.sub && <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 1 }}>{d.sub}</span>}
-                    </span>
-                    {d.price && <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: on ? TOKENS.mintDark : TOKENS.ink, flexShrink: 0 }}>{d.price}</span>}
-                  </button>
-                );
-              })}
-            </div>
+                      <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 700, color: on ? "rgba(255,255,255,0.92)" : TOKENS.mintDark }}>{t.price || "Free"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Plain detail line for the SELECTED version only. */}
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.45, marginTop: 10 }}>{doerTab(doer, tier).detail}</div>
+            </>
           ) : (
             <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub }}>The Apnosh team does this for you.</div>
           )}
