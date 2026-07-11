@@ -25,19 +25,23 @@ function Inbox() {
   const [orders, setOrders] = useState<WorkOrder[] | null>(null)
   const [resolvedId, setResolvedId] = useState<string | null>(null)
   const [earnings, setEarnings] = useState<CreatorEarnings | null>(null)
+  const [ratingLabel, setRatingLabel] = useState<string | null>(null)
+  const [orderStars, setOrderStars] = useState<Record<string, number>>({})
   const [busy, setBusy] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (creator) {
       const r = await fetch(`/api/creator/work?creator=${encodeURIComponent(creator)}`, { cache: 'no-store' })
       const j = await r.json().catch(() => ({ orders: [] }))
-      setOrders(j.orders ?? []); setResolvedId(creator); setEarnings(null)
+      setOrders(j.orders ?? []); setResolvedId(creator); setEarnings(null); setRatingLabel(null); setOrderStars({})
       return
     }
     // No param: resolve the logged-in creator (creator_logins).
     const r = await fetch('/api/creator/me', { cache: 'no-store' })
     const j = await r.json().catch(() => ({ orders: [], creatorId: null }))
     setOrders(j.orders ?? []); setResolvedId(j.creatorId ?? null); setEarnings((j.earnings as CreatorEarnings) ?? null)
+    setRatingLabel(typeof j.ratingLabel === 'string' ? j.ratingLabel : null)
+    setOrderStars((j.ratingsByOrder as Record<string, number>) ?? {})
   }, [creator])
 
   useEffect(() => { load() }, [load])
@@ -66,6 +70,12 @@ function Inbox() {
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wide text-neutral-400">Creator workspace</p>
             <h1 className="mt-0.5 text-lg font-semibold text-neutral-900">{name}</h1>
+            {/* the creator's own honest track record: real ratings only, "No ratings yet" until one exists */}
+            {ratingLabel && (
+              <p className="mt-0.5 text-[12px] text-neutral-500">
+                {ratingLabel === 'No ratings yet' ? ratingLabel : <><span className="text-amber-500">★</span> {ratingLabel}</>}
+              </p>
+            )}
           </div>
           {earnings && earnings.count > 0 && (
             <div className="text-right">
@@ -93,7 +103,7 @@ function Inbox() {
         {done.length > 0 && (
           <section className="space-y-3">
             <SectionLabel>History · {done.length}</SectionLabel>
-            {done.map((o) => <OrderCard key={o.id} o={o} busy={busy === o.id} onAct={act} />)}
+            {done.map((o) => <OrderCard key={o.id} o={o} busy={busy === o.id} onAct={act} stars={orderStars[o.id]} />)}
           </section>
         )}
       </main>
@@ -117,7 +127,7 @@ const STATUS_META: Record<WorkOrderStatus, { label: string; cls: string }> = {
 
 const DISC_ICON: Record<string, string> = { Video: '🎬', Photo: '📷', Social: '📱', Design: '🎨' }
 
-function OrderCard({ o, busy, onAct }: { o: WorkOrder; busy: boolean; onAct: (id: string, p: { status?: WorkOrderStatus; delivered_url?: string }) => void }) {
+function OrderCard({ o, busy, onAct, stars }: { o: WorkOrder; busy: boolean; onAct: (id: string, p: { status?: WorkOrderStatus; delivered_url?: string }) => void; stars?: number }) {
   const [url, setUrl] = useState(o.deliveredUrl ?? '')
   const meta = STATUS_META[o.status]
   const due = o.dueDate ? new Date(o.dueDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : null
@@ -171,6 +181,10 @@ function OrderCard({ o, busy, onAct }: { o: WorkOrder; busy: boolean; onAct: (id
       )}
       {o.status === 'approved' && safeHref(o.deliveredUrl) && (
         <a href={safeHref(o.deliveredUrl)!} target="_blank" rel="noreferrer" className="mt-3 inline-block text-[12px] font-medium text-emerald-700 underline">View delivered work</a>
+      )}
+      {/* the owner's real rating for this delivery, when one exists */}
+      {o.status === 'approved' && typeof stars === 'number' && stars >= 1 && (
+        <p className="mt-2 text-[12px] text-neutral-500">Owner rated this <span className="text-amber-500">★</span> {stars}/5</p>
       )}
     </article>
   )

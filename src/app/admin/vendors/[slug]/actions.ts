@@ -26,6 +26,94 @@ async function requireAdmin() {
   return { ok: true as const, userId: user.id }
 }
 
+/** The dispatchable crafts (vendors.craft check constraint, migration 198). */
+const CRAFTS = ['Video', 'Photo', 'Social', 'Design'] as const
+
+/**
+ * Save a creator's profile fields: display name, bio (description), craft,
+ * and active/paused (bookable). Same admin gate as every action here.
+ */
+export async function updateVendorProfile({
+  vendorSlug,
+  name,
+  description,
+  craft,
+  bookable,
+}: {
+  vendorSlug: string
+  name?: string
+  description?: string | null
+  craft?: string | null
+  bookable?: boolean
+}): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { ok: false, error: auth.error }
+  const admin = createAdminClient()
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (name !== undefined) {
+    const trimmed = name.trim()
+    if (!trimmed) return { ok: false, error: 'Name cannot be empty' }
+    patch.name = trimmed
+  }
+  if (description !== undefined) patch.description = description?.trim() || null
+  if (craft !== undefined) {
+    if (craft !== null && !(CRAFTS as readonly string[]).includes(craft)) return { ok: false, error: 'Unknown craft' }
+    patch.craft = craft
+  }
+  if (bookable !== undefined) patch.bookable = bookable
+
+  const { error } = await admin.from('vendors').update(patch).eq('slug', vendorSlug)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath(`/admin/vendors/${vendorSlug}`)
+  revalidatePath(`/marketplace/${vendorSlug}`)
+  revalidatePath('/admin/vendors')
+  return { ok: true }
+}
+
+/**
+ * Upload the creator's avatar (vendors.logo_url). Reuses the portfolio upload
+ * idiom: base64 data URL into the vendor-portfolio bucket, public URL saved
+ * on the vendor row.
+ */
+export async function uploadVendorLogo({
+  vendorSlug,
+  dataUrl,
+}: { vendorSlug: string; dataUrl: string }): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { ok: false, error: auth.error }
+  const admin = createAdminClient()
+
+  const { data: vendor } = await admin
+    .from('vendors')
+    .select('id')
+    .eq('slug', vendorSlug)
+    .maybeSingle() as { data: { id: string } | null }
+  if (!vendor) return { ok: false, error: 'Vendor not found' }
+
+  const match = dataUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/i)
+  if (!match) return { ok: false, error: 'Invalid image data' }
+  const mimeType = match[1]
+  const ext = mimeType.split('/')[1].replace('jpeg', 'jpg')
+  const buffer = Buffer.from(match[2], 'base64')
+  if (buffer.length > 5 * 1024 * 1024) return { ok: false, error: 'Image too large (max 5MB)' }
+
+  const filename = `${vendorSlug}/avatar-${Date.now()}.${ext}`
+  const { error: uploadErr } = await admin.storage
+    .from(BUCKET)
+    .upload(filename, buffer, { contentType: mimeType, cacheControl: '31536000' })
+  if (uploadErr) return { ok: false, error: uploadErr.message }
+
+  const { data: pub } = admin.storage.from(BUCKET).getPublicUrl(filename)
+  const { error } = await admin.from('vendors').update({ logo_url: pub.publicUrl, updated_at: new Date().toISOString() }).eq('id', vendor.id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath(`/admin/vendors/${vendorSlug}`)
+  revalidatePath(`/marketplace/${vendorSlug}`)
+  return { ok: true }
+}
+
 /**
  * Upload a portfolio image. Accepts a base64 data URL (image/jpeg or
  * image/png), uploads to Supabase Storage, inserts a portfolio row.

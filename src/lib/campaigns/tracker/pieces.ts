@@ -10,6 +10,8 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { creatorNamesByIds } from '@/lib/campaigns/vendor-supply'
 import { getCampaignOutcomes } from '@/lib/campaigns/outcomes/read'
+import { getRatingsForOrders, creatorRatingAggregates } from '@/lib/campaigns/work-ratings'
+import { isRealCreatorId, RATABLE_STATUSES } from '@/lib/campaigns/work-ratings-core'
 import { safeHref, PLAN_REMOVED_NOTE, STOP_NOTE } from '@/lib/campaigns/work-orders-core'
 import { stageForOrder, stageForDraft, stageRank, type Stage } from './stages'
 import type { TrackerPiece } from './types'
@@ -61,6 +63,28 @@ export async function getCampaignPieces(campaignId: string): Promise<TrackerPiec
   // column must never show a raw UUID.
   const names = await creatorNamesByIds(orders.map((o) => (o.creator_id as string) ?? ''))
 
+  // Ratings layer, real rows only: which orders the owner already rated, and each
+  // REAL creator's live aggregate. A real creator = vendor UUID that resolved to a
+  // vendors row (`names` has it); pool ids (the internal team) never rate-gate.
+  const orderIds = orders.map((o) => o.id as string)
+  const vendorIds = [...new Set(orders.map((o) => (o.creator_id as string) ?? '').filter((id) => isRealCreatorId(id) && names.has(id)))]
+  const [ratings, aggregates] = await Promise.all([
+    getRatingsForOrders(orderIds),
+    creatorRatingAggregates(vendorIds),
+  ])
+  const isRealVendor = (id: string) => isRealCreatorId(id) && names.has(id)
+  const ratingBits = (order: Record<string, unknown> | undefined) => {
+    if (!order) return { ratable: false, myStars: null, creatorRating: null }
+    const oid = order.id as string
+    const cid = (order.creator_id as string) ?? ''
+    const mine = ratings.get(oid) ?? null
+    return {
+      ratable: isRealVendor(cid) && RATABLE_STATUSES.has((order.status as string) ?? '') && !mine,
+      myStars: mine ? mine.stars : null,
+      creatorRating: isRealVendor(cid) ? aggregates.get(cid) ?? null : null,
+    }
+  }
+
   const pieces: TrackerPiece[] = []
 
   // Team lane: one row per alive draft. A bridged draft is enriched with its creator (the creator made
@@ -102,6 +126,7 @@ export async function getCampaignPieces(campaignId: string): Promise<TrackerPiec
       readoutValue: out?.state === 'live' ? (out.readout.value ?? null) : null,
       readoutVerdict: out?.readout.verdict ?? null,
       note: null,
+      ...ratingBits(order),
     })
   }
 
@@ -143,6 +168,7 @@ export async function getCampaignPieces(campaignId: string): Promise<TrackerPiec
       readoutValue: null,
       readoutVerdict: null,
       note: (o.note as string) ?? null,
+      ...ratingBits(o),
     })
   }
 

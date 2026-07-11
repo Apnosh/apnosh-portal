@@ -26,6 +26,14 @@ export interface TrackerPiece {
   readoutValue: string | null       // e.g. "4.2k reached", once live
   readoutVerdict: 'working' | 'watch' | 'drop' | null
   note: string | null               // owner's last change ask (current note only)
+  /** the owner can rate this delivered work now: creator-lane order made by a REAL
+   *  vendor (never the internal team), delivered/approved, not yet rated. */
+  ratable: boolean
+  /** the owner's existing rating for this order (1..5), null when unrated. */
+  myStars: number | null
+  /** the maker's live rating aggregate — present ONLY when the creator is a real
+   *  vendor row with >=1 real rating; null otherwise (nothing is ever fabricated). */
+  creatorRating: { avg: number; count: number } | null
 }
 
 /** A real, timestamped production event for the activity feed. Derived from real columns; an event
