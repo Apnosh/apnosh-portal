@@ -2,17 +2,23 @@
  * smoke-render-plan-cart):
  *   a) mixed statuses: the intro renders with the correct part count
  *   b) a good hours part: the 7-day table (incl a Closed day), the special-hours
- *      line, "This is correct, next" AND the "Something is off" affordance
- *   c) categories: primary + additional render as chips
- *   d) description: the FULL text renders + the draft affordance on needs-work
- *   e) photos: the summary line + a grid of img tags with the fixture URLs
- *   f) menu: item names + prices, the "and N more" cap line, the menu link
- *   g) links: website (tappable) + phone render
- *   h) fallbacks: a detail-less part falls back to the summary string; a
- *      missing description with no detail says Nothing yet + Draft it for me
- *   i) an unknown part keeps the honest could-not-read screen
- *   j) the summary screen lists every part's outcome
- *   k) no em dashes anywhere in the rendered HTML
+ *      line, the small Edit affordance, and the Next button (no confirm pair)
+ *   c) categories (good): chips + the small "Edit on Google" link (no in-app editor)
+ *   d) description (needs-work): the FULL text + the prominent Edit button
+ *   e) the description EDITOR (test seam): prefilled textarea, char count vs the
+ *      250-750 rule, "Draft it for me", "Save to Google", Cancel
+ *   f) the hours EDITOR (test seam): 7 day rows, time inputs prefilled, the
+ *      closed day checked, the honest multi-range replace note
+ *   g) the links EDITOR (test seam): Website + Phone inputs prefilled + Save
+ *   h) photos (needs-work): the grid + the "Edit this on Google" block + re-check line
+ *   i) menu (good): items + the small Edit-on-Google link
+ *   j) links part (good): website + phone rows + the small Edit affordance
+ *   k) honest save strings: applyResultNote maps live:true / live:false / 429 /
+ *      raw-5xx correctly, and injected notes render on the part screen
+ *   l) fallbacks + unknown part unchanged
+ *   m) the summary lists outcomes + the What's-next reviews card
+ *   n) the helper hub renders both cards (and the Continue variant)
+ *   o) the last part says Finish; no em dashes anywhere
  * Run: node_modules/.bin/tsx scripts/smoke-render-gbp-review.tsx */
 
 // localStorage stub before anything loads (the review reads it in effects only,
@@ -32,7 +38,7 @@ let fail = 0
 const ok = (cond: boolean, msg: string) => { console.log(`  ${cond ? 'PASS' : 'FAIL'}  ${msg}`); if (!cond) fail++ }
 
 // The fixture mirrors the GET /api/dashboard/gbp-diagnosis wire shape,
-// including the per-section `detail` payload the engine now emits.
+// including the per-section `detail` payload the engine emits.
 const HOURS_DETAIL = {
   kind: 'hours',
   days: [
@@ -115,6 +121,8 @@ const FIXTURE = {
 async function main() {
   const mod = await import('../src/components/mvp/gbp-fixer')
   const AiReview = mod.AiReview as unknown as React.ComponentType<Record<string, unknown>>
+  const GbpHelperHub = mod.GbpHelperHub as unknown as React.ComponentType<Record<string, unknown>>
+  const applyResultNote = mod.applyResultNote as (status: number, body: Record<string, unknown> | null) => { tone: string; text: string }
   const noop = () => undefined
 
   const base = {
@@ -123,16 +131,15 @@ async function main() {
     drafting: false,
     draft: null,
     draftError: null,
-    copied: false,
     onDraft: noop,
-    onCopy: noop,
     onRecheck: noop,
   }
   const rendered: string[] = []
   // SSR sprinkles "<!-- -->" comments between text children; strip them so
   // string assertions read like the owner does.
+  const strip = (html: string) => html.replace(/<!-- -->/g, '')
   const render = (props: Record<string, unknown>) => {
-    const html = renderToString(React.createElement(AiReview, { ...base, ...props })).replace(/<!-- -->/g, '')
+    const html = strip(renderToString(React.createElement(AiReview, { ...base, ...props })))
     rendered.push(html)
     return html
   }
@@ -145,7 +152,7 @@ async function main() {
   ok(/2\s*parts could use/.test(intro), 'the needs-work count (2) renders honestly')
   ok(intro.includes('We pulled what Google shows today'), 'the honest we-pulled-it line renders')
 
-  console.log('\n== b) a good hours part: the real 7-day table + confirm ==')
+  console.log('\n== b) a good hours part: the real 7-day table + Edit + Next ==')
   const hoursPart = render({ initialPhase: 'part', initialIndex: 0 })
   ok(/Part\s*1\s*of\s*6/.test(hoursPart), 'the progress line (Part 1 of 6) renders')
   ok(hoursPart.includes('Your hours') && hoursPart.includes('Looks good'), 'the part name and status chip render')
@@ -156,27 +163,58 @@ async function main() {
   ok(hoursPart.includes('9:00 AM to 2:00 PM, 5:00 PM to 10:00 PM'), 'a split-shift day renders both ranges')
   ok(hoursPart.includes('Closed'), 'the closed day says Closed')
   ok(/special hours for\s*2\s*dates/.test(hoursPart), 'the special-hours count line renders')
-  ok(hoursPart.includes('This is correct, next'), 'a good part asks the owner to confirm (This is correct, next)')
-  ok(hoursPart.includes('Something is off'), 'the Something is off affordance renders on a good part')
+  ok(hoursPart.includes('Edit'), 'the small Edit affordance renders on the hours part')
+  ok(hoursPart.includes('>Next<'), 'the primary button is Next')
+  ok(!hoursPart.includes('This is correct, next') && !hoursPart.includes('Something is off'), 'the old confirm/complain pair is gone')
   ok(hoursPart.includes('On Google now') && hoursPart.includes('Why it matters'), 'the block labels render')
 
-  console.log('\n== c) categories: real chips ==')
+  console.log('\n== c) categories: chips + Edit on Google (no in-app editor) ==')
   const cats = render({ initialPhase: 'part', initialIndex: 1 })
   ok(/Main:\s*Grocery store/.test(cats), 'the primary category renders as the Main chip')
   ok(cats.includes('Cafe') && cats.includes('Deli'), 'the additional categories render as chips')
-  ok(cats.includes('This is correct, next') && cats.includes('Something is off'), 'the confirm + something-is-off pair renders')
+  ok(cats.includes('Edit on Google'), 'the Edit affordance is the Google link')
+  ok(cats.includes('https://business.google.com/info'), 'the categories link points at the Google info editor')
+  ok(!cats.includes('<textarea') && !cats.includes('type="time"'), 'no in-app editor exists for categories')
+  ok(cats.includes('>Next<'), 'Next renders on the categories part')
 
-  console.log('\n== d) description: the full text + draft ==')
+  console.log('\n== d) description (needs-work): full text + prominent Edit ==')
   const desc = render({ initialPhase: 'part', initialIndex: 2 })
   ok(desc.includes('Your description') && desc.includes('Needs work'), 'the part renders with its Needs work chip')
   ok(desc.includes(DESCRIPTION_TEXT), 'the FULL description text renders')
-  ok(desc.includes('Draft it for me'), 'the AI draft affordance renders')
-  ok(desc.includes('I updated it') && desc.includes('Skip for now'), 'the honest done/skip actions render')
-  const descWithDraft = render({ initialPhase: 'part', initialIndex: 2, draft: 'We serve wood-fired pizza made fresh every day.' })
-  ok(descWithDraft.includes('Copy') && descWithDraft.includes('business.google.com'), 'a written draft renders with Copy + the open-Google link')
-  ok(descWithDraft.includes('One-tap apply to Google is coming'), 'the honest no-apply line renders')
+  ok(desc.includes('Edit your description'), 'the prominent Edit affordance renders on a needs-work description')
+  ok(desc.includes('>Next<'), 'Next renders as the move-on action')
+  ok(!desc.includes('I updated it'), 'the old I-updated-it button is gone')
 
-  console.log('\n== e) photos: the grid ==')
+  console.log('\n== e) the description editor (seam) ==')
+  const descEdit = render({ initialPhase: 'part', initialIndex: 2, initialEditing: true })
+  ok(descEdit.includes('<textarea'), 'the textarea renders')
+  ok(descEdit.includes(DESCRIPTION_TEXT), 'the textarea is prefilled with the current text')
+  ok(new RegExp(`${DESCRIPTION_TEXT.length}\\s*of\\s*750 characters`).test(descEdit), 'the live character count renders')
+  ok(descEdit.includes('Aim for 250 to 750'), 'the 250-750 rule renders')
+  ok(descEdit.includes('Draft it for me'), 'Draft it for me lives inside the editor (fills the textarea)')
+  ok(descEdit.includes('Save to Google'), 'the Save to Google button renders')
+  ok(descEdit.includes('Cancel'), 'Cancel renders')
+
+  console.log('\n== f) the hours editor (seam): 7 rows ==')
+  const hoursEdit = render({ initialPhase: 'part', initialIndex: 0, initialEditing: true })
+  for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']) {
+    ok(hoursEdit.includes(day), `the ${day} editor row renders`)
+  }
+  const timeInputs = (hoursEdit.match(/type="time"/g) ?? []).length
+  ok(timeInputs === 12, `open/close time inputs render for the 6 open days (got ${timeInputs})`)
+  ok(hoursEdit.includes('value="08:00"') && hoursEdit.includes('value="21:00"'), 'times prefill from what Google shows')
+  ok(/checked/.test(hoursEdit), 'the closed day (Sunday) prefills as Closed')
+  ok(hoursEdit.includes('This day has more than one time range on Google. Saving replaces it with one range.'), 'the honest multi-range replace note renders')
+  ok(hoursEdit.includes('Save to Google'), 'the Save to Google button renders')
+
+  console.log('\n== g) the links editor (seam): 2 labeled inputs ==')
+  const linksEdit = render({ initialPhase: 'part', initialIndex: 5, initialEditing: true })
+  ok(linksEdit.includes('Website') && linksEdit.includes('Phone'), 'the Website and Phone labels render')
+  ok(linksEdit.includes('value="https://tacoexample.com"'), 'the website input prefills')
+  ok(linksEdit.includes('value="(555) 123-4567"'), 'the phone input prefills')
+  ok(linksEdit.includes('Save to Google'), 'the Save to Google button renders')
+
+  console.log('\n== h) photos (needs-work): grid + Edit this on Google ==')
   const photos = render({ initialPhase: 'part', initialIndex: 3 })
   ok(photos.includes('9 photos. Newest is about 8 months old.'), 'the count + freshness line renders above the grid')
   ok(photos.includes('<img'), 'the grid renders img tags')
@@ -184,8 +222,12 @@ async function main() {
     ok(photos.includes(url), `the photo ${url.split('/').pop()} renders`)
   }
   ok(photos.includes('loading="lazy"'), 'the thumbnails lazy-load')
+  ok(photos.includes('Edit this on Google'), 'the Google edit link renders (no fake in-app editor)')
+  ok(photos.includes('https://business.google.com/photos'), 'the photos link points at the Google photos editor')
+  ok(photos.includes('then come back. We will re-check.'), 'the honest come-back line renders')
+  ok(!photos.includes('<textarea') && !photos.includes('type="time"'), 'no in-app editor exists for photos')
 
-  console.log('\n== f) menu: real items + the cap line + the link ==')
+  console.log('\n== i) menu (good): items + the small Edit-on-Google link ==')
   const menu = render({ initialPhase: 'part', initialIndex: 4 })
   for (const name of ['Carnitas taco', 'Al pastor taco', 'Chips and salsa', 'Horchata', 'Elote']) {
     ok(menu.includes(name), `the ${name} item renders`)
@@ -193,14 +235,34 @@ async function main() {
   ok(menu.includes('$4.50') && menu.includes('$5.25'), 'item prices render when Google has them')
   ok(/and\s*10\s*more/.test(menu), 'the "and 10 more" cap line renders (15 items, 5 shown)')
   ok(menu.includes('https://tacoexample.com/menu'), 'the menu link renders')
+  ok(menu.includes('Edit on Google') && menu.includes('https://business.google.com/menu'), 'the menu Edit affordance is the Google link')
 
-  console.log('\n== g) links: website + phone ==')
+  console.log('\n== j) links part (good): rows + small Edit ==')
   const links = render({ initialPhase: 'part', initialIndex: 5 })
   ok(links.includes('Website') && links.includes('https://tacoexample.com'), 'the website row renders with the real URL')
   ok(links.includes('href="https://tacoexample.com"') && links.includes('target="_blank"'), 'the website is tappable and opens a new tab')
   ok(links.includes('Phone') && links.includes('(555) 123-4567'), 'the phone row renders with the real number')
+  ok(links.includes('Edit'), 'the small Edit affordance renders on the links part')
+  ok(links.includes('>Finish<'), 'the last part says Finish')
 
-  console.log('\n== h) fallbacks: never a blank box ==')
+  console.log('\n== k) honest save strings ==')
+  const liveNote = applyResultNote(200, { ok: true, live: true })
+  ok(liveNote.tone === 'ok' && liveNote.text === 'Saved to Google.', 'live:true reads Saved to Google.')
+  const pendingNote = applyResultNote(200, { ok: true, live: false })
+  ok(pendingNote.tone === 'pending' && pendingNote.text === 'Sent to Google. It can take a few minutes to show.', 'ok without proof reads sent-not-showing-yet')
+  const rateNote = applyResultNote(429, { ok: false, error: 'server words' })
+  ok(rateNote.tone === 'error' && rateNote.text === 'Google only allows a few edits per minute. Try again in a minute.', 'a 429 reads as the per-minute line')
+  const rawNote = applyResultNote(502, { ok: false, error: 'Not connected to Google yet: invalid_grant token refresh' })
+  ok(rawNote.tone === 'error' && !rawNote.text.includes('invalid_grant'), 'a 5xx never leaks the raw server string')
+  const badNote = applyResultNote(400, { ok: false, error: 'The description is empty.' })
+  ok(badNote.text === 'The description is empty.', 'a 400 shows the server plain-words reason')
+  // Injected on screen (test seam): both honest lines render in the part UI.
+  const savedShown = render({ initialPhase: 'part', initialIndex: 2, initialSaveNote: liveNote })
+  ok(savedShown.includes('Saved to Google.'), 'the proven Saved line renders on the part screen')
+  const pendingShown = render({ initialPhase: 'part', initialIndex: 2, initialSaveNote: pendingNote })
+  ok(pendingShown.includes('Sent to Google. It can take a few minutes to show.'), 'the honest pending line renders on the part screen')
+
+  console.log('\n== l) fallbacks + the unknown part ==')
   // A detail-less section (older cache, failed read) falls back to the summary string.
   const noDetailDiag = {
     ...FIXTURE,
@@ -209,8 +271,8 @@ async function main() {
   const fallback = render({ diag: noDetailDiag, initialPhase: 'part', initialIndex: 0 })
   ok(!fallback.includes('Monday'), 'no invented table when detail is missing')
   ok(fallback.includes('Hours set for 6 of 7 days.'), 'a detail-less part falls back to the summary string')
-  ok(fallback.includes('This is correct, next') && fallback.includes('Something is off'), 'the confirm actions still render on the fallback')
-  // A missing description (no detail, empty current) still reads Nothing yet + draft.
+  ok(fallback.includes('>Next<'), 'Next still renders on the fallback')
+  // A missing description (no detail, empty current) still reads Nothing yet + the add path.
   const missingDescDiag = {
     ...FIXTURE,
     sections: FIXTURE.sections.map((s) => (s.key === 'description' ? { ...s, status: 'missing', current: '', detail: undefined } : s)),
@@ -218,9 +280,10 @@ async function main() {
   const missingDesc = render({ diag: missingDescDiag, initialPhase: 'part', initialIndex: 2 })
   ok(missingDesc.includes('Missing'), 'the Missing chip renders')
   ok(missingDesc.includes('Nothing yet'), 'an empty current value renders as Nothing yet')
-  ok(missingDesc.includes('Draft it for me'), 'the AI draft affordance renders on a missing description')
-
-  console.log('\n== i) an unknown part ==')
+  ok(missingDesc.includes('Add a description'), 'a missing description offers Add a description')
+  const missingDescEdit = render({ diag: missingDescDiag, initialPhase: 'part', initialIndex: 2, initialEditing: true })
+  ok(missingDescEdit.includes('<textarea') && missingDescEdit.includes('Draft it for me'), 'the editor opens empty with the draft path')
+  // Unknown part unchanged.
   const unknownDiag = {
     ...FIXTURE,
     sections: FIXTURE.sections.map((s) => (s.key === 'photos' ? { ...s, status: 'unknown', current: 'We could not read your photos right now.', detail: undefined } : s)),
@@ -229,9 +292,9 @@ async function main() {
   ok(unk.includes('We could not read this part.'), 'the honest could-not-read line renders')
   ok(unk.includes('Could not check'), 'the chip says Could not check')
   ok(unk.includes('Skip for now'), 'Skip for now renders')
-  ok(!unk.includes('I updated it') && !unk.includes('Draft it for me') && !unk.includes('Fix it on Google'), 'no fix/draft/updated actions on an unknown part')
+  ok(!unk.includes('Edit this on Google') && !unk.includes('Save to Google'), 'no edit/save actions on an unknown part')
 
-  console.log('\n== j) the summary ==')
+  console.log('\n== m) the summary + What\'s next ==')
   const summary = render({
     initialPhase: 'summary',
     initialOutcomes: { hours: 'good', categories: 'good', description: 'skipped', photos: 'updated', menu: 'good', links: 'good' },
@@ -245,6 +308,10 @@ async function main() {
   ok(summary.includes('Skipped'), 'a skipped part reads Skipped')
   ok(summary.includes('Check my profile again'), 'the re-check button renders')
   ok(summary.includes('can take a few minutes to show up'), 'the honest delay note renders')
+  ok(summary.includes('s next'), 'the What\'s-next block renders')
+  ok(summary.includes('Your reviews'), 'the reviews card renders on the summary')
+  ok(summary.includes('Read new reviews and reply with AI help.'), 'the reviews card sub renders')
+  ok(summary.includes('/dashboard/inbox?tab=reviews'), 'the reviews card links to the real reviews surface')
 
   // The all-good read shows the celebration on the summary.
   const allGoodDiag = { ...FIXTURE, sections: FIXTURE.sections.map((s) => ({ ...s, status: 'good', current: s.current || 'Set' })) }
@@ -253,7 +320,20 @@ async function main() {
   ok(celebrate.includes('This campaign task is complete'), 'the task-done line renders when the PATCH landed')
   ok(!celebrate.includes('Check my profile again'), 'no re-check button when everything reads good')
 
-  console.log('\n== k) no em dashes ==')
+  console.log('\n== n) the helper hub ==')
+  const hub = strip(renderToString(React.createElement(GbpHelperHub, { continueReview: false, onReview: noop })))
+  rendered.push(hub)
+  ok(hub.includes('Your Google helper'), 'the hub title renders')
+  ok(hub.includes('Review your profile'), 'the review card renders')
+  ok(hub.includes('6 parts. See what Google shows and fix it.'), 'the review card sub renders')
+  ok(hub.includes('Your reviews'), 'the reviews card renders')
+  ok(hub.includes('Read new reviews and reply with AI help.'), 'the reviews card sub renders')
+  ok(hub.includes('/dashboard/inbox?tab=reviews'), 'the reviews card links to the real reviews surface')
+  const hubResume = strip(renderToString(React.createElement(GbpHelperHub, { continueReview: true, onReview: noop })))
+  rendered.push(hubResume)
+  ok(hubResume.includes('Continue your review'), 'a mid-review save flips the card to Continue your review')
+
+  console.log('\n== o) no em dashes ==')
   ok(rendered.every((h) => !h.includes('\u2014')), 'no em dash in any rendered screen')
   ok(rendered.every((h) => !h.includes('\u2013')), 'no en dash in any rendered screen either')
 
