@@ -362,13 +362,15 @@ export async function getClientListing(clientId: string, locationId?: string | n
   ok: true
   resourceName: string
   title: string | null
+  /** Public Google Maps URL of the listing (metadata.mapsUri) — where reviews and Q&A live. */
+  mapsUri?: string | null
   fields: ListingFields
 } | { ok: false; error: string }> {
   const tok = await getActiveTokenForClient(clientId, locationId)
   if ('error' in tok) return { ok: false, error: tok.error }
   const { accessToken, resourceName } = tok
 
-  const readMask = 'title,profile,websiteUri,phoneNumbers,regularHours,specialHours,categories,storefrontAddress'
+  const readMask = 'title,profile,websiteUri,phoneNumbers,regularHours,specialHours,categories,storefrontAddress,metadata'
   const url = `${V1_BASE}/${resourceName}?readMask=${encodeURIComponent(readMask)}`
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
   const body = await res.json().catch(() => ({}))
@@ -387,11 +389,13 @@ export async function getClientListing(clientId: string, locationId?: string | n
       additionalCategories?: ListingCategory[]
     }
     storefrontAddress?: { addressLines?: string[]; locality?: string; administrativeArea?: string; postalCode?: string; regionCode?: string }
+    metadata?: { mapsUri?: string }
   }
   return {
     ok: true,
     resourceName,
     title: data.title ?? null,
+    mapsUri: data.metadata?.mapsUri ?? null,
     fields: {
       description: data.profile?.description ?? null,
       primaryPhone: data.phoneNumbers?.primaryPhone ?? null,

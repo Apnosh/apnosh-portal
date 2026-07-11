@@ -179,7 +179,7 @@ async function main() {
     countAssignedLocations: async () => { calls.push('count'); return 1 },
     acquireSlot: async () => { calls.push('slot'); return true },
     updateListing: async () => { calls.push('update'); return { ok: true as const } },
-    getListing: async () => { calls.push('read'); return { ok: true as const, resourceName: 'locations/222', title: 'T', fields: { description: VALID_DESC } } },
+    getListing: async () => { calls.push('read'); return { ok: true as const, resourceName: 'locations/222', title: 'T', mapsUri: null, fields: { description: VALID_DESC } } },
     ...over,
   })
 
@@ -189,7 +189,7 @@ async function main() {
   check('G2 pipeline order validate→token→count→slot→update→read', deepEq(calls, ['token', 'count', 'slot', 'update', 'read']))
 
   const g3 = await pushFieldWrite('client-1', 'description', VALID_DESC, happyDeps({
-    getListing: async () => ({ ok: true as const, resourceName: 'locations/222', title: 'T', fields: { description: 'something else entirely lives here' } }),
+    getListing: async () => ({ ok: true as const, resourceName: 'locations/222', title: 'T', mapsUri: null, fields: { description: 'something else entirely lives here' } }),
   }))
   check('G3 read-back mismatch → ok but NOT live', g3.ok && g3.detail?.verified === false && /not showing the new text yet/.test(g3.summary ?? ''))
 
