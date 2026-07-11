@@ -3042,46 +3042,12 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             )}
           </div>
         </div>
-        {/* ── SELL — a COMPACT diagnosis/why right under the hero (cause sits close to the choices
-              below). gbp gaps: a short count + the real gap items; gbp all-good: one strong line;
-              other cards: the personalized why in a line or two. Honesty guards unchanged. ── */}
-        {gbpState === "A" ? (
-          /* STATE A — real gaps: compact amber note with the honest count + up to 4 traceable rows. */
-          <div style={{ padding: "12px 20px 0" }}>
-            <div style={{ background: GBP_AMBER.bg, border: `1px solid ${GBP_AMBER.line}`, borderRadius: 14, padding: "12px 14px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
-                <span style={{ width: 20, height: 20, borderRadius: 10, background: GBP_AMBER.chip, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={GBP_AMBER.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></svg>
-                </span>
-                <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: GBP_AMBER.ink, lineHeight: 1.25 }}>{gbpProblems.length} {gbpProblems.length === 1 ? "thing needs" : "things need"} fixing on your profile.</div>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {gbpProblems.slice(0, 4).map((s, i) => (
-                  <div key={s.key || i} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                    <span style={{ width: 5, height: 5, borderRadius: 3, background: GBP_AMBER.ink, flexShrink: 0, marginTop: 7 }} />
-                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: GBP_AMBER.body, lineHeight: 1.4 }}>{gbpGapPhrase(s)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : gbpState === "B" ? (
-          /* STATE B — all good: one compact green line, no manufactured urgency. */
-          <div style={{ padding: "12px 20px 0" }}>
-            <div style={{ background: TOKENS.mintTint, border: `1px solid ${GBP_GREEN.line}`, borderRadius: 14, padding: "12px 14px", display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ width: 20, height: 20, borderRadius: 10, background: GBP_GREEN.chip, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-              </span>
-              <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.mintDark, lineHeight: 1.25 }}>Your profile looks strong. All {gbpSections} parts are set.</div>
-            </div>
-          </div>
-        ) : (
-          /* State C — a plain description of the campaign (gbp), else the card's personalized why.
-             Clean paragraph text (no tinted callout box — that reads as an alert, not a description). */
-          <div style={{ padding: "16px 20px 0" }}>
-            <p style={{ margin: 0, fontFamily: "Inter, sans-serif", fontSize: 14.5, color: "#4c554f", lineHeight: 1.55 }}>{isGbp ? "Your Google profile is the first thing most people check before they visit. A complete, current one is more likely to show up in search and makes it easy to pick you." : why}</p>
-          </div>
-        )}
+        {/* ── SELL — one clean description right under the hero (what it is and why). Always shown for
+              gbp as a plain paragraph; other cards use their personalized why. The live gaps/all-good
+              check still runs, it just drives the walkthrough after you buy, not this product page. ── */}
+        <div style={{ padding: "16px 20px 0" }}>
+          <p style={{ margin: 0, fontFamily: "Inter, sans-serif", fontSize: 14.5, color: "#4c554f", lineHeight: 1.55 }}>{isGbp ? "Your Google profile is the first thing most people check before they visit. A complete, current one is more likely to show up in search and makes it easy to pick you." : why}</p>
+        </div>
         {/* ── THE PRODUCT (grouping one) — the version pick and "what you get" flow as ONE
               continuous block, no numbered steps. First: choose how it's done (3-lane doer for gbp
               with Pro gate + passthrough); non-versioned cards show the quiet "the Apnosh team does
