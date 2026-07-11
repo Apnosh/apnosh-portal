@@ -2981,7 +2981,6 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
     setTimeout(() => setAdded(false), 1800);
   };
   const timeline = configTimeline(p, gbpLane, selected);
-  const similar = similarCards(itemId);
   // The "Add extras" block at the bottom only exists when this card has REAL add-ons or a
   // Pro AI row to offer. When it has neither, the whole block is hidden (renders nothing).
   const hasExtras = optServices.length > 0 || (doerCfg && !!aiOpt);
@@ -3287,26 +3286,6 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             </div>
           </div>
         </div>
-
-        {/* ── YOU MIGHT ALSO ADD — real adjacency (shared funnel stage) as cross-sell AFTER the buy
-              box; each deep-links to its own product page. ── */}
-        {similar.length > 0 && (
-          <div style={{ padding: "22px 20px 26px" }}>
-            <div style={sectionLabel}>You might also add</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-              {similar.map((c) => (
-                <button key={c.id} onClick={() => onOpenCard && onOpenCard(c.id)} className="apnpress" style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: "#fff", border: `1.5px solid ${TOKENS.line}`, borderRadius: 16, padding: "11px 13px", cursor: "pointer", boxShadow: "0 2px 8px rgba(20,40,30,0.04)", WebkitTapHighlightColor: "transparent" }}>
-                  <span style={{ width: 44, height: 44, borderRadius: 12, background: gType(c.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: `0 4px 10px ${hexA((TYPE_G[c.type] || TYPE_G.plan)[1], 0.28)}` }}><Art id={c.id} size={30} /></span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: "block", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink }}>{c.title}</span>
-                    <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{priceLabel(c.id) || "Free"}</span>
-                  </span>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 5l7 7-7 7" /></svg>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
