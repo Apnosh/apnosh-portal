@@ -3078,7 +3078,7 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
         ) : (
           /* State C — a plain description of the campaign (gbp), else the card's personalized why. */
           <div style={{ padding: "12px 20px 0" }}>
-            <div style={{ background: TOKENS.mintTint, borderRadius: 14, padding: "12px 14px", fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.5 }}>{isGbp ? "We check every part of your Google profile and fix what's missing, so your hours, menu, photos, and info all show you at your best." : why}</div>
+            <div style={{ background: TOKENS.mintTint, borderRadius: 14, padding: "12px 14px", fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.5 }}>{isGbp ? "Up-to-date Google profiles are more likely to show up when people search, and they give guests the info they need to choose you." : why}</div>
           </div>
         )}
         {/* ── THE PRODUCT (grouping one) — the version pick and "what you get" flow as ONE
