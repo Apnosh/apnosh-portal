@@ -6,6 +6,7 @@
  * dev /preview/catalog route) disables the server calls so the UI can be reviewed without auth.
  */
 import { useMemo, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { marginOf, MARGIN_FLOOR, type PricedService, type PricePoint } from '@/lib/campaigns/data/priced-catalog'
 import type { CatalogRow } from '@/lib/campaigns/data/catalog-db-shape'
 import { rowToService } from '@/lib/campaigns/data/catalog-db-shape'
@@ -51,6 +52,10 @@ export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: 
           <p className="text-[13px] text-ink-3 mt-1">{rows.length} services · click a row to edit{preview ? ' · preview (saving off)' : ''}</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg bg-bg-2 p-1 mr-1">
+            <span className="text-[12.5px] font-semibold rounded-md px-3 py-1.5 bg-white text-ink shadow-sm">Services</span>
+            <Link href="/admin/catalog/campaigns" className="text-[12.5px] font-medium rounded-md px-3 py-1.5 text-ink-3 hover:text-ink">Campaigns</Link>
+          </div>
           {dirty && <span className="text-[12px] text-amber-600 font-medium">Unpublished changes</span>}
           <button
             disabled={pending || preview}

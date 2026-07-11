@@ -1,31 +1,78 @@
 /**
- * whatYouGet — the product page's "what you get" rows, DERIVED from the item's real
- * composition instead of hand-written lists that drift from what actually ships:
+ * whatYouGet — the product page's "what you get" list, DERIVED from the item's real
+ * composition instead of hand-written lists that drift from what actually ships, and now
+ * RECOMPOSED LIVE from the owner's current selection (the chosen version + the toggled
+ * add-on options — the same state that drives the price):
  *
+ *  - a BASE section = the item's own deliverables, framed HONESTLY by version where a
+ *    version exists (gbp's diy/ai/team lanes each describe what that lane truly does);
+ *  - one ADDED section PER selected option, titled by the option's plain name, whose rows
+ *    are that service's REAL catalog deliverables.included (never hand-written).
+ *
+ * The base rows still come from:
  *  - system goals (firstvisit / nights / regulars, and reviewsplan via its system alias)
- *    read the same buildSystem() moves the plan flow composes, rendered by plain name;
- *  - a single-service card (gbp, welcome, qr, …) reads that service's real deliverable
+ *    reading the same buildSystem() moves the plan flow composes, rendered by plain name;
+ *  - a single-service card (gbp, welcome, qr, …) reading that service's real deliverable
  *    bullets from the priced catalog;
- *  - everything else lists its ITEM_SHAPE composition: included services by plain name,
+ *  - everything else listing its ITEM_SHAPE composition: included services by plain name,
  *    then the seed beats' owner-facing labels.
  *
  * Pure + client-safe (same guarantees as compose-plan: no server, no AI, total on any id).
- * Rows are clamped to 4 so the page stays scannable.
+ * Base rows are clamped so the page stays scannable; each option group is capped too.
  */
 
-import { ITEM_SHAPE, buildSystem, isSystemGoal } from './compose-plan'
-import { serviceById, plainNameOf } from '../catalog'
+import { shapeFor, buildSystem, isSystemGoal } from './compose-plan'
+import { serviceById, plainNameOf, cadenceOf } from '../catalog'
 
 /** The plan flow routes reviewsplan onto the 'reviews' system goal (builder-entry's
  *  SYSTEM_GOAL_ALIAS) — mirror it so this page describes the plan that actually ships. */
 const SYSTEM_ALIAS: Record<string, string> = { reviewsplan: 'reviews' }
 
 const MAX_ROWS = 4
+/** An option group shows the real bullets, but a very long list is capped so the page
+ *  stays scannable — the full list still lives in the zone-4 "see what's included" expander. */
+const MAX_OPTION_ROWS = 5
 
 /** Beat labels use an em dash as a clause break; owner copy avoids em dashes, so soften it. */
 const plainLabel = (l: string) => l.replace(/\s+—\s+/g, ', ')
 
-export function whatYouGet(itemId: string): string[] {
+/** A version lane a versioned card can be sold in. Today only gbp carries lanes. */
+export type WhatYouGetVersion = 'diy' | 'ai' | 'team'
+
+/** One rendered group: the base has no title; each added option is titled by its plain name.
+ *  `recurring` lets the page mark a monthly add-on ("/mo") without re-reading the catalog. */
+export interface WhatYouGetSection {
+  title?: string
+  rows: string[]
+  recurring?: boolean
+}
+
+export interface WhatYouGetSelection {
+  /** The chosen version lane (gbp: 'diy' | 'ai' | 'team'); null/undefined for unversioned cards. */
+  version?: WhatYouGetVersion | string | null
+  /** The serviceIds of the add-on options the owner has toggled on (drives the added groups). */
+  optionServiceIds?: string[]
+}
+
+/** The gbp profile's fixable parts, read from the real gbp-setup deliverables so the "all N
+ *  parts" copy stays honest if the catalog changes (today it is 6). */
+function gbpPartCount(): number {
+  const n = serviceById('gbp-setup')?.deliverables?.included?.length
+  return typeof n === 'number' && n > 0 ? n : 6
+}
+
+/** gbp base rows, framed by the chosen lane. Each line describes what that lane TRULY does —
+ *  team fixes it for you, diy hands you the checklist, ai drafts each fix for your review.
+ *  Every lane ends with the same honest recheck, since all three re-read the profile after. */
+function gbpBaseRows(version: WhatYouGetSelection['version']): string[] {
+  if (version === 'diy') return ['A clear checklist of what to fix', 'We recheck it for you when you are done']
+  if (version === 'ai') return ['AI drafts each fix for you', 'You review and apply, then we recheck']
+  // team (done-for-you) is the default lane.
+  return [`We fix all ${gbpPartCount()} parts of your profile`, 'We recheck it and show you what changed']
+}
+
+/** The item's own deliverables, unversioned — the pre-selection base list (today's behavior). */
+function baseRows(itemId: string): string[] {
   const goalId = SYSTEM_ALIAS[itemId] ?? itemId
 
   // System goals: the staged services the default plan really composes, by plain name.
@@ -41,14 +88,20 @@ export function whatYouGet(itemId: string): string[] {
     if (names.length) return names
   }
 
-  const shape = ITEM_SHAPE[itemId]
+  const shape = shapeFor(itemId)
   if (!shape) return []
+  return rowsFromComposition(shape.services ?? [], shape.seed.map(([, , label]) => label))
+}
 
-  const services = (shape.services ?? []).map(serviceById).filter((s) => !!s)
+/** The shared composition → rows derivation: one service with no seed shows that
+ *  service's REAL deliverable bullets; otherwise included services by plain name, then
+ *  the seed beats' owner-facing labels, capped so the page stays scannable. */
+function rowsFromComposition(serviceIds: string[], seedLabels: string[]): string[] {
+  const services = serviceIds.map(serviceById).filter((s) => !!s)
 
   // One real service and no content seed (gbp, welcome, qr, …): that service's own
   // deliverable bullets ARE the composition — show them instead of one opaque row.
-  if (services.length === 1 && shape.seed.length === 0) {
+  if (services.length === 1 && seedLabels.length === 0) {
     const bullets = services[0].deliverables?.included ?? []
     if (bullets.length) return bullets.slice(0, MAX_ROWS)
   }
@@ -58,10 +111,50 @@ export function whatYouGet(itemId: string): string[] {
     const name = plainNameOf(s)
     if (!rows.includes(name)) rows.push(name)
   }
-  for (const [, , label] of shape.seed) {
+  for (const label of seedLabels) {
     const l = plainLabel(label)
     if (!rows.includes(l)) rows.push(l)
     if (rows.length >= MAX_ROWS) break
   }
   return rows.slice(0, MAX_ROWS)
+}
+
+/** What-you-get rows for a bare service list — the admin CMS preview path (Phase C2),
+ *  where the campaign may not be registered (or even saved) yet. Identical derivation
+ *  to a registered services-only DB campaign, so the preview shows the real page facts. */
+export function whatYouGetForServices(serviceIds: string[]): string[] {
+  return rowsFromComposition(serviceIds, [])
+}
+
+/**
+ * The live "what you get" groups for the current selection. Returns at least the base
+ * section; each selected option adds a titled group of that service's REAL deliverables.
+ */
+export function whatYouGet(itemId: string, sel: WhatYouGetSelection = {}): WhatYouGetSection[] {
+  const sections: WhatYouGetSection[] = []
+
+  // BASE — framed by version for gbp (the only versioned card today), else the plain list.
+  const base = itemId === 'gbp' ? gbpBaseRows(sel.version) : baseRows(itemId)
+  sections.push({ rows: base })
+
+  // ADDED — one group per selected option, from the option service's real deliverables.
+  const ids = Array.isArray(sel.optionServiceIds) ? sel.optionServiceIds : []
+  const seen = new Set<string>()
+  for (const id of ids) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    const s = serviceById(id)
+    if (!s) continue
+    const rows = (s.deliverables?.included ?? []).slice(0, MAX_OPTION_ROWS)
+    if (!rows.length) continue
+    sections.push({ title: plainNameOf(s), rows, recurring: cadenceOf(s).cadence.kind === 'recurring' })
+  }
+
+  return sections
+}
+
+/** Total real rows across every group — used by the drift guard to assert a card never
+ *  ships an empty "what you get". */
+export function whatYouGetRowCount(itemId: string, sel: WhatYouGetSelection = {}): number {
+  return whatYouGet(itemId, sel).reduce((n, s) => n + s.rows.length, 0)
 }
