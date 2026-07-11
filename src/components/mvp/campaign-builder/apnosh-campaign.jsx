@@ -2669,7 +2669,7 @@ function doerDisplay(opt, tier) {
   if (lane === "diy") return { lane, title: "I'll do it myself", sub: "Free. We show you what to fix.", price: "Free", pro: false };
   if (lane === "ai") {
     const pro = isProTier(tier);
-    return { lane, title: "Do it with Apnosh AI", sub: pro ? "Free on your plan. AI writes each fix." : "Included in Pro.", price: pro ? "Free" : null, pro: true };
+    return { lane, title: "Do it with Apnosh AI", sub: pro ? "Included on your plan. A guided review with AI to complete and polish each part." : "Included in Pro.", price: pro ? "Included" : null, pro: true };
   }
   const m = String(opt).match(/\$\s?([\d,]+)/);
   return { lane, title: "Apnosh does it", sub: "We fix it all for you.", price: m ? `$${m[1]}` : null, pro: false };
@@ -2684,7 +2684,7 @@ function doerTab(opt, tier) {
   if (lane === "diy") return { lane, short: "I'll do it", price: "Free", pro: false, detail: "You do it yourself. We show you what to fix." };
   if (lane === "ai") {
     const pro = isProTier(tier);
-    return { lane, short: "Apnosh AI", price: "Free", pro: true, detail: pro ? "Apnosh AI writes each fix for you." : "Included in the Pro plan." };
+    return { lane, short: "Apnosh AI", price: "Included", pro: true, detail: pro ? "A guided review, part by part. AI checks each one is complete and helps you make it better, then you approve." : "Included with Pro. A guided review, part by part, with AI to complete and polish each one." };
   }
   const m = String(opt).match(/\$\s?([\d,]+)/);
   return { lane, short: "Apnosh", price: m ? `$${m[1]}` : null, pro: false, detail: "We fix it all for you." };
@@ -3235,7 +3235,7 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
                           PRO
                         </span>
                       </span>
-                      <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 1, lineHeight: 1.4 }}>Unlocks AI on this and every campaign. AI writes each fix, free.</span>
+                      <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 1, lineHeight: 1.4 }}>Adds the AI review builder to this and every campaign: check each part is complete and let AI make it better.</span>
                     </span>
                   </button>
                 )
