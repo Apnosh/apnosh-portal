@@ -21,7 +21,7 @@
  * Base rows are clamped so the page stays scannable; each option group is capped too.
  */
 
-import { ITEM_SHAPE, buildSystem, isSystemGoal } from './compose-plan'
+import { shapeFor, buildSystem, isSystemGoal } from './compose-plan'
 import { serviceById, plainNameOf, cadenceOf } from '../catalog'
 
 /** The plan flow routes reviewsplan onto the 'reviews' system goal (builder-entry's
@@ -88,14 +88,20 @@ function baseRows(itemId: string): string[] {
     if (names.length) return names
   }
 
-  const shape = ITEM_SHAPE[itemId]
+  const shape = shapeFor(itemId)
   if (!shape) return []
+  return rowsFromComposition(shape.services ?? [], shape.seed.map(([, , label]) => label))
+}
 
-  const services = (shape.services ?? []).map(serviceById).filter((s) => !!s)
+/** The shared composition → rows derivation: one service with no seed shows that
+ *  service's REAL deliverable bullets; otherwise included services by plain name, then
+ *  the seed beats' owner-facing labels, capped so the page stays scannable. */
+function rowsFromComposition(serviceIds: string[], seedLabels: string[]): string[] {
+  const services = serviceIds.map(serviceById).filter((s) => !!s)
 
   // One real service and no content seed (gbp, welcome, qr, …): that service's own
   // deliverable bullets ARE the composition — show them instead of one opaque row.
-  if (services.length === 1 && shape.seed.length === 0) {
+  if (services.length === 1 && seedLabels.length === 0) {
     const bullets = services[0].deliverables?.included ?? []
     if (bullets.length) return bullets.slice(0, MAX_ROWS)
   }
@@ -105,12 +111,19 @@ function baseRows(itemId: string): string[] {
     const name = plainNameOf(s)
     if (!rows.includes(name)) rows.push(name)
   }
-  for (const [, , label] of shape.seed) {
+  for (const label of seedLabels) {
     const l = plainLabel(label)
     if (!rows.includes(l)) rows.push(l)
     if (rows.length >= MAX_ROWS) break
   }
   return rows.slice(0, MAX_ROWS)
+}
+
+/** What-you-get rows for a bare service list — the admin CMS preview path (Phase C2),
+ *  where the campaign may not be registered (or even saved) yet. Identical derivation
+ *  to a registered services-only DB campaign, so the preview shows the real page facts. */
+export function whatYouGetForServices(serviceIds: string[]): string[] {
+  return rowsFromComposition(serviceIds, [])
 }
 
 /**

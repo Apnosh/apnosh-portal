@@ -16,28 +16,45 @@ export interface ItemPrice { oneTime: number; perMonth: number }
 // drifted the moment items were merged/renamed (the 2026-07-09 recompose).
 const IDS = CREATE_CATALOG_IDS
 
+/** One id's estimate through the REAL builder rail (draftFromBuilder → summarize) —
+ *  the same engine that prices the saved campaign. {0,0} when composing fails. */
+export function computeItemPrice(id: string): ItemPrice {
+  try {
+    const draft = draftFromBuilder({ itemId: id, status: 'estimate', vals: {} })
+    const bill = summarize(draft.items)
+    return { oneTime: Math.round(bill.oneTimeOnDelivery), perMonth: Math.round(bill.perMonth) }
+  } catch {
+    return { oneTime: 0, perMonth: 0 }
+  }
+}
+
 function compute(): Record<string, ItemPrice> {
   const out: Record<string, ItemPrice> = {}
-  for (const id of IDS) {
-    try {
-      const draft = draftFromBuilder({ itemId: id, status: 'estimate', vals: {} })
-      const bill = summarize(draft.items)
-      out[id] = { oneTime: Math.round(bill.oneTimeOnDelivery), perMonth: Math.round(bill.perMonth) }
-    } catch {
-      out[id] = { oneTime: 0, perMonth: 0 }
-    }
-  }
+  for (const id of IDS) out[id] = computeItemPrice(id)
   return out
 }
 
 export const ITEM_PRICES: Record<string, ItemPrice> = compute()
 
-/** A short owner-facing estimate label, e.g. "$120", "$545/mo", or null. */
-export function priceLabel(id: string): string | null {
-  const p = ITEM_PRICES[id]
+/** Price a runtime-registered DB campaign (Phase C2) through the SAME rail the built-ins
+ *  use, and publish it into ITEM_PRICES so every existing read path (planTags, pdpPrice,
+ *  the madlib footer) prices it with no per-caller changes. Built-in ids are never
+ *  recomputed — their module-load estimate stays canonical. */
+export function registerItemPrice(id: string): void {
+  if (IDS.includes(id)) return
+  ITEM_PRICES[id] = computeItemPrice(id)
+}
+
+/** A short owner-facing estimate label from a computed pair, e.g. "$120", "$545/mo". */
+export function formatItemPrice(p: ItemPrice | undefined | null): string | null {
   if (!p) return null
   if (p.perMonth > 0 && p.oneTime > 0) return `$${p.oneTime} + $${p.perMonth}/mo`
   if (p.perMonth > 0) return `$${p.perMonth}/mo`
   if (p.oneTime > 0) return `$${p.oneTime}`
   return null
+}
+
+/** A short owner-facing estimate label for a catalog id, e.g. "$120", "$545/mo", or null. */
+export function priceLabel(id: string): string | null {
+  return formatItemPrice(ITEM_PRICES[id])
 }

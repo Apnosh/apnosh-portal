@@ -387,9 +387,23 @@ export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {
   },
 }
 
-/** Loose lookup for the untyped JSX render layer; null when the id is unknown. */
+/* ── Dynamic content (Phase C2: admin-created DB campaigns) ────────────────
+ * DB campaigns carry their OWN authored content (a catalog_campaigns row), registered
+ * at runtime by registerDbCampaigns. Built-in ids can never be shadowed: registration
+ * refuses any id already in CAMPAIGN_CONTENT, and the lookup checks the code record
+ * first. Re-registering replaces, so an admin edit lands on the next fetch. */
+const DYNAMIC_CONTENT: Record<string, CampaignContent> = {}
+
+/** Register the content record for a DB campaign. No-op for built-in ids. */
+export function registerDynamicCampaignContent(itemId: string, content: CampaignContent): void {
+  if (itemId in CAMPAIGN_CONTENT) return
+  DYNAMIC_CONTENT[itemId] = content
+}
+
+/** Loose lookup for the untyped JSX render layer; null when the id is unknown.
+ *  Resolves built-in code records first, then runtime-registered DB campaigns. */
 export function campaignContent(itemId: string): CampaignContent | null {
-  return (CAMPAIGN_CONTENT as Record<string, CampaignContent | undefined>)[itemId] ?? null
+  return (CAMPAIGN_CONTENT as Record<string, CampaignContent | undefined>)[itemId] ?? DYNAMIC_CONTENT[itemId] ?? null
 }
 
 /** The shape the product page has always consumed (was create-catalog-content.ts). */

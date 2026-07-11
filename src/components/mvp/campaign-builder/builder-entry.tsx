@@ -16,6 +16,7 @@ import { resolveBrainGoal } from '@/lib/campaigns/builder/compose-plan'
 import { CREATE_CATALOG_IDS } from '@/lib/campaigns/data/create-catalog'
 import type { WhySignals } from '@/lib/campaigns/data/why-for'
 import type { ContentOverrideMap } from '@/lib/campaigns/data/content-overrides'
+import { registerDbCampaigns, type DbCampaign } from '@/lib/campaigns/data/db-campaigns'
 import type { CampaignProfile } from '@/lib/campaigns/builder/campaign-profile'
 import type { Diagnosis } from '@/lib/campaigns/planning/types'
 import { summarize, type LineItem, type CampaignDraft, type PieceProducer, type CampaignReceipt } from '@/lib/campaigns/types'
@@ -30,7 +31,7 @@ type MenuOpt = { l: string; photo?: string; f?: boolean }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
 type PlanPayload = { itemId: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; contentOverrides?: ContentOverrideMap | null; tier?: string | null; clientId?: string | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; contentOverrides?: ContentOverrideMap | null; dbCampaigns?: DbCampaign[] | null; tier?: string | null; clientId?: string | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -161,12 +162,23 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
   // edits (~30min TTL). Fetch failure or a missing table just means code content
   // renders — the store never blocks on this and never invents copy.
   const [contentOverrides, setContentOverrides] = useState<ContentOverrideMap | null>(null)
+  // Admin-CREATED campaigns (Phase C2): live catalog_campaigns rows, registered into the
+  // runtime catalog (shape + content + price) BEFORE they render, so composing/pricing a
+  // DB card rides the exact rails the built-ins use. Same payload + cache as the overrides.
+  const [dbCampaigns, setDbCampaigns] = useState<DbCampaign[] | null>(null)
+  const applyDbCampaigns = (list: unknown) => {
+    if (!Array.isArray(list)) return
+    // registerDbCampaigns validates + registers and returns what actually took; the
+    // store only ever renders cards that are fully wired.
+    setDbCampaigns(registerDbCampaigns(list as DbCampaign[]))
+  }
   useEffect(() => {
     let cancelled = false
-    const cacheKey = 'apnosh-content-ov-v1'
-    let cached: { overrides?: ContentOverrideMap; ts?: number } | null = null
+    const cacheKey = 'apnosh-content-ov-v2'
+    let cached: { overrides?: ContentOverrideMap; campaigns?: DbCampaign[]; ts?: number } | null = null
     try { cached = JSON.parse(localStorage.getItem(cacheKey) ?? 'null') } catch { cached = null }
     if (cached?.overrides) setContentOverrides(cached.overrides)
+    if (cached?.campaigns) applyDbCampaigns(cached.campaigns)
     const fresh = typeof cached?.ts === 'number' && Date.now() - cached.ts < 30 * 60 * 1000
     if (fresh) return
     fetch('/api/dashboard/catalog-content')
@@ -174,7 +186,8 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
       .then((j) => {
         if (cancelled || !j || typeof j.overrides !== 'object' || j.overrides === null) return
         setContentOverrides(j.overrides as ContentOverrideMap)
-        try { localStorage.setItem(cacheKey, JSON.stringify({ overrides: j.overrides, ts: Date.now() })) } catch { /* storage full/private — fine */ }
+        applyDbCampaigns(j.campaigns)
+        try { localStorage.setItem(cacheKey, JSON.stringify({ overrides: j.overrides, campaigns: Array.isArray(j.campaigns) ? j.campaigns : [], ts: Date.now() })) } catch { /* storage full/private — fine */ }
       })
       .catch(() => { /* code content shows; nothing is ever faked */ })
     return () => { cancelled = true }
@@ -430,6 +443,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
         profile={profile}
         whySignals={whySignals}
         contentOverrides={contentOverrides}
+        dbCampaigns={dbCampaigns}
         tier={client?.tier ?? null}
         clientId={client?.id ?? null}
         onCreate={onCreate}

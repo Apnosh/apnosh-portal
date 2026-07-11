@@ -156,6 +156,28 @@ function fallbackShape(): ItemShape {
   return { title: 'New campaign', kind: 'piece', goal: 'acquire', dur: 'once', seed: [['post', 'social', 'A post']] }
 }
 
+/* ── Dynamic shapes (Phase C2: admin-created DB campaigns) ─────────────────
+ * DB campaigns are ids OUTSIDE the CreateCatalogId union, registered at runtime by
+ * registerDbCampaigns (data/db-campaigns.ts). Their shape is SERVICES-ONLY by
+ * construction: an empty seed + real catalog serviceIds, kind never 'program', so the
+ * composer can never funnel-grow content for them — they ride the exact svcLines rail
+ * a built-in services-only card (listings) rides. Built-in ids can never be shadowed:
+ * registration refuses any id already in ITEM_SHAPE, and shapeFor checks ITEM_SHAPE first. */
+const DYNAMIC_SHAPES: Record<string, ItemShape> = {}
+
+/** Register a runtime shape for a DB campaign. No-op for built-in ids. Idempotent
+ *  (re-registering replaces, so an admin edit is picked up on the next fetch). */
+export function registerDynamicShape(itemId: string, shape: ItemShape): void {
+  if (Object.prototype.hasOwnProperty.call(ITEM_SHAPE, itemId)) return
+  DYNAMIC_SHAPES[itemId] = shape
+}
+
+/** The one shape lookup: built-in ITEM_SHAPE first, then runtime-registered DB shapes.
+ *  undefined for a genuinely unknown id (callers keep their existing fallbacks). */
+export function shapeFor(itemId: string): ItemShape | undefined {
+  return ITEM_SHAPE[itemId] ?? DYNAMIC_SHAPES[itemId]
+}
+
 /* Targeting (the locked decision): the owner's free-text "who's this for?" answer should
  * drive who the campaign targets. These keyword rules resolve that answer to the guest
  * segments composeCampaign understands; a no-match leaves targeting at the goal default. */
@@ -522,7 +544,7 @@ function adapt(beats: Beat[], itemId: string, spec: Record<string, string>): Bea
 /** Seed the Content Menu cart from a selected catalog item: its title (a name suggestion)
  *  + its content pieces, drawn from the one ITEM_SHAPE table the plan flow uses. */
 export function seedFromItem(itemId: string): { name: string; pieces: Array<{ type: string; label: string }> } {
-  const shape = ITEM_SHAPE[itemId] || fallbackShape()
+  const shape = shapeFor(itemId) || fallbackShape()
   return { name: shape.title, pieces: shape.seed.map(([type, , label]) => ({ type, label })) }
 }
 
@@ -725,7 +747,7 @@ export function buildSystem(goal: SystemGoal, spec: Record<string, string>): { m
 /** THE CANONICAL ENTRY. Pure, total on an empty spec. Builds the CampaignTemplate the
  *  adapter hands to composeCampaign, plus the occasion (gated on a picked date) and goalKey. */
 export function composePlanForGoal(itemId: string, spec: Record<string, string>): { tpl: CampaignTemplate; occasion?: string; goalKey: GoalKey; ads: boolean; heldAds?: boolean; leadMove?: { serviceId: string; title: string; because: string }; moves?: PlanMove[]; stages?: PlanStage[]; serviceIds?: string[] } {
-  const shape = ITEM_SHAPE[itemId] || fallbackShape()
+  const shape = shapeFor(itemId) || fallbackShape()
   const meta = GOAL_META[shape.goal]
   // Needs-aware: the funnel responds to who the owner is ACTUALLY targeting (their mapped
   // audience), not just the item's static default — so retargeting a program onto a list

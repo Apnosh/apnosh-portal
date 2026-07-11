@@ -49,13 +49,28 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
   const itemId = body && typeof body.itemId === 'string' ? body.itemId : ''
   const content = (CAMPAIGN_CONTENT as Record<string, CampaignContent | undefined>)[itemId]
-  if (!content) return NextResponse.json({ error: 'unknown campaign id' }, { status: 400 })
 
-  // Ground in the services this campaign REALLY composes (plain names + real deliverables).
+  // Phase C2: an admin-created (or not-yet-saved) campaign has no code record — the
+  // form sends its CHOSEN title + serviceIds instead, and the draft grounds in those
+  // real catalog services. Every id is validated against the priced catalog; junk 400s.
+  const newTitle = body && typeof body.title === 'string' ? body.title.trim() : ''
+  const rawServiceIds: string[] = body && Array.isArray(body.serviceIds)
+    ? (body.serviceIds as unknown[]).filter((x): x is string => typeof x === 'string' && !!x.trim())
+    : []
+  if (!content && (!newTitle || !rawServiceIds.length)) {
+    return NextResponse.json({ error: 'unknown campaign id (send title + serviceIds for a new campaign)' }, { status: 400 })
+  }
+  if (!content) {
+    const bad = rawServiceIds.find((sid) => !serviceById(sid))
+    if (bad) return NextResponse.json({ error: `unknown service id "${bad}"` }, { status: 400 })
+  }
+
+  // Ground in the services this campaign REALLY composes (plain names + real deliverables):
+  // the composed plan for a built-in, the chosen service list for a new/DB campaign.
   let services: { name: string; deliverables: string[] }[] = []
   try {
-    const plan = composePlanForGoal(itemId, {})
-    services = (plan.serviceIds ?? [])
+    const serviceIds = content ? (composePlanForGoal(itemId, {}).serviceIds ?? []) : rawServiceIds
+    services = serviceIds
       .map((sid) => serviceById(sid))
       .filter((s): s is NonNullable<typeof s> => !!s)
       .map((s) => ({ name: plainNameOf(s), deliverables: (s.deliverables?.included ?? []).slice(0, 6) }))
@@ -76,12 +91,12 @@ export async function POST(req: NextRequest) {
   ].join('\n')
 
   const userMsg = JSON.stringify({
-    campaign_title: content.title,
-    campaign_tagline: content.tagline,
+    campaign_title: content ? content.title : newTitle,
+    campaign_tagline: content ? content.tagline : (body && typeof body.tagline === 'string' ? body.tagline.trim() : ''),
     services,
-    current_description: content.description,
-    current_why: content.why,
-    current_expectation: content.expectation,
+    current_description: content?.description ?? '',
+    current_why: content?.why ?? '',
+    current_expectation: content?.expectation ?? '',
   })
 
   const out = await callStructuredOutput<{ description: string; why: string; expectation: string }>({

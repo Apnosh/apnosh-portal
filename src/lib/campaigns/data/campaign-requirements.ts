@@ -11,7 +11,7 @@
  * PURE + synchronous + CLIENT-SAFE: no server-only, no fetch, total on unknown ids (returns []).
  */
 
-import { ITEM_SHAPE } from '../builder/compose-plan'
+import { shapeFor } from '../builder/compose-plan'
 import { turnaroundFor } from './service-turnaround'
 
 /** Gate kind → the plain ask, in service-needs.ts's voice. 'external' gates carry no owner ask. */
@@ -33,17 +33,11 @@ const LIST_SERVICES = new Set(['crm-list', 'email-found'])
 /** Seed beat types that mean a camera has to visit before the piece can exist. */
 const SHOOT_BEATS = new Set(['reel', 'video', 'photo'])
 
-/** What the owner must provide before this campaign can complete. Deduped, plain words,
- *  sentence case. [] when nothing is genuinely required (e.g. a text-only send). */
-export function requirementsFor(itemId: string): string[] {
-  const shape = ITEM_SHAPE[itemId]
-  if (!shape) return []
-  const out: string[] = []
+/** The per-service asks, shared by the id path and the services-only path (admin preview).
+ *  Deduped into `out` in catalog order. */
+function pushServiceAsks(serviceIds: string[], out: string[], shootAsk: string): void {
   const push = (ask: string) => { if (!out.includes(ask)) out.push(ask) }
-  // 'edit' cuts the OWNER's footage — its reel/photo beats need their files, not a camera visit.
-  const shootAsk = itemId === 'edit' ? 'Send us your clips and photos' : SHOOT_ASK
-
-  for (const serviceId of shape.services ?? []) {
+  for (const serviceId of serviceIds) {
     const t = turnaroundFor(serviceId)
     if (t?.class === 'setup' && t.gate) {
       const ask = GATE_ASK[t.gate.kind]
@@ -53,9 +47,33 @@ export function requirementsFor(itemId: string): string[] {
     if (MENU_SERVICES.has(serviceId)) push('Send us your current menu')
     if (LIST_SERVICES.has(serviceId)) push('Share your customer list')
   }
+}
+
+/** What the owner must provide before this campaign can complete. Deduped, plain words,
+ *  sentence case. [] when nothing is genuinely required (e.g. a text-only send).
+ *  Resolves DB campaigns too via shapeFor (their registered shape is services-only). */
+export function requirementsFor(itemId: string): string[] {
+  const shape = shapeFor(itemId)
+  if (!shape) return []
+  const out: string[] = []
+  // 'edit' cuts the OWNER's footage — its reel/photo beats need their files, not a camera visit.
+  const shootAsk = itemId === 'edit' ? 'Send us your clips and photos' : SHOOT_ASK
+
+  pushServiceAsks(shape.services ?? [], out, shootAsk)
 
   // Any seed piece that needs filming or a photographer implies the shoot ask too.
-  if ((shape.seed ?? []).some(([type]) => SHOOT_BEATS.has(type))) push(shootAsk)
+  if ((shape.seed ?? []).some(([type]) => SHOOT_BEATS.has(type))) {
+    if (!out.includes(shootAsk)) out.push(shootAsk)
+  }
 
+  return out
+}
+
+/** Requirements derived from a bare service list — the admin CMS preview path (Phase C2),
+ *  where the campaign may not be registered (or even saved) yet. Same asks, same voice,
+ *  same derivation as requirementsFor over a services-only shape. */
+export function requirementsForServices(serviceIds: string[]): string[] {
+  const out: string[] = []
+  pushServiceAsks(serviceIds, out, SHOOT_ASK)
   return out
 }

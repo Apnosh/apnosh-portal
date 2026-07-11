@@ -2144,8 +2144,35 @@ const CATALOG = [
 // card render path); the product page merges the full record via contentFor. Empty or
 // absent = the CATALOG literal below stays the source, byte-identical to the code record.
 let CONTENT_OVERRIDES = null;
+// Admin-CREATED DB campaigns (Phase C2), set by ApnoshCampaign each render. The wrapper
+// (builder-entry) already registered each one's compose shape, content record, and price
+// into the lib registries; this holds only the CARD render data and mutates the per-card
+// lookup tables this file reads (ITEM_STAGES funnel tags, CARD_OPTIONS add-ons). Built-in
+// ids can never be shadowed (collisions are filtered), and re-applying is idempotent.
+let DB_CARDS = [];
+const applyDbCards = (list) => {
+  const rows = Array.isArray(list) ? list : [];
+  DB_CARDS = rows
+    .filter((c) => c && typeof c.id === "string" && c.title && !CATALOG.some((x) => x.id === c.id))
+    .map((c) => ({
+      id: c.id,
+      type: TYPE_G[c.type] ? c.type : "task",
+      icon: "tag",
+      title: c.title,
+      sub: c.tagline || "",
+      cad: c.cad || "once",
+      shelf: c.shelf || "aware",
+      serviceIds: Array.isArray(c.serviceIds) ? c.serviceIds : [],
+      db: true,
+    }));
+  for (const c of rows) {
+    if (!DB_CARDS.some((x) => x.id === c.id)) continue;
+    ITEM_STAGES[c.id] = Array.isArray(c.stages) ? c.stages : [];
+    CARD_OPTIONS[c.id] = Array.isArray(c.addonServiceIds) ? c.addonServiceIds : [];
+  }
+};
 export const catGet = (id) => {
-  const p = CATALOG.find((x) => x.id === id);
+  const p = CATALOG.find((x) => x.id === id) || DB_CARDS.find((x) => x.id === id);
   const o = p && CONTENT_OVERRIDES ? CONTENT_OVERRIDES[id] : null;
   if (!o) return p;
   return {
@@ -2251,6 +2278,14 @@ const ROWS = [
   // campaigns — no outcome promise, no tracking, the deliverable is the product.
   { id: "content", title: "Just need content", note: "Shoots, edits, and pieces. No campaign, just the goods", ids: ["shoot", "edit", "reel", "story", "graphic", "dish", "gpost"] },
 ];
+
+// DB campaigns appear on their chosen shelf AFTER the code-authored cards (never
+// reordering the authored merchandising). Pure: reads the current DB_CARDS.
+const rowWithDb = (row) => {
+  if (!row) return row;
+  const extra = DB_CARDS.filter((c) => c.shelf === row.id && !row.ids.includes(c.id)).map((c) => c.id);
+  return extra.length ? { ...row, ids: [...row.ids, ...extra] } : row;
+};
 
 // Lenses mirror the rows: filter by what the owner wants done. "all" is the full browse.
 const LENS_CHIPS = [
@@ -2454,16 +2489,19 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
   // A funnel-stage deep link (Home's weak-leg tap) lands with its shelf pre-filtered.
   const [lens, setLens] = useState(() => (initialLens && LENS_CHIPS.some((c) => c.id === initialLens) ? initialLens : "all"));
   const query = q.trim().toLowerCase();
-  // Search over the resolved cards (catGet) so an admin-edited title both matches and renders.
-  const results = query ? CATALOG.map((x) => catGet(x.id)).filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
+  // Search over the resolved cards (catGet) so an admin-edited title both matches and
+  // renders — DB campaigns included, same match fields.
+  const results = query ? [...CATALOG, ...DB_CARDS].map((x) => catGet(x.id)).filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
   // AI recommendations (fetched by the wrapper): drive the featured card + the
   // "Suggested for you" row when present; otherwise the static defaults show.
   const recList = (recommended || []).filter((r) => r && catGet(r.id));
   const recFeatured = recList[0] ? { item: catGet(recList[0].id), reason: recList[0].reason } : null;
   const recRowIds = recList.slice(recFeatured ? 1 : 0).map((r) => r.id);
+  // DB campaigns join their chosen shelf before the suggested-row swap.
+  const baseRows = ROWS.map(rowWithDb);
   const rows = recRowIds.length
-    ? ROWS.map((row) => (row.id === "suggested" ? { ...row, ids: recRowIds, note: "Picked for your goals and reviews" } : row))
-    : ROWS;
+    ? baseRows.map((row) => (row.id === "suggested" ? { ...row, ids: recRowIds, note: "Picked for your goals and reviews" } : row))
+    : baseRows;
   return (
     <div style={{ paddingBottom: 26 }}>
       <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
@@ -2500,7 +2538,7 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
               {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} />)}
             </>
           ) : (() => {
-            const row = ROWS.find((r) => r.id === lens);
+            const row = rowWithDb(ROWS.find((r) => r.id === lens));
             const items = row ? row.ids.map(catGet).filter(Boolean) : [];
             return (
               <div style={{ padding: "0 20px 6px" }}>
@@ -2529,7 +2567,7 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
 }
 
 function CategoryAll({ rowId, onBack, onOpen }) {
-  const row = ROWS.find((r) => r.id === rowId) || { title: "Plans", ids: [] };
+  const row = rowWithDb(ROWS.find((r) => r.id === rowId)) || { title: "Plans", ids: [] };
   const items = row.ids.map(catGet).filter(Boolean);
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
@@ -2842,6 +2880,35 @@ function configTimeline(p, gbpLane, optionIds) {
     const workMax = (t && t.class === "setup" && t.business) ? t.business.max : 7;
     steps.push({ text: "Most of your profile is fixed", when: etaDateLabel(workMax), sub: `About ${etaLabelFor("gbp-setup")} after you approve.` });
     if (t && t.gate && t.gate.addDays) steps.push({ text: "Fully live, once Google finishes checking", when: etaDateLabel(workMax + t.gate.addDays.max), sub: t.gate.note });
+  } else if (p.db && Array.isArray(p.serviceIds) && p.serviceIds.length) {
+    // DB campaign (Phase C2): the timeline derives from the REAL per-service turnarounds,
+    // as a critical PATH (the max bound — services run in parallel, never a sum). The
+    // worst external gate appends its own honest wait; recurring services say when they
+    // start. Nothing here is authored — remove a service and its time disappears.
+    let workMax = 0;
+    let gate = null;
+    const recurring = [];
+    for (const id of p.serviceIds) {
+      const t = SERVICE_TURNAROUND[id];
+      if (!t) continue;
+      if (t.class === "setup") {
+        workMax = Math.max(workMax, t.business.max);
+        if (t.gate && t.gate.addDays && (!gate || t.gate.addDays.max > gate.addDays.max)) gate = t.gate;
+      } else if (t.class === "creative") {
+        workMax = Math.max(workMax, t.business.max);
+      } else if (t.class === "recurring") {
+        recurring.push({ id, t });
+      }
+    }
+    if (workMax > 0) {
+      steps.push({ text: "The work is done", when: etaDateLabel(workMax), sub: "After you approve." });
+      if (gate) steps.push({ text: "Fully live", when: etaDateLabel(workMax + gate.addDays.max), sub: gate.note });
+    }
+    for (const { id, t } of recurring) {
+      const s = serviceById(id);
+      if (s) steps.push({ text: `${plainNameOf(s)} starts within ${t.startsWithin.min} to ${t.startsWithin.max} days, then keeps running.` });
+    }
+    if (!steps.length) steps.push({ text: "About 1 to 2 weeks after you approve." });
   } else {
     const byCad = {
       setup: "About 1 to 2 weeks after you approve.",
@@ -4044,11 +4111,14 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, tier = null, clientId = null, onCreate, onClose, onPlan } = {}) {
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, dbCampaigns = null, tier = null, clientId = null, onCreate, onClose, onPlan } = {}) {
   // Publish the CMS override map for catGet + the product page (see CONTENT_OVERRIDES above).
   // Set during render so every child render below reads the current map; a late fetch just
   // re-renders this tree with the fresh edits.
   CONTENT_OVERRIDES = contentOverrides;
+  // Merge admin-created DB campaigns into the runtime catalog (cards + stage tags +
+  // add-ons; see applyDbCards). The wrapper already registered their shape/content/price.
+  applyDbCards(dbCampaigns);
   // Deep links (Home suggestions, ?template=) land on the PRODUCT PAGE too, never the bare madlib.
   const [route, setRoute] = useState(() => (initialItem ? { name: "pdp", itemId: buildIdFor(initialItem) } : { name: "browse" }));
 
@@ -4132,7 +4202,18 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
               initialOptions={route.preset && route.preset.options}
               onBack={backToSource}
               onOpenCard={(id) => setRoute({ name: "pdp", itemId: id, from: route.from, rowId: route.rowId })}
-              onContinue={(preset) => setRoute({ name: "build", itemId: buildIdFor(route.itemId), from: route.from, rowId: route.rowId, preset: preset || undefined, fromPdp: true })}
+              onContinue={(preset) => {
+                // A DB campaign has NO madlib: Buy now composes its services-only plan
+                // directly (empty vals + any picked add-ons ride as spec.options) and
+                // goes straight to the plan breakdown -> order summary -> ship.
+                const card = catGet(route.itemId);
+                if (card && card.db && onPlan) {
+                  const opts = preset && Array.isArray(preset.options) ? preset.options : [];
+                  onPlan({ itemId: route.itemId, vals: opts.length ? { options: opts.join(",") } : {} });
+                  return;
+                }
+                setRoute({ name: "build", itemId: buildIdFor(route.itemId), from: route.from, rowId: route.rowId, preset: preset || undefined, fromPdp: true });
+              }}
             />
           )}
 

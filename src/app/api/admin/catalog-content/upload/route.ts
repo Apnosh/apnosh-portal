@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CAMPAIGN_CONTENT } from '@/lib/campaigns/data/campaign-content'
+import { isValidCampaignSlug } from '@/lib/campaigns/data/db-campaigns'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -39,8 +40,13 @@ export async function POST(req: NextRequest) {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
   if (profile?.role !== 'admin') return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
+  // A built-in content id (C1) or a DB-campaign slug (C2 — may not be saved yet, the
+  // create form uploads before the first save). Anything else is junk. Admin-only route,
+  // and the file lands under the shared catalog-content/ folder either way.
   const itemId = req.nextUrl.searchParams.get('itemId') ?? ''
-  if (!(itemId in CAMPAIGN_CONTENT)) return NextResponse.json({ error: 'unknown campaign id' }, { status: 400 })
+  if (!(itemId in CAMPAIGN_CONTENT) && !isValidCampaignSlug(itemId)) {
+    return NextResponse.json({ error: 'unknown campaign id' }, { status: 400 })
+  }
 
   let form: FormData
   try {
