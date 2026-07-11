@@ -3217,12 +3217,13 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
           </div>
         )}
 
-        {/* ── BUY — pinned to the bottom of the scroll area (position: sticky), so the total + Add to
-              plan stay in reach as the owner scrolls; content passes under its opaque bar. "Add to
-              plan" is the bold filled PRIMARY (collect-only local draft, ships/bills nothing); "Buy
-              now instead" the quiet secondary carrying version + options into Continue; AI keeps its
-              Pro path. ── */}
-        <div style={{ position: "sticky", bottom: 0, zIndex: 5, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.10)", padding: "11px 18px calc(12px + env(safe-area-inset-bottom))" }}>
+      </div>
+
+      {/* ── BUY — a real footer at the bottom of the frame: a flex-shrink:0 bar BELOW the scroll area
+            (not an overlay), so the content scrolls in the space above it and nothing ever passes
+            behind it. "Add to plan" is the filled primary (collect-only local draft, ships/bills
+            nothing); "Buy now instead" the quiet secondary into Continue; AI keeps its Pro path. ── */}
+      <div style={{ flexShrink: 0, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.10)", padding: "11px 18px calc(12px + env(safe-area-inset-bottom))" }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 9 }}>
             <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
             <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{totalLabel}</span>
@@ -3240,7 +3241,6 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             <button onClick={() => onContinue(buildPreset())} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Buy now instead</button>
           )}
         </div>
-      </div>
     </div>
   );
 }
