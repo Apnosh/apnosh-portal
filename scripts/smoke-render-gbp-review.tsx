@@ -17,7 +17,17 @@
  *      raw-5xx correctly, and injected notes render on the part screen
  *   l) fallbacks + unknown part unchanged
  *   m) the summary lists outcomes + the What's-next reviews card
- *   n) the helper hub renders both cards (and the Continue variant)
+ *   n) the helper hub renders all three cards (and the Continue variant)
+ *   p) Questions and answers: the list (Answered + Needs-an-answer chips, the
+ *      merchant answer under answered ones, the Asked line), the empty state,
+ *      the failed-read state (+ the api_disabled plain line), and the answer
+ *      screen (prefilled textarea, Draft it for me, Save answer, the Pro
+ *      hint, honest answerResultNote strings)
+ *   q) Post an update: the composer (textarea + live count vs the 1500 rule,
+ *      the button picker None/Learn more/Call, the https link field, Draft it
+ *      for me, Publish to Google, the non-Pro hint), honest postResultNote
+ *      strings, and the posted screen (proof line, See-it link only when
+ *      Google sent one back, Post again)
  *   o) the last part says Finish; no em dashes anywhere
  * Run: node_modules/.bin/tsx scripts/smoke-render-gbp-review.tsx */
 
@@ -329,9 +339,170 @@ async function main() {
   ok(hub.includes('Your reviews'), 'the reviews card renders')
   ok(hub.includes('Read new reviews and reply with AI help.'), 'the reviews card sub renders')
   ok(hub.includes('/dashboard/inbox?tab=reviews'), 'the reviews card links to the real reviews surface')
+  ok(hub.includes('Questions and answers'), 'the questions card renders')
+  ok(hub.includes('See what people ask and answer them.'), 'the questions card sub renders')
+  ok(hub.includes('Post an update'), 'the post card renders (fourth card)')
+  ok(hub.includes('Share news on your Google listing.'), 'the post card sub renders')
   const hubResume = strip(renderToString(React.createElement(GbpHelperHub, { continueReview: true, onReview: noop })))
   rendered.push(hubResume)
   ok(hubResume.includes('Continue your review'), 'a mid-review save flips the card to Continue your review')
+
+  console.log('\n== p) Questions and answers ==')
+  const GbpQandaView = mod.GbpQandaView as unknown as React.ComponentType<Record<string, unknown>>
+  const answerResultNote = mod.answerResultNote as (status: number, body: Record<string, unknown> | null) => { tone: string; text: string }
+  const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
+  const Q_FIXTURE = [
+    {
+      id: 'q-answered', text: 'Do you have gluten free options?', author: 'Dana P',
+      createTime: daysAgo(21), upvotes: 3, merchantAnswer: 'Yes, we mark them right on the menu.',
+    },
+    {
+      id: 'q-open', text: 'Is there parking nearby?', author: 'A customer',
+      createTime: daysAgo(3), upvotes: 0, merchantAnswer: null,
+    },
+  ]
+  const renderQanda = (props: Record<string, unknown>) => {
+    const html = strip(renderToString(React.createElement(GbpQandaView, { clientId: 'smoke-client', isPro: true, onBack: noop, ...props })))
+    rendered.push(html)
+    return html
+  }
+
+  // The list: both chips, the Asked line, the merchant answer under answered ones.
+  const qList = renderQanda({ initialQuestions: Q_FIXTURE })
+  ok(qList.includes('Questions and answers'), 'the Q&A title renders')
+  ok(qList.includes('Do you have gluten free options?'), 'the answered question text renders')
+  ok(qList.includes('Is there parking nearby?'), 'the open question text renders')
+  ok(qList.includes('>Answered<'), 'the Answered chip renders')
+  ok(qList.includes('>Needs an answer<'), 'the Needs-an-answer chip renders')
+  ok(/Asked\s*21\s*days ago/.test(qList) && /Asked\s*3\s*days ago/.test(qList), 'the Asked lines render in plain words')
+  ok(qList.includes('Your answer') && qList.includes('Yes, we mark them right on the menu.'), 'the merchant answer shows under the answered question')
+  ok(qList.includes('Read from your live Google listing.'), 'the honest source line renders')
+
+  // The empty state.
+  const qEmpty = renderQanda({ initialQuestions: [] })
+  ok(qEmpty.includes('No questions yet.'), 'the empty state title renders')
+  ok(qEmpty.includes('When someone asks on Google, it shows here.'), 'the empty state sub renders')
+
+  // The failed-read states.
+  const qFail = renderQanda({ initialErrorCode: 'google_error' })
+  ok(qFail.includes('We could not read your questions yet.'), 'the failed-read line renders')
+  ok(qFail.includes('Try again'), 'Try again renders on the failed state')
+  ok(!qFail.includes('This part of Google is not connected yet.'), 'the not-connected line stays off a plain failure')
+  const qDisabled = renderQanda({ initialErrorCode: 'api_disabled' })
+  ok(qDisabled.includes('We could not read your questions yet.'), 'the disabled state keeps the failed-read line')
+  ok(qDisabled.includes('This part of Google is not connected yet.'), 'the api_disabled state adds the plain not-connected line')
+  ok(qDisabled.includes('Try again'), 'Try again renders on the disabled state too')
+
+  // The answer screen: prefilled textarea, Draft, Save, the replace note.
+  const qAnswer = renderQanda({ initialQuestions: Q_FIXTURE, initialSelectedId: 'q-answered' })
+  ok(qAnswer.includes('Answer this question'), 'the answer screen title renders')
+  ok(qAnswer.includes('Do you have gluten free options?'), 'the question renders on the answer screen')
+  ok(/by\s*Dana P/.test(qAnswer), 'who asked renders')
+  ok(qAnswer.includes('<textarea'), 'the textarea renders')
+  ok(qAnswer.includes('Yes, we mark them right on the menu.'), 'the textarea prefills with the current answer (editing re-saves)')
+  ok(qAnswer.includes('You answered this one before. Saving replaces your old answer.'), 'the honest replace note renders on an answered question')
+  ok(qAnswer.includes('Draft it for me'), 'Draft it for me renders')
+  ok(qAnswer.includes('Save answer'), 'Save answer renders')
+  ok(/of\s*1000 characters/.test(qAnswer), 'the character count renders against the 1000 rule')
+  const qAnswerOpen = renderQanda({ initialQuestions: Q_FIXTURE, initialSelectedId: 'q-open' })
+  ok(qAnswerOpen.includes('>Needs an answer<'), 'the open question keeps its chip on the answer screen')
+  ok(!qAnswerOpen.includes('Saving replaces your old answer'), 'no replace note on a question with no answer yet')
+  // Non-Pro: the plain hint, no AI draft button (server enforces regardless).
+  const qAnswerFree = renderQanda({ initialQuestions: Q_FIXTURE, initialSelectedId: 'q-open', isPro: false })
+  ok(qAnswerFree.includes('Answering from here is on the Pro plan.'), 'the Pro hint renders for non-Pro')
+  ok(!qAnswerFree.includes('Draft it for me'), 'no AI draft button for non-Pro')
+
+  // Honest save strings, same contract as the profile save rail.
+  const aLive = answerResultNote(200, { ok: true, live: true })
+  ok(aLive.tone === 'ok' && aLive.text === 'Answer saved.', 'live:true reads Answer saved.')
+  const aPending = answerResultNote(200, { ok: true, live: false })
+  ok(aPending.tone === 'pending' && aPending.text === 'Sent to Google. It can take a few minutes to show.', 'ok without proof reads sent-not-showing-yet')
+  const aRate = answerResultNote(429, { ok: false, error: 'server words' })
+  ok(aRate.tone === 'error' && aRate.text === 'Google only allows a few edits per minute. Try again in a minute.', 'a 429 reads as the per-minute line')
+  const aRaw = answerResultNote(502, { ok: false, error: 'Not connected to Google yet: invalid_grant token refresh' })
+  ok(aRaw.tone === 'error' && !aRaw.text.includes('invalid_grant'), 'a 5xx never leaks the raw server string')
+  const aBad = answerResultNote(400, { ok: false, error: 'The answer is empty.' })
+  ok(aBad.text === 'The answer is empty.', 'a 400 shows the server plain-words reason')
+  const aPro = answerResultNote(403, { ok: false, error: 'Answering from here is on the Pro plan.' })
+  ok(aPro.text === 'Answering from here is on the Pro plan.', 'a 403 shows the plain Pro line')
+  // Injected on screen (test seam): the proven line renders on the answer screen.
+  const qSaved = renderQanda({ initialQuestions: Q_FIXTURE, initialSelectedId: 'q-open', initialSaveNote: aLive })
+  ok(qSaved.includes('Answer saved.'), 'the proven Answer saved line renders on the answer screen')
+  const qPendingShown = renderQanda({ initialQuestions: Q_FIXTURE, initialSelectedId: 'q-open', initialSaveNote: aPending })
+  ok(qPendingShown.includes('Sent to Google. It can take a few minutes to show.'), 'the honest pending line renders on the answer screen')
+
+  console.log('\n== q) Post an update ==')
+  const GbpPostView = mod.GbpPostView as unknown as React.ComponentType<Record<string, unknown>>
+  const postResultNote = mod.postResultNote as (status: number, body: Record<string, unknown> | null) => { tone: string; text: string }
+  const renderPost = (props: Record<string, unknown>) => {
+    const html = strip(renderToString(React.createElement(GbpPostView, { clientId: 'smoke-client', isPro: true, onBack: noop, ...props })))
+    rendered.push(html)
+    return html
+  }
+
+  // The composer: textarea, live count, button picker, Draft, Publish.
+  const postEmpty = renderPost({})
+  ok(postEmpty.includes('Post an update'), 'the composer title renders')
+  ok(postEmpty.includes('Share news on your Google listing.'), 'the composer sub renders')
+  ok(postEmpty.includes('<textarea'), 'the textarea renders')
+  ok(/0\s*of\s*1500 characters/.test(postEmpty), 'the live count renders against the 1500 rule')
+  ok(postEmpty.includes('Add a button'), 'the button picker label renders')
+  ok(postEmpty.includes('>None<') && postEmpty.includes('>Learn more<') && postEmpty.includes('>Call<'), 'the None / Learn more / Call choices render')
+  ok(postEmpty.includes('Draft it for me'), 'Draft it for me renders for Pro')
+  ok(postEmpty.includes('Publish to Google'), 'the Publish to Google button renders')
+  ok(!postEmpty.includes('Button link'), 'no link field until Learn more is picked')
+  ok(postEmpty.includes('Your update shows on Google as the business.'), 'the honest as-the-business line renders')
+
+  // A prefilled composer counts its text.
+  const POST_TEXT = 'Our new patio is open. Come try the smoked brisket plate this weekend and bring the whole family.'
+  const postFilled = renderPost({ initialText: POST_TEXT })
+  ok(postFilled.includes(POST_TEXT), 'the textarea prefills (test seam)')
+  ok(new RegExp(`${POST_TEXT.length}\\s*of\\s*1500 characters`).test(postFilled), 'the count tracks the text length')
+
+  // Learn more picked: the https link field + the keep-links-out note.
+  const postLearn = renderPost({ initialCta: { choice: 'LEARN_MORE', url: 'https://tacoexample.com/specials' } })
+  ok(postLearn.includes('Button link'), 'the Learn-more link field renders')
+  ok(postLearn.includes('value="https://tacoexample.com/specials"'), 'the link field prefills (test seam)')
+  ok(postLearn.includes('The button carries the link, so keep links out of the post text.'), 'the keep-links-out note renders')
+  const postCall = renderPost({ initialCta: { choice: 'CALL' } })
+  ok(postCall.includes('The Call button uses the phone number on your listing.'), 'the Call explainer renders')
+  ok(!postCall.includes('Button link'), 'no link field on a Call button')
+
+  // Non-Pro: the plain hint, no AI draft button (server enforces regardless).
+  const postFree = renderPost({ isPro: false })
+  ok(postFree.includes('Posting from here is on the Pro plan.'), 'the Pro hint renders for non-Pro')
+  ok(!postFree.includes('Draft it for me'), 'no AI draft button for non-Pro')
+  ok(postFree.includes('Publish to Google'), 'the Publish button still renders (disabled) for non-Pro')
+
+  // Honest publish strings, same contract as the other rails.
+  const pLive = postResultNote(200, { ok: true, live: true })
+  ok(pLive.tone === 'ok' && pLive.text === 'Posted to Google.', 'live:true reads Posted to Google.')
+  const pPending = postResultNote(200, { ok: true, live: false })
+  ok(pPending.tone === 'pending' && pPending.text === 'Sent to Google. It can take a few minutes to show.', 'ok without proof reads sent-not-showing-yet')
+  const pRate = postResultNote(429, { ok: false, error: 'server words' })
+  ok(pRate.tone === 'error' && pRate.text === 'Google only allows a few edits per minute. Try again in a minute.', 'a 429 reads as the per-minute line')
+  const pRaw = postResultNote(502, { ok: false, error: 'Not connected to Google yet: invalid_grant token refresh' })
+  ok(pRaw.tone === 'error' && !pRaw.text.includes('invalid_grant'), 'a 5xx never leaks the raw server string')
+  const pBad = postResultNote(400, { ok: false, error: 'The post is empty.' })
+  ok(pBad.text === 'The post is empty.', 'a 400 shows the server plain-words reason')
+  const pPro = postResultNote(403, { ok: false, error: 'Posting from here is on the Pro plan.' })
+  ok(pPro.text === 'Posting from here is on the Pro plan.', 'a 403 shows the plain Pro line')
+
+  // An error note renders inside the composer (test seam).
+  const postErrShown = renderPost({ initialSaveNote: pRate })
+  ok(postErrShown.includes('Google only allows a few edits per minute.'), 'the per-minute line renders in the composer')
+
+  // The posted screen: proof line + See it (only with a URL) + Post again.
+  const postedProof = renderPost({ initialPosted: { note: pLive, postUrl: 'https://local.google.com/place?id=1&use=posts&lpsid=789' } })
+  ok(postedProof.includes('Posted to Google.'), 'the proven Posted line renders after a publish')
+  ok(postedProof.includes('See it on Google'), 'the See-it link renders when Google sent the URL back')
+  ok(postedProof.includes('https://local.google.com/place?id=1&amp;use=posts&amp;lpsid=789'), 'the See-it link points at the real post URL')
+  ok(postedProof.includes('Post again'), 'the quiet Post again reset renders')
+  ok(!postedProof.includes('<textarea'), 'the composer is cleared off the posted screen')
+  const postedPending = renderPost({ initialPosted: { note: pPending, postUrl: null } })
+  ok(postedPending.includes('Sent to Google. It can take a few minutes to show.'), 'the honest pending line renders when no proof came back')
+  ok(!postedPending.includes('See it on Google'), 'no See-it link is invented without a URL from Google')
+  ok(postedPending.includes('Post again'), 'Post again renders on the pending outcome too')
 
   console.log('\n== o) no em dashes ==')
   ok(rendered.every((h) => !h.includes('\u2014')), 'no em dash in any rendered screen')

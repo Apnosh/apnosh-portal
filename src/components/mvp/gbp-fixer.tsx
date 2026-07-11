@@ -29,7 +29,15 @@
  *
  * The STANDALONE door (no campaignId) opens on a small hub first ("Your
  * Google helper"): one card into this review, one card out to the reviews
- * inbox (/dashboard/inbox?tab=reviews). The campaign door skips the hub.
+ * inbox (/dashboard/inbox?tab=reviews), one card into Questions and
+ * answers (the listing's customer Q&A, read live via
+ * GET /api/dashboard/gbp-questions; answers write as the merchant via
+ * POST /api/dashboard/gbp-answer with the same honest save lines as the
+ * gbp-apply rail, plus an AI draft via POST /api/dashboard/gbp-answer-draft),
+ * and one card into Post an update (compose a What's New post with an AI
+ * draft via POST /api/dashboard/gbp-post-draft and publish it live via
+ * POST /api/dashboard/gbp-post — text + one button only, no photos or
+ * scheduling). The campaign door skips the hub.
  *
  * Honesty rules baked in:
  *  - Every string shown comes from the diagnosis `sections[]` payload, which
@@ -46,7 +54,7 @@
 
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
-import { Loader2, Check, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Copy, ExternalLink, Plug, Pencil, Star } from 'lucide-react'
+import { Loader2, Check, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Copy, ExternalLink, Plug, Pencil, Star, MessageCircle, Megaphone } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
 
@@ -133,7 +141,7 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
   // The STANDALONE door opens on the helper hub (review card + reviews card).
   // A campaign task skips the hub and lands straight in the walkthrough.
   const standalone = !campaignId
-  const [door, setDoor] = useState<'hub' | 'review'>(standalone ? 'hub' : 'review')
+  const [door, setDoor] = useState<'hub' | 'review' | 'qanda' | 'post'>(standalone ? 'hub' : 'review')
   // A saved mid-review state flips the hub card to "Continue your review".
   // Read in an effect only (localStorage), so hydration stays clean.
   const [hasResume, setHasResume] = useState(false)
@@ -254,7 +262,23 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
       <style>{FIXER_CSS}</style>
 
       {standalone && door === 'hub' && (
-        <GbpHelperHub continueReview={hasResume} onReview={() => setDoor('review')} />
+        <GbpHelperHub continueReview={hasResume} onReview={() => setDoor('review')} onQuestions={() => setDoor('qanda')} onPost={() => setDoor('post')} />
+      )}
+
+      {standalone && door === 'qanda' && (
+        <GbpQandaView
+          clientId={client?.id ?? ''}
+          isPro={isProTier(client?.tier)}
+          onBack={() => setDoor('hub')}
+        />
+      )}
+
+      {standalone && door === 'post' && (
+        <GbpPostView
+          clientId={client?.id ?? ''}
+          isPro={isProTier(client?.tier)}
+          onBack={() => setDoor('hub')}
+        />
       )}
 
       {(!standalone || door === 'review') && (<>
@@ -376,13 +400,16 @@ const hubCardStyle: CSSProperties = {
 }
 
 /**
- * The standalone door's front screen: two cards. One enters the part-by-part
+ * The standalone door's front screen: four cards. One enters the part-by-part
  * review (says "Continue your review" when a saved mid-review state exists);
- * one goes to the reviews inbox. Exported for the render smoke.
+ * one goes to the reviews inbox; one opens Questions and answers; one opens
+ * Post an update. Exported for the render smoke.
  */
-export function GbpHelperHub({ continueReview, onReview, reviewsHref = REVIEWS_HREF }: {
+export function GbpHelperHub({ continueReview, onReview, onQuestions, onPost, reviewsHref = REVIEWS_HREF }: {
   continueReview: boolean
   onReview: () => void
+  onQuestions?: () => void
+  onPost?: () => void
   reviewsHref?: string
 }) {
   return (
@@ -421,6 +448,32 @@ export function GbpHelperHub({ continueReview, onReview, reviewsHref = REVIEWS_H
         </span>
         <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
       </Link>
+
+      <button type="button" onClick={onQuestions} className="mvp-row" style={hubCardStyle}>
+        <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <MessageCircle size={19} color={C.greenDk} />
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>Questions and answers</span>
+          <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
+            See what people ask and answer them.
+          </span>
+        </span>
+        <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
+      </button>
+
+      <button type="button" onClick={onPost} className="mvp-row" style={hubCardStyle}>
+        <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Megaphone size={19} color={C.greenDk} />
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>Post an update</span>
+          <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
+            Share news on your Google listing.
+          </span>
+        </span>
+        <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
+      </button>
     </div>
   )
 }
@@ -1751,7 +1804,7 @@ function AiSummary({ sections, outcomes, allGood, taskDone, rechecking, recheckF
         </>
       )}
 
-      {/* What's next: the other half of the Google helper. */}
+      {/* What's next: another part of the Google helper. */}
       <div style={{ marginTop: 18 }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, margin: '0 2px 8px' }}>
           What&rsquo;s next
@@ -1770,5 +1823,660 @@ function AiSummary({ sections, outcomes, allGood, taskDone, rechecking, recheckF
         </Link>
       </div>
     </>
+  )
+}
+
+/* ── Questions and answers (the hub's third card) ───────────────── */
+
+/* Wire type for GET /api/dashboard/gbp-questions — mirrors QandaQuestion in
+   src/lib/gbp-qanda.ts (that module is server-only, so the shape is restated
+   here rather than imported into the client bundle). */
+interface QandaQuestionWire {
+  id: string
+  text: string
+  author: string
+  createTime: string
+  upvotes: number
+  merchantAnswer: string | null
+  topAnswer?: { text: string; author: string }
+}
+
+/** The machine codes GET gbp-questions can return on a failed read. */
+type QandaErrorCode = 'not_connected' | 'api_disabled' | 'google_error'
+
+const ANSWER_MAX_UI = 1000
+const ANSWER_SAVE_FAIL = 'We could not save your answer right now. Try again in a minute.'
+
+/**
+ * Map one gbp-answer response to the honest owner line. Never optimistic:
+ * "Answer saved." appears ONLY on live:true (the read-back proof); ok without
+ * proof reads as sent-not-showing-yet; 429 is Google's own per-minute cap in
+ * plain words; 400/403 bodies are the server's plain owner words; anything
+ * else gets the generic could-not-save line (raw 5xx strings never render).
+ * Exported for the render smoke.
+ */
+export function answerResultNote(status: number, body: { ok?: boolean; live?: boolean; error?: string } | null): SaveNote {
+  if (status === 200 && body?.ok) {
+    return body.live === true
+      ? { tone: 'ok', text: 'Answer saved.' }
+      : { tone: 'pending', text: 'Sent to Google. It can take a few minutes to show.' }
+  }
+  if (status === 429) return { tone: 'error', text: 'Google only allows a few edits per minute. Try again in a minute.' }
+  if ((status === 400 || status === 403) && typeof body?.error === 'string' && body.error.trim()) {
+    return { tone: 'error', text: body.error }
+  }
+  return { tone: 'error', text: ANSWER_SAVE_FAIL }
+}
+
+/** "Asked today" / "Asked 3 days ago" / "Asked 2 months ago" — plain words,
+ *  never a raw timestamp. Unparseable times fall back to a safe line. */
+function askedLabel(createTime: string): string {
+  const t = Date.parse(createTime)
+  if (Number.isNaN(t)) return 'Asked on Google'
+  const days = Math.floor((Date.now() - t) / 86_400_000)
+  if (days <= 0) return 'Asked today'
+  if (days === 1) return 'Asked yesterday'
+  if (days < 30) return `Asked ${days} days ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `Asked ${months} ${months === 1 ? 'month' : 'months'} ago`
+  const years = Math.floor(days / 365)
+  return `Asked ${years} ${years === 1 ? 'year' : 'years'} ago`
+}
+
+/** Answered / Needs an answer chip, same visual language as the review chips. */
+function QandaChip({ answered }: { answered: boolean }) {
+  const s = answered
+    ? { word: 'Answered', color: C.greenDk, bg: C.greenSoft }
+    : { word: 'Needs an answer', color: '#9a6b17', bg: '#faf1de' }
+  return (
+    <span style={{ flexShrink: 0, fontSize: 11.5, fontWeight: 700, color: s.color, background: s.bg, borderRadius: 99, padding: '4px 10px' }}>
+      {s.word}
+    </span>
+  )
+}
+
+/**
+ * The Q&A surface: the list of customer questions from the live listing,
+ * then an answer screen per question. Reading works on every plan; saving an
+ * answer (and AI drafting) is Pro, hinted in the UI and enforced on the
+ * server.
+ *
+ * The initial* props are a TEST SEAM for the render smoke only (they seed the
+ * list, the failed state, or the open answer screen without a fetch); the
+ * live page never passes them.
+ */
+export function GbpQandaView({ clientId, isPro, onBack, initialQuestions, initialErrorCode, initialSelectedId, initialSaveNote }: {
+  clientId: string
+  isPro: boolean
+  onBack: () => void
+  initialQuestions?: QandaQuestionWire[]
+  initialErrorCode?: QandaErrorCode
+  initialSelectedId?: string
+  initialSaveNote?: SaveNote
+}) {
+  const seeded = initialQuestions !== undefined || initialErrorCode !== undefined
+  const [questions, setQuestions] = useState<QandaQuestionWire[] | null>(initialQuestions ?? null)
+  const [errorCode, setErrorCode] = useState<QandaErrorCode | null>(initialErrorCode ?? null)
+  const [loading, setLoading] = useState(!seeded)
+  const [reload, setReload] = useState(0)
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null)
+
+  useEffect(() => {
+    if (!clientId) return
+    if (seeded && reload === 0) return // test seam: no first fetch
+    let live = true
+    setErrorCode(null)
+    if (!questions) setLoading(true)
+    fetch(`/api/dashboard/gbp-questions?clientId=${clientId}`)
+      .then(async (r) => {
+        const j = await r.json().catch(() => ({})) as { ok?: boolean; questions?: QandaQuestionWire[]; code?: string }
+        if (!live) return
+        if (r.ok && j.ok && Array.isArray(j.questions)) {
+          setQuestions(j.questions)
+        } else {
+          const code = j.code === 'api_disabled' || j.code === 'not_connected' ? j.code : 'google_error'
+          setErrorCode(code)
+        }
+      })
+      .catch(() => { if (live) setErrorCode('google_error') })
+      .finally(() => { if (live) setLoading(false) })
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, reload])
+
+  // A save Google accepted updates the row right away (proof only), then a
+  // silent re-fetch keeps the list tracking what Google actually shows.
+  const onSaved = useCallback((questionId: string, text: string, live: boolean) => {
+    if (live) {
+      setQuestions((cur) => (cur ?? []).map((q) => (q.id === questionId ? { ...q, merchantAnswer: text } : q)))
+    }
+    setReload((n) => n + 1)
+  }, [])
+
+  const selected = selectedId ? (questions ?? []).find((q) => q.id === selectedId) ?? null : null
+
+  if (selected) {
+    return (
+      <QandaAnswerScreen
+        key={selected.id}
+        question={selected}
+        clientId={clientId}
+        isPro={isPro}
+        onBack={() => setSelectedId(null)}
+        onSaved={onSaved}
+        initialSaveNote={initialSaveNote}
+      />
+    )
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 2px 2px' }}>
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          className="mvp-row"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, marginLeft: -6, borderRadius: 9, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+        >
+          <ChevronLeft size={19} color={C.mute} />
+        </button>
+        <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>Questions and answers</span>
+      </div>
+      <div style={{ fontSize: 13, color: C.mute, padding: '0 2px 14px', lineHeight: 1.5 }}>
+        What people ask on your Google listing.
+      </div>
+
+      {loading && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '40px 0', color: C.mute }}>
+          <Loader2 size={22} className="mvp-spin" color={C.green} />
+          <span style={{ fontSize: 13.5 }}>Reading your questions&hellip;</span>
+        </div>
+      )}
+
+      {!loading && errorCode && (
+        <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '22px 18px', textAlign: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>We could not read your questions yet.</div>
+          {errorCode === 'api_disabled' ? (
+            <div style={{ fontSize: 13, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>This part of Google is not connected yet.</div>
+          ) : (
+            <div style={{ fontSize: 13, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>Give it a minute and try again.</div>
+          )}
+          <button
+            type="button"
+            onClick={() => setReload((n) => n + 1)}
+            className="mvp-row"
+            style={{ marginTop: 14, padding: '10px 22px', borderRadius: 11, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 14, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {!loading && !errorCode && questions && questions.length === 0 && (
+        <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '26px 20px', textAlign: 'center' }}>
+          <span style={{ width: 46, height: 46, borderRadius: 13, background: C.greenSoft, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <MessageCircle size={22} color={C.greenDk} />
+          </span>
+          <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginTop: 12 }}>No questions yet.</div>
+          <div style={{ fontSize: 13, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>When someone asks on Google, it shows here.</div>
+        </div>
+      )}
+
+      {!loading && !errorCode && questions && questions.map((q) => (
+        <button key={q.id} type="button" onClick={() => setSelectedId(q.id)} className="mvp-row" style={hubCardStyle}>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>{q.text}</span>
+              <QandaChip answered={!!q.merchantAnswer} />
+            </span>
+            <span style={{ display: 'block', fontSize: 12, color: C.faint, marginTop: 4 }}>{askedLabel(q.createTime)}</span>
+            {q.merchantAnswer && (
+              <span style={{ display: 'block', marginTop: 8, background: C.bg, borderRadius: 10, padding: '8px 10px' }}>
+                <span style={{ display: 'block', fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 2 }}>Your answer</span>
+                <span style={{ display: 'block', fontSize: 12.5, color: C.ink, lineHeight: 1.45 }}>{q.merchantAnswer}</span>
+              </span>
+            )}
+          </span>
+          <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
+        </button>
+      ))}
+
+      {!loading && !errorCode && questions && questions.length > 0 && (
+        <div style={{ textAlign: 'center', fontSize: 12, color: C.faint, padding: '12px 0 2px' }}>
+          Read from your live Google listing.
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Answer one question: the question, a textarea (prefilled with the current
+ * answer when one exists — saving again replaces it), "Draft it for me"
+ * (POST gbp-answer-draft fills the box), and "Save answer" (POST gbp-answer).
+ * The saved line is never optimistic: "Answer saved." ONLY on live:true.
+ * Saving and drafting are Pro; non-Pro sees the plain hint and the server
+ * enforces it regardless.
+ */
+function QandaAnswerScreen({ question, clientId, isPro, onBack, onSaved, initialSaveNote }: {
+  question: QandaQuestionWire
+  clientId: string
+  isPro: boolean
+  onBack: () => void
+  onSaved: (questionId: string, text: string, live: boolean) => void
+  initialSaveNote?: SaveNote
+}) {
+  const [text, setText] = useState(question.merchantAnswer ?? '')
+  const [localError, setLocalError] = useState<string | null>(null)
+  const [drafting, setDrafting] = useState(false)
+  const [draftError, setDraftError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [note, setNote] = useState<SaveNote | null>(initialSaveNote ?? null)
+
+  const requestDraft = async () => {
+    if (drafting || saving) return
+    setDrafting(true)
+    setDraftError(null)
+    try {
+      const r = await fetch('/api/dashboard/gbp-answer-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, questionId: question.id, questionText: question.text }),
+      })
+      const j = await r.json().catch(() => ({})) as { draft?: unknown; error?: unknown }
+      if (!r.ok || typeof j.draft !== 'string' || !j.draft.trim()) {
+        // Only surface the server's message on our own 502s (plain owner
+        // words); anything else gets the generic plain line.
+        const msg = r.status === 502 && typeof j.error === 'string' && j.error ? j.error : DRAFT_FAIL
+        throw new Error(msg)
+      }
+      setText(j.draft)
+      setLocalError(null)
+    } catch (e) {
+      setDraftError(e instanceof Error && e.message ? e.message : DRAFT_FAIL)
+    } finally {
+      setDrafting(false)
+    }
+  }
+
+  const save = async () => {
+    if (saving) return
+    const v = text.trim()
+    if (!v) { setLocalError('Write an answer first.'); return }
+    if (v.length > ANSWER_MAX_UI) { setLocalError(`Google allows up to ${ANSWER_MAX_UI} characters. This has ${v.length}.`); return }
+    setLocalError(null)
+    setNote(null)
+    setSaving(true)
+    try {
+      const r = await fetch('/api/dashboard/gbp-answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, questionId: question.id, text: v }),
+      })
+      const j = await r.json().catch(() => null) as { ok?: boolean; live?: boolean; error?: string } | null
+      const n = answerResultNote(r.status, j)
+      setNote(n)
+      if (r.status === 200 && j?.ok === true) onSaved(question.id, v, j.live === true)
+    } catch {
+      setNote({ tone: 'error', text: ANSWER_SAVE_FAIL })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const len = text.trim().length
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 2px 14px' }}>
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          className="mvp-row"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, marginLeft: -6, borderRadius: 9, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+        >
+          <ChevronLeft size={19} color={C.mute} />
+        </button>
+        <span style={{ fontFamily: DISPLAY, fontSize: 16.5, fontWeight: 600, color: C.ink }}>Answer this question</span>
+      </div>
+
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '17px 15px', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 15.5, fontWeight: 600, color: C.ink, lineHeight: 1.4, fontFamily: DISPLAY }}>{question.text}</div>
+          <QandaChip answered={!!question.merchantAnswer} />
+        </div>
+        <div style={{ fontSize: 12, color: C.faint, marginTop: 5 }}>{askedLabel(question.createTime)} by {question.author}</div>
+
+        <div style={{ marginTop: 14 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 5 }} htmlFor="gbp-qanda-answer">Your answer</label>
+          <textarea
+            id="gbp-qanda-answer"
+            value={text}
+            onChange={(e) => { setText(e.target.value); setLocalError(null) }}
+            rows={5}
+            placeholder="Answer like you would in person. Short and friendly works best."
+            style={{ width: '100%', boxSizing: 'border-box', borderRadius: 11, border: `0.5px solid ${C.line}`, background: C.bg, padding: '10px 12px', fontSize: 13.5, lineHeight: 1.55, color: C.ink, font: 'inherit', resize: 'vertical' }}
+          />
+          <div style={{ fontSize: 12, color: len > ANSWER_MAX_UI ? C.red : C.mute, margin: '6px 2px 0' }}>
+            {len} of {ANSWER_MAX_UI} characters.
+          </div>
+
+          {question.merchantAnswer && (
+            <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '8px 0 0' }}>
+              You answered this one before. Saving replaces your old answer.
+            </p>
+          )}
+
+          {isPro && (
+            <button
+              type="button"
+              onClick={() => { void requestDraft() }}
+              disabled={drafting || saving}
+              className="mvp-row"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 10, height: 44, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 14.5, fontWeight: 700, cursor: drafting ? 'default' : 'pointer', opacity: drafting ? 0.8 : 1, font: 'inherit' }}
+            >
+              {drafting
+                ? <><Loader2 size={15} className="mvp-spin" /> Writing your draft&hellip;</>
+                : <><Sparkles size={15} /> Draft it for me</>}
+            </button>
+          )}
+          {draftError && <div style={errLineStyle}>{draftError}</div>}
+          {localError && <div style={errLineStyle}>{localError}</div>}
+          {note && <SaveNoteLine note={note} />}
+
+          <button
+            type="button"
+            onClick={() => { void save() }}
+            disabled={saving || !isPro}
+            className="mvp-row"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 12, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: saving || !isPro ? 'default' : 'pointer', opacity: saving || !isPro ? 0.7 : 1, font: 'inherit' }}
+          >
+            {saving ? <><Loader2 size={16} className="mvp-spin" /> Saving to Google&hellip;</> : 'Save answer'}
+          </button>
+          {!isPro && (
+            <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '9px 0 0', textAlign: 'center' }}>
+              Answering from here is on the Pro plan.
+            </p>
+          )}
+          <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '9px 0 0', textAlign: 'center' }}>
+            Your answer shows on Google as the business.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Post an update (the hub's fourth card) ─────────────────────── */
+
+const POST_MAX_UI = 1500
+const POST_FAIL = 'We could not post this right now. Try again in a minute.'
+
+/** The button choices the composer offers. The server also accepts ORDER. */
+type PostCtaChoice = 'none' | 'LEARN_MORE' | 'CALL'
+
+/**
+ * Map one gbp-post response to the honest owner line. Never optimistic:
+ * "Posted to Google." appears ONLY on live:true (Google returned the created
+ * post, which is a create's own proof); ok without proof reads as
+ * sent-not-showing-yet; 429 is Google's own per-minute cap in plain words;
+ * 400/403 bodies are the server's plain owner words; anything else gets the
+ * generic could-not-post line (raw 5xx strings never render). Exported for
+ * the render smoke.
+ */
+export function postResultNote(status: number, body: { ok?: boolean; live?: boolean; error?: string } | null): SaveNote {
+  if (status === 200 && body?.ok) {
+    return body.live === true
+      ? { tone: 'ok', text: 'Posted to Google.' }
+      : { tone: 'pending', text: 'Sent to Google. It can take a few minutes to show.' }
+  }
+  if (status === 429) return { tone: 'error', text: 'Google only allows a few edits per minute. Try again in a minute.' }
+  if ((status === 400 || status === 403) && typeof body?.error === 'string' && body.error.trim()) {
+    return { tone: 'error', text: body.error }
+  }
+  return { tone: 'error', text: POST_FAIL }
+}
+
+/** What a finished publish leaves on screen: the honest line + the proof link
+ *  when Google sent one back. */
+export interface PostedState { note: SaveNote; postUrl: string | null }
+
+const ctaChipStyle = (active: boolean): CSSProperties => ({
+  padding: '7px 14px', borderRadius: 99, fontSize: 13, fontWeight: 600, cursor: 'pointer', font: 'inherit',
+  border: `0.5px solid ${active ? C.green : C.line}`,
+  background: active ? C.greenSoft : '#fff',
+  color: active ? C.greenDk : C.ink,
+})
+
+/**
+ * Compose one Google post (What's New) and publish it live: a textarea with
+ * a live count against Google's 1500 rule, "Draft it for me" (POST
+ * gbp-post-draft fills the box), an optional button (None / Learn more with
+ * an https link / Call), and "Publish to Google" (POST gbp-post). Text and
+ * one button only — no photos and no scheduling here.
+ *
+ * The published line is never optimistic: "Posted to Google." ONLY when
+ * Google returned the created post; a tappable "See it" only when Google sent
+ * the public link back. After a successful publish the composer clears, the
+ * proof line shows, and a quiet "Post again" resets. Publishing and drafting
+ * are Pro; non-Pro sees the plain hint and the server enforces it regardless.
+ *
+ * The initial* props are a TEST SEAM for the render smoke only (they prefill
+ * the composer, pick a button, inject a note, or land on the posted screen
+ * without a fetch); the live page never passes them.
+ */
+export function GbpPostView({ clientId, isPro, onBack, initialText, initialCta, initialSaveNote, initialPosted }: {
+  clientId: string
+  isPro: boolean
+  onBack: () => void
+  initialText?: string
+  initialCta?: { choice: PostCtaChoice; url?: string }
+  initialSaveNote?: SaveNote
+  initialPosted?: PostedState
+}) {
+  const [text, setText] = useState(initialText ?? '')
+  const [ctaChoice, setCtaChoice] = useState<PostCtaChoice>(initialCta?.choice ?? 'none')
+  const [ctaUrl, setCtaUrl] = useState(initialCta?.url ?? '')
+  const [localError, setLocalError] = useState<string | null>(null)
+  const [drafting, setDrafting] = useState(false)
+  const [draftError, setDraftError] = useState<string | null>(null)
+  const [publishing, setPublishing] = useState(false)
+  const [note, setNote] = useState<SaveNote | null>(initialSaveNote ?? null)
+  const [posted, setPosted] = useState<PostedState | null>(initialPosted ?? null)
+
+  const requestDraft = async () => {
+    if (drafting || publishing) return
+    setDrafting(true)
+    setDraftError(null)
+    try {
+      const r = await fetch('/api/dashboard/gbp-post-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId }),
+      })
+      const j = await r.json().catch(() => ({})) as { draft?: unknown; error?: unknown }
+      if (!r.ok || typeof j.draft !== 'string' || !j.draft.trim()) {
+        // Only surface the server's message on our own 502s (plain owner
+        // words); anything else gets the generic plain line.
+        const msg = r.status === 502 && typeof j.error === 'string' && j.error ? j.error : DRAFT_FAIL
+        throw new Error(msg)
+      }
+      setText(j.draft)
+      setLocalError(null)
+    } catch (e) {
+      setDraftError(e instanceof Error && e.message ? e.message : DRAFT_FAIL)
+    } finally {
+      setDrafting(false)
+    }
+  }
+
+  const publish = async () => {
+    if (publishing) return
+    const v = text.trim()
+    if (!v) { setLocalError('Write your update first.'); return }
+    if (v.length > POST_MAX_UI) { setLocalError(`Google allows up to ${POST_MAX_UI} characters. This has ${v.length}.`); return }
+    if (ctaChoice === 'LEARN_MORE' && !/^https:\/\//i.test(ctaUrl.trim())) {
+      setLocalError('The button link must start with https://.')
+      return
+    }
+    setLocalError(null)
+    setNote(null)
+    setPublishing(true)
+    try {
+      const cta = ctaChoice === 'none' ? undefined
+        : ctaChoice === 'CALL' ? { type: 'CALL' }
+          : { type: 'LEARN_MORE', url: ctaUrl.trim() }
+      const r = await fetch('/api/dashboard/gbp-post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, text: v, ...(cta ? { cta } : {}) }),
+      })
+      const j = await r.json().catch(() => null) as { ok?: boolean; live?: boolean; postUrl?: unknown; error?: string } | null
+      const n = postResultNote(r.status, j)
+      if (r.status === 200 && j?.ok === true) {
+        // Google accepted the post: clear the composer and show the proof line.
+        setPosted({ note: n, postUrl: typeof j.postUrl === 'string' && j.postUrl ? j.postUrl : null })
+        setText('')
+        setCtaChoice('none')
+        setCtaUrl('')
+      } else {
+        setNote(n)
+      }
+    } catch {
+      setNote({ tone: 'error', text: POST_FAIL })
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const len = text.trim().length
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 2px 2px' }}>
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          className="mvp-row"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, marginLeft: -6, borderRadius: 9, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+        >
+          <ChevronLeft size={19} color={C.mute} />
+        </button>
+        <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>Post an update</span>
+      </div>
+      <div style={{ fontSize: 13, color: C.mute, padding: '0 2px 14px', lineHeight: 1.5 }}>
+        Share news on your Google listing.
+      </div>
+
+      {posted ? (
+        <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '17px 15px', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+          <SaveNoteLine note={posted.note} />
+          {posted.postUrl && (
+            <a
+              href={posted.postUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mvp-row"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 12, height: 44, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 14.5, fontWeight: 700, textDecoration: 'none' }}
+            >
+              See it on Google <ExternalLink size={15} />
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={() => { setPosted(null); setNote(null); setLocalError(null); setDraftError(null) }}
+            className="mvp-row"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 8, height: 40, borderRadius: 12, border: 'none', background: 'none', color: C.mute, fontSize: 14, fontWeight: 600, cursor: 'pointer', font: 'inherit' }}
+          >
+            Post again
+          </button>
+        </div>
+      ) : (
+        <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '17px 15px', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 5 }} htmlFor="gbp-post-text">Your update</label>
+          <textarea
+            id="gbp-post-text"
+            value={text}
+            onChange={(e) => { setText(e.target.value); setLocalError(null) }}
+            rows={6}
+            placeholder="What is new at your place? A dish, a special, a change in hours."
+            style={{ width: '100%', boxSizing: 'border-box', borderRadius: 11, border: `0.5px solid ${C.line}`, background: C.bg, padding: '10px 12px', fontSize: 13.5, lineHeight: 1.55, color: C.ink, font: 'inherit', resize: 'vertical' }}
+          />
+          <div style={{ fontSize: 12, color: len > POST_MAX_UI ? C.red : C.mute, margin: '6px 2px 0' }}>
+            {len} of {POST_MAX_UI} characters.
+          </div>
+
+          {isPro && (
+            <button
+              type="button"
+              onClick={() => { void requestDraft() }}
+              disabled={drafting || publishing}
+              className="mvp-row"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 10, height: 44, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 14.5, fontWeight: 700, cursor: drafting ? 'default' : 'pointer', opacity: drafting ? 0.8 : 1, font: 'inherit' }}
+            >
+              {drafting
+                ? <><Loader2 size={15} className="mvp-spin" /> Writing your draft&hellip;</>
+                : <><Sparkles size={15} /> Draft it for me</>}
+            </button>
+          )}
+          {draftError && <div style={errLineStyle}>{draftError}</div>}
+
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 7 }}>Add a button</div>
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => { setCtaChoice('none'); setLocalError(null) }} style={ctaChipStyle(ctaChoice === 'none')}>None</button>
+              <button type="button" onClick={() => { setCtaChoice('LEARN_MORE'); setLocalError(null) }} style={ctaChipStyle(ctaChoice === 'LEARN_MORE')}>Learn more</button>
+              <button type="button" onClick={() => { setCtaChoice('CALL'); setLocalError(null) }} style={ctaChipStyle(ctaChoice === 'CALL')}>Call</button>
+            </div>
+            {ctaChoice === 'LEARN_MORE' && (
+              <div style={{ marginTop: 10 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 5 }} htmlFor="gbp-post-cta-url">Button link</label>
+                <input
+                  id="gbp-post-cta-url"
+                  type="url"
+                  inputMode="url"
+                  value={ctaUrl}
+                  onChange={(e) => { setCtaUrl(e.target.value); setLocalError(null) }}
+                  placeholder="https://yourplace.com"
+                  style={{ width: '100%', boxSizing: 'border-box', borderRadius: 11, border: `0.5px solid ${C.line}`, background: C.bg, padding: '10px 12px', fontSize: 13.5, color: C.ink, font: 'inherit' }}
+                />
+                <p style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.45, margin: '6px 0 0' }}>
+                  The button carries the link, so keep links out of the post text.
+                </p>
+              </div>
+            )}
+            {ctaChoice === 'CALL' && (
+              <p style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.45, margin: '8px 0 0' }}>
+                The Call button uses the phone number on your listing.
+              </p>
+            )}
+          </div>
+
+          {localError && <div style={errLineStyle}>{localError}</div>}
+          {note && <SaveNoteLine note={note} />}
+
+          <button
+            type="button"
+            onClick={() => { void publish() }}
+            disabled={publishing || !isPro}
+            className="mvp-row"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 14, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: publishing || !isPro ? 'default' : 'pointer', opacity: publishing || !isPro ? 0.7 : 1, font: 'inherit' }}
+          >
+            {publishing ? <><Loader2 size={16} className="mvp-spin" /> Posting to Google&hellip;</> : 'Publish to Google'}
+          </button>
+          {!isPro && (
+            <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '9px 0 0', textAlign: 'center' }}>
+              Posting from here is on the Pro plan.
+            </p>
+          )}
+          <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '9px 0 0', textAlign: 'center' }}>
+            Your update shows on Google as the business.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
