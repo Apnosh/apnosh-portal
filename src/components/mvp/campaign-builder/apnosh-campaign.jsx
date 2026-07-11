@@ -2807,14 +2807,25 @@ function addToPlanDraft(entry) {
 /** An honest, clearly-labeled delivery estimate for the selected config. Uses the REAL
  *  service-turnaround data where we have it (gbp's setup window + Google's own review gate),
  *  else a plain range from the card's cadence. Owner-run gbp lanes have no work order. */
+/** A friendly "by around" date N days from today, e.g. "Thu, Jul 17". Computed at render time. */
+function etaDateLabel(daysFromNow) {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromNow);
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+/** The delivery timeline as a list of clear milestones: { text, when?, sub? }. `when` is a real,
+ *  under-promised estimated date (uses the MAX bound of the turnaround range); `sub` is the honest
+ *  caveat. Owner-run lanes (diy/ai) have no team ETA. Recomputes live from the chosen version. */
 function configTimeline(p, gbpLane, optionIds) {
-  const lines = [];
+  const steps = [];
   if (gbpLane === "diy" || gbpLane === "ai") {
-    lines.push("You can start today and go at your own pace.");
+    steps.push({ text: "Start today and go at your own pace." });
   } else if (p.id === "gbp") {
     const t = SERVICE_TURNAROUND["gbp-setup"];
-    lines.push(`Most of your profile is fixed in about ${etaLabelFor("gbp-setup")} after you approve.`);
-    if (t && t.gate && t.gate.note) lines.push(t.gate.note);
+    const workMax = (t && t.class === "setup" && t.business) ? t.business.max : 7;
+    steps.push({ text: "Most of your profile is fixed", when: etaDateLabel(workMax), sub: `About ${etaLabelFor("gbp-setup")} after you approve.` });
+    if (t && t.gate && t.gate.addDays) steps.push({ text: "Fully live, once Google finishes checking", when: etaDateLabel(workMax + t.gate.addDays.max), sub: t.gate.note });
   } else {
     const byCad = {
       setup: "About 1 to 2 weeks after you approve.",
@@ -2823,14 +2834,14 @@ function configTimeline(p, gbpLane, optionIds) {
       recurring: "Starts within about a week, then runs on its own.",
       auto: "Set up in a few days, then runs on its own.",
     };
-    lines.push(byCad[p.cad] || "About 1 week after you approve.");
+    steps.push({ text: byCad[p.cad] || "About 1 week after you approve." });
   }
   for (const id of optionIds) {
     const s = serviceById(id); if (!s || !optionIsRecurring(s)) continue;
     const t = SERVICE_TURNAROUND[id];
-    if (t && t.class === "recurring") lines.push(`${plainNameOf(s)} starts within ${t.startsWithin.min} to ${t.startsWithin.max} days, then runs every month.`);
+    if (t && t.class === "recurring") steps.push({ text: `${plainNameOf(s)} starts within ${t.startsWithin.min} to ${t.startsWithin.max} days, then runs every month.` });
   }
-  return lines;
+  return steps;
 }
 
 /** 2-3 related cards for cross-sell, chosen by a shared funnel stage (real adjacency from
@@ -3085,6 +3096,36 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub }}>The Apnosh team does this for you.</div>
           )}
         </div>
+
+        {/* When you'll have it — a clear, dated section right under the version tabs. Recomputes from
+              the selected version (real, under-promised dates for the done-for-you lane; "at your own
+              pace" for the free lanes). Rush is a click, never an invented price. ── */}
+        <div style={{ padding: "20px 20px 0" }}>
+          <BlockLabel label="When you'll have it" />
+          <div style={{ background: "#f7f9f8", borderRadius: 14, padding: "13px 15px" }}>
+            {timeline.map((s, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: i === 0 ? 0 : 12 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 4, background: TOKENS.mint, flexShrink: 0, marginTop: 6 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.4 }}>{s.text}{s.when ? <> by around <span style={{ fontWeight: 700 }}>{s.when}</span></> : null}</div>
+                  {s.sub && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, lineHeight: 1.45, marginTop: 2 }}>{s.sub}</div>}
+                </div>
+              </div>
+            ))}
+            {timeline.some((s) => s.when) && (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 13, paddingTop: 11, borderTop: `1px solid ${TOKENS.line}` }}>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>These are estimates.</span>
+                  <span style={{ color: TOKENS.dash }}>·</span>
+                  <button onClick={() => setRushOpen((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Need it faster?</button>
+                </div>
+                {rushOpen && (
+                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.5, marginTop: 8 }}>Rush timing depends on the work. Add it to your plan or buy now, then tell your team you need it sooner and they will confirm what is possible.</div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
         {/* What you get — flows directly under the version pick as part of the SAME product block
               (minimal separation, no numbered step). Recomposes LIVE from the chosen version +
               toggled options (the same state that drives the price, and that the extras block below
@@ -3202,23 +3243,6 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             </div>
           </div>
         )}
-
-        {/* Honest delivery estimate — at the bottom, below the add-ons. Rush is a click, not a price. */}
-        <div style={{ padding: "24px 20px 0" }}>
-          <div style={{ background: "#f7f9f8", borderRadius: 14, padding: "12px 14px" }}>
-            {timeline.map((t, i) => (
-              <div key={i} style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: i === 0 ? TOKENS.ink : TOKENS.sub, lineHeight: 1.5, marginTop: i === 0 ? 0 : 5 }}>{t}</div>
-            ))}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>This is an estimate.</span>
-              <span style={{ color: TOKENS.dash }}>·</span>
-              <button onClick={() => setRushOpen((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Need it faster?</button>
-            </div>
-            {rushOpen && (
-              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.5, marginTop: 8 }}>Rush timing depends on the work. Add it to your plan or buy now, then tell your team you need it sooner and they will confirm what is possible.</div>
-            )}
-          </div>
-        </div>
 
       </div>
 
