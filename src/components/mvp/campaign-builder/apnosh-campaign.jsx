@@ -12,6 +12,8 @@ import { contentFor } from "@/lib/campaigns/data/content-overrides";
 import { requirementsFor } from "@/lib/campaigns/data/campaign-requirements";
 import { whyFor } from "@/lib/campaigns/data/why-for";
 import { whatYouGet } from "@/lib/campaigns/builder/what-you-get";
+import { readPlanDraft, addToPlan, removeFromPlan, planItemMoney, planTotals, subscribePlanDraft } from "@/lib/campaigns/builder/plan-draft";
+import { composePlanCampaign, planProBlocked } from "@/lib/campaigns/builder/plan-checkout";
 import { getMarketingCalendar, daysUntil } from "@/lib/dashboard/marketing-calendar";
 
 /* ============================================================
@@ -2845,18 +2847,9 @@ function moneyLabel(oneTime, perMonth) {
   return parts.length ? parts.join(" + ") : "Free";
 }
 
-/* Minimal local plan-draft store (Section 1). COLLECT-ONLY: it saves the owner's picks to
-   localStorage so nothing is lost, but ships and bills NOTHING. Section 2 formalizes the cart. */
-const PLAN_DRAFT_KEY = "apnosh-plan-draft-v1";
-function addToPlanDraft(entry) {
-  try {
-    const raw = JSON.parse(localStorage.getItem(PLAN_DRAFT_KEY) || "[]");
-    const list = Array.isArray(raw) ? raw : [];
-    list.push(entry);
-    localStorage.setItem(PLAN_DRAFT_KEY, JSON.stringify(list));
-    return true;
-  } catch { return false; }
-}
+/* The plan (cart) store now lives in @/lib/campaigns/builder/plan-draft (Section 2):
+   keyed by itemId, add-or-replace, silent v1→v2 migration, PDP-exact price math.
+   Still COLLECT-ONLY: adding ships and bills NOTHING; checkout is the only door. */
 
 /** An honest, clearly-labeled delivery estimate for the selected config. Uses the REAL
  *  service-turnaround data where we have it (gbp's setup window + Google's own review gate),
@@ -2959,7 +2952,7 @@ function BlockLabel({ label, hint }) {
   );
 }
 
-function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer, initialOptions, onBack, onContinue, onOpenCard }) {
+function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer, initialOptions, onBack, onContinue, onOpenCard, onOpenPlan }) {
   const p = catGet(itemId) || CATALOG[0];
   // The ONE canonical content record (Phase B) merged with any admin CMS edits (Phase C1):
   // the sell description, the longer why, and the real product photo all render from here —
@@ -3072,10 +3065,12 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
     return Object.keys(pr).length ? pr : null;
   };
   const onAddToPlan = () => {
-    addToPlanDraft({ itemId, version: doerCfg ? doer : null, options: selected, at: Date.now() });
+    addToPlan({ itemId, doer: doerCfg ? doer : null, options: selected });
     setAdded(true);
-    setTimeout(() => setAdded(false), 1800);
   };
+  // Changing the config after adding re-arms the button: re-adding replaces this
+  // item's saved config (the cart is keyed by itemId), so the label stays honest.
+  useEffect(() => { setAdded(false); }, [itemId, doer, selected]);
   const timeline = configTimeline(p, gbpLane, selected);
   // What the OWNER must provide, derived from the card's REAL composition (services + seed
   // beats → turnaround gates). Hidden when nothing is genuinely needed. On a versioned card's
@@ -3375,9 +3370,11 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
             <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{totalLabel}</span>
           </div>
-          <button onClick={onAddToPlan} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: added ? TOKENS.mintDark : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
+          {/* After adding, the button STAYS confirmed and becomes the door to the plan —
+              the add never again looks like nothing happened. Changing the config re-arms it. */}
+          <button onClick={added ? (onOpenPlan || (() => {})) : onAddToPlan} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: added ? TOKENS.mintDark : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
             {added ? (
-              <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>Added to your plan</>
+              <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>Added · View your plan</>
             ) : (
               <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Add to plan</>
             )}
@@ -4103,6 +4100,211 @@ function Phone({ children }) {
 }
 
 /* ============================================================
+   Section 2 — the PLAN (cart): a persistent bar across the store,
+   a plan view (one row per collected item), and checkout-as-one-
+   campaign. Prices reuse the exact PDP buy-footer math via
+   planItemMoney/planTotals; the merge + Pro gate live in
+   plan-checkout.ts. Nothing here ships or bills before Confirm.
+   ============================================================ */
+
+const isCreativeCard = (p) => !!p && (p.type === "content" || p.id === "shoot");
+
+/** Money label in the buy-footer idiom: "Free", "$365", "From $120", "$85/mo". */
+function planMoneyLabel(money, creative) {
+  if (money.oneTime === 0 && money.perMonth === 0) return "Free";
+  return `${creative && money.oneTime > 0 ? "From " : ""}${moneyLabel(money.oneTime, money.perMonth)}`;
+}
+
+/** The persistent plan bar — shows on the store's browse/see-all views (never inside the
+ *  PDP, which has its own buy footer, or the plan view itself) whenever the plan holds
+ *  anything, so an add is never invisible. Exported for the render smoke. */
+export function PlanBar({ items, onOpen }) {
+  if (!items || !items.length) return null;
+  const t = planTotals(items);
+  const anyCreative = items.some((it) => isCreativeCard(catGet(it.itemId)));
+  const n = items.length;
+  return (
+    <div style={{ flexShrink: 0, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.08)", padding: "9px 16px 10px" }}>
+      <button onClick={onOpen} className="apnpress" style={{ width: "100%", height: 46, borderRadius: 23, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.38)", WebkitTapHighlightColor: "transparent" }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1.6" /><circle cx="19" cy="21" r="1.6" /><path d="M2 3h3l2.6 13.4a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 2-1.6L22 8H6" /></svg>
+        View your plan · {n} {n === 1 ? "item" : "items"} · {planMoneyLabel(t, anyCreative)}
+      </button>
+    </div>
+  );
+}
+
+/** One plan row: art tile, title, the config in plain words (version + add-ons), the
+ *  PDP-exact price, and an X that slides the row out. Tapping the row re-opens the PDP
+ *  with this config so editing is just re-adding. */
+function PlanRow({ it, tier, leaving, onOpen, onRemove }) {
+  const p = catGet(it.itemId) || { title: it.itemId, type: "task" };
+  const money = planItemMoney(it);
+  const versioned = doerSlotFor(it.itemId) && it.doer;
+  const parts = [];
+  if (versioned) parts.push(doerDisplay(it.doer, tier).title);
+  for (const id of it.options) { const s = serviceById(id); if (s) parts.push(plainNameOf(s)); }
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${TOKENS.line}`, transition: "transform 240ms ease, opacity 240ms ease", transform: leaving ? "translateX(72%)" : "none", opacity: leaving ? 0 : 1 }}>
+      <button onClick={onOpen} className="apnpress" style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
+        <span style={{ width: 54, height: 54, borderRadius: 15, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Art id={it.itemId} size={38} />
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.25 }}>{p.title}</span>
+          {parts.length > 0 && (
+            <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{parts.join(" · ")}</span>
+          )}
+          <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 3 }}>{planMoneyLabel(money, isCreativeCard(p))}</span>
+        </span>
+      </button>
+      <button onClick={onRemove} aria-label={`Remove ${p.title}`} className="apnpress" style={{ width: 32, height: 32, borderRadius: 16, border: "none", background: "rgba(20,35,28,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, WebkitTapHighlightColor: "transparent" }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+  );
+}
+
+/** The plan view (route {name:"plan"}): the collected items, the running total, and the
+ *  checkout moment. Checkout composes the WHOLE plan as ONE campaign (plan-checkout.ts)
+ *  and ships it through the same rail Buy now uses. Exported for the render smoke. */
+export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout }) {
+  const [stage, setStage] = useState("list");
+  const [composed, setComposed] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [droppedNote, setDroppedNote] = useState(null);
+  const [leaving, setLeaving] = useState(() => new Set());
+  const totals = planTotals(items);
+  const anyCreative = items.some((it) => isCreativeCard(catGet(it.itemId)));
+  const blocked = planProBlocked(items, tier);
+  const empty = items.length === 0;
+
+  const slideOut = (id) => {
+    setLeaving((s) => new Set(s).add(id));
+    setTimeout(() => {
+      onRemove(id);
+      setLeaving((s) => { const n = new Set(s); n.delete(id); return n; });
+    }, 240);
+  };
+
+  // Compose the one-campaign draft NOW so anything stale is caught before the last look.
+  // Items that no longer price are removed OUT LOUD (the note below) — never silently billed.
+  const startCheckout = () => {
+    if (blocked || empty) return;
+    const res = composePlanCampaign(items);
+    if (res.dropped.length) {
+      const names = res.dropped.map((id) => (catGet(id) || { title: id }).title).join(", ");
+      for (const id of res.dropped) onRemove(id);
+      setDroppedNote(`We took ${names} out of your plan. It can't be priced right now, so you were not charged for it.`);
+    }
+    if (!res.draft) return;
+    setComposed({ draft: res.draft, perItem: res.perItem });
+    setError(null);
+    setStage("confirm");
+  };
+
+  const confirmShip = async () => {
+    if (busy || !composed) return;
+    setBusy(true);
+    setError(null);
+    const ok = onCheckout ? await onCheckout(composed.draft) : false;
+    if (!ok) { setBusy(false); setError("That didn't go through. Nothing was ordered. Try again."); }
+    // On success the host clears the plan and navigates to the campaign's ready page.
+  };
+
+  const header = (title, backFn) => (
+    <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 12, padding: "14px 18px 12px" }}>
+      <button onClick={backFn} aria-label="Back" className="apnpress" style={{ width: 36, height: 36, borderRadius: 18, border: "none", background: "rgba(20,35,28,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+      </button>
+      <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4, margin: 0 }}>{title}</h1>
+    </div>
+  );
+
+  if (stage === "confirm" && composed) {
+    const d = composed.draft;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+        {header("One last look", () => { setStage("list"); setError(null); })}
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 18px 16px" }}>
+          <div style={{ background: "#fff", borderRadius: 18, border: `1px solid ${TOKENS.line}`, padding: "4px 16px", marginBottom: 14 }}>
+            {composed.perItem.map(({ itemId }) => {
+              const it = items.find((x) => x.itemId === itemId) || { itemId, doer: null, options: [] };
+              const p = catGet(itemId) || { title: itemId };
+              return (
+                <div key={itemId} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, padding: "11px 0", borderBottom: `1px solid ${TOKENS.line}` }}>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink }}>{p.title}</span>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.ink, whiteSpace: "nowrap" }}>{planMoneyLabel(planItemMoney(it), isCreativeCard(catGet(itemId)))}</span>
+                </div>
+              );
+            })}
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "12px 0" }}>
+              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
+              <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.3 }}>{planMoneyLabel(totals, anyCreative)}</span>
+            </div>
+          </div>
+          {/* What happens next — every line true to the real rail: one campaign, delivery-gated billing. */}
+          <div style={{ background: TOKENS.mintTint, borderRadius: 16, padding: "13px 15px" }}>
+            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink, marginBottom: 6 }}>What happens when you confirm</div>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#3f7d6a", lineHeight: 1.55 }}>
+              Everything here starts as one campaign, so you track it all in one place. The work begins right away. You pay for each piece only when it is delivered.{totals.perMonth > 0 ? " Monthly items keep running until you stop them." : ""}
+            </div>
+          </div>
+        </div>
+        <div style={{ flexShrink: 0, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.10)", padding: "11px 18px calc(12px + env(safe-area-inset-bottom))" }}>
+          {error && <div role="alert" style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: "#b3462e", textAlign: "center", marginBottom: 8 }}>{error}</div>}
+          <button onClick={confirmShip} disabled={busy} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: busy ? "default" : "pointer", background: busy ? TOKENS.mintDark : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
+            {busy ? "Starting your plan…" : "Confirm and start"}
+          </button>
+          <button onClick={() => { setStage("list"); setError(null); }} disabled={busy} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Go back</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+      {header("Your plan", onBack)}
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 18px 16px" }}>
+        {droppedNote && (
+          <div style={{ background: "#fdf6e9", border: "1px solid #f0dfb8", borderRadius: 14, padding: "11px 13px", margin: "4px 0 10px", fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#854f0b", lineHeight: 1.5 }}>{droppedNote}</div>
+        )}
+        {empty ? (
+          <div style={{ textAlign: "center", padding: "64px 20px" }}>
+            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 17, fontWeight: 600, color: TOKENS.ink, marginBottom: 6 }}>Your plan is empty.</div>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, marginBottom: 22 }}>Anything you add shows up here.</div>
+            <button onClick={onBack} className="apnpress" style={{ height: 46, padding: "0 26px", borderRadius: 23, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, boxShadow: "0 8px 22px rgba(74,189,152,0.38)", WebkitTapHighlightColor: "transparent" }}>Back to the store</button>
+          </div>
+        ) : (
+          <>
+            {items.map((it) => (
+              <PlanRow key={it.itemId} it={it} tier={tier} leaving={leaving.has(it.itemId)} onOpen={() => onOpenItem(it.itemId, { doer: it.doer || undefined, options: it.options.length ? it.options : undefined })} onRemove={() => slideOut(it.itemId)} />
+            ))}
+            {blocked && (
+              <div style={{ background: "#fdf6e9", border: "1px solid #f0dfb8", borderRadius: 14, padding: "12px 14px", marginTop: 14, fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#854f0b", lineHeight: 1.55 }}>
+                Apnosh AI is on the Pro plan. <a href="/dashboard/billing" style={{ color: "#854f0b", fontWeight: 700 }}>Upgrade to Pro</a>, or tap the item to pick another version, or remove it.
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      {!empty && (
+        <div style={{ flexShrink: 0, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.10)", padding: "11px 18px calc(12px + env(safe-area-inset-bottom))" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
+            <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{planMoneyLabel(totals, anyCreative)}</span>
+          </div>
+          {/* Honest: tapping Check out only opens the last look; work starts on Confirm there. */}
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "center", marginBottom: 9 }}>Nothing starts or bills yet. Check out gives you one last look first.</div>
+          <button onClick={startCheckout} disabled={blocked} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: blocked ? "default" : "pointer", background: blocked ? TOKENS.dash : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: blocked ? "none" : "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>Check out</button>
+          <button onClick={onBack} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Keep shopping</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
    Create-only controller (portal). Renders the canonical new
    builder flow full-screen (no phone frame, no home/campaigns/nav,
    no legacy intake path). Props:
@@ -4111,7 +4313,7 @@ function Phone({ children }) {
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, dbCampaigns = null, tier = null, clientId = null, onCreate, onClose, onPlan } = {}) {
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, initialView, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, dbCampaigns = null, tier = null, clientId = null, onCreate, onClose, onPlan, onCheckout } = {}) {
   // Publish the CMS override map for catGet + the product page (see CONTENT_OVERRIDES above).
   // Set during render so every child render below reads the current map; a late fetch just
   // re-renders this tree with the fresh edits.
@@ -4120,9 +4322,21 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
   // add-ons; see applyDbCards). The wrapper already registered their shape/content/price.
   applyDbCards(dbCampaigns);
   // Deep links (Home suggestions, ?template=) land on the PRODUCT PAGE too, never the bare madlib.
-  const [route, setRoute] = useState(() => (initialItem ? { name: "pdp", itemId: buildIdFor(initialItem) } : { name: "browse" }));
+  const [route, setRoute] = useState(() => (initialItem ? { name: "pdp", itemId: buildIdFor(initialItem) } : initialView === "plan" ? { name: "plan" } : { name: "browse" }));
 
   const exit = () => { if (onClose) onClose(); };
+
+  // The live plan (cart). Loaded + subscribed after mount (hydration-safe: server and
+  // first client render both show no bar), re-read on route changes and when late-
+  // registering DB campaigns land, so an item added on the PDP is on the bar the
+  // moment the owner is back browsing.
+  const [planItems, setPlanItems] = useState([]);
+  useEffect(() => {
+    setPlanItems(readPlanDraft());
+    return subscribePlanDraft(() => setPlanItems(readPlanDraft()));
+  }, []);
+  useEffect(() => { setPlanItems(readPlanDraft()); }, [route.name, dbCampaigns]);
+  const openPlan = () => setRoute({ name: "plan" });
 
   // Catalog card -> PRODUCT PAGE (the sell) -> Continue -> Builder (the madlib). Every
   // open path (shelf tap, see-all grid, suggested/featured cards, deep links) funnels
@@ -4132,7 +4346,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
     else setRoute({ name: "build", itemId: buildIdFor(id), from, rowId });
   };
   const backToBrowse = () => setRoute({ name: "browse" });
-  const backToSource = () => (route.from === "catall" ? setRoute({ name: "catall", rowId: route.rowId }) : backToBrowse());
+  const backToSource = () => (route.from === "catall" ? setRoute({ name: "catall", rowId: route.rowId }) : route.from === "plan" ? setRoute({ name: "plan" }) : backToBrowse());
 
   // Save for real, then route on the outcome: confirm on success, a retry
   // screen on failure. The old code showed "added" before the write landed,
@@ -4201,6 +4415,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
               initialDoer={route.preset && route.preset.doer}
               initialOptions={route.preset && route.preset.options}
               onBack={backToSource}
+              onOpenPlan={openPlan}
               onOpenCard={(id) => setRoute({ name: "pdp", itemId: id, from: route.from, rowId: route.rowId })}
               onContinue={(preset) => {
                 // A DB campaign has NO madlib: Buy now composes its services-only plan
@@ -4234,7 +4449,24 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             />
           )}
 
+          {route.name === "plan" && (
+            <PlanView
+              items={planItems}
+              tier={tier}
+              onBack={backToBrowse}
+              onOpenItem={(id, preset) => setRoute({ name: "pdp", itemId: id, from: "plan", preset })}
+              onRemove={(id) => removeFromPlan(id)}
+              onCheckout={onCheckout}
+            />
+          )}
+
         </div>
+
+        {/* The persistent plan bar: store views only (the PDP keeps its own buy footer,
+            and the plan view is the destination), whenever the plan holds anything. */}
+        {(route.name === "browse" || route.name === "catall") && planItems.length > 0 && (
+          <PlanBar items={planItems} onOpen={openPlan} />
+        )}
 
         <BottomNav active="campaigns" />
       </div>
