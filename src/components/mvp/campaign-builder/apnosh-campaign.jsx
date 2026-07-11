@@ -3119,20 +3119,6 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
               </div>
             </div>
           ))}
-          {/* Honest delivery estimate, folded in. Rush is a click, not an invented price. */}
-          <div style={{ marginTop: 16, background: "#f7f9f8", borderRadius: 14, padding: "12px 14px" }}>
-            {timeline.map((t, i) => (
-              <div key={i} style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: i === 0 ? TOKENS.ink : TOKENS.sub, lineHeight: 1.5, marginTop: i === 0 ? 0 : 5 }}>{t}</div>
-            ))}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>This is an estimate.</span>
-              <span style={{ color: TOKENS.dash }}>·</span>
-              <button onClick={() => setRushOpen((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Need it faster?</button>
-            </div>
-            {rushOpen && (
-              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.5, marginTop: 8 }}>Rush timing depends on the work. Add it to your plan or buy now, then tell your team you need it sooner and they will confirm what is possible.</div>
-            )}
-          </div>
         </div>
 
         {/* ── ADD EXTRAS (grouping two) — a distinct OPTIONAL block at the BOTTOM, above the buy box.
@@ -3142,7 +3128,7 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
               both update. Hidden entirely when there are no real options and no AI row. ── */}
         {hasExtras && (
           <div style={{ padding: "28px 20px 0" }}>
-            <BlockLabel label="Add extras" hint="Optional" />
+            <BlockLabel label="Add ons" hint="Optional" />
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
               {optServices.map((s) => {
                 const on = selected.includes(s.id);
@@ -3216,6 +3202,23 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             </div>
           </div>
         )}
+
+        {/* Honest delivery estimate — at the bottom, below the add-ons. Rush is a click, not a price. */}
+        <div style={{ padding: "24px 20px 0" }}>
+          <div style={{ background: "#f7f9f8", borderRadius: 14, padding: "12px 14px" }}>
+            {timeline.map((t, i) => (
+              <div key={i} style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: i === 0 ? TOKENS.ink : TOKENS.sub, lineHeight: 1.5, marginTop: i === 0 ? 0 : 5 }}>{t}</div>
+            ))}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>This is an estimate.</span>
+              <span style={{ color: TOKENS.dash }}>·</span>
+              <button onClick={() => setRushOpen((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Need it faster?</button>
+            </div>
+            {rushOpen && (
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.5, marginTop: 8 }}>Rush timing depends on the work. Add it to your plan or buy now, then tell your team you need it sooner and they will confirm what is possible.</div>
+            )}
+          </div>
+        </div>
 
       </div>
 
