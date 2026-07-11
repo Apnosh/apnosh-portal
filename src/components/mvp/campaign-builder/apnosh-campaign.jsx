@@ -2839,10 +2839,11 @@ function similarCards(itemId) {
 /** A guided-form step header: a small filled-green numbered circle + a bold label, with an
  *  optional quiet hint on the right. The number renumbers from the caller so the flow stays
  *  1,2,3 (or 1,2 when the options step is absent). */
-function StepHead({ n, label, hint }) {
+// A plain, light section label — no numbered step circle. Optional right-aligned hint
+// (used for "Optional" on the extras block). Keeps the page reading as natural groupings.
+function BlockLabel({ label, hint }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 13 }}>
-      <span style={{ width: 24, height: 24, borderRadius: 12, background: TOKENS.mint, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 700, boxShadow: "0 3px 9px rgba(74,189,152,0.35)" }}>{n}</span>
       <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.2 }}>{label}</span>
       {hint && <span style={{ marginLeft: "auto", fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 600, color: TOKENS.faint }}>{hint}</span>}
     </div>
@@ -2966,11 +2967,9 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   };
   const timeline = configTimeline(p, gbpLane, selected);
   const similar = similarCards(itemId);
-  // Guided flow numbering. Step 1 (how it's done) + step 3 (what you get) always render; the
-  // options step exists only when this card has REAL add-ons, so when it doesn't we drop it and
-  // "what you get" becomes step 2 — the numbers stay contiguous either way.
-  const hasOptionsStep = optServices.length > 0 || (doerCfg && !!aiOpt);
-  const getStepNum = hasOptionsStep ? 3 : 2;
+  // The "Add extras" block at the bottom only exists when this card has REAL add-ons or a
+  // Pro AI row to offer. When it has neither, the whole block is hidden (renders nothing).
+  const hasExtras = optServices.length > 0 || (doerCfg && !!aiOpt);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
@@ -3077,11 +3076,12 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             <div style={{ background: TOKENS.mintTint, borderRadius: 14, padding: "12px 14px", fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.5 }}>{why}</div>
           </div>
         )}
-        {/* ── STEP 1 — CHOOSE HOW IT'S DONE: the version picker (3-lane doer for gbp with Pro gate +
-              passthrough). Non-versioned cards show the quiet "the Apnosh team does this" line and
-              this still counts as step 1. ── */}
+        {/* ── THE PRODUCT (grouping one) — the version pick and "what you get" flow as ONE
+              continuous block, no numbered steps. First: choose how it's done (3-lane doer for gbp
+              with Pro gate + passthrough); non-versioned cards show the quiet "the Apnosh team does
+              this" line. ── */}
         <div style={{ padding: "22px 20px 0" }}>
-          <StepHead n={1} label={doerCfg ? "Choose how it's done" : "How it's done"} />
+          <BlockLabel label={doerCfg ? "Choose how it's done" : "How it's done"} />
           {doerCfg ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
               {doerCfg.o.map((opt) => {
@@ -3113,13 +3113,64 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub }}>The Apnosh team does this for you.</div>
           )}
         </div>
-        {/* ── STEP 2 — ADD EXTRAS (optional): real add-on services, each expands to its catalog
-              deliverables. Toggling one genuinely adds/removes its serviceId from the composed draft
-              (svcLines), so the live total + the plan update for real. When a card has NO real
-              options this whole step is skipped and "what you get" renumbers to step 2. ── */}
-        {hasOptionsStep && (
-          <div style={{ padding: "22px 20px 0" }}>
-            <StepHead n={2} label="Add extras" hint="Optional" />
+        {/* What you get — flows directly under the version pick as part of the SAME product block
+              (minimal separation, no numbered step). Recomposes LIVE from the chosen version +
+              toggled options (the same state that drives the price, and that the extras block below
+              also feeds). Base group first, then one titled sub-group per selected add-on with its
+              REAL catalog bullets. The honest delivery estimate folds in at the end — rush is a
+              click, never an invented price. ── */}
+        <div style={{ padding: "18px 20px 0" }}>
+          <BlockLabel label="What you get" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {(getSections[0] ? getSections[0].rows : []).map((g, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+                <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                </span>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{g}</span>
+              </div>
+            ))}
+          </div>
+          {getSections.slice(1).map((sec, si) => (
+            <div key={si} style={{ marginTop: 15, background: TOKENS.mintTint, borderRadius: 14, padding: "12px 14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 9 }}>
+                <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.mintDark }}>{sec.title}</span>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, color: TOKENS.mintDark, textTransform: "uppercase" }}>{sec.recurring ? "Added /mo" : "Added"}</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                {sec.rows.map((r, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 3 }}><path d="M20 6L9 17l-5-5" /></svg>
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink, lineHeight: 1.45 }}>{r}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {/* Honest delivery estimate, folded in. Rush is a click, not an invented price. */}
+          <div style={{ marginTop: 16, background: "#f7f9f8", borderRadius: 14, padding: "12px 14px" }}>
+            {timeline.map((t, i) => (
+              <div key={i} style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: i === 0 ? TOKENS.ink : TOKENS.sub, lineHeight: 1.5, marginTop: i === 0 ? 0 : 5 }}>{t}</div>
+            ))}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>This is an estimate.</span>
+              <span style={{ color: TOKENS.dash }}>·</span>
+              <button onClick={() => setRushOpen((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Need it faster?</button>
+            </div>
+            {rushOpen && (
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.5, marginTop: 8 }}>Rush timing depends on the work. Add it to your plan or buy now, then tell your team you need it sooner and they will confirm what is possible.</div>
+            )}
+          </div>
+        </div>
+
+        {/* ── ADD EXTRAS (grouping two) — a distinct OPTIONAL block at the BOTTOM, above the buy box.
+              Real add-on services + the Pro AI row, each keeps its "See what's included" expander so
+              its deliverables show inline here. Toggling one genuinely adds/removes its serviceId
+              from the composed draft (svcLines), so the live total AND the "What you get" list above
+              both update. Hidden entirely when there are no real options and no AI row. ── */}
+        {hasExtras && (
+          <div style={{ padding: "28px 20px 0" }}>
+            <BlockLabel label="Add extras" hint="Optional" />
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
               {optServices.map((s) => {
                 const on = selected.includes(s.id);
@@ -3193,54 +3244,6 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             </div>
           </div>
         )}
-
-        {/* ── STEP 3 (or 2 when there are no extras) — HERE'S WHAT YOU GET: recomposes LIVE from the
-              chosen version + toggled options (same state that drives the price). Base group first,
-              then one titled sub-group per selected add-on with its REAL catalog bullets. The honest
-              delivery estimate folds in at the end — rush is a click, never an invented price. ── */}
-        <div style={{ padding: "22px 20px 0" }}>
-          <StepHead n={getStepNum} label="Here's what you get" />
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {(getSections[0] ? getSections[0].rows : []).map((g, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
-                <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-                </span>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{g}</span>
-              </div>
-            ))}
-          </div>
-          {getSections.slice(1).map((sec, si) => (
-            <div key={si} style={{ marginTop: 15, background: TOKENS.mintTint, borderRadius: 14, padding: "12px 14px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 9 }}>
-                <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.mintDark }}>{sec.title}</span>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, color: TOKENS.mintDark, textTransform: "uppercase" }}>{sec.recurring ? "Added /mo" : "Added"}</span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                {sec.rows.map((r, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 3 }}><path d="M20 6L9 17l-5-5" /></svg>
-                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink, lineHeight: 1.45 }}>{r}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          {/* Honest delivery estimate, folded in. Rush is a click, not an invented price. */}
-          <div style={{ marginTop: 16, background: "#f7f9f8", borderRadius: 14, padding: "12px 14px" }}>
-            {timeline.map((t, i) => (
-              <div key={i} style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: i === 0 ? TOKENS.ink : TOKENS.sub, lineHeight: 1.5, marginTop: i === 0 ? 0 : 5 }}>{t}</div>
-            ))}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>This is an estimate.</span>
-              <span style={{ color: TOKENS.dash }}>·</span>
-              <button onClick={() => setRushOpen((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Need it faster?</button>
-            </div>
-            {rushOpen && (
-              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.5, marginTop: 8 }}>Rush timing depends on the work. Add it to your plan or buy now, then tell your team you need it sooner and they will confirm what is possible.</div>
-            )}
-          </div>
-        </div>
 
         {/* ── BUY — INLINE at the END of the flow (NOT sticky/floating, so nothing overlaps the
               content). Live total, then "Add to plan" as the bold filled PRIMARY (collect-only to a
