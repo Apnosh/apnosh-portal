@@ -18,11 +18,11 @@
  *   l) fallbacks + unknown part unchanged
  *   m) the summary lists outcomes + the What's-next reviews card
  *   n) the helper hub renders all three cards (and the Continue variant)
- *   p) Questions and answers: the list (Answered + Needs-an-answer chips, the
- *      merchant answer under answered ones, the Asked line), the empty state,
- *      the failed-read state (+ the api_disabled plain line), and the answer
- *      screen (prefilled textarea, Draft it for me, Save answer, the Pro
- *      hint, honest answerResultNote strings)
+ *   p) Questions and answers: Google closed the Q&A API for apps
+ *      (501 API_UNSUPPORTED, 2026-07-11), so the door is the honest
+ *      explainer + the Answer-on-Google link + the paste-a-question AI
+ *      drafter (textarea, Draft my answer, the copyable draft block via the
+ *      test seam, the non-Pro hint)
  *   q) Post an update: the composer (textarea + live count vs the 1500 rule,
  *      the button picker None/Learn more/Call, the https link field, Draft it
  *      for me, Publish to Google, the non-Pro hint), honest postResultNote
@@ -340,96 +340,56 @@ async function main() {
   ok(hub.includes('Read new reviews and reply with AI help.'), 'the reviews card sub renders')
   ok(hub.includes('/dashboard/inbox?tab=reviews'), 'the reviews card links to the real reviews surface')
   ok(hub.includes('Questions and answers'), 'the questions card renders')
-  ok(hub.includes('See what people ask and answer them.'), 'the questions card sub renders')
+  ok(hub.includes('Answer what people ask, with AI help.'), 'the questions card sub renders (stays true to the Google-side flow)')
   ok(hub.includes('Post an update'), 'the post card renders (fourth card)')
   ok(hub.includes('Share news on your Google listing.'), 'the post card sub renders')
   const hubResume = strip(renderToString(React.createElement(GbpHelperHub, { continueReview: true, onReview: noop })))
   rendered.push(hubResume)
   ok(hubResume.includes('Continue your review'), 'a mid-review save flips the card to Continue your review')
 
-  console.log('\n== p) Questions and answers ==')
+  console.log('\n== p) Questions and answers (honest hand-off + the paste drafter) ==')
   const GbpQandaView = mod.GbpQandaView as unknown as React.ComponentType<Record<string, unknown>>
-  const answerResultNote = mod.answerResultNote as (status: number, body: Record<string, unknown> | null) => { tone: string; text: string }
-  const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
-  const Q_FIXTURE = [
-    {
-      id: 'q-answered', text: 'Do you have gluten free options?', author: 'Dana P',
-      createTime: daysAgo(21), upvotes: 3, merchantAnswer: 'Yes, we mark them right on the menu.',
-    },
-    {
-      id: 'q-open', text: 'Is there parking nearby?', author: 'A customer',
-      createTime: daysAgo(3), upvotes: 0, merchantAnswer: null,
-    },
-  ]
   const renderQanda = (props: Record<string, unknown>) => {
     const html = strip(renderToString(React.createElement(GbpQandaView, { clientId: 'smoke-client', isPro: true, onBack: noop, ...props })))
     rendered.push(html)
     return html
   }
 
-  // The list: both chips, the Asked line, the merchant answer under answered ones.
-  const qList = renderQanda({ initialQuestions: Q_FIXTURE })
-  ok(qList.includes('Questions and answers'), 'the Q&A title renders')
-  ok(qList.includes('Do you have gluten free options?'), 'the answered question text renders')
-  ok(qList.includes('Is there parking nearby?'), 'the open question text renders')
-  ok(qList.includes('>Answered<'), 'the Answered chip renders')
-  ok(qList.includes('>Needs an answer<'), 'the Needs-an-answer chip renders')
-  ok(/Asked\s*21\s*days ago/.test(qList) && /Asked\s*3\s*days ago/.test(qList), 'the Asked lines render in plain words')
-  ok(qList.includes('Your answer') && qList.includes('Yes, we mark them right on the menu.'), 'the merchant answer shows under the answered question')
-  ok(qList.includes('Read from your live Google listing.'), 'the honest source line renders')
+  // The honest explainer + the Answer-on-Google link out.
+  const qDoor = renderQanda({})
+  ok(qDoor.includes('Questions and answers'), 'the Q&A title renders')
+  ok(qDoor.includes('Google does not let apps read or answer listing questions anymore, so this happens on Google itself.'), 'the honest explainer renders in plain words')
+  ok(qDoor.includes('Answer on Google'), 'the Answer on Google button renders')
+  ok(qDoor.includes('href="https://business.google.com/"') && qDoor.includes('target="_blank"'), 'the button links out to Google in a new tab')
+  // The old fetch-driven list is gone: nothing reads the dead API.
+  ok(!qDoor.includes('Reading your questions'), 'no loading state for a list that can never load')
+  ok(!qDoor.includes('Save answer') && !qDoor.includes('Needs an answer'), 'the old list/answer-screen surface is gone')
 
-  // The empty state.
-  const qEmpty = renderQanda({ initialQuestions: [] })
-  ok(qEmpty.includes('No questions yet.'), 'the empty state title renders')
-  ok(qEmpty.includes('When someone asks on Google, it shows here.'), 'the empty state sub renders')
+  // The paste drafter: invite line, textarea, Draft my answer.
+  ok(qDoor.includes('Got a question?'), 'the drafter card title renders')
+  ok(qDoor.includes('Paste it here and we will draft your answer.'), 'the paste invite renders')
+  ok(qDoor.includes('<textarea') && qDoor.includes('id="gbp-qanda-question"'), 'the question textarea renders')
+  ok(qDoor.includes('Paste the question just as they asked it.'), 'the textarea placeholder renders')
+  ok(qDoor.includes('Draft my answer'), 'the Draft my answer button renders for Pro')
 
-  // The failed-read states.
-  const qFail = renderQanda({ initialErrorCode: 'google_error' })
-  ok(qFail.includes('We could not read your questions yet.'), 'the failed-read line renders')
-  ok(qFail.includes('Try again'), 'Try again renders on the failed state')
-  ok(!qFail.includes('This part of Google is not connected yet.'), 'the not-connected line stays off a plain failure')
-  const qDisabled = renderQanda({ initialErrorCode: 'api_disabled' })
-  ok(qDisabled.includes('We could not read your questions yet.'), 'the disabled state keeps the failed-read line')
-  ok(qDisabled.includes('This part of Google is not connected yet.'), 'the api_disabled state adds the plain not-connected line')
-  ok(qDisabled.includes('Try again'), 'Try again renders on the disabled state too')
+  // Seam: a pasted question prefills the box.
+  const qPasted = renderQanda({ initialQuestionText: 'Do you have gluten free options?' })
+  ok(qPasted.includes('Do you have gluten free options?'), 'the question box prefills (test seam)')
 
-  // The answer screen: prefilled textarea, Draft, Save, the replace note.
-  const qAnswer = renderQanda({ initialQuestions: Q_FIXTURE, initialSelectedId: 'q-answered' })
-  ok(qAnswer.includes('Answer this question'), 'the answer screen title renders')
-  ok(qAnswer.includes('Do you have gluten free options?'), 'the question renders on the answer screen')
-  ok(/by\s*Dana P/.test(qAnswer), 'who asked renders')
-  ok(qAnswer.includes('<textarea'), 'the textarea renders')
-  ok(qAnswer.includes('Yes, we mark them right on the menu.'), 'the textarea prefills with the current answer (editing re-saves)')
-  ok(qAnswer.includes('You answered this one before. Saving replaces your old answer.'), 'the honest replace note renders on an answered question')
-  ok(qAnswer.includes('Draft it for me'), 'Draft it for me renders')
-  ok(qAnswer.includes('Save answer'), 'Save answer renders')
-  ok(/of\s*1000 characters/.test(qAnswer), 'the character count renders against the 1000 rule')
-  const qAnswerOpen = renderQanda({ initialQuestions: Q_FIXTURE, initialSelectedId: 'q-open' })
-  ok(qAnswerOpen.includes('>Needs an answer<'), 'the open question keeps its chip on the answer screen')
-  ok(!qAnswerOpen.includes('Saving replaces your old answer'), 'no replace note on a question with no answer yet')
-  // Non-Pro: the plain hint, no AI draft button (server enforces regardless).
-  const qAnswerFree = renderQanda({ initialQuestions: Q_FIXTURE, initialSelectedId: 'q-open', isPro: false })
-  ok(qAnswerFree.includes('Answering from here is on the Pro plan.'), 'the Pro hint renders for non-Pro')
-  ok(!qAnswerFree.includes('Draft it for me'), 'no AI draft button for non-Pro')
+  // Seam: a finished draft shows the copyable block + the honest post-it line.
+  const DRAFT_TEXT = 'Yes, we mark every gluten free dish right on the menu. Ask for the list when you come in.'
+  const qDrafted = renderQanda({ initialQuestionText: 'Do you have gluten free options?', initialDraft: DRAFT_TEXT })
+  ok(qDrafted.includes('Your draft'), 'the draft block label renders')
+  ok(qDrafted.includes(DRAFT_TEXT), 'the draft text renders in the copyable block')
+  ok(qDrafted.includes('>Copy<') || qDrafted.includes('Copy</button>'), 'the Copy button renders')
+  ok(qDrafted.includes('Copy this and post it on Google.'), 'the honest copy-and-post line renders')
+  ok(qDrafted.includes('Answer on Google'), 'the Answer on Google button stays on screen with the draft')
 
-  // Honest save strings, same contract as the profile save rail.
-  const aLive = answerResultNote(200, { ok: true, live: true })
-  ok(aLive.tone === 'ok' && aLive.text === 'Answer saved.', 'live:true reads Answer saved.')
-  const aPending = answerResultNote(200, { ok: true, live: false })
-  ok(aPending.tone === 'pending' && aPending.text === 'Sent to Google. It can take a few minutes to show.', 'ok without proof reads sent-not-showing-yet')
-  const aRate = answerResultNote(429, { ok: false, error: 'server words' })
-  ok(aRate.tone === 'error' && aRate.text === 'Google only allows a few edits per minute. Try again in a minute.', 'a 429 reads as the per-minute line')
-  const aRaw = answerResultNote(502, { ok: false, error: 'Not connected to Google yet: invalid_grant token refresh' })
-  ok(aRaw.tone === 'error' && !aRaw.text.includes('invalid_grant'), 'a 5xx never leaks the raw server string')
-  const aBad = answerResultNote(400, { ok: false, error: 'The answer is empty.' })
-  ok(aBad.text === 'The answer is empty.', 'a 400 shows the server plain-words reason')
-  const aPro = answerResultNote(403, { ok: false, error: 'Answering from here is on the Pro plan.' })
-  ok(aPro.text === 'Answering from here is on the Pro plan.', 'a 403 shows the plain Pro line')
-  // Injected on screen (test seam): the proven line renders on the answer screen.
-  const qSaved = renderQanda({ initialQuestions: Q_FIXTURE, initialSelectedId: 'q-open', initialSaveNote: aLive })
-  ok(qSaved.includes('Answer saved.'), 'the proven Answer saved line renders on the answer screen')
-  const qPendingShown = renderQanda({ initialQuestions: Q_FIXTURE, initialSelectedId: 'q-open', initialSaveNote: aPending })
-  ok(qPendingShown.includes('Sent to Google. It can take a few minutes to show.'), 'the honest pending line renders on the answer screen')
+  // Non-Pro: the quiet hint, the draft button disabled (server enforces regardless).
+  const qFree = renderQanda({ isPro: false })
+  ok(qFree.includes('Apnosh AI drafting is on the Pro plan.'), 'the Pro hint renders for non-Pro')
+  ok(qFree.includes('disabled'), 'the draft button is disabled for non-Pro')
+  ok(qFree.includes('Answer on Google'), 'the Answer on Google hand-off works on every plan')
 
   console.log('\n== q) Post an update ==')
   const GbpPostView = mod.GbpPostView as unknown as React.ComponentType<Record<string, unknown>>

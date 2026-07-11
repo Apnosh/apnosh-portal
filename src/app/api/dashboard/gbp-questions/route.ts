@@ -1,43 +1,26 @@
 /**
- * GET /api/dashboard/gbp-questions?clientId=
+ * GET /api/dashboard/gbp-questions — DEAD ROUTE (410).
  *
- * The customer Questions & Answers on the client's Google listing, read live
- * via the My Business Q&A API (src/lib/gbp-qanda.ts listGbpQuestions).
+ * Google shut the My Business Q&A API down for every app. Verified by a live
+ * probe on 2026-07-11: the questions list returns 501 UNIMPLEMENTED, reason
+ * API_UNSUPPORTED, "My Business Q&A API is no longer supported." No app can
+ * read listing questions anymore, so this route answers 410 Gone with a
+ * plain-words body and NEVER calls Google (the old listGbpQuestions in
+ * src/lib/gbp-qanda.ts is kept for reference but no longer invoked).
  *
- * Auth: checkClientAccess only — READING questions is fine for every tier
- * (same stance as GET /api/dashboard/gbp-diagnosis). Answering is the
- * Pro-gated write, on POST /api/dashboard/gbp-answer.
- *
- * Response is honest:
- *   200 { ok: true, questions: [...] }
- *   502 { ok: false, error, code } — plain owner words + a machine code;
- *       code 'api_disabled' means the Q&A API is not enabled on the OAuth
- *       project (a setup problem on our side, so the UI says "This part of
- *       Google is not connected yet."). Raw Google strings never escape.
+ * The owner UI (GbpQandaView in src/components/mvp/gbp-fixer.tsx) no longer
+ * fetches this route; it hands off to business.google.com and keeps the AI
+ * drafter (POST /api/dashboard/gbp-answer-draft), which never used this API.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { checkClientAccess } from '@/lib/dashboard/check-client-access'
-import { listGbpQuestions } from '@/lib/gbp-qanda'
+import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-export const maxDuration = 30
 
-function denied(reason: string | undefined) {
-  return NextResponse.json({ error: reason ?? 'forbidden' }, { status: reason === 'unauthenticated' ? 401 : 403 })
-}
-
-export async function GET(req: NextRequest) {
-  const clientId = req.nextUrl.searchParams.get('clientId')
-  if (!clientId) return NextResponse.json({ ok: false, error: 'clientId required' }, { status: 400 })
-
-  const access = await checkClientAccess(clientId)
-  if (!access.authorized) return denied(access.reason)
-
-  const result = await listGbpQuestions(clientId)
-  if (!result.ok) {
-    return NextResponse.json({ ok: false, error: result.error, code: result.code }, { status: 502 })
-  }
-  return NextResponse.json({ ok: true, questions: result.questions })
+export async function GET() {
+  return NextResponse.json(
+    { ok: false, error: 'Google closed this feature for apps.', code: 'api_removed' },
+    { status: 410 },
+  )
 }
