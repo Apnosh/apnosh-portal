@@ -360,7 +360,12 @@ async function main() {
   ok(qDoor.includes('Questions and answers'), 'the Q&A title renders')
   ok(qDoor.includes('Google does not let apps read or answer listing questions anymore, so this happens on Google itself.'), 'the honest explainer renders in plain words')
   ok(qDoor.includes('Answer on Google'), 'the Answer on Google button renders')
-  ok(qDoor.includes('href="https://business.google.com/"') && qDoor.includes('target="_blank"'), 'the button links out to Google in a new tab')
+  ok(qDoor.includes('href="https://business.google.com/"') && qDoor.includes('target="_blank"'), 'without a mapsUri the button falls back to business.google.com in a new tab')
+  // With the listing's real Maps URL the button deep-links straight to it.
+  const qDeep = renderQanda({ mapsUri: 'https://maps.google.com/?cid=123456' })
+  ok(qDeep.includes('href="https://maps.google.com/?cid=123456"'), 'with a mapsUri the button deep-links to the listing itself')
+  const qBadUri = renderQanda({ mapsUri: 'http://not-https.example.com' })
+  ok(qBadUri.includes('href="https://business.google.com/"'), 'a non-https mapsUri is not trusted; falls back to business.google.com')
   // The old fetch-driven list is gone: nothing reads the dead API.
   ok(!qDoor.includes('Reading your questions'), 'no loading state for a list that can never load')
   ok(!qDoor.includes('Save answer') && !qDoor.includes('Needs an answer'), 'the old list/answer-screen surface is gone')

@@ -89,6 +89,8 @@ interface GbpDiagnosis {
   sections: GbpDiagnosisSection[]
   notes: string[] // never rendered — can carry raw error strings
   checkedAt: string
+  /** Public Google Maps URL of the listing (where reviews and Q&A live). */
+  mapsUri?: string
 }
 
 const C = {
@@ -269,6 +271,7 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
         <GbpQandaView
           clientId={client?.id ?? ''}
           isPro={isProTier(client?.tier)}
+          mapsUri={diag?.mapsUri ?? null}
           onBack={() => setDoor('hub')}
         />
       )}
@@ -1846,13 +1849,18 @@ function AiSummary({ sections, outcomes, allGood, taskDone, rechecking, recheckF
  * the question box or show the finished draft without a fetch); the live
  * page never passes them.
  */
-export function GbpQandaView({ clientId, isPro, onBack, initialQuestionText, initialDraft }: {
+export function GbpQandaView({ clientId, isPro, mapsUri, onBack, initialQuestionText, initialDraft }: {
   clientId: string
   isPro: boolean
+  /** The listing's public Google Maps URL (its Q&A section lives there). Falls back to business.google.com. */
+  mapsUri?: string | null
   onBack: () => void
   initialQuestionText?: string
   initialDraft?: string
 }) {
+  // Deep-link straight to THEIR listing when we have it from the live read;
+  // only https URLs from Google's own metadata field are trusted.
+  const answerHref = mapsUri && /^https:\/\//.test(mapsUri) ? mapsUri : 'https://business.google.com/'
   const [question, setQuestion] = useState(initialQuestionText ?? '')
   const [drafting, setDrafting] = useState(false)
   const [draft, setDraft] = useState<string | null>(initialDraft ?? null)
@@ -1917,7 +1925,7 @@ export function GbpQandaView({ clientId, isPro, onBack, initialQuestionText, ini
       </div>
 
       <a
-        href="https://business.google.com/"
+        href={answerHref}
         target="_blank"
         rel="noopener noreferrer"
         className="mvp-row"

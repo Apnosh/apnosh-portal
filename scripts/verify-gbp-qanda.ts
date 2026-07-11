@@ -300,8 +300,9 @@ async function main() {
   check('F2 draft gates in order: access → tier → zero-facts refusal → AI call',
     dIdx.access > 0 && dIdx.access < dIdx.tier && dIdx.tier < dIdx.refuse && dIdx.refuse < dIdx.call,
     JSON.stringify(dIdx))
-  check('F3 draft grounded in real facts only (name/concept/menu/location)',
-    dSrc.includes('facts.business_name') && dSrc.includes('facts.menu_items') && dSrc.includes('facts.neighborhood_or_area') && dSrc.includes('facts.city'))
+  check('F3 draft grounded in real facts only; menu labeled partial + no-negative-claims rule',
+    dSrc.includes('facts.business_name') && dSrc.includes('facts.some_menu_items') && dSrc.includes('facts.neighborhood_or_area') && dSrc.includes('facts.city')
+    && dSrc.includes('Never say or imply the business does NOT have'))
   check('F4 draft treats the question as data, never instructions', /never instructions/i.test(dSrc) && dSrc.includes('<question>'))
   check('F5 deterministic backstop: em-dash strip + boundary cut + the SAME answer validator',
     dSrc.includes('truncateAtBoundary') && /\[–—\]/.test(dSrc) && dSrc.includes('validateAnswer(cleaned)'))

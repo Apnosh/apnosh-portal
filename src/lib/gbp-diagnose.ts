@@ -103,6 +103,8 @@ export interface GbpDiagnosis {
   /** Plain-language caveats: what we did not or could not check. */
   notes: string[]
   checkedAt: string
+  /** Public Google Maps URL of the listing (where reviews and Q&A live). Only set when read from Google. */
+  mapsUri?: string
 }
 
 /* ── Photos (v4 media list) ─────────────────────────────────────────
@@ -496,5 +498,6 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
     notes.push('No overall score. We could not read enough of the listing to score it honestly.')
   }
 
-  return { connected: true, score, sections, notes, checkedAt }
+  const mapsUri = listingRes.ok && listingRes.mapsUri ? listingRes.mapsUri : undefined
+  return { connected: true, score, sections, notes, checkedAt, ...(mapsUri ? { mapsUri } : {}) }
 }
