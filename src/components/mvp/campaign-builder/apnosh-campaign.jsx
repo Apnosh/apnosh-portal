@@ -4133,33 +4133,57 @@ export function PlanBar({ items, onOpen }) {
   );
 }
 
-/** One plan row: art tile, title, the config in plain words (version + add-ons), the
- *  PDP-exact price, and an X that slides the row out. Tapping the row re-opens the PDP
- *  with this config so editing is just re-adding. */
-function PlanRow({ it, tier, leaving, onOpen, onRemove }) {
+/** One plan item as a full cart card (Amazon/DoorDash idiom): art + title + the
+ *  PDP-exact per-item price up top, then the chosen version and EVERY selected add-on
+ *  as its own priced line — the labels and prices come from the same sources the PDP
+ *  renders (doerDisplay, plainNameOf, optionDelta), so they can never drift. Tapping
+ *  the card body or Edit re-opens the PDP with this saved config; re-adding replaces
+ *  it (the cart is keyed by itemId). Remove slides the card out. */
+function PlanItemCard({ it, tier, leaving, onOpen, onRemove }) {
   const p = catGet(it.itemId) || { title: it.itemId, type: "task" };
   const money = planItemMoney(it);
   const versioned = doerSlotFor(it.itemId) && it.doer;
-  const parts = [];
-  if (versioned) parts.push(doerDisplay(it.doer, tier).title);
-  for (const id of it.options) { const s = serviceById(id); if (s) parts.push(plainNameOf(s)); }
+  const d = versioned ? doerDisplay(it.doer, tier) : null;
+  const opts = it.options.map((id) => serviceById(id)).filter(Boolean);
+  const lineL = { fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink, lineHeight: 1.4, minWidth: 0 };
+  const lineR = { fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap", flexShrink: 0 };
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${TOKENS.line}`, transition: "transform 240ms ease, opacity 240ms ease", transform: leaving ? "translateX(72%)" : "none", opacity: leaving ? 0 : 1 }}>
-      <button onClick={onOpen} className="apnpress" style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 12, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
-        <span style={{ width: 54, height: 54, borderRadius: 15, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Art id={it.itemId} size={38} />
+    <div style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 18, marginTop: 10, overflow: "hidden", boxShadow: "0 1px 2px rgba(20,40,30,0.03)", transition: "transform 240ms ease, opacity 240ms ease", transform: leaving ? "translateX(72%)" : "none", opacity: leaving ? 0 : 1 }}>
+      <button onClick={onOpen} className="apnpress" style={{ width: "100%", display: "block", background: "none", border: "none", padding: "13px 14px 12px", cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ width: 48, height: 48, borderRadius: 13, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Art id={it.itemId} size={34} />
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.25 }}>{p.title}</span>
+            {/* Per-item price summary — planItemMoney, the same math the PDP buy footer shows. */}
+            <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 3 }}>{planMoneyLabel(money, isCreativeCard(p))}</span>
+          </span>
         </span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: "block", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.25 }}>{p.title}</span>
-          {parts.length > 0 && (
-            <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{parts.join(" · ")}</span>
-          )}
-          <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 3 }}>{planMoneyLabel(money, isCreativeCard(p))}</span>
-        </span>
+        {(d || opts.length > 0) && (
+          <span style={{ display: "block", marginTop: 11, paddingTop: 10, borderTop: `1px solid ${TOKENS.line}` }}>
+            {/* The chosen version, labeled and priced exactly like the PDP's version picker. */}
+            {d && (
+              <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+                <span style={lineL}>{d.title}</span>
+                <span style={lineR}>{d.price || "Included in Pro"}</span>
+              </span>
+            )}
+            {/* Every selected add-on: the PDP's plain name + its cadence-aware price delta. */}
+            {opts.map((s, i) => (
+              <span key={s.id} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginTop: d || i > 0 ? 7 : 0 }}>
+                <span style={lineL}>{plainNameOf(s)}</span>
+                <span style={lineR}>{optionDelta(s)}</span>
+              </span>
+            ))}
+          </span>
+        )}
       </button>
-      <button onClick={onRemove} aria-label={`Remove ${p.title}`} className="apnpress" style={{ width: 32, height: 32, borderRadius: 16, border: "none", background: "rgba(20,35,28,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, WebkitTapHighlightColor: "transparent" }}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-      </button>
+      <div style={{ display: "flex", borderTop: `1px solid ${TOKENS.line}` }}>
+        <button onClick={onOpen} className="apnpress" style={{ flex: 1, background: "none", border: "none", padding: "10px 0", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Edit</button>
+        <span aria-hidden style={{ width: 1, background: TOKENS.line }} />
+        <button onClick={onRemove} aria-label={`Remove ${p.title}`} className="apnpress" style={{ flex: 1, background: "none", border: "none", padding: "10px 0", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: "#7c837e", WebkitTapHighlightColor: "transparent" }}>Remove</button>
+      </div>
     </div>
   );
 }
@@ -4278,8 +4302,32 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
         ) : (
           <>
             {items.map((it) => (
-              <PlanRow key={it.itemId} it={it} tier={tier} leaving={leaving.has(it.itemId)} onOpen={() => onOpenItem(it.itemId, { doer: it.doer || undefined, options: it.options.length ? it.options : undefined })} onRemove={() => slideOut(it.itemId)} />
+              <PlanItemCard key={it.itemId} it={it} tier={tier} leaving={leaving.has(it.itemId)} onOpen={() => onOpenItem(it.itemId, { doer: it.doer || undefined, options: it.options.length ? it.options : undefined })} onRemove={() => slideOut(it.itemId)} />
             ))}
+            {/* Price details — the order-summary card. Every number comes from planTotals
+                (the PDP-exact math), never recomputed here. */}
+            <div style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 18, padding: "14px 16px 13px", marginTop: 16 }}>
+              <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, marginBottom: 11 }}>Price details</div>
+              {(totals.oneTime > 0 || totals.perMonth === 0) && (
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink }}>One-time work</span>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap" }}>{totals.oneTime > 0 ? `${anyCreative ? "From " : ""}$${totals.oneTime.toLocaleString()}` : "Free"}</span>
+                </div>
+              )}
+              {totals.perMonth > 0 && (
+                <>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginTop: totals.oneTime > 0 ? 8 : 0 }}>
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink }}>Monthly services</span>
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap" }}>{`$${totals.perMonth.toLocaleString()}/mo`}</span>
+                  </div>
+                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 3 }}>Billed monthly once your services start.</div>
+                </>
+              )}
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, borderTop: `1px solid ${TOKENS.line}`, marginTop: 12, paddingTop: 11 }}>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
+                <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 17, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.3, whiteSpace: "nowrap" }}>{planMoneyLabel(totals, anyCreative)}</span>
+              </div>
+            </div>
             {blocked && (
               <div style={{ background: "#fdf6e9", border: "1px solid #f0dfb8", borderRadius: 14, padding: "12px 14px", marginTop: 14, fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#854f0b", lineHeight: 1.55 }}>
                 Apnosh AI is on the Pro plan. <a href="/dashboard/billing" style={{ color: "#854f0b", fontWeight: 700 }}>Upgrade to Pro</a>, or tap the item to pick another version, or remove it.
