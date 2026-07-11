@@ -3076,9 +3076,9 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             </div>
           </div>
         ) : (
-          /* State C — the personalized "why this, for you", kept to a line or two. */
+          /* State C — a plain description of the campaign (gbp), else the card's personalized why. */
           <div style={{ padding: "12px 20px 0" }}>
-            <div style={{ background: TOKENS.mintTint, borderRadius: 14, padding: "12px 14px", fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.5 }}>{why}</div>
+            <div style={{ background: TOKENS.mintTint, borderRadius: 14, padding: "12px 14px", fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.5 }}>{isGbp ? "We check every part of your Google profile and fix what's missing, so your hours, menu, photos, and info all show you at your best." : why}</div>
           </div>
         )}
         {/* ── THE PRODUCT (grouping one) — the version pick and "what you get" flow as ONE
