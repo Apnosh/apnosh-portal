@@ -3007,13 +3007,7 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             {/* Product name eyebrow, then the BIG bold outcome headline. */}
             <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.mintDark, marginBottom: 6 }}>{p.title}</div>
             <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 26, fontWeight: 700, color: TOKENS.ink, lineHeight: 1.16, letterSpacing: -0.5, margin: 0, textWrap: "balance" }}>{heroHeadline}</h1>
-            {/* Confident price moment, live from the selected version. */}
-            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 14 }}>
-              <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 27, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.5 }}>{price || "Free"}</span>
-              {(!price || price === "Free")
-                ? (moneyLabel(baseP.oneTime, baseP.perMonth) !== "Free" && <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub }}>or {moneyLabel(baseP.oneTime, baseP.perMonth)} done for you</span>)
-                : <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub }}>to start</span>}
-            </div>
+            {/* Price lives only in the sticky total bar at the bottom, not repeated here. */}
             {/* Product shot: the REAL Google listing (gbp only) or the lifted card art. */}
             {isGbp ? (
               <div className="apnrise2" style={{ marginTop: 20, background: "#fff", borderRadius: 18, padding: "15px 16px 14px", boxShadow: "0 14px 34px rgba(20,45,33,0.14), 0 2px 6px rgba(20,45,33,0.05)" }}>
