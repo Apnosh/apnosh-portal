@@ -17,27 +17,36 @@
  *    payload — the 7-day hours table, the category chips, the full
  *    description, the photo grid, the menu items, the website + phone —
  *    with the summary string as the fallback when detail is absent; why it
- *    matters; and the action: confirm ("This is correct, next" with a
- *    "Something is off" fix path on good parts), draft (description only),
- *    fix on Google, or skip), then a
- *    summary of every outcome with a fresh "Check my profile again". Review
- *    progress resumes from localStorage (keyed by client id) so a refresh
- *    never restarts at part 1; a fresh all-good read clears the save.
+ *    matters; and the action: EDIT it right here for the kinds the save
+ *    rail supports (description / hours / website+phone, via
+ *    POST /api/dashboard/gbp-apply), or an "Edit this on Google" link for
+ *    the kinds it does not (categories / menu / photos); then "Next"
+ *    ("Finish" on the last part) moves on. A summary of every outcome ends
+ *    the review with a fresh "Check my profile again" and a What's-next
+ *    pointer to the reviews inbox. Review progress resumes from
+ *    localStorage (keyed by client id) so a refresh never restarts at
+ *    part 1; a fresh all-good read clears the save.
+ *
+ * The STANDALONE door (no campaignId) opens on a small hub first ("Your
+ * Google helper"): one card into this review, one card out to the reviews
+ * inbox (/dashboard/inbox?tab=reviews). The campaign door skips the hub.
  *
  * Honesty rules baked in:
  *  - Every string shown comes from the diagnosis `sections[]` payload, which
  *    the engine builds only from what it actually read on Google. The raw
  *    `notes[]` (which can carry error strings) are NEVER rendered.
- *  - Only the description section gets a "Draft it for me" button (the only
- *    AI draft that is actually built). No fake apply: the draft is copy-only,
- *    with a plain line saying one-tap apply is not built yet.
- *  - We never claim we changed Google. The owner makes every change there
- *    (or copies the draft over), then tells us with "I updated it".
+ *  - Saves are never optimistic: "Saved to Google." appears ONLY when the
+ *    rail returned live:true (read-back proof). ok-without-proof reads as
+ *    "Sent to Google. It can take a few minutes to show." Failures show the
+ *    server's plain 400/403 words, the 429 per-minute line, or a generic
+ *    could-not-save line (raw 5xx strings are never rendered).
+ *  - After any accepted save the diagnosis silently re-fetches once, so the
+ *    content and statuses on screen stay what Google actually shows.
  */
 
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
-import { Loader2, Check, ChevronDown, ChevronLeft, Sparkles, Copy, ExternalLink, Plug } from 'lucide-react'
+import { Loader2, Check, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Copy, ExternalLink, Plug, Pencil, Star } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
 
@@ -121,6 +130,17 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
   // The AI lane unlocks only when the resolved mode is 'ai' AND this client is still Pro; anything
   // else runs the checklist. A URL/prop alone can never unlock AI without the live Pro entitlement.
   const effectiveMode: 'diy' | 'ai' = mode === 'ai' && isProTier(client?.tier) ? 'ai' : 'diy'
+  // The STANDALONE door opens on the helper hub (review card + reviews card).
+  // A campaign task skips the hub and lands straight in the walkthrough.
+  const standalone = !campaignId
+  const [door, setDoor] = useState<'hub' | 'review'>(standalone ? 'hub' : 'review')
+  // A saved mid-review state flips the hub card to "Continue your review".
+  // Read in an effect only (localStorage), so hydration stays clean.
+  const [hasResume, setHasResume] = useState(false)
+  useEffect(() => {
+    if (!client?.id) return
+    try { setHasResume(!!localStorage.getItem(reviewStorageKey(client.id))) } catch { /* ignore */ }
+  }, [client?.id, door])
   const [diag, setDiag] = useState<GbpDiagnosis | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [reload, setReload] = useState(0)
@@ -233,6 +253,12 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
     <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
       <style>{FIXER_CSS}</style>
 
+      {standalone && door === 'hub' && (
+        <GbpHelperHub continueReview={hasResume} onReview={() => setDoor('review')} />
+      )}
+
+      {(!standalone || door === 'review') && (<>
+
       {loading && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '48px 0', color: C.mute }}>
           <Loader2 size={22} className="mvp-spin" color={C.green} />
@@ -289,9 +315,7 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
             drafting={drafting}
             draft={draft}
             draftError={draftError}
-            copied={copied}
             onDraft={() => { void requestDraft() }}
-            onCopy={() => { void copyDraft() }}
           />
         ) : (
           <Walkthrough
@@ -309,6 +333,8 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
           />
         )
       )}
+
+      </>)}
     </div>
   )
 }
@@ -331,6 +357,69 @@ function NotConnected() {
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 16, height: 46, borderRadius: 13, background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, textDecoration: 'none' }}
       >
         Connect Google
+      </Link>
+    </div>
+  )
+}
+
+/* ── The helper hub (standalone door only) ─────────────────────── */
+
+/** Where the owner reads and answers reviews: the Inbox's Reviews tab
+ *  (each row deep-links to /dashboard/reviews/[id] with the AI reply). */
+const REVIEWS_HREF = '/dashboard/inbox?tab=reviews'
+
+const hubCardStyle: CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
+  background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '15px 14px',
+  marginBottom: 10, boxShadow: '0 1px 3px rgba(0,0,0,.04)', textDecoration: 'none',
+  cursor: 'pointer', font: 'inherit',
+}
+
+/**
+ * The standalone door's front screen: two cards. One enters the part-by-part
+ * review (says "Continue your review" when a saved mid-review state exists);
+ * one goes to the reviews inbox. Exported for the render smoke.
+ */
+export function GbpHelperHub({ continueReview, onReview, reviewsHref = REVIEWS_HREF }: {
+  continueReview: boolean
+  onReview: () => void
+  reviewsHref?: string
+}) {
+  return (
+    <div>
+      <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink, padding: '4px 2px 2px' }}>
+        Your Google helper
+      </div>
+      <div style={{ fontSize: 13, color: C.mute, padding: '0 2px 14px', lineHeight: 1.5 }}>
+        Keep your Google listing sharp and answer your reviews.
+      </div>
+
+      <button type="button" onClick={onReview} className="mvp-row" style={hubCardStyle}>
+        <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Sparkles size={19} color={C.greenDk} />
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>
+            {continueReview ? 'Continue your review' : 'Review your profile'}
+          </span>
+          <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
+            6 parts. See what Google shows and fix it.
+          </span>
+        </span>
+        <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
+      </button>
+
+      <Link href={reviewsHref} className="mvp-row" style={hubCardStyle}>
+        <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Star size={19} color={C.greenDk} />
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>Your reviews</span>
+          <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
+            Read new reviews and reply with AI help.
+          </span>
+        </span>
+        <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
       </Link>
     </div>
   )
@@ -608,9 +697,10 @@ function summaryOutcome(section: GbpDiagnosisSection, outcomes: Record<string, P
  * clean). A fresh all-good diagnosis clears the save.
  *
  * The initial* props are a TEST SEAM for the render smoke only (they pick the
- * first screen without localStorage); the live page never passes them.
+ * first screen without localStorage, open a part's editor, or inject a save
+ * note); the live page never passes them.
  */
-export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, copied, onDraft, onCopy, initialPhase, initialIndex, initialOutcomes }: {
+export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, onDraft, initialPhase, initialIndex, initialOutcomes, initialEditing, initialSaveNote }: {
   diag: GbpDiagnosis
   clientId: string
   taskDone?: boolean
@@ -620,12 +710,12 @@ export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, 
   drafting: boolean
   draft: string | null
   draftError: string | null
-  copied: boolean
   onDraft: () => void
-  onCopy: () => void
   initialPhase?: 'intro' | 'part' | 'summary'
   initialIndex?: number
   initialOutcomes?: Record<string, PartOutcome>
+  initialEditing?: boolean
+  initialSaveNote?: SaveNote
 }) {
   const sections = diag.sections ?? []
   const total = sections.length
@@ -687,6 +777,12 @@ export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, 
     setPhase(index + 1 >= total ? { name: 'summary' } : { name: 'part', index: index + 1 })
   }, [total])
 
+  // A save that Google accepted marks the part updated RIGHT AWAY (so a
+  // refresh mid-review never forgets it), without leaving the part.
+  const markUpdated = useCallback((sectionKey: string) => {
+    setOutcomes((cur) => ({ ...cur, [sectionKey]: 'updated' }))
+  }, [])
+
   if (total === 0) {
     // The engine always emits its sections; this is a pure safety net.
     return (
@@ -713,14 +809,17 @@ export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, 
           section={sections[phase.index]}
           index={phase.index}
           total={total}
+          clientId={clientId}
           onBack={() => setPhase(phase.index === 0 ? { name: 'intro' } : { name: 'part', index: phase.index - 1 })}
           onDone={(outcome) => finishPart(sections[phase.index].key, outcome, phase.index)}
+          onSaved={markUpdated}
+          onSilentRefresh={onRecheck}
           drafting={drafting}
           draft={draft}
           draftError={draftError}
-          copied={copied}
           onDraft={onDraft}
-          onCopy={onCopy}
+          initialEditing={initialEditing}
+          initialSaveNote={initialSaveNote}
         />
       )}
 
@@ -773,31 +872,313 @@ function AiIntro({ total, needsWork, onStart }: { total: number; needsWork: numb
   )
 }
 
-/** One part per screen: progress, name + status chip, what Google shows now,
- *  why it matters, then the action for this part's status. */
-function AiPart({ section, index, total, onBack, onDone, drafting, draft, draftError, copied, onDraft, onCopy }: {
+/* ── Save to Google: the gbp-apply rail plumbing ─────────────────── */
+
+/** The field kinds POST /api/dashboard/gbp-apply accepts. */
+type ApplyKind = 'description' | 'hours' | 'website' | 'phone'
+
+export type SaveTone = 'ok' | 'pending' | 'error'
+export interface SaveNote { tone: SaveTone; text: string }
+
+// Google's description rules, mirrored from src/lib/gbp-apply/validate.ts.
+const DESC_MIN = 250
+const DESC_MAX = 750
+
+const SAVE_FAIL = 'We could not save this to Google right now. Try again in a minute.'
+
+/**
+ * Map one gbp-apply response to the honest owner line. Never optimistic:
+ * "Saved to Google." appears ONLY on live:true (the rail's read-back proof);
+ * ok without proof reads as sent-not-showing-yet; 429 is Google's own
+ * per-minute cap in plain words; 400/403 bodies are the server's plain owner
+ * words; anything else (5xx can carry raw upstream strings) gets the generic
+ * could-not-save line. Exported for the render smoke.
+ */
+export function applyResultNote(status: number, body: { ok?: boolean; live?: boolean; error?: string } | null): SaveNote {
+  if (status === 200 && body?.ok) {
+    return body.live === true
+      ? { tone: 'ok', text: 'Saved to Google.' }
+      : { tone: 'pending', text: 'Sent to Google. It can take a few minutes to show.' }
+  }
+  if (status === 429) return { tone: 'error', text: 'Google only allows a few edits per minute. Try again in a minute.' }
+  if ((status === 400 || status === 403) && typeof body?.error === 'string' && body.error.trim()) {
+    return { tone: 'error', text: body.error }
+  }
+  return { tone: 'error', text: SAVE_FAIL }
+}
+
+async function postApply(clientId: string, kind: ApplyKind, value: unknown): Promise<{ note: SaveNote; accepted: boolean; live: boolean }> {
+  try {
+    const r = await fetch('/api/dashboard/gbp-apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId, kind, value }),
+    })
+    const j = await r.json().catch(() => null) as { ok?: boolean; live?: boolean; error?: string } | null
+    return { note: applyResultNote(r.status, j), accepted: r.status === 200 && j?.ok === true, live: j?.live === true }
+  } catch {
+    return { note: { tone: 'error', text: SAVE_FAIL }, accepted: false, live: false }
+  }
+}
+
+/** One save outcome, worded by the rail response. Green check only on proof. */
+function SaveNoteLine({ note }: { note: SaveNote }) {
+  const tone = note.tone === 'ok'
+    ? { background: C.greenSoft, color: C.greenDk }
+    : note.tone === 'pending'
+      ? { background: '#faf1de', color: '#9a6b17' }
+      : { background: C.redSoft, color: C.red }
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, borderRadius: 10, padding: '9px 12px', fontSize: 12.5, lineHeight: 1.5, whiteSpace: 'pre-line', ...tone }}>
+      {note.tone === 'ok' && <Check size={14} strokeWidth={3} style={{ flexShrink: 0, marginTop: 2 }} />}
+      <span>{note.text}</span>
+    </div>
+  )
+}
+
+const errLineStyle: CSSProperties = { marginTop: 8, background: C.redSoft, borderRadius: 10, padding: '9px 12px', fontSize: 12.5, color: C.red, lineHeight: 1.45 }
+
+/** Green Save-to-Google + Cancel pair shared by the three editors. */
+function SaveCancelRow({ saving, disabled, onSave, onCancel }: { saving: boolean; disabled?: boolean; onSave: () => void; onCancel: () => void }) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={saving || disabled}
+        className="mvp-row"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 12, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: saving || disabled ? 'default' : 'pointer', opacity: saving || disabled ? 0.7 : 1, font: 'inherit' }}
+      >
+        {saving ? <><Loader2 size={16} className="mvp-spin" /> Saving to Google&hellip;</> : 'Save to Google'}
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={saving}
+        className="mvp-row"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 6, height: 40, borderRadius: 12, border: 'none', background: 'none', color: C.mute, fontSize: 14, fontWeight: 600, cursor: 'pointer', font: 'inherit' }}
+      >
+        Cancel
+      </button>
+    </>
+  )
+}
+
+/* ── Hours editor helpers ───────────────────────────────────────── */
+
+const GBP_DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const
+
+interface HoursRowDraft {
+  day: (typeof GBP_DAYS)[number]
+  label: string
+  closed: boolean
+  open: string  // 'HH:MM' 24h; '' when unknown (owner must fill before saving)
+  close: string // 'HH:MM' 24h; '00:00' means closes at midnight
+  /** Google shows more than one range this day; the editor holds only the first. */
+  multi: boolean
+}
+
+/** '8:00 AM' → '08:00'; '12:00 AM' → '00:00'. Null when it is not a time. */
+function parse12h(t: string): string | null {
+  const m = /^(\d{1,2}):([0-5]\d)\s*(AM|PM)$/i.exec(t.trim())
+  if (!m) return null
+  let h = Number(m[1])
+  if (h < 1 || h > 12) return null
+  h = h % 12
+  if (/^pm$/i.test(m[3])) h += 12
+  return `${String(h).padStart(2, '0')}:${m[2]}`
+}
+
+/** '08:00' → '8:00 AM'; '00:00' → '12:00 AM' (for the read-back-proven table). */
+function fmt12hClient(t: string): string {
+  const h = Number(t.slice(0, 2)) % 24
+  const mm = t.slice(3, 5)
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${mm} ${h < 12 ? 'AM' : 'PM'}`
+}
+
+/**
+ * Prefill the 7 editor rows from the diagnosis detail (the display strings the
+ * engine formatted straight off Google, e.g. "8:00 AM to 9:00 PM" / "Closed").
+ * Multi-range days prefill their FIRST range and set `multi` for the honest
+ * replace note. A day we cannot parse comes back open with empty times, so the
+ * owner must set it before saving — never silently marked closed (a closed day
+ * in this save ERASES that day's hours on Google).
+ */
+function hoursRowsFromDetail(days?: Array<{ day: string; hours: string }>): HoursRowDraft[] {
+  return GBP_DAYS.map((day, i) => {
+    const label = day.charAt(0) + day.slice(1).toLowerCase()
+    const text = (days?.[i]?.hours ?? '').trim()
+    if (text === 'Closed') return { day, label, closed: true, open: '', close: '', multi: false }
+    const parts = text.split(', ')
+    const m = /^(.+?) to (.+)$/.exec(parts[0] ?? '')
+    const open = m ? parse12h(m[1]) : null
+    const close = m ? parse12h(m[2]) : null
+    return { day, label, closed: false, open: open ?? '', close: close ?? '', multi: parts.length > 1 }
+  })
+}
+
+/** Plain-words pre-check (mirrors the server rules) so 400s stay rare. Null = good to send. */
+function hoursRowsError(rows: HoursRowDraft[]): string | null {
+  let openDays = 0
+  for (const r of rows) {
+    if (r.closed) continue
+    openDays++
+    if (!r.open || !r.close) return `${r.label} needs an open time and a close time, or mark it closed.`
+    if (r.close !== '00:00' && r.close <= r.open) {
+      return `${r.label} closes at or before it opens. For hours past midnight, set the close to 12:00 AM or edit that day on Google.`
+    }
+  }
+  if (openDays === 0) return 'Every day is marked closed. Saving that would remove all your hours from Google. To close for a while, set that on Google instead.'
+  return null
+}
+
+/** The exact wire shape POST gbp-apply expects for kind "hours" (all 7 days, one range each). */
+function hoursWireValue(rows: HoursRowDraft[]): Array<{ day: string; closed: boolean; open?: string; close?: string }> {
+  return rows.map((r) => (r.closed ? { day: r.day, closed: true } : { day: r.day, closed: false, open: r.open, close: r.close }))
+}
+
+/** The 7-day table for a read-back-proven save, shown until the silent re-fetch lands. */
+function hoursDisplayFromRows(rows: HoursRowDraft[]): Array<{ day: string; hours: string }> {
+  return rows.map((r) => ({ day: r.label, hours: r.closed ? 'Closed' : `${fmt12hClient(r.open)} to ${fmt12hClient(r.close)}` }))
+}
+
+/* ── The part screen ────────────────────────────────────────────── */
+
+/** business.google.com edit surfaces for the kinds the save rail cannot write.
+ *  Google's own signed-in editor pages — with one listing they land on the
+ *  right business. Never a fake in-app editor for these. */
+const GOOGLE_EDIT_HREF: Record<string, string> = {
+  categories: 'https://business.google.com/info',
+  menu: 'https://business.google.com/menu',
+  photos: 'https://business.google.com/photos',
+}
+
+const smallEditBtnStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', padding: 2, color: C.greenDk, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', font: 'inherit' }
+const smallEditLinkStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, color: C.greenDk, fontSize: 12.5, fontWeight: 700, textDecoration: 'none' }
+const fieldLabelStyle: CSSProperties = { display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 5 }
+const textInputStyle: CSSProperties = { width: '100%', boxSizing: 'border-box', borderRadius: 11, border: `0.5px solid ${C.line}`, background: C.bg, padding: '10px 12px', fontSize: 13.5, color: C.ink, font: 'inherit' }
+const timeInputStyle: CSSProperties = { flex: 1, minWidth: 0, boxSizing: 'border-box', borderRadius: 9, border: `0.5px solid ${C.line}`, background: C.bg, padding: '7px 9px', fontSize: 13, color: C.ink, font: 'inherit' }
+
+/**
+ * One part per screen: progress, name + status chip, what Google shows now,
+ * why it matters, then the fix path. Description / hours / website+phone get
+ * a real Edit → Save to Google editor (the gbp-apply rail); categories /
+ * menu / photos get Google's own editor link. "Next" ("Finish" on the last
+ * part) moves on; a part the owner did not fix records as skipped, a part
+ * Google accepted a save for records as updated.
+ */
+function AiPart({ section, index, total, clientId, onBack, onDone, onSaved, onSilentRefresh, drafting, draft, draftError, onDraft, initialEditing, initialSaveNote }: {
   section: GbpDiagnosisSection
   index: number
   total: number
+  clientId: string
   onBack: () => void
   onDone: (outcome: PartOutcome) => void
+  onSaved: (sectionKey: string) => void
+  onSilentRefresh?: () => void
   drafting: boolean
   draft: string | null
   draftError: string | null
-  copied: boolean
   onDraft: () => void
-  onCopy: () => void
+  /** TEST SEAM (render smoke only): open this part's editor on first render. */
+  initialEditing?: boolean
+  /** TEST SEAM (render smoke only): start with a save note on screen. */
+  initialSaveNote?: SaveNote
 }) {
   const chip = AI_CHIP[section.status] ?? AI_CHIP.unknown
   const actionable = section.status === 'needs-work' || section.status === 'missing'
-  // "Draft it for me" exists ONLY for the description (the one AI draft that is actually built).
-  const canDraft = actionable && section.key === 'description'
+  const editableKind: 'description' | 'hours' | 'links' | null =
+    section.key === 'description' ? 'description' : section.key === 'hours' ? 'hours' : section.key === 'links' ? 'links' : null
+  const googleEditHref = GOOGLE_EDIT_HREF[section.key]
   const current = section.current && section.current.trim() ? section.current : 'Nothing yet'
-  // A good part can still be WRONG (an old Tuesday hour, a stale phone number).
-  // "Something is off" opens the same fix path problem parts get, so the owner
-  // can correct it without leaving the review. Resets per part (AiPart is
-  // keyed by section, so moving on remounts it closed).
-  const [fixOpen, setFixOpen] = useState(false)
+  const editCta = section.key === 'description'
+    ? (section.status === 'missing' ? 'Add a description' : 'Edit your description')
+    : section.key === 'hours'
+      ? 'Edit your hours'
+      : 'Edit website and phone'
+
+  const [editing, setEditing] = useState(!!initialEditing && !!editableKind && section.status !== 'unknown')
+  const [editSession, setEditSession] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [note, setNote] = useState<SaveNote | null>(initialSaveNote ?? null)
+  const [savedThisPart, setSavedThisPart] = useState(false)
+
+  // Read-back-PROVEN values only (live:true): shown in place of the now-stale
+  // diagnosis content until the silent re-fetch catches up. A pending save
+  // never touches the block — it keeps showing what Google actually shows.
+  const [provenDesc, setProvenDesc] = useState<string | null>(null)
+  const [provenLinks, setProvenLinks] = useState<{ website?: string; phone?: string }>({})
+  const [provenHours, setProvenHours] = useState<Array<{ day: string; hours: string }> | null>(null)
+
+  let detail = section.detail
+  if (section.key === 'description' && provenDesc != null) detail = { kind: 'description', text: provenDesc }
+  if (detail?.kind === 'links' && (provenLinks.website || provenLinks.phone)) {
+    detail = { ...detail, website: provenLinks.website ?? detail.website, phone: provenLinks.phone ?? detail.phone }
+  }
+  if (detail?.kind === 'hours' && provenHours) detail = { ...detail, days: provenHours }
+
+  const openEditor = () => { setNote(null); setEditing(true); setEditSession((n) => n + 1) }
+
+  const afterAccepted = (n: SaveNote) => {
+    setNote(n)
+    setSavedThisPart(true)
+    setEditing(false)
+    onSaved(section.key)
+    // One silent re-fetch so statuses + content track what Google shows now.
+    onSilentRefresh?.()
+  }
+
+  const saveDescription = async (text: string) => {
+    if (saving) return
+    setSaving(true)
+    const res = await postApply(clientId, 'description', text)
+    setSaving(false)
+    if (!res.accepted) { setNote(res.note); return }
+    if (res.live) setProvenDesc(text)
+    afterAccepted(res.note)
+  }
+
+  const saveHours = async (rows: HoursRowDraft[]) => {
+    if (saving) return
+    setSaving(true)
+    const res = await postApply(clientId, 'hours', hoursWireValue(rows))
+    setSaving(false)
+    if (!res.accepted) { setNote(res.note); return }
+    if (res.live) setProvenHours(hoursDisplayFromRows(rows))
+    afterAccepted(res.note)
+  }
+
+  /** Website and phone are separate rail kinds: each CHANGED field saves on
+   *  its own call, in order, and each is reported honestly by name — if one
+   *  fails, the note says which. */
+  const saveLinks = async (changes: { website?: string; phone?: string }) => {
+    if (saving) return
+    setSaving(true)
+    const lines: string[] = []
+    let accepted = false
+    let worst: SaveTone = 'ok'
+    const one = async (kind: 'website' | 'phone', label: string, value: string) => {
+      const res = await postApply(clientId, kind, value)
+      lines.push(`${label}: ${res.note.text}`)
+      if (res.accepted) {
+        accepted = true
+        if (res.live) setProvenLinks((cur) => ({ ...cur, [kind]: value }))
+      }
+      if (res.note.tone === 'error') worst = 'error'
+      else if (res.note.tone === 'pending' && worst === 'ok') worst = 'pending'
+    }
+    if (changes.website !== undefined) await one('website', 'Website', changes.website)
+    if (changes.phone !== undefined) await one('phone', 'Phone number', changes.phone)
+    setSaving(false)
+    const combined: SaveNote = { tone: worst, text: lines.join('\n') }
+    if (!accepted) { setNote(combined); return }
+    afterAccepted(combined)
+  }
+
+  const isLast = index + 1 >= total
+  const nextOutcome: PartOutcome = savedThisPart ? 'updated' : section.status === 'good' ? 'good' : 'skipped'
+  const nextIsPrimary = section.status === 'good' || savedThisPart
 
   return (
     <>
@@ -840,92 +1221,91 @@ function AiPart({ section, index, total, onBack, onDone, drafting, draft, draftE
               Skip for now
             </button>
           </>
+        ) : editing && editableKind ? (
+          <>
+            {editableKind === 'description' && (
+              <DescriptionEditor
+                key={editSession}
+                initialText={detail?.kind === 'description' && detail.text ? detail.text : ''}
+                saving={saving}
+                serverNote={note?.tone === 'error' ? note : null}
+                drafting={drafting}
+                draft={draft}
+                draftError={draftError}
+                onDraft={onDraft}
+                onCancel={() => setEditing(false)}
+                onSave={(t) => { void saveDescription(t) }}
+              />
+            )}
+            {editableKind === 'hours' && (
+              <HoursEditor
+                key={editSession}
+                initialRows={hoursRowsFromDetail(detail?.kind === 'hours' ? detail.days : undefined)}
+                saving={saving}
+                serverNote={note?.tone === 'error' ? note : null}
+                onCancel={() => setEditing(false)}
+                onSave={(rows) => { void saveHours(rows) }}
+              />
+            )}
+            {editableKind === 'links' && (
+              <LinksEditor
+                key={editSession}
+                initialWebsite={detail?.kind === 'links' ? detail.website ?? '' : ''}
+                initialPhone={detail?.kind === 'links' ? detail.phone ?? '' : ''}
+                saving={saving}
+                serverNote={note?.tone === 'error' ? note : null}
+                onCancel={() => setEditing(false)}
+                onSave={(c) => { void saveLinks(c) }}
+              />
+            )}
+          </>
         ) : (
           <>
             <div style={{ background: C.bg, borderRadius: 11, padding: '10px 12px', marginBottom: 10 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 6 }}>On Google now</div>
-              {section.detail
-                ? <PartDetail detail={section.detail} summary={current} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint }}>On Google now</span>
+                {!actionable && editableKind && (
+                  <button type="button" onClick={openEditor} style={smallEditBtnStyle}>
+                    <Pencil size={12} /> Edit
+                  </button>
+                )}
+                {!actionable && !editableKind && googleEditHref && (
+                  <a href={googleEditHref} target="_blank" rel="noopener noreferrer" style={smallEditLinkStyle}>
+                    Edit on Google <ExternalLink size={11} />
+                  </a>
+                )}
+              </div>
+              {detail
+                ? <PartDetail detail={detail} summary={current} />
                 : <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{current}</div>}
             </div>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 3 }}>Why it matters</div>
             <p style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: 0 }}>{section.why}</p>
 
-            {section.status === 'good' ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onDone('good')}
-                  className="mvp-row"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 14, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
-                >
-                  This is correct, next
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFixOpen((v) => !v)}
-                  aria-expanded={fixOpen}
-                  className="mvp-row"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 6, height: 42, borderRadius: 12, border: 'none', background: 'none', color: C.mute, fontSize: 14, fontWeight: 600, cursor: 'pointer', font: 'inherit' }}
-                >
-                  Something is off
-                </button>
-                {fixOpen && (
-                  <>
-                    {section.key === 'description' && (
-                      <DraftBlock
-                        drafting={drafting}
-                        draft={draft}
-                        draftError={draftError}
-                        copied={copied}
-                        onDraft={onDraft}
-                        onCopy={onCopy}
-                      />
-                    )}
-                    <AiFixLink />
-                    <button
-                      type="button"
-                      onClick={() => onDone('updated')}
-                      className="mvp-row"
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 10, height: 46, borderRadius: 13, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
-                    >
-                      <Check size={16} strokeWidth={3} /> I updated it
-                    </button>
-                  </>
-                )}
-              </>
-            ) : (
-              <>
-                {canDraft ? (
-                  <DraftBlock
-                    drafting={drafting}
-                    draft={draft}
-                    draftError={draftError}
-                    copied={copied}
-                    onDraft={onDraft}
-                    onCopy={onCopy}
-                  />
-                ) : (
-                  <AiFixLink />
-                )}
-                <button
-                  type="button"
-                  onClick={() => onDone('updated')}
-                  className="mvp-row"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 10, height: 46, borderRadius: 13, border: 'none', background: canDraft && !draft ? '#fff' : C.green, color: canDraft && !draft ? C.greenDk : '#fff', ...(canDraft && !draft ? { border: `0.5px solid ${C.line}` } : {}), fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
-                >
-                  <Check size={16} strokeWidth={3} /> I updated it
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDone('skipped')}
-                  className="mvp-row"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 6, height: 42, borderRadius: 12, border: 'none', background: 'none', color: C.mute, fontSize: 14, fontWeight: 600, cursor: 'pointer', font: 'inherit' }}
-                >
-                  Skip for now
-                </button>
-              </>
+            {actionable && editableKind && (
+              <button
+                type="button"
+                onClick={openEditor}
+                className="mvp-row"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 14, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
+              >
+                <Pencil size={15} /> {editCta}
+              </button>
             )}
+            {actionable && !editableKind && googleEditHref && <GoogleEditBlock href={googleEditHref} />}
+
+            {note && <SaveNoteLine note={note} />}
+
+            <button
+              type="button"
+              onClick={() => onDone(nextOutcome)}
+              className="mvp-row"
+              style={nextIsPrimary
+                ? { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 14, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }
+                : { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 10, height: 46, borderRadius: 13, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
+            >
+              {isLast ? 'Finish' : 'Next'}
+            </button>
           </>
         )}
       </div>
@@ -933,22 +1313,212 @@ function AiPart({ section, index, total, onBack, onDone, drafting, draft, draftE
   )
 }
 
-/** AI review's fix-it link for parts without a built draft. Honest: the owner
- *  makes the change on Google, we never claim to. */
-function AiFixLink() {
+/** Edit → Save for the description: a textarea prefilled with what Google
+ *  shows, a live count against Google's 250 to 750 rule, and "Draft it for
+ *  me" (the existing AI draft) that FILLS the textarea for the owner to tweak. */
+function DescriptionEditor({ initialText, saving, serverNote, drafting, draft, draftError, onDraft, onCancel, onSave }: {
+  initialText: string
+  saving: boolean
+  serverNote: SaveNote | null
+  drafting: boolean
+  draft: string | null
+  draftError: string | null
+  onDraft: () => void
+  onCancel: () => void
+  onSave: (text: string) => void
+}) {
+  const [text, setText] = useState(initialText)
+  const [localError, setLocalError] = useState<string | null>(null)
+  // Only a draft that arrives WHILE this editor is open fills the box; a
+  // draft left over from earlier never clobbers the prefill.
+  const appliedDraftRef = useRef(draft)
+  useEffect(() => {
+    if (draft && draft !== appliedDraftRef.current) {
+      appliedDraftRef.current = draft
+      setText(draft)
+      setLocalError(null)
+    }
+  }, [draft])
+
+  const len = text.trim().length
+  const countBad = len > DESC_MAX || (len > 0 && len < DESC_MIN)
+
+  const submit = () => {
+    const v = text.trim()
+    if (v.length < DESC_MIN) { setLocalError(`Your description needs at least ${DESC_MIN} characters. It has ${v.length}.`); return }
+    if (v.length > DESC_MAX) { setLocalError(`Google allows up to ${DESC_MAX} characters. This has ${v.length}.`); return }
+    setLocalError(null)
+    onSave(v)
+  }
+
+  return (
+    <div>
+      <textarea
+        value={text}
+        onChange={(e) => { setText(e.target.value); setLocalError(null) }}
+        rows={7}
+        placeholder="Tell people what makes your place worth the trip."
+        aria-label="Your description"
+        style={{ width: '100%', boxSizing: 'border-box', borderRadius: 11, border: `0.5px solid ${C.line}`, background: C.bg, padding: '10px 12px', fontSize: 13.5, lineHeight: 1.55, color: C.ink, font: 'inherit', resize: 'vertical' }}
+      />
+      <div style={{ fontSize: 12, color: countBad ? C.red : C.mute, margin: '6px 2px 0' }}>
+        {len} of {DESC_MAX} characters. Aim for {DESC_MIN} to {DESC_MAX}.
+      </div>
+      <button
+        type="button"
+        onClick={onDraft}
+        disabled={drafting || saving}
+        className="mvp-row"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 10, height: 44, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 14.5, fontWeight: 700, cursor: drafting ? 'default' : 'pointer', opacity: drafting ? 0.8 : 1, font: 'inherit' }}
+      >
+        {drafting
+          ? <><Loader2 size={15} className="mvp-spin" /> Writing your draft&hellip;</>
+          : <><Sparkles size={15} /> Draft it for me</>}
+      </button>
+      {draftError && <div style={errLineStyle}>{draftError}</div>}
+      {localError && <div style={errLineStyle}>{localError}</div>}
+      {serverNote && <SaveNoteLine note={serverNote} />}
+      <SaveCancelRow saving={saving} onSave={submit} onCancel={onCancel} />
+    </div>
+  )
+}
+
+/** Edit → Save for hours: one row per day (Closed toggle + open/close time
+ *  inputs) prefilled from what Google shows. The save replaces the whole
+ *  week, so all 7 days always travel together. */
+function HoursEditor({ initialRows, saving, serverNote, onCancel, onSave }: {
+  initialRows: HoursRowDraft[]
+  saving: boolean
+  serverNote: SaveNote | null
+  onCancel: () => void
+  onSave: (rows: HoursRowDraft[]) => void
+}) {
+  const [rows, setRows] = useState(initialRows)
+  const [localError, setLocalError] = useState<string | null>(null)
+  const patch = (i: number, p: Partial<HoursRowDraft>) => {
+    setLocalError(null)
+    setRows((cur) => cur.map((r, j) => (j === i ? { ...r, ...p } : r)))
+  }
+  const submit = () => {
+    const err = hoursRowsError(rows)
+    if (err) { setLocalError(err); return }
+    setLocalError(null)
+    onSave(rows)
+  }
+  return (
+    <div>
+      {rows.map((r, i) => (
+        <div key={r.day} style={{ padding: '8px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.ink }}>{r.label}</span>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: C.mute, cursor: 'pointer' }}>
+              <input type="checkbox" checked={r.closed} onChange={(e) => patch(i, { closed: e.target.checked })} />
+              Closed
+            </label>
+          </div>
+          {!r.closed && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 6 }}>
+              <input type="time" value={r.open} onChange={(e) => patch(i, { open: e.target.value })} aria-label={`${r.label} opens`} style={timeInputStyle} />
+              <span style={{ fontSize: 12.5, color: C.mute, flexShrink: 0 }}>to</span>
+              <input type="time" value={r.close} onChange={(e) => patch(i, { close: e.target.value })} aria-label={`${r.label} closes`} style={timeInputStyle} />
+            </div>
+          )}
+          {r.multi && (
+            <p style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.45, margin: '6px 0 0' }}>
+              This day has more than one time range on Google. Saving replaces it with one range.
+            </p>
+          )}
+        </div>
+      ))}
+      <p style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.45, margin: '8px 0 0' }}>
+        To close at midnight, set the close time to 12:00 AM.
+      </p>
+      {localError && <div style={errLineStyle}>{localError}</div>}
+      {serverNote && <SaveNoteLine note={serverNote} />}
+      <SaveCancelRow saving={saving} onSave={submit} onCancel={onCancel} />
+    </div>
+  )
+}
+
+/** Edit → Save for website + phone: two labeled inputs. Each field is its own
+ *  rail kind, so only changed fields are sent (one call each, in order). */
+function LinksEditor({ initialWebsite, initialPhone, saving, serverNote, onCancel, onSave }: {
+  initialWebsite: string
+  initialPhone: string
+  saving: boolean
+  serverNote: SaveNote | null
+  onCancel: () => void
+  onSave: (changes: { website?: string; phone?: string }) => void
+}) {
+  const [website, setWebsite] = useState(initialWebsite)
+  const [phone, setPhone] = useState(initialPhone)
+  const [localError, setLocalError] = useState<string | null>(null)
+  const websiteChanged = website.trim() !== initialWebsite.trim() && website.trim() !== ''
+  const phoneChanged = phone.trim() !== initialPhone.trim() && phone.trim() !== ''
+  const nothingToSave = !websiteChanged && !phoneChanged
+  const submit = () => {
+    if (nothingToSave) return
+    if (websiteChanged && !/^https:\/\//i.test(website.trim())) {
+      setLocalError('The website address must start with https:// so Google shows a secure link.')
+      return
+    }
+    if (phoneChanged) {
+      const digits = phone.replace(/\D/g, '').length
+      if (digits < 10 || digits > 15) { setLocalError('A phone number needs 10 to 15 digits.'); return }
+    }
+    setLocalError(null)
+    onSave({ ...(websiteChanged ? { website: website.trim() } : {}), ...(phoneChanged ? { phone: phone.trim() } : {}) })
+  }
+  return (
+    <div>
+      <label style={fieldLabelStyle} htmlFor="gbp-edit-website">Website</label>
+      <input
+        id="gbp-edit-website"
+        type="url"
+        inputMode="url"
+        value={website}
+        onChange={(e) => { setWebsite(e.target.value); setLocalError(null) }}
+        placeholder="https://yourplace.com"
+        style={textInputStyle}
+      />
+      <label style={{ ...fieldLabelStyle, marginTop: 12 }} htmlFor="gbp-edit-phone">Phone</label>
+      <input
+        id="gbp-edit-phone"
+        type="tel"
+        inputMode="tel"
+        value={phone}
+        onChange={(e) => { setPhone(e.target.value); setLocalError(null) }}
+        placeholder="(555) 123-4567"
+        style={textInputStyle}
+      />
+      {nothingToSave && (
+        <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '9px 0 0' }}>
+          Change the website or the phone number, then save.
+        </p>
+      )}
+      {localError && <div style={errLineStyle}>{localError}</div>}
+      {serverNote && <SaveNoteLine note={serverNote} />}
+      <SaveCancelRow saving={saving} disabled={nothingToSave} onSave={submit} onCancel={onCancel} />
+    </div>
+  )
+}
+
+/** The fix path for the kinds the save rail cannot write (categories, menu,
+ *  photos): a real link to Google's own editor, never a fake in-app one. */
+function GoogleEditBlock({ href }: { href: string }) {
   return (
     <div style={{ marginTop: 12 }}>
       <a
-        href="https://business.google.com"
+        href={href}
         target="_blank"
         rel="noopener noreferrer"
         className="mvp-row"
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', height: 44, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 14.5, fontWeight: 700, textDecoration: 'none' }}
       >
-        Fix it on Google <ExternalLink size={15} />
+        Edit this on Google <ExternalLink size={15} />
       </a>
       <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '9px 0 0' }}>
-        Make the change on Google, then come back and tap I updated it.
+        Edit this on Google, then come back. We will re-check.
       </p>
     </div>
   )
@@ -1180,6 +1750,25 @@ function AiSummary({ sections, outcomes, allGood, taskDone, rechecking, recheckF
           </p>
         </>
       )}
+
+      {/* What's next: the other half of the Google helper. */}
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, margin: '0 2px 8px' }}>
+          What&rsquo;s next
+        </div>
+        <Link href={REVIEWS_HREF} className="mvp-row" style={hubCardStyle}>
+          <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Star size={19} color={C.greenDk} />
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>Your reviews</span>
+            <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
+              Read new reviews and reply with AI help.
+            </span>
+          </span>
+          <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
+        </Link>
+      </div>
     </>
   )
 }

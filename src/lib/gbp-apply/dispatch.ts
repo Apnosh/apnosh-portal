@@ -10,12 +10,16 @@ import 'server-only'
  * applied, falling back to a per-instance token bucket until then.
  */
 import { getActiveTokenForClient } from '@/lib/gbp-menu'
-import { updateClientListing, getClientListing } from '@/lib/gbp-listing'
+import { getClientListing } from '@/lib/gbp-listing'
 import { publishToGbp } from '@/lib/publish/gbp'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { draftDescription, draftGbpPost } from './draft'
-import { validateDescription, validateGbpPost } from './validate'
+import { validateGbpPost } from './validate'
+import { pushFieldWrite } from './fields'
+import { acquireWriteSlot } from './pace'
 import type { StepAction } from './bindings'
+
+export { acquireWriteSlot }
 
 export type ApplyResult = {
   ok: boolean
@@ -29,28 +33,8 @@ export type ApplyResult = {
   detail?: Record<string, unknown> | null
 }
 
-/* ── Paced write path: ≤10 edits/min per GBP location (Google's un-raisable cap).
- *    Source of truth = the gbp_write_ledger RPC (atomic, shared across server instances; migration
- *    191). Until that migration is applied, fall back to the in-memory per-instance bucket — safe for
- *    one careful operator, NOT for concurrent fleets, which is why the durable path exists. */
-const writeStamps = new Map<string, number[]>()
-function acquireLocalSlot(key: string, limit = 10, windowMs = 60_000): boolean {
-  const now = Date.now()
-  const recent = (writeStamps.get(key) ?? []).filter((t) => now - t < windowMs)
-  if (recent.length >= limit) { writeStamps.set(key, recent); return false }
-  recent.push(now)
-  writeStamps.set(key, recent)
-  return true
-}
-
-export async function acquireWriteSlot(locationKey: string): Promise<boolean> {
-  const admin = createAdminClient()
-  try {
-    const { data, error } = await admin.rpc('gbp_acquire_write_slot', { p_location: locationKey, p_limit: 10, p_window_secs: 60 })
-    if (!error && typeof data === 'boolean') return data
-  } catch { /* table/function not applied yet — fall back below */ }
-  return acquireLocalSlot(locationKey)
-}
+/* Paced write path (≤10 edits/min per GBP location) lives in ./pace — shared with the
+ * generic field-write engine (./fields) so both draw from ONE slot pool per location. */
 
 async function accessProbe(clientId: string): Promise<ApplyResult> {
   const tok = await getActiveTokenForClient(clientId, null)
@@ -203,33 +187,10 @@ export async function pushWrite(clientId: string, action: StepAction, value: str
   if (action.handler === 'gbpPosts') return pushGbpPost(clientId, value)
   if (action.handler !== 'description') return { ok: false, enabled: false, reason: `Live push for ${action.label} is wired next.` }
 
-  // 1. Validate BEFORE anything else — an invalid value must never burn a rate slot or reach Google.
-  const check = validateDescription(value)
-  if (!check.ok) return { ok: false, error: check.error }
-  const v = check.value
-
-  // 2. Resolve the target location. Guard the ambiguous case: a client with multiple assigned GBP
-  //    locations would silently write to the default-resolved one, so refuse until targeting is wired.
-  const tok = await getActiveTokenForClient(clientId, null)
-  if ('error' in tok) return { ok: false, error: `Not connected to Google yet: ${tok.error}` }
-  const admin = createAdminClient()
-  const { count } = await admin.from('gbp_locations').select('id', { count: 'exact', head: true }).eq('client_id', clientId).eq('status', 'assigned')
-  if ((count ?? 0) > 1) return { ok: false, error: 'This client has more than one Google location, so a push could hit the wrong one. Per-location targeting is coming; for now make this edit in the Google dashboard.' }
-
-  // 3. Pace per location (10/min, un-raisable), only now that the write is definitely going out.
-  if (!(await acquireWriteSlot(tok.v4Path))) return { ok: false, error: 'Too many Google edits in the last minute for this profile. Wait a moment and push again.' }
-
-  // 4. Write, then read back and COMPARE. Only a matching read-back earns "live"; anything else is
-  //    reported for what it is, so the tool never claims more than Google confirmed.
-  const res = await updateClientListing(clientId, { description: v })
-  if (!res.ok) return { ok: false, error: res.error }
-  const live = await getClientListing(clientId, null)
-  if (!live.ok) {
-    return { ok: true, summary: 'Saved to Google, but the read-back to confirm failed. Open the live profile and verify it shows the new text.', detail: { sent: v, readBack: null, verified: false } }
-  }
-  const readBack = live.fields.description ?? null
-  const matches = (readBack ?? '').replace(/\s+/g, ' ').trim() === v.replace(/\s+/g, ' ').trim()
-  return matches
-    ? { ok: true, summary: 'The description is confirmed live on the Google profile.', detail: { sent: v, readBack, verified: true } }
-    : { ok: true, summary: 'Submitted to Google, but the profile is not showing the new text yet (Google may still be processing or reviewing it). Check again shortly.', detail: { sent: v, readBack, verified: false } }
+  // The description write runs on the shared field-write engine (fields.ts), which carries the
+  // exact pipeline that used to live inline here: validate first (never burn a rate slot on an
+  // invalid value) → refuse multi-location clients → per-location 10/min slot → PATCH →
+  // read-back compare, claiming "live" only on a match. Same messages, byte-for-byte — the
+  // parity is locked by scripts/verify-gbp-apply.ts.
+  return pushFieldWrite(clientId, 'description', value)
 }
