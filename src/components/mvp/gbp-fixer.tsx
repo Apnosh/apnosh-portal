@@ -13,8 +13,13 @@
  *    expanded at a time, each with a "Fix it on Google" link.
  *  - ai (Pro, "Apnosh AI"): a guided review, part by part. A small intro
  *    ("Let's review your profile, part by part."), then ONE part per screen
- *    (status chip, what is on Google now, why it matters, and the action:
- *    approve, draft (description only), fix on Google, or skip), then a
+ *    (status chip, the REAL content on Google now via the engine's `detail`
+ *    payload — the 7-day hours table, the category chips, the full
+ *    description, the photo grid, the menu items, the website + phone —
+ *    with the summary string as the fallback when detail is absent; why it
+ *    matters; and the action: confirm ("This is correct, next" with a
+ *    "Something is off" fix path on good parts), draft (description only),
+ *    fix on Google, or skip), then a
  *    summary of every outcome with a fresh "Check my profile again". Review
  *    progress resumes from localStorage (keyed by client id) so a refresh
  *    never restarts at part 1; a fresh all-good read clears the save.
@@ -30,7 +35,7 @@
  *    (or copies the draft over), then tells us with "I updated it".
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { Loader2, Check, ChevronDown, ChevronLeft, Sparkles, Copy, ExternalLink, Plug } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
@@ -40,6 +45,16 @@ import { isProTier } from '@/lib/entitlements'
    src/lib/gbp-diagnose.ts (that module is server-only, so the shapes are
    restated here rather than imported into the client bundle). */
 type GbpSectionStatus = 'good' | 'needs-work' | 'missing' | 'unknown'
+/** Per-section content detail (mirrors GbpSectionDetail in gbp-diagnose.ts).
+ *  Every value was read from Google on this diagnosis; when a read failed the
+ *  engine omits `detail` and the UI falls back to the `current` summary. */
+type GbpSectionDetail =
+  | { kind: 'hours'; days: Array<{ day: string; hours: string }>; specialCount?: number }
+  | { kind: 'categories'; primary: string | null; additional: string[] }
+  | { kind: 'description'; text: string | null }
+  | { kind: 'photos'; count: number; newestLabel?: string; items: Array<{ url: string }> }
+  | { kind: 'menu'; itemCount: number; items: Array<{ name: string; price?: string }>; menuLink?: string | null }
+  | { kind: 'links'; website: string | null; phone: string | null }
 interface GbpDiagnosisSection {
   key: string
   label: string
@@ -47,6 +62,7 @@ interface GbpDiagnosisSection {
   current: string
   why: string
   aiFixable: boolean
+  detail?: GbpSectionDetail
 }
 interface GbpDiagnosis {
   connected: boolean
@@ -693,6 +709,7 @@ export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, 
 
       {phase.name === 'part' && sections[phase.index] && (
         <AiPart
+          key={sections[phase.index].key}
           section={sections[phase.index]}
           index={phase.index}
           total={total}
@@ -738,11 +755,11 @@ function AiIntro({ total, needsWork, onStart }: { total: number; needsWork: numb
         Let&rsquo;s review your profile, part by part.
       </div>
       <div style={{ fontSize: 13.5, color: C.mute, marginTop: 6, lineHeight: 1.55 }}>
-        Your Google listing has {total} parts. We checked each one.{' '}
+        Your Google listing has {total} parts. We pulled what Google shows today.{' '}
         {needsWork > 0
           ? `${needsWork} ${needsWork === 1 ? 'part could use' : 'parts could use'} some work.`
           : 'They all look good right now.'}{' '}
-        You approve each part as we go.
+        Check each part is right as we go.
       </div>
       <button
         type="button"
@@ -776,6 +793,11 @@ function AiPart({ section, index, total, onBack, onDone, drafting, draft, draftE
   // "Draft it for me" exists ONLY for the description (the one AI draft that is actually built).
   const canDraft = actionable && section.key === 'description'
   const current = section.current && section.current.trim() ? section.current : 'Nothing yet'
+  // A good part can still be WRONG (an old Tuesday hour, a stale phone number).
+  // "Something is off" opens the same fix path problem parts get, so the owner
+  // can correct it without leaving the review. Resets per part (AiPart is
+  // keyed by section, so moving on remounts it closed).
+  const [fixOpen, setFixOpen] = useState(false)
 
   return (
     <>
@@ -821,21 +843,57 @@ function AiPart({ section, index, total, onBack, onDone, drafting, draft, draftE
         ) : (
           <>
             <div style={{ background: C.bg, borderRadius: 11, padding: '10px 12px', marginBottom: 10 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 3 }}>On Google now</div>
-              <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{current}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 6 }}>On Google now</div>
+              {section.detail
+                ? <PartDetail detail={section.detail} summary={current} />
+                : <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{current}</div>}
             </div>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 3 }}>Why it matters</div>
             <p style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: 0 }}>{section.why}</p>
 
             {section.status === 'good' ? (
-              <button
-                type="button"
-                onClick={() => onDone('good')}
-                className="mvp-row"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 14, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
-              >
-                Looks good, next
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => onDone('good')}
+                  className="mvp-row"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 14, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
+                >
+                  This is correct, next
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFixOpen((v) => !v)}
+                  aria-expanded={fixOpen}
+                  className="mvp-row"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 6, height: 42, borderRadius: 12, border: 'none', background: 'none', color: C.mute, fontSize: 14, fontWeight: 600, cursor: 'pointer', font: 'inherit' }}
+                >
+                  Something is off
+                </button>
+                {fixOpen && (
+                  <>
+                    {section.key === 'description' && (
+                      <DraftBlock
+                        drafting={drafting}
+                        draft={draft}
+                        draftError={draftError}
+                        copied={copied}
+                        onDraft={onDraft}
+                        onCopy={onCopy}
+                      />
+                    )}
+                    <AiFixLink />
+                    <button
+                      type="button"
+                      onClick={() => onDone('updated')}
+                      className="mvp-row"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 10, height: 46, borderRadius: 13, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
+                    >
+                      <Check size={16} strokeWidth={3} /> I updated it
+                    </button>
+                  </>
+                )}
+              </>
             ) : (
               <>
                 {canDraft ? (
@@ -892,6 +950,150 @@ function AiFixLink() {
       <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '9px 0 0' }}>
         Make the change on Google, then come back and tap I updated it.
       </p>
+    </div>
+  )
+}
+
+/** "example.com/menu" → a safe absolute href. Google returns full URLs, but a
+ *  bare host would otherwise resolve as a relative path. */
+const safeHref = (url: string) => (/^https?:\/\//i.test(url) ? url : `https://${url}`)
+
+/** A label/value row for the tabular details (hours, menu items, links). */
+const detailRowStyle = (first: boolean): CSSProperties => ({
+  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12,
+  padding: '4.5px 0', borderTop: first ? 'none' : `0.5px solid ${C.line}`,
+})
+
+/**
+ * The real content on Google for one part, rendered per detail kind so the
+ * owner can actually CHECK it (see the hours, read the description, look at
+ * the photos) instead of trusting a one-line summary. Every value came off
+ * Google on this diagnosis; when a kind has nothing to show, it falls back
+ * to the honest summary string, never a blank box.
+ */
+function PartDetail({ detail, summary }: { detail: GbpSectionDetail; summary: string }) {
+  const summaryLine = <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{summary}</div>
+
+  if (detail.kind === 'hours') {
+    return (
+      <div>
+        {detail.days.map((d, i) => (
+          <div key={d.day} style={detailRowStyle(i === 0)}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{d.day}</span>
+            <span style={{ fontSize: 13, color: d.hours === 'Closed' ? C.mute : C.ink, textAlign: 'right' }}>{d.hours}</span>
+          </div>
+        ))}
+        {(detail.specialCount ?? 0) > 0 && (
+          <div style={{ fontSize: 12, color: C.mute, marginTop: 7, lineHeight: 1.45 }}>
+            You also set special hours for {detail.specialCount} {detail.specialCount === 1 ? 'date' : 'dates'}.
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (detail.kind === 'categories') {
+    if (!detail.primary && detail.additional.length === 0) return summaryLine
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {detail.primary && (
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '5px 11px' }}>
+            Main: {detail.primary}
+          </span>
+        )}
+        {detail.additional.map((c) => (
+          <span key={c} style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 99, padding: '5px 11px' }}>
+            {c}
+          </span>
+        ))}
+      </div>
+    )
+  }
+
+  if (detail.kind === 'description') {
+    if (!detail.text) return summaryLine
+    return (
+      <div style={{ maxHeight: 190, overflowY: 'auto', fontSize: 13.5, color: C.ink, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+        {detail.text}
+      </div>
+    )
+  }
+
+  if (detail.kind === 'photos') {
+    return (
+      <div>
+        {summaryLine}
+        {detail.items.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 9 }}>
+            {detail.items.map((it, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={`${it.url}-${i}`}
+                src={it.url}
+                alt=""
+                loading="lazy"
+                style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 9, display: 'block', background: '#e9e9ee' }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (detail.kind === 'menu') {
+    if (detail.items.length === 0 && !detail.menuLink) return summaryLine
+    const more = detail.itemCount - detail.items.length
+    return (
+      <div>
+        {detail.items.map((it, i) => (
+          <div key={`${it.name}-${i}`} style={detailRowStyle(i === 0)}>
+            <span style={{ fontSize: 13, color: C.ink, minWidth: 0 }}>{it.name}</span>
+            {it.price && <span style={{ fontSize: 13, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{it.price}</span>}
+          </div>
+        ))}
+        {more > 0 && <div style={{ fontSize: 12, color: C.mute, marginTop: 7 }}>and {more} more</div>}
+        {detail.menuLink && (
+          <div style={{ marginTop: detail.items.length > 0 ? 8 : 0 }}>
+            <div style={{ fontSize: 12, color: C.mute, marginBottom: 2 }}>Your menu link</div>
+            <a
+              href={safeHref(detail.menuLink)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none', wordBreak: 'break-all' }}
+            >
+              {detail.menuLink} <ExternalLink size={12} style={{ flexShrink: 0 }} />
+            </a>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  /* links */
+  return (
+    <div>
+      <div style={detailRowStyle(true)}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.ink, flexShrink: 0 }}>Website</span>
+        {detail.website
+          ? (
+            <a
+              href={safeHref(detail.website)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: 13, fontWeight: 600, color: C.greenDk, textDecoration: 'none', textAlign: 'right', wordBreak: 'break-all', minWidth: 0 }}
+            >
+              {detail.website}
+            </a>
+          )
+          : <span style={{ fontSize: 13, color: C.mute }}>Not set</span>}
+      </div>
+      <div style={detailRowStyle(false)}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.ink, flexShrink: 0 }}>Phone</span>
+        {detail.phone
+          ? <span style={{ fontSize: 13, color: C.ink, textAlign: 'right' }}>{detail.phone}</span>
+          : <span style={{ fontSize: 13, color: C.mute }}>Not set</span>}
+      </div>
     </div>
   )
 }
