@@ -3259,32 +3259,28 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
           </div>
         )}
 
-        {/* ── BUY — INLINE at the END of the flow (NOT sticky/floating, so nothing overlaps the
-              content). Live total, then "Add to plan" as the bold filled PRIMARY (collect-only to a
-              local draft; ships and bills nothing) and "Buy now instead" as the quiet secondary link
-              that carries the version + options into today's Continue flow. AI-lane keeps its Pro path. ── */}
-        <div style={{ padding: "24px 20px 4px" }}>
-          <div style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 20, padding: "16px 16px 18px", boxShadow: "0 10px 26px rgba(20,40,30,0.06)" }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
-              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
-              <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{totalLabel}</span>
-            </div>
-            <button onClick={onAddToPlan} className="apnpress" style={{ width: "100%", height: 54, borderRadius: 27, border: "none", cursor: "pointer", background: added ? TOKENS.mintDark : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
-              {added ? (
-                <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>Added to your plan</>
-              ) : (
-                <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Add to plan</>
-              )}
-            </button>
-            {upsellAi ? (
-              <a href="/dashboard/billing" className="apnpress" style={{ display: "block", textAlign: "center", textDecoration: "none", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 13 }}>Upgrade to Pro to use Apnosh AI</a>
-            ) : (
-              <button onClick={() => onContinue(buildPreset())} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 13, WebkitTapHighlightColor: "transparent" }}>Buy now instead</button>
-            )}
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, textAlign: "center", marginTop: 10 }}>
-              {upsellAi ? "Apnosh AI is on the Pro plan. Or pick one of the other two." : "Nothing ships or bills until you say so."}
-            </div>
+        {/* ── BUY — pinned to the bottom of the scroll area (position: sticky), so the total + Add to
+              plan stay in reach as the owner scrolls; content passes under its opaque bar. "Add to
+              plan" is the bold filled PRIMARY (collect-only local draft, ships/bills nothing); "Buy
+              now instead" the quiet secondary carrying version + options into Continue; AI keeps its
+              Pro path. ── */}
+        <div style={{ position: "sticky", bottom: 0, zIndex: 5, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.10)", padding: "11px 18px calc(12px + env(safe-area-inset-bottom))" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 9 }}>
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
+            <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{totalLabel}</span>
           </div>
+          <button onClick={onAddToPlan} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: added ? TOKENS.mintDark : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
+            {added ? (
+              <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>Added to your plan</>
+            ) : (
+              <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Add to plan</>
+            )}
+          </button>
+          {upsellAi ? (
+            <a href="/dashboard/billing" className="apnpress" style={{ display: "block", textAlign: "center", textDecoration: "none", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 10 }}>Upgrade to Pro to use Apnosh AI</a>
+          ) : (
+            <button onClick={() => onContinue(buildPreset())} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Buy now instead</button>
+          )}
         </div>
       </div>
     </div>
