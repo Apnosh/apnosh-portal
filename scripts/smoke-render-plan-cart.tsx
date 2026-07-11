@@ -28,8 +28,8 @@ const GBP_AI = 'done with Apnosh AI, step by step, free'
 async function main() {
   const mod = await import('../src/components/mvp/campaign-builder/apnosh-campaign')
   const { planTotals, planItemMoney } = await import('../src/lib/campaigns/builder/plan-draft')
-  const PlanBar = mod.PlanBar as React.ComponentType<Record<string, unknown>>
-  const PlanView = mod.PlanView as React.ComponentType<Record<string, unknown>>
+  const PlanBar = mod.PlanBar as unknown as React.ComponentType<Record<string, unknown>>
+  const PlanView = mod.PlanView as unknown as React.ComponentType<Record<string, unknown>>
   const Store = mod.default as unknown as React.ComponentType<Record<string, unknown>>
   const noop = () => undefined
 
