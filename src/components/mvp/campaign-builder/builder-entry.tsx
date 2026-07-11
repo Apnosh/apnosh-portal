@@ -20,6 +20,8 @@ import { registerDbCampaigns, type DbCampaign } from '@/lib/campaigns/data/db-ca
 import type { CampaignProfile } from '@/lib/campaigns/builder/campaign-profile'
 import type { Diagnosis } from '@/lib/campaigns/planning/types'
 import { summarize, type LineItem, type CampaignDraft, type PieceProducer, type CampaignReceipt } from '@/lib/campaigns/types'
+import { saveAndShip } from '@/lib/campaigns/builder/ship'
+import { clearPlan } from '@/lib/campaigns/builder/plan-draft'
 import CampaignPlanFlow from '@/components/campaigns/plan-flow/campaign-plan-flow'
 import PlanAnalyzing from '@/components/campaigns/plan-flow/plan-analyzing'
 import OrderConfirmed from '@/components/campaigns/plan-flow/order-confirmed'
@@ -31,7 +33,7 @@ type MenuOpt = { l: string; photo?: string; f?: boolean }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
 type PlanPayload = { itemId: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; contentOverrides?: ContentOverrideMap | null; dbCampaigns?: DbCampaign[] | null; tier?: string | null; clientId?: string | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; initialView?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; contentOverrides?: ContentOverrideMap | null; dbCampaigns?: DbCampaign[] | null; tier?: string | null; clientId?: string | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void; onCheckout?: (draft: CampaignDraft) => Promise<boolean> }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -387,39 +389,42 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
   }
 
   // Confirm the order: create the campaign with the owner's edited pieces + service
-  // choices, then ship it (the team starts), and land on the live campaign.
+  // choices, then ship it (the team starts), and land on the live campaign. The POST +
+  // PATCH rail lives in saveAndShip (ship.ts), shared with the plan (cart) checkout.
   // Owner-facing copy when the confirm fails partway: the campaign is at most a saved
   // draft (status never flipped), so nothing was ordered and tapping Confirm again is safe.
-  const SHIP_FAIL = "That didn't go through. Nothing was ordered. Try again."
   const onConfirm = async ({ draft, producerChoices, receipt }: { draft: CampaignDraft; producerChoices: Record<string, PieceProducer>; receipt: CampaignReceipt }) => {
     if (!client?.id) return
     setPlanBusy(true); setPlanError(null)
-    const h = { 'Content-Type': 'application/json' }
     try {
-      const res = await fetch('/api/campaigns', { method: 'POST', headers: h, body: JSON.stringify({ clientId: client.id, draft }) })
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not create the campaign')
-      const { id } = (await res.json()) as { id?: string }
-      if (!id) throw new Error('Could not create the campaign')
-      // Both PATCHes must land before the receipt shows. The producer picks decide who
-      // makes each piece (and what it bills), and the status flip IS the order: swallowing
-      // a failure here would show "you're all set" over a campaign still sitting in draft.
-      if (Object.keys(producerChoices).length) {
-        const pr = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify({ fields: { producer_choices: producerChoices } }) }).catch(() => null)
-        if (!pr || !pr.ok) throw new Error(SHIP_FAIL)
-      }
-      const sr = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: new Date().toISOString() } }) }).catch(() => null)
-      if (!sr || !sr.ok) throw new Error(SHIP_FAIL)
+      const id = await saveAndShip({ clientId: client.id, draft, producerChoices })
       // Remember durable answers on the profile (fill-when-empty, server-side; a
       // failure costs nothing) — a cold client's first campaign teaches the brain
       // what they're after and who they're for, instead of the answers evaporating
       // with the draft and being re-asked forever.
       if (plan?.itemId && plan?.vals) {
-        fetch('/api/campaigns/profile-recall', { method: 'POST', headers: h, body: JSON.stringify({ clientId: client.id, goalId: plan.itemId, vals: plan.vals }) }).catch(() => {})
+        fetch('/api/campaigns/profile-recall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: client.id, goalId: plan.itemId, vals: plan.vals }) }).catch(() => {})
       }
       // Show the "you're all set" receipt (with a handoff to setup) instead of jumping straight in.
       setConfirmed({ id, draft, receipt }); setPlanBusy(false)
     } catch (e) {
       setPlanError(e instanceof Error ? e.message : 'Something went wrong'); setPlanBusy(false)
+    }
+  }
+
+  // The plan (cart) checkout: the store hands up ONE pre-merged draft (composePlanCampaign)
+  // and it ships through the SAME rail as Buy now. On success the plan clears and the owner
+  // lands on the new campaign's "Get it ready" page — the same post-ship destination Buy
+  // now hands off to. On failure nothing shipped and the plan is untouched; retry is safe.
+  const onCheckout = async (draft: CampaignDraft): Promise<boolean> => {
+    if (!client?.id) return false
+    try {
+      const id = await saveAndShip({ clientId: client.id, draft })
+      clearPlan()
+      router.push(`/dashboard/campaigns/${id}/ready`)
+      return true
+    } catch {
+      return false
     }
   }
 
@@ -449,6 +454,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
         onCreate={onCreate}
         onClose={onClose}
         onPlan={handlePlan}
+        onCheckout={onCheckout}
       />
       {analyzing && plan && client?.id && (
         <PlanAnalyzing
