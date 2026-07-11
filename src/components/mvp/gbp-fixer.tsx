@@ -5,10 +5,19 @@
  * fixer, on top of the read-only diagnosis engine (src/lib/gbp-diagnose.ts via
  * GET /api/dashboard/gbp-diagnosis).
  *
- * Design (owner-approved mock): progress "N of M done" + a thin bar, then the
- * sections in engine order. Good sections collapse to a dim row with a green
- * check; problem sections are white cards with a severity dot (missing = red,
- * needs-work = amber, unknown = grey). ONE section is expanded at a time.
+ * Two experiences on one diagnosis:
+ *  - diy (the checklist): progress "N of M done" + a thin bar, then the
+ *    sections in engine order. Good sections collapse to a dim row with a
+ *    green check; problem sections are white cards with a severity dot
+ *    (missing = red, needs-work = amber, unknown = grey). ONE section is
+ *    expanded at a time, each with a "Fix it on Google" link.
+ *  - ai (Pro, "Apnosh AI"): a guided review, part by part. A small intro
+ *    ("Let's review your profile, part by part."), then ONE part per screen
+ *    (status chip, what is on Google now, why it matters, and the action:
+ *    approve, draft (description only), fix on Google, or skip), then a
+ *    summary of every outcome with a fresh "Check my profile again". Review
+ *    progress resumes from localStorage (keyed by client id) so a refresh
+ *    never restarts at part 1; a fresh all-good read clears the save.
  *
  * Honesty rules baked in:
  *  - Every string shown comes from the diagnosis `sections[]` payload, which
@@ -17,11 +26,13 @@
  *  - Only the description section gets a "Draft it for me" button (the only
  *    AI draft that is actually built). No fake apply: the draft is copy-only,
  *    with a plain line saying one-tap apply is not built yet.
+ *  - We never claim we changed Google. The owner makes every change there
+ *    (or copies the draft over), then tells us with "I updated it".
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { Loader2, Check, ChevronDown, Sparkles, Copy, ExternalLink, Plug } from 'lucide-react'
+import { Loader2, Check, ChevronDown, ChevronLeft, Sparkles, Copy, ExternalLink, Plug } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
 
@@ -122,6 +133,26 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
   const [draft, setDraft] = useState<string | null>(null)
   const [draftError, setDraftError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  // Re-check from the AI review's summary screen: a fresh diagnosis WITHOUT
+  // dropping the current one (the review stays on screen while it runs). A
+  // fresh all-good read here is what flips the campaign task done, via the
+  // same gbp-fixed effect above.
+  const [rechecking, setRechecking] = useState(false)
+  const [recheckFailed, setRecheckFailed] = useState(false)
+  const recheck = useCallback(() => {
+    if (!client?.id || rechecking) return
+    setRechecking(true)
+    setRecheckFailed(false)
+    fetch(`/api/dashboard/gbp-diagnosis?clientId=${client.id}`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`recheck failed (${r.status})`)
+        return r.json() as Promise<GbpDiagnosis>
+      })
+      .then((j) => setDiag(j))
+      .catch(() => setRecheckFailed(true))
+      .finally(() => setRechecking(false))
+  }, [client?.id, rechecking])
 
   useEffect(() => {
     if (!client?.id) return
@@ -231,19 +262,36 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
       )}
 
       {!loading && !loadError && diag && diag.connected && !diag.readFailed && (
-        <Walkthrough
-          diag={diag}
-          mode={effectiveMode}
-          taskDone={taskDone}
-          openKey={openKey}
-          onToggle={(k) => setOpenKey((cur) => (cur === k ? null : k))}
-          drafting={drafting}
-          draft={draft}
-          draftError={draftError}
-          copied={copied}
-          onDraft={() => { void requestDraft() }}
-          onCopy={() => { void copyDraft() }}
-        />
+        effectiveMode === 'ai' ? (
+          <AiReview
+            diag={diag}
+            clientId={client?.id ?? ''}
+            taskDone={taskDone}
+            rechecking={rechecking}
+            recheckFailed={recheckFailed}
+            onRecheck={recheck}
+            drafting={drafting}
+            draft={draft}
+            draftError={draftError}
+            copied={copied}
+            onDraft={() => { void requestDraft() }}
+            onCopy={() => { void copyDraft() }}
+          />
+        ) : (
+          <Walkthrough
+            diag={diag}
+            mode="diy"
+            taskDone={taskDone}
+            openKey={openKey}
+            onToggle={(k) => setOpenKey((cur) => (cur === k ? null : k))}
+            drafting={drafting}
+            draft={draft}
+            draftError={draftError}
+            copied={copied}
+            onDraft={() => { void requestDraft() }}
+            onCopy={() => { void copyDraft() }}
+          />
+        )
       )}
     </div>
   )
@@ -507,5 +555,429 @@ function FixOnGoogleBlock() {
         Fix this in your Google profile, then come back. We check it for you when you refresh.
       </p>
     </div>
+  )
+}
+
+/* ── Apnosh AI: the guided review, part by part ─────────────────── */
+
+/** What the owner said about a part (or what the read said, for good/unknown). */
+type PartOutcome = 'good' | 'updated' | 'skipped' | 'unknown'
+
+type ReviewPhase = { name: 'intro' } | { name: 'part'; index: number } | { name: 'summary' }
+
+/** Status chip for the part screens. Every word is plain and honest. */
+const AI_CHIP: Record<GbpSectionStatus, { word: string; color: string; bg: string }> = {
+  good: { word: 'Looks good', color: C.greenDk, bg: C.greenSoft },
+  'needs-work': { word: 'Needs work', color: '#9a6b17', bg: '#faf1de' },
+  missing: { word: 'Missing', color: C.red, bg: C.redSoft },
+  unknown: { word: 'Could not check', color: C.mute, bg: '#f0f0f3' },
+}
+
+const reviewStorageKey = (clientId: string) => `mvp-gbp-review:${clientId}`
+
+/** The summary word for a part. A fresh read always wins: a part that now
+ *  reads good says "Looks good" no matter what the owner tapped earlier. */
+function summaryOutcome(section: GbpDiagnosisSection, outcomes: Record<string, PartOutcome>): { word: string; color: string; good: boolean } {
+  if (section.status === 'good') return { word: 'Looks good', color: C.greenDk, good: true }
+  if (section.status === 'unknown') return { word: 'Could not check', color: C.faint, good: false }
+  if (outcomes[section.key] === 'updated') return { word: 'You updated it', color: C.greenDk, good: false }
+  return { word: 'Skipped', color: C.mute, good: false }
+}
+
+/**
+ * The AI-mode review: intro → one part per screen → summary.
+ *
+ * Resume: { phase, index, outcomes } persists in localStorage keyed by client
+ * id, restored in an effect (never on the server render, so hydration stays
+ * clean). A fresh all-good diagnosis clears the save.
+ *
+ * The initial* props are a TEST SEAM for the render smoke only (they pick the
+ * first screen without localStorage); the live page never passes them.
+ */
+export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, copied, onDraft, onCopy, initialPhase, initialIndex, initialOutcomes }: {
+  diag: GbpDiagnosis
+  clientId: string
+  taskDone?: boolean
+  rechecking?: boolean
+  recheckFailed?: boolean
+  onRecheck?: () => void
+  drafting: boolean
+  draft: string | null
+  draftError: string | null
+  copied: boolean
+  onDraft: () => void
+  onCopy: () => void
+  initialPhase?: 'intro' | 'part' | 'summary'
+  initialIndex?: number
+  initialOutcomes?: Record<string, PartOutcome>
+}) {
+  const sections = diag.sections ?? []
+  const total = sections.length
+  const allGood = total > 0 && sections.every((s) => s.status === 'good')
+
+  const [phase, setPhase] = useState<ReviewPhase>(() => (
+    initialPhase === 'summary' ? { name: 'summary' }
+      : initialPhase === 'part' ? { name: 'part', index: Math.min(Math.max(initialIndex ?? 0, 0), Math.max(total - 1, 0)) }
+        : { name: 'intro' }
+  ))
+  const [outcomes, setOutcomes] = useState<Record<string, PartOutcome>>(initialOutcomes ?? {})
+  const restoredRef = useRef(false)
+  const storageKey = reviewStorageKey(clientId)
+
+  // Resume: a refresh mid-review lands back on the same part (or the summary).
+  useEffect(() => {
+    if (restoredRef.current) return
+    restoredRef.current = true
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (!raw) return
+      const saved = JSON.parse(raw) as { phase?: unknown; index?: unknown; outcomes?: unknown } | null
+      if (!saved || typeof saved !== 'object') return
+      const safe: Record<string, PartOutcome> = {}
+      if (saved.outcomes && typeof saved.outcomes === 'object') {
+        for (const [k, v] of Object.entries(saved.outcomes as Record<string, unknown>)) {
+          if (v === 'good' || v === 'updated' || v === 'skipped' || v === 'unknown') safe[k] = v
+        }
+      }
+      if (Object.keys(safe).length) setOutcomes((cur) => ({ ...safe, ...cur }))
+      if (saved.phase === 'summary') setPhase({ name: 'summary' })
+      else if (saved.phase === 'part' && typeof saved.index === 'number' && total > 0) {
+        setPhase({ name: 'part', index: Math.min(Math.max(Math.floor(saved.index), 0), total - 1) })
+      }
+    } catch { /* a bad save never blocks the review */ }
+  }, [storageKey, total])
+
+  // Persist progress (only once a review has started; never after an all-good
+  // read, which clears the save below instead).
+  useEffect(() => {
+    if (!restoredRef.current || allGood || phase.name === 'intro') return
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({
+        phase: phase.name,
+        index: phase.name === 'part' ? phase.index : Math.max(total - 1, 0),
+        outcomes,
+      }))
+    } catch { /* storage being unavailable never blocks the review */ }
+  }, [phase, outcomes, storageKey, allGood, total])
+
+  // A fresh all-good read leaves nothing to resume.
+  useEffect(() => {
+    if (!allGood) return
+    try { localStorage.removeItem(storageKey) } catch { /* ignore */ }
+  }, [allGood, storageKey])
+
+  const finishPart = useCallback((sectionKey: string, outcome: PartOutcome, index: number) => {
+    setOutcomes((cur) => ({ ...cur, [sectionKey]: outcome }))
+    setPhase(index + 1 >= total ? { name: 'summary' } : { name: 'part', index: index + 1 })
+  }, [total])
+
+  if (total === 0) {
+    // The engine always emits its sections; this is a pure safety net.
+    return (
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '22px 18px', textAlign: 'center' }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>We could not read the parts of your profile</div>
+        <div style={{ fontSize: 13, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>Give it a minute and try again.</div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {phase.name === 'intro' && (
+        <AiIntro
+          total={total}
+          needsWork={sections.filter((s) => s.status === 'needs-work' || s.status === 'missing').length}
+          onStart={() => setPhase({ name: 'part', index: 0 })}
+        />
+      )}
+
+      {phase.name === 'part' && sections[phase.index] && (
+        <AiPart
+          section={sections[phase.index]}
+          index={phase.index}
+          total={total}
+          onBack={() => setPhase(phase.index === 0 ? { name: 'intro' } : { name: 'part', index: phase.index - 1 })}
+          onDone={(outcome) => finishPart(sections[phase.index].key, outcome, phase.index)}
+          drafting={drafting}
+          draft={draft}
+          draftError={draftError}
+          copied={copied}
+          onDraft={onDraft}
+          onCopy={onCopy}
+        />
+      )}
+
+      {phase.name === 'summary' && (
+        <AiSummary
+          sections={sections}
+          outcomes={outcomes}
+          allGood={allGood}
+          taskDone={taskDone}
+          rechecking={rechecking}
+          recheckFailed={recheckFailed}
+          onRecheck={onRecheck}
+          onBack={() => setPhase({ name: 'part', index: total - 1 })}
+        />
+      )}
+
+      <div style={{ textAlign: 'center', fontSize: 12, color: C.faint, padding: '14px 0 2px' }}>
+        Read from your live Google listing.
+      </div>
+    </>
+  )
+}
+
+/** The intro moment: what this is, how many parts, one Start button. */
+function AiIntro({ total, needsWork, onStart }: { total: number; needsWork: number; onStart: () => void }) {
+  return (
+    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '26px 20px', textAlign: 'center' }}>
+      <span style={{ width: 46, height: 46, borderRadius: 13, background: C.greenSoft, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Sparkles size={22} color={C.greenDk} />
+      </span>
+      <div style={{ fontSize: 18, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, marginTop: 12 }}>
+        Let&rsquo;s review your profile, part by part.
+      </div>
+      <div style={{ fontSize: 13.5, color: C.mute, marginTop: 6, lineHeight: 1.55 }}>
+        Your Google listing has {total} parts. We checked each one.{' '}
+        {needsWork > 0
+          ? `${needsWork} ${needsWork === 1 ? 'part could use' : 'parts could use'} some work.`
+          : 'They all look good right now.'}{' '}
+        You approve each part as we go.
+      </div>
+      <button
+        type="button"
+        onClick={onStart}
+        className="mvp-row"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 18, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
+      >
+        Start the review
+      </button>
+    </div>
+  )
+}
+
+/** One part per screen: progress, name + status chip, what Google shows now,
+ *  why it matters, then the action for this part's status. */
+function AiPart({ section, index, total, onBack, onDone, drafting, draft, draftError, copied, onDraft, onCopy }: {
+  section: GbpDiagnosisSection
+  index: number
+  total: number
+  onBack: () => void
+  onDone: (outcome: PartOutcome) => void
+  drafting: boolean
+  draft: string | null
+  draftError: string | null
+  copied: boolean
+  onDraft: () => void
+  onCopy: () => void
+}) {
+  const chip = AI_CHIP[section.status] ?? AI_CHIP.unknown
+  const actionable = section.status === 'needs-work' || section.status === 'missing'
+  // "Draft it for me" exists ONLY for the description (the one AI draft that is actually built).
+  const canDraft = actionable && section.key === 'description'
+  const current = section.current && section.current.trim() ? section.current : 'Nothing yet'
+
+  return (
+    <>
+      <div style={{ padding: '2px 2px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Back"
+            className="mvp-row"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, marginLeft: -6, borderRadius: 9, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            <ChevronLeft size={19} color={C.mute} />
+          </button>
+          <span style={{ fontFamily: DISPLAY, fontSize: 15.5, fontWeight: 600, color: C.ink }}>Part {index + 1} of {total}</span>
+        </div>
+        <div style={{ height: 5, borderRadius: 99, background: '#e9e9ee', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${Math.round(((index + 1) / total) * 100)}%`, background: C.green, borderRadius: 99, transition: 'width .4s ease' }} />
+        </div>
+      </div>
+
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '17px 15px', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 13 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, lineHeight: 1.25 }}>{section.label}</span>
+          <span style={{ flexShrink: 0, fontSize: 11.5, fontWeight: 700, color: chip.color, background: chip.bg, borderRadius: 99, padding: '4px 10px' }}>{chip.word}</span>
+        </div>
+
+        {section.status === 'unknown' ? (
+          <>
+            <p style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5, margin: 0 }}>We could not read this part.</p>
+            {section.current && (
+              <p style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: '6px 0 0' }}>{section.current}</p>
+            )}
+            <button
+              type="button"
+              onClick={() => onDone('unknown')}
+              className="mvp-row"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 14, height: 44, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.mute, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
+            >
+              Skip for now
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={{ background: C.bg, borderRadius: 11, padding: '10px 12px', marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 3 }}>On Google now</div>
+              <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{current}</div>
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 3 }}>Why it matters</div>
+            <p style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: 0 }}>{section.why}</p>
+
+            {section.status === 'good' ? (
+              <button
+                type="button"
+                onClick={() => onDone('good')}
+                className="mvp-row"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 14, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
+              >
+                Looks good, next
+              </button>
+            ) : (
+              <>
+                {canDraft ? (
+                  <DraftBlock
+                    drafting={drafting}
+                    draft={draft}
+                    draftError={draftError}
+                    copied={copied}
+                    onDraft={onDraft}
+                    onCopy={onCopy}
+                  />
+                ) : (
+                  <AiFixLink />
+                )}
+                <button
+                  type="button"
+                  onClick={() => onDone('updated')}
+                  className="mvp-row"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 10, height: 46, borderRadius: 13, border: 'none', background: canDraft && !draft ? '#fff' : C.green, color: canDraft && !draft ? C.greenDk : '#fff', ...(canDraft && !draft ? { border: `0.5px solid ${C.line}` } : {}), fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
+                >
+                  <Check size={16} strokeWidth={3} /> I updated it
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDone('skipped')}
+                  className="mvp-row"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 6, height: 42, borderRadius: 12, border: 'none', background: 'none', color: C.mute, fontSize: 14, fontWeight: 600, cursor: 'pointer', font: 'inherit' }}
+                >
+                  Skip for now
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
+/** AI review's fix-it link for parts without a built draft. Honest: the owner
+ *  makes the change on Google, we never claim to. */
+function AiFixLink() {
+  return (
+    <div style={{ marginTop: 12 }}>
+      <a
+        href="https://business.google.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mvp-row"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', height: 44, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 14.5, fontWeight: 700, textDecoration: 'none' }}
+      >
+        Fix it on Google <ExternalLink size={15} />
+      </a>
+      <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '9px 0 0' }}>
+        Make the change on Google, then come back and tap I updated it.
+      </p>
+    </div>
+  )
+}
+
+/** The summary: every part with its outcome, then a fresh re-check (which is
+ *  what can complete the campaign task) and the honest delay note. */
+function AiSummary({ sections, outcomes, allGood, taskDone, rechecking, recheckFailed, onRecheck, onBack }: {
+  sections: GbpDiagnosisSection[]
+  outcomes: Record<string, PartOutcome>
+  allGood: boolean
+  taskDone?: boolean
+  rechecking?: boolean
+  recheckFailed?: boolean
+  onRecheck?: () => void
+  onBack: () => void
+}) {
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 2px 14px' }}>
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          className="mvp-row"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, marginLeft: -6, borderRadius: 9, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+        >
+          <ChevronLeft size={19} color={C.mute} />
+        </button>
+        <span style={{ fontFamily: DISPLAY, fontSize: 16.5, fontWeight: 600, color: C.ink }}>
+          {allGood ? 'Every part looks good' : 'You went through every part'}
+        </span>
+      </div>
+
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '4px 0', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+        {sections.map((s, i) => {
+          const o = summaryOutcome(s, outcomes)
+          return (
+            <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+              {o.good
+                ? (
+                  <span style={{ width: 20, height: 20, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Check size={12} color={C.greenDk} strokeWidth={3} />
+                  </span>
+                )
+                : <span style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: o.color }} /></span>}
+              <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: C.ink }}>{s.label}</span>
+              <span style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: o.color }}>{o.word}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      {allGood ? (
+        <div style={{ background: C.greenSoft, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 16px', marginTop: 12 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>Every section looks good</div>
+          <div style={{ fontSize: 13, color: C.mute, marginTop: 2, lineHeight: 1.45 }}>Nothing needs fixing right now. Come back after big changes to check again.</div>
+          {/* Only shown after the campaign PATCH actually landed. Never claimed on a failed save. */}
+          {taskDone && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 13, fontWeight: 600, color: C.greenDk }}>
+              <Check size={14} strokeWidth={3} /> All done. This campaign task is complete.
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={onRecheck}
+            disabled={!!rechecking}
+            className="mvp-row"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 14, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: rechecking ? 'default' : 'pointer', opacity: rechecking ? 0.8 : 1, font: 'inherit' }}
+          >
+            {rechecking
+              ? <><Loader2 size={16} className="mvp-spin" /> Checking your profile&hellip;</>
+              : 'Check my profile again'}
+          </button>
+          {recheckFailed && (
+            <div style={{ marginTop: 8, background: C.redSoft, borderRadius: 10, padding: '9px 12px', fontSize: 12.5, color: C.red, lineHeight: 1.45 }}>
+              We could not check right now. Try again in a minute.
+            </div>
+          )}
+          <p style={{ textAlign: 'center', fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '10px 2px 0' }}>
+            Changes you make on Google can take a few minutes to show up here.
+          </p>
+        </>
+      )}
+    </>
   )
 }
