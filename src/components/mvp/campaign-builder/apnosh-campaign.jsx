@@ -2916,15 +2916,12 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   const isGbp = p.id === "gbp";
   // The headline AGREES with the live diagnosis state so it never claims gaps when the profile
   // is all-good (or the reverse): A = fix framing, B = maintain framing, C = neutral aspiration.
-  // The real monthly-views number lives HERE (the zone-2 line no longer repeats it). Never a
-  // guaranteed result or an invented percentage.
+  // The headline is a plain description of what the campaign DOES (not a state claim or a promised
+  // result). The real monthly-views number and the state-aware "why" live in the zone-2 sell line
+  // below. gbp gets a fixed description; other cards use their authored promise.
   const heroHeadline = (() => {
     const v = views30d ? views30d.toLocaleString("en-US") : null;
-    if (isGbp) {
-      if (gbpState === "A") return v ? `Fix what's missing so more of the ${v} who find you walk in.` : "Fix what's missing so more people walk in.";
-      if (gbpState === "B") return v ? `Keep showing up for the ${v} who already find you.` : "Keep showing up for the people who already find you.";
-      return v ? `Help more of the ${v} who find you each month walk in.` : "Be the easy yes when neighbors search you.";
-    }
+    if (isGbp) return "Clean up your Google profile to rank higher and get seen by more people.";
     const seen = (ITEM_STAGES[p.id] || []).includes("aware");
     if (seen && v) return `Get in front of more of the ${v} who find you each month.`;
     return copy.promise || p.sub;
