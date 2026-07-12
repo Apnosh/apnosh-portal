@@ -998,19 +998,11 @@ export default function HomeFunnel({
     if (i < 0) return
     const key = stages[i].key
     if (!key) return
-    // Weak leg → the create-page shelf that moves this exact number (the store's
-    // rows use the funnel's own stage words); healthy or ungraded → the stage's
-    // own insights graph. Mirrors the drawn pill: only a leg the eye sees as
-    // red/orange re-routes, so the tap always matches what the owner is seeing.
-    const a = i > 0 ? stages[i].count : null
-    const b = i > 0 ? stages[i - 1].count : null
-    const band = a != null && b != null && a > 0 && b > 0 ? bandFor(a / b, key) : null
-    const lens = STAGE_LENS[key]
-    if ((band === 'veryLow' || band === 'low') && lens) {
-      router.push(`/dashboard/campaigns/new?lens=${lens}`)
-      return
-    }
-    router.push(`/dashboard/insights?stage=${key}`) // straight to THIS stage's own named graph (funnel key → focused insights view)
+    // ALWAYS the tapped stage's own insights — Awareness to Awareness, Interest
+    // to Interest. (The old weak-leg reroute to the campaign store made taps
+    // land somewhere other than the stage the owner tapped; the insights page
+    // has its own paths into fixing a weak number.)
+    router.push(`/dashboard/insights?stage=${key}`)
   }
   const onCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const p = ptFrom(e); if (p) pressRef.current.i = hitStage(p.mx, p.my)

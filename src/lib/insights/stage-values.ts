@@ -72,19 +72,18 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
   try {
     const { data, error } = await admin
       .from('gbp_metrics')
-      .select('impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, search_views, impressions_total, photo_views, directions, calls, website_clicks, bookings')
+      .select('impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, search_views, impressions_total, directions, calls, website_clicks, bookings')
       .eq('client_id', clientId)
       .gte('date', gbpStart)
       .lte('date', gbpEnd)
     if (!error && data) {
       let searchSplit = 0, searchFallback = 0, maps = 0
-      let photo = 0, directions = 0, calls = 0, clicks = 0, bookings = 0
+      let directions = 0, calls = 0, clicks = 0, bookings = 0
       for (const r of data as Record<string, unknown>[]) {
         searchSplit += num(r.impressions_search_mobile) + num(r.impressions_search_desktop)
         // fallback per legacy rows with no split columns: search_views mirrors the total
         searchFallback += num(r.search_views ?? r.impressions_total)
         maps += num(r.impressions_maps_mobile) + num(r.impressions_maps_desktop)
-        photo += num(r.photo_views)
         directions += num(r.directions)
         calls += num(r.calls)
         clicks += num(r.website_clicks)
@@ -93,7 +92,6 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
       // prefer the real split; only fall back to search_views/total when the split is empty
       out.gbp_impressions_search = searchSplit > 0 ? searchSplit : searchFallback
       out.gbp_impressions_maps = maps
-      out.gbp_photo_views = photo
       out.gbp_direction_requests = directions
       out.gbp_calls = calls
       out.gbp_website_clicks = clicks
@@ -125,21 +123,26 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
     }
   } catch { /* reviews unavailable */ }
 
-  // ── Instagram (social_metrics) -> reach + follower growth ───────────────
+  // ── Instagram (social_metrics) -> reach, profile visits, engagement,
+  //    follower growth. All written daily by the sync-social-metrics edge fn. ──
   try {
     const { data, error } = await admin
       .from('social_metrics')
-      .select('reach, followers_gained')
+      .select('reach, followers_gained, profile_visits, engagement')
       .eq('client_id', clientId)
       .gte('date', otherBound)
     if (!error && data) {
-      let reach = 0, gained = 0
+      let reach = 0, gained = 0, visits = 0, engaged = 0
       for (const r of data as Record<string, unknown>[]) {
         reach += num(r.reach)
         gained += num(r.followers_gained)
+        visits += num(r.profile_visits)
+        engaged += num(r.engagement)
       }
       out.ig_reach = reach
       out.ig_follower_growth = gained
+      out.ig_profile_visits = visits
+      out.ig_engaged = engaged
     }
   } catch { /* social unavailable */ }
 

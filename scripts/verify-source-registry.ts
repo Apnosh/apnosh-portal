@@ -29,7 +29,7 @@ const ok = (cond: boolean, msg: string) => {
 console.log('\n== 1. Stage coverage ==')
 const EXPECT_BY_STAGE: Record<number, string[]> = {
   1: ['gbp_impressions_search', 'gbp_impressions_maps', 'ig_reach', 'tiktok_video_views', 'facebook_reach', 'yelp_views', 'gbp_search_keywords', 'ig_nonfollower_reach_pct', 'gsc_site_impressions'],
-  2: ['gbp_photo_views', 'ig_profile_visits', 'ig_saves', 'ig_shares', 'ga4_menu_views'],
+  2: ['ig_profile_visits', 'ig_engaged', 'ig_saves', 'ig_shares', 'ga4_menu_views'],
   3: ['gbp_direction_requests', 'gbp_calls', 'gbp_website_clicks', 'gbp_booking_clicks', 'ig_link_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
   4: ['pos_covers', 'pos_revenue', 'pos_avg_ticket', 'delivery_orders'],
   5: ['pos_repeat_customers', 'loyalty_redemptions', 'ga4_returning_users', 'gbp_review_count', 'gbp_rating_trend', 'ig_follower_growth'],
@@ -87,15 +87,20 @@ for (const id of NO_ADAPTER) {
 
 // ── 4. IG sub-metrics are AVAILABLE_NOT_CONNECTED, never CONNECTED ────────
 console.log('\n== 4. Instagram limitation encoded ==')
-const IG_NOT_WIRED = ['ig_profile_visits', 'ig_saves', 'ig_shares', 'ig_link_clicks', 'ig_nonfollower_reach_pct']
+const IG_NOT_WIRED = ['ig_saves', 'ig_shares', 'ig_link_clicks', 'ig_nonfollower_reach_pct']
 for (const id of IG_NOT_WIRED) {
   const s = SOURCE_BY_ID[id]
   ok(s?.baseStatus === 'AVAILABLE_NOT_CONNECTED', `${id} baseStatus === AVAILABLE_NOT_CONNECTED`)
   ok(s?.wired === false, `${id} wired === false (not pulled by our sync)`)
 }
-// The account-level IG metrics we DO pull.
-ok(SOURCE_BY_ID['ig_reach']?.wired === true && SOURCE_BY_ID['ig_reach']?.baseStatus === 'CONNECTED', 'ig_reach is CONNECTED + wired')
-ok(SOURCE_BY_ID['ig_follower_growth']?.wired === true && SOURCE_BY_ID['ig_follower_growth']?.baseStatus === 'CONNECTED', 'ig_follower_growth is CONNECTED + wired')
+// The account-level IG metrics we DO pull (the daily sync-social-metrics edge
+// function writes reach, profile_visits, engagement, followers_gained).
+for (const id of ['ig_reach', 'ig_profile_visits', 'ig_engaged', 'ig_follower_growth']) {
+  ok(SOURCE_BY_ID[id]?.wired === true && SOURCE_BY_ID[id]?.baseStatus === 'CONNECTED', `${id} is CONNECTED + wired`)
+}
+// The dead Google metric stays dead: photo views left the registry entirely
+// (the Performance API no longer reports them — every ingested row was 0).
+ok(SOURCE_BY_ID['gbp_photo_views'] === undefined, 'gbp_photo_views is NOT in the registry (unsourceable metric removed)')
 
 // ── 5. Hero / stage-number / drilldown flags ─────────────────────────────
 console.log('\n== 5. Semantic flags ==')
@@ -116,12 +121,12 @@ const ALL_ACTIVE: ConnectionsByChannel = {
   google_search_console: { status: 'active', sync_error: null, last_sync_at: '2026-07-10T00:00:00Z' },
 }
 const active = resolveSourceStatusesFrom(ALL_ACTIVE)
-for (const id of ['gbp_impressions_search', 'gbp_impressions_maps', 'gbp_direction_requests', 'gbp_calls', 'gbp_website_clicks', 'ig_reach']) {
+for (const id of ['gbp_impressions_search', 'gbp_impressions_maps', 'gbp_direction_requests', 'gbp_calls', 'gbp_website_clicks', 'ig_reach', 'ig_profile_visits', 'ig_engaged']) {
   ok(active[id].status === 'CONNECTED', `${id} → CONNECTED when connection active`)
   ok(active[id].hasData === true, `${id} hasData true when connected`)
 }
 // Active-but-not-wired stays AVAILABLE_NOT_CONNECTED even with an active connection.
-for (const id of ['ig_profile_visits', 'ig_saves', 'ig_shares', 'ig_link_clicks', 'ga4_phone_taps']) {
+for (const id of ['ig_saves', 'ig_shares', 'ig_link_clicks', 'ga4_phone_taps']) {
   ok(active[id].status === 'AVAILABLE_NOT_CONNECTED', `${id} → AVAILABLE_NOT_CONNECTED despite active connection (metric not wired)`)
 }
 // GA4 wired metric + GSC drill-down light up when their connection is active.

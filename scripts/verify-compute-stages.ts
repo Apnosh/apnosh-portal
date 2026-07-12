@@ -39,7 +39,8 @@ const ACTIVE = (): ConnectionSnapshot => ({ status: 'active', sync_error: null, 
 const VALUES: Record<string, number | null> = {
   gbp_impressions_search: 1000,
   gbp_impressions_maps: 500,
-  gbp_photo_views: 80,
+  ig_profile_visits: 70,   // present, but must NOT count unless IG connected
+  ig_engaged: 130,         // present, but must NOT count unless IG connected
   gbp_direction_requests: 40,
   gbp_calls: 10,
   gbp_website_clicks: 25,
@@ -70,9 +71,12 @@ ok(src(aw, 'tiktok_video_views').status === 'COMING_SOON', 'tiktok_video_views i
 ok(src(aw, 'tiktok_video_views').counted === false, 'COMING_SOON tiktok excluded from the sum')
 ok(src(aw, 'gbp_search_keywords').feedRole === 'drilldown', 'gbp_search_keywords is a drilldown (not summed)')
 
+// Interest is an IG/GA4 stage now (photo views removed — Google's API stopped
+// reporting them). A GBP-only client honestly has NO Interest data.
 const inte = stage(gbpStages, 2)
-ok(inte.headline === 80, `Interest headline = photo_views 80 (${inte.headline})`)
-ok(inte.headline === sumCounted(inte), `Interest headline == sum(counted) (${sumCounted(inte)})`)
+ok(inte.isEmpty === true && inte.headline === null, `Interest empty for a GBP-only client — no fabricated number (${inte.headline})`)
+ok(src(inte, 'ig_profile_visits').counted === false, 'ig_profile_visits NOT counted (IG not connected) despite value 70 present')
+ok(src(inte, 'ig_engaged').counted === false, 'ig_engaged NOT counted (IG not connected) despite value 130 present')
 ok(src(inte, 'ga4_menu_views').counted === false, 'ga4_menu_views NOT counted (GA4 not connected)')
 
 const act = stage(gbpStages, 3)
@@ -130,7 +134,9 @@ const awFull = stage(full, 1)
 ok(src(awFull, 'ig_reach').counted === true, 'ig_reach counted once IG is connected')
 ok(awFull.headline === 1000 + 500 + VALUES.ig_reach!, `Awareness folds ig_reach when IG connected (${awFull.headline})`)
 const inteFull = stage(full, 2)
-ok(inteFull.headline === 80 + 300, `Interest folds ga4_menu_views when GA4 connected+configured (${inteFull.headline})`)
+ok(src(inteFull, 'ig_profile_visits').counted === true, 'ig_profile_visits counted once IG is connected')
+ok(src(inteFull, 'ig_engaged').counted === true, 'ig_engaged counted once IG is connected')
+ok(inteFull.headline === 70 + 130 + 300, `Interest = profile visits 70 + engaged 130 + menu views 300 (${inteFull.headline})`)
 
 // ── 3. Empty / disconnected client ─────────────────────────────────────────
 console.log('\n== 3. No connections at all ==')

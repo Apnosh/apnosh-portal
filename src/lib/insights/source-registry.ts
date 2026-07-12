@@ -231,29 +231,34 @@ export const SOURCES: SourceDef[] = [
   // NOTE: "GBP profile views" was intentionally NOT included. Google's
   // Performance API has no dedicated profile-views metric (only impressions),
   // and the owner's rule is: if we can't source it honestly, we don't track it.
-  {
-    id: 'gbp_photo_views',
-    displayName: 'Views on your Google photos',
-    provider: 'google_business_profile',
-    stage: 2,
-    metricKeys: ['photo_views'],
-    baseStatus: 'CONNECTED',
-    authType: 'oauth',
-    docsUrl: null,
-    notes: 'Real GBP metric — photo_views column present in gbp_metrics and populated by ingest.',
-    wired: true,
-  },
+  // (gbp_photo_views was removed: Google's Performance API no longer reports
+  //  photo views — every ingested row is 0. Owner rule: can't source it, don't
+  //  track it. Same call as gbp_profile_views.)
   {
     id: 'ig_profile_visits',
     displayName: 'People who opened your Instagram profile',
     provider: 'instagram',
     stage: 2,
-    metricKeys: ['profile_visits'],
-    baseStatus: 'AVAILABLE_NOT_CONNECTED',
+    metricKeys: ['profile_visits', 'profile_views'],
+    baseStatus: 'CONNECTED',
     authType: 'oauth',
     docsUrl: null,
-    notes: IG_ACCOUNT_NOTE,
-    wired: false,
+    notes:
+      'Real IG metric. The daily sync-social-metrics edge function pulls profile_views from the Graph API into social_metrics.profile_visits. (P1 marked this unwired by only checking the app-side sync — the edge function is the daily writer.)',
+    wired: true,
+  },
+  {
+    id: 'ig_engaged',
+    displayName: 'Times people engaged with your posts',
+    provider: 'instagram',
+    stage: 2,
+    metricKeys: ['engagement', 'total_interactions'],
+    baseStatus: 'CONNECTED',
+    authType: 'oauth',
+    docsUrl: null,
+    notes:
+      'Real IG metric. The daily sync-social-metrics edge function writes total_interactions (falling back to per-post likes+comments) into social_metrics.engagement.',
+    wired: true,
   },
   {
     id: 'ig_saves',
@@ -544,8 +549,8 @@ export const SHORT_LABELS: Record<string, string> = {
   ig_nonfollower_reach_pct: 'New-audience reach',
   gsc_site_impressions: 'Website in Google',
   // Stage 2 · Interest
-  gbp_photo_views: 'Google photo views',
   ig_profile_visits: 'Profile visits',
+  ig_engaged: 'Post engagement',
   ig_saves: 'Post saves',
   ig_shares: 'Post shares',
   ga4_menu_views: 'Menu page views',

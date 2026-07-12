@@ -36,7 +36,7 @@ const META: Record<string, { tab: string; heroLabel: string; heroSub: string; un
   bookings: { tab: 'Bookings', heroLabel: 'Bookings', heroSub: 'reserved a table from your profile', unit: 'booked' },
   loyalty: { tab: 'Email', heroLabel: 'Email engagement', heroSub: 'opened or clicked your emails', unit: 'engaged' },
   reputation: { tab: 'Reviews', heroLabel: 'New reviews', heroSub: 'left a review this period', unit: 'reviews' },
-  engagement: { tab: 'Interest', heroLabel: 'People who looked closer', heroSub: 'photo views and menu looks', unit: 'looked closer' },
+  engagement: { tab: 'Interest', heroLabel: 'People who looked closer', heroSub: 'profile visits, post engagement, and menu looks', unit: 'looks' },
 }
 // 'engagement' rides at the END so the home slide order is untouched — it exists
 // for the Insights Interest stage (LEGACY_HOME slides are off anyway).

@@ -268,7 +268,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
   }
 
   const [gbp, social, reviews, localReviews, email, website] = await Promise.all([
-    fetchAll('gbp_metrics', 'date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks, photo_views', 'date', bound),
+    fetchAll('gbp_metrics', 'date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks', 'date', bound),
     fetchAll('social_metrics', 'date, reach, engagement, posts_published, followers_gained, profile_visits', 'date', bound),
     fetchAll('reviews', 'rating, response_text, posted_at', 'posted_at', bound + 'T00:00:00'),
     fetchAll('local_reviews', 'rating, reply_text, created_at_platform', 'created_at_platform', bound + 'T00:00:00'),
@@ -284,7 +284,6 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
   const gDir: Maps = new Map(), gCall: Maps = new Map(), gClick: Maps = new Map()
   const gConv: Maps = new Map(), gMenu: Maps = new Map()
   const gBook: Maps = new Map(), gFood: Maps = new Map()
-  const gPhoto: Maps = new Map()  // people who looked at the photos (Interest)
   for (const r of (gbp.data ?? []) as Record<string, unknown>[]) {
     const d = String(r.date).slice(0, 10)
     const views = num(r.impressions_total) || num(r.search_views)
@@ -296,7 +295,6 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     gMenu.set(d, (gMenu.get(d) ?? 0) + num(r.food_menu_clicks))
     gBook.set(d, (gBook.get(d) ?? 0) + num(r.bookings))
     gFood.set(d, (gFood.get(d) ?? 0) + num(r.food_orders))
-    gPhoto.set(d, (gPhoto.get(d) ?? 0) + num(r.photo_views))
   }
   // Website (GA4) — menu page views, when the owner has configured the path
   const wMenu: Maps = new Map()
@@ -339,28 +337,32 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
   }, today, earliestOf(reachMain), frontierFor(reachMain, today, SETTLE.gbp))
 
   /* ── 1b. Interest — people who looked closer. The SAME sources the honest
-     funnel's Interest stage counts today (Google photo views + configured menu
-     page views), so the insights chart total matches the stage's source cards. ── */
-  const engMain = addInto(gPhoto, wMenu)
+     funnel's Interest stage counts today (IG profile visits + IG post
+     engagement + configured menu page views), so the insights chart total
+     matches the stage's source cards. ── */
+  const engMain = addInto(sVis, sEng, wMenu)
   const engagement = buildMetric({
-    key: 'engagement', label: 'Interest', sub: 'People who looked closer at your photos and menu', fmt: 'num',
+    key: 'engagement', label: 'Interest', sub: 'People who looked closer at your profile, posts, and menu', fmt: 'num',
     mainMap: engMain,
     comps: [
-      { label: 'Photo views', icon: 'eye', map: gPhoto },
+      { label: 'Profile visits', icon: 'user', map: sVis },
+      { label: 'Engaged', icon: 'heart', map: sEng },
       { label: 'Menu views', icon: 'cursor', map: wMenu },
     ],
   }, today, earliestOf(engMain), frontierFor(engMain, today, SETTLE.gbp))
 
-  /* ── 2. Interactions — people who engaged ── */
-  const interMain = addInto(gDir, gCall, gClick, gConv, gMenu, sEng, sVis)
+  /* ── 2. Interactions — the moves people made. The SAME four GBP actions the
+     funnel's Actions stage counts (social engagement + profile visits moved to
+     Interest above), so the chart total matches the stage's source cards. ── */
+  const interMain = addInto(gDir, gCall, gClick, gBook)
   const interactions = buildMetric({
-    key: 'interactions', label: 'Interactions', sub: 'Calls, directions, clicks and likes', fmt: 'num',
+    key: 'interactions', label: 'Interactions', sub: 'Calls, directions, clicks and bookings', fmt: 'num',
     mainMap: interMain,
     comps: [
       { label: 'Calls', icon: 'phone', map: gCall },
       { label: 'Directions', icon: 'pin', map: gDir },
       { label: 'Site clicks', icon: 'cursor', map: gClick },
-      { label: 'Engaged', icon: 'heart', map: sEng },
+      { label: 'Bookings', icon: 'calendar', map: gBook },
     ],
   }, today, earliestOf(interMain), frontierFor(interMain, today, SETTLE.gbp))
 

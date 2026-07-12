@@ -44,7 +44,7 @@ const AVAILABLE_CFG  = src({ id: 'ga4_menu_views', status: 'AVAILABLE_NOT_CONNEC
 const AVAILABLE_PLAIN = src({ id: 'ig_profile_visits', status: 'AVAILABLE_NOT_CONNECTED' }) // no config → "Connect"
 const ERRORED        = src({ id: 'ig_reach', status: 'ERROR' })
 const COMING         = src({ id: 'tiktok_video_views', status: 'COMING_SOON' })
-const MANUAL         = src({ id: 'gbp_photo_views', status: 'MANUAL_ENTRY', value: 200, counted: true, isManual: true, manualBy: 'Priya', manualAt: '2026-07-03T12:00:00Z' })
+const MANUAL         = src({ id: 'ig_engaged', status: 'MANUAL_ENTRY', value: 200, counted: true, isManual: true, manualBy: 'Priya', manualAt: '2026-07-03T12:00:00Z' })
 const EXPECTED_WHEN = new Date(MANUAL.manualAt!).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
 const SUMS: StageSourceView[] = [CONNECTED_DATA, NO_DATA, AVAILABLE_CFG, AVAILABLE_PLAIN, ERRORED, COMING, MANUAL]
@@ -100,7 +100,7 @@ function main() {
   ok(man.includes(EXPECTED_WHEN), `MANUAL card shows a friendly when (${EXPECTED_WHEN})`)
   ok(man.includes('dashed') && man.toLowerCase().includes('#f5a623'), 'MANUAL card is visually distinct (dashed amber border)')
   // manualBy null → "entered by hand"
-  const manHand = html(<SourceStateCard s={src({ id: 'gbp_photo_views', status: 'MANUAL_ENTRY', value: 5, isManual: true, manualBy: null, manualAt: null })} />)
+  const manHand = html(<SourceStateCard s={src({ id: 'ig_engaged', status: 'MANUAL_ENTRY', value: 5, isManual: true, manualBy: null, manualAt: null })} />)
   ok(manHand.includes('entered by hand'), 'MANUAL with no author falls back to "entered by hand"')
   // distinct from a plain CONNECTED API card (which never says MANUAL)
   ok(!html(<SourceStateCard s={CONNECTED_DATA} />).includes('MANUAL'), 'a connected API card never wears the MANUAL badge')

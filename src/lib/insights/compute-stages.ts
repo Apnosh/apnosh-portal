@@ -84,7 +84,7 @@ export type ManualStore = Record<string, ManualEntry>
 // excluded). Stage 4 and 5 have preference rules layered on top (see below).
 const SUMMABLE: Record<FunnelStage, string[]> = {
   1: ['gbp_impressions_search', 'gbp_impressions_maps', 'ig_reach', 'tiktok_video_views', 'facebook_reach', 'yelp_views'],
-  2: ['gbp_photo_views', 'ig_profile_visits', 'ig_saves', 'ig_shares', 'ga4_menu_views'],
+  2: ['ig_profile_visits', 'ig_engaged', 'ig_saves', 'ig_shares', 'ga4_menu_views'],
   3: ['gbp_direction_requests', 'gbp_calls', 'gbp_website_clicks', 'gbp_booking_clicks', 'ig_link_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
   4: ['pos_covers', 'delivery_orders'],
   5: ['pos_repeat_customers'],
@@ -92,7 +92,7 @@ const SUMMABLE: Record<FunnelStage, string[]> = {
 
 const STAGE_UNIT: Partial<Record<FunnelStage, string>> = {
   1: 'views',
-  2: 'people',
+  2: 'looks', // profile visits + post engagement are look-events, not unique people
   3: 'actions',
   4: 'guests',
   5: 'guests',

@@ -20,7 +20,7 @@
  * from /api/dashboard/insights-detail, keyed on clientId, so the home stays lean.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -276,12 +276,13 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
   )
 }
 
-// The five stages as in-page chips — every stage is reachable from every stage,
-// so a deep-link (or a mis-tap on the home funnel) never traps you on Awareness.
-const STAGE_CHIPS: Array<{ key: string; label: string }> = [
+// The five funnel stages, in funnel order — the swipeable header moves through
+// these, so every stage is reachable from every stage and a deep-link lands on
+// exactly the stage that was tapped.
+const STAGE_ORDER: Array<{ key: string; label: string }> = [
   { key: 'shown', label: 'Awareness' },
   { key: 'engaged', label: 'Interest' },
-  { key: 'moved', label: 'Actions' },
+  { key: 'moved', label: 'Customer actions' },
   { key: 'camein', label: 'Orders' },
   { key: 'back', label: 'Retention' },
 ]
@@ -289,35 +290,68 @@ const STAGE_CHIPS: Array<{ key: string; label: string }> = [
 function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsData; focusKey?: string; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null; clientId?: string; campaigns: Record<string, StageCampaign[]> | null }) {
   const metrics = data.metrics
   const byKey = new Map(metrics.map((m) => [m.key, m]))
-  // the tapped funnel stage seeds the view; the chips switch it in-page. The URL
-  // follows (replaceState) so a refresh or share keeps the same stage.
+  // The tapped funnel stage seeds the view; SWIPING the title header moves
+  // between stages and everything below re-renders to match. The URL follows
+  // (replaceState) so a refresh or share keeps the same stage.
   const [sel, setSel] = useState<string | undefined>(focusKey)
   useEffect(() => { if (focusKey) setSel(focusKey) }, [focusKey])
+  const focus = resolveFocus(sel)
+  const mv = byKey.get(focus.metric)
+  const idx = Math.max(0, STAGE_ORDER.findIndex((s) => s.key === focus.stageKey))
+
+  const swipeRef = useRef<HTMLDivElement>(null)
+  const progRef = useRef(false) // true while WE scroll it (deep-link) — don't re-pick
   const pick = (k: string) => {
     setSel(k)
     try { window.history.replaceState(null, '', `/dashboard/insights?stage=${k}`) } catch { /* ignore */ }
   }
-  const focus = resolveFocus(sel)
-  const mv = byKey.get(focus.metric)
+  // keep the header on the selected stage (mount + deep-link arriving late)
+  useEffect(() => {
+    const el = swipeRef.current
+    if (!el) return
+    const want = idx * el.clientWidth
+    if (Math.abs(el.scrollLeft - want) < 2) return
+    progRef.current = true
+    el.scrollTo({ left: want, behavior: 'auto' })
+    const t = setTimeout(() => { progRef.current = false }, 120)
+    return () => clearTimeout(t)
+  }, [idx])
+  // a finished swipe picks the stage it landed on
+  const onSwipe = () => {
+    const el = swipeRef.current
+    if (!el || progRef.current) return
+    const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
+    const k = STAGE_ORDER[i]?.key
+    if (k && k !== focus.stageKey) pick(k)
+  }
 
   return (
-    <div style={{ padding: '14px 18px 44px' }}>
+    <div style={{ padding: '14px 0 44px' }}>
 
-      {/* the stage's own name + the in-page stage switcher */}
-      <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1 }}>{focus.title}</div>
-      <div style={{ display: 'flex', gap: 7, margin: '12px 0 18px', overflowX: 'auto', paddingBottom: 2 }} className="mvp-swipe">
-        {STAGE_CHIPS.map((s) => {
-          const on = focus.stageKey === s.key
-          return (
-            <button key={s.key} onClick={() => pick(s.key)} style={{ flexShrink: 0, whiteSpace: 'nowrap', border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer' }}>{s.label}</button>
-          )
-        })}
+      {/* swipeable stage header — swipe the title left/right to change stages;
+          the dots show where you are and are tappable too */}
+      <div ref={swipeRef} onScroll={onSwipe} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory' }}>
+        {STAGE_ORDER.map((s) => (
+          <div key={s.key} style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'center', padding: '0 18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1 }}>{s.label}</div>
+              <ChevronRight size={17} color={C.faint} style={{ marginTop: 2, flexShrink: 0 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', margin: '10px 18px 18px' }}>
+        {STAGE_ORDER.map((s, i) => (
+          <button key={s.key} aria-label={s.label} onClick={() => pick(s.key)} style={{ width: i === idx ? 18 : 6, height: 6, borderRadius: 99, border: 'none', padding: 0, cursor: 'pointer', background: i === idx ? C.green : C.line, transition: 'width .2s, background .2s' }} />
+        ))}
       </div>
 
-      <StageView stageKey={focus.stageKey} title={focus.title} detail={detail} mv={mv} clientId={clientId} />
+      <div style={{ padding: '0 18px' }}>
+        <StageView stageKey={focus.stageKey} title={focus.title} detail={detail} mv={mv} clientId={clientId} />
 
-      {/* the live campaigns pushing on THIS stage's number */}
-      <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
+        {/* the live campaigns pushing on THIS stage's number */}
+        <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
+      </div>
     </div>
   )
 }
