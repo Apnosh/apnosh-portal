@@ -568,15 +568,45 @@ export function SourceBreakdown({ stage, unit, showReconcile = true }: { stage: 
   )
 }
 
-// A trend graph for a stage (per-day bars over a range). Reuses the home chart so
-// the two surfaces match. It's a TREND under its own "over time" heading, kept
-// separate from the reconciling headline above it.
-function StageTrend({ mv, noun }: { mv: MetricView; noun: string }) {
+// ── A charted stage, in the shape the owner trusts (the home MetricCard): the big
+//    number + an up/down trend on TOP, the histogram under it, then the honest
+//    source cards. ONE useChartRange drives the delta AND the bars, so the number,
+//    the arrow and the bars always describe the same series (no drift). The trend
+//    is honest about staleness: when the freshest data is too old for a real
+//    "this period vs last" claim, it shows "Updated <when>" instead of a frozen
+//    arrow. The headline stays the honest stage number; the cards below reconcile
+//    to it ("Adds up to N"). ──
+function StageWithChart({ mv, headline, label, caption, cs, unit }: { mv: MetricView; headline: number; label: string; caption: string; cs: ComputedStage | undefined; unit: string }) {
   const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
+  const fresh = isFresh(mv.lastDataDate, summary.periodDays)
+  const dn = summary.deltaPct < 0
+  const ac = dn ? C.coral : C.green
+  const acbg = dn ? C.coralBg : C.greenSoft
   return (
-    <Section title="Over time">
-      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={noun} />
-    </Section>
+    <>
+      {/* number + trend on top */}
+      <div>
+        <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>{label}</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
+          <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{headline.toLocaleString()}</span>
+          {headline > 0 && fresh && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, color: ac, background: acbg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
+              <span style={{ fontSize: 11 }}>{dn ? '▼' : '▲'}</span>{Math.abs(summary.deltaPct)}% {summary.cmpFrame}
+            </span>
+          )}
+          {headline > 0 && !fresh && mv.lastDataDate && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: C.mute, background: C.bg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
+              Updated {relDate(mv.lastDataDate)}
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: 13, color: C.faint, marginTop: 6, lineHeight: 1.45 }}>{caption}</div>
+      </div>
+      {/* histogram — the same series as the number + arrow above */}
+      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} />
+      {/* the honest source cards, below the graph */}
+      {cs ? <SourceBreakdown stage={cs} unit={unit} /> : null}
+    </>
   )
 }
 
@@ -595,9 +625,14 @@ function AwarenessStage({ detail, mv }: { detail: InsightsDetail | null; mv: Met
   const feed = cs ? stageFeedFrom(cs) : buildAwarenessFeed(toFeedInput(detail))
   return (
     <>
-      {mv && <StageTrend mv={mv} noun="saw you" />}
-      <StageHero total={feed.headline} label="Times you showed up" caption={feed.caption} />
-      {cs ? <SourceBreakdown stage={cs} unit="Times you showed up" /> : <WhatFeedsThis feed={feed} unit="Times you showed up" />}
+      {mv && cs ? (
+        <StageWithChart mv={mv} headline={feed.headline} label="Times you showed up" caption={feed.caption} cs={cs} unit="Times you showed up" />
+      ) : (
+        <>
+          <StageHero total={feed.headline} label="Times you showed up" caption={feed.caption} />
+          {cs ? <SourceBreakdown stage={cs} unit="Times you showed up" /> : <WhatFeedsThis feed={feed} unit="Times you showed up" />}
+        </>
+      )}
       {detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
       {!detail.socialConnected && <ConnectSocial connected={false} />}
     </>
@@ -628,9 +663,14 @@ function ActionsStage({ detail, mv }: { detail: InsightsDetail | null; mv: Metri
   const feed = cs ? stageFeedFrom(cs) : buildActionsFeed(toFeedInput(detail))
   return (
     <>
-      {mv && <StageTrend mv={mv} noun="took action" />}
-      <StageHero total={feed.headline} label="Moves people made" caption={feed.caption} />
-      {cs ? <SourceBreakdown stage={cs} unit="Moves people made" /> : <WhatFeedsThis feed={feed} unit="Moves people made" />}
+      {mv && cs ? (
+        <StageWithChart mv={mv} headline={feed.headline} label="Moves people made" caption={feed.caption} cs={cs} unit="Moves people made" />
+      ) : (
+        <>
+          <StageHero total={feed.headline} label="Moves people made" caption={feed.caption} />
+          {cs ? <SourceBreakdown stage={cs} unit="Moves people made" /> : <WhatFeedsThis feed={feed} unit="Moves people made" />}
+        </>
+      )}
     </>
   )
 }
