@@ -549,7 +549,7 @@ function SeparatedSources({ title, sources }: { title: string; sources: StageSou
 //    sources sit in the sum group and add up to the headline in plain sight;
 //    context (audience growth, revenue) and drill-downs are shown but clearly
 //    separated so they never imply they feed the number. No source is dropped. ──
-export function SourceBreakdown({ stage, unit, showReconcile = true, title = 'What feeds this' }: { stage: ComputedStage; unit: string; showReconcile?: boolean; title?: string }) {
+export function SourceBreakdown({ stage, unit, showReconcile = true, showExtras = true, title = 'What feeds this' }: { stage: ComputedStage; unit: string; showReconcile?: boolean; showExtras?: boolean; title?: string }) {
   const sums = stage.sources.filter((s) => s.feedRole === 'sum')
   const context = stage.sources.filter((s) => s.feedRole === 'context')
   const drills = stage.sources.filter((s) => s.feedRole === 'drilldown')
@@ -563,39 +563,41 @@ export function SourceBreakdown({ stage, unit, showReconcile = true, title = 'Wh
       {showReconcile && (
         <div style={{ fontSize: 12.5, color: C.faint, marginTop: 10, textAlign: 'center' }}>Adds up to <b style={{ color: C.greenDk, fontFamily: DISPLAY, fontSize: 14 }}>{headline.toLocaleString()}</b> {unit.toLowerCase()}</div>
       )}
-      {context.length > 0 && <SeparatedSources title="Also tracked · not part of this number" sources={context} />}
-      {drills.length > 0 && <SeparatedSources title="More detail · not part of this number" sources={drills} />}
+      {showExtras && context.length > 0 && <SeparatedSources title="Also tracked · not part of this number" sources={context} />}
+      {showExtras && drills.length > 0 && <SeparatedSources title="More detail · not part of this number" sources={drills} />}
     </Section>
   )
 }
 
 // ── A charted stage, in the shape the owner trusts (the home MetricCard): the big
-//    number + an up/down trend on TOP, the histogram under it, then the honest
-//    source cards. ONE useChartRange drives the delta AND the bars, so the number,
-//    the arrow and the bars always describe the same series (no drift). The trend
-//    is honest about staleness: when the freshest data is too old for a real
-//    "this period vs last" claim, it shows "Updated <when>" instead of a frozen
-//    arrow. The headline stays the honest stage number; the cards below reconcile
-//    to it ("Adds up to N"). ──
-function StageWithChart({ mv, headline, label, cs, unit, breakdownTitle }: { mv: MetricView; headline: number; label: string; cs: ComputedStage | undefined; unit: string; breakdownTitle?: string }) {
+//    number + an up/down trend on TOP, the histogram under it, then the source
+//    cards. ONE useChartRange drives the number, the delta AND the bars, so the
+//    range chips (Last 7 days / 30 days / …) move ALL of them together — the big
+//    number is the total for whatever range is picked, not a frozen 30-day figure.
+//    The trend is honest about staleness: when the freshest data is too old for a
+//    real "this period vs last" claim, it shows "Updated <when>" instead of a
+//    frozen arrow. ──
+function StageWithChart({ mv, label, cs, unit, breakdownTitle }: { mv: MetricView; label: string; cs: ComputedStage | undefined; unit: string; breakdownTitle?: string }) {
   const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
   const fresh = isFresh(mv.lastDataDate, summary.periodDays)
   const dn = summary.deltaPct < 0
   const ac = dn ? C.coral : C.green
   const acbg = dn ? C.coralBg : C.greenSoft
+  // The headline is the total of the selected range — moves with the chips.
+  const total = summary.total
   return (
     <>
       {/* number + trend on top */}
       <div>
         <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>{label}</div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
-          <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{headline.toLocaleString()}</span>
-          {headline > 0 && fresh && (
+          <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{total.toLocaleString()}</span>
+          {total > 0 && fresh && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, color: ac, background: acbg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
               <span style={{ fontSize: 11 }}>{dn ? '▼' : '▲'}</span>{Math.abs(summary.deltaPct)}% {summary.cmpFrame}
             </span>
           )}
-          {headline > 0 && !fresh && mv.lastDataDate && (
+          {total > 0 && !fresh && mv.lastDataDate && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: C.mute, background: C.bg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
               Updated {relDate(mv.lastDataDate)}
             </span>
@@ -612,8 +614,10 @@ function StageWithChart({ mv, headline, label, cs, unit, breakdownTitle }: { mv:
       </div>
       {/* histogram — the same series as the number + arrow above */}
       <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} />
-      {/* the honest source cards, below the graph */}
-      {cs ? <SourceBreakdown stage={cs} unit={unit} title={breakdownTitle} /> : null}
+      {/* the source cards, below the graph. Clean split-by-source only — no
+          reconcile line and no drill-down section (the big number is the
+          range-aware total, so a fixed "adds up to N" line would fight it). */}
+      {cs ? <SourceBreakdown stage={cs} unit={unit} title={breakdownTitle} showReconcile={false} showExtras={false} /> : null}
     </>
   )
 }
@@ -634,7 +638,7 @@ function AwarenessStage({ detail, mv }: { detail: InsightsDetail | null; mv: Met
   return (
     <>
       {mv && cs ? (
-        <StageWithChart mv={mv} headline={feed.headline} label="Times you showed up" cs={cs} unit="Times you showed up" breakdownTitle="Views by source" />
+        <StageWithChart mv={mv} label="Times you showed up" cs={cs} unit="Times you showed up" breakdownTitle="Views by source" />
       ) : (
         <>
           <StageHero total={feed.headline} label="Times you showed up" caption={feed.caption} />
@@ -642,7 +646,6 @@ function AwarenessStage({ detail, mv }: { detail: InsightsDetail | null; mv: Met
         </>
       )}
       {detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
-      {!detail.socialConnected && <ConnectSocial connected={false} />}
     </>
   )
 }
@@ -672,7 +675,7 @@ function ActionsStage({ detail, mv }: { detail: InsightsDetail | null; mv: Metri
   return (
     <>
       {mv && cs ? (
-        <StageWithChart mv={mv} headline={feed.headline} label="Moves people made" cs={cs} unit="Moves people made" breakdownTitle="Actions by source" />
+        <StageWithChart mv={mv} label="Moves people made" cs={cs} unit="Moves people made" breakdownTitle="Actions by source" />
       ) : (
         <>
           <StageHero total={feed.headline} label="Moves people made" caption={feed.caption} />
