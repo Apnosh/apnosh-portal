@@ -1,0 +1,169 @@
+/* Verify the insights source-of-truth registry + pure status resolver.
+ * Offline, no DB — connection reads are mocked as ConnectionsByChannel maps.
+ * Exits non-zero on any failure. 30+ checks. */
+import {
+  SOURCES,
+  SOURCE_BY_ID,
+  STAGE_NAMES,
+  PROVIDER_CHANNELS,
+  sourceActionVerb,
+  resolveSourceStatusesFrom,
+  type SourceDef,
+  type SourceStatus,
+  type SourceProvider,
+  type ConnectionsByChannel,
+} from '../src/lib/insights/source-registry'
+import { getConnector } from '../src/lib/integrations/registry'
+
+let fail = 0
+let count = 0
+const ok = (cond: boolean, msg: string) => {
+  count++
+  console.log(`  ${cond ? 'PASS' : 'FAIL'}  ${msg}`)
+  if (!cond) fail++
+}
+
+// ── 1. Every stage has its spec'd sources ────────────────────────────────
+console.log('\n== 1. Stage coverage ==')
+const EXPECT_BY_STAGE: Record<number, string[]> = {
+  1: ['gbp_impressions_search', 'gbp_impressions_maps', 'ig_reach', 'tiktok_video_views', 'gbp_search_keywords', 'ig_nonfollower_reach_pct', 'gsc_site_impressions'],
+  2: ['gbp_profile_views', 'gbp_photo_views', 'ig_profile_visits', 'ig_saves', 'ig_shares', 'ga4_menu_views'],
+  3: ['gbp_direction_requests', 'gbp_calls', 'gbp_website_clicks', 'gbp_booking_clicks', 'ig_link_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
+  4: ['pos_covers', 'pos_revenue', 'pos_avg_ticket', 'delivery_orders'],
+  5: ['pos_repeat_customers', 'loyalty_redemptions', 'ga4_returning_users', 'gbp_review_count', 'gbp_rating_trend', 'ig_follower_growth'],
+}
+for (const [stage, ids] of Object.entries(EXPECT_BY_STAGE)) {
+  const present = SOURCES.filter(s => s.stage === Number(stage)).map(s => s.id)
+  for (const id of ids) ok(present.includes(id), `stage ${stage} (${STAGE_NAMES[Number(stage) as 1]}) has ${id}`)
+  ok(present.length === ids.length, `stage ${stage} has exactly ${ids.length} sources (found ${present.length})`)
+}
+ok(SOURCES.length === Object.values(EXPECT_BY_STAGE).flat().length, `total source count == ${Object.values(EXPECT_BY_STAGE).flat().length}`)
+
+// ── 2. Required fields present + well-formed ─────────────────────────────
+console.log('\n== 2. Every source is well-formed ==')
+const VALID_STATUS: SourceStatus[] = ['CONNECTED', 'AVAILABLE_NOT_CONNECTED', 'ERROR', 'COMING_SOON', 'MANUAL_ENTRY']
+const VALID_PROVIDER: SourceProvider[] = ['google_business_profile', 'instagram', 'google_analytics', 'google_search_console', 'tiktok', 'pos', 'reservations', 'delivery', 'loyalty', 'email']
+let wellFormed = true
+let uniqueIds = true
+const seen = new Set<string>()
+for (const s of SOURCES) {
+  if (seen.has(s.id)) uniqueIds = false
+  seen.add(s.id)
+  const good =
+    typeof s.id === 'string' && s.id.length > 0 &&
+    typeof s.displayName === 'string' && s.displayName.length > 0 &&
+    VALID_PROVIDER.includes(s.provider) &&
+    [1, 2, 3, 4, 5].includes(s.stage) &&
+    Array.isArray(s.metricKeys) &&
+    VALID_STATUS.includes(s.baseStatus) &&
+    ['oauth', 'api_key', 'manual', 'none'].includes(s.authType) &&
+    (s.docsUrl === null || typeof s.docsUrl === 'string') &&
+    typeof s.notes === 'string' && s.notes.length > 0 &&
+    typeof s.wired === 'boolean'
+  if (!good) { wellFormed = false; console.log(`     -> malformed: ${s.id}`) }
+}
+ok(wellFormed, 'every source has all required, well-typed fields')
+ok(uniqueIds, 'all source ids are unique')
+ok(SOURCE_BY_ID['gbp_direction_requests']?.id === 'gbp_direction_requests', 'SOURCE_BY_ID lookup works')
+
+// ── 3. No-adapter sources are COMING_SOON + not wired ────────────────────
+console.log('\n== 3. No-adapter sources are honest stubs ==')
+const NO_ADAPTER = ['tiktok_video_views', 'reservations', 'pos_covers', 'pos_revenue', 'pos_avg_ticket', 'delivery_orders', 'pos_repeat_customers', 'loyalty_redemptions']
+for (const id of NO_ADAPTER) {
+  const s = SOURCE_BY_ID[id]
+  ok(s?.baseStatus === 'COMING_SOON', `${id} baseStatus === COMING_SOON`)
+  ok(s?.wired === false, `${id} wired === false`)
+}
+// COMING_SOON sources have NO connector adapter registered (the true "no adapter" test).
+// (A provider may have a planned channel key — e.g. tiktok — but no adapter in the registry.)
+for (const id of NO_ADAPTER) {
+  const s = SOURCE_BY_ID[id]
+  const channels = PROVIDER_CHANNELS[s.provider] ?? []
+  const anyAdapter = channels.some(ch => !!getConnector(ch))
+  ok(!anyAdapter, `${id} provider "${s.provider}" has no registered connector adapter`)
+}
+
+// ── 4. IG sub-metrics are AVAILABLE_NOT_CONNECTED, never CONNECTED ────────
+console.log('\n== 4. Instagram limitation encoded ==')
+const IG_NOT_WIRED = ['ig_profile_visits', 'ig_saves', 'ig_shares', 'ig_link_clicks', 'ig_nonfollower_reach_pct']
+for (const id of IG_NOT_WIRED) {
+  const s = SOURCE_BY_ID[id]
+  ok(s?.baseStatus === 'AVAILABLE_NOT_CONNECTED', `${id} baseStatus === AVAILABLE_NOT_CONNECTED`)
+  ok(s?.wired === false, `${id} wired === false (not pulled by our sync)`)
+}
+// The account-level IG metrics we DO pull.
+ok(SOURCE_BY_ID['ig_reach']?.wired === true && SOURCE_BY_ID['ig_reach']?.baseStatus === 'CONNECTED', 'ig_reach is CONNECTED + wired')
+ok(SOURCE_BY_ID['ig_follower_growth']?.wired === true && SOURCE_BY_ID['ig_follower_growth']?.baseStatus === 'CONNECTED', 'ig_follower_growth is CONNECTED + wired')
+
+// ── 5. Hero / stage-number / drilldown flags ─────────────────────────────
+console.log('\n== 5. Semantic flags ==')
+ok(SOURCE_BY_ID['gbp_direction_requests']?.isHero === true && SOURCE_BY_ID['gbp_direction_requests']?.stage === 3, 'gbp_direction_requests isHero on stage 3')
+ok(SOURCE_BY_ID['pos_covers']?.isStageNumber === true && SOURCE_BY_ID['pos_covers']?.stage === 4, 'pos_covers isStageNumber on stage 4')
+ok(SOURCE_BY_ID['pos_repeat_customers']?.isStageNumber === true && SOURCE_BY_ID['pos_repeat_customers']?.stage === 5, 'pos_repeat_customers isStageNumber on stage 5')
+const drilldowns = SOURCES.filter(s => s.isDrilldown).map(s => s.id).sort()
+ok(JSON.stringify(drilldowns) === JSON.stringify(['gbp_search_keywords', 'gsc_site_impressions', 'ig_nonfollower_reach_pct']), 'exactly the 3 spec drill-downs are marked isDrilldown')
+// Exactly one hero total.
+ok(SOURCES.filter(s => s.isHero).length === 1, 'exactly one isHero source')
+
+// ── 6. Resolver: active connection lights up wired GBP + IG sources ──────
+console.log('\n== 6. Resolver — active connections ==')
+const ALL_ACTIVE: ConnectionsByChannel = {
+  google_business_profile: { status: 'active', sync_error: null, last_sync_at: '2026-07-10T00:00:00Z' },
+  instagram: { status: 'active', sync_error: null, last_sync_at: '2026-07-10T00:00:00Z' },
+  google_analytics: { status: 'active', sync_error: null, last_sync_at: '2026-07-10T00:00:00Z' },
+  google_search_console: { status: 'active', sync_error: null, last_sync_at: '2026-07-10T00:00:00Z' },
+}
+const active = resolveSourceStatusesFrom(ALL_ACTIVE)
+for (const id of ['gbp_impressions_search', 'gbp_impressions_maps', 'gbp_direction_requests', 'gbp_calls', 'gbp_website_clicks', 'ig_reach']) {
+  ok(active[id].status === 'CONNECTED', `${id} → CONNECTED when connection active`)
+  ok(active[id].hasData === true, `${id} hasData true when connected`)
+}
+// Active-but-not-wired stays AVAILABLE_NOT_CONNECTED even with an active connection.
+for (const id of ['ig_profile_visits', 'ig_saves', 'ig_shares', 'ig_link_clicks', 'ga4_menu_views', 'ga4_order_clicks', 'ga4_phone_taps']) {
+  ok(active[id].status === 'AVAILABLE_NOT_CONNECTED', `${id} → AVAILABLE_NOT_CONNECTED despite active connection (metric not wired)`)
+}
+// GA4 wired metric + GSC drill-down light up when their connection is active.
+ok(active['ga4_returning_users'].status === 'CONNECTED', 'ga4_returning_users → CONNECTED (sessions ingested) when GA4 active')
+ok(active['gsc_site_impressions'].status === 'CONNECTED', 'gsc_site_impressions → CONNECTED when GSC active')
+// No-adapter sources stay COMING_SOON no matter what.
+for (const id of NO_ADAPTER) ok(active[id].status === 'COMING_SOON', `${id} → COMING_SOON even with connections present`)
+
+// ── 7. Resolver: errored connection → ERROR + "Reconnect" ────────────────
+console.log('\n== 7. Resolver — errored connection ==')
+const GBP_ERROR: ConnectionsByChannel = {
+  google_business_profile: { status: 'error', sync_error: 'invalid_grant: token expired', last_sync_at: '2026-07-01T00:00:00Z' },
+}
+const errored = resolveSourceStatusesFrom(GBP_ERROR)
+ok(errored['gbp_direction_requests'].status === 'ERROR', 'errored GBP connection → gbp_direction_requests ERROR')
+ok(errored['gbp_direction_requests'].errorReason === 'invalid_grant: token expired', 'ERROR carries sync_error reason')
+ok(sourceActionVerb(errored['gbp_direction_requests'].status) === 'Reconnect', 'ERROR verb is "Reconnect"')
+ok(errored['gbp_direction_requests'].hasData === false, 'ERROR source has no data')
+
+// ── 8. Resolver: disconnected / missing → AVAILABLE_NOT_CONNECTED + "Connect" ──
+console.log('\n== 8. Resolver — disconnected / missing ==')
+const NONE: ConnectionsByChannel = {}
+const none = resolveSourceStatusesFrom(NONE)
+ok(none['gbp_direction_requests'].status === 'AVAILABLE_NOT_CONNECTED', 'no GBP connection → gbp_direction_requests AVAILABLE_NOT_CONNECTED')
+ok(sourceActionVerb(none['gbp_direction_requests'].status) === 'Connect', 'AVAILABLE_NOT_CONNECTED verb is "Connect"')
+ok(none['ig_reach'].status === 'AVAILABLE_NOT_CONNECTED', 'no IG connection → ig_reach AVAILABLE_NOT_CONNECTED')
+const DISC: ConnectionsByChannel = { google_business_profile: { status: 'disconnected', sync_error: null, last_sync_at: null } }
+const disc = resolveSourceStatusesFrom(DISC)
+ok(disc['gbp_calls'].status === 'AVAILABLE_NOT_CONNECTED', 'disconnected GBP → gbp_calls AVAILABLE_NOT_CONNECTED')
+// pending is also not-connected
+const PEND: ConnectionsByChannel = { instagram: { status: 'pending', sync_error: null, last_sync_at: null } }
+ok(resolveSourceStatusesFrom(PEND)['ig_reach'].status === 'AVAILABLE_NOT_CONNECTED', 'pending IG → ig_reach AVAILABLE_NOT_CONNECTED')
+
+// ── 9. Resolver: IG via agency-login channel (instagram_direct) ──────────
+console.log('\n== 9. Resolver — instagram_direct fallback channel ==')
+const IG_DIRECT: ConnectionsByChannel = { instagram_direct: { status: 'active', sync_error: null, last_sync_at: '2026-07-09T00:00:00Z' } }
+ok(resolveSourceStatusesFrom(IG_DIRECT)['ig_reach'].status === 'CONNECTED', 'ig_reach → CONNECTED via instagram_direct channel')
+
+// ── 10. Verb helper sanity ───────────────────────────────────────────────
+console.log('\n== 10. Action verbs ==')
+ok(sourceActionVerb('CONNECTED') === null, 'CONNECTED has no verb')
+ok(sourceActionVerb('COMING_SOON') === null, 'COMING_SOON has no verb')
+ok(sourceActionVerb('MANUAL_ENTRY') === null, 'MANUAL_ENTRY has no verb')
+
+// ── Summary ──────────────────────────────────────────────────────────────
+console.log(`\n${fail === 0 ? 'ALL PASS' : 'FAILURES'} — ${count - fail}/${count} checks passed`)
+if (fail > 0) process.exit(1)
