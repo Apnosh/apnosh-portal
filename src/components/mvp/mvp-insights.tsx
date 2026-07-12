@@ -375,9 +375,9 @@ function AwarenessStage({ detail, mv }: { detail: InsightsDetail | null; mv: Met
   const feed = buildAwarenessFeed(toFeedInput(detail))
   return (
     <>
+      {mv && <StageTrend mv={mv} noun="saw you" />}
       <StageHero total={feed.headline} label="Times you showed up" caption={feed.caption} />
       <WhatFeedsThis feed={feed} unit="Times you showed up" />
-      {mv && <StageTrend mv={mv} noun="saw you" />}
       {detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
       {!detail.socialConnected && <ConnectSocial connected={false} />}
     </>
@@ -406,9 +406,9 @@ function ActionsStage({ detail, mv }: { detail: InsightsDetail | null; mv: Metri
   const feed = buildActionsFeed(toFeedInput(detail))
   return (
     <>
+      {mv && <StageTrend mv={mv} noun="took action" />}
       <StageHero total={feed.headline} label="Moves people made" caption={feed.caption} />
       <WhatFeedsThis feed={feed} unit="Moves people made" />
-      {mv && <StageTrend mv={mv} noun="took action" />}
     </>
   )
 }
