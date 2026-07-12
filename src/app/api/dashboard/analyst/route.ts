@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       const { data } = await admin
         .from('analyst_reports')
         .select('read, funnel, business, reputation, generated_at')
-        .eq('client_id', clientId).eq('window', window)
+        .eq('client_id', clientId).eq('report_window', window)
         .maybeSingle()
       const row = data as { read: unknown; funnel: unknown; business: unknown; reputation: unknown; generated_at: string } | null
       if (row?.read && row.generated_at && Date.now() - new Date(row.generated_at).getTime() < CACHE_FRESH_MS) {
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
       const admin = createAdminClient()
       await admin.from('analyst_reports').upsert({
         client_id: clientId,
-        window,
+        report_window: window,
         read,
         funnel,
         business: payload.business,

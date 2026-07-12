@@ -2,10 +2,11 @@
 -- One cached read per client + window, so opening the Analyst page doesn't
 -- re-bill the AI on every visit. The route serves the cache when it's fresh
 -- (< 7 days) and regenerates on the owner's explicit Refresh.
+-- (column is report_window because `window` is a reserved word in Postgres)
 
 create table if not exists analyst_reports (
   client_id uuid not null references clients(id) on delete cascade,
-  window text not null default '30d',
+  report_window text not null default '30d',
   read jsonb not null,            -- the AI prose {bottomLine, working, fixes, blindSpots}
   funnel jsonb not null,          -- the authoritative numbers (from the grounded payload, never the model)
   business jsonb,
@@ -13,7 +14,7 @@ create table if not exists analyst_reports (
   model text,
   cost_cents int,
   generated_at timestamptz not null default now(),
-  primary key (client_id, window)
+  primary key (client_id, report_window)
 );
 
 alter table analyst_reports enable row level security;
