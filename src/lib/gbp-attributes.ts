@@ -92,6 +92,9 @@ function groupFor(id: string): GbpAttributeGroupKey | null {
 
 interface RawAttributeMetadata {
   attributeId?: string
+  /** The LIVE v1 response carries the id here: parent: "attributes/{id}"
+   *  (verified against production 2026-07-11). */
+  parent?: string
   /** Some API versions carry the id under `name` instead. */
   name?: string
   valueType?: string
@@ -128,12 +131,31 @@ export async function readGbpAttributes(clientId: string): Promise<GbpAttributes
     return { ok: false, error: (err as Error).message }
   }
 
-  const metaBody = await metaRes.json().catch(() => ({})) as {
+  type MetaBody = {
     attributeMetadata?: RawAttributeMetadata[]
     attributes?: RawAttributeMetadata[]
+    nextPageToken?: string
     error?: { message?: string }
   }
+  const metaBody = await metaRes.json().catch(() => ({})) as MetaBody
   if (!metaRes.ok) return { ok: false, error: metaBody?.error?.message || `HTTP ${metaRes.status}` }
+
+  /* The metadata list can span pages; follow up to 3 extra pages so a long
+     category list cannot silently hide parking/seating attributes. */
+  const allMetaRows: RawAttributeMetadata[] = [...(metaBody.attributeMetadata ?? metaBody.attributes ?? [])]
+  let pageToken = metaBody.nextPageToken
+  for (let page = 0; pageToken && page < 3; page++) {
+    let more: Response
+    try {
+      more = await fetch(`${V1_BASE}/attributes?parent=${encodeURIComponent(loc)}&pageSize=200&pageToken=${encodeURIComponent(pageToken)}`, { headers })
+    } catch {
+      break
+    }
+    const moreBody = await more.json().catch(() => ({})) as MetaBody
+    if (!more.ok) break
+    allMetaRows.push(...(moreBody.attributeMetadata ?? moreBody.attributes ?? []))
+    pageToken = moreBody.nextPageToken
+  }
 
   const valBody = await valRes.json().catch(() => ({})) as {
     attributes?: RawAttributeValue[]
@@ -154,9 +176,8 @@ export async function readGbpAttributes(clientId: string): Promise<GbpAttributes
      for this location, only BOOL, curated into groups, capped per group. */
   const groups: GbpAttributeGroups = { getting: [], seating: [], service: [] }
   const seen = new Set<string>()
-  const metaRows = metaBody.attributeMetadata ?? metaBody.attributes ?? []
-  for (const meta of metaRows) {
-    const rawId = meta.attributeId ?? meta.name ?? ''
+  for (const meta of allMetaRows) {
+    const rawId = meta.parent ?? meta.attributeId ?? meta.name ?? ''
     if (!rawId) continue
     if ((meta.valueType ?? '') !== 'BOOL') continue
     const id = bareAttributeId(rawId)
