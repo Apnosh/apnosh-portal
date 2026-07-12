@@ -33,7 +33,8 @@ import {
 } from 'lucide-react'
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
-import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
+import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
+import type { ComputedStage } from '@/lib/insights/compute-stages'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
@@ -92,6 +93,15 @@ interface InsightsDetail {
   profileVisits?: number
   followersGained?: number
   socialEngagement?: number
+  // Phase 2: the honest outcome-funnel stages (headline == sum of CONNECTED
+  // sources). When present, the stage breakdowns are driven by these so the
+  // boxes reconcile by construction.
+  stages?: ComputedStage[]
+}
+
+// Pull one computed stage out of the detail payload by its funnel stage number.
+function computedStage(detail: InsightsDetail | null, n: number): ComputedStage | undefined {
+  return detail?.stages?.find((s) => s.stage === n)
 }
 
 // Map the lazy-loaded InsightsDetail into the pure FeedInput the breakdown
@@ -296,8 +306,58 @@ function StageView({ stageKey, title, detail, mv }: { stageKey: string; title: s
     case 'shown': return <AwarenessStage detail={detail} mv={mv} />
     case 'engaged': return <InterestStage detail={detail} />
     case 'moved': return <ActionsStage detail={detail} mv={mv} />
+    case 'camein': return <SalesStage detail={detail} mv={mv} title={title} />
+    case 'back': return <RetentionStage detail={detail} mv={mv} title={title} />
     default: return mv ? <MetricCard mv={mv} /> : <NoMetricYet title={title} />
   }
+}
+
+// ── Sales — guests served, straight from a register. Every register/delivery
+//    source is COMING_SOON today, so the stage COLLAPSES gracefully: Customer
+//    actions stays the last real number and this reads as a calm "connect it",
+//    never a fake 0. ──
+function SalesStage({ detail, mv, title }: { detail: InsightsDetail | null; mv: MetricView | undefined; title: string }) {
+  const stage = computedStage(detail, 4)
+  if (stage && stage.isEmpty) return <SalesLocked note={stage.note} />
+  if (stage) {
+    const feed = stageFeedFrom(stage)
+    return (
+      <>
+        <StageHero total={feed.headline} label="Guests served" caption={feed.caption} />
+        <WhatFeedsThis feed={feed} unit="Guests served" />
+      </>
+    )
+  }
+  return mv ? <MetricCard mv={mv} /> : <NoMetricYet title={title} />
+}
+
+// ── Retention — repeat guests when a register connects, otherwise new reviews
+//    this month (the clearest come-back signal we can honestly see). ──
+function RetentionStage({ detail, mv, title }: { detail: InsightsDetail | null; mv: MetricView | undefined; title: string }) {
+  const stage = computedStage(detail, 5)
+  if (stage && !stage.isEmpty) {
+    const feed = stageFeedFrom(stage)
+    return (
+      <>
+        <StageHero total={feed.headline} label="Guests who came back" caption={feed.caption} />
+        <WhatFeedsThis feed={feed} unit="Came back" />
+      </>
+    )
+  }
+  return mv ? <MetricCard mv={mv} /> : <NoMetricYet title={title} />
+}
+
+// The graceful Sales collapse: honest about what we cannot see yet, with the one
+// door that unlocks it. Actions remains the visible endpoint of the funnel.
+function SalesLocked({ note }: { note?: string }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '44px 24px' }}>
+      <div style={{ width: 52, height: 52, borderRadius: 14, background: C.bg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Lock size={22} color={C.faint} /></div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginTop: 14 }}>We cannot see sales yet</div>
+      <div style={{ fontSize: 12.5, color: C.faint, marginTop: 6, lineHeight: 1.5, maxWidth: 280, margin: '6px auto 0' }}>{note || 'Connect your register to measure guests and revenue.'}</div>
+      <Link href="/dashboard/connect-accounts" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 16, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, borderRadius: 99, padding: '10px 16px', textDecoration: 'none' }}>Connect your register <ArrowRight size={15} /></Link>
+    </div>
+  )
 }
 
 // ── The stage hero: one big reconciling number + a plain caption of what it's
@@ -373,7 +433,10 @@ function FeedLoading() {
 //    reach, shown as three labeled pieces that add up to it. ──
 function AwarenessStage({ detail, mv }: { detail: InsightsDetail | null; mv: MetricView | undefined }) {
   if (!detail) return <FeedLoading />
-  const feed = buildAwarenessFeed(toFeedInput(detail))
+  // Phase 2: drive the boxes from the honest computed stage (headline == sum of
+  // CONNECTED sources) when present; fall back to the legacy feed builder.
+  const cs = computedStage(detail, 1)
+  const feed = cs ? stageFeedFrom(cs) : buildAwarenessFeed(toFeedInput(detail))
   return (
     <>
       {mv && <StageTrend mv={mv} noun="saw you" />}
@@ -389,7 +452,8 @@ function AwarenessStage({ detail, mv }: { detail: InsightsDetail | null; mv: Met
 //    New followers rides along as clearly-separated audience growth. ──
 function InterestStage({ detail }: { detail: InsightsDetail | null }) {
   if (!detail) return <FeedLoading />
-  const feed = buildInterestFeed(toFeedInput(detail))
+  const cs = computedStage(detail, 2)
+  const feed = cs ? stageFeedFrom(cs) : buildInterestFeed(toFeedInput(detail))
   return (
     <>
       <StageHero total={feed.headline} label="People who looked closer" caption={feed.caption} />
@@ -404,7 +468,8 @@ function InterestStage({ detail }: { detail: InsightsDetail | null }) {
 //    website taps). One source, still labeled per action. ──
 function ActionsStage({ detail, mv }: { detail: InsightsDetail | null; mv: MetricView | undefined }) {
   if (!detail) return <FeedLoading />
-  const feed = buildActionsFeed(toFeedInput(detail))
+  const cs = computedStage(detail, 3)
+  const feed = cs ? stageFeedFrom(cs) : buildActionsFeed(toFeedInput(detail))
   return (
     <>
       {mv && <StageTrend mv={mv} noun="took action" />}

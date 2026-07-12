@@ -1114,6 +1114,36 @@ export default function HomeFunnel({
  * (and nothing at all if the business has no Google data yet), so Home falls
  * back gracefully to the rest of the feed.
  */
+/** A computed-stage source as it arrives in the insights-detail JSON. */
+interface WireStageSource { id: string; value: number | null; counted: boolean }
+interface WireStage { stage: number; headline: number | null; sources: WireStageSource[] }
+
+/** Derive the funnel's Views + Actions from the honest computed stages (Phase 2):
+ *  Awareness = the CONNECTED-sum (headline), split into its Google vs Social parts
+ *  from the same counted sources, and Actions from the counted GBP action sources.
+ *  Returns null when Awareness has no connected source (so Home falls back / hides). */
+function fromStages(stages: WireStage[] | undefined): { views: Views; actions: Actions } | null {
+  if (!stages || !stages.length) return null
+  const aw = stages.find((s) => s.stage === 1)
+  const ac = stages.find((s) => s.stage === 3)
+  if (!aw || aw.headline == null) return null
+  const val = (st: WireStage | undefined, id: string): number => {
+    const s = st?.sources.find((x) => x.id === id)
+    return s && s.counted && s.value != null ? s.value : 0
+  }
+  const search = val(aw, 'gbp_impressions_search')
+  const maps = val(aw, 'gbp_impressions_maps')
+  const social = val(aw, 'ig_reach')
+  const google = search + maps
+  const views: Views = { total: aw.headline, google, social, maps, search }
+  const actions: Actions = {
+    directions: val(ac, 'gbp_direction_requests'),
+    calls: val(ac, 'gbp_calls'),
+    websiteClicks: val(ac, 'gbp_website_clicks'),
+  }
+  return { views, actions }
+}
+
 export function HomeFunnelLive({ clientId, height, fill }: { clientId?: string; height?: number; fill?: boolean }) {
   const [data, setData] = useState<{ views: Views | null; actions: Actions | null; asOf: string | null; windowStart: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
@@ -1124,7 +1154,18 @@ export function HomeFunnelLive({ clientId, height, fill }: { clientId?: string; 
     setLoading(true)
     fetch(`/api/dashboard/insights-detail?clientId=${clientId}&range=${range}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (alive && d) setData({ views: d.views ?? null, actions: d.actions ?? null, asOf: d.asOf ?? null, windowStart: d.windowStart ?? null, audience: d.audience ?? null, yoy: d.yoy ?? null }) })
+      .then((d) => {
+        if (!alive || !d) return
+        // Phase 2: the honest computed stages are the source of truth for the
+        // funnel numbers (Awareness = connected-sum). Fall back to the legacy
+        // views/actions only if stages are absent (older payloads).
+        const derived = fromStages(d.stages)
+        setData({
+          views: derived?.views ?? d.views ?? null,
+          actions: derived?.actions ?? d.actions ?? null,
+          asOf: d.asOf ?? null, windowStart: d.windowStart ?? null, audience: d.audience ?? null, yoy: d.yoy ?? null,
+        })
+      })
       .catch(() => { /* Home stays lean if this fails */ })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
