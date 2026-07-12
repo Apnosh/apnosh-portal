@@ -191,18 +191,9 @@ export const SOURCES: SourceDef[] = [
   },
 
   // ─────────────────────────────── STAGE 2 · INTEREST ───────────────────────────────
-  {
-    id: 'gbp_profile_views',
-    displayName: 'People who opened your Google profile',
-    provider: 'google_business_profile',
-    stage: 2,
-    metricKeys: [],
-    baseStatus: 'AVAILABLE_NOT_CONNECTED',
-    authType: 'oauth',
-    docsUrl: null,
-    notes: 'gbp_metrics has photo_views but NO dedicated profile_views column — profile views are impressions-adjacent and not separately ingested. Marked not-wired so we never show an untraceable number. (If the owner accepts approximating from impressions, flip wired:true and map to impressions_total.)',
-    wired: false,
-  },
+  // NOTE: "GBP profile views" was intentionally NOT included. Google's
+  // Performance API has no dedicated profile-views metric (only impressions),
+  // and the owner's rule is: if we can't source it honestly, we don't track it.
   {
     id: 'gbp_photo_views',
     displayName: 'Views on your Google photos',
