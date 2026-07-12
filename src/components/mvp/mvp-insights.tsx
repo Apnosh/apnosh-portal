@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
+import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
@@ -84,6 +85,29 @@ interface InsightsDetail {
   actions: { directions: number; calls: number; websiteClicks: number } | null
   socialReach: number
   socialConnected: boolean
+  // whether Google Business Profile analytics resolved (drives the honest
+  // "Not connected" label on Google pieces vs a real 0)
+  googleConnected?: boolean
+  // Interest-stage social signals (best effort; 0 when absent)
+  profileVisits?: number
+  followersGained?: number
+  socialEngagement?: number
+}
+
+// Map the lazy-loaded InsightsDetail into the pure FeedInput the breakdown
+// builders read. Keeps the reconciling math (headline == sum of parts) in one
+// tested place (src/lib/dashboard/insights-feed.ts).
+function toFeedInput(detail: InsightsDetail): FeedInput {
+  return {
+    views: detail.views,
+    socialReach: detail.socialReach ?? 0,
+    socialConnected: !!detail.socialConnected,
+    googleConnected: detail.googleConnected ?? (!!detail.views && ((detail.views.google ?? detail.views.total) > 0)),
+    actions: detail.actions,
+    profileVisits: detail.profileVisits ?? 0,
+    followersGained: detail.followersGained ?? 0,
+    socialEngagement: detail.socialEngagement ?? 0,
+  }
 }
 
 // Short icon per metric key, for the metric switcher + the journey stages.
@@ -255,15 +279,137 @@ function Body({ data, focusKey, detail, campaigns }: { data: InsightsData; focus
       <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1 }}>{focus.title}</div>
       {focus.sub && <div style={{ fontSize: 13, color: C.faint, margin: '5px 0 18px' }}>{focus.sub}</div>}
 
-      {focus.metric === 'engagement'
-        ? <EngagementView detail={detail} />
-        : mv
-          ? <MetricCard mv={mv} />
-          : <NoMetricYet title={focus.title} />}
+      <StageView stageKey={focus.stageKey} title={focus.title} detail={detail} mv={mv} />
 
       {/* the live campaigns pushing on THIS stage's number */}
       <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
     </div>
+  )
+}
+
+// Route each funnel stage to its reconciling view. Awareness / Interest /
+// Customer actions each show a headline that EQUALS the sum of clearly-labeled
+// source pieces (built by the tested insights-feed helpers). Orders + Retention
+// keep the trusted metric graph.
+function StageView({ stageKey, title, detail, mv }: { stageKey: string; title: string; detail: InsightsDetail | null; mv: MetricView | undefined }) {
+  switch (stageKey) {
+    case 'shown': return <AwarenessStage detail={detail} mv={mv} />
+    case 'engaged': return <InterestStage detail={detail} />
+    case 'moved': return <ActionsStage detail={detail} mv={mv} />
+    default: return mv ? <MetricCard mv={mv} /> : <NoMetricYet title={title} />
+  }
+}
+
+// ── The stage hero: one big reconciling number + a plain caption of what it's
+//    made of. This number ALWAYS equals the sum of the "What feeds this" pieces. ──
+function StageHero({ total, label, caption }: { total: number; label: string; caption: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>{label}</div>
+      <div style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink, marginTop: 2 }}>{total.toLocaleString()}</div>
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 6, lineHeight: 1.45 }}>{caption}</div>
+    </div>
+  )
+}
+
+// ── "What feeds this": every source piece as its own labeled row, adding up to
+//    the headline in plain sight. A piece with no connection shows "Not
+//    connected" (never silently dropped). Anything NOT part of the total (e.g.
+//    audience growth) sits below a clear divider so it can't imply it feeds it. ──
+function WhatFeedsThis({ feed, unit }: { feed: StageFeed; unit: string }) {
+  return (
+    <Section title="What feeds this" sub="last 30 days">
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '4px 14px' }}>
+        {feed.pieces.map((p, i) => (
+          <div key={p.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+            <span style={{ fontSize: 13, color: C.ink }}>{p.label}</span>
+            {p.connected
+              ? <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, fontFamily: DISPLAY }}>{p.value.toLocaleString()}</span>
+              : <span style={{ fontSize: 12, color: C.faint }}>{NOT_CONNECTED}</span>}
+          </div>
+        ))}
+        {/* the sum, drawn as an equals so the reconcile is unmistakable */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 0', borderTop: `1px solid ${C.line}` }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{unit}</span>
+          <span style={{ fontSize: 17, fontWeight: 600, color: C.greenDk, fontFamily: DISPLAY }}>{feed.headline.toLocaleString()}</span>
+        </div>
+      </div>
+      {feed.note.length > 0 && (
+        <div style={{ marginTop: 10, background: '#fbfcfb', border: `1px dashed ${C.line}`, borderRadius: 14, padding: '4px 14px' }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, padding: '10px 0 6px' }}>Audience growth · not part of this number</div>
+          {feed.note.map((p) => (
+            <div key={p.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderTop: `0.5px solid ${C.line}` }}>
+              <span style={{ fontSize: 13, color: C.mute }}>{p.label}</span>
+              {p.connected
+                ? <span style={{ fontSize: 14, fontWeight: 600, color: C.mute, fontFamily: DISPLAY }}>{p.value.toLocaleString()}</span>
+                : <span style={{ fontSize: 12, color: C.faint }}>{NOT_CONNECTED}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
+  )
+}
+
+// A trend graph for a stage (per-day bars over a range). Reuses the home chart so
+// the two surfaces match. It's a TREND under its own "over time" heading, kept
+// separate from the reconciling headline above it.
+function StageTrend({ mv, noun }: { mv: MetricView; noun: string }) {
+  const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
+  return (
+    <Section title="Over time">
+      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={noun} />
+    </Section>
+  )
+}
+
+// Calm placeholder while the breakdown data is still loading in.
+function FeedLoading() {
+  return <div style={{ fontSize: 13, color: C.faint, padding: '24px 0' }}>Adding up your sources&hellip;</div>
+}
+
+// ── Awareness — who saw you. Headline = Google Maps + Google Search + Social
+//    reach, shown as three labeled pieces that add up to it. ──
+function AwarenessStage({ detail, mv }: { detail: InsightsDetail | null; mv: MetricView | undefined }) {
+  if (!detail) return <FeedLoading />
+  const feed = buildAwarenessFeed(toFeedInput(detail))
+  return (
+    <>
+      <StageHero total={feed.headline} label="Times you showed up" caption={feed.caption} />
+      <WhatFeedsThis feed={feed} unit="Times you showed up" />
+      {mv && <StageTrend mv={mv} noun="saw you" />}
+      {detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
+      {!detail.socialConnected && <ConnectSocial connected={false} />}
+    </>
+  )
+}
+
+// ── Interest — who looked closer. Headline = Profile visits + Post engagement.
+//    New followers rides along as clearly-separated audience growth. ──
+function InterestStage({ detail }: { detail: InsightsDetail | null }) {
+  if (!detail) return <FeedLoading />
+  const feed = buildInterestFeed(toFeedInput(detail))
+  return (
+    <>
+      <StageHero total={feed.headline} label="People who looked closer" caption={feed.caption} />
+      <WhatFeedsThis feed={feed} unit="Looked closer" />
+      {detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} />}
+      {!detail.socialConnected && <ConnectSocial connected={false} />}
+    </>
+  )
+}
+
+// ── Customer actions — the moves people made on Google (directions, calls,
+//    website taps). One source, still labeled per action. ──
+function ActionsStage({ detail, mv }: { detail: InsightsDetail | null; mv: MetricView | undefined }) {
+  if (!detail) return <FeedLoading />
+  const feed = buildActionsFeed(toFeedInput(detail))
+  return (
+    <>
+      <StageHero total={feed.headline} label="Moves people made" caption={feed.caption} />
+      <WhatFeedsThis feed={feed} unit="Moves people made" />
+      {mv && <StageTrend mv={mv} noun="took action" />}
+    </>
   )
 }
 
