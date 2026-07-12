@@ -27,6 +27,8 @@ import {
   type ResolvedSource,
 } from '@/lib/insights/source-registry'
 import { resolveSourceStatuses } from '@/lib/insights/resolve-source-statuses'
+import { loadClientAnalyticsConfig } from '@/lib/insights/client-analytics-config'
+import { AnalyticsConfigForm } from './AnalyticsConfigForm'
 
 const STATUS_STYLE: Record<SourceStatus, { label: string; chip: string; dot: string }> = {
   CONNECTED: { label: 'Connected', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'text-emerald-500' },
@@ -65,6 +67,7 @@ export default async function InsightsSourcesPage({
   const activeClient = clientId ? clients.find(c => c.id === clientId) ?? null : null
 
   const resolved = clientId ? await resolveSourceStatuses(clientId) : null
+  const analyticsConfig = clientId ? await loadClientAnalyticsConfig(clientId) : null
 
   // Tally counts (resolved when a client is picked, else baseStatus).
   const statusOf = (src: SourceDef): SourceStatus => resolved?.[src.id]?.status ?? src.baseStatus
@@ -110,6 +113,16 @@ export default async function InsightsSourcesPage({
           </Link>
         ))}
       </div>
+
+      {/* GA4 event config — only when a client is picked */}
+      {activeClient && analyticsConfig && (
+        <AnalyticsConfigForm
+          clientId={activeClient.id}
+          clientName={activeClient.name}
+          menuPath={analyticsConfig.menuPath}
+          orderDomain={analyticsConfig.orderDomain}
+        />
+      )}
 
       {/* Legend / counts */}
       <div className="bg-bg-2 rounded-xl border border-ink-6 p-3 flex items-center gap-4 flex-wrap text-[12px]">
@@ -177,6 +190,9 @@ export default async function InsightsSourcesPage({
                             )}
                             {r?.errorReason && (
                               <div className="text-[10.5px] text-rose-600 mt-1 max-w-[200px] truncate" title={r.errorReason}>{r.errorReason}</div>
+                            )}
+                            {r?.hint && (
+                              <div className="text-[10.5px] text-amber-700 mt-1 max-w-[200px]" title={r.hint}>{r.hint}</div>
                             )}
                             {r?.lastUpdated && (
                               <div className="text-[10.5px] text-ink-4 mt-1">synced {new Date(r.lastUpdated).toLocaleDateString()}</div>

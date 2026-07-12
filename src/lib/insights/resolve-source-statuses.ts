@@ -17,7 +17,9 @@ import {
   resolveSourceStatusesFrom,
   type ConnectionsByChannel,
   type ResolvedSourceMap,
+  type ResolverClientConfig,
 } from './source-registry'
+import { loadClientAnalyticsConfig } from './client-analytics-config'
 
 /** Load the client's connections keyed by channel (last-synced row wins per channel). */
 export async function loadClientConnections(clientId: string): Promise<ConnectionsByChannel> {
@@ -52,8 +54,17 @@ export async function loadClientConnections(clientId: string): Promise<Connectio
   return byChannel
 }
 
-/** Resolve every source's live status for one client. Never throws. */
+/** Resolve every source's live status for one client. Never throws. Also reads
+ *  the client's owner-set analytics config so config-gated GA4 event sources
+ *  resolve CONNECTED only when their exact value is present. */
 export async function resolveSourceStatuses(clientId: string): Promise<ResolvedSourceMap> {
-  const connections = await loadClientConnections(clientId)
-  return resolveSourceStatusesFrom(connections)
+  const [connections, cfg] = await Promise.all([
+    loadClientConnections(clientId),
+    loadClientAnalyticsConfig(clientId),
+  ])
+  const config: ResolverClientConfig = {
+    ga4_menu_path: cfg.menuPath,
+    ga4_order_domain: cfg.orderDomain,
+  }
+  return resolveSourceStatusesFrom(connections, config)
 }

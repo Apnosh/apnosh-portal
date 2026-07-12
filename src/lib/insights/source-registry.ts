@@ -55,6 +55,10 @@ export const STAGE_NAMES: Record<FunnelStage, string> = {
 
 export type SourceAuthType = 'oauth' | 'api_key' | 'manual' | 'none'
 
+/** Per-client config keys (set by the owner) that a wired source can additionally
+ *  require before it can resolve CONNECTED. Owner decision: NO auto-detect. */
+export type ClientConfigKey = 'ga4_menu_path' | 'ga4_order_domain'
+
 export interface SourceDef {
   /** stable id, matches the funnel/insights metric key */
   id: string
@@ -77,6 +81,13 @@ export interface SourceDef {
    *  enough — a source whose column/event we don't pull is wired:false and can
    *  never resolve CONNECTED). */
   wired: boolean
+  /** When set, an active provider connection is necessary but NOT sufficient:
+   *  this per-client config value (owner-set) must ALSO be present before the
+   *  source resolves CONNECTED. Missing config → AVAILABLE_NOT_CONNECTED with
+   *  configMissingReason. Used by the GA4 event sources (no auto-detect). */
+  requiresClientConfig?: ClientConfigKey
+  /** Owner-words hint shown when requiresClientConfig is set but missing. */
+  configMissingReason?: string
   /** the primary sub-metric of its stage (e.g. direction requests in Actions) */
   isHero?: boolean
   /** the stage's headline number (e.g. covers in Sales) */
@@ -247,12 +258,15 @@ export const SOURCES: SourceDef[] = [
     displayName: 'People who viewed your menu page',
     provider: 'google_analytics',
     stage: 2,
-    metricKeys: ['menu_view'],
+    metricKeys: ['menu_views'],
     baseStatus: 'AVAILABLE_NOT_CONNECTED',
     authType: 'oauth',
     docsUrl: null,
-    notes: GA4_EVENT_NOTE,
-    wired: false,
+    notes:
+      'Real GA4 page-view data. We read the exact menu page path from settings, then sum views for that page. Turns on once GA4 is connected and a menu page path is set.',
+    wired: true,
+    requiresClientConfig: 'ga4_menu_path',
+    configMissingReason: 'Add your menu page path in settings',
   },
 
   // ─────────────────────────────── STAGE 3 · ACTIONS ───────────────────────────────
@@ -322,12 +336,15 @@ export const SOURCES: SourceDef[] = [
     displayName: 'People who clicked to order online',
     provider: 'google_analytics',
     stage: 3,
-    metricKeys: ['order_click'],
+    metricKeys: ['order_clicks'],
     baseStatus: 'AVAILABLE_NOT_CONNECTED',
     authType: 'oauth',
     docsUrl: null,
-    notes: GA4_EVENT_NOTE,
-    wired: false,
+    notes:
+      'Real GA4 outbound-click data. We read the exact ordering site from settings, then count clicks that leave for it. Turns on once GA4 is connected and an ordering site is set.',
+    wired: true,
+    requiresClientConfig: 'ga4_order_domain',
+    configMissingReason: 'Add your ordering site in settings',
   },
   {
     id: 'ga4_phone_taps',
@@ -338,7 +355,8 @@ export const SOURCES: SourceDef[] = [
     baseStatus: 'AVAILABLE_NOT_CONNECTED',
     authType: 'oauth',
     docsUrl: null,
-    notes: GA4_EVENT_NOTE,
+    notes:
+      'Google Analytics cannot see phone taps on its own. Add a small tracking tag to your website to count them.',
     wired: false,
   },
   {
@@ -523,12 +541,21 @@ export interface ResolvedSource {
   hasData: boolean
   lastUpdated: string | null
   errorReason: string | null
+  /** Non-error hint (e.g. a config-missing prompt) shown neutrally, not as an error. */
+  hint?: string | null
   /** MANUAL_ENTRY provenance — modeled now, populated later. */
   manualBy?: string | null
   manualAt?: string | null
 }
 
 export type ResolvedSourceMap = Record<string, ResolvedSource>
+
+/** The owner-set per-client config the resolver consults for config-gated
+ *  sources (currently the two GA4 event sources). Keys match ClientConfigKey. */
+export interface ResolverClientConfig {
+  ga4_menu_path?: string | null
+  ga4_order_domain?: string | null
+}
 
 /** A trimmed channel_connections row, keyed by channel, that the resolver reads. */
 export interface ConnectionSnapshot {
@@ -550,11 +577,16 @@ export type ConnectionsByChannel = Partial<Record<ConnectorChannel | string, Con
  *  - provider connection in error → ERROR + reason (verb "Reconnect").
  *  - provider connection active + source.wired → CONNECTED.
  *  - provider connection active but NOT wired → AVAILABLE_NOT_CONNECTED.
+ *  - provider connection active + wired + requiresClientConfig, but the config
+ *    value is missing → AVAILABLE_NOT_CONNECTED + configMissingReason hint.
  */
-export function resolveSourceStatusesFrom(connections: ConnectionsByChannel): ResolvedSourceMap {
+export function resolveSourceStatusesFrom(
+  connections: ConnectionsByChannel,
+  config: ResolverClientConfig = {},
+): ResolvedSourceMap {
   const out: ResolvedSourceMap = {}
   for (const source of SOURCES) {
-    out[source.id] = resolveOne(source, connections)
+    out[source.id] = resolveOne(source, connections, config)
   }
   return out
 }
@@ -567,7 +599,11 @@ function notConnected(): ResolvedSource {
   return { status: 'AVAILABLE_NOT_CONNECTED', hasData: false, lastUpdated: null, errorReason: null }
 }
 
-function resolveOne(source: SourceDef, connections: ConnectionsByChannel): ResolvedSource {
+function resolveOne(
+  source: SourceDef,
+  connections: ConnectionsByChannel,
+  config: ResolverClientConfig,
+): ResolvedSource {
   // No adapter → never a number.
   if (source.baseStatus === 'COMING_SOON') return comingSoon()
 
@@ -596,6 +632,19 @@ function resolveOne(source: SourceDef, connections: ConnectionsByChannel): Resol
   if (conn.status === 'active') {
     // Active connection is necessary but NOT sufficient — the metric must be wired.
     if (source.wired) {
+      // A config-gated source (GA4 event sources) also needs its owner-set value.
+      if (source.requiresClientConfig) {
+        const val = config[source.requiresClientConfig]
+        if (!val || !String(val).trim()) {
+          return {
+            status: 'AVAILABLE_NOT_CONNECTED',
+            hasData: false,
+            lastUpdated: conn.last_sync_at ?? null,
+            errorReason: null,
+            hint: source.configMissingReason ?? null,
+          }
+        }
+      }
       return {
         status: 'CONNECTED',
         hasData: true, // best-effort default; refined by a real data check later

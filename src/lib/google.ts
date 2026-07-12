@@ -401,6 +401,177 @@ export async function runGA4DailyReport(
 }
 
 // ---------------------------------------------------------------------------
+// GA4 event sources (Phase 1.5 outcome funnel) -- menu views + order clicks
+// ---------------------------------------------------------------------------
+// Both are REAL, auto-collected GA4 data:
+//   * menu_views   -> screenPageViews (auto-collected page_view) for the
+//                     client's exact menu page path.
+//   * order_clicks -> eventCount of 'click' events (GA4 Enhanced Measurement
+//                     outbound clicks) whose linkDomain is the client's exact
+//                     ordering domain.
+// The owner sets the exact per-client values (NO auto-detect). A metric with
+// no configured value is NOT queried and comes back null (never a fake 0).
+//
+// Phone taps are intentionally absent: GA4 cannot auto-track tel: clicks.
+
+export interface GA4EventConfig {
+  /** exact menu page path, e.g. "/menu" (null = don't query menu views) */
+  menuPath: string | null
+  /** exact outbound ordering domain, e.g. "order.toasttab.com" (null = don't query order clicks) */
+  orderDomain: string | null
+}
+
+export interface GA4EventMetrics {
+  /** null = not queried (no menu path configured). A real query can legitimately be 0. */
+  menuViews: number | null
+  /** null = not queried (no ordering domain configured). A real query can legitimately be 0. */
+  orderClicks: number | null
+}
+
+/** Shape of one GA4 runReport row (dimension values in requested order + metric values). */
+export interface GA4ReportRow {
+  dimensionValues?: Array<{ value?: string }>
+  metricValues?: Array<{ value?: string }>
+}
+
+/** Normalize a path for exact-or-prefix matching: strip a trailing slash
+ *  (except the bare root "/"), and pagePath is already query/host-free in GA4. */
+function normalizePath(p: string): string {
+  const t = (p || '').trim()
+  if (t.length > 1 && t.endsWith('/')) return t.slice(0, -1)
+  return t
+}
+
+/** True when a GA4 pagePath is the configured menu page OR a sub-path of it.
+ *  "/menu" matches "/menu", "/menu/", and "/menu/lunch" — but NOT "/menuitems". */
+export function matchesMenuPath(pagePath: string, menuPath: string): boolean {
+  const path = normalizePath(pagePath)
+  const menu = normalizePath(menuPath)
+  if (!menu) return false
+  return path === menu || path.startsWith(menu + '/')
+}
+
+/** Sum screenPageViews (metric[0]) over rows whose pagePath (dimension[0])
+ *  matches the configured menu path exact-or-prefix. Pure + offline-testable. */
+export function sumMenuViews(rows: GA4ReportRow[], menuPath: string): number {
+  let sum = 0
+  for (const row of rows) {
+    const path = row.dimensionValues?.[0]?.value ?? ''
+    if (matchesMenuPath(path, menuPath)) sum += Number(row.metricValues?.[0]?.value ?? 0)
+  }
+  return sum
+}
+
+/** Sum eventCount (metric[0]) over rows where eventName (dimension[0]) === 'click'
+ *  AND linkDomain (dimension[1]) === the configured ordering domain. Pure +
+ *  offline-testable. Ignores every other event and every other domain. */
+export function sumOrderClicks(rows: GA4ReportRow[], orderDomain: string): number {
+  const domain = (orderDomain || '').trim().toLowerCase()
+  if (!domain) return 0
+  let sum = 0
+  for (const row of rows) {
+    const eventName = row.dimensionValues?.[0]?.value ?? ''
+    const linkDomain = (row.dimensionValues?.[1]?.value ?? '').toLowerCase()
+    if (eventName === 'click' && linkDomain === domain) {
+      sum += Number(row.metricValues?.[0]?.value ?? 0)
+    }
+  }
+  return sum
+}
+
+/** True when a Supabase/Postgres error means "that column isn't there yet"
+ *  (owner hasn't applied migration 206). Lets the sync skip the two event
+ *  writes gracefully instead of erroring the whole GA4 sync. */
+export function isMissingColumnError(error: unknown): boolean {
+  const e = (error ?? {}) as { code?: string; message?: string }
+  if (e.code === '42703' || e.code === 'PGRST204') return true
+  const msg = e.message ?? ''
+  return /column .* does not exist/i.test(msg) || /could not find the '.*' column/i.test(msg)
+}
+
+/**
+ * Pull the day's menu views + order clicks for ONE property, using the client's
+ * exact config. Only queries a metric whose config value is present; the other
+ * stays null. Throws on a GA4 API error (the caller treats event ingest as
+ * best-effort and swallows it so the main sync is unaffected).
+ * propertyId format: "properties/123456"
+ */
+export async function runGA4EventReport(
+  propertyId: string,
+  accessToken: string,
+  date: string, // YYYY-MM-DD
+  config: GA4EventConfig,
+): Promise<GA4EventMetrics> {
+  const out: GA4EventMetrics = { menuViews: null, orderClicks: null }
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  }
+  const url = `https://analyticsdata.googleapis.com/v1beta/${propertyId}:runReport`
+  const tasks: Array<Promise<void>> = []
+
+  // MENU VIEWS: pagePath -> screenPageViews, filtered exact-or-prefix on the
+  // configured menu path (BEGINS_WITH). Auto-collected page_view data.
+  if (config.menuPath && config.menuPath.trim()) {
+    const menuPath = config.menuPath.trim()
+    tasks.push((async () => {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          dateRanges: [{ startDate: date, endDate: date }],
+          dimensions: [{ name: 'pagePath' }],
+          metrics: [{ name: 'screenPageViews' }],
+          dimensionFilter: {
+            filter: {
+              fieldName: 'pagePath',
+              stringFilter: { matchType: 'BEGINS_WITH', value: normalizePath(menuPath) },
+            },
+          },
+          limit: 250,
+        }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error.message)
+      out.menuViews = sumMenuViews((data.rows ?? []) as GA4ReportRow[], menuPath)
+    })())
+  }
+
+  // ORDER CLICKS: eventName + linkDomain -> eventCount, filtered to
+  // eventName == 'click' AND linkDomain == the configured ordering domain.
+  // Auto-collected Enhanced Measurement outbound-click data.
+  if (config.orderDomain && config.orderDomain.trim()) {
+    const orderDomain = config.orderDomain.trim()
+    tasks.push((async () => {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          dateRanges: [{ startDate: date, endDate: date }],
+          dimensions: [{ name: 'eventName' }, { name: 'linkDomain' }],
+          metrics: [{ name: 'eventCount' }],
+          dimensionFilter: {
+            andGroup: {
+              expressions: [
+                { filter: { fieldName: 'eventName', stringFilter: { matchType: 'EXACT', value: 'click' } } },
+                { filter: { fieldName: 'linkDomain', stringFilter: { matchType: 'EXACT', value: orderDomain } } },
+              ],
+            },
+          },
+          limit: 250,
+        }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error.message)
+      out.orderClicks = sumOrderClicks((data.rows ?? []) as GA4ReportRow[], orderDomain)
+    })())
+  }
+
+  await Promise.all(tasks)
+  return out
+}
+
+// ---------------------------------------------------------------------------
 // Google Search Console -- list sites + run queries
 // ---------------------------------------------------------------------------
 

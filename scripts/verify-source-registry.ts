@@ -119,7 +119,7 @@ for (const id of ['gbp_impressions_search', 'gbp_impressions_maps', 'gbp_directi
   ok(active[id].hasData === true, `${id} hasData true when connected`)
 }
 // Active-but-not-wired stays AVAILABLE_NOT_CONNECTED even with an active connection.
-for (const id of ['ig_profile_visits', 'ig_saves', 'ig_shares', 'ig_link_clicks', 'ga4_menu_views', 'ga4_order_clicks', 'ga4_phone_taps']) {
+for (const id of ['ig_profile_visits', 'ig_saves', 'ig_shares', 'ig_link_clicks', 'ga4_phone_taps']) {
   ok(active[id].status === 'AVAILABLE_NOT_CONNECTED', `${id} → AVAILABLE_NOT_CONNECTED despite active connection (metric not wired)`)
 }
 // GA4 wired metric + GSC drill-down light up when their connection is active.
@@ -127,6 +127,54 @@ ok(active['ga4_returning_users'].status === 'CONNECTED', 'ga4_returning_users �
 ok(active['gsc_site_impressions'].status === 'CONNECTED', 'gsc_site_impressions → CONNECTED when GSC active')
 // No-adapter sources stay COMING_SOON no matter what.
 for (const id of NO_ADAPTER) ok(active[id].status === 'COMING_SOON', `${id} → COMING_SOON even with connections present`)
+
+// ── 6b. GA4 event sources are wired BUT config-gated (Phase 1.5) ──────────
+console.log('\n== 6b. GA4 event sources — wired + config-gated ==')
+// Now wired (an event we DO ingest), but need the owner's exact per-client config.
+ok(SOURCE_BY_ID['ga4_menu_views']?.wired === true, 'ga4_menu_views is wired')
+ok(SOURCE_BY_ID['ga4_order_clicks']?.wired === true, 'ga4_order_clicks is wired')
+ok(SOURCE_BY_ID['ga4_menu_views']?.requiresClientConfig === 'ga4_menu_path', 'ga4_menu_views requires ga4_menu_path config')
+ok(SOURCE_BY_ID['ga4_order_clicks']?.requiresClientConfig === 'ga4_order_domain', 'ga4_order_clicks requires ga4_order_domain config')
+
+// GA4 active but NO config → AVAILABLE_NOT_CONNECTED + a config-missing hint.
+ok(active['ga4_menu_views'].status === 'AVAILABLE_NOT_CONNECTED', 'ga4_menu_views → AVAILABLE_NOT_CONNECTED when GA4 active but menu path missing')
+ok(active['ga4_menu_views'].hint === 'Add your menu page path in settings', 'ga4_menu_views carries the menu-path config hint')
+ok(active['ga4_order_clicks'].status === 'AVAILABLE_NOT_CONNECTED', 'ga4_order_clicks → AVAILABLE_NOT_CONNECTED when GA4 active but ordering site missing')
+ok(active['ga4_order_clicks'].hint === 'Add your ordering site in settings', 'ga4_order_clicks carries the ordering-site config hint')
+
+// GA4 active AND config present → CONNECTED.
+const activeWithConfig = resolveSourceStatusesFrom(ALL_ACTIVE, { ga4_menu_path: '/menu', ga4_order_domain: 'order.toasttab.com' })
+ok(activeWithConfig['ga4_menu_views'].status === 'CONNECTED', 'ga4_menu_views → CONNECTED when GA4 active + menu path set')
+ok(activeWithConfig['ga4_order_clicks'].status === 'CONNECTED', 'ga4_order_clicks → CONNECTED when GA4 active + ordering site set')
+// A blank/whitespace config value is treated as missing.
+const activeBlankConfig = resolveSourceStatusesFrom(ALL_ACTIVE, { ga4_menu_path: '   ', ga4_order_domain: '' })
+ok(activeBlankConfig['ga4_menu_views'].status === 'AVAILABLE_NOT_CONNECTED', 'ga4_menu_views → AVAILABLE_NOT_CONNECTED when menu path is blank')
+ok(activeBlankConfig['ga4_order_clicks'].status === 'AVAILABLE_NOT_CONNECTED', 'ga4_order_clicks → AVAILABLE_NOT_CONNECTED when ordering site is blank')
+
+// GA4 errored → ERROR even with config present.
+const GA4_ERROR: ConnectionsByChannel = {
+  google_analytics: { status: 'error', sync_error: 'invalid_grant', last_sync_at: '2026-07-01T00:00:00Z' },
+}
+const ga4Errored = resolveSourceStatusesFrom(GA4_ERROR, { ga4_menu_path: '/menu', ga4_order_domain: 'order.toasttab.com' })
+ok(ga4Errored['ga4_menu_views'].status === 'ERROR', 'ga4_menu_views → ERROR when GA4 connection errored')
+ok(ga4Errored['ga4_order_clicks'].status === 'ERROR', 'ga4_order_clicks → ERROR when GA4 connection errored')
+
+// GA4 missing entirely → AVAILABLE_NOT_CONNECTED (connect GA4 first), config irrelevant.
+const noGa4 = resolveSourceStatusesFrom({}, { ga4_menu_path: '/menu', ga4_order_domain: 'order.toasttab.com' })
+ok(noGa4['ga4_menu_views'].status === 'AVAILABLE_NOT_CONNECTED', 'ga4_menu_views → AVAILABLE_NOT_CONNECTED when GA4 not connected')
+ok(noGa4['ga4_order_clicks'].status === 'AVAILABLE_NOT_CONNECTED', 'ga4_order_clicks → AVAILABLE_NOT_CONNECTED when GA4 not connected')
+
+// ── 6c. Phone taps stay honestly off (GA4 can't see tel: taps) ───────────
+console.log('\n== 6c. Phone taps honest note ==')
+ok(SOURCE_BY_ID['ga4_phone_taps']?.wired === false, 'ga4_phone_taps stays wired:false')
+ok(SOURCE_BY_ID['ga4_phone_taps']?.baseStatus === 'AVAILABLE_NOT_CONNECTED', 'ga4_phone_taps baseStatus AVAILABLE_NOT_CONNECTED')
+ok(
+  SOURCE_BY_ID['ga4_phone_taps']?.notes === 'Google Analytics cannot see phone taps on its own. Add a small tracking tag to your website to count them.',
+  'ga4_phone_taps carries the exact honest tel: note',
+)
+ok(!SOURCE_BY_ID['ga4_phone_taps']?.requiresClientConfig, 'ga4_phone_taps has no config gate (never queried)')
+// Even with GA4 active + all config, phone taps never light up (not wired).
+ok(activeWithConfig['ga4_phone_taps'].status === 'AVAILABLE_NOT_CONNECTED', 'ga4_phone_taps stays AVAILABLE_NOT_CONNECTED even with GA4 active + config')
 
 // ── 7. Resolver: errored connection → ERROR + "Reconnect" ────────────────
 console.log('\n== 7. Resolver — errored connection ==')
