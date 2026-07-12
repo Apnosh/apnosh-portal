@@ -87,12 +87,14 @@ const BAND_INK: Record<HealthBand, [number, number, number]> = {
 const BAND_WORD: Record<HealthBand, string> = { veryLow: 'very low', low: 'low', average: 'average', high: 'high', veryHigh: 'very high' }
 const bandVigor = (b: HealthBand | null): number => (b === 'veryHigh' ? 1 : b === 'high' ? 0.66 : 0.38) // pulse liveliness by band
 
-export interface Views { total: number; maps: number; search: number }
+// total = Google views + social reach. google/social carry the honest split so Awareness can
+// be labelled truthfully; both are optional so older callers (Google-only) stay byte-identical.
+export interface Views { total: number; maps: number; search: number; google?: number; social?: number }
 export interface Actions { directions: number; calls: number; websiteClicks: number }
 export interface FunnelYoY { awareness: number | null; interest: number | null; actions: number | null; orders: number | null }
 
 type Emblem = 'eye' | 'spark' | 'tap' | 'door' | 'heart'
-interface HStage { key: string; label: string; sub?: string; count: number | null; zone: Zone; conv?: string; tag: string; emblem?: Emblem; deltaYoY?: number | null; insightsStage?: string }
+interface HStage { key: string; label: string; sub?: string; count: number | null; zone: Zone; conv?: string; tag: string; split?: string; emblem?: Emblem; deltaYoY?: number | null; insightsStage?: string }
 
 export type FunnelRange = '7d' | '30d' | '90d' | '12m'
 const RANGES: [FunnelRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['90d', 'Last 90 days'], ['12m', 'Last year']]
@@ -205,8 +207,17 @@ function drawEmblem(ctx: CanvasRenderingContext2D, ox: number, oy: number, r: nu
 }
 
 /* Recompute the whole funnel from the real signals + the owner's two dials. */
-function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null) {
+export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null) {
   const total = Math.max(0, views.total)
+  // Awareness folds SOCIAL reach into the Google views (top of funnel = "people who saw you").
+  // When social is 0/undefined the labels stay exactly as before (Google-only accounts see no
+  // change); when social > 0 we relabel honestly and show the Google/Social split.
+  const social = Math.max(0, views.social ?? 0)
+  const google = Math.max(0, views.google ?? total) // fall back to total when no split was sent
+  const hasSocial = social > 0
+  const awareTag = hasSocial ? 'Real · Google + Social' : 'Real · Google'
+  const awareSub = hasSocial ? 'times you showed up on Google and social' : 'times you showed up on Google'
+  const awareSplit = hasSocial ? `Google ${google.toLocaleString()} · Social ${social.toLocaleString()}` : undefined
   const { directions, calls, websiteClicks } = actions
   const engaged = directions + calls + websiteClicks // any interaction with the listing
   const acted = directions + calls                    // the come-or-contact steps (a subset of engaged)
@@ -219,7 +230,7 @@ function computeHome(views: Views, actions: Actions, walkInRate: number, avgTick
   const retention = 0
 
   const stages: HStage[] = [
-    { key: 'shown', label: 'Awareness', sub: 'times you showed up on Google', count: total, zone: 'measured', tag: 'Real · Google', conv: `${pct(engaged, total)} in 100 engaged`, emblem: 'eye', deltaYoY: yoy?.awareness ?? null, insightsStage: 'discovery' },
+    { key: 'shown', label: 'Awareness', sub: awareSub, count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: `${pct(engaged, total)} in 100 engaged`, emblem: 'eye', deltaYoY: yoy?.awareness ?? null, insightsStage: 'discovery' },
     { key: 'engaged', label: 'Interest', sub: 'clicks · calls · directions', count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, insightsStage: 'intent' },
     { key: 'moved', label: 'Customer actions', sub: 'directions & calls', count: acted, zone: 'measured', tag: 'Real · Google', conv: `~${ratePct}% of directions ordered`, emblem: 'tap', deltaYoY: yoy?.actions ?? null, insightsStage: 'intent' },
     { key: 'camein', label: 'Orders', sub: 'walk-in orders from Google', count: cameIn, zone: 'estimate', tag: '~ about · your math', emblem: 'door', deltaYoY: yoy?.orders ?? null, insightsStage: 'conversion' },

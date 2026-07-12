@@ -62,7 +62,10 @@ export async function GET(req: NextRequest) {
   // Brand-awareness view: how many times we showed up, split Maps vs Search, and
   // what people did after seeing us. Same 30d window as findYou so the numbers
   // on the Visibility tab agree with each other.
-  let views: { total: number; maps: number; search: number } | null = null
+  // total = Google impressions + social reach (folded in below, after socialReach is
+  // known). google/social carry the honest split so the funnel can label it truthfully;
+  // maps/search stay the Google-views breakdown used elsewhere.
+  let views: { total: number; maps: number; search: number; google?: number; social?: number } | null = null
   let actions: { directions: number; calls: number; websiteClicks: number } | null = null
   // the most recent day Google actually has data for (its Performance API runs a few
   // days behind); surfaced as "as of ‹date›" so an owner reads the lag honestly.
@@ -131,6 +134,24 @@ export async function GET(req: NextRequest) {
         postedAt: p.posted_at ?? null,
       }))
   }
+
+  // Fold social REACH into the funnel's TOP stage only — Awareness = "people who saw you"
+  // = Google views + social reach. Reach is the only social number with an honest funnel
+  // meaning; likes/comments/profile-visits are NOT folded (they'd break monotonicity). The
+  // deeper stages stay Google-measured. Honesty rules:
+  //   · GBP off/zero AND no social reach → views stays null (funnel hides, unchanged).
+  //   · GBP has impressions, social 0/disconnected → total = google only, social = 0 (looks
+  //     byte-identical to today).
+  //   · social has reach → it's added to the total, split carried for an honest label.
+  if (views) {
+    views = { total: views.total + socialReach, google: views.total, social: socialReach, maps: views.maps, search: views.search }
+  } else if (socialReach > 0) {
+    // GBP disconnected/zero but social has real reach → an honest social-only Awareness.
+    views = { total: socialReach, google: 0, social: socialReach, maps: 0, search: 0 }
+  }
+  // NOTE: yoy.awareness stays the GOOGLE-only year-over-year comparison. We do NOT have a
+  // cheap prior-period social reach here, and fabricating one would be dishonest, so a
+  // Google-only awareness trend is the honest choice.
 
   return NextResponse.json({ findYou, topQueries, topPosts, views, actions, socialReach, socialConnected, asOf, windowStart, audience, yoy })
 }
