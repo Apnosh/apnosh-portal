@@ -23,11 +23,18 @@
  *   j) the hub is GONE from the flow (no "Your Google helper" cards screen)
  *   k) Questions and answers + Post an update still render (reached from the
  *      summary's Keep-it-strong cards)
- *   l) the STANDALONE viewer (ProfileViewer, the More door): all 9 sections
- *      on one page in chapter order under the 3 group headers, honest status
- *      chips, the rich On-Google-now content, a per-section Edit-on-Google
- *      link — and NONE of the builder: no Fix it now, no Apnosh AI says, no
- *      Save to Google, no Keep-it-strong cards
+ *   l) the STANDALONE viewer (ProfileViewer, the More door), non-Pro: all 9
+ *      sections on one page in chapter order under the 3 group headers,
+ *      honest status chips, the rich On-Google-now content, a per-section
+ *      Edit-on-Google link, ONE quiet Pro line — and NONE of the builder:
+ *      no Fix it now, no Apnosh AI says, no Save to Google, no
+ *      Keep-it-strong cards, no in-app Edit
+ *   l2) the tier-aware viewer, Pro: the 6 save-rail sections get a small
+ *      in-app Edit affordance that opens the SAME editors the builder uses
+ *      (description textarea WITHOUT "Draft it for me", hours 7-day rows,
+ *      links 2 fields, attrs Yes/No toggles) with Save to Google + Cancel;
+ *      categories/menu/photos keep their Edit-on-Google links; still no
+ *      advice, no Why-it-matters, no Keep-it-strong; no Pro line
  *   m) the last part says Finish; no em dashes anywhere
  * Run: node_modules/.bin/tsx scripts/smoke-render-gbp-review.tsx */
 
@@ -457,14 +464,14 @@ async function main() {
   const postedPending = renderPost({ initialPosted: { note: pPending, postUrl: null } })
   ok(!postedPending.includes('See it on Google'), 'no See-it link is invented without a URL from Google')
 
-  console.log('\n== l) the standalone viewer: read-only, chaptered, links out ==')
+  console.log('\n== l) the standalone viewer, non-Pro: read-only, chaptered, links out ==')
   const ProfileViewer = mod.ProfileViewer as unknown as React.ComponentType<Record<string, unknown>>
-  const renderViewer = (diag: Record<string, unknown>) => {
-    const html = strip(renderToString(React.createElement(ProfileViewer, { diag })))
+  const renderViewer = (diag: Record<string, unknown>, extra?: Record<string, unknown>) => {
+    const html = strip(renderToString(React.createElement(ProfileViewer, { diag, clientId: 'smoke-client', ...extra })))
     rendered.push(html)
     return html
   }
-  const viewer = renderViewer(FIXTURE)
+  const viewer = renderViewer(FIXTURE, { isPro: false })
   // One page: all 3 group headers and all 9 sections render together.
   for (const ch of ['Be found', 'Look worth the trip', 'Easy to visit']) {
     ok(viewer.includes(ch), `the "${ch}" group header renders on the viewer`)
@@ -516,6 +523,12 @@ async function main() {
   ok(!viewer.includes('Why it matters'), 'no builder Why-it-matters block in the viewer')
   ok(!viewer.includes('>Start<') && !viewer.includes('>Next<') && !viewer.includes('>Finish<'), 'no stepper buttons in the viewer')
   ok(!viewer.includes('Part 1 of 9'), 'no part-by-part progress in the viewer')
+  // Non-Pro tier: ONE quiet Pro line, and never an in-app Edit affordance.
+  ok(viewer.includes('Editing from the app is on the Pro plan.'), 'the quiet Pro line renders for non-Pro')
+  ok(!/ Edit<\/button>/.test(viewer), 'no in-app Edit affordance for non-Pro')
+  // Even the test seam cannot open an editor without Pro.
+  const freeSeam = renderViewer(FIXTURE, { isPro: false, initialEditKey: 'description' })
+  ok(!freeSeam.includes('<textarea') && !freeSeam.includes('Save to Google'), 'the non-Pro viewer can never open an editor')
   // An unknown section shows the engine's safe reason, chips Could not check,
   // and still links out.
   const unkViewer = renderViewer({
@@ -531,6 +544,57 @@ async function main() {
   })
   ok(!noDetailViewer.includes('Monday'), 'no invented hours table when detail is missing')
   ok(noDetailViewer.includes('Hours set for 6 of 7 days.'), 'a detail-less section falls back to the summary string')
+
+  console.log('\n== l2) the tier-aware viewer: Pro edits in app ==')
+  const proViewer = renderViewer(FIXTURE, { isPro: true })
+  // The 6 save-rail sections get the small in-app Edit affordance.
+  const editBtns = (proViewer.match(/ Edit<\/button>/g) ?? []).length
+  ok(editBtns === 6, `the 6 editable sections get an in-app Edit affordance (got ${editBtns})`)
+  ok(!proViewer.includes('Editing from the app is on the Pro plan.'), 'no Pro line for Pro owners')
+  // Categories / menu / photos keep their Edit-on-Google links for everyone.
+  const proGoogleLinks = (proViewer.match(/Edit on Google/g) ?? []).length
+  ok(proGoogleLinks === 3, `categories/menu/photos keep Edit-on-Google links (got ${proGoogleLinks})`)
+  ok(proViewer.includes('https://business.google.com/info') && proViewer.includes('https://business.google.com/menu') && proViewer.includes('https://business.google.com/photos'), 'the three Google editor pages still link out')
+  // Closed cards hold no editor seams.
+  ok(!proViewer.includes('<textarea') && !proViewer.includes('Save to Google'), 'no editor is open before Edit is tapped')
+
+  // The description editor: same textarea + count + save, NO AI drafting.
+  const proDesc = renderViewer(FIXTURE, { isPro: true, initialEditKey: 'description' })
+  ok(proDesc.includes('<textarea'), 'the description textarea renders in the viewer')
+  ok(proDesc.includes(DESCRIPTION_TEXT), 'the viewer textarea prefills with the current text')
+  ok(new RegExp(`${DESCRIPTION_TEXT.length}\\s*of\\s*750 characters`).test(proDesc), 'the live character count renders in the viewer')
+  ok(proDesc.includes('Aim for 250 to 750'), 'the 250-750 rule renders in the viewer')
+  ok(!proDesc.includes('Draft it for me'), 'NO Draft-it-for-me in the viewer description editor')
+  ok(proDesc.includes('Save to Google') && proDesc.includes('Cancel'), 'Save to Google + Cancel render in the viewer')
+
+  // The hours editor: the same 7-day rows, prefilled from Google.
+  const proHours = renderViewer(FIXTURE, { isPro: true, initialEditKey: 'hours' })
+  const proTimeInputs = (proHours.match(/type="time"/g) ?? []).length
+  ok(proTimeInputs === 12, `open/close time inputs render for the 6 open days in the viewer (got ${proTimeInputs})`)
+  ok(proHours.includes('value="08:00"') && proHours.includes('value="21:00"'), 'viewer hours prefill from what Google shows')
+  ok(proHours.includes('This day has more than one time range on Google. Saving replaces it with one range.'), 'the honest multi-range replace note renders in the viewer')
+  ok(proHours.includes('Save to Google'), 'the hours Save to Google button renders in the viewer')
+
+  // The links editor: the same two prefilled fields.
+  const proLinks = renderViewer(FIXTURE, { isPro: true, initialEditKey: 'links' })
+  ok(proLinks.includes('value="https://tacoexample.com"'), 'the viewer website input prefills')
+  ok(proLinks.includes('value="(555) 123-4567"'), 'the viewer phone input prefills')
+  ok(proLinks.includes('Save to Google'), 'the links Save to Google button renders in the viewer')
+
+  // The attribute editor: the same Yes/No toggles, only-what-you-set line.
+  const proAttrs = renderViewer(FIXTURE, { isPro: true, initialEditKey: 'getting' })
+  const proYes = (proAttrs.match(/>Yes<\/button>/g) ?? []).length
+  const proNo = (proAttrs.match(/>No<\/button>/g) ?? []).length
+  ok(proYes === 3 && proNo === 3, `every getting-here row gets a Yes/No toggle pair in the viewer (got ${proYes}/${proNo})`)
+  ok(proAttrs.includes('Only what you set is sent.'), 'the honest only-what-you-set line renders in the viewer')
+  ok(proAttrs.includes('Save to Google') && proAttrs.includes('Cancel'), 'Save to Google + Cancel render in the viewer attrs editor')
+
+  // Still NONE of the builder on any tier: no advice, no Why-it-matters,
+  // no Keep-it-strong, no Fix it now, no stepper.
+  for (const [name, html] of [['closed', proViewer], ['description', proDesc], ['hours', proHours], ['links', proLinks], ['attrs', proAttrs]] as const) {
+    ok(!html.includes('Apnosh AI says') && !html.includes('Why it matters') && !html.includes('Keep it strong') && !html.includes('Fix it now') && !html.includes('>Start<'), `no builder blocks leak into the Pro viewer (${name})`)
+  }
+  ok(!proViewer.includes(ADVICE.description) && !proViewer.includes(ADVICE.hours), 'no advice text leaks into the Pro viewer')
 
   console.log('\n== m) no em dashes ==')
   ok(rendered.every((h) => !h.includes('\u2014')), 'no em dash in any rendered screen')
