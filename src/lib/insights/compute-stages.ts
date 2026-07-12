@@ -24,6 +24,7 @@
 import {
   sourcesForStage,
   SOURCE_BY_ID,
+  shortLabelFor,
   STAGE_NAMES,
   type FunnelStage,
   type SourceStatus,
@@ -36,7 +37,10 @@ export type InsightsWindow = '7d' | '30d' | '90d' | '12m'
 /** One source inside a stage, as the UI + reconcile test read it. */
 export interface StageSourceView {
   id: string
+  /** full owner-words sentence — for admin / hover */
   displayName: string
+  /** short noun label for the breakdown card ("Google Maps views") */
+  shortLabel: string
   provider: SourceProvider
   /** the real number for the window, or null when not CONNECTED / unavailable */
   value: number | null
@@ -139,6 +143,7 @@ function toView(
   return {
     id,
     displayName: def.displayName,
+    shortLabel: shortLabelFor(id),
     provider: def.provider,
     value,
     status,

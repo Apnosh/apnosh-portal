@@ -4,6 +4,8 @@
 import {
   SOURCES,
   SOURCE_BY_ID,
+  SHORT_LABELS,
+  shortLabelFor,
   STAGE_NAMES,
   PROVIDER_CHANNELS,
   sourceActionVerb,
@@ -211,6 +213,13 @@ console.log('\n== 10. Action verbs ==')
 ok(sourceActionVerb('CONNECTED') === null, 'CONNECTED has no verb')
 ok(sourceActionVerb('COMING_SOON') === null, 'COMING_SOON has no verb')
 ok(sourceActionVerb('MANUAL_ENTRY') === null, 'MANUAL_ENTRY has no verb')
+
+// ── 11. Short card labels — every source has one, all short + distinct ─────
+console.log('\n== 11. Short card labels ==')
+for (const s of SOURCES) ok(typeof SHORT_LABELS[s.id] === 'string' && SHORT_LABELS[s.id].length > 0, `${s.id} has a short label ("${SHORT_LABELS[s.id]}")`)
+ok(SOURCES.every(s => shortLabelFor(s.id).length <= 22), 'every short label is <= 22 chars (fits a small card)')
+ok(new Set(SOURCES.map(s => shortLabelFor(s.id))).size === SOURCES.length, 'all short labels are distinct')
+ok(shortLabelFor('not_a_real_source') === 'not_a_real_source', 'unknown id falls back to the id (never throws)')
 
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${fail === 0 ? 'ALL PASS' : 'FAILURES'} — ${count - fail}/${count} checks passed`)

@@ -499,6 +499,56 @@ export const SOURCES: SourceDef[] = [
   },
 ]
 
+// ── Short card labels ───────────────────────────────────────────────────
+// The `displayName` above is the full owner-words sentence ("Times you showed
+// up in Google Maps") — right for the admin board and a hover. But on the tiny
+// breakdown cards (a 2–4 column grid), a sentence wraps to four lines and buries
+// the number. So each source also gets a SHORT noun label ("Google Maps views")
+// for the card. Still honest: impressions read as "views" (not "people"), IG
+// stays "reach", nothing is renamed into a claim it can't back.
+export const SHORT_LABELS: Record<string, string> = {
+  // Stage 1 · Awareness
+  gbp_impressions_search: 'Google Search views',
+  gbp_impressions_maps: 'Google Maps views',
+  ig_reach: 'Instagram reach',
+  tiktok_video_views: 'TikTok views',
+  gbp_search_keywords: 'Search terms',
+  ig_nonfollower_reach_pct: 'New-audience reach',
+  gsc_site_impressions: 'Website in Google',
+  // Stage 2 · Interest
+  gbp_photo_views: 'Google photo views',
+  ig_profile_visits: 'Profile visits',
+  ig_saves: 'Post saves',
+  ig_shares: 'Post shares',
+  ga4_menu_views: 'Menu page views',
+  // Stage 3 · Actions
+  gbp_direction_requests: 'Directions',
+  gbp_calls: 'Calls',
+  gbp_website_clicks: 'Website clicks',
+  gbp_booking_clicks: 'Booking clicks',
+  ig_link_clicks: 'Instagram link taps',
+  ga4_order_clicks: 'Online-order clicks',
+  ga4_phone_taps: 'Phone taps',
+  reservations: 'Online reservations',
+  // Stage 4 · Sales
+  pos_covers: 'Guests served',
+  pos_revenue: 'Revenue',
+  pos_avg_ticket: 'Avg per guest',
+  delivery_orders: 'Delivery orders',
+  // Stage 5 · Retention
+  pos_repeat_customers: 'Repeat guests',
+  loyalty_redemptions: 'Rewards redeemed',
+  ga4_returning_users: 'Returning visitors',
+  gbp_review_count: 'Google reviews',
+  gbp_rating_trend: 'Star rating',
+  ig_follower_growth: 'New followers',
+}
+
+/** Short card label for a source; falls back to the full displayName. */
+export function shortLabelFor(id: string): string {
+  return SHORT_LABELS[id] ?? SOURCE_BY_ID[id]?.displayName ?? id
+}
+
 // ── Lookups ─────────────────────────────────────────────────────────────
 export const SOURCE_BY_ID: Record<string, SourceDef> = Object.fromEntries(
   SOURCES.map(s => [s.id, s]),

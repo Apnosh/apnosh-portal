@@ -452,7 +452,7 @@ export function SourceStateCard({ s, hero, small }: { s: StageSourceView; hero?:
     gap: 4, minHeight: small ? 70 : 80,
   }
   const numFs = small ? 19 : 22
-  const label = <span style={{ fontSize: small ? 11 : 11.5, color: C.mute, lineHeight: 1.3 }}>{s.displayName}</span>
+  const label = <span style={{ fontSize: small ? 11 : 11.5, color: C.mute, lineHeight: 1.3 }}>{s.shortLabel || s.displayName}</span>
   const num = (v: number, color = C.ink) => <span style={{ fontFamily: DISPLAY, fontSize: numFs, fontWeight: 600, color, letterSpacing: '-.01em' }}>{v.toLocaleString()}</span>
   const dash = <span style={{ fontFamily: DISPLAY, fontSize: numFs, fontWeight: 600, color: C.faint }}>{DASH}</span>
 

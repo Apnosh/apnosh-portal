@@ -12,19 +12,21 @@ import React from 'react'
 import { renderToString } from 'react-dom/server'
 import { SourceStateCard, SourceBreakdown } from '../src/components/mvp/mvp-insights'
 import type { ComputedStage, StageSourceView } from '../src/lib/insights/compute-stages'
-import { SOURCE_BY_ID } from '../src/lib/insights/source-registry'
+import { SOURCE_BY_ID, shortLabelFor } from '../src/lib/insights/source-registry'
 
 let fail = 0
 const ok = (cond: boolean, msg: string) => { console.log(`  ${cond ? 'PASS' : 'FAIL'}  ${msg}`); if (!cond) fail++ }
 
 const html = (el: React.ReactElement) => renderToString(el)
-const name = (id: string) => SOURCE_BY_ID[id].displayName
+// cards render the SHORT label now, not the full displayName
+const name = (id: string) => shortLabelFor(id)
 
 // One StageSourceView with sane defaults; override per state.
 function src(over: Partial<StageSourceView> & { id: string; status: StageSourceView['status'] }): StageSourceView {
   const def = SOURCE_BY_ID[over.id]
   return {
     displayName: def.displayName,
+    shortLabel: shortLabelFor(over.id),
     provider: def.provider,
     value: null,
     hasData: false,
