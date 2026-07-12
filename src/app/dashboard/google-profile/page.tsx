@@ -53,7 +53,7 @@ export default async function GoogleProfilePage({ searchParams }: { searchParams
       header={(
         <MvpDetailHeader
           title={campaignId ? 'Fix your Google profile' : 'Your Google profile'}
-          subtitle={campaignId ? 'What Google shows customers today' : 'What Google shows customers today. Edit it on Google.'}
+          subtitle="What Google shows customers today"
           backHref={campaignId ? `/dashboard/campaigns/${campaignId}/ready` : '/dashboard/more'}
           backLabel={campaignId ? 'Campaign' : 'More'}
         />
