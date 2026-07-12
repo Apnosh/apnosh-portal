@@ -276,7 +276,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
   )
 }
 
-function Body({ data, focusKey, detail, campaigns }: { data: InsightsData; focusKey?: string; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null; clientId?: string; campaigns: Record<string, StageCampaign[]> | null }) {
+function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsData; focusKey?: string; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null; clientId?: string; campaigns: Record<string, StageCampaign[]> | null }) {
   const metrics = data.metrics
   const byKey = new Map(metrics.map((m) => [m.key, m]))
   // one tapped funnel stage drives the whole page (no in-page selector). Each stage
@@ -293,7 +293,7 @@ function Body({ data, focusKey, detail, campaigns }: { data: InsightsData; focus
           title flows straight into "Times you showed up". */}
       <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1, marginBottom: 18 }}>{focus.title}</div>
 
-      <StageView stageKey={focus.stageKey} title={focus.title} detail={detail} mv={mv} />
+      <StageView stageKey={focus.stageKey} title={focus.title} detail={detail} mv={mv} clientId={clientId} />
 
       {/* the live campaigns pushing on THIS stage's number */}
       <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
@@ -305,11 +305,11 @@ function Body({ data, focusKey, detail, campaigns }: { data: InsightsData; focus
 // Customer actions each show a headline that EQUALS the sum of clearly-labeled
 // source pieces (built by the tested insights-feed helpers). Orders + Retention
 // keep the trusted metric graph.
-function StageView({ stageKey, title, detail, mv }: { stageKey: string; title: string; detail: InsightsDetail | null; mv: MetricView | undefined }) {
+function StageView({ stageKey, title, detail, mv, clientId }: { stageKey: string; title: string; detail: InsightsDetail | null; mv: MetricView | undefined; clientId?: string }) {
   switch (stageKey) {
-    case 'shown': return <AwarenessStage detail={detail} mv={mv} />
+    case 'shown': return <AwarenessStage detail={detail} mv={mv} clientId={clientId} />
     case 'engaged': return <InterestStage detail={detail} />
-    case 'moved': return <ActionsStage detail={detail} mv={mv} />
+    case 'moved': return <ActionsStage detail={detail} mv={mv} clientId={clientId} />
     case 'camein': return <SalesStage detail={detail} mv={mv} title={title} />
     case 'back': return <RetentionStage detail={detail} mv={mv} title={title} />
     default: return mv ? <MetricCard mv={mv} /> : <NoMetricYet title={title} />
@@ -551,14 +551,14 @@ function SeparatedSources({ title, sources }: { title: string; sources: StageSou
 //    sources sit in the sum group and add up to the headline in plain sight;
 //    context (audience growth, revenue) and drill-downs are shown but clearly
 //    separated so they never imply they feed the number. No source is dropped. ──
-export function SourceBreakdown({ stage, unit, showReconcile = true, showExtras = true, title = 'What feeds this' }: { stage: ComputedStage; unit: string; showReconcile?: boolean; showExtras?: boolean; title?: string }) {
+export function SourceBreakdown({ stage, unit, showReconcile = true, showExtras = true, title = 'What feeds this', sub = 'last 30 days' }: { stage: ComputedStage; unit: string; showReconcile?: boolean; showExtras?: boolean; title?: string; sub?: string }) {
   const sums = stage.sources.filter((s) => s.feedRole === 'sum')
   const context = stage.sources.filter((s) => s.feedRole === 'context')
   const drills = stage.sources.filter((s) => s.feedRole === 'drilldown')
   const headline = stage.headline ?? 0
   const cols = Math.min(4, Math.max(2, sums.length))
   return (
-    <Section title={title} sub="last 30 days">
+    <Section title={title} sub={sub}>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
         {sums.map((s) => <SourceStateCard key={s.id} s={s} hero={s.isHero} />)}
       </div>
@@ -579,7 +579,7 @@ export function SourceBreakdown({ stage, unit, showReconcile = true, showExtras 
 //    The trend is honest about staleness: when the freshest data is too old for a
 //    real "this period vs last" claim, it shows "Updated <when>" instead of a
 //    frozen arrow. ──
-function StageWithChart({ mv, label, cs, unit, breakdownTitle }: { mv: MetricView; label: string; cs: ComputedStage | undefined; unit: string; breakdownTitle?: string }) {
+function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNumber }: { mv: MetricView; label: string; cs: ComputedStage | undefined; unit: string; breakdownTitle?: string; clientId?: string; stageNumber?: number }) {
   const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
   const fresh = isFresh(mv.lastDataDate, summary.periodDays)
   const dn = summary.deltaPct < 0
@@ -587,6 +587,41 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle }: { mv: MetricVie
   const acbg = dn ? C.coralBg : C.greenSoft
   // The headline is the total of the selected range — moves with the chips.
   const total = summary.total
+
+  // The "by source" cards re-scope to the SAME range as the chart. The chart
+  // ranges map to the funnel windows computeStages supports; a custom range has
+  // no fixed window, so it keeps the 30-day snapshot. We refetch the stage from
+  // the light insights-stages endpoint and swap it in (falling back to the
+  // 30-day `cs` while loading or on any hiccup — never a blank).
+  const [rangeStage, setRangeStage] = useState<ComputedStage | undefined>(cs)
+  const [sub, setSub] = useState('last 30 days')
+  useEffect(() => {
+    const map: Record<string, { w: string; label: string } | null> = {
+      '7d': { w: '7d', label: 'last 7 days' },
+      '30d': { w: '30d', label: 'last 30 days' },
+      '1y': { w: '12m', label: 'last year' },
+      custom: null,
+    }
+    const picked = map[range] ?? null
+    // 30 days, custom, or no way to fetch → the snapshot we already have
+    if (!picked || picked.w === '30d' || !clientId || stageNumber == null) {
+      setRangeStage(cs)
+      setSub(range === 'custom' ? 'recent' : 'last 30 days')
+      return
+    }
+    let live = true
+    setSub(picked.label)
+    fetch(`/api/dashboard/insights-stages?clientId=${clientId}&window=${picked.w}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!live) return
+        const found = (j?.stages as ComputedStage[] | undefined)?.find((s) => s.stage === stageNumber)
+        setRangeStage(found ?? cs)
+      })
+      .catch(() => { if (live) setRangeStage(cs) })
+    return () => { live = false }
+  }, [range, clientId, stageNumber, cs])
+
   return (
     <>
       {/* number + trend on top */}
@@ -619,7 +654,7 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle }: { mv: MetricVie
       {/* the source cards, below the graph. Clean split-by-source only — no
           reconcile line and no drill-down section (the big number is the
           range-aware total, so a fixed "adds up to N" line would fight it). */}
-      {cs ? <SourceBreakdown stage={cs} unit={unit} title={breakdownTitle} showReconcile={false} showExtras={false} /> : null}
+      {(rangeStage ?? cs) ? <SourceBreakdown stage={(rangeStage ?? cs)!} unit={unit} title={breakdownTitle} sub={sub} showReconcile={false} showExtras={false} /> : null}
     </>
   )
 }
@@ -631,7 +666,7 @@ function FeedLoading() {
 
 // ── Awareness — who saw you. Headline = Google Maps + Google Search + Social
 //    reach, shown as three labeled pieces that add up to it. ──
-function AwarenessStage({ detail, mv }: { detail: InsightsDetail | null; mv: MetricView | undefined }) {
+function AwarenessStage({ detail, mv, clientId }: { detail: InsightsDetail | null; mv: MetricView | undefined; clientId?: string }) {
   if (!detail) return <FeedLoading />
   // Phase 2: drive the boxes from the honest computed stage (headline == sum of
   // CONNECTED sources) when present; fall back to the legacy feed builder.
@@ -640,7 +675,7 @@ function AwarenessStage({ detail, mv }: { detail: InsightsDetail | null; mv: Met
   return (
     <>
       {mv && cs ? (
-        <StageWithChart mv={mv} label="Times you showed up" cs={cs} unit="Times you showed up" breakdownTitle="Views by source" />
+        <StageWithChart mv={mv} label="Times you showed up" cs={cs} stageNumber={1} clientId={clientId} unit="Times you showed up" breakdownTitle="Views by source" />
       ) : (
         <>
           <StageHero total={feed.headline} label="Times you showed up" caption={feed.caption} />
@@ -670,14 +705,14 @@ function InterestStage({ detail }: { detail: InsightsDetail | null }) {
 
 // ── Customer actions — the moves people made on Google (directions, calls,
 //    website taps). One source, still labeled per action. ──
-function ActionsStage({ detail, mv }: { detail: InsightsDetail | null; mv: MetricView | undefined }) {
+function ActionsStage({ detail, mv, clientId }: { detail: InsightsDetail | null; mv: MetricView | undefined; clientId?: string }) {
   if (!detail) return <FeedLoading />
   const cs = computedStage(detail, 3)
   const feed = cs ? stageFeedFrom(cs) : buildActionsFeed(toFeedInput(detail))
   return (
     <>
       {mv && cs ? (
-        <StageWithChart mv={mv} label="Moves people made" cs={cs} unit="Moves people made" breakdownTitle="Actions by source" />
+        <StageWithChart mv={mv} label="Moves people made" cs={cs} stageNumber={3} clientId={clientId} unit="Moves people made" breakdownTitle="Actions by source" />
       ) : (
         <>
           <StageHero total={feed.headline} label="Moves people made" caption={feed.caption} />
