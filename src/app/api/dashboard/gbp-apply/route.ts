@@ -13,6 +13,11 @@
  *                   [{ day: 'MONDAY', closed: false, open: '11:00', close: '21:00' }, ...]
  *                   The save REPLACES the whole weekly schedule, so the UI must send the
  *                   full week (validated). One open range per day in v1.
+ *   - attributes  : Array<{ id: string, value: boolean }> — 1-20 yes/no listing
+ *                   options (bare attribute ids, e.g. "has_outdoor_seating"). The PATCH
+ *                   is attributeMask-scoped to ONLY the sent ids, so other attributes
+ *                   on the listing are never cleared. live:true only when a re-read of
+ *                   the values shows EVERY sent id at its sent value.
  *
  * Gates, in order (same pattern as the sibling gbp-draft route):
  *   1. checkClientAccess — signed-in user must be linked to the client

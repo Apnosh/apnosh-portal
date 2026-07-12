@@ -11,33 +11,36 @@
  *    green check; problem sections are white cards with a severity dot
  *    (missing = red, needs-work = amber, unknown = grey). ONE section is
  *    expanded at a time, each with a "Fix it on Google" link.
- *  - ai (Pro, "Apnosh AI"): a guided review, part by part. A small intro
- *    ("Let's review your profile, part by part."), then ONE part per screen
- *    (status chip, the REAL content on Google now via the engine's `detail`
- *    payload — the 7-day hours table, the category chips, the full
- *    description, the photo grid, the menu items, the website + phone —
- *    with the summary string as the fallback when detail is absent; why it
- *    matters; and the action: EDIT it right here for the kinds the save
- *    rail supports (description / hours / website+phone, via
- *    POST /api/dashboard/gbp-apply), or an "Edit this on Google" link for
- *    the kinds it does not (categories / menu / photos); then "Next"
- *    ("Finish" on the last part) moves on. A summary of every outcome ends
- *    the review with a fresh "Check my profile again" and a What's-next
- *    pointer to the reviews inbox. Review progress resumes from
- *    localStorage (keyed by client id) so a refresh never restarts at
- *    part 1; a fresh all-good read clears the save.
+ *  - ai (Pro, "Apnosh AI"): ONE dynamic profile builder, chaptered by the
+ *    customer journey. The 9 diagnosed parts are reordered into 3 chapters:
+ *    "Be found" (categories, description, links), "Look worth the trip"
+ *    (photos, menu), "Easy to visit" (hours, getting, seating, service).
+ *    An intro lists the chapters with per-part status chips, then ONE part
+ *    per screen (chapter eyebrow + Part N of 9, status chip, the REAL
+ *    content on Google now via the engine's `detail` payload, the engine's
+ *    deterministic `advice` as the "Apnosh AI says" block, why it matters,
+ *    and the action: EDIT it right here for the kinds the save rail
+ *    supports (description / hours / website+phone / the yes-no attribute
+ *    groups, via POST /api/dashboard/gbp-apply), or an "Edit this on
+ *    Google" link for the kinds it does not (categories / menu / photos)).
+ *    Weak parts say "Fix it now"; good parts offer "Edit anyway". "Next"
+ *    ("Finish" on the last part) moves on. The summary groups every outcome
+ *    under its chapter, shows the honest profile score when one exists, and
+ *    ends with the "Keep it strong" cards: the reviews inbox, Post an
+ *    update, and Questions and answers. Review progress resumes from
+ *    localStorage (versioned key by client id) so a refresh never restarts
+ *    at part 1; a fresh all-good read clears the save.
  *
- * The STANDALONE door (no campaignId) opens on a small hub first ("Your
- * Google helper"): one card into this review, one card out to the reviews
- * inbox (/dashboard/inbox?tab=reviews), one card into Questions and
- * answers (Google shut the Q&A API down for apps, so this door says so
- * plainly, links out to business.google.com, and keeps the part that still
- * works: paste a question, get an AI-drafted answer via
- * POST /api/dashboard/gbp-answer-draft, copy it, post it on Google),
- * and one card into Post an update (compose a What's New post with an AI
- * draft via POST /api/dashboard/gbp-post-draft and publish it live via
- * POST /api/dashboard/gbp-post — text + one button only, no photos or
- * scheduling). The campaign door skips the hub.
+ * The STANDALONE door (no campaignId) goes STRAIGHT into the builder (the
+ * intro, or the resumed part). Questions and answers (Google shut the Q&A
+ * API down for apps, so that door says so plainly, links out to
+ * business.google.com, and keeps the part that still works: paste a
+ * question, get an AI-drafted answer via POST /api/dashboard/gbp-answer-draft,
+ * copy it, post it on Google) and Post an update (compose a What's New post
+ * with an AI draft via POST /api/dashboard/gbp-post-draft and publish it
+ * live via POST /api/dashboard/gbp-post — text + one button only) are
+ * reached from the summary's Keep-it-strong cards; their back button
+ * returns to the builder.
  *
  * Honesty rules baked in:
  *  - Every string shown comes from the diagnosis `sections[]` payload, which
@@ -72,6 +75,7 @@ type GbpSectionDetail =
   | { kind: 'photos'; count: number; newestLabel?: string; items: Array<{ url: string }> }
   | { kind: 'menu'; itemCount: number; items: Array<{ name: string; price?: string }>; menuLink?: string | null }
   | { kind: 'links'; website: string | null; phone: string | null }
+  | { kind: 'attrs'; items: Array<{ id: string; label: string; value: boolean | null }> }
 interface GbpDiagnosisSection {
   key: string
   label: string
@@ -79,6 +83,9 @@ interface GbpDiagnosisSection {
   current: string
   why: string
   aiFixable: boolean
+  /** One deterministic plain recommendation, computed by the engine from the
+   *  real read data only. Rendered as the "Apnosh AI says" block; hidden when absent. */
+  advice?: string
   detail?: GbpSectionDetail
 }
 interface GbpDiagnosis {
@@ -140,17 +147,9 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
   // The AI lane unlocks only when the resolved mode is 'ai' AND this client is still Pro; anything
   // else runs the checklist. A URL/prop alone can never unlock AI without the live Pro entitlement.
   const effectiveMode: 'diy' | 'ai' = mode === 'ai' && isProTier(client?.tier) ? 'ai' : 'diy'
-  // The STANDALONE door opens on the helper hub (review card + reviews card).
-  // A campaign task skips the hub and lands straight in the walkthrough.
-  const standalone = !campaignId
-  const [door, setDoor] = useState<'hub' | 'review' | 'qanda' | 'post'>(standalone ? 'hub' : 'review')
-  // A saved mid-review state flips the hub card to "Continue your review".
-  // Read in an effect only (localStorage), so hydration stays clean.
-  const [hasResume, setHasResume] = useState(false)
-  useEffect(() => {
-    if (!client?.id) return
-    try { setHasResume(!!localStorage.getItem(reviewStorageKey(client.id))) } catch { /* ignore */ }
-  }, [client?.id, door])
+  // Every door lands straight in the builder. Questions and answers + Post an
+  // update open from the summary's Keep-it-strong cards; back returns here.
+  const [door, setDoor] = useState<'review' | 'qanda' | 'post'>('review')
   const [diag, setDiag] = useState<GbpDiagnosis | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [reload, setReload] = useState(0)
@@ -263,28 +262,24 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
     <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
       <style>{FIXER_CSS}</style>
 
-      {standalone && door === 'hub' && (
-        <GbpHelperHub continueReview={hasResume} onReview={() => setDoor('review')} onQuestions={() => setDoor('qanda')} onPost={() => setDoor('post')} />
-      )}
-
-      {standalone && door === 'qanda' && (
+      {door === 'qanda' && (
         <GbpQandaView
           clientId={client?.id ?? ''}
           isPro={isProTier(client?.tier)}
           mapsUri={diag?.mapsUri ?? null}
-          onBack={() => setDoor('hub')}
+          onBack={() => setDoor('review')}
         />
       )}
 
-      {standalone && door === 'post' && (
+      {door === 'post' && (
         <GbpPostView
           clientId={client?.id ?? ''}
           isPro={isProTier(client?.tier)}
-          onBack={() => setDoor('hub')}
+          onBack={() => setDoor('review')}
         />
       )}
 
-      {(!standalone || door === 'review') && (<>
+      {door === 'review' && (<>
 
       {loading && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '48px 0', color: C.mute }}>
@@ -343,6 +338,8 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
             draft={draft}
             draftError={draftError}
             onDraft={() => { void requestDraft() }}
+            onOpenQanda={() => setDoor('qanda')}
+            onOpenPost={() => setDoor('post')}
           />
         ) : (
           <Walkthrough
@@ -389,7 +386,7 @@ function NotConnected() {
   )
 }
 
-/* ── The helper hub (standalone door only) ─────────────────────── */
+/* ── Shared card style (the summary's Keep-it-strong cards) ─────── */
 
 /** Where the owner reads and answers reviews: the Inbox's Reviews tab
  *  (each row deep-links to /dashboard/reviews/[id] with the AI reply). */
@@ -400,85 +397,6 @@ const hubCardStyle: CSSProperties = {
   background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '15px 14px',
   marginBottom: 10, boxShadow: '0 1px 3px rgba(0,0,0,.04)', textDecoration: 'none',
   cursor: 'pointer', font: 'inherit',
-}
-
-/**
- * The standalone door's front screen: four cards. One enters the part-by-part
- * review (says "Continue your review" when a saved mid-review state exists);
- * one goes to the reviews inbox; one opens Questions and answers; one opens
- * Post an update. Exported for the render smoke.
- */
-export function GbpHelperHub({ continueReview, onReview, onQuestions, onPost, reviewsHref = REVIEWS_HREF }: {
-  continueReview: boolean
-  onReview: () => void
-  onQuestions?: () => void
-  onPost?: () => void
-  reviewsHref?: string
-}) {
-  return (
-    <div>
-      <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink, padding: '4px 2px 2px' }}>
-        Your Google helper
-      </div>
-      <div style={{ fontSize: 13, color: C.mute, padding: '0 2px 14px', lineHeight: 1.5 }}>
-        Keep your Google listing sharp and answer your reviews.
-      </div>
-
-      <button type="button" onClick={onReview} className="mvp-row" style={hubCardStyle}>
-        <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Sparkles size={19} color={C.greenDk} />
-        </span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>
-            {continueReview ? 'Continue your review' : 'Review your profile'}
-          </span>
-          <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
-            6 parts. See what Google shows and fix it.
-          </span>
-        </span>
-        <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
-      </button>
-
-      <Link href={reviewsHref} className="mvp-row" style={hubCardStyle}>
-        <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Star size={19} color={C.greenDk} />
-        </span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>Your reviews</span>
-          <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
-            Read new reviews and reply with AI help.
-          </span>
-        </span>
-        <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
-      </Link>
-
-      <button type="button" onClick={onQuestions} className="mvp-row" style={hubCardStyle}>
-        <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <MessageCircle size={19} color={C.greenDk} />
-        </span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>Questions and answers</span>
-          <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
-            Answer what people ask, with AI help.
-          </span>
-        </span>
-        <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
-      </button>
-
-      <button type="button" onClick={onPost} className="mvp-row" style={hubCardStyle}>
-        <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Megaphone size={19} color={C.greenDk} />
-        </span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>Post an update</span>
-          <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
-            Share news on your Google listing.
-          </span>
-        </span>
-        <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
-      </button>
-    </div>
-  )
 }
 
 /* ── The section walkthrough ───────────────────────────────────── */
@@ -719,7 +637,33 @@ function FixOnGoogleBlock() {
   )
 }
 
-/* ── Apnosh AI: the guided review, part by part ─────────────────── */
+/* ── Apnosh AI: the profile builder, chaptered by the customer journey ── */
+
+/**
+ * The 3 chapters over the 9 diagnosed parts, in the order a customer meets
+ * the listing: first Google has to FIND you, then the listing has to look
+ * worth the trip, then the visit has to hold no surprises. The builder
+ * reorders the engine's sections into this sequence; a section key the
+ * chapters do not know (never expected) falls to the end, un-chaptered.
+ */
+const CHAPTERS: Array<{ name: string; sub: string; keys: string[] }> = [
+  { name: 'Be found', sub: 'How Google matches you to searches.', keys: ['categories', 'description', 'links'] },
+  { name: 'Look worth the trip', sub: 'What makes people pick you.', keys: ['photos', 'menu'] },
+  { name: 'Easy to visit', sub: 'No surprises when they come.', keys: ['hours', 'getting', 'seating', 'service'] },
+]
+const CHAPTER_ORDER: string[] = CHAPTERS.flatMap((c) => c.keys)
+
+/** Engine order → chapter order. Unknown keys keep their relative order at the end. */
+function orderSections(sections: GbpDiagnosisSection[]): GbpDiagnosisSection[] {
+  const rank = (s: GbpDiagnosisSection) => {
+    const i = CHAPTER_ORDER.indexOf(s.key)
+    return i === -1 ? CHAPTER_ORDER.length : i
+  }
+  return [...sections].sort((a, b) => rank(a) - rank(b))
+}
+
+/** The chapter a part belongs to (for the eyebrow + summary grouping). */
+const chapterOf = (key: string): string | null => CHAPTERS.find((c) => c.keys.includes(key))?.name ?? null
 
 /** What the owner said about a part (or what the read said, for good/unknown). */
 type PartOutcome = 'good' | 'updated' | 'skipped' | 'unknown'
@@ -734,7 +678,17 @@ const AI_CHIP: Record<GbpSectionStatus, { word: string; color: string; bg: strin
   unknown: { word: 'Could not check', color: C.mute, bg: '#f0f0f3' },
 }
 
-const reviewStorageKey = (clientId: string) => `mvp-gbp-review:${clientId}`
+/** Intro chip: softer words for the chapter list (weak parts read the same). */
+const INTRO_CHIP: Record<GbpSectionStatus, { word: string; color: string; bg: string }> = {
+  good: AI_CHIP.good,
+  'needs-work': { word: 'Could be better', color: '#9a6b17', bg: '#faf1de' },
+  missing: { word: 'Could be better', color: '#9a6b17', bg: '#faf1de' },
+  unknown: AI_CHIP.unknown,
+}
+
+// v2: the review grew from 6 parts to 9 chaptered parts, so old saved indexes
+// would resume into the wrong part. The bumped key simply ignores v1 saves.
+const reviewStorageKey = (clientId: string) => `mvp-gbp-review:v2:${clientId}`
 
 /** The summary word for a part. A fresh read always wins: a part that now
  *  reads good says "Looks good" no matter what the owner tapped earlier. */
@@ -756,7 +710,7 @@ function summaryOutcome(section: GbpDiagnosisSection, outcomes: Record<string, P
  * first screen without localStorage, open a part's editor, or inject a save
  * note); the live page never passes them.
  */
-export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, onDraft, initialPhase, initialIndex, initialOutcomes, initialEditing, initialSaveNote }: {
+export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, onDraft, onOpenQanda, onOpenPost, initialPhase, initialIndex, initialOutcomes, initialEditing, initialSaveNote }: {
   diag: GbpDiagnosis
   clientId: string
   taskDone?: boolean
@@ -767,13 +721,18 @@ export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, 
   draft: string | null
   draftError: string | null
   onDraft: () => void
+  /** Open the Questions-and-answers door (a summary Keep-it-strong card). */
+  onOpenQanda?: () => void
+  /** Open the Post-an-update door (a summary Keep-it-strong card). */
+  onOpenPost?: () => void
   initialPhase?: 'intro' | 'part' | 'summary'
   initialIndex?: number
   initialOutcomes?: Record<string, PartOutcome>
   initialEditing?: boolean
   initialSaveNote?: SaveNote
 }) {
-  const sections = diag.sections ?? []
+  // The builder walks the parts in CHAPTER order, not engine order.
+  const sections = orderSections(diag.sections ?? [])
   const total = sections.length
   const allGood = total > 0 && sections.every((s) => s.status === 'good')
 
@@ -853,7 +812,7 @@ export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, 
     <>
       {phase.name === 'intro' && (
         <AiIntro
-          total={total}
+          sections={sections}
           needsWork={sections.filter((s) => s.status === 'needs-work' || s.status === 'missing').length}
           onStart={() => setPhase({ name: 'part', index: 0 })}
         />
@@ -863,6 +822,7 @@ export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, 
         <AiPart
           key={sections[phase.index].key}
           section={sections[phase.index]}
+          chapter={chapterOf(sections[phase.index].key)}
           index={phase.index}
           total={total}
           clientId={clientId}
@@ -884,10 +844,13 @@ export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, 
           sections={sections}
           outcomes={outcomes}
           allGood={allGood}
+          score={diag.score}
           taskDone={taskDone}
           rechecking={rechecking}
           recheckFailed={recheckFailed}
           onRecheck={onRecheck}
+          onOpenQanda={onOpenQanda}
+          onOpenPost={onOpenPost}
           onBack={() => setPhase({ name: 'part', index: total - 1 })}
         />
       )}
@@ -899,30 +862,57 @@ export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, 
   )
 }
 
-/** The intro moment: what this is, how many parts, one Start button. */
-function AiIntro({ total, needsWork, onStart }: { total: number; needsWork: number; onStart: () => void }) {
+/** The intro moment: the promise, the three chapters with their parts and
+ *  honest status chips, one Start button. */
+function AiIntro({ sections, needsWork, onStart }: { sections: GbpDiagnosisSection[]; needsWork: number; onStart: () => void }) {
+  const total = sections.length
   return (
-    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '26px 20px', textAlign: 'center' }}>
-      <span style={{ width: 46, height: 46, borderRadius: 13, background: C.greenSoft, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Sparkles size={22} color={C.greenDk} />
-      </span>
-      <div style={{ fontSize: 18, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, marginTop: 12 }}>
-        Let&rsquo;s review your profile, part by part.
+    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '24px 18px' }}>
+      <div style={{ textAlign: 'center' }}>
+        <span style={{ width: 46, height: 46, borderRadius: 13, background: C.greenSoft, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Sparkles size={22} color={C.greenDk} />
+        </span>
+        <div style={{ fontSize: 18, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, marginTop: 12 }}>
+          Let&rsquo;s build your best profile.
+        </div>
+        <div style={{ fontSize: 13.5, color: C.mute, marginTop: 6, lineHeight: 1.55 }}>
+          We read your Google listing top to bottom and checked {total} parts, from hours to parking.{' '}
+          {needsWork > 0
+            ? `${needsWork} could be better.`
+            : 'They all look good right now.'}{' '}
+          You get a recommendation on every part, and you can fix most of it right here.
+        </div>
       </div>
-      <div style={{ fontSize: 13.5, color: C.mute, marginTop: 6, lineHeight: 1.55 }}>
-        Your Google listing has {total} parts. We pulled what Google shows today.{' '}
-        {needsWork > 0
-          ? `${needsWork} ${needsWork === 1 ? 'part could use' : 'parts could use'} some work.`
-          : 'They all look good right now.'}{' '}
-        Check each part is right as we go.
-      </div>
+
+      {CHAPTERS.map((ch) => {
+        const parts = sections.filter((s) => ch.keys.includes(s.key))
+        if (parts.length === 0) return null
+        return (
+          <div key={ch.name} style={{ marginTop: 18 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, fontFamily: DISPLAY }}>{ch.name}</div>
+            <div style={{ fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.45 }}>{ch.sub}</div>
+            <div style={{ marginTop: 7, border: `0.5px solid ${C.line}`, borderRadius: 12, overflow: 'hidden' }}>
+              {parts.map((s, i) => {
+                const chip = INTRO_CHIP[s.status] ?? INTRO_CHIP.unknown
+                return (
+                  <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>{s.label}</span>
+                    <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: chip.color, background: chip.bg, borderRadius: 99, padding: '3px 9px' }}>{chip.word}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+
       <button
         type="button"
         onClick={onStart}
         className="mvp-row"
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 18, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
       >
-        Start the review
+        Start
       </button>
     </div>
   )
@@ -931,7 +921,7 @@ function AiIntro({ total, needsWork, onStart }: { total: number; needsWork: numb
 /* ── Save to Google: the gbp-apply rail plumbing ─────────────────── */
 
 /** The field kinds POST /api/dashboard/gbp-apply accepts. */
-type ApplyKind = 'description' | 'hours' | 'website' | 'phone'
+type ApplyKind = 'description' | 'hours' | 'website' | 'phone' | 'attributes'
 
 export type SaveTone = 'ok' | 'pending' | 'error'
 export interface SaveNote { tone: SaveTone; text: string }
@@ -1117,15 +1107,19 @@ const textInputStyle: CSSProperties = { width: '100%', boxSizing: 'border-box', 
 const timeInputStyle: CSSProperties = { flex: 1, minWidth: 0, boxSizing: 'border-box', borderRadius: 9, border: `0.5px solid ${C.line}`, background: C.bg, padding: '7px 9px', fontSize: 13, color: C.ink, font: 'inherit' }
 
 /**
- * One part per screen: progress, name + status chip, what Google shows now,
- * why it matters, then the fix path. Description / hours / website+phone get
- * a real Edit → Save to Google editor (the gbp-apply rail); categories /
- * menu / photos get Google's own editor link. "Next" ("Finish" on the last
- * part) moves on; a part the owner did not fix records as skipped, a part
- * Google accepted a save for records as updated.
+ * One part per screen: the chapter eyebrow + progress, name + status chip,
+ * what Google shows now, the engine's "Apnosh AI says" recommendation, why
+ * it matters, then the fix path. Description / hours / website+phone / the
+ * yes-no attribute groups get a real Edit → Save to Google editor (the
+ * gbp-apply rail); categories / menu / photos get Google's own editor link.
+ * Weak parts say "Fix it now", good parts offer "Edit anyway". "Next"
+ * ("Finish" on the last part) moves on; a part the owner did not fix records
+ * as skipped, a part Google accepted a save for records as updated.
  */
-function AiPart({ section, index, total, clientId, onBack, onDone, onSaved, onSilentRefresh, drafting, draft, draftError, onDraft, initialEditing, initialSaveNote }: {
+function AiPart({ section, chapter, index, total, clientId, onBack, onDone, onSaved, onSilentRefresh, drafting, draft, draftError, onDraft, initialEditing, initialSaveNote }: {
   section: GbpDiagnosisSection
+  /** The chapter this part belongs to (the uppercase eyebrow). */
+  chapter: string | null
   index: number
   total: number
   clientId: string
@@ -1144,15 +1138,16 @@ function AiPart({ section, index, total, clientId, onBack, onDone, onSaved, onSi
 }) {
   const chip = AI_CHIP[section.status] ?? AI_CHIP.unknown
   const actionable = section.status === 'needs-work' || section.status === 'missing'
-  const editableKind: 'description' | 'hours' | 'links' | null =
-    section.key === 'description' ? 'description' : section.key === 'hours' ? 'hours' : section.key === 'links' ? 'links' : null
+  // The attribute groups are editable only when the read gave us the real
+  // rows to start from (no detail = nothing honest to prefill).
+  const editableKind: 'description' | 'hours' | 'links' | 'attrs' | null =
+    section.key === 'description' ? 'description'
+      : section.key === 'hours' ? 'hours'
+        : section.key === 'links' ? 'links'
+          : section.detail?.kind === 'attrs' ? 'attrs'
+            : null
   const googleEditHref = GOOGLE_EDIT_HREF[section.key]
   const current = section.current && section.current.trim() ? section.current : 'Nothing yet'
-  const editCta = section.key === 'description'
-    ? (section.status === 'missing' ? 'Add a description' : 'Edit your description')
-    : section.key === 'hours'
-      ? 'Edit your hours'
-      : 'Edit website and phone'
 
   const [editing, setEditing] = useState(!!initialEditing && !!editableKind && section.status !== 'unknown')
   const [editSession, setEditSession] = useState(0)
@@ -1166,6 +1161,7 @@ function AiPart({ section, index, total, clientId, onBack, onDone, onSaved, onSi
   const [provenDesc, setProvenDesc] = useState<string | null>(null)
   const [provenLinks, setProvenLinks] = useState<{ website?: string; phone?: string }>({})
   const [provenHours, setProvenHours] = useState<Array<{ day: string; hours: string }> | null>(null)
+  const [provenAttrs, setProvenAttrs] = useState<Record<string, boolean>>({})
 
   let detail = section.detail
   if (section.key === 'description' && provenDesc != null) detail = { kind: 'description', text: provenDesc }
@@ -1173,6 +1169,9 @@ function AiPart({ section, index, total, clientId, onBack, onDone, onSaved, onSi
     detail = { ...detail, website: provenLinks.website ?? detail.website, phone: provenLinks.phone ?? detail.phone }
   }
   if (detail?.kind === 'hours' && provenHours) detail = { ...detail, days: provenHours }
+  if (detail?.kind === 'attrs' && Object.keys(provenAttrs).length > 0) {
+    detail = { ...detail, items: detail.items.map((it) => (it.id in provenAttrs ? { ...it, value: provenAttrs[it.id] } : it)) }
+  }
 
   const openEditor = () => { setNote(null); setEditing(true); setEditSession((n) => n + 1) }
 
@@ -1232,6 +1231,24 @@ function AiPart({ section, index, total, clientId, onBack, onDone, onSaved, onSi
     afterAccepted(combined)
   }
 
+  /** The yes-no attribute rows: ONLY the rows the owner actually set or
+   *  changed travel, as one attributeMask-scoped gbp-apply call. */
+  const saveAttrs = async (items: Array<{ id: string; value: boolean }>) => {
+    if (saving) return
+    setSaving(true)
+    const res = await postApply(clientId, 'attributes', items)
+    setSaving(false)
+    if (!res.accepted) { setNote(res.note); return }
+    if (res.live) {
+      setProvenAttrs((cur) => {
+        const next = { ...cur }
+        for (const it of items) next[it.id] = it.value
+        return next
+      })
+    }
+    afterAccepted(res.note)
+  }
+
   const isLast = index + 1 >= total
   const nextOutcome: PartOutcome = savedThisPart ? 'updated' : section.status === 'good' ? 'good' : 'skipped'
   const nextIsPrimary = section.status === 'good' || savedThisPart
@@ -1249,7 +1266,12 @@ function AiPart({ section, index, total, clientId, onBack, onDone, onSaved, onSi
           >
             <ChevronLeft size={19} color={C.mute} />
           </button>
-          <span style={{ fontFamily: DISPLAY, fontSize: 15.5, fontWeight: 600, color: C.ink }}>Part {index + 1} of {total}</span>
+          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            {chapter && (
+              <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: C.greenDk, lineHeight: 1.3 }}>{chapter}</span>
+            )}
+            <span style={{ fontFamily: DISPLAY, fontSize: 15.5, fontWeight: 600, color: C.ink }}>Part {index + 1} of {total}</span>
+          </span>
         </div>
         <div style={{ height: 5, borderRadius: 99, background: '#e9e9ee', overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${Math.round(((index + 1) / total) * 100)}%`, background: C.green, borderRadius: 99, transition: 'width .4s ease' }} />
@@ -1314,6 +1336,16 @@ function AiPart({ section, index, total, clientId, onBack, onDone, onSaved, onSi
                 onSave={(c) => { void saveLinks(c) }}
               />
             )}
+            {editableKind === 'attrs' && (
+              <AttrsEditor
+                key={editSession}
+                initialItems={detail?.kind === 'attrs' ? detail.items : []}
+                saving={saving}
+                serverNote={note?.tone === 'error' ? note : null}
+                onCancel={() => setEditing(false)}
+                onSave={(items) => { void saveAttrs(items) }}
+              />
+            )}
           </>
         ) : (
           <>
@@ -1322,7 +1354,7 @@ function AiPart({ section, index, total, clientId, onBack, onDone, onSaved, onSi
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint }}>On Google now</span>
                 {!actionable && editableKind && (
                   <button type="button" onClick={openEditor} style={smallEditBtnStyle}>
-                    <Pencil size={12} /> Edit
+                    <Pencil size={12} /> Edit anyway
                   </button>
                 )}
                 {!actionable && !editableKind && googleEditHref && (
@@ -1335,6 +1367,18 @@ function AiPart({ section, index, total, clientId, onBack, onDone, onSaved, onSi
                 ? <PartDetail detail={detail} summary={current} />
                 : <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{current}</div>}
             </div>
+
+            {/* The engine's deterministic recommendation for this part. Hidden
+                when the engine sent none (older cache) — never invented here. */}
+            {section.advice && (
+              <div style={{ background: C.greenSoft, borderRadius: 11, padding: '10px 12px', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 3 }}>
+                  <Sparkles size={12} /> Apnosh AI says
+                </div>
+                <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5 }}>{section.advice}</div>
+              </div>
+            )}
+
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 3 }}>Why it matters</div>
             <p style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: 0 }}>{section.why}</p>
 
@@ -1345,7 +1389,7 @@ function AiPart({ section, index, total, clientId, onBack, onDone, onSaved, onSi
                 className="mvp-row"
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 14, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
               >
-                <Pencil size={15} /> {editCta}
+                <Pencil size={15} /> Fix it now
               </button>
             )}
             {actionable && !editableKind && googleEditHref && <GoogleEditBlock href={googleEditHref} />}
@@ -1559,6 +1603,76 @@ function LinksEditor({ initialWebsite, initialPhone, saving, serverNote, onCance
   )
 }
 
+/** One Yes/No segmented pair for an attribute row. */
+const attrToggleStyle = (active: boolean): CSSProperties => ({
+  padding: '6px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', font: 'inherit',
+  border: `0.5px solid ${active ? C.green : C.line}`,
+  background: active ? C.greenSoft : '#fff',
+  color: active ? C.greenDk : C.mute,
+})
+
+/**
+ * Edit → Save for a yes-no attribute group (Getting here / Seating and
+ * space / Service and payments): one row per option with a Yes/No segmented
+ * toggle, prefilled from what Google shows (a never-answered option starts
+ * unselected). Save sends ONLY the rows the owner actually set or changed —
+ * untouched rows never travel, so nothing on Google moves by accident.
+ */
+function AttrsEditor({ initialItems, saving, serverNote, onCancel, onSave }: {
+  initialItems: Array<{ id: string; label: string; value: boolean | null }>
+  saving: boolean
+  serverNote: SaveNote | null
+  onCancel: () => void
+  onSave: (items: Array<{ id: string; value: boolean }>) => void
+}) {
+  const [values, setValues] = useState<Record<string, boolean | null>>(
+    () => Object.fromEntries(initialItems.map((it) => [it.id, it.value])),
+  )
+  const changed = initialItems.filter((it) => {
+    const v = values[it.id]
+    return typeof v === 'boolean' && v !== it.value
+  })
+  const nothingToSave = changed.length === 0
+  const submit = () => {
+    if (nothingToSave) return
+    onSave(changed.map((it) => ({ id: it.id, value: values[it.id] as boolean })))
+  }
+  return (
+    <div>
+      {initialItems.map((it, i) => (
+        <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>{it.label}</span>
+          <span style={{ display: 'inline-flex', flexShrink: 0, borderRadius: 10, overflow: 'hidden' }}>
+            <button
+              type="button"
+              onClick={() => setValues((cur) => ({ ...cur, [it.id]: true }))}
+              aria-pressed={values[it.id] === true}
+              style={{ ...attrToggleStyle(values[it.id] === true), borderRadius: '10px 0 0 10px' }}
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              onClick={() => setValues((cur) => ({ ...cur, [it.id]: false }))}
+              aria-pressed={values[it.id] === false}
+              style={{ ...attrToggleStyle(values[it.id] === false), borderRadius: '0 10px 10px 0', marginLeft: -0.5 }}
+            >
+              No
+            </button>
+          </span>
+        </div>
+      ))}
+      {nothingToSave && (
+        <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '9px 0 0' }}>
+          Set or change an answer, then save. Only what you set is sent.
+        </p>
+      )}
+      {serverNote && <SaveNoteLine note={serverNote} />}
+      <SaveCancelRow saving={saving} disabled={nothingToSave} onSave={submit} onCancel={onCancel} />
+    </div>
+  )
+}
+
 /** The fix path for the kinds the save rail cannot write (categories, menu,
  *  photos): a real link to Google's own editor, never a fake in-app one. */
 function GoogleEditBlock({ href }: { href: string }) {
@@ -1696,6 +1810,22 @@ function PartDetail({ detail, summary }: { detail: GbpSectionDetail; summary: st
     )
   }
 
+  if (detail.kind === 'attrs') {
+    if (detail.items.length === 0) return summaryLine
+    return (
+      <div>
+        {detail.items.map((it, i) => (
+          <div key={it.id} style={detailRowStyle(i === 0)}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.ink, minWidth: 0 }}>{it.label}</span>
+            {it.value === null
+              ? <span style={{ fontSize: 13, fontWeight: 600, color: C.amber, flexShrink: 0 }}>Not set</span>
+              : <span style={{ fontSize: 13, color: C.ink, flexShrink: 0 }}>{it.value ? 'Yes' : 'No'}</span>}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   /* links */
   return (
     <div>
@@ -1724,18 +1854,31 @@ function PartDetail({ detail, summary }: { detail: GbpSectionDetail; summary: st
   )
 }
 
-/** The summary: every part with its outcome, then a fresh re-check (which is
- *  what can complete the campaign task) and the honest delay note. */
-function AiSummary({ sections, outcomes, allGood, taskDone, rechecking, recheckFailed, onRecheck, onBack }: {
+/** The summary: the honest profile score when one exists, every part with
+ *  its outcome grouped under its chapter, a fresh re-check (which is what
+ *  can complete the campaign task), the honest delay note, and the
+ *  Keep-it-strong cards (reviews / post / Q and A). */
+function AiSummary({ sections, outcomes, allGood, score, taskDone, rechecking, recheckFailed, onRecheck, onOpenQanda, onOpenPost, onBack }: {
   sections: GbpDiagnosisSection[]
   outcomes: Record<string, PartOutcome>
   allGood: boolean
+  /** The diagnosis's existing listing-health score; null = could not score honestly. */
+  score: number | null
   taskDone?: boolean
   rechecking?: boolean
   recheckFailed?: boolean
   onRecheck?: () => void
+  onOpenQanda?: () => void
+  onOpenPost?: () => void
   onBack: () => void
 }) {
+  // Chapter groups (a key no chapter knows falls into a last, unnamed group).
+  const groups = CHAPTERS
+    .map((ch) => ({ name: ch.name, parts: sections.filter((s) => ch.keys.includes(s.key)) }))
+    .filter((g) => g.parts.length > 0)
+  const stray = sections.filter((s) => !CHAPTER_ORDER.includes(s.key))
+  if (stray.length > 0) groups.push({ name: 'More', parts: stray })
+
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 2px 14px' }}>
@@ -1753,24 +1896,38 @@ function AiSummary({ sections, outcomes, allGood, taskDone, rechecking, recheckF
         </span>
       </div>
 
-      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '4px 0', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
-        {sections.map((s, i) => {
-          const o = summaryOutcome(s, outcomes)
-          return (
-            <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
-              {o.good
-                ? (
-                  <span style={{ width: 20, height: 20, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Check size={12} color={C.greenDk} strokeWidth={3} />
-                  </span>
-                )
-                : <span style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: o.color }} /></span>}
-              <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: C.ink }}>{s.label}</span>
-              <span style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: o.color }}>{o.word}</span>
-            </div>
-          )
-        })}
-      </div>
+      {/* The honest score: the diagnosis's existing listing-health number,
+          shown plainly. No before/after is ever invented. */}
+      {score != null && (
+        <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '13px 16px', marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+          <div style={{ fontSize: 14.5, fontWeight: 700, color: C.ink, fontFamily: DISPLAY }}>Profile score: {score} of 100</div>
+          <div style={{ fontSize: 12, color: C.mute, marginTop: 2, lineHeight: 1.45 }}>From what Google shows on your listing right now.</div>
+        </div>
+      )}
+
+      {groups.map((g) => (
+        <div key={g.name} style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, margin: '0 2px 6px' }}>{g.name}</div>
+          <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '4px 0', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+            {g.parts.map((s, i) => {
+              const o = summaryOutcome(s, outcomes)
+              return (
+                <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+                  {o.good
+                    ? (
+                      <span style={{ width: 20, height: 20, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Check size={12} color={C.greenDk} strokeWidth={3} />
+                      </span>
+                    )
+                    : <span style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: o.color }} /></span>}
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: C.ink }}>{s.label}</span>
+                  <span style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: o.color }}>{o.word}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
 
       {allGood ? (
         <div style={{ background: C.greenSoft, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 16px', marginTop: 12 }}>
@@ -1807,10 +1964,10 @@ function AiSummary({ sections, outcomes, allGood, taskDone, rechecking, recheckF
         </>
       )}
 
-      {/* What's next: another part of the Google helper. */}
+      {/* Keep it strong: the other Google tools, now homed on the summary. */}
       <div style={{ marginTop: 18 }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, margin: '0 2px 8px' }}>
-          What&rsquo;s next
+          Keep it strong
         </div>
         <Link href={REVIEWS_HREF} className="mvp-row" style={hubCardStyle}>
           <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1824,6 +1981,30 @@ function AiSummary({ sections, outcomes, allGood, taskDone, rechecking, recheckF
           </span>
           <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
         </Link>
+        <button type="button" onClick={onOpenPost} className="mvp-row" style={hubCardStyle}>
+          <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Megaphone size={19} color={C.greenDk} />
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>Post an update</span>
+            <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
+              Share news on your Google listing.
+            </span>
+          </span>
+          <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
+        </button>
+        <button type="button" onClick={onOpenQanda} className="mvp-row" style={hubCardStyle}>
+          <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <MessageCircle size={19} color={C.greenDk} />
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>Questions and answers</span>
+            <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
+              Answer what people ask, with AI help.
+            </span>
+          </span>
+          <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
+        </button>
       </div>
     </>
   )

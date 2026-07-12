@@ -321,7 +321,9 @@ export async function getClientAttributes(clientId: string, locationId?: string 
   const out: AttributeValues = {}
   const attrs = ((body as { attributes?: RawAttribute[] }).attributes ?? [])
   for (const a of attrs) {
-    const id = a.name.replace(/^attributes\//, '')
+    /* Google returns the attribute name as either "attributes/{id}" or the
+       full "locations/{l}/attributes/{id}" — normalize both to the bare id. */
+    const id = (a.name.split('/attributes/').pop() ?? a.name).replace(/^attributes\//, '')
     if (a.valueType === 'BOOL' && Array.isArray(a.values) && a.values.length > 0) {
       out[id] = !!a.values[0]
     }

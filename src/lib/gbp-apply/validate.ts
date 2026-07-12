@@ -152,6 +152,52 @@ export function validateHoursWeek(input: unknown): { ok: true; value: WeeklyHour
   return { ok: true, value: weekly }
 }
 
+/* ── Attributes (v1 locations.attributes PATCH) ── */
+
+/** One save touches at most this many yes/no options — a UI group is ≤8. */
+export const ATTRIBUTES_MAX_ITEMS = 20
+
+// Bare attribute ids only (e.g. "has_outdoor_seating"): path-safe by
+// construction, since each id is embedded in the attributeMask and the
+// "attributes/{id}" resource names of the PATCH body.
+const ATTRIBUTE_ID_RE = /^[A-Za-z0-9_]+$/
+
+export interface AttributeWriteItem {
+  /** Bare attribute id, no "attributes/" prefix. */
+  id: string
+  value: boolean
+}
+
+/**
+ * Deterministic guard for an attributes save: a non-empty list of
+ * { id, value } pairs, 1-20 items, bare path-safe ids, booleans only,
+ * each id at most once. Anything else is refused before a rate slot is
+ * burned or Google is touched.
+ */
+export function validateAttributes(input: unknown): { ok: true; value: AttributeWriteItem[] } | { ok: false; error: string } {
+  if (!Array.isArray(input)) return { ok: false, error: 'Attributes must be a list of { id, value } items.' }
+  if (input.length === 0) return { ok: false, error: 'Send at least one attribute to save.' }
+  if (input.length > ATTRIBUTES_MAX_ITEMS) {
+    return { ok: false, error: `Send at most ${ATTRIBUTES_MAX_ITEMS} attributes per save (got ${input.length}).` }
+  }
+  const out: AttributeWriteItem[] = []
+  const seen = new Set<string>()
+  for (const raw of input) {
+    if (typeof raw !== 'object' || raw === null) return { ok: false, error: 'Each attribute must be an object like { id, value }.' }
+    const entry = raw as Record<string, unknown>
+    const id = entry.id
+    if (typeof id !== 'string' || !id.trim()) return { ok: false, error: 'Each attribute needs a non-empty id.' }
+    if (!ATTRIBUTE_ID_RE.test(id)) {
+      return { ok: false, error: `"${id}" is not a valid attribute id. Use letters, numbers, and underscores only.` }
+    }
+    if (seen.has(id)) return { ok: false, error: `"${id}" appears twice. Send each attribute once.` }
+    seen.add(id)
+    if (typeof entry.value !== 'boolean') return { ok: false, error: `"${id}" needs a value of true or false.` }
+    out.push({ id, value: entry.value })
+  }
+  return { ok: true, value: out }
+}
+
 /* ── GBP local posts (What's New) ── */
 
 // Google's summary cap is 1500; we stop well short so posts read like posts, not essays.

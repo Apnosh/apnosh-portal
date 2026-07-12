@@ -2,7 +2,8 @@ import 'server-only'
 /**
  * gbp-apply/fields — the generic single-field write engine for the Google Business
  * Profile fields the v1 API supports editing: description, hours (regularHours),
- * website (websiteUri), and phone (phoneNumbers.primaryPhone).
+ * website (websiteUri), phone (phoneNumbers.primaryPhone), and yes/no listing
+ * attributes (the v1 attributes sub-resource, attributeMask-scoped).
  *
  * One honesty contract for every kind, identical to the description path that
  * shipped first in dispatch.ts (whose description branch now delegates here):
@@ -18,13 +19,13 @@ import 'server-only'
  * harness-testable with zero network: scripts/verify-gbp-apply.ts.
  */
 import { getActiveTokenForClient } from '@/lib/gbp-menu'
-import { updateClientListing, getClientListing, type ListingFields, type WeeklyHours, type DayKey } from '@/lib/gbp-listing'
+import { updateClientListing, getClientListing, updateClientAttributes, getClientAttributes, type ListingFields, type WeeklyHours, type DayKey, type AttributeValues } from '@/lib/gbp-listing'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { acquireWriteSlot } from './pace'
-import { validateDescription, validateWebsite, validatePhone, validateHoursWeek, type HoursDayInput } from './validate'
+import { validateDescription, validateWebsite, validatePhone, validateHoursWeek, validateAttributes, type HoursDayInput, type AttributeWriteItem } from './validate'
 
-export type FieldKind = 'description' | 'hours' | 'website' | 'phone'
-export const FIELD_KINDS: readonly FieldKind[] = ['description', 'hours', 'website', 'phone'] as const
+export type FieldKind = 'description' | 'hours' | 'website' | 'phone' | 'attributes'
+export const FIELD_KINDS: readonly FieldKind[] = ['description', 'hours', 'website', 'phone', 'attributes'] as const
 
 /** Same shape as dispatch.ts PushOutcome, plus a machine-readable code so callers
  *  (the owner endpoint) can map refusals to honest HTTP statuses (e.g. 429). */
@@ -37,8 +38,19 @@ export type FieldWriteOutcome = {
 }
 
 export type ValidatedField =
-  | { ok: true; kind: FieldKind; patch: ListingFields; sent: string; weekly?: WeeklyHours }
+  | { ok: true; kind: FieldKind; patch: ListingFields; sent: string; weekly?: WeeklyHours; attrs?: AttributeValues }
   | { ok: false; error: string }
+
+/** Canonical id → boolean map (ids sorted) so `sent` and the read-back proof
+ *  compare order-independently. */
+function canonAttrs(items: AttributeWriteItem[]): AttributeValues {
+  const out: AttributeValues = {}
+  for (const id of items.map((i) => i.id).sort()) {
+    const item = items.find((i) => i.id === id) as AttributeWriteItem
+    out[id] = item.value
+  }
+  return out
+}
 
 /** Validate + normalize one field value into the exact ListingFields patch that will be
  *  PATCHed (updateClientListing derives the updateMask from which key is present). */
@@ -66,6 +78,14 @@ export function validateField(kind: FieldKind, value: unknown): ValidatedField {
       const check = validateHoursWeek(value)
       if (!check.ok) return check
       return { ok: true, kind, patch: { regularHours: check.value }, sent: JSON.stringify(canonWeekly(check.value)), weekly: check.value }
+    }
+    case 'attributes': {
+      const check = validateAttributes(value)
+      if (!check.ok) return check
+      const attrs = canonAttrs(check.value)
+      /* patch stays empty: attributes write through their own v1 endpoint
+         (updateClientAttributes with an attributeMask), not the listing PATCH. */
+      return { ok: true, kind, patch: {}, sent: JSON.stringify(attrs), attrs }
     }
     default:
       return { ok: false, error: `"${String(kind)}" is not a field this save supports.` }
@@ -116,8 +136,12 @@ function weeklyEqual(a: WeeklyHours | null | undefined, b: WeeklyHours | null | 
   return JSON.stringify(canonWeekly(a)) === JSON.stringify(canonWeekly(b))
 }
 
+/** The kinds that write through the listing PATCH + listing read-back.
+ *  'attributes' has its own endpoint pair and is branched before these. */
+type ListingFieldKind = Exclude<FieldKind, 'attributes'>
+
 /** Pull the just-written field out of a fresh listing read, as a display string. */
-function readBackFor(kind: FieldKind, fields: ListingFields): string | null {
+function readBackFor(kind: ListingFieldKind, fields: ListingFields): string | null {
   switch (kind) {
     case 'description': return fields.description ?? null
     case 'website': return fields.websiteUri ?? null
@@ -126,7 +150,7 @@ function readBackFor(kind: FieldKind, fields: ListingFields): string | null {
   }
 }
 
-function readBackMatches(kind: FieldKind, checked: Extract<ValidatedField, { ok: true }>, fields: ListingFields): boolean {
+function readBackMatches(kind: ListingFieldKind, checked: Extract<ValidatedField, { ok: true }>, fields: ListingFields): boolean {
   switch (kind) {
     case 'description': return normText(fields.description ?? '') === normText(checked.sent)
     case 'website': return normWebsite(fields.websiteUri ?? '') === normWebsite(checked.sent)
@@ -159,6 +183,11 @@ const KIND_TEXT: Record<FieldKind, { confirmed: string; pending: string; readFai
     pending: 'Submitted to Google, but the profile is not showing the new phone number yet (Google may still be processing or reviewing it). Check again shortly.',
     readFail: 'Saved to Google, but the read-back to confirm failed. Open the live profile and verify it shows the new phone number.',
   },
+  attributes: {
+    confirmed: 'The listing options are confirmed live on the Google profile.',
+    pending: 'Submitted to Google, but the profile is not showing the new answers yet (Google may still be processing or reviewing them). Check again shortly.',
+    readFail: 'Saved to Google, but the read-back to confirm failed. Open the live profile and verify it shows the new answers.',
+  },
 }
 
 /* ── Injectable collaborators ── */
@@ -169,6 +198,12 @@ export interface FieldWriteDeps {
   acquireSlot: (locationKey: string) => Promise<boolean>
   updateListing: (clientId: string, patch: ListingFields) => Promise<{ ok: true } | { ok: false; error: string }>
   getListing: (clientId: string) => Promise<Awaited<ReturnType<typeof getClientListing>>>
+  /** Attributes rail (kind 'attributes'). Optional so existing callers that
+   *  inject only the listing collaborators keep compiling; defaults are the
+   *  real v1 attribute helpers. The PATCH is attributeMask-scoped to only
+   *  the sent ids, so a save never clears other attributes. */
+  updateAttributes?: (clientId: string, values: AttributeValues) => Promise<{ ok: true } | { ok: false; error: string }>
+  getAttributes?: (clientId: string) => Promise<{ ok: true; values: AttributeValues } | { ok: false; error: string }>
 }
 
 const defaultDeps: FieldWriteDeps = {
@@ -181,6 +216,8 @@ const defaultDeps: FieldWriteDeps = {
   acquireSlot: acquireWriteSlot,
   updateListing: (clientId, patch) => updateClientListing(clientId, patch),
   getListing: (clientId) => getClientListing(clientId, null),
+  updateAttributes: (clientId, values) => updateClientAttributes(clientId, values, null),
+  getAttributes: (clientId) => getClientAttributes(clientId, null),
 }
 
 /** Write ONE supported field to the live profile, with the full honesty pipeline. */
@@ -209,6 +246,33 @@ export async function pushFieldWrite(
 
   // 4. Write, then read back and COMPARE. Only a matching read-back earns "live"; anything else is
   //    reported for what it is, so the tool never claims more than Google confirmed.
+  //    Attributes write through their own v1 endpoint pair (attributeMask-scoped PATCH +
+  //    values re-read) — same gates above, same honesty contract below.
+  if (kind === 'attributes') {
+    const sentMap = checked.attrs ?? {}
+    const updateAttrs = deps.updateAttributes ?? defaultDeps.updateAttributes!
+    const getAttrs = deps.getAttributes ?? defaultDeps.getAttributes!
+    const res = await updateAttrs(clientId, sentMap)
+    if (!res.ok) return { ok: false, error: res.error, code: 'google_error' }
+    const live = await getAttrs(clientId)
+    if (!live.ok) {
+      return { ok: true, summary: KIND_TEXT.attributes.readFail, detail: { sent: checked.sent, readBack: null, verified: false } }
+    }
+    /* Proof = every sent id now reads the sent value. A missing id (Google
+       dropped it) or a flipped value is a mismatch, never claimed live. */
+    const readMap: Record<string, boolean | null> = {}
+    let allMatch = true
+    for (const id of Object.keys(sentMap)) {
+      const got = Object.prototype.hasOwnProperty.call(live.values, id) ? live.values[id] : null
+      readMap[id] = got
+      if (got !== sentMap[id]) allMatch = false
+    }
+    const readBack = JSON.stringify(readMap)
+    return allMatch
+      ? { ok: true, summary: KIND_TEXT.attributes.confirmed, detail: { sent: checked.sent, readBack, verified: true } }
+      : { ok: true, summary: KIND_TEXT.attributes.pending, detail: { sent: checked.sent, readBack, verified: false } }
+  }
+
   const res = await deps.updateListing(clientId, checked.patch)
   if (!res.ok) return { ok: false, error: res.error, code: 'google_error' }
   const live = await deps.getListing(clientId)
@@ -221,4 +285,4 @@ export async function pushFieldWrite(
     : { ok: true, summary: KIND_TEXT[kind].pending, detail: { sent: checked.sent, readBack, verified: false } }
 }
 
-export type { HoursDayInput }
+export type { HoursDayInput, AttributeWriteItem }
