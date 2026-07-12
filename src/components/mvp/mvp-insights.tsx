@@ -549,14 +549,14 @@ function SeparatedSources({ title, sources }: { title: string; sources: StageSou
 //    sources sit in the sum group and add up to the headline in plain sight;
 //    context (audience growth, revenue) and drill-downs are shown but clearly
 //    separated so they never imply they feed the number. No source is dropped. ──
-export function SourceBreakdown({ stage, unit, showReconcile = true }: { stage: ComputedStage; unit: string; showReconcile?: boolean }) {
+export function SourceBreakdown({ stage, unit, showReconcile = true, title = 'What feeds this' }: { stage: ComputedStage; unit: string; showReconcile?: boolean; title?: string }) {
   const sums = stage.sources.filter((s) => s.feedRole === 'sum')
   const context = stage.sources.filter((s) => s.feedRole === 'context')
   const drills = stage.sources.filter((s) => s.feedRole === 'drilldown')
   const headline = stage.headline ?? 0
   const cols = Math.min(4, Math.max(2, sums.length))
   return (
-    <Section title="What feeds this" sub="last 30 days">
+    <Section title={title} sub="last 30 days">
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
         {sums.map((s) => <SourceStateCard key={s.id} s={s} hero={s.isHero} />)}
       </div>
@@ -577,7 +577,7 @@ export function SourceBreakdown({ stage, unit, showReconcile = true }: { stage: 
 //    "this period vs last" claim, it shows "Updated <when>" instead of a frozen
 //    arrow. The headline stays the honest stage number; the cards below reconcile
 //    to it ("Adds up to N"). ──
-function StageWithChart({ mv, headline, label, caption, cs, unit }: { mv: MetricView; headline: number; label: string; caption: string; cs: ComputedStage | undefined; unit: string }) {
+function StageWithChart({ mv, headline, label, cs, unit, breakdownTitle }: { mv: MetricView; headline: number; label: string; cs: ComputedStage | undefined; unit: string; breakdownTitle?: string }) {
   const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
   const fresh = isFresh(mv.lastDataDate, summary.periodDays)
   const dn = summary.deltaPct < 0
@@ -601,12 +601,19 @@ function StageWithChart({ mv, headline, label, caption, cs, unit }: { mv: Metric
             </span>
           )}
         </div>
-        <div style={{ fontSize: 13, color: C.faint, marginTop: 6, lineHeight: 1.45 }}>{caption}</div>
+        {/* year-over-year: same window a year ago. Shows only when we can honestly
+            make the claim (fresh data + a real prior-year number). */}
+        {fresh && summary.yoyPct != null && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: summary.yoyPct > 0 ? C.greenDk : summary.yoyPct < 0 ? C.coral : C.mute }}>
+            {summary.yoyPct > 0 ? <TrendingUp size={14} /> : summary.yoyPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
+            {summary.yoyPct > 0 ? `Up ${summary.yoyPct}% ${summary.yoyLabel}` : summary.yoyPct < 0 ? `Down ${Math.abs(summary.yoyPct)}% ${summary.yoyLabel}` : `Even with last year`}
+          </div>
+        )}
       </div>
       {/* histogram — the same series as the number + arrow above */}
       <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} />
       {/* the honest source cards, below the graph */}
-      {cs ? <SourceBreakdown stage={cs} unit={unit} /> : null}
+      {cs ? <SourceBreakdown stage={cs} unit={unit} title={breakdownTitle} /> : null}
     </>
   )
 }
@@ -627,7 +634,7 @@ function AwarenessStage({ detail, mv }: { detail: InsightsDetail | null; mv: Met
   return (
     <>
       {mv && cs ? (
-        <StageWithChart mv={mv} headline={feed.headline} label="Times you showed up" caption={feed.caption} cs={cs} unit="Times you showed up" />
+        <StageWithChart mv={mv} headline={feed.headline} label="Times you showed up" cs={cs} unit="Times you showed up" breakdownTitle="Views by source" />
       ) : (
         <>
           <StageHero total={feed.headline} label="Times you showed up" caption={feed.caption} />
@@ -665,7 +672,7 @@ function ActionsStage({ detail, mv }: { detail: InsightsDetail | null; mv: Metri
   return (
     <>
       {mv && cs ? (
-        <StageWithChart mv={mv} headline={feed.headline} label="Moves people made" caption={feed.caption} cs={cs} unit="Moves people made" />
+        <StageWithChart mv={mv} headline={feed.headline} label="Moves people made" cs={cs} unit="Moves people made" breakdownTitle="Actions by source" />
       ) : (
         <>
           <StageHero total={feed.headline} label="Moves people made" caption={feed.caption} />

@@ -37,6 +37,8 @@ export type SourceProvider =
   | 'google_analytics'
   | 'google_search_console'
   | 'tiktok'
+  | 'facebook'
+  | 'yelp'
   | 'pos'
   | 'reservations'
   | 'delivery'
@@ -158,6 +160,30 @@ export const SOURCES: SourceDef[] = [
     authType: 'oauth',
     docsUrl: null,
     notes: NO_ADAPTER_NOTE,
+    wired: false,
+  },
+  {
+    id: 'facebook_reach',
+    displayName: 'People your Facebook reached',
+    provider: 'facebook',
+    stage: 1,
+    metricKeys: [],
+    baseStatus: 'COMING_SOON',
+    authType: 'oauth',
+    docsUrl: null,
+    notes: NO_ADAPTER_NOTE + ' (Facebook Page reach via the Graph API.)',
+    wired: false,
+  },
+  {
+    id: 'yelp_views',
+    displayName: 'Views on your Yelp page',
+    provider: 'yelp',
+    stage: 1,
+    metricKeys: [],
+    baseStatus: 'COMING_SOON',
+    authType: 'api_key',
+    docsUrl: null,
+    notes: NO_ADAPTER_NOTE + ' (Yelp business page views.)',
     wired: false,
   },
   // Drill-downs (NOT summed into the Awareness total)
@@ -512,6 +538,8 @@ export const SHORT_LABELS: Record<string, string> = {
   gbp_impressions_maps: 'Google Maps views',
   ig_reach: 'Instagram reach',
   tiktok_video_views: 'TikTok views',
+  facebook_reach: 'Facebook reach',
+  yelp_views: 'Yelp views',
   gbp_search_keywords: 'Search terms',
   ig_nonfollower_reach_pct: 'New-audience reach',
   gsc_site_impressions: 'Website in Google',

@@ -28,7 +28,7 @@ const ok = (cond: boolean, msg: string) => {
 // ── 1. Every stage has its spec'd sources ────────────────────────────────
 console.log('\n== 1. Stage coverage ==')
 const EXPECT_BY_STAGE: Record<number, string[]> = {
-  1: ['gbp_impressions_search', 'gbp_impressions_maps', 'ig_reach', 'tiktok_video_views', 'gbp_search_keywords', 'ig_nonfollower_reach_pct', 'gsc_site_impressions'],
+  1: ['gbp_impressions_search', 'gbp_impressions_maps', 'ig_reach', 'tiktok_video_views', 'facebook_reach', 'yelp_views', 'gbp_search_keywords', 'ig_nonfollower_reach_pct', 'gsc_site_impressions'],
   2: ['gbp_photo_views', 'ig_profile_visits', 'ig_saves', 'ig_shares', 'ga4_menu_views'],
   3: ['gbp_direction_requests', 'gbp_calls', 'gbp_website_clicks', 'gbp_booking_clicks', 'ig_link_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
   4: ['pos_covers', 'pos_revenue', 'pos_avg_ticket', 'delivery_orders'],
@@ -44,7 +44,7 @@ ok(SOURCES.length === Object.values(EXPECT_BY_STAGE).flat().length, `total sourc
 // ── 2. Required fields present + well-formed ─────────────────────────────
 console.log('\n== 2. Every source is well-formed ==')
 const VALID_STATUS: SourceStatus[] = ['CONNECTED', 'AVAILABLE_NOT_CONNECTED', 'ERROR', 'COMING_SOON', 'MANUAL_ENTRY']
-const VALID_PROVIDER: SourceProvider[] = ['google_business_profile', 'instagram', 'google_analytics', 'google_search_console', 'tiktok', 'pos', 'reservations', 'delivery', 'loyalty', 'email']
+const VALID_PROVIDER: SourceProvider[] = ['google_business_profile', 'instagram', 'google_analytics', 'google_search_console', 'tiktok', 'facebook', 'yelp', 'pos', 'reservations', 'delivery', 'loyalty', 'email']
 let wellFormed = true
 let uniqueIds = true
 const seen = new Set<string>()
@@ -70,7 +70,7 @@ ok(SOURCE_BY_ID['gbp_direction_requests']?.id === 'gbp_direction_requests', 'SOU
 
 // ── 3. No-adapter sources are COMING_SOON + not wired ────────────────────
 console.log('\n== 3. No-adapter sources are honest stubs ==')
-const NO_ADAPTER = ['tiktok_video_views', 'reservations', 'pos_covers', 'pos_revenue', 'pos_avg_ticket', 'delivery_orders', 'pos_repeat_customers', 'loyalty_redemptions']
+const NO_ADAPTER = ['tiktok_video_views', 'facebook_reach', 'yelp_views', 'reservations', 'pos_covers', 'pos_revenue', 'pos_avg_ticket', 'delivery_orders', 'pos_repeat_customers', 'loyalty_redemptions']
 for (const id of NO_ADAPTER) {
   const s = SOURCE_BY_ID[id]
   ok(s?.baseStatus === 'COMING_SOON', `${id} baseStatus === COMING_SOON`)
