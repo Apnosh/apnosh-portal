@@ -78,7 +78,9 @@ interface InsightsDetail {
   findYou: { searchMobile: number; searchDesktop: number; mapsMobile: number; mapsDesktop: number } | null
   topQueries: { query: string; impressions: number }[]
   topPosts: InsightsPost[]
-  views: { total: number; maps: number; search: number } | null
+  // total now folds social reach in (for the home funnel); this Google-framed tab reads the
+  // Google-only `google` field so its "Real · Google" numbers + Maps/Search split stay honest.
+  views: { total: number; maps: number; search: number; google?: number; social?: number } | null
   actions: { directions: number; calls: number; websiteClicks: number } | null
   socialReach: number
   socialConnected: boolean
@@ -442,8 +444,11 @@ function SplitBar({ left, right, total }: { left: { label: string; value: number
 //    social channel wired in but quiet until a social account syncs. ──
 function ReachChannels({ detail }: { detail: InsightsDetail | null }) {
   const v = detail?.views
-  if (!v || v.total <= 0) return null
-  const mapsPct = Math.round((v.maps / v.total) * 100)
+  // Google-only impressions — this tab is Google-framed, so it never counts the social reach
+  // that `total` now folds in. Falls back to total for older payloads with no split.
+  const g = v ? (v.google ?? v.total) : 0
+  if (!v || g <= 0) return null
+  const mapsPct = Math.round((v.maps / g) * 100)
   const fy = detail?.findYou
   const mobile = fy ? fy.searchMobile + fy.mapsMobile : 0
   const desktop = fy ? fy.searchDesktop + fy.mapsDesktop : 0
@@ -451,7 +456,7 @@ function ReachChannels({ detail }: { detail: InsightsDetail | null }) {
   const social = detail?.socialReach ?? 0
   return (
     <Section title="Where people find you" sub="last 30 days">
-      <SplitBar left={{ label: 'Google Maps', value: v.maps, color: C.green }} right={{ label: 'Search', value: v.search, color: C.greenDk }} total={v.total} />
+      <SplitBar left={{ label: 'Google Maps', value: v.maps, color: C.green }} right={{ label: 'Search', value: v.search, color: C.greenDk }} total={g} />
       <div style={{ fontSize: 12.5, color: C.mute, marginTop: 12, lineHeight: 1.45 }}>
         <b style={{ color: C.ink, fontWeight: 600 }}>{mapsPct}%</b> of the time people find you on Google Maps. Your spot on the map is how new people discover you.
       </div>
@@ -497,10 +502,13 @@ function FunnelSpine({ detail, storageKey }: { detail: InsightsDetail | null; st
 
   const v = detail?.views
   const a = detail?.actions
-  if (!v || !a || v.total <= 0) return null
+  // Google-only impressions — this funnel's "Showed up" number wears a "Real · Google" pill,
+  // so it must not include the social reach that `total` now folds in.
+  const g = v ? (v.google ?? v.total) : 0
+  if (!v || !a || g <= 0) return null
   const { directions, calls, websiteClicks } = a
   const madeMove = directions + calls + websiteClicks
-  const actRate = v.total > 0 ? Math.round((madeMove / v.total) * 100) : 0
+  const actRate = g > 0 ? Math.round((madeMove / g) * 100) : 0
   const ratePct = Math.round(walkInRate * 100)
   const visits = Math.round(directions * walkInRate)
   const revenue = avgTicket != null && avgTicket > 0 ? round100(visits * avgTicket) : null
@@ -529,7 +537,7 @@ function FunnelSpine({ detail, storageKey }: { detail: InsightsDetail | null; st
               <div style={{ fontSize: 11, color: C.mute }}>how many times you popped up</div>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={bignum}>{v.total.toLocaleString()}</div>
+              <div style={bignum}>{g.toLocaleString()}</div>
               <div style={{ marginTop: 3 }}>{realPill}</div>
             </div>
           </div>
@@ -637,7 +645,9 @@ function FunnelSpine({ detail, storageKey }: { detail: InsightsDetail | null; st
 //    find you. Bridges the numbers to a real action (the review-request kit). ──
 function GrowAwareness({ rating, reviewCount, detail }: { rating: number | null; reviewCount: number; detail: InsightsDetail | null }) {
   const v = detail?.views
-  const mapsPct = v && v.total > 0 ? Math.round((v.maps / v.total) * 100) : null
+  // Google-only denominator — this "views from Maps" fact is Google, not the social-inclusive total.
+  const g = v ? (v.google ?? v.total) : 0
+  const mapsPct = v && g > 0 ? Math.round((v.maps / g) * 100) : null
   return (
     <Section title="Get seen by more people">
       <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 16 }}>
