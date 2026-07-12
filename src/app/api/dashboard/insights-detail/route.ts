@@ -115,6 +115,9 @@ export async function GET(req: NextRequest) {
   // (an honest "connect to unlock") until an Instagram/Facebook sync exists.
   let socialReach = 0
   let socialConnected = false
+  // Whether Google Business Profile analytics resolved at all. Drives the honest
+  // "Not connected" label on the Google pieces of a stage breakdown (vs a real 0).
+  const googleConnected = gbp.status === 'fulfilled' && !!gbp.value
   if (posts.status === 'fulfilled' && Array.isArray(posts.value)) {
     socialConnected = posts.value.length > 0
     socialReach = posts.value.reduce((s, p) => s + (p.reach ?? 0), 0)
@@ -153,5 +156,28 @@ export async function GET(req: NextRequest) {
   // cheap prior-period social reach here, and fabricating one would be dishonest, so a
   // Google-only awareness trend is the honest choice.
 
-  return NextResponse.json({ findYou, topQueries, topPosts, views, actions, socialReach, socialConnected, asOf, windowStart, audience, yoy })
+  // Interest-stage social signals (best effort; 0 when absent). Profile visits are an
+  // INTEREST signal (someone looked closer), post engagement is likes/comments/saves, and
+  // followers gained is audience GROWTH. These feed the Interest breakdown, NOT Awareness.
+  let profileVisits = 0
+  let followersGained = 0
+  let socialEngagement = 0
+  {
+    const days = range === '7d' ? 7 : range === '90d' ? 90 : range === '12m' ? 365 : 30
+    const since = new Date()
+    since.setDate(since.getDate() - (days - 1))
+    const bound = since.toISOString().slice(0, 10)
+    const sm = await admin
+      .from('social_metrics')
+      .select('profile_visits, followers_gained, engagement')
+      .eq('client_id', clientId)
+      .gte('date', bound)
+    for (const r of (sm.data ?? []) as Record<string, unknown>[]) {
+      profileVisits += Number(r.profile_visits) || 0
+      followersGained += Number(r.followers_gained) || 0
+      socialEngagement += Number(r.engagement) || 0
+    }
+  }
+
+  return NextResponse.json({ findYou, topQueries, topPosts, views, actions, socialReach, socialConnected, googleConnected, profileVisits, followersGained, socialEngagement, asOf, windowStart, audience, yoy })
 }
