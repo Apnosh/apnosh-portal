@@ -84,8 +84,11 @@ export type ManualStore = Record<string, ManualEntry>
 // excluded). Stage 4 and 5 have preference rules layered on top (see below).
 const SUMMABLE: Record<FunnelStage, string[]> = {
   1: ['gbp_impressions_search', 'gbp_impressions_maps', 'ig_reach', 'tiktok_video_views', 'facebook_reach', 'yelp_views'],
-  2: ['ig_profile_visits', 'ig_engaged', 'ig_saves', 'ig_shares', 'ga4_menu_views'],
-  3: ['gbp_direction_requests', 'gbp_calls', 'gbp_website_clicks', 'gbp_booking_clicks', 'ig_link_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
+  // Owner redefinition (2026-07-12): Interest = people who TOOK AN INTEREST
+  // (website clicks, menu views, profile looks, post engagement); Actions =
+  // people who actually DID something (calls, directions, bookings, orders).
+  2: ['gbp_website_clicks', 'ig_profile_visits', 'ig_engaged', 'ig_saves', 'ig_shares', 'ig_link_clicks', 'ga4_menu_views'],
+  3: ['gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
   4: ['pos_covers', 'delivery_orders'],
   5: ['pos_repeat_customers'],
 }

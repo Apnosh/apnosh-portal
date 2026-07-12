@@ -71,16 +71,17 @@ ok(src(aw, 'tiktok_video_views').status === 'COMING_SOON', 'tiktok_video_views i
 ok(src(aw, 'tiktok_video_views').counted === false, 'COMING_SOON tiktok excluded from the sum')
 ok(src(aw, 'gbp_search_keywords').feedRole === 'drilldown', 'gbp_search_keywords is a drilldown (not summed)')
 
-// Interest is an IG/GA4 stage now (photo views removed — Google's API stopped
-// reporting them). A GBP-only client honestly has NO Interest data.
+// Interest (owner definition): people who TOOK AN INTEREST — website clicks +
+// menu views + profile looks. A GBP-only client counts just its site clicks.
 const inte = stage(gbpStages, 2)
-ok(inte.isEmpty === true && inte.headline === null, `Interest empty for a GBP-only client — no fabricated number (${inte.headline})`)
+ok(inte.headline === 25, `Interest = website clicks 25 for a GBP-only client (${inte.headline})`)
+ok(inte.headline === sumCounted(inte), `Interest headline == sum(counted) (${sumCounted(inte)})`)
 ok(src(inte, 'ig_profile_visits').counted === false, 'ig_profile_visits NOT counted (IG not connected) despite value 70 present')
 ok(src(inte, 'ig_engaged').counted === false, 'ig_engaged NOT counted (IG not connected) despite value 130 present')
 ok(src(inte, 'ga4_menu_views').counted === false, 'ga4_menu_views NOT counted (GA4 not connected)')
 
 const act = stage(gbpStages, 3)
-ok(act.headline === 80, `Actions headline = 40 + 10 + 25 + 5 = 80 (${act.headline})`)
+ok(act.headline === 55, `Actions = directions 40 + calls 10 + bookings 5 = 55 (site clicks now Interest) (${act.headline})`)
 ok(act.headline === sumCounted(act), `Actions headline == sum(counted) (${sumCounted(act)})`)
 ok(act.heroSourceId === 'gbp_direction_requests', `Stage 3 heroSourceId === gbp_direction_requests (${act.heroSourceId})`)
 ok(src(act, 'gbp_direction_requests').isHero === true, 'gbp_direction_requests carries isHero')
@@ -115,7 +116,7 @@ const ga4NoCfg = resolveSourceStatusesFrom(
 const actNoCfg = stage(computeStagesFrom(ga4NoCfg, VALUES), 3)
 ok(src(actNoCfg, 'ga4_order_clicks').status === 'AVAILABLE_NOT_CONNECTED', 'GA4 active, no config -> ga4_order_clicks AVAILABLE_NOT_CONNECTED')
 ok(src(actNoCfg, 'ga4_order_clicks').counted === false, 'ga4_order_clicks excluded when config missing')
-ok(actNoCfg.headline === 80, `Actions still 80 (order clicks excluded) (${actNoCfg.headline})`)
+ok(actNoCfg.headline === 55, `Actions still 55 (order clicks excluded) (${actNoCfg.headline})`)
 
 // 2b. GA4 active AND config -> order clicks CONNECTED and counted
 const fullStatuses = resolveSourceStatusesFrom(
@@ -126,7 +127,7 @@ const full = computeStagesFrom(fullStatuses, VALUES)
 const actFull = stage(full, 3)
 ok(src(actFull, 'ga4_order_clicks').status === 'CONNECTED', 'GA4 active + config -> ga4_order_clicks CONNECTED')
 ok(src(actFull, 'ga4_order_clicks').counted === true, 'ga4_order_clicks counted when connected + configured')
-ok(actFull.headline === 230, `Actions headline = 80 + 150 order clicks = 230 (${actFull.headline})`)
+ok(actFull.headline === 205, `Actions headline = 55 + 150 order clicks = 205 (${actFull.headline})`)
 ok(actFull.headline === sumCounted(actFull), 'Actions reconciles with GA4 connected')
 
 // full-client Awareness folds ig_reach now that IG is connected
@@ -136,7 +137,7 @@ ok(awFull.headline === 1000 + 500 + VALUES.ig_reach!, `Awareness folds ig_reach 
 const inteFull = stage(full, 2)
 ok(src(inteFull, 'ig_profile_visits').counted === true, 'ig_profile_visits counted once IG is connected')
 ok(src(inteFull, 'ig_engaged').counted === true, 'ig_engaged counted once IG is connected')
-ok(inteFull.headline === 70 + 130 + 300, `Interest = profile visits 70 + engaged 130 + menu views 300 (${inteFull.headline})`)
+ok(inteFull.headline === 25 + 70 + 130 + 300, `Interest = site clicks 25 + visits 70 + engaged 130 + menu views 300 (${inteFull.headline})`)
 
 // ── 3. Empty / disconnected client ─────────────────────────────────────────
 console.log('\n== 3. No connections at all ==')

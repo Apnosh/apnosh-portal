@@ -74,12 +74,12 @@ function main() {
   }
 
   console.log('\n== e) deeper stages remain Google-measured (untouched by social) ==')
-  // Interest = clicks+calls+directions; identical across the social/no-social cases since
-  // only Awareness folds social. The tags below Awareness never mention social.
+  // Interest = website clicks (owner definition); identical across the social/no-social
+  // cases since only Awareness folds social. The tags below Awareness never mention social.
   const deeper = (r: ReturnType<typeof computeHome>) => r.stages.filter((s) => s.key !== 'shown')
   const iA = deeper(rA), iB = deeper(rB)
   ok(iA.every((s) => !/social/i.test(s.tag)), 'no deeper-stage tag mentions social')
-  ok(iA[0].count === iB[0].count && iA[0].count === 66, `Interest is Google-only + unchanged (got ${iA[0].count})`)
+  ok(iA[0].count === iB[0].count && iA[0].count === 20, `Interest = website clicks only (got ${iA[0].count})`)
 
   console.log(fail ? `\n${fail} FAILURES` : '\nALL PASS')
   process.exit(fail ? 1 : 0)

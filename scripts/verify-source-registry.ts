@@ -29,8 +29,8 @@ const ok = (cond: boolean, msg: string) => {
 console.log('\n== 1. Stage coverage ==')
 const EXPECT_BY_STAGE: Record<number, string[]> = {
   1: ['gbp_impressions_search', 'gbp_impressions_maps', 'ig_reach', 'tiktok_video_views', 'facebook_reach', 'yelp_views', 'gbp_search_keywords', 'ig_nonfollower_reach_pct', 'gsc_site_impressions'],
-  2: ['ig_profile_visits', 'ig_engaged', 'ig_saves', 'ig_shares', 'ga4_menu_views'],
-  3: ['gbp_direction_requests', 'gbp_calls', 'gbp_website_clicks', 'gbp_booking_clicks', 'ig_link_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
+  2: ['gbp_website_clicks', 'ig_profile_visits', 'ig_engaged', 'ig_saves', 'ig_shares', 'ig_link_clicks', 'ga4_menu_views'],
+  3: ['gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
   4: ['pos_covers', 'pos_revenue', 'pos_avg_ticket', 'delivery_orders'],
   5: ['pos_repeat_customers', 'loyalty_redemptions', 'ga4_returning_users', 'gbp_review_count', 'gbp_rating_trend', 'ig_follower_growth'],
 }

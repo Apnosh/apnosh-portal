@@ -106,15 +106,15 @@ export function buildActionsFeed(d: FeedInput): StageFeed {
     headline: sumConnected(pieces),
     pieces,
     note: [],
-    caption: 'Calls, directions, and website taps on Google.',
+    caption: 'Calls, directions, and bookings on Google.',
   }
 }
 
 /** Plain per-stage caption for the reconciling headline. */
 const STAGE_CAPTION: Record<number, string> = {
   1: 'Times you showed up on Google and social.',
-  2: 'People who looked closer at your posts and profile.',
-  3: 'The moves people made after seeing you.',
+  2: 'Site clicks, menu views, and profile looks.',
+  3: 'Calls, directions, bookings, and orders.',
   4: 'Guests you served, once your register connects.',
   5: 'Guests who came back, or new reviews this month.',
 }

@@ -336,32 +336,33 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     ],
   }, today, earliestOf(reachMain), frontierFor(reachMain, today, SETTLE.gbp))
 
-  /* ── 1b. Interest — people who looked closer. The SAME sources the honest
-     funnel's Interest stage counts today (IG profile visits + IG post
-     engagement + configured menu page views), so the insights chart total
-     matches the stage's source cards. ── */
-  const engMain = addInto(sVis, sEng, wMenu)
+  /* ── 1b. Interest — people who TOOK AN INTEREST (owner definition): website
+     clicks + menu page views + IG profile visits + IG post engagement. The SAME
+     sources the honest funnel's Interest stage counts, so the insights chart
+     total matches the stage's source cards. ── */
+  const engMain = addInto(gClick, sVis, sEng, wMenu)
   const engagement = buildMetric({
-    key: 'engagement', label: 'Interest', sub: 'People who looked closer at your profile, posts, and menu', fmt: 'num',
+    key: 'engagement', label: 'Interest', sub: 'Site clicks, menu views, and profile looks', fmt: 'num',
     mainMap: engMain,
     comps: [
+      { label: 'Site clicks', icon: 'cursor', map: gClick },
       { label: 'Profile visits', icon: 'user', map: sVis },
       { label: 'Engaged', icon: 'heart', map: sEng },
-      { label: 'Menu views', icon: 'cursor', map: wMenu },
+      { label: 'Menu views', icon: 'eye', map: wMenu },
     ],
   }, today, earliestOf(engMain), frontierFor(engMain, today, SETTLE.gbp))
 
-  /* ── 2. Interactions — the moves people made. The SAME four GBP actions the
-     funnel's Actions stage counts (social engagement + profile visits moved to
-     Interest above), so the chart total matches the stage's source cards. ── */
-  const interMain = addInto(gDir, gCall, gClick, gBook)
+  /* ── 2. Interactions — people who actually DID something (owner definition):
+     calls + directions + bookings. The SAME GBP actions the funnel's Actions
+     stage counts (site clicks moved to Interest above), so the chart total
+     matches the stage's source cards. ── */
+  const interMain = addInto(gDir, gCall, gBook)
   const interactions = buildMetric({
-    key: 'interactions', label: 'Interactions', sub: 'Calls, directions, clicks and bookings', fmt: 'num',
+    key: 'interactions', label: 'Interactions', sub: 'Calls, directions and bookings', fmt: 'num',
     mainMap: interMain,
     comps: [
       { label: 'Calls', icon: 'phone', map: gCall },
       { label: 'Directions', icon: 'pin', map: gDir },
-      { label: 'Site clicks', icon: 'cursor', map: gClick },
       { label: 'Bookings', icon: 'calendar', map: gBook },
     ],
   }, today, earliestOf(interMain), frontierFor(interMain, today, SETTLE.gbp))

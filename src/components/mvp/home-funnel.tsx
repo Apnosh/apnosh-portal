@@ -219,8 +219,11 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
   const awareSub = hasSocial ? 'times you showed up on Google and social' : 'times you showed up on Google'
   const awareSplit = hasSocial ? `Google ${google.toLocaleString()} · Social ${social.toLocaleString()}` : undefined
   const { directions, calls, websiteClicks } = actions
-  const engaged = directions + calls + websiteClicks // any interaction with the listing
-  const acted = directions + calls                    // the come-or-contact steps (a subset of engaged)
+  // Owner definition (2026-07-12), matching the Insights stages: Interest =
+  // people who took an interest (website clicks); Actions = people who actually
+  // did something (directions + calls). Same words, same numbers everywhere.
+  const engaged = websiteClicks
+  const acted = directions + calls
   const cameIn = Math.round(directions * walkInRate)
   const revenue = avgTicket != null && avgTicket > 0 ? round100(cameIn * avgTicket) : null
   const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0)
@@ -231,7 +234,7 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
 
   const stages: HStage[] = [
     { key: 'shown', label: 'Awareness', sub: awareSub, count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: `${pct(engaged, total)} in 100 engaged`, emblem: 'eye', deltaYoY: yoy?.awareness ?? null, insightsStage: 'discovery' },
-    { key: 'engaged', label: 'Interest', sub: 'clicks · calls · directions', count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, insightsStage: 'intent' },
+    { key: 'engaged', label: 'Interest', sub: 'website clicks', count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, insightsStage: 'intent' },
     { key: 'moved', label: 'Customer actions', sub: 'directions & calls', count: acted, zone: 'measured', tag: 'Real · Google', conv: `~${ratePct}% of directions ordered`, emblem: 'tap', deltaYoY: yoy?.actions ?? null, insightsStage: 'intent' },
     { key: 'camein', label: 'Orders', sub: 'walk-in orders from Google', count: cameIn, zone: 'estimate', tag: '~ about · your math', emblem: 'door', deltaYoY: yoy?.orders ?? null, insightsStage: 'conversion' },
     { key: 'back', label: 'Retention', sub: 'came back for more', count: retention, zone: 'measured', tag: 'Repeat visits', emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },

@@ -31,12 +31,12 @@ const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 // impressions (views, not unique people) — so the copy must say what they
 // actually are, not "customers" or "people".
 const META: Record<string, { tab: string; heroLabel: string; heroSub: string; unit: string }> = {
-  interactions: { tab: 'Actions', heroLabel: 'Actions on your business', heroSub: 'calls, directions, clicks, and likes', unit: 'actions' },
+  interactions: { tab: 'Actions', heroLabel: 'Actions on your business', heroSub: 'calls, directions, and bookings', unit: 'actions' },
   reach: { tab: 'Views', heroLabel: 'Times you showed up', heroSub: 'across Google Maps, Search, and your social posts', unit: 'views' },
   bookings: { tab: 'Bookings', heroLabel: 'Bookings', heroSub: 'reserved a table from your profile', unit: 'booked' },
   loyalty: { tab: 'Email', heroLabel: 'Email engagement', heroSub: 'opened or clicked your emails', unit: 'engaged' },
   reputation: { tab: 'Reviews', heroLabel: 'New reviews', heroSub: 'left a review this period', unit: 'reviews' },
-  engagement: { tab: 'Interest', heroLabel: 'People who looked closer', heroSub: 'profile visits, post engagement, and menu looks', unit: 'looks' },
+  engagement: { tab: 'Interest', heroLabel: 'People who took an interest', heroSub: 'site clicks, menu views, and profile looks', unit: 'looks' },
 }
 // 'engagement' rides at the END so the home slide order is untouched — it exists
 // for the Insights Interest stage (LEGACY_HOME slides are off anyway).
