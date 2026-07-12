@@ -6,12 +6,18 @@
  * GET /api/dashboard/gbp-diagnosis).
  *
  * Three experiences on one diagnosis:
- *  - view (the standalone More door): ONE read-only scrollable page of what
- *    Google shows customers today. The 9 parts sit under their 3 chapter
- *    headers, each with a label, an honest status chip, the real content on
- *    Google now, and a small "Edit on Google" link out. No in-app editors,
- *    no advice, no saves, no resume state — fixing happens on Google, and
- *    the AI builder stays part of the paid campaign lane. Every tier.
+ *  - view (the standalone More door): ONE scrollable page of what Google
+ *    shows customers today. The 9 parts sit under their 3 chapter headers,
+ *    each with a label, an honest status chip, and the real content on
+ *    Google now. Pro owners get a small Edit affordance on the sections the
+ *    save rail can write (description / hours / website+phone / the yes-no
+ *    attribute groups): the SAME editors the builder uses, inline in that
+ *    section's card, with the same honest save handling and the silent
+ *    re-diagnose — minus "Draft it for me" (AI drafting stays on the
+ *    campaign AI lane). Categories / menu / photos keep their Edit-on-Google
+ *    links for everyone. Non-Pro keeps the read-only page with Edit-on-Google
+ *    links plus one quiet Pro line at the top. No advice blocks and no
+ *    guided flow here on any tier.
  *  - diy (the checklist): progress "N of M done" + a thin bar, then the
  *    sections in engine order. Good sections collapse to a dim row with a
  *    green check; problem sections are white cards with a severity dot
@@ -141,8 +147,9 @@ const DRAFT_FAIL = 'Could not write a draft right now. Try again in a minute.'
  * on the server, so a later visit can never overwrite when the task was finished.
  * Without campaignId nothing changes.
  *
- * mode: which experience the owner gets. 'view' = the standalone read-only viewer (no tier
- * gate; every owner can see their own listing). 'ai' = the section-by-section builder WITH
+ * mode: which experience the owner gets. 'view' = the standalone viewer (every owner can see
+ * their own listing; Pro also edits the save-rail sections inline, and the save endpoint is
+ * Pro-gated on the server regardless). 'ai' = the section-by-section builder WITH
  * the "Apnosh AI says" advice and in-app editors (campaign lane, Pro only). 'diy' = the plain
  * checklist: same diagnosis, no drafting — each problem section gets a "Fix it on Google"
  * link + the honest self-check. Defaults to 'view' (the standalone door). AI is ALSO gated on
@@ -336,8 +343,15 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
 
       {!loading && !loadError && diag && diag.connected && !diag.readFailed && (
         effectiveMode === 'view' ? (
-          // Read-only: no editors, no advice, no saves, no resume state.
-          <ProfileViewer diag={diag} />
+          // The viewer: no advice, no guided flow, no resume state. Pro
+          // owners can edit the save-rail sections inline; everyone else
+          // keeps the Edit-on-Google links.
+          <ProfileViewer
+            diag={diag}
+            clientId={client?.id ?? ''}
+            isPro={isProTier(client?.tier)}
+            onSilentRefresh={recheck}
+          />
         ) : effectiveMode === 'ai' ? (
           <AiReview
             diag={diag}
@@ -1101,75 +1115,41 @@ function hoursDisplayFromRows(rows: HoursRowDraft[]): Array<{ day: string; hours
   return rows.map((r) => ({ day: r.label, hours: r.closed ? 'Closed' : `${fmt12hClient(r.open)} to ${fmt12hClient(r.close)}` }))
 }
 
-/* ── The part screen ────────────────────────────────────────────── */
+/* ── Shared save plumbing: ONE hook for the builder and the viewer ── */
 
-/** business.google.com edit surfaces for the kinds the save rail cannot write.
- *  Google's own signed-in editor pages — with one listing they land on the
- *  right business. Never a fake in-app editor for these. */
-const GOOGLE_EDIT_HREF: Record<string, string> = {
-  categories: 'https://business.google.com/info',
-  menu: 'https://business.google.com/menu',
-  photos: 'https://business.google.com/photos',
+/** Which in-app editor a section gets (null = Google-link only). The
+ *  attribute groups are editable only when the read gave us the real rows
+ *  to start from (no detail = nothing honest to prefill). */
+function sectionEditableKind(section: GbpDiagnosisSection): 'description' | 'hours' | 'links' | 'attrs' | null {
+  return section.key === 'description' ? 'description'
+    : section.key === 'hours' ? 'hours'
+      : section.key === 'links' ? 'links'
+        : section.detail?.kind === 'attrs' ? 'attrs'
+          : null
 }
 
-const smallEditBtnStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', padding: 2, color: C.greenDk, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', font: 'inherit' }
-const smallEditLinkStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, color: C.greenDk, fontSize: 12.5, fontWeight: 700, textDecoration: 'none' }
-const fieldLabelStyle: CSSProperties = { display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 5 }
-const textInputStyle: CSSProperties = { width: '100%', boxSizing: 'border-box', borderRadius: 11, border: `0.5px solid ${C.line}`, background: C.bg, padding: '10px 12px', fontSize: 13.5, color: C.ink, font: 'inherit' }
-const timeInputStyle: CSSProperties = { flex: 1, minWidth: 0, boxSizing: 'border-box', borderRadius: 9, border: `0.5px solid ${C.line}`, background: C.bg, padding: '7px 9px', fontSize: 13, color: C.ink, font: 'inherit' }
-
 /**
- * One part per screen: the chapter eyebrow + progress, name + status chip,
- * what Google shows now, the engine's "Apnosh AI says" recommendation, why
- * it matters, then the fix path. Description / hours / website+phone / the
- * yes-no attribute groups get a real Edit → Save to Google editor (the
- * gbp-apply rail); categories / menu / photos get Google's own editor link.
- * Weak parts say "Fix it now", good parts offer "Edit anyway". "Next"
- * ("Finish" on the last part) moves on; a part the owner did not fix records
- * as skipped, a part Google accepted a save for records as updated.
+ * The gbp-apply save plumbing, shared by the builder's part screens (AiPart)
+ * and the viewer's inline editors (ViewerSection) so the two can never
+ * drift: the saving flag, the honest result note, the per-kind save calls,
+ * and the read-back-PROVEN values (live:true only) overlaid on the diagnosis
+ * detail until the silent re-fetch catches up. A pending save never touches
+ * the shown content — it keeps showing what Google actually shows.
+ * `onAccepted` runs after any save Google accepted (ok:true), with the
+ * honest note already on state.
  */
-function AiPart({ section, chapter, index, total, clientId, onBack, onDone, onSaved, onSilentRefresh, drafting, draft, draftError, onDraft, initialEditing, initialSaveNote }: {
-  section: GbpDiagnosisSection
-  /** The chapter this part belongs to (the uppercase eyebrow). */
-  chapter: string | null
-  index: number
-  total: number
+function useGbpSectionSave({ clientId, section, initialNote, onAccepted }: {
   clientId: string
-  onBack: () => void
-  onDone: (outcome: PartOutcome) => void
-  onSaved: (sectionKey: string) => void
-  onSilentRefresh?: () => void
-  drafting: boolean
-  draft: string | null
-  draftError: string | null
-  onDraft: () => void
-  /** TEST SEAM (render smoke only): open this part's editor on first render. */
-  initialEditing?: boolean
+  section: GbpDiagnosisSection
   /** TEST SEAM (render smoke only): start with a save note on screen. */
-  initialSaveNote?: SaveNote
+  initialNote?: SaveNote | null
+  onAccepted: () => void
 }) {
-  const chip = AI_CHIP[section.status] ?? AI_CHIP.unknown
-  const actionable = section.status === 'needs-work' || section.status === 'missing'
-  // The attribute groups are editable only when the read gave us the real
-  // rows to start from (no detail = nothing honest to prefill).
-  const editableKind: 'description' | 'hours' | 'links' | 'attrs' | null =
-    section.key === 'description' ? 'description'
-      : section.key === 'hours' ? 'hours'
-        : section.key === 'links' ? 'links'
-          : section.detail?.kind === 'attrs' ? 'attrs'
-            : null
-  const googleEditHref = GOOGLE_EDIT_HREF[section.key]
-  const current = section.current && section.current.trim() ? section.current : 'Nothing yet'
-
-  const [editing, setEditing] = useState(!!initialEditing && !!editableKind && section.status !== 'unknown')
-  const [editSession, setEditSession] = useState(0)
   const [saving, setSaving] = useState(false)
-  const [note, setNote] = useState<SaveNote | null>(initialSaveNote ?? null)
-  const [savedThisPart, setSavedThisPart] = useState(false)
+  const [note, setNote] = useState<SaveNote | null>(initialNote ?? null)
 
   // Read-back-PROVEN values only (live:true): shown in place of the now-stale
-  // diagnosis content until the silent re-fetch catches up. A pending save
-  // never touches the block — it keeps showing what Google actually shows.
+  // diagnosis content until the silent re-fetch catches up.
   const [provenDesc, setProvenDesc] = useState<string | null>(null)
   const [provenLinks, setProvenLinks] = useState<{ website?: string; phone?: string }>({})
   const [provenHours, setProvenHours] = useState<Array<{ day: string; hours: string }> | null>(null)
@@ -1185,15 +1165,9 @@ function AiPart({ section, chapter, index, total, clientId, onBack, onDone, onSa
     detail = { ...detail, items: detail.items.map((it) => (it.id in provenAttrs ? { ...it, value: provenAttrs[it.id] } : it)) }
   }
 
-  const openEditor = () => { setNote(null); setEditing(true); setEditSession((n) => n + 1) }
-
   const afterAccepted = (n: SaveNote) => {
     setNote(n)
-    setSavedThisPart(true)
-    setEditing(false)
-    onSaved(section.key)
-    // One silent re-fetch so statuses + content track what Google shows now.
-    onSilentRefresh?.()
+    onAccepted()
   }
 
   const saveDescription = async (text: string) => {
@@ -1261,6 +1235,82 @@ function AiPart({ section, chapter, index, total, clientId, onBack, onDone, onSa
     afterAccepted(res.note)
   }
 
+  return { detail, saving, note, setNote, saveDescription, saveHours, saveLinks, saveAttrs }
+}
+
+/* ── The part screen ────────────────────────────────────────────── */
+
+/** business.google.com edit surfaces for the kinds the save rail cannot write.
+ *  Google's own signed-in editor pages — with one listing they land on the
+ *  right business. Never a fake in-app editor for these. */
+const GOOGLE_EDIT_HREF: Record<string, string> = {
+  categories: 'https://business.google.com/info',
+  menu: 'https://business.google.com/menu',
+  photos: 'https://business.google.com/photos',
+}
+
+const smallEditBtnStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', padding: 2, color: C.greenDk, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', font: 'inherit' }
+const smallEditLinkStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, color: C.greenDk, fontSize: 12.5, fontWeight: 700, textDecoration: 'none' }
+const fieldLabelStyle: CSSProperties = { display: 'block', fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 5 }
+const textInputStyle: CSSProperties = { width: '100%', boxSizing: 'border-box', borderRadius: 11, border: `0.5px solid ${C.line}`, background: C.bg, padding: '10px 12px', fontSize: 13.5, color: C.ink, font: 'inherit' }
+const timeInputStyle: CSSProperties = { flex: 1, minWidth: 0, boxSizing: 'border-box', borderRadius: 9, border: `0.5px solid ${C.line}`, background: C.bg, padding: '7px 9px', fontSize: 13, color: C.ink, font: 'inherit' }
+
+/**
+ * One part per screen: the chapter eyebrow + progress, name + status chip,
+ * what Google shows now, the engine's "Apnosh AI says" recommendation, why
+ * it matters, then the fix path. Description / hours / website+phone / the
+ * yes-no attribute groups get a real Edit → Save to Google editor (the
+ * gbp-apply rail); categories / menu / photos get Google's own editor link.
+ * Weak parts say "Fix it now", good parts offer "Edit anyway". "Next"
+ * ("Finish" on the last part) moves on; a part the owner did not fix records
+ * as skipped, a part Google accepted a save for records as updated.
+ */
+function AiPart({ section, chapter, index, total, clientId, onBack, onDone, onSaved, onSilentRefresh, drafting, draft, draftError, onDraft, initialEditing, initialSaveNote }: {
+  section: GbpDiagnosisSection
+  /** The chapter this part belongs to (the uppercase eyebrow). */
+  chapter: string | null
+  index: number
+  total: number
+  clientId: string
+  onBack: () => void
+  onDone: (outcome: PartOutcome) => void
+  onSaved: (sectionKey: string) => void
+  onSilentRefresh?: () => void
+  drafting: boolean
+  draft: string | null
+  draftError: string | null
+  onDraft: () => void
+  /** TEST SEAM (render smoke only): open this part's editor on first render. */
+  initialEditing?: boolean
+  /** TEST SEAM (render smoke only): start with a save note on screen. */
+  initialSaveNote?: SaveNote
+}) {
+  const chip = AI_CHIP[section.status] ?? AI_CHIP.unknown
+  const actionable = section.status === 'needs-work' || section.status === 'missing'
+  const editableKind = sectionEditableKind(section)
+  const googleEditHref = GOOGLE_EDIT_HREF[section.key]
+  const current = section.current && section.current.trim() ? section.current : 'Nothing yet'
+
+  const [editing, setEditing] = useState(!!initialEditing && !!editableKind && section.status !== 'unknown')
+  const [editSession, setEditSession] = useState(0)
+  const [savedThisPart, setSavedThisPart] = useState(false)
+
+  // The save plumbing + read-back-proven content, shared with the viewer.
+  const { detail, saving, note, setNote, saveDescription, saveHours, saveLinks, saveAttrs } = useGbpSectionSave({
+    clientId,
+    section,
+    initialNote: initialSaveNote,
+    onAccepted: () => {
+      setSavedThisPart(true)
+      setEditing(false)
+      onSaved(section.key)
+      // One silent re-fetch so statuses + content track what Google shows now.
+      onSilentRefresh?.()
+    },
+  })
+
+  const openEditor = () => { setNote(null); setEditing(true); setEditSession((n) => n + 1) }
+
   const isLast = index + 1 >= total
   const nextOutcome: PartOutcome = savedThisPart ? 'updated' : section.status === 'good' ? 'good' : 'skipped'
   const nextIsPrimary = section.status === 'good' || savedThisPart
@@ -1312,53 +1362,19 @@ function AiPart({ section, chapter, index, total, clientId, onBack, onDone, onSa
             </button>
           </>
         ) : editing && editableKind ? (
-          <>
-            {editableKind === 'description' && (
-              <DescriptionEditor
-                key={editSession}
-                initialText={detail?.kind === 'description' && detail.text ? detail.text : ''}
-                saving={saving}
-                serverNote={note?.tone === 'error' ? note : null}
-                drafting={drafting}
-                draft={draft}
-                draftError={draftError}
-                onDraft={onDraft}
-                onCancel={() => setEditing(false)}
-                onSave={(t) => { void saveDescription(t) }}
-              />
-            )}
-            {editableKind === 'hours' && (
-              <HoursEditor
-                key={editSession}
-                initialRows={hoursRowsFromDetail(detail?.kind === 'hours' ? detail.days : undefined)}
-                saving={saving}
-                serverNote={note?.tone === 'error' ? note : null}
-                onCancel={() => setEditing(false)}
-                onSave={(rows) => { void saveHours(rows) }}
-              />
-            )}
-            {editableKind === 'links' && (
-              <LinksEditor
-                key={editSession}
-                initialWebsite={detail?.kind === 'links' ? detail.website ?? '' : ''}
-                initialPhone={detail?.kind === 'links' ? detail.phone ?? '' : ''}
-                saving={saving}
-                serverNote={note?.tone === 'error' ? note : null}
-                onCancel={() => setEditing(false)}
-                onSave={(c) => { void saveLinks(c) }}
-              />
-            )}
-            {editableKind === 'attrs' && (
-              <AttrsEditor
-                key={editSession}
-                initialItems={detail?.kind === 'attrs' ? detail.items : []}
-                saving={saving}
-                serverNote={note?.tone === 'error' ? note : null}
-                onCancel={() => setEditing(false)}
-                onSave={(items) => { void saveAttrs(items) }}
-              />
-            )}
-          </>
+          <SectionEditor
+            key={editSession}
+            kind={editableKind}
+            detail={detail}
+            saving={saving}
+            serverNote={note?.tone === 'error' ? note : null}
+            onCancel={() => setEditing(false)}
+            onSaveDescription={(t) => { void saveDescription(t) }}
+            onSaveHours={(rows) => { void saveHours(rows) }}
+            onSaveLinks={(c) => { void saveLinks(c) }}
+            onSaveAttrs={(items) => { void saveAttrs(items) }}
+            descDraft={{ drafting, draft, draftError, onDraft }}
+          />
         ) : (
           <>
             <div style={{ background: C.bg, borderRadius: 11, padding: '10px 12px', marginBottom: 10 }}>
@@ -1425,22 +1441,31 @@ function AiPart({ section, chapter, index, total, clientId, onBack, onDone, onSa
   )
 }
 
-/** Edit → Save for the description: a textarea prefilled with what Google
- *  shows, a live count against Google's 250 to 750 rule, and "Draft it for
- *  me" (the existing AI draft) that FILLS the textarea for the owner to tweak. */
-function DescriptionEditor({ initialText, saving, serverNote, drafting, draft, draftError, onDraft, onCancel, onSave }: {
-  initialText: string
-  saving: boolean
-  serverNote: SaveNote | null
+/** The builder's "Draft it for me" wiring for the description editor. The
+ *  viewer never passes it (AI drafting stays on the campaign AI lane). */
+interface DraftTool {
   drafting: boolean
   draft: string | null
   draftError: string | null
   onDraft: () => void
+}
+
+/** Edit → Save for the description: a textarea prefilled with what Google
+ *  shows and a live count against Google's 250 to 750 rule. With `draftTool`
+ *  (the builder), "Draft it for me" (the existing AI draft) FILLS the
+ *  textarea for the owner to tweak; without it (the viewer) there is no
+ *  draft button — textarea + count + save only. */
+function DescriptionEditor({ initialText, saving, serverNote, draftTool, onCancel, onSave }: {
+  initialText: string
+  saving: boolean
+  serverNote: SaveNote | null
+  draftTool?: DraftTool
   onCancel: () => void
   onSave: (text: string) => void
 }) {
   const [text, setText] = useState(initialText)
   const [localError, setLocalError] = useState<string | null>(null)
+  const draft = draftTool?.draft ?? null
   // Only a draft that arrives WHILE this editor is open fills the box; a
   // draft left over from earlier never clobbers the prefill.
   const appliedDraftRef = useRef(draft)
@@ -1476,18 +1501,20 @@ function DescriptionEditor({ initialText, saving, serverNote, drafting, draft, d
       <div style={{ fontSize: 12, color: countBad ? C.red : C.mute, margin: '6px 2px 0' }}>
         {len} of {DESC_MAX} characters. Aim for {DESC_MIN} to {DESC_MAX}.
       </div>
-      <button
-        type="button"
-        onClick={onDraft}
-        disabled={drafting || saving}
-        className="mvp-row"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 10, height: 44, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 14.5, fontWeight: 700, cursor: drafting ? 'default' : 'pointer', opacity: drafting ? 0.8 : 1, font: 'inherit' }}
-      >
-        {drafting
-          ? <><Loader2 size={15} className="mvp-spin" /> Writing your draft&hellip;</>
-          : <><Sparkles size={15} /> Draft it for me</>}
-      </button>
-      {draftError && <div style={errLineStyle}>{draftError}</div>}
+      {draftTool && (
+        <button
+          type="button"
+          onClick={draftTool.onDraft}
+          disabled={draftTool.drafting || saving}
+          className="mvp-row"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 10, height: 44, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 14.5, fontWeight: 700, cursor: draftTool.drafting ? 'default' : 'pointer', opacity: draftTool.drafting ? 0.8 : 1, font: 'inherit' }}
+        >
+          {draftTool.drafting
+            ? <><Loader2 size={15} className="mvp-spin" /> Writing your draft&hellip;</>
+            : <><Sparkles size={15} /> Draft it for me</>}
+        </button>
+      )}
+      {draftTool?.draftError && <div style={errLineStyle}>{draftTool.draftError}</div>}
       {localError && <div style={errLineStyle}>{localError}</div>}
       {serverNote && <SaveNoteLine note={serverNote} />}
       <SaveCancelRow saving={saving} onSave={submit} onCancel={onCancel} />
@@ -1685,6 +1712,72 @@ function AttrsEditor({ initialItems, saving, serverNote, onCancel, onSave }: {
   )
 }
 
+/**
+ * The right in-app editor for one editable kind, prefilled from the shown
+ * detail: ONE switch that both the builder's part screens (AiPart) and the
+ * viewer's cards (ViewerSection) render, so the editors can never drift.
+ * `descDraft` wires the builder's "Draft it for me" into the description
+ * editor; the viewer leaves it out (AI drafting stays on the campaign AI
+ * lane), so there the description editor is textarea + count + save only.
+ */
+function SectionEditor({ kind, detail, saving, serverNote, onCancel, onSaveDescription, onSaveHours, onSaveLinks, onSaveAttrs, descDraft }: {
+  kind: 'description' | 'hours' | 'links' | 'attrs'
+  detail: GbpSectionDetail | undefined
+  saving: boolean
+  serverNote: SaveNote | null
+  onCancel: () => void
+  onSaveDescription: (text: string) => void
+  onSaveHours: (rows: HoursRowDraft[]) => void
+  onSaveLinks: (changes: { website?: string; phone?: string }) => void
+  onSaveAttrs: (items: Array<{ id: string; value: boolean }>) => void
+  descDraft?: DraftTool
+}) {
+  if (kind === 'description') {
+    return (
+      <DescriptionEditor
+        initialText={detail?.kind === 'description' && detail.text ? detail.text : ''}
+        saving={saving}
+        serverNote={serverNote}
+        draftTool={descDraft}
+        onCancel={onCancel}
+        onSave={onSaveDescription}
+      />
+    )
+  }
+  if (kind === 'hours') {
+    return (
+      <HoursEditor
+        initialRows={hoursRowsFromDetail(detail?.kind === 'hours' ? detail.days : undefined)}
+        saving={saving}
+        serverNote={serverNote}
+        onCancel={onCancel}
+        onSave={onSaveHours}
+      />
+    )
+  }
+  if (kind === 'links') {
+    return (
+      <LinksEditor
+        initialWebsite={detail?.kind === 'links' ? detail.website ?? '' : ''}
+        initialPhone={detail?.kind === 'links' ? detail.phone ?? '' : ''}
+        saving={saving}
+        serverNote={serverNote}
+        onCancel={onCancel}
+        onSave={onSaveLinks}
+      />
+    )
+  }
+  return (
+    <AttrsEditor
+      initialItems={detail?.kind === 'attrs' ? detail.items : []}
+      saving={saving}
+      serverNote={serverNote}
+      onCancel={onCancel}
+      onSave={onSaveAttrs}
+    />
+  )
+}
+
 /** The fix path for the kinds the save rail cannot write (categories, menu,
  *  photos): a real link to Google's own editor, never a fake in-app one. */
 function GoogleEditBlock({ href }: { href: string }) {
@@ -1873,15 +1966,28 @@ function PartDetail({ detail, summary }: { detail: GbpSectionDetail; summary: st
 const GOOGLE_EDIT_GENERIC = 'https://business.google.com'
 
 /**
- * The standalone door: ONE scrollable read-only page of what Google shows
- * customers today. The 9 parts sit under their 3 chapter headers in chapter
- * order, each with its label, an honest status chip, the real content on
- * Google now (the same PartDetail renderers the builder uses), and a small
- * "Edit on Google" link out. Fixing happens on Google itself — no in-app
- * editors, no "Apnosh AI says" advice, no saves here; the builder with all
- * of that runs only on the campaign AI lane. Exported for the render smoke.
+ * The standalone door: ONE scrollable page of what Google shows customers
+ * today. The 9 parts sit under their 3 chapter headers in chapter order,
+ * each with its label, an honest status chip, and the real content on
+ * Google now (the same PartDetail renderers the builder uses). The fix path
+ * is tier-aware: Pro owners get a small Edit affordance on the sections the
+ * save rail can write (the SAME editors and honest save handling the
+ * builder uses, no AI drafting); categories / menu / photos keep their
+ * Edit-on-Google links for everyone, and non-Pro keeps every link plus one
+ * quiet Pro line at the top. No "Apnosh AI says" advice and no guided flow
+ * here on any tier; the builder with all of that runs only on the campaign
+ * AI lane. Exported for the render smoke.
  */
-export function ProfileViewer({ diag }: { diag: GbpDiagnosis }) {
+export function ProfileViewer({ diag, clientId = '', isPro = false, onSilentRefresh, initialEditKey }: {
+  diag: GbpDiagnosis
+  clientId?: string
+  /** Pro unlocks the inline editors on the save-rail sections. */
+  isPro?: boolean
+  /** One silent diagnosis re-fetch after a save Google accepted. */
+  onSilentRefresh?: () => void
+  /** TEST SEAM (render smoke only): open this section's editor on first render. */
+  initialEditKey?: string
+}) {
   const sections = orderSections(diag.sections ?? [])
   const groups: Array<{ name: string; sub: string; parts: GbpDiagnosisSection[] }> = CHAPTERS
     .map((ch) => ({ name: ch.name, sub: ch.sub, parts: sections.filter((s) => ch.keys.includes(s.key)) }))
@@ -1901,13 +2007,29 @@ export function ProfileViewer({ diag }: { diag: GbpDiagnosis }) {
 
   return (
     <>
+      {/* One quiet line for non-Pro: the app's inline editing is a Pro tool.
+          No upsell button — the Edit-on-Google links below still work. */}
+      {!isPro && (
+        <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '0 2px 12px' }}>
+          Editing from the app is on the Pro plan.
+        </div>
+      )}
       {groups.map((g) => (
         <div key={g.name} style={{ marginBottom: 16 }}>
           <div style={{ margin: '0 2px 8px' }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, fontFamily: DISPLAY }}>{g.name}</div>
             {g.sub && <div style={{ fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.45 }}>{g.sub}</div>}
           </div>
-          {g.parts.map((s) => <ViewerSection key={s.key} section={s} />)}
+          {g.parts.map((s) => (
+            <ViewerSection
+              key={s.key}
+              section={s}
+              clientId={clientId}
+              isPro={isPro}
+              onSilentRefresh={onSilentRefresh}
+              initialEditing={initialEditKey === s.key}
+            />
+          ))}
         </div>
       ))}
       <div style={{ textAlign: 'center', fontSize: 12, color: C.faint, padding: '4px 0 2px' }}>
@@ -1917,35 +2039,96 @@ export function ProfileViewer({ diag }: { diag: GbpDiagnosis }) {
   )
 }
 
-/** One read-only section: label + status chip, the real content on Google
- *  now, and the Edit-on-Google link (the part's own editor page when Google
- *  has one; the generic business.google.com home when it does not). */
-function ViewerSection({ section }: { section: GbpDiagnosisSection }) {
+/** One viewer section: label + status chip and the real content on Google
+ *  now. The fix path is tier-aware. Pro owners get a small Edit affordance
+ *  on the sections the save rail can write: the SAME editors the builder
+ *  uses (via SectionEditor + useGbpSectionSave), inline in this card, with
+ *  Save to Google + Cancel, the same honest result lines, and one silent
+ *  re-diagnose after an accepted save — but never "Draft it for me" (AI
+ *  drafting stays on the campaign AI lane). Every other section, and every
+ *  section for non-Pro, keeps the Edit-on-Google link (the part's own
+ *  editor page when Google has one; the generic business.google.com home
+ *  when it does not). */
+function ViewerSection({ section, clientId, isPro, onSilentRefresh, initialEditing }: {
+  section: GbpDiagnosisSection
+  clientId: string
+  isPro: boolean
+  onSilentRefresh?: () => void
+  /** TEST SEAM (render smoke only): open this section's editor on first render. */
+  initialEditing?: boolean
+}) {
   const chip = INTRO_CHIP[section.status] ?? INTRO_CHIP.unknown
   const editHref = GOOGLE_EDIT_HREF[section.key] ?? GOOGLE_EDIT_GENERIC
   const current = section.current && section.current.trim() ? section.current : 'Nothing yet'
+  const editableKind = sectionEditableKind(section)
+  // In-app editing is Pro only, only for the kinds the save rail can write,
+  // and never on a part we could not read (nothing honest to prefill).
+  const canEditHere = isPro && !!editableKind && section.status !== 'unknown'
+
+  const [editing, setEditing] = useState(!!initialEditing && canEditHere)
+  const [editSession, setEditSession] = useState(0)
+
+  // The save plumbing + read-back-proven content, shared with the builder.
+  const { detail, saving, note, setNote, saveDescription, saveHours, saveLinks, saveAttrs } = useGbpSectionSave({
+    clientId,
+    section,
+    onAccepted: () => {
+      setEditing(false)
+      // One silent re-fetch so the content and chips stay what Google shows.
+      onSilentRefresh?.()
+    },
+  })
+
+  const openEditor = () => { setNote(null); setEditing(true); setEditSession((n) => n + 1) }
+
   return (
     <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '15px 14px', marginBottom: 10, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
         <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, lineHeight: 1.3 }}>{section.label}</span>
         <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: chip.color, background: chip.bg, borderRadius: 99, padding: '3px 9px' }}>{chip.word}</span>
       </div>
-      <div style={{ background: C.bg, borderRadius: 11, padding: '10px 12px' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 6 }}>On Google now</div>
-        {section.status === 'unknown' || !section.detail
-          // Unknown parts show the engine's own safe reason; a detail-less
-          // part falls back to the honest summary string, never a blank box.
-          ? <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{current}</div>
-          : <PartDetail detail={section.detail} summary={current} />}
-      </div>
-      <a
-        href={editHref}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ ...smallEditLinkStyle, marginTop: 10 }}
-      >
-        Edit on Google <ExternalLink size={11} />
-      </a>
+      {editing && canEditHere && editableKind ? (
+        <SectionEditor
+          key={editSession}
+          kind={editableKind}
+          detail={detail}
+          saving={saving}
+          serverNote={note?.tone === 'error' ? note : null}
+          onCancel={() => setEditing(false)}
+          onSaveDescription={(t) => { void saveDescription(t) }}
+          onSaveHours={(rows) => { void saveHours(rows) }}
+          onSaveLinks={(c) => { void saveLinks(c) }}
+          onSaveAttrs={(items) => { void saveAttrs(items) }}
+        />
+      ) : (
+        <>
+          <div style={{ background: C.bg, borderRadius: 11, padding: '10px 12px' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 6 }}>On Google now</div>
+            {section.status === 'unknown' || !detail
+              // Unknown parts show the engine's own safe reason; a detail-less
+              // part falls back to the honest summary string, never a blank box.
+              ? <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{current}</div>
+              : <PartDetail detail={detail} summary={current} />}
+          </div>
+          {/* The honest save outcome (Saved on proof, the pending line, or an
+              error) stays on screen after the editor closes. */}
+          {note && <SaveNoteLine note={note} />}
+          {canEditHere ? (
+            <button type="button" onClick={openEditor} style={{ ...smallEditBtnStyle, marginTop: 10 }}>
+              <Pencil size={12} /> Edit
+            </button>
+          ) : (
+            <a
+              href={editHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ ...smallEditLinkStyle, marginTop: 10 }}
+            >
+              Edit on Google <ExternalLink size={11} />
+            </a>
+          )}
+        </>
+      )}
     </div>
   )
 }
