@@ -286,9 +286,10 @@ function Body({ data, focusKey, detail, campaigns }: { data: InsightsData; focus
   return (
     <div style={{ padding: '14px 18px 44px' }}>
 
-      {/* the tapped stage's own name — reflects the funnel stage you came from */}
-      <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1 }}>{focus.title}</div>
-      {focus.sub && <div style={{ fontSize: 13, color: C.faint, margin: '5px 0 18px' }}>{focus.sub}</div>}
+      {/* the tapped stage's own name — reflects the funnel stage you came from.
+          No sub-line: the hero's own number + caption say it plainly, so the
+          title flows straight into "Times you showed up". */}
+      <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1, marginBottom: 18 }}>{focus.title}</div>
 
       <StageView stageKey={focus.stageKey} title={focus.title} detail={detail} mv={mv} />
 
