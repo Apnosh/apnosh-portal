@@ -317,35 +317,36 @@ function StageHero({ total, label, caption }: { total: number; label: string; ca
 //    connected" (never silently dropped). Anything NOT part of the total (e.g.
 //    audience growth) sits below a clear divider so it can't imply it feeds it. ──
 function WhatFeedsThis({ feed, unit }: { feed: StageFeed; unit: string }) {
+  const cols = Math.min(4, Math.max(2, feed.pieces.length))
   return (
     <Section title="What feeds this" sub="last 30 days">
-      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '4px 14px' }}>
-        {feed.pieces.map((p, i) => (
-          <div key={p.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
-            <span style={{ fontSize: 13, color: C.ink }}>{p.label}</span>
+      {/* Small boxes, one per source — they add up to the headline in plain sight. */}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
+        {feed.pieces.map((p) => (
+          <div key={p.key} style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '13px 6px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 74, opacity: p.connected ? 1 : 0.6 }}>
             {p.connected
-              ? <span style={{ fontSize: 15, fontWeight: 600, color: C.ink, fontFamily: DISPLAY }}>{p.value.toLocaleString()}</span>
-              : <span style={{ fontSize: 12, color: C.faint }}>{NOT_CONNECTED}</span>}
+              ? <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: C.ink, letterSpacing: '-.01em' }}>{p.value.toLocaleString()}</span>
+              : <span style={{ fontSize: 11, color: C.faint }}>{NOT_CONNECTED}</span>}
+            <span style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.3 }}>{p.label}</span>
           </div>
         ))}
-        {/* the sum, drawn as an equals so the reconcile is unmistakable */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 0', borderTop: `1px solid ${C.line}` }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{unit}</span>
-          <span style={{ fontSize: 17, fontWeight: 600, color: C.greenDk, fontFamily: DISPLAY }}>{feed.headline.toLocaleString()}</span>
-        </div>
       </div>
+      {/* the reconcile stays visible: the boxes above add up to this */}
+      <div style={{ fontSize: 12.5, color: C.faint, marginTop: 10, textAlign: 'center' }}>Adds up to <b style={{ color: C.greenDk, fontFamily: DISPLAY, fontSize: 14 }}>{feed.headline.toLocaleString()}</b> {unit.toLowerCase()}</div>
       {feed.note.length > 0 && (
-        <div style={{ marginTop: 10, background: '#fbfcfb', border: `1px dashed ${C.line}`, borderRadius: 14, padding: '4px 14px' }}>
-          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, padding: '10px 0 6px' }}>Audience growth · not part of this number</div>
-          {feed.note.map((p) => (
-            <div key={p.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderTop: `0.5px solid ${C.line}` }}>
-              <span style={{ fontSize: 13, color: C.mute }}>{p.label}</span>
-              {p.connected
-                ? <span style={{ fontSize: 14, fontWeight: 600, color: C.mute, fontFamily: DISPLAY }}>{p.value.toLocaleString()}</span>
-                : <span style={{ fontSize: 12, color: C.faint }}>{NOT_CONNECTED}</span>}
-            </div>
-          ))}
-        </div>
+        <>
+          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, margin: '16px 0 8px' }}>Audience growth · not part of this number</div>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(3, Math.max(2, feed.note.length))}, 1fr)`, gap: 8 }}>
+            {feed.note.map((p) => (
+              <div key={p.key} style={{ background: '#fbfcfb', border: `1px dashed ${C.line}`, borderRadius: 13, padding: '12px 6px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 68 }}>
+                {p.connected
+                  ? <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.mute }}>{p.value.toLocaleString()}</span>
+                  : <span style={{ fontSize: 11, color: C.faint }}>{NOT_CONNECTED}</span>}
+                <span style={{ fontSize: 11, color: C.mute, lineHeight: 1.3 }}>{p.label}</span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </Section>
   )
