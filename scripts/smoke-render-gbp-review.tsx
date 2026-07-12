@@ -23,7 +23,12 @@
  *   j) the hub is GONE from the flow (no "Your Google helper" cards screen)
  *   k) Questions and answers + Post an update still render (reached from the
  *      summary's Keep-it-strong cards)
- *   l) the last part says Finish; no em dashes anywhere
+ *   l) the STANDALONE viewer (ProfileViewer, the More door): all 9 sections
+ *      on one page in chapter order under the 3 group headers, honest status
+ *      chips, the rich On-Google-now content, a per-section Edit-on-Google
+ *      link — and NONE of the builder: no Fix it now, no Apnosh AI says, no
+ *      Save to Google, no Keep-it-strong cards
+ *   m) the last part says Finish; no em dashes anywhere
  * Run: node_modules/.bin/tsx scripts/smoke-render-gbp-review.tsx */
 
 // localStorage stub before anything loads (the review reads it in effects only,
@@ -452,7 +457,82 @@ async function main() {
   const postedPending = renderPost({ initialPosted: { note: pPending, postUrl: null } })
   ok(!postedPending.includes('See it on Google'), 'no See-it link is invented without a URL from Google')
 
-  console.log('\n== l) no em dashes ==')
+  console.log('\n== l) the standalone viewer: read-only, chaptered, links out ==')
+  const ProfileViewer = mod.ProfileViewer as unknown as React.ComponentType<Record<string, unknown>>
+  const renderViewer = (diag: Record<string, unknown>) => {
+    const html = strip(renderToString(React.createElement(ProfileViewer, { diag })))
+    rendered.push(html)
+    return html
+  }
+  const viewer = renderViewer(FIXTURE)
+  // One page: all 3 group headers and all 9 sections render together.
+  for (const ch of ['Be found', 'Look worth the trip', 'Easy to visit']) {
+    ok(viewer.includes(ch), `the "${ch}" group header renders on the viewer`)
+  }
+  for (const p of CHAPTER_WALK) {
+    ok(viewer.includes(p.label), `the ${p.label} section renders on the viewer`)
+  }
+  // Sections come out in CHAPTER order (engine order goes in).
+  const positions = CHAPTER_WALK.map((p) => viewer.indexOf(p.label))
+  ok(positions.every((pos, i) => pos >= 0 && (i === 0 || pos > positions[i - 1])), 'the 9 sections render in chapter order')
+  // Each group header sits before its first section.
+  ok(viewer.indexOf('Be found') < viewer.indexOf('Your categories'), 'Be found heads its sections')
+  ok(viewer.indexOf('Look worth the trip') < viewer.indexOf('Your photos'), 'Look worth the trip heads its sections')
+  ok(viewer.indexOf('Easy to visit') < viewer.indexOf('Your hours'), 'Easy to visit heads its sections')
+  // Honest status chips (the softer viewer words).
+  ok(viewer.includes('Looks good'), 'good sections chip Looks good')
+  ok(viewer.includes('Could be better'), 'weak sections chip Could be better')
+  // The rich On-Google-now content renders per kind.
+  ok(viewer.includes('On Google now'), 'the On-Google-now label renders')
+  ok(viewer.includes('Monday') && viewer.includes('8:00 AM to 9:00 PM') && viewer.includes('Closed'), 'the hours table renders')
+  ok(viewer.includes('special hours for 2 dates'), 'the special-hours line renders')
+  ok(viewer.includes('Main: Grocery store') && viewer.includes('Cafe') && viewer.includes('Deli'), 'the category chips render')
+  ok(viewer.includes(DESCRIPTION_TEXT), 'the description text renders')
+  ok(viewer.includes('<img') && viewer.includes('https://photos.example.com/one.jpg'), 'the photo grid renders')
+  ok(viewer.includes('Carnitas taco') && viewer.includes('$4.50') && viewer.includes('and 10 more'), 'the menu rows render')
+  ok(viewer.includes('https://tacoexample.com/menu'), 'the menu link renders')
+  ok(viewer.includes('Website') && viewer.includes('https://tacoexample.com') && viewer.includes('(555) 123-4567'), 'the links rows render')
+  ok(viewer.includes('Parking lot') && viewer.includes('Not set'), 'a never-answered attribute reads Not set')
+  ok(viewer.includes('Outdoor seating') && viewer.includes('>Yes<'), 'answered attribute rows read Yes')
+  // Every section links out to Google: the per-kind pages where they exist,
+  // the generic business.google.com home for the rest.
+  const editLinks = (viewer.match(/Edit on Google/g) ?? []).length
+  ok(editLinks === 9, `every section gets an Edit-on-Google link (got ${editLinks})`)
+  ok(viewer.includes('https://business.google.com/info'), 'categories link to their own Google editor page')
+  ok(viewer.includes('https://business.google.com/menu'), 'menu links to its own Google editor page')
+  ok(viewer.includes('https://business.google.com/photos'), 'photos link to their own Google editor page')
+  const genericLinks = (viewer.match(/href="https:\/\/business\.google\.com"/g) ?? []).length
+  ok(genericLinks === 6, `the other 6 sections use the generic business.google.com link (got ${genericLinks})`)
+  ok(viewer.includes('Read from your live Google listing.'), 'the honest read-from-Google footer renders')
+  // NONE of the builder leaks into the viewer: no editors, no advice, no
+  // saves, no Keep-it-strong cards, no stepper.
+  ok(!viewer.includes('Fix it now'), 'no Fix it now in the viewer')
+  ok(!viewer.includes('Apnosh AI says'), 'no Apnosh AI says advice in the viewer')
+  ok(!viewer.includes(ADVICE.description) && !viewer.includes(ADVICE.hours), 'no advice text leaks into the viewer')
+  ok(!viewer.includes('Save to Google'), 'no Save to Google in the viewer')
+  ok(!viewer.includes('Keep it strong'), 'no Keep-it-strong cards in the viewer')
+  ok(!viewer.includes('Edit anyway'), 'no Edit-anyway editor door in the viewer')
+  ok(!viewer.includes('<textarea'), 'no in-app editor fields in the viewer')
+  ok(!viewer.includes('Why it matters'), 'no builder Why-it-matters block in the viewer')
+  ok(!viewer.includes('>Start<') && !viewer.includes('>Next<') && !viewer.includes('>Finish<'), 'no stepper buttons in the viewer')
+  ok(!viewer.includes('Part 1 of 9'), 'no part-by-part progress in the viewer')
+  // An unknown section shows the engine's safe reason, chips Could not check,
+  // and still links out.
+  const unkViewer = renderViewer({
+    ...FIXTURE,
+    sections: FIXTURE.sections.map((s) => (s.key === 'photos' ? { ...s, status: 'unknown', current: 'We could not read your photos right now.', detail: undefined } : s)),
+  })
+  ok(unkViewer.includes('Could not check'), 'an unknown section chips Could not check')
+  ok(unkViewer.includes('We could not read your photos right now.'), 'the safe could-not-read reason renders')
+  // A detail-less section falls back to the honest summary string.
+  const noDetailViewer = renderViewer({
+    ...FIXTURE,
+    sections: FIXTURE.sections.map((s) => (s.key === 'hours' ? { ...s, detail: undefined } : s)),
+  })
+  ok(!noDetailViewer.includes('Monday'), 'no invented hours table when detail is missing')
+  ok(noDetailViewer.includes('Hours set for 6 of 7 days.'), 'a detail-less section falls back to the summary string')
+
+  console.log('\n== m) no em dashes ==')
   ok(rendered.every((h) => !h.includes('\u2014')), 'no em dash in any rendered screen')
   ok(rendered.every((h) => !h.includes('\u2013')), 'no en dash in any rendered screen either')
 
