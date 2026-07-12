@@ -47,12 +47,14 @@ export default function AnalystPage() {
   const [data, setData] = useState<AnalystResponse | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
-  const run = useCallback(() => {
+  // First open serves the cached read (cheap); the Refresh button forces a
+  // fresh generate (refresh: true skips the cache on the server).
+  const run = useCallback((refresh = false) => {
     if (!client?.id) return
     setState('loading'); setErr(null)
     fetch('/api/dashboard/analyst', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ clientId: client.id, window: '30d' }),
+      body: JSON.stringify({ clientId: client.id, window: '30d', refresh }),
     })
       .then(async (r) => {
         const j = (await r.json().catch(() => ({}))) as AnalystResponse & { error?: string }
@@ -63,7 +65,7 @@ export default function AnalystPage() {
       .catch((e) => { setErr(e.message); setState('error') })
   }, [client?.id])
 
-  useEffect(() => { run() }, [run])
+  useEffect(() => { run(false) }, [run])
 
   const back = () => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard/insights') }
 
@@ -78,13 +80,13 @@ export default function AnalystPage() {
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.1 }}>AI Analyst</div>
           </div>
           {state === 'ready' && (
-            <button onClick={run} aria-label="Refresh" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${C.line}`, background: '#fff', color: C.mute, borderRadius: 99, padding: '6px 11px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}><RefreshCw size={13} /> Refresh</button>
+            <button onClick={() => run(true)} aria-label="Refresh" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${C.line}`, background: '#fff', color: C.mute, borderRadius: 99, padding: '6px 11px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}><RefreshCw size={13} /> Refresh</button>
           )}
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px 16px 40px' }}>
           {state === 'loading' && <Centered>Reading your numbers&hellip;</Centered>}
-          {state === 'error' && <Centered>Couldn&apos;t generate: {err}<div style={{ marginTop: 12 }}><button onClick={run} style={btn}>Try again</button></div></Centered>}
+          {state === 'error' && <Centered>Couldn&apos;t generate: {err}<div style={{ marginTop: 12 }}><button onClick={() => run(false)} style={btn}>Try again</button></div></Centered>}
           {state === 'locked' && <Locked />}
           {state === 'ready' && data?.read && <ReadView read={data.read} funnel={data.funnel ?? []} when={whenLabel(data.generatedAt)} />}
         </div>

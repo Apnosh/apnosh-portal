@@ -46,7 +46,7 @@ export interface HomeInstance {
 }
 
 export interface HomeMetric {
-  key: 'reach' | 'interactions' | 'bookings' | 'loyalty' | 'reputation'
+  key: 'reach' | 'engagement' | 'interactions' | 'bookings' | 'loyalty' | 'reputation'
   label: string
   sub: string
   fmt: HomeFmt
@@ -267,12 +267,14 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     return { data: out }
   }
 
-  const [gbp, social, reviews, localReviews, email] = await Promise.all([
-    fetchAll('gbp_metrics', 'date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks', 'date', bound),
+  const [gbp, social, reviews, localReviews, email, website] = await Promise.all([
+    fetchAll('gbp_metrics', 'date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks, photo_views', 'date', bound),
     fetchAll('social_metrics', 'date, reach, engagement, posts_published, followers_gained, profile_visits', 'date', bound),
     fetchAll('reviews', 'rating, response_text, posted_at', 'posted_at', bound + 'T00:00:00'),
     fetchAll('local_reviews', 'rating, reply_text, created_at_platform', 'created_at_platform', bound + 'T00:00:00'),
     fetchAll('email_metrics', 'sent_date, sent_count, open_count, click_count, revenue_attributed', 'sent_date', bound),
+    // menu page views (migration 206). A missing column/table just yields no rows.
+    fetchAll('website_metrics', 'date, menu_views', 'date', bound),
   ])
 
   /* Per-day source maps. We only create+populate a map when the source
@@ -282,6 +284,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
   const gDir: Maps = new Map(), gCall: Maps = new Map(), gClick: Maps = new Map()
   const gConv: Maps = new Map(), gMenu: Maps = new Map()
   const gBook: Maps = new Map(), gFood: Maps = new Map()
+  const gPhoto: Maps = new Map()  // people who looked at the photos (Interest)
   for (const r of (gbp.data ?? []) as Record<string, unknown>[]) {
     const d = String(r.date).slice(0, 10)
     const views = num(r.impressions_total) || num(r.search_views)
@@ -293,6 +296,14 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     gMenu.set(d, (gMenu.get(d) ?? 0) + num(r.food_menu_clicks))
     gBook.set(d, (gBook.get(d) ?? 0) + num(r.bookings))
     gFood.set(d, (gFood.get(d) ?? 0) + num(r.food_orders))
+    gPhoto.set(d, (gPhoto.get(d) ?? 0) + num(r.photo_views))
+  }
+  // Website (GA4) — menu page views, when the owner has configured the path
+  const wMenu: Maps = new Map()
+  for (const r of (website.data ?? []) as Record<string, unknown>[]) {
+    const d = String(r.date).slice(0, 10)
+    const v = num(r.menu_views)
+    if (v > 0) wMenu.set(d, (wMenu.get(d) ?? 0) + v)
   }
   // Social
   const sReach: Maps = new Map(), sEng: Maps = new Map(), sFol: Maps = new Map(), sVis: Maps = new Map()
@@ -326,6 +337,19 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
       { label: 'New followers', icon: 'heart', map: sFol },
     ],
   }, today, earliestOf(reachMain), frontierFor(reachMain, today, SETTLE.gbp))
+
+  /* ── 1b. Interest — people who looked closer. The SAME sources the honest
+     funnel's Interest stage counts today (Google photo views + configured menu
+     page views), so the insights chart total matches the stage's source cards. ── */
+  const engMain = addInto(gPhoto, wMenu)
+  const engagement = buildMetric({
+    key: 'engagement', label: 'Interest', sub: 'People who looked closer at your photos and menu', fmt: 'num',
+    mainMap: engMain,
+    comps: [
+      { label: 'Photo views', icon: 'eye', map: gPhoto },
+      { label: 'Menu views', icon: 'cursor', map: wMenu },
+    ],
+  }, today, earliestOf(engMain), frontierFor(engMain, today, SETTLE.gbp))
 
   /* ── 2. Interactions — people who engaged ── */
   const interMain = addInto(gDir, gCall, gClick, gConv, gMenu, sEng, sVis)
@@ -403,5 +427,5 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     rate: { count: repCount, ratingSum: repRating, replied: repReplied, five: repFive },
   }, today, earliestOf(repCount), today)
 
-  return { metrics: [reach, interactions, bookings, loyalty, reputation] }
+  return { metrics: [reach, engagement, interactions, bookings, loyalty, reputation] }
 }

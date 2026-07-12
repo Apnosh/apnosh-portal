@@ -276,22 +276,43 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
   )
 }
 
+// The five stages as in-page chips — every stage is reachable from every stage,
+// so a deep-link (or a mis-tap on the home funnel) never traps you on Awareness.
+const STAGE_CHIPS: Array<{ key: string; label: string }> = [
+  { key: 'shown', label: 'Awareness' },
+  { key: 'engaged', label: 'Interest' },
+  { key: 'moved', label: 'Actions' },
+  { key: 'camein', label: 'Orders' },
+  { key: 'back', label: 'Retention' },
+]
+
 function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsData; focusKey?: string; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null; clientId?: string; campaigns: Record<string, StageCampaign[]> | null }) {
   const metrics = data.metrics
   const byKey = new Map(metrics.map((m) => [m.key, m]))
-  // one tapped funnel stage drives the whole page (no in-page selector). Each stage
-  // shows the SAME clean graph the home uses (MetricCard) for its metric; Interest
-  // has no Google metric, so it shows the social/content engagement view instead.
-  const focus = resolveFocus(focusKey)
+  // the tapped funnel stage seeds the view; the chips switch it in-page. The URL
+  // follows (replaceState) so a refresh or share keeps the same stage.
+  const [sel, setSel] = useState<string | undefined>(focusKey)
+  useEffect(() => { if (focusKey) setSel(focusKey) }, [focusKey])
+  const pick = (k: string) => {
+    setSel(k)
+    try { window.history.replaceState(null, '', `/dashboard/insights?stage=${k}`) } catch { /* ignore */ }
+  }
+  const focus = resolveFocus(sel)
   const mv = byKey.get(focus.metric)
 
   return (
     <div style={{ padding: '14px 18px 44px' }}>
 
-      {/* the tapped stage's own name — reflects the funnel stage you came from.
-          No sub-line: the hero's own number + caption say it plainly, so the
-          title flows straight into "Times you showed up". */}
-      <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1, marginBottom: 18 }}>{focus.title}</div>
+      {/* the stage's own name + the in-page stage switcher */}
+      <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1 }}>{focus.title}</div>
+      <div style={{ display: 'flex', gap: 7, margin: '12px 0 18px', overflowX: 'auto', paddingBottom: 2 }} className="mvp-swipe">
+        {STAGE_CHIPS.map((s) => {
+          const on = focus.stageKey === s.key
+          return (
+            <button key={s.key} onClick={() => pick(s.key)} style={{ flexShrink: 0, whiteSpace: 'nowrap', border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer' }}>{s.label}</button>
+          )
+        })}
+      </div>
 
       <StageView stageKey={focus.stageKey} title={focus.title} detail={detail} mv={mv} clientId={clientId} />
 
@@ -308,10 +329,10 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
 function StageView({ stageKey, title, detail, mv, clientId }: { stageKey: string; title: string; detail: InsightsDetail | null; mv: MetricView | undefined; clientId?: string }) {
   switch (stageKey) {
     case 'shown': return <AwarenessStage detail={detail} mv={mv} clientId={clientId} />
-    case 'engaged': return <InterestStage detail={detail} />
+    case 'engaged': return <InterestStage detail={detail} mv={mv} clientId={clientId} />
     case 'moved': return <ActionsStage detail={detail} mv={mv} clientId={clientId} />
     case 'camein': return <SalesStage detail={detail} mv={mv} title={title} />
-    case 'back': return <RetentionStage detail={detail} mv={mv} title={title} />
+    case 'back': return <RetentionStage detail={detail} mv={mv} title={title} clientId={clientId} />
     default: return mv ? <MetricCard mv={mv} /> : <NoMetricYet title={title} />
   }
 }
@@ -346,10 +367,19 @@ function SalesStage({ detail, mv, title }: { detail: InsightsDetail | null; mv: 
 }
 
 // ── Retention — repeat guests when a register connects, otherwise new reviews
-//    this month (the clearest come-back signal we can honestly see). ──
-function RetentionStage({ detail, mv, title }: { detail: InsightsDetail | null; mv: MetricView | undefined; title: string }) {
+//    this month (the clearest come-back signal we can honestly see). On the
+//    reviews fallback it gets the SAME shape as the other stages: number + trend,
+//    the reviews-per-day histogram (the same series the number counts), then the
+//    by-source cards. When a register is live, the headline is repeat guests —
+//    a different series than the reviews chart — so it keeps the plain hero
+//    rather than pairing the number with a chart that doesn't match it. ──
+function RetentionStage({ detail, mv, title, clientId }: { detail: InsightsDetail | null; mv: MetricView | undefined; title: string; clientId?: string }) {
   const stage = computedStage(detail, 5)
   if (stage && !stage.isEmpty) {
+    const registerLive = stage.sources.some((s) => s.id === 'pos_repeat_customers' && s.counted)
+    if (mv && !registerLive) {
+      return <StageWithChart mv={mv} label="New reviews" cs={stage} stageNumber={5} clientId={clientId} unit="Came back" breakdownTitle="Retention by source" />
+    }
     const feed = stageFeedFrom(stage)
     return (
       <>
@@ -687,16 +717,23 @@ function AwarenessStage({ detail, mv, clientId }: { detail: InsightsDetail | nul
   )
 }
 
-// ── Interest — who looked closer. Headline = Profile visits + Post engagement.
-//    New followers rides along as clearly-separated audience growth. ──
-function InterestStage({ detail }: { detail: InsightsDetail | null }) {
+// ── Interest — who looked closer. Same shape as Awareness/Actions: the number +
+//    trend on top, the histogram (real photo views + configured menu views — the
+//    same sources the stage counts), then the by-source cards. ──
+function InterestStage({ detail, mv, clientId }: { detail: InsightsDetail | null; mv?: MetricView; clientId?: string }) {
   if (!detail) return <FeedLoading />
   const cs = computedStage(detail, 2)
   const feed = cs ? stageFeedFrom(cs) : buildInterestFeed(toFeedInput(detail))
   return (
     <>
-      <StageHero total={feed.headline} label="People who looked closer" caption={feed.caption} />
-      {cs ? <SourceBreakdown stage={cs} unit="Looked closer" /> : <WhatFeedsThis feed={feed} unit="Looked closer" />}
+      {mv && cs ? (
+        <StageWithChart mv={mv} label="People who looked closer" cs={cs} stageNumber={2} clientId={clientId} unit="Looked closer" breakdownTitle="Interest by source" />
+      ) : (
+        <>
+          <StageHero total={feed.headline} label="People who looked closer" caption={feed.caption} />
+          {cs ? <SourceBreakdown stage={cs} unit="Looked closer" /> : <WhatFeedsThis feed={feed} unit="Looked closer" />}
+        </>
+      )}
       {detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} />}
       {!detail.socialConnected && <ConnectSocial connected={false} />}
     </>

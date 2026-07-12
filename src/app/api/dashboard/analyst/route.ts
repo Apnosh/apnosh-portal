@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
   if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 })
   const w = body.window
   const window: InsightsWindow = w === '7d' || w === '90d' || w === '12m' ? w : '30d'
+  const refresh = body.refresh === true
 
   const access = await checkClientAccess(clientId)
   if (!access.authorized) {
@@ -51,10 +52,57 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ locked: true }, { status: 200 })
   }
 
+  // ── Cache (Phase D): serve the stored read when it's fresh, so opening the
+  //    page doesn't re-bill the AI. Only an explicit Refresh regenerates.
+  //    Best-effort on both sides: a missing table (migration 207 not applied
+  //    yet) or any read/write hiccup just falls through to a live generate. ──
+  const CACHE_FRESH_MS = 7 * 24 * 60 * 60 * 1000 // a week
+  if (!refresh) {
+    try {
+      const admin = createAdminClient()
+      const { data } = await admin
+        .from('analyst_reports')
+        .select('read, funnel, business, reputation, generated_at')
+        .eq('client_id', clientId).eq('window', window)
+        .maybeSingle()
+      const row = data as { read: unknown; funnel: unknown; business: unknown; reputation: unknown; generated_at: string } | null
+      if (row?.read && row.generated_at && Date.now() - new Date(row.generated_at).getTime() < CACHE_FRESH_MS) {
+        return NextResponse.json({
+          locked: false,
+          read: row.read,
+          funnel: row.funnel,
+          reputation: row.reputation,
+          business: row.business,
+          window,
+          generatedAt: row.generated_at,
+          cached: true,
+        })
+      }
+    } catch { /* no cache → generate live */ }
+  }
+
   try {
     const payload = await buildAnalystPayload(clientId, window)
     const funnel = funnelFromPayload(payload)
     const { read, costCents } = await runAnalyst(payload)
+    const generatedAt = new Date().toISOString()
+
+    // store the fresh read (best-effort; a failure never blocks the response)
+    try {
+      const admin = createAdminClient()
+      await admin.from('analyst_reports').upsert({
+        client_id: clientId,
+        window,
+        read,
+        funnel,
+        business: payload.business,
+        reputation: payload.reputation,
+        model: 'claude-sonnet-4-5-20250929',
+        cost_cents: costCents,
+        generated_at: generatedAt,
+      })
+    } catch { /* cache write is optional */ }
+
     return NextResponse.json({
       locked: false,
       read,
@@ -62,7 +110,7 @@ export async function POST(req: NextRequest) {
       reputation: payload.reputation,
       business: payload.business,
       window,
-      generatedAt: new Date().toISOString(),
+      generatedAt,
       costCents,
     })
   } catch (e) {
