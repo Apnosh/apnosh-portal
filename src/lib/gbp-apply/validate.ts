@@ -198,6 +198,52 @@ export function validateAttributes(input: unknown): { ok: true; value: Attribute
   return { ok: true, value: out }
 }
 
+/* ── Categories (v1 locations.categories PATCH) ── */
+
+/** Up to 9 additional categories beyond the required primary (Google's cap). */
+export const CATEGORIES_MAX_ADDITIONAL = 9
+
+// A category resource name looks like "categories/gcid:vietnamese_restaurant".
+// Path-safe by construction, since each name is embedded in the PATCH body.
+const CATEGORY_NAME_RE = /^categories\/gcid:[a-z0-9_]+$/
+
+export interface CategoriesWriteValue {
+  /** Required primary category resource name ("categories/gcid:..."). */
+  primary: string
+  /** 0-9 additional category resource names, no dupes, none equal to primary. */
+  additional: string[]
+}
+
+/**
+ * Deterministic guard for a categories save: a required primary resource name,
+ * plus 0-9 additional resource names, all matching the "categories/gcid:..."
+ * shape, no duplicates, and the primary never repeated in additional. Anything
+ * else is refused before a rate slot is burned or Google is touched.
+ */
+export function validateCategories(input: unknown): { ok: true; value: CategoriesWriteValue } | { ok: false; error: string } {
+  if (typeof input !== 'object' || input === null) return { ok: false, error: 'Categories must be an object like { primary, additional }.' }
+  const entry = input as Record<string, unknown>
+  const primary = entry.primary
+  if (typeof primary !== 'string' || !primary.trim()) return { ok: false, error: 'Pick a main category first.' }
+  if (!CATEGORY_NAME_RE.test(primary)) return { ok: false, error: 'That main category is not one Google knows. Pick it from the search list.' }
+  const rawAdditional = entry.additional ?? []
+  if (!Array.isArray(rawAdditional)) return { ok: false, error: 'The extra categories must be a list.' }
+  if (rawAdditional.length > CATEGORIES_MAX_ADDITIONAL) {
+    return { ok: false, error: `Google allows at most ${CATEGORIES_MAX_ADDITIONAL} extra categories (got ${rawAdditional.length}).` }
+  }
+  const additional: string[] = []
+  const seen = new Set<string>([primary])
+  for (const c of rawAdditional) {
+    if (typeof c !== 'string' || !c.trim()) return { ok: false, error: 'Each extra category needs a name.' }
+    if (!CATEGORY_NAME_RE.test(c)) return { ok: false, error: 'One extra category is not one Google knows. Pick it from the search list.' }
+    if (c === primary) return { ok: false, error: 'The main category is also in the extra list. Remove it from the extras.' }
+    if (seen.has(c)) return { ok: false, error: 'The same extra category is listed twice. Remove the repeat.' }
+    seen.add(c)
+    additional.push(c)
+  }
+  return { ok: true, value: { primary, additional } }
+}
+
 /* ── GBP local posts (What's New) ── */
 
 // Google's summary cap is 1500; we stop well short so posts read like posts, not essays.

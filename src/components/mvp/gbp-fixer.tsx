@@ -69,7 +69,7 @@
 
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
-import { Loader2, Check, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Copy, ExternalLink, Plug, Pencil, Star, MessageCircle, Megaphone } from 'lucide-react'
+import { Loader2, Check, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Copy, ExternalLink, Plug, Pencil, Star, MessageCircle, Megaphone, X, Search, ImagePlus } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
 
@@ -82,7 +82,7 @@ type GbpSectionStatus = 'good' | 'needs-work' | 'missing' | 'unknown'
  *  engine omits `detail` and the UI falls back to the `current` summary. */
 type GbpSectionDetail =
   | { kind: 'hours'; days: Array<{ day: string; hours: string }>; specialCount?: number }
-  | { kind: 'categories'; primary: string | null; additional: string[] }
+  | { kind: 'categories'; primary: string | null; additional: string[]; primaryName?: string | null; additionalNames?: string[] }
   | { kind: 'description'; text: string | null }
   | { kind: 'photos'; count: number; newestLabel?: string; items: Array<{ url: string }> }
   | { kind: 'menu'; itemCount: number; items: Array<{ name: string; price?: string }>; menuLink?: string | null }
@@ -947,7 +947,7 @@ function AiIntro({ sections, needsWork, onStart }: { sections: GbpDiagnosisSecti
 /* ── Save to Google: the gbp-apply rail plumbing ─────────────────── */
 
 /** The field kinds POST /api/dashboard/gbp-apply accepts. */
-type ApplyKind = 'description' | 'hours' | 'website' | 'phone' | 'attributes'
+type ApplyKind = 'description' | 'hours' | 'website' | 'phone' | 'attributes' | 'categories'
 
 export type SaveTone = 'ok' | 'pending' | 'error'
 export interface SaveNote { tone: SaveTone; text: string }
@@ -977,6 +977,27 @@ export function applyResultNote(status: number, body: { ok?: boolean; live?: boo
     return { tone: 'error', text: body.error }
   }
   return { tone: 'error', text: SAVE_FAIL }
+}
+
+const PHOTO_FAIL = 'We could not add the photo to Google right now. Try again in a minute.'
+
+/**
+ * Map one gbp-photo response to the honest owner line. A photo CREATE has no
+ * prior value to read back, so a returned media resource IS the proof:
+ * "Added to Google." only on live:true; ok without proof reads as
+ * sent-not-showing-yet; 400/403 bodies are the server's plain owner words;
+ * anything else gets the generic could-not-add line. Exported for the render smoke.
+ */
+export function photoResultNote(status: number, body: { ok?: boolean; live?: boolean; error?: string } | null): SaveNote {
+  if (status === 200 && body?.ok) {
+    return body.live === true
+      ? { tone: 'ok', text: 'Added to Google.' }
+      : { tone: 'pending', text: 'Sent to Google. It can take a few minutes to show.' }
+  }
+  if ((status === 400 || status === 403) && typeof body?.error === 'string' && body.error.trim()) {
+    return { tone: 'error', text: body.error }
+  }
+  return { tone: 'error', text: PHOTO_FAIL }
 }
 
 async function postApply(clientId: string, kind: ApplyKind, value: unknown): Promise<{ note: SaveNote; accepted: boolean; live: boolean }> {
@@ -1118,14 +1139,21 @@ function hoursDisplayFromRows(rows: HoursRowDraft[]): Array<{ day: string; hours
 /* ── Shared save plumbing: ONE hook for the builder and the viewer ── */
 
 /** Which in-app editor a section gets (null = Google-link only). The
- *  attribute groups are editable only when the read gave us the real rows
- *  to start from (no detail = nothing honest to prefill). */
-function sectionEditableKind(section: GbpDiagnosisSection): 'description' | 'hours' | 'links' | 'attrs' | null {
+ *  attribute groups and categories are editable only when the read gave us the
+ *  real rows/resource-names to start from (no detail = nothing honest to
+ *  prefill). Menu stays Google-link only for now. */
+type EditableKind = 'description' | 'hours' | 'links' | 'attrs' | 'categories' | 'photos'
+function sectionEditableKind(section: GbpDiagnosisSection): EditableKind | null {
   return section.key === 'description' ? 'description'
     : section.key === 'hours' ? 'hours'
       : section.key === 'links' ? 'links'
-        : section.detail?.kind === 'attrs' ? 'attrs'
-          : null
+        // Categories need the resource names off the live read to re-send them
+        // on save; an older cache without `additionalNames` falls back to the
+        // Google link.
+        : section.detail?.kind === 'categories' && section.detail.additionalNames !== undefined ? 'categories'
+          : section.key === 'photos' && section.detail?.kind === 'photos' ? 'photos'
+            : section.detail?.kind === 'attrs' ? 'attrs'
+              : null
 }
 
 /**
@@ -1154,6 +1182,7 @@ function useGbpSectionSave({ clientId, section, initialNote, onAccepted }: {
   const [provenLinks, setProvenLinks] = useState<{ website?: string; phone?: string }>({})
   const [provenHours, setProvenHours] = useState<Array<{ day: string; hours: string }> | null>(null)
   const [provenAttrs, setProvenAttrs] = useState<Record<string, boolean>>({})
+  const [provenCats, setProvenCats] = useState<{ primary: string | null; additional: string[]; primaryName: string | null; additionalNames: string[] } | null>(null)
 
   let detail = section.detail
   if (section.key === 'description' && provenDesc != null) detail = { kind: 'description', text: provenDesc }
@@ -1163,6 +1192,9 @@ function useGbpSectionSave({ clientId, section, initialNote, onAccepted }: {
   if (detail?.kind === 'hours' && provenHours) detail = { ...detail, days: provenHours }
   if (detail?.kind === 'attrs' && Object.keys(provenAttrs).length > 0) {
     detail = { ...detail, items: detail.items.map((it) => (it.id in provenAttrs ? { ...it, value: provenAttrs[it.id] } : it)) }
+  }
+  if (detail?.kind === 'categories' && provenCats) {
+    detail = { ...detail, primary: provenCats.primary, additional: provenCats.additional, primaryName: provenCats.primaryName, additionalNames: provenCats.additionalNames }
   }
 
   const afterAccepted = (n: SaveNote) => {
@@ -1235,7 +1267,56 @@ function useGbpSectionSave({ clientId, section, initialNote, onAccepted }: {
     afterAccepted(res.note)
   }
 
-  return { detail, saving, note, setNote, saveDescription, saveHours, saveLinks, saveAttrs }
+  /** Categories: the whole set (primary + additional resource names) travels as
+   *  one gbp-apply call. `display` carries the picked display names so a proven
+   *  save can show the right chips until the silent re-fetch catches up. */
+  const saveCategories = async (
+    value: { primary: string; additional: string[] },
+    display: { primary: string; additional: string[] },
+  ) => {
+    if (saving) return
+    setSaving(true)
+    const res = await postApply(clientId, 'categories', value)
+    setSaving(false)
+    if (!res.accepted) { setNote(res.note); return }
+    if (res.live) {
+      setProvenCats({ primary: display.primary, additional: display.additional, primaryName: value.primary, additionalNames: value.additional })
+    }
+    afterAccepted(res.note)
+  }
+
+  /** Photos: upload the owner's file to the existing bucket, then hand the
+   *  public URL to Google's media create. A create IS its own proof, so the
+   *  silent re-fetch brings the new photo into the grid. */
+  const savePhoto = async (file: File) => {
+    if (saving) return
+    setSaving(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const up = await fetch(`/api/dashboard/upload-asset?clientId=${encodeURIComponent(clientId)}`, { method: 'POST', body: form })
+      const upBody = await up.json().catch(() => null) as { url?: unknown; error?: unknown } | null
+      if (!up.ok || typeof upBody?.url !== 'string' || !upBody.url) {
+        setSaving(false)
+        setNote({ tone: 'error', text: PHOTO_FAIL })
+        return
+      }
+      const r = await fetch('/api/dashboard/gbp-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, sourceUrl: upBody.url }),
+      })
+      const j = await r.json().catch(() => null) as { ok?: boolean; live?: boolean; error?: string } | null
+      setSaving(false)
+      const n = photoResultNote(r.status, j)
+      if (r.status === 200 && j?.ok === true) { afterAccepted(n) } else { setNote(n) }
+    } catch {
+      setSaving(false)
+      setNote({ tone: 'error', text: PHOTO_FAIL })
+    }
+  }
+
+  return { detail, saving, note, setNote, saveDescription, saveHours, saveLinks, saveAttrs, saveCategories, savePhoto }
 }
 
 /* ── The part screen ────────────────────────────────────────────── */
@@ -1296,7 +1377,7 @@ function AiPart({ section, chapter, index, total, clientId, onBack, onDone, onSa
   const [savedThisPart, setSavedThisPart] = useState(false)
 
   // The save plumbing + read-back-proven content, shared with the viewer.
-  const { detail, saving, note, setNote, saveDescription, saveHours, saveLinks, saveAttrs } = useGbpSectionSave({
+  const { detail, saving, note, setNote, saveDescription, saveHours, saveLinks, saveAttrs, saveCategories, savePhoto } = useGbpSectionSave({
     clientId,
     section,
     initialNote: initialSaveNote,
@@ -1366,6 +1447,7 @@ function AiPart({ section, chapter, index, total, clientId, onBack, onDone, onSa
             key={editSession}
             kind={editableKind}
             detail={detail}
+            clientId={clientId}
             saving={saving}
             serverNote={note?.tone === 'error' ? note : null}
             onCancel={() => setEditing(false)}
@@ -1373,6 +1455,8 @@ function AiPart({ section, chapter, index, total, clientId, onBack, onDone, onSa
             onSaveHours={(rows) => { void saveHours(rows) }}
             onSaveLinks={(c) => { void saveLinks(c) }}
             onSaveAttrs={(items) => { void saveAttrs(items) }}
+            onSaveCategories={(v, d) => { void saveCategories(v, d) }}
+            onSavePhoto={(f) => { void savePhoto(f) }}
             descDraft={{ drafting, draft, draftError, onDraft }}
           />
         ) : (
@@ -1712,6 +1796,239 @@ function AttrsEditor({ initialItems, saving, serverNote, onCancel, onSave }: {
   )
 }
 
+/* ── Categories editor ──────────────────────────────────────────── */
+
+type CatChip = { name: string; displayName: string }
+
+const catChipStyle = (isMain: boolean): CSSProperties => ({
+  display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: isMain ? 700 : 600,
+  color: isMain ? C.greenDk : C.ink, background: isMain ? C.greenSoft : '#fff',
+  border: `0.5px solid ${isMain ? C.green : C.line}`, borderRadius: 99, padding: '5px 10px',
+})
+
+/**
+ * Edit → Save for categories: the current main (labeled "Main") + the extra
+ * categories as removable chips, a search box that calls gbp-categories to add
+ * more, and a "Make main" action to promote an extra. Google requires a main
+ * category and allows up to 9 extras. The whole set is re-sent on save (the
+ * PATCH replaces categories), which is why the current ones carry their
+ * resource names. Save goes through the gbp-apply rail (kind 'categories').
+ */
+function CategoriesEditor({ clientId, initialPrimary, initialAdditional, saving, serverNote, onCancel, onSave }: {
+  clientId: string
+  initialPrimary: CatChip | null
+  initialAdditional: CatChip[]
+  saving: boolean
+  serverNote: SaveNote | null
+  onCancel: () => void
+  onSave: (value: { primary: string; additional: string[] }, display: { primary: string; additional: string[] }) => void
+}) {
+  const [primary, setPrimary] = useState<CatChip | null>(initialPrimary)
+  const [additional, setAdditional] = useState<CatChip[]>(initialAdditional)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<CatChip[]>([])
+  const [searching, setSearching] = useState(false)
+  const [localError, setLocalError] = useState<string | null>(null)
+
+  // Debounced taxonomy search. A too-short query clears the list.
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) { setResults([]); setSearching(false); return }
+    let live = true
+    setSearching(true)
+    const t = setTimeout(() => {
+      fetch(`/api/dashboard/gbp-categories?clientId=${encodeURIComponent(clientId)}&q=${encodeURIComponent(q)}`)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('search failed'))))
+        .then((j: { categories?: CatChip[] }) => { if (live) setResults(Array.isArray(j.categories) ? j.categories : []) })
+        .catch(() => { if (live) setResults([]) })
+        .finally(() => { if (live) setSearching(false) })
+    }, 300)
+    return () => { live = false; clearTimeout(t) }
+  }, [query, clientId])
+
+  const has = (name: string) => primary?.name === name || additional.some((a) => a.name === name)
+  const add = (c: CatChip) => {
+    setLocalError(null)
+    if (has(c.name)) return
+    if (!primary) { setPrimary(c); setQuery(''); setResults([]); return }
+    if (additional.length >= 9) { setLocalError('You already have the most extra categories Google allows.'); return }
+    setAdditional((cur) => [...cur, c])
+    setQuery('')
+    setResults([])
+  }
+  const removeAdditional = (name: string) => setAdditional((cur) => cur.filter((a) => a.name !== name))
+  const makeMain = (c: CatChip) => {
+    setAdditional((cur) => {
+      const without = cur.filter((a) => a.name !== c.name)
+      return primary ? [...without, primary] : without
+    })
+    setPrimary(c)
+  }
+
+  const submit = () => {
+    if (!primary) { setLocalError('Pick a main category first.'); return }
+    setLocalError(null)
+    onSave(
+      { primary: primary.name, additional: additional.map((a) => a.name) },
+      { primary: primary.displayName, additional: additional.map((a) => a.displayName) },
+    )
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, marginBottom: 6 }}>Your categories</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {primary
+          ? <span style={catChipStyle(true)}>Main: {primary.displayName}</span>
+          : <span style={{ fontSize: 12.5, color: C.mute }}>No main category yet. Add one below.</span>}
+        {additional.map((c) => (
+          <span key={c.name} style={catChipStyle(false)}>
+            {c.displayName}
+            <button type="button" onClick={() => makeMain(c)} aria-label={`Make ${c.displayName} the main category`} style={{ border: 'none', background: 'none', padding: 0, color: C.greenDk, fontSize: 11, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}>
+              Make main
+            </button>
+            <button type="button" onClick={() => removeAdditional(c.name)} aria-label={`Remove ${c.displayName}`} style={{ border: 'none', background: 'none', padding: 0, color: C.mute, cursor: 'pointer', display: 'inline-flex' }}>
+              <X size={13} />
+            </button>
+          </span>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <label style={fieldLabelStyle} htmlFor="gbp-cat-search">Add a category</label>
+        <div style={{ position: 'relative' }}>
+          <Search size={14} color={C.faint} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+          <input
+            id="gbp-cat-search"
+            type="text"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setLocalError(null) }}
+            placeholder="Search, like taco or coffee"
+            style={{ ...textInputStyle, paddingLeft: 32 }}
+          />
+        </div>
+        {searching && <div style={{ fontSize: 12, color: C.mute, margin: '6px 2px 0' }}>Searching&hellip;</div>}
+        {results.length > 0 && (
+          <div style={{ marginTop: 6, border: `0.5px solid ${C.line}`, borderRadius: 11, overflow: 'hidden' }}>
+            {results.map((c, i) => (
+              <button
+                key={c.name}
+                type="button"
+                onClick={() => add(c)}
+                disabled={has(c.name)}
+                className="mvp-row"
+                style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 8, padding: '9px 11px', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}`, background: 'none', border: 'none', textAlign: 'left', font: 'inherit', cursor: has(c.name) ? 'default' : 'pointer', color: has(c.name) ? C.faint : C.ink }}
+              >
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600 }}>{c.displayName}</span>
+                {has(c.name) ? <Check size={14} color={C.greenDk} /> : <span style={{ fontSize: 12.5, fontWeight: 700, color: C.greenDk }}>Add</span>}
+              </button>
+            ))}
+          </div>
+        )}
+        <p style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.45, margin: '8px 0 0' }}>
+          Pick the one that fits best as your main. Add up to 9 more.
+        </p>
+      </div>
+
+      {localError && <div style={errLineStyle}>{localError}</div>}
+      {serverNote && <SaveNoteLine note={serverNote} />}
+      <SaveCancelRow saving={saving} disabled={!primary} onSave={submit} onCancel={onCancel} />
+    </div>
+  )
+}
+
+/* ── Photos editor ──────────────────────────────────────────────── */
+
+/**
+ * Edit → Save for photos: pick one image, see a preview, then "Add to Google".
+ * The file uploads to the existing bucket and Google fetches it (v4 media
+ * create). One photo at a time keeps it simple. A create IS its own proof, so
+ * the honest "Added to Google" line shows on success and the new photo appears
+ * after the silent re-fetch.
+ */
+function PhotosEditor({ saving, serverNote, onCancel, onSave, initialFileName }: {
+  saving: boolean
+  serverNote: SaveNote | null
+  onCancel: () => void
+  onSave: (file: File) => void
+  /** TEST SEAM (render smoke only): show the preview + Add button without a real File. */
+  initialFileName?: string
+}) {
+  const [file, setFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [localError, setLocalError] = useState<string | null>(null)
+
+  const pick = (f: File | null) => {
+    setLocalError(null)
+    setFile(f)
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(f ? URL.createObjectURL(f) : null)
+  }
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
+
+  const submit = () => {
+    if (!file) { setLocalError('Pick a photo first.'); return }
+    setLocalError(null)
+    onSave(file)
+  }
+  const hasPick = !!file || !!initialFileName
+
+  return (
+    <div>
+      <label style={fieldLabelStyle} htmlFor="gbp-photo-file">Add a photo</label>
+      <input
+        id="gbp-photo-file"
+        type="file"
+        accept="image/*"
+        onChange={(e) => pick(e.target.files?.[0] ?? null)}
+        style={{ fontSize: 13, color: C.ink, font: 'inherit' }}
+      />
+      {previewUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={previewUrl} alt="Your photo" style={{ display: 'block', marginTop: 10, width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 11, background: '#e9e9ee' }} />
+      )}
+      {initialFileName && !previewUrl && (
+        <div style={{ marginTop: 10, fontSize: 12.5, color: C.mute }}>{initialFileName}</div>
+      )}
+      <p style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.45, margin: '8px 0 0' }}>
+        Use a clear JPG or PNG. It shows on your listing as the business.
+      </p>
+      {localError && <div style={errLineStyle}>{localError}</div>}
+      {serverNote && <SaveNoteLine note={serverNote} />}
+      <button
+        type="button"
+        onClick={submit}
+        disabled={saving || !hasPick}
+        className="mvp-row"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 12, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: saving || !hasPick ? 'default' : 'pointer', opacity: saving || !hasPick ? 0.7 : 1, font: 'inherit' }}
+      >
+        {saving ? <><Loader2 size={16} className="mvp-spin" /> Adding to Google&hellip;</> : <><ImagePlus size={16} /> Add to Google</>}
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={saving}
+        className="mvp-row"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: 6, height: 40, borderRadius: 12, border: 'none', background: 'none', color: C.mute, fontSize: 14, fontWeight: 600, cursor: 'pointer', font: 'inherit' }}
+      >
+        Cancel
+      </button>
+    </div>
+  )
+}
+
+/** Build the categories editor's initial chips from the diagnosis detail (which
+ *  carries display names + aligned resource names). */
+function catChipsFromDetail(detail: GbpSectionDetail | undefined): { primary: CatChip | null; additional: CatChip[] } {
+  if (detail?.kind !== 'categories') return { primary: null, additional: [] }
+  const primary = detail.primaryName && detail.primary
+    ? { name: detail.primaryName, displayName: detail.primary }
+    : null
+  const names = detail.additionalNames ?? []
+  const additional = names.map((name, i) => ({ name, displayName: detail.additional[i] ?? name }))
+  return { primary, additional }
+}
+
 /**
  * The right in-app editor for one editable kind, prefilled from the shown
  * detail: ONE switch that both the builder's part screens (AiPart) and the
@@ -1720,9 +2037,10 @@ function AttrsEditor({ initialItems, saving, serverNote, onCancel, onSave }: {
  * editor; the viewer leaves it out (AI drafting stays on the campaign AI
  * lane), so there the description editor is textarea + count + save only.
  */
-function SectionEditor({ kind, detail, saving, serverNote, onCancel, onSaveDescription, onSaveHours, onSaveLinks, onSaveAttrs, descDraft }: {
-  kind: 'description' | 'hours' | 'links' | 'attrs'
+function SectionEditor({ kind, detail, clientId, saving, serverNote, onCancel, onSaveDescription, onSaveHours, onSaveLinks, onSaveAttrs, onSaveCategories, onSavePhoto, descDraft, initialPhotoFileName }: {
+  kind: EditableKind
   detail: GbpSectionDetail | undefined
+  clientId: string
   saving: boolean
   serverNote: SaveNote | null
   onCancel: () => void
@@ -1730,8 +2048,37 @@ function SectionEditor({ kind, detail, saving, serverNote, onCancel, onSaveDescr
   onSaveHours: (rows: HoursRowDraft[]) => void
   onSaveLinks: (changes: { website?: string; phone?: string }) => void
   onSaveAttrs: (items: Array<{ id: string; value: boolean }>) => void
+  onSaveCategories: (value: { primary: string; additional: string[] }, display: { primary: string; additional: string[] }) => void
+  onSavePhoto: (file: File) => void
   descDraft?: DraftTool
+  /** TEST SEAM (render smoke only): render the photo preview + Add button. */
+  initialPhotoFileName?: string
 }) {
+  if (kind === 'categories') {
+    const chips = catChipsFromDetail(detail)
+    return (
+      <CategoriesEditor
+        clientId={clientId}
+        initialPrimary={chips.primary}
+        initialAdditional={chips.additional}
+        saving={saving}
+        serverNote={serverNote}
+        onCancel={onCancel}
+        onSave={onSaveCategories}
+      />
+    )
+  }
+  if (kind === 'photos') {
+    return (
+      <PhotosEditor
+        saving={saving}
+        serverNote={serverNote}
+        onCancel={onCancel}
+        onSave={onSavePhoto}
+        initialFileName={initialPhotoFileName}
+      />
+    )
+  }
   if (kind === 'description') {
     return (
       <DescriptionEditor
@@ -2069,7 +2416,7 @@ function ViewerSection({ section, clientId, isPro, onSilentRefresh, initialEditi
   const [editSession, setEditSession] = useState(0)
 
   // The save plumbing + read-back-proven content, shared with the builder.
-  const { detail, saving, note, setNote, saveDescription, saveHours, saveLinks, saveAttrs } = useGbpSectionSave({
+  const { detail, saving, note, setNote, saveDescription, saveHours, saveLinks, saveAttrs, saveCategories, savePhoto } = useGbpSectionSave({
     clientId,
     section,
     onAccepted: () => {
@@ -2092,6 +2439,7 @@ function ViewerSection({ section, clientId, isPro, onSilentRefresh, initialEditi
           key={editSession}
           kind={editableKind}
           detail={detail}
+          clientId={clientId}
           saving={saving}
           serverNote={note?.tone === 'error' ? note : null}
           onCancel={() => setEditing(false)}
@@ -2099,6 +2447,8 @@ function ViewerSection({ section, clientId, isPro, onSilentRefresh, initialEditi
           onSaveHours={(rows) => { void saveHours(rows) }}
           onSaveLinks={(c) => { void saveLinks(c) }}
           onSaveAttrs={(items) => { void saveAttrs(items) }}
+          onSaveCategories={(v, d) => { void saveCategories(v, d) }}
+          onSavePhoto={(f) => { void savePhoto(f) }}
         />
       ) : (
         <>
