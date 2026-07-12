@@ -49,6 +49,7 @@ const VALUES: Record<string, number | null> = {
   gbp_rating_trend: 4.5,
   ig_reach: 9999,          // present, but must NOT count unless IG connected
   ig_follower_growth: 12,
+  ga4_website_visits: 900,
   ga4_menu_views: 300,
   ga4_order_clicks: 150,   // present, but must NOT count unless GA4 connected + configured
   ga4_returning_users: 60,
@@ -79,6 +80,7 @@ ok(inte.headline === sumCounted(inte), `Interest headline == sum(counted) (${sum
 ok(src(inte, 'ig_profile_visits').counted === false, 'ig_profile_visits NOT counted (IG not connected) despite value 70 present')
 ok(src(inte, 'ig_engaged').counted === false, 'ig_engaged NOT counted (IG not connected) despite value 130 present')
 ok(src(inte, 'ga4_menu_views').counted === false, 'ga4_menu_views NOT counted (GA4 not connected)')
+ok(src(inte, 'ga4_website_visits').counted === false, 'ga4_website_visits NOT counted (GA4 not connected) despite value 900 present')
 
 const act = stage(gbpStages, 3)
 ok(act.headline === 55, `Actions = directions 40 + calls 10 + bookings 5 = 55 (site clicks now Interest) (${act.headline})`)
@@ -137,7 +139,7 @@ ok(awFull.headline === 1000 + 500 + VALUES.ig_reach!, `Awareness folds ig_reach 
 const inteFull = stage(full, 2)
 ok(src(inteFull, 'ig_profile_visits').counted === true, 'ig_profile_visits counted once IG is connected')
 ok(src(inteFull, 'ig_engaged').counted === true, 'ig_engaged counted once IG is connected')
-ok(inteFull.headline === 25 + 70 + 130 + 300, `Interest = site clicks 25 + visits 70 + engaged 130 + menu views 300 (${inteFull.headline})`)
+ok(inteFull.headline === 25 + 900 + 70 + 130 + 300, `Interest = clicks 25 + web visits 900 + profile 70 + engaged 130 + menu 300 = 1425 (${inteFull.headline})`)
 
 // ── 3. Empty / disconnected client ─────────────────────────────────────────
 console.log('\n== 3. No connections at all ==')

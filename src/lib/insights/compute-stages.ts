@@ -87,7 +87,7 @@ const SUMMABLE: Record<FunnelStage, string[]> = {
   // Owner redefinition (2026-07-12): Interest = people who TOOK AN INTEREST
   // (website clicks, menu views, profile looks, post engagement); Actions =
   // people who actually DID something (calls, directions, bookings, orders).
-  2: ['gbp_website_clicks', 'ig_profile_visits', 'ig_engaged', 'ig_saves', 'ig_shares', 'ig_link_clicks', 'ga4_menu_views'],
+  2: ['ga4_website_visits', 'gbp_website_clicks', 'ig_profile_visits', 'ig_engaged', 'ig_saves', 'ig_shares', 'ig_link_clicks', 'ga4_menu_views'],
   3: ['gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
   4: ['pos_covers', 'delivery_orders'],
   5: ['pos_repeat_customers'],

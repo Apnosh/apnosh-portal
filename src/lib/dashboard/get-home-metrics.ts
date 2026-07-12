@@ -273,8 +273,8 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     fetchAll('reviews', 'rating, response_text, posted_at', 'posted_at', bound + 'T00:00:00'),
     fetchAll('local_reviews', 'rating, reply_text, created_at_platform', 'created_at_platform', bound + 'T00:00:00'),
     fetchAll('email_metrics', 'sent_date, sent_count, open_count, click_count, revenue_attributed', 'sent_date', bound),
-    // menu page views (migration 206). A missing column/table just yields no rows.
-    fetchAll('website_metrics', 'date, menu_views', 'date', bound),
+    // website visits (sessions) + menu page views. A missing column/table just yields no rows.
+    fetchAll('website_metrics', 'date, sessions, menu_views', 'date', bound),
   ])
 
   /* Per-day source maps. We only create+populate a map when the source
@@ -296,12 +296,15 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     gBook.set(d, (gBook.get(d) ?? 0) + num(r.bookings))
     gFood.set(d, (gFood.get(d) ?? 0) + num(r.food_orders))
   }
-  // Website (GA4) — menu page views, when the owner has configured the path
-  const wMenu: Maps = new Map()
+  // Website (GA4) — visits (sessions, always ingested when GA4 connected) +
+  // menu page views (only when the owner configured the menu path)
+  const wVisits: Maps = new Map(), wMenu: Maps = new Map()
   for (const r of (website.data ?? []) as Record<string, unknown>[]) {
     const d = String(r.date).slice(0, 10)
-    const v = num(r.menu_views)
-    if (v > 0) wMenu.set(d, (wMenu.get(d) ?? 0) + v)
+    const sv = num(r.sessions)
+    if (sv > 0) wVisits.set(d, (wVisits.get(d) ?? 0) + sv)
+    const mv = num(r.menu_views)
+    if (mv > 0) wMenu.set(d, (wMenu.get(d) ?? 0) + mv)
   }
   // Social
   const sReach: Maps = new Map(), sEng: Maps = new Map(), sFol: Maps = new Map(), sVis: Maps = new Map()
@@ -340,15 +343,15 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
      clicks + menu page views + IG profile visits + IG post engagement. The SAME
      sources the honest funnel's Interest stage counts, so the insights chart
      total matches the stage's source cards. ── */
-  const engMain = addInto(gClick, sVis, sEng, wMenu)
+  const engMain = addInto(wVisits, gClick, sVis, sEng, wMenu)
   const engagement = buildMetric({
-    key: 'engagement', label: 'Interest', sub: 'Site clicks, menu views, and profile looks', fmt: 'num',
+    key: 'engagement', label: 'Interest', sub: 'Website visits, site clicks, and profile looks', fmt: 'num',
     mainMap: engMain,
     comps: [
+      { label: 'Website visits', icon: 'eye', map: wVisits },
       { label: 'Site clicks', icon: 'cursor', map: gClick },
       { label: 'Profile visits', icon: 'user', map: sVis },
       { label: 'Engaged', icon: 'heart', map: sEng },
-      { label: 'Menu views', icon: 'eye', map: wMenu },
     ],
   }, today, earliestOf(engMain), frontierFor(engMain, today, SETTLE.gbp))
 

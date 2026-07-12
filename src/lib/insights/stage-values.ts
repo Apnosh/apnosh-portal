@@ -146,22 +146,25 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
     }
   } catch { /* social unavailable */ }
 
-  // ── Website / GA4 events (website_metrics) -> menu views, order clicks,
-  //    returning users. menu_views / order_clicks come from migration 206. ──
+  // ── Website / GA4 (website_metrics) -> website visits (sessions), menu views,
+  //    order clicks, returning users. sessions are always ingested when GA4 is
+  //    connected; menu_views / order_clicks come from migration 206. ──
   try {
     const { data, error } = await admin
       .from('website_metrics')
-      .select('menu_views, order_clicks, returning_users')
+      .select('sessions, menu_views, order_clicks, returning_users')
       .eq('client_id', clientId)
       .gte('date', otherBound)
     if (!error && data) {
-      let menu = 0, order = 0, ret = 0
-      let sawReturning = false
+      let visits = 0, menu = 0, order = 0, ret = 0
+      let sawSessions = false, sawReturning = false
       for (const r of data as Record<string, unknown>[]) {
+        if (r.sessions != null) { visits += num(r.sessions); sawSessions = true }
         menu += num(r.menu_views)
         order += num(r.order_clicks)
         if (r.returning_users != null) { ret += num(r.returning_users); sawReturning = true }
       }
+      out.ga4_website_visits = sawSessions ? visits : null
       out.ga4_menu_views = menu
       out.ga4_order_clicks = order
       out.ga4_returning_users = sawReturning ? ret : null

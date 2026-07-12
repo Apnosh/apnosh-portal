@@ -104,6 +104,8 @@ export interface HomeFunnelProps {
   period?: string
   views?: Views
   actions?: Actions
+  /** honest per-stage headlines (Interest/Actions/Retention) from computeStages */
+  counts?: StageCounts
   initialWalkInRate?: number
   initialAvgTicket?: number | null
   currency?: string
@@ -207,7 +209,12 @@ function drawEmblem(ctx: CanvasRenderingContext2D, ox: number, oy: number, r: nu
 }
 
 /* Recompute the whole funnel from the real signals + the owner's two dials. */
-export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null) {
+/** The honest per-stage headlines, straight from computeStages, so the animated
+ *  funnel shows the SAME numbers as the Insights page. When absent (older payload)
+ *  computeHome falls back to deriving them from the raw actions. */
+export interface StageCounts { interest?: number; actions?: number; retention?: number }
+
+export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null, counts?: StageCounts) {
   const total = Math.max(0, views.total)
   // Awareness folds SOCIAL reach into the Google views (top of funnel = "people who saw you").
   // When social is 0/undefined the labels stay exactly as before (Google-only accounts see no
@@ -219,22 +226,24 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
   const awareSub = hasSocial ? 'times you showed up on Google and social' : 'times you showed up on Google'
   const awareSplit = hasSocial ? `Google ${google.toLocaleString()} · Social ${social.toLocaleString()}` : undefined
   const { directions, calls, websiteClicks } = actions
-  // Owner definition (2026-07-12), matching the Insights stages: Interest =
-  // people who took an interest (website clicks); Actions = people who actually
-  // did something (directions + calls). Same words, same numbers everywhere.
-  const engaged = websiteClicks
-  const acted = directions + calls
+  // Interest + Actions come STRAIGHT from the honest Insights stage headlines
+  // (counts), so the animation and the Insights page always show the same
+  // numbers. Fallback (older payload with no counts): Interest = website
+  // clicks, Actions = directions + calls.
+  const engaged = counts?.interest ?? websiteClicks
+  const acted = counts?.actions ?? (directions + calls)
   const cameIn = Math.round(directions * walkInRate)
   const revenue = avgTicket != null && avgTicket > 0 ? round100(cameIn * avgTicket) : null
   const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0)
   const ratePct = Math.round(walkInRate * 100)
-  // repeat visits — Google can't see these; it's 0 until a register/POS feeds a real
-  // number, and a plain 0 (not a lock) is honest: nobody we can see has come back yet.
-  const retention = 0
+  // Retention = the Insights Retention headline (repeat guests once a register
+  // connects, else new reviews this month). Falls back to 0 (a plain 0, never a
+  // lock) when no count is provided.
+  const retention = counts?.retention ?? 0
 
   const stages: HStage[] = [
     { key: 'shown', label: 'Awareness', sub: awareSub, count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: `${pct(engaged, total)} in 100 engaged`, emblem: 'eye', deltaYoY: yoy?.awareness ?? null, insightsStage: 'discovery' },
-    { key: 'engaged', label: 'Interest', sub: 'website clicks', count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, insightsStage: 'intent' },
+    { key: 'engaged', label: 'Interest', sub: 'website visits & clicks', count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, insightsStage: 'intent' },
     { key: 'moved', label: 'Customer actions', sub: 'directions & calls', count: acted, zone: 'measured', tag: 'Real · Google', conv: `~${ratePct}% of directions ordered`, emblem: 'tap', deltaYoY: yoy?.actions ?? null, insightsStage: 'intent' },
     { key: 'camein', label: 'Orders', sub: 'walk-in orders from Google', count: cameIn, zone: 'estimate', tag: '~ about · your math', emblem: 'door', deltaYoY: yoy?.orders ?? null, insightsStage: 'conversion' },
     { key: 'back', label: 'Retention', sub: 'came back for more', count: retention, zone: 'measured', tag: 'Repeat visits', emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },
@@ -266,6 +275,7 @@ export default function HomeFunnel({
   period = 'Last 30 days',
   views = MOCK_VIEWS,
   actions = MOCK_ACTIONS,
+  counts,
   initialWalkInRate = 0.5,
   initialAvgTicket = 24,
   currency = '$',
@@ -363,7 +373,7 @@ export default function HomeFunnel({
     try { if (t) localStorage.setItem(audKey, t); else localStorage.removeItem(audKey) } catch { /* ignore */ }
   }
 
-  const { stages } = useMemo(() => computeHome(views, actions, walkInRate, avgTicket, currency, yoy ?? null), [views, actions, walkInRate, avgTicket, currency, yoy])
+  const { stages } = useMemo(() => computeHome(views, actions, walkInRate, avgTicket, currency, yoy ?? null, counts), [views, actions, walkInRate, avgTicket, currency, yoy, counts])
 
   const geom = useRef({ W: 400 })
 
@@ -1117,10 +1127,12 @@ interface WireStage { stage: number; headline: number | null; sources: WireStage
  *  Awareness = the CONNECTED-sum (headline), split into its Google vs Social parts
  *  from the same counted sources, and Actions from the counted GBP action sources.
  *  Returns null when Awareness has no connected source (so Home falls back / hides). */
-function fromStages(stages: WireStage[] | undefined): { views: Views; actions: Actions } | null {
+function fromStages(stages: WireStage[] | undefined): { views: Views; actions: Actions; counts: StageCounts } | null {
   if (!stages || !stages.length) return null
   const aw = stages.find((s) => s.stage === 1)
+  const it = stages.find((s) => s.stage === 2)
   const ac = stages.find((s) => s.stage === 3)
+  const rt = stages.find((s) => s.stage === 5)
   if (!aw || aw.headline == null) return null
   const val = (st: WireStage | undefined, id: string): number => {
     const s = st?.sources.find((x) => x.id === id)
@@ -1134,13 +1146,20 @@ function fromStages(stages: WireStage[] | undefined): { views: Views; actions: A
   const actions: Actions = {
     directions: val(ac, 'gbp_direction_requests'),
     calls: val(ac, 'gbp_calls'),
-    websiteClicks: val(ac, 'gbp_website_clicks'),
+    websiteClicks: val(it, 'gbp_website_clicks'), // moved to Interest (stage 2)
   }
-  return { views, actions }
+  // the animated Interest / Actions / Retention counts ARE the Insights stage
+  // headlines, so the two surfaces never disagree
+  const counts: StageCounts = {
+    interest: it?.headline ?? undefined,
+    actions: ac?.headline ?? undefined,
+    retention: rt?.headline ?? undefined, // null headline (empty stage) → undefined → falls back to 0
+  }
+  return { views, actions, counts }
 }
 
 export function HomeFunnelLive({ clientId, height, fill }: { clientId?: string; height?: number; fill?: boolean }) {
-  const [data, setData] = useState<{ views: Views | null; actions: Actions | null; asOf: string | null; windowStart: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
+  const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
   const [loading, setLoading] = useState(false)
   useEffect(() => {
@@ -1158,6 +1177,7 @@ export function HomeFunnelLive({ clientId, height, fill }: { clientId?: string; 
         setData({
           views: derived?.views ?? d.views ?? null,
           actions: derived?.actions ?? d.actions ?? null,
+          counts: derived?.counts,
           asOf: d.asOf ?? null, windowStart: d.windowStart ?? null, audience: d.audience ?? null, yoy: d.yoy ?? null,
         })
       })
@@ -1166,7 +1186,7 @@ export function HomeFunnelLive({ clientId, height, fill }: { clientId?: string; 
     return () => { alive = false }
   }, [clientId, range])
   if (!data?.views || !data?.actions || data.views.total <= 0) return null
-  return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnel views={data.views} actions={data.actions} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} loading={loading} /></div>
+  return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} loading={loading} /></div>
 }
 
 /* truncate text with an ellipsis to fit maxW at the ctx's current font */
