@@ -34,7 +34,8 @@ import {
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
-import type { ComputedStage } from '@/lib/insights/compute-stages'
+import type { ComputedStage, StageSourceView } from '@/lib/insights/compute-stages'
+import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
@@ -318,13 +319,23 @@ function StageView({ stageKey, title, detail, mv }: { stageKey: string; title: s
 //    never a fake 0. ──
 function SalesStage({ detail, mv, title }: { detail: InsightsDetail | null; mv: MetricView | undefined; title: string }) {
   const stage = computedStage(detail, 4)
-  if (stage && stage.isEmpty) return <SalesLocked note={stage.note} />
+  // Empty (every register/delivery source COMING_SOON): collapse to the calm
+  // "connect your register" state, but still SHOW the coming-soon source cards so
+  // the owner sees what's coming, never a blank. No reconcile line (nothing sums).
+  if (stage && stage.isEmpty) {
+    return (
+      <>
+        <SalesLocked note={stage.note} />
+        <SourceBreakdown stage={stage} unit="Guests served" showReconcile={false} />
+      </>
+    )
+  }
   if (stage) {
     const feed = stageFeedFrom(stage)
     return (
       <>
         <StageHero total={feed.headline} label="Guests served" caption={feed.caption} />
-        <WhatFeedsThis feed={feed} unit="Guests served" />
+        <SourceBreakdown stage={stage} unit="Guests served" />
       </>
     )
   }
@@ -340,7 +351,7 @@ function RetentionStage({ detail, mv, title }: { detail: InsightsDetail | null; 
     return (
       <>
         <StageHero total={feed.headline} label="Guests who came back" caption={feed.caption} />
-        <WhatFeedsThis feed={feed} unit="Came back" />
+        <SourceBreakdown stage={stage} unit="Came back" />
       </>
     )
   }
@@ -412,6 +423,151 @@ function WhatFeedsThis({ feed, unit }: { feed: StageFeed; unit: string }) {
   )
 }
 
+// en-dash placeholder for an absent number. Deliberately NOT an em dash (house
+// style bans em dashes); it reads as "no number here", never a real 0.
+const DASH = '–'
+
+// Friendly "Jul 3, 2026" for a manual entry's timestamp; '' when unknown/invalid.
+function friendlyDate(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+// ── One STATE-AWARE source card. Every source in a stage renders one of these, so
+//    the client always sees exactly which sources make up the number and what is
+//    missing. Six looks, one per state:
+//     CONNECTED+data → the value (hero gets a green accent)
+//     CONNECTED+NO_DATA → a calm dash + "no activity yet" (connected, truly zero)
+//     AVAILABLE_NOT_CONNECTED → dimmed + "Connect to see" (or the exact config hint)
+//     ERROR → alert-tinted + "Reconnect" (never "Connect", never raw error text)
+//     COMING_SOON → ghost card + "Coming soon" (never a number)
+//     MANUAL_ENTRY → value + a distinct dashed-amber MANUAL tag + who/when line
+//    `small` (context / more-detail cards) drops the NO_DATA subline to stay tidy. ──
+export function SourceStateCard({ s, hero, small }: { s: StageSourceView; hero?: boolean; small?: boolean }) {
+  const base: React.CSSProperties = {
+    borderRadius: 13, padding: small ? '11px 6px' : '13px 6px', textAlign: 'center',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    gap: 4, minHeight: small ? 70 : 80,
+  }
+  const numFs = small ? 19 : 22
+  const label = <span style={{ fontSize: small ? 11 : 11.5, color: C.mute, lineHeight: 1.3 }}>{s.displayName}</span>
+  const num = (v: number, color = C.ink) => <span style={{ fontFamily: DISPLAY, fontSize: numFs, fontWeight: 600, color, letterSpacing: '-.01em' }}>{v.toLocaleString()}</span>
+  const dash = <span style={{ fontFamily: DISPLAY, fontSize: numFs, fontWeight: 600, color: C.faint }}>{DASH}</span>
+
+  // MANUAL_ENTRY — a human typed it. DISTINCT on purpose so a client can tell a
+  // hand-entered number from a platform one at a glance: dashed amber border, a
+  // MANUAL tag, and a subtle who/when line.
+  if (s.status === 'MANUAL_ENTRY') {
+    const who = s.manualBy ? `entered by ${s.manualBy}` : 'entered by hand'
+    const when = friendlyDate(s.manualAt)
+    return (
+      <div style={{ ...base, background: '#fffdf5', border: `1px dashed ${C.amber}` }}>
+        <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.07em', color: '#976a12', background: '#fbeecb', borderRadius: 99, padding: '2px 7px' }}>MANUAL</span>
+        {s.value != null ? num(s.value) : dash}
+        {label}
+        <span style={{ fontSize: 9, color: C.faint, lineHeight: 1.3 }}>{who}{when ? ` on ${when}` : ''}</span>
+      </div>
+    )
+  }
+
+  // ERROR — the connection is broken (not absent). Calm alert tint, always
+  // "Reconnect", never a raw error string (the reason lives in admin).
+  if (s.status === 'ERROR') {
+    return (
+      <div style={{ ...base, background: C.coralBg, border: `1px solid ${C.coral}44` }}>
+        {dash}
+        {label}
+        <span style={{ fontSize: 10, fontWeight: 700, color: C.coral }}>{sourceActionVerb(s.status) ?? 'Reconnect'}</span>
+      </div>
+    )
+  }
+
+  // COMING_SOON — no adapter yet. Ghost card, never a number.
+  if (s.status === 'COMING_SOON') {
+    return (
+      <div style={{ ...base, background: '#fbfcfb', border: `1px dashed ${C.line}`, opacity: 0.75 }}>
+        {label}
+        <span style={{ fontSize: 10, color: C.faint }}>Coming soon</span>
+      </div>
+    )
+  }
+
+  // AVAILABLE_NOT_CONNECTED — the integration exists but isn't flowing. Dimmed,
+  // with a Connect affordance (or the exact config hint when one is needed, e.g.
+  // GA4 menu/order sources that need a path/domain set in settings).
+  if (s.status === 'AVAILABLE_NOT_CONNECTED') {
+    const cfg = SOURCE_BY_ID[s.id]?.configMissingReason
+    return (
+      <div style={{ ...base, background: '#fff', border: `0.5px solid ${C.line}`, opacity: 0.6 }}>
+        {label}
+        <span style={{ fontSize: 10, color: C.greenDk, fontWeight: 600, lineHeight: 1.3 }}>{cfg ?? `${sourceActionVerb(s.status) ?? 'Connect'} to see`}</span>
+      </div>
+    )
+  }
+
+  // CONNECTED + data — a genuine queried number. Hero (the stage's primary
+  // sub-metric) gets a light green accent.
+  if (s.status === 'CONNECTED' && s.hasData && s.value != null) {
+    return (
+      <div style={{ ...base, background: hero ? C.greenSoft : '#fff', border: hero ? `1px solid ${C.greenLine}` : `0.5px solid ${C.line}` }}>
+        {num(s.value, hero ? C.greenDk : C.ink)}
+        {label}
+      </div>
+    )
+  }
+
+  // CONNECTED + NO_DATA — connected and genuinely zero. A dash (never a real 0)
+  // plus a calm hint so it never reads as broken.
+  return (
+    <div style={{ ...base, background: '#fff', border: `0.5px solid ${C.line}` }}>
+      {dash}
+      {label}
+      {!small && <span style={{ fontSize: 9.5, color: C.faint }}>no activity yet</span>}
+    </div>
+  )
+}
+
+// A clearly-separated group of source cards that are NOT in the headline sum
+// (context / drill-downs). Its own heading keeps them from implying they feed it.
+function SeparatedSources({ title, sources }: { title: string; sources: StageSourceView[] }) {
+  const cols = Math.min(3, Math.max(2, sources.length))
+  return (
+    <>
+      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, margin: '16px 0 8px' }}>{title}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
+        {sources.map((s) => <SourceStateCard key={s.id} s={s} small />)}
+      </div>
+    </>
+  )
+}
+
+// ── State-aware "What feeds this": ONE card per source, straight from the honest
+//    computed stage (headline == sum of CONNECTED/counted sources). The counted
+//    sources sit in the sum group and add up to the headline in plain sight;
+//    context (audience growth, revenue) and drill-downs are shown but clearly
+//    separated so they never imply they feed the number. No source is dropped. ──
+export function SourceBreakdown({ stage, unit, showReconcile = true }: { stage: ComputedStage; unit: string; showReconcile?: boolean }) {
+  const sums = stage.sources.filter((s) => s.feedRole === 'sum')
+  const context = stage.sources.filter((s) => s.feedRole === 'context')
+  const drills = stage.sources.filter((s) => s.feedRole === 'drilldown')
+  const headline = stage.headline ?? 0
+  const cols = Math.min(4, Math.max(2, sums.length))
+  return (
+    <Section title="What feeds this" sub="last 30 days">
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
+        {sums.map((s) => <SourceStateCard key={s.id} s={s} hero={s.isHero} />)}
+      </div>
+      {showReconcile && (
+        <div style={{ fontSize: 12.5, color: C.faint, marginTop: 10, textAlign: 'center' }}>Adds up to <b style={{ color: C.greenDk, fontFamily: DISPLAY, fontSize: 14 }}>{headline.toLocaleString()}</b> {unit.toLowerCase()}</div>
+      )}
+      {context.length > 0 && <SeparatedSources title="Also tracked · not part of this number" sources={context} />}
+      {drills.length > 0 && <SeparatedSources title="More detail · not part of this number" sources={drills} />}
+    </Section>
+  )
+}
+
 // A trend graph for a stage (per-day bars over a range). Reuses the home chart so
 // the two surfaces match. It's a TREND under its own "over time" heading, kept
 // separate from the reconciling headline above it.
@@ -441,7 +597,7 @@ function AwarenessStage({ detail, mv }: { detail: InsightsDetail | null; mv: Met
     <>
       {mv && <StageTrend mv={mv} noun="saw you" />}
       <StageHero total={feed.headline} label="Times you showed up" caption={feed.caption} />
-      <WhatFeedsThis feed={feed} unit="Times you showed up" />
+      {cs ? <SourceBreakdown stage={cs} unit="Times you showed up" /> : <WhatFeedsThis feed={feed} unit="Times you showed up" />}
       {detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
       {!detail.socialConnected && <ConnectSocial connected={false} />}
     </>
@@ -457,7 +613,7 @@ function InterestStage({ detail }: { detail: InsightsDetail | null }) {
   return (
     <>
       <StageHero total={feed.headline} label="People who looked closer" caption={feed.caption} />
-      <WhatFeedsThis feed={feed} unit="Looked closer" />
+      {cs ? <SourceBreakdown stage={cs} unit="Looked closer" /> : <WhatFeedsThis feed={feed} unit="Looked closer" />}
       {detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} />}
       {!detail.socialConnected && <ConnectSocial connected={false} />}
     </>
@@ -474,7 +630,7 @@ function ActionsStage({ detail, mv }: { detail: InsightsDetail | null; mv: Metri
     <>
       {mv && <StageTrend mv={mv} noun="took action" />}
       <StageHero total={feed.headline} label="Moves people made" caption={feed.caption} />
-      <WhatFeedsThis feed={feed} unit="Moves people made" />
+      {cs ? <SourceBreakdown stage={cs} unit="Moves people made" /> : <WhatFeedsThis feed={feed} unit="Moves people made" />}
     </>
   )
 }
