@@ -1,11 +1,15 @@
 /**
- * /dashboard/google-profile — "Fix your Google profile", the owner-facing
- * section-by-section walkthrough of the read-only GBP diagnosis. Two doors:
- *  - plain (no params): the standalone checker, reached from More (prod legacy).
- *  - ?campaignId=<id>: a CAMPAIGN task (the gbp card's free self-serve version).
- *    Back returns to that campaign's setup page, and an all-good fresh diagnosis
- *    marks the campaign task done (GbpFixer POSTs /api/campaigns/:id/gbp-fixed;
- *    the server re-checks and stamps execution.gbpFixedAt itself).
+ * /dashboard/google-profile — the owner-facing view of the read-only GBP
+ * diagnosis. Two doors:
+ *  - plain (no params): the standalone READ-ONLY profile viewer, reached from
+ *    More. It shows what Google shows customers today and links out to
+ *    business.google.com to change things. No in-app editors and no AI advice
+ *    here (the builder is part of the paid campaign lane). Every tier sees it.
+ *  - ?campaignId=<id>: a CAMPAIGN task (the gbp card's owner-run lane, 'diy'
+ *    checklist or the Pro 'ai' builder). Back returns to that campaign's setup
+ *    page, and an all-good fresh diagnosis marks the campaign task done
+ *    (GbpFixer POSTs /api/campaigns/:id/gbp-fixed; the server re-checks and
+ *    stamps execution.gbpFixedAt itself).
  */
 
 import MvpShell from '@/components/mvp/mvp-shell'
@@ -39,17 +43,17 @@ export default async function GoogleProfilePage({ searchParams }: { searchParams
   const raw = typeof sp.campaignId === 'string' ? sp.campaignId : undefined
   // Sanitize before it lands in an href/API path — ids are uuid-shaped, nothing else passes.
   const campaignId = raw && /^[A-Za-z0-9-]{1,64}$/.test(raw) ? raw : undefined
-  // Campaign task: mode is the SERVER's call (stored lane × live tier). Standalone/legacy door
-  // (no campaignId): 'ai' by default, but the fixer still gates the draft buttons on the live
-  // tier via useClient, so a non-Pro owner there sees the checklist, never a button that 403s.
-  const mode = campaignId ? await resolveCampaignMode(campaignId) : 'ai'
+  // Campaign task: mode is the SERVER's call (stored lane × live tier). Standalone door
+  // (no campaignId): the read-only viewer, no tier gate — every owner can SEE their own
+  // listing; only the campaign AI lane carries the builder and its advice.
+  const mode: 'diy' | 'ai' | 'view' = campaignId ? await resolveCampaignMode(campaignId) : 'view'
   return (
     <MvpShell
       active="more"
       header={(
         <MvpDetailHeader
           title={campaignId ? 'Fix your Google profile' : 'Your Google profile'}
-          subtitle={campaignId ? 'What Google shows customers today' : 'We check 9 parts and help you fix them'}
+          subtitle={campaignId ? 'What Google shows customers today' : 'What Google shows customers today. Edit it on Google.'}
           backHref={campaignId ? `/dashboard/campaigns/${campaignId}/ready` : '/dashboard/more'}
           backLabel={campaignId ? 'Campaign' : 'More'}
         />

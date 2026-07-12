@@ -5,7 +5,13 @@
  * fixer, on top of the read-only diagnosis engine (src/lib/gbp-diagnose.ts via
  * GET /api/dashboard/gbp-diagnosis).
  *
- * Two experiences on one diagnosis:
+ * Three experiences on one diagnosis:
+ *  - view (the standalone More door): ONE read-only scrollable page of what
+ *    Google shows customers today. The 9 parts sit under their 3 chapter
+ *    headers, each with a label, an honest status chip, the real content on
+ *    Google now, and a small "Edit on Google" link out. No in-app editors,
+ *    no advice, no saves, no resume state — fixing happens on Google, and
+ *    the AI builder stays part of the paid campaign lane. Every tier.
  *  - diy (the checklist): progress "N of M done" + a thin bar, then the
  *    sections in engine order. Good sections collapse to a dim row with a
  *    green check; problem sections are white cards with a severity dot
@@ -31,8 +37,8 @@
  *    localStorage (versioned key by client id) so a refresh never restarts
  *    at part 1; a fresh all-good read clears the save.
  *
- * The STANDALONE door (no campaignId) goes STRAIGHT into the builder (the
- * intro, or the resumed part). Questions and answers (Google shut the Q&A
+ * The STANDALONE door (no campaignId) renders the read-only viewer; the
+ * builder runs ONLY for the campaign AI lane. Questions and answers (Google shut the Q&A
  * API down for apps, so that door says so plainly, links out to
  * business.google.com, and keeps the part that still works: paste a
  * question, get an AI-drafted answer via POST /api/dashboard/gbp-answer-draft,
@@ -135,18 +141,21 @@ const DRAFT_FAIL = 'Could not write a draft right now. Try again in a minute.'
  * on the server, so a later visit can never overwrite when the task was finished.
  * Without campaignId nothing changes.
  *
- * mode: which walkthrough the owner runs. 'ai' = the section-by-section experience WITH the
- * "Draft it for me" AI drafting (Pro only). 'diy' = the plain checklist: same diagnosis, no
- * drafting — each problem section gets a "Fix it on Google" link + the honest self-check.
- * Defaults to 'ai' (legacy/standalone), but AI is ALSO gated on the LIVE client tier here, so a
- * non-Pro owner can never see a draft button (belt-and-suspenders with the server mode-resolution
- * on the /dashboard/google-profile page and the tier gate on the gbp-draft endpoint).
+ * mode: which experience the owner gets. 'view' = the standalone read-only viewer (no tier
+ * gate; every owner can see their own listing). 'ai' = the section-by-section builder WITH
+ * the "Apnosh AI says" advice and in-app editors (campaign lane, Pro only). 'diy' = the plain
+ * checklist: same diagnosis, no drafting — each problem section gets a "Fix it on Google"
+ * link + the honest self-check. Defaults to 'view' (the standalone door). AI is ALSO gated on
+ * the LIVE client tier here, so a non-Pro owner can never see a draft button (belt-and-suspenders
+ * with the server mode-resolution on the /dashboard/google-profile page and the tier gate on the
+ * gbp-draft endpoint).
  */
-export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: string; mode?: 'diy' | 'ai' }) {
+export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: string; mode?: 'diy' | 'ai' | 'view' }) {
   const { client, loading: clientLoading } = useClient()
-  // The AI lane unlocks only when the resolved mode is 'ai' AND this client is still Pro; anything
-  // else runs the checklist. A URL/prop alone can never unlock AI without the live Pro entitlement.
-  const effectiveMode: 'diy' | 'ai' = mode === 'ai' && isProTier(client?.tier) ? 'ai' : 'diy'
+  // The viewer is read-only and tier-free. The AI lane unlocks only when the resolved mode is
+  // 'ai' AND this client is still Pro; anything else runs the checklist. A URL/prop alone can
+  // never unlock AI without the live Pro entitlement.
+  const effectiveMode: 'diy' | 'ai' | 'view' = mode === 'view' ? 'view' : mode === 'ai' && isProTier(client?.tier) ? 'ai' : 'diy'
   // Every door lands straight in the builder. Questions and answers + Post an
   // update open from the summary's Keep-it-strong cards; back returns here.
   const [door, setDoor] = useState<'review' | 'qanda' | 'post'>('review')
@@ -326,7 +335,10 @@ export default function GbpFixer({ campaignId, mode = 'ai' }: { campaignId?: str
       )}
 
       {!loading && !loadError && diag && diag.connected && !diag.readFailed && (
-        effectiveMode === 'ai' ? (
+        effectiveMode === 'view' ? (
+          // Read-only: no editors, no advice, no saves, no resume state.
+          <ProfileViewer diag={diag} />
+        ) : effectiveMode === 'ai' ? (
           <AiReview
             diag={diag}
             clientId={client?.id ?? ''}
@@ -1850,6 +1862,90 @@ function PartDetail({ detail, summary }: { detail: GbpSectionDetail; summary: st
           ? <span style={{ fontSize: 13, color: C.ink, textAlign: 'right' }}>{detail.phone}</span>
           : <span style={{ fontSize: 13, color: C.mute }}>Not set</span>}
       </div>
+    </div>
+  )
+}
+
+/* ── The read-only profile viewer (the standalone More door) ────── */
+
+/** Google's generic signed-in editor home, for the parts without their own
+ *  edit surface (hours, description, links, the attribute groups). */
+const GOOGLE_EDIT_GENERIC = 'https://business.google.com'
+
+/**
+ * The standalone door: ONE scrollable read-only page of what Google shows
+ * customers today. The 9 parts sit under their 3 chapter headers in chapter
+ * order, each with its label, an honest status chip, the real content on
+ * Google now (the same PartDetail renderers the builder uses), and a small
+ * "Edit on Google" link out. Fixing happens on Google itself — no in-app
+ * editors, no "Apnosh AI says" advice, no saves here; the builder with all
+ * of that runs only on the campaign AI lane. Exported for the render smoke.
+ */
+export function ProfileViewer({ diag }: { diag: GbpDiagnosis }) {
+  const sections = orderSections(diag.sections ?? [])
+  const groups: Array<{ name: string; sub: string; parts: GbpDiagnosisSection[] }> = CHAPTERS
+    .map((ch) => ({ name: ch.name, sub: ch.sub, parts: sections.filter((s) => ch.keys.includes(s.key)) }))
+    .filter((g) => g.parts.length > 0)
+  const stray = sections.filter((s) => !CHAPTER_ORDER.includes(s.key))
+  if (stray.length > 0) groups.push({ name: 'More', sub: '', parts: stray })
+
+  if (sections.length === 0) {
+    // The engine always emits its sections; this is a pure safety net.
+    return (
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '22px 18px', textAlign: 'center' }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>We could not read the parts of your profile</div>
+        <div style={{ fontSize: 13, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>Give it a minute and try again.</div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {groups.map((g) => (
+        <div key={g.name} style={{ marginBottom: 16 }}>
+          <div style={{ margin: '0 2px 8px' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, fontFamily: DISPLAY }}>{g.name}</div>
+            {g.sub && <div style={{ fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.45 }}>{g.sub}</div>}
+          </div>
+          {g.parts.map((s) => <ViewerSection key={s.key} section={s} />)}
+        </div>
+      ))}
+      <div style={{ textAlign: 'center', fontSize: 12, color: C.faint, padding: '4px 0 2px' }}>
+        Read from your live Google listing.
+      </div>
+    </>
+  )
+}
+
+/** One read-only section: label + status chip, the real content on Google
+ *  now, and the Edit-on-Google link (the part's own editor page when Google
+ *  has one; the generic business.google.com home when it does not). */
+function ViewerSection({ section }: { section: GbpDiagnosisSection }) {
+  const chip = INTRO_CHIP[section.status] ?? INTRO_CHIP.unknown
+  const editHref = GOOGLE_EDIT_HREF[section.key] ?? GOOGLE_EDIT_GENERIC
+  const current = section.current && section.current.trim() ? section.current : 'Nothing yet'
+  return (
+    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '15px 14px', marginBottom: 10, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, lineHeight: 1.3 }}>{section.label}</span>
+        <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: chip.color, background: chip.bg, borderRadius: 99, padding: '3px 9px' }}>{chip.word}</span>
+      </div>
+      <div style={{ background: C.bg, borderRadius: 11, padding: '10px 12px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 6 }}>On Google now</div>
+        {section.status === 'unknown' || !section.detail
+          // Unknown parts show the engine's own safe reason; a detail-less
+          // part falls back to the honest summary string, never a blank box.
+          ? <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{current}</div>
+          : <PartDetail detail={section.detail} summary={current} />}
+      </div>
+      <a
+        href={editHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ ...smallEditLinkStyle, marginTop: 10 }}
+      >
+        Edit on Google <ExternalLink size={11} />
+      </a>
     </div>
   )
 }
