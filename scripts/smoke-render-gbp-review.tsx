@@ -101,7 +101,11 @@ const FIXTURE = {
       current: 'Main category is Grocery store, plus 2 more.',
       why: 'The right categories help Google show you in more searches.', aiFixable: true,
       advice: ADVICE.categories,
-      detail: { kind: 'categories', primary: 'Grocery store', additional: ['Cafe', 'Deli'] },
+      detail: {
+        kind: 'categories', primary: 'Grocery store', additional: ['Cafe', 'Deli'],
+        primaryName: 'categories/gcid:grocery_store',
+        additionalNames: ['categories/gcid:cafe', 'categories/gcid:deli'],
+      },
     },
     {
       key: 'description', label: 'Your description', status: 'needs-work',
@@ -281,13 +285,16 @@ async function main() {
   ok(goodAttrs.includes('Edit anyway'), 'a good attribute part offers Edit anyway')
   const weakAttrs = render({ initialPhase: 'part', initialIndex: 6 }) // getting (needs-work, attrs)
   ok(weakAttrs.includes('Fix it now'), 'a weak attribute part says Fix it now')
-  // The Google-link kinds keep their honest links, never a fake editor.
+  // Categories now edit IN APP (good part → Edit anyway), no Google link.
   const cats = render({ initialPhase: 'part', initialIndex: 0 })
-  ok(cats.includes('Edit on Google') && cats.includes('https://business.google.com/info'), 'categories keep the Edit-on-Google link')
-  ok(!cats.includes('Fix it now') && !cats.includes('<textarea'), 'no in-app editor exists for categories')
+  ok(cats.includes('Edit anyway'), 'a good categories part offers Edit anyway in app')
+  ok(!cats.includes('Edit on Google') && !cats.includes('https://business.google.com/info'), 'categories no longer link out to Google')
+  // Photos now edit IN APP (weak part → Fix it now), no Google link.
   const photos = render({ initialPhase: 'part', initialIndex: 3 })
-  ok(photos.includes('Edit this on Google') && photos.includes('https://business.google.com/photos'), 'weak photos keep the Edit-this-on-Google block')
+  ok(photos.includes('Fix it now'), 'a weak photos part says Fix it now in app')
+  ok(!photos.includes('Edit this on Google') && !photos.includes('https://business.google.com/photos'), 'photos no longer link out to Google')
   ok(photos.includes('<img') && photos.includes('https://photos.example.com/one.jpg'), 'the photo grid still renders')
+  // Menu stays Edit-on-Google for now (no in-app editor yet).
   const menu = render({ initialPhase: 'part', initialIndex: 4 })
   ok(menu.includes('Edit on Google') && menu.includes('https://business.google.com/menu'), 'menu keeps the Edit-on-Google link')
   ok(menu.includes('Carnitas taco') && menu.includes('$4.50'), 'menu items still render')
@@ -330,6 +337,19 @@ async function main() {
   ok(attrsEdit.includes('Save to Google') && attrsEdit.includes('Cancel'), 'Save to Google + Cancel render in the attrs editor')
   ok(attrsEdit.includes('Only what you set is sent.'), 'the honest only-what-you-set line renders')
 
+  console.log('\n== f2) the categories + photos in-app editors ==')
+  const catsEdit = render({ initialPhase: 'part', initialIndex: 0, initialEditing: true })
+  ok(catsEdit.includes('Main: Grocery store'), 'the categories editor shows the current main labeled Main')
+  ok(catsEdit.includes('Cafe') && catsEdit.includes('Deli'), 'the current extra categories render as chips')
+  ok(catsEdit.includes('Add a category'), 'the category search box label renders')
+  ok(/id="gbp-cat-search"/.test(catsEdit), 'the category search input renders')
+  ok(catsEdit.includes('Make main'), 'a Make main action renders on an extra chip')
+  ok(catsEdit.includes('Save to Google') && catsEdit.includes('Cancel'), 'the categories Save to Google + Cancel render')
+  const photosEdit = render({ initialPhase: 'part', initialIndex: 3, initialEditing: true })
+  ok(photosEdit.includes('type="file"') && photosEdit.includes('accept="image/*"'), 'the photo file input renders and accepts images')
+  ok(photosEdit.includes('Add to Google'), 'the Add to Google button renders')
+  ok(photosEdit.includes('Cancel'), 'the photos Cancel renders')
+
   console.log('\n== g) honest save strings ==')
   const liveNote = applyResultNote(200, { ok: true, live: true })
   ok(liveNote.tone === 'ok' && liveNote.text === 'Saved to Google.', 'live:true reads Saved to Google.')
@@ -341,6 +361,15 @@ async function main() {
   ok(rawNote.tone === 'error' && !rawNote.text.includes('invalid_grant'), 'a 5xx never leaks the raw server string')
   const badNote = applyResultNote(400, { ok: false, error: 'The description is empty.' })
   ok(badNote.text === 'The description is empty.', 'a 400 shows the server plain-words reason')
+  // Photos: a returned media resource reads as Added to Google (a create is its
+  // own proof); a non-image reject shows the server words; a 5xx stays generic.
+  const photoResultNote = mod.photoResultNote as (status: number, body: Record<string, unknown> | null) => { tone: string; text: string }
+  const photoLive = photoResultNote(200, { ok: true, live: true })
+  ok(photoLive.tone === 'ok' && photoLive.text === 'Added to Google.', 'a created photo reads Added to Google.')
+  const photoBad = photoResultNote(400, { ok: false, error: 'That is not a photo we can add. Upload a JPG or PNG and try again.' })
+  ok(photoBad.text === 'That is not a photo we can add. Upload a JPG or PNG and try again.', 'a 400 shows the server photo reason')
+  const photoFail = photoResultNote(502, { ok: false, error: 'invalid_grant token refresh boom' })
+  ok(photoFail.tone === 'error' && !photoFail.text.includes('invalid_grant'), 'a 5xx never leaks the raw server string for photos')
   // Injected on screen (test seam): both honest lines render in the part UI,
   // including on an attribute part.
   const savedShown = render({ initialPhase: 'part', initialIndex: 6, initialSaveNote: liveNote })
@@ -547,14 +576,16 @@ async function main() {
 
   console.log('\n== l2) the tier-aware viewer: Pro edits in app ==')
   const proViewer = renderViewer(FIXTURE, { isPro: true })
-  // The 6 save-rail sections get the small in-app Edit affordance.
+  // The 8 save-rail sections (description, hours, links, 3 attr groups,
+  // categories, photos) get the small in-app Edit affordance.
   const editBtns = (proViewer.match(/ Edit<\/button>/g) ?? []).length
-  ok(editBtns === 6, `the 6 editable sections get an in-app Edit affordance (got ${editBtns})`)
+  ok(editBtns === 8, `the 8 editable sections get an in-app Edit affordance (got ${editBtns})`)
   ok(!proViewer.includes('Editing from the app is on the Pro plan.'), 'no Pro line for Pro owners')
-  // Categories / menu / photos keep their Edit-on-Google links for everyone.
+  // Only menu keeps the Edit-on-Google link now (no in-app menu editor yet).
   const proGoogleLinks = (proViewer.match(/Edit on Google/g) ?? []).length
-  ok(proGoogleLinks === 3, `categories/menu/photos keep Edit-on-Google links (got ${proGoogleLinks})`)
-  ok(proViewer.includes('https://business.google.com/info') && proViewer.includes('https://business.google.com/menu') && proViewer.includes('https://business.google.com/photos'), 'the three Google editor pages still link out')
+  ok(proGoogleLinks === 1, `only menu keeps the Edit-on-Google link (got ${proGoogleLinks})`)
+  ok(proViewer.includes('https://business.google.com/menu'), 'the menu Google editor page still links out')
+  ok(!proViewer.includes('https://business.google.com/info') && !proViewer.includes('https://business.google.com/photos'), 'categories/photos no longer link out for Pro')
   // Closed cards hold no editor seams.
   ok(!proViewer.includes('<textarea') && !proViewer.includes('Save to Google'), 'no editor is open before Edit is tapped')
 
@@ -589,9 +620,23 @@ async function main() {
   ok(proAttrs.includes('Only what you set is sent.'), 'the honest only-what-you-set line renders in the viewer')
   ok(proAttrs.includes('Save to Google') && proAttrs.includes('Cancel'), 'Save to Google + Cancel render in the viewer attrs editor')
 
+  // The categories editor: current Main + extra chips + search + Save.
+  const proCats = renderViewer(FIXTURE, { isPro: true, initialEditKey: 'categories' })
+  ok(proCats.includes('Main: Grocery store'), 'the viewer categories editor shows the current main')
+  ok(proCats.includes('Cafe') && proCats.includes('Deli'), 'the viewer categories editor shows the extra chips')
+  ok(/id="gbp-cat-search"/.test(proCats), 'the viewer category search box renders')
+  ok(proCats.includes('Make main'), 'the viewer categories editor offers Make main')
+  ok(proCats.includes('Save to Google') && proCats.includes('Cancel'), 'Save to Google + Cancel render in the viewer categories editor')
+
+  // The photos editor: file input + Add to Google.
+  const proPhotos = renderViewer(FIXTURE, { isPro: true, initialEditKey: 'photos' })
+  ok(proPhotos.includes('type="file"') && proPhotos.includes('accept="image/*"'), 'the viewer photo file input renders')
+  ok(proPhotos.includes('Add to Google'), 'the viewer Add to Google button renders')
+  ok(proPhotos.includes('Cancel'), 'the viewer photos Cancel renders')
+
   // Still NONE of the builder on any tier: no advice, no Why-it-matters,
   // no Keep-it-strong, no Fix it now, no stepper.
-  for (const [name, html] of [['closed', proViewer], ['description', proDesc], ['hours', proHours], ['links', proLinks], ['attrs', proAttrs]] as const) {
+  for (const [name, html] of [['closed', proViewer], ['description', proDesc], ['hours', proHours], ['links', proLinks], ['attrs', proAttrs], ['categories', proCats], ['photos', proPhotos]] as const) {
     ok(!html.includes('Apnosh AI says') && !html.includes('Why it matters') && !html.includes('Keep it strong') && !html.includes('Fix it now') && !html.includes('>Start<'), `no builder blocks leak into the Pro viewer (${name})`)
   }
   ok(!proViewer.includes(ADVICE.description) && !proViewer.includes(ADVICE.hours), 'no advice text leaks into the Pro viewer')

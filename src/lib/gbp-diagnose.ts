@@ -57,7 +57,17 @@ export type GbpSectionDetail =
       /** Only present when the owner set special hours. */
       specialCount?: number
     }
-  | { kind: 'categories'; primary: string | null; additional: string[] }
+  | {
+      kind: 'categories'
+      /** Display names, for showing chips. */
+      primary: string | null
+      additional: string[]
+      /** Bare "categories/gcid:..." resource names, aligned with the display
+       *  names above — what the in-app editor re-sends on save. Present only
+       *  when the read succeeded (absent on older cached diagnoses). */
+      primaryName?: string | null
+      additionalNames?: string[]
+    }
   | { kind: 'description'; text: string | null }
   | {
       kind: 'photos'
@@ -451,6 +461,10 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
         kind: 'categories',
         primary: primary?.displayName ?? null,
         additional: (fields.categories?.additional ?? []).map(c => c.displayName),
+        // Resource names, aligned by index with the display names above, so the
+        // in-app editor can re-send the existing categories on a save.
+        primaryName: primary?.name ?? null,
+        additionalNames: (fields.categories?.additional ?? []).map(c => c.name),
       },
     })
   } else {

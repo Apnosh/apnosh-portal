@@ -442,6 +442,53 @@ export async function searchListingCategories(clientId: string, query: string): 
   return { ok: true, categories }
 }
 
+/* ── Categories (dedicated read + write, resource names only) ───── */
+
+/** Bare category resource names read off the live listing (no display names).
+ *  Used by the field-write engine's read-back proof for kind 'categories'. */
+export async function getClientCategories(clientId: string, locationId?: string | null): Promise<
+  { ok: true; primary: string | null; additional: string[] } | { ok: false; error: string }
+> {
+  const tok = await getActiveTokenForClient(clientId, locationId)
+  if ('error' in tok) return { ok: false, error: tok.error }
+  const url = `${V1_BASE}/${tok.resourceName}?readMask=${encodeURIComponent('categories')}`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${tok.accessToken}` } })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) return { ok: false, error: body?.error?.message || `HTTP ${res.status}` }
+  const cats = (body as { categories?: { primaryCategory?: { name?: string }; additionalCategories?: Array<{ name?: string }> } }).categories
+  return {
+    ok: true,
+    primary: cats?.primaryCategory?.name ?? null,
+    additional: (cats?.additionalCategories ?? []).map(c => c.name ?? '').filter(Boolean),
+  }
+}
+
+/** Write the listing's categories: a required primary + up to 9 additional,
+ *  each a bare "categories/gcid:..." resource name. Scoped PATCH with
+ *  updateMask=categories so no other field is touched. */
+export async function updateClientCategories(
+  clientId: string,
+  value: { primary: string; additional: string[] },
+  locationId?: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const tok = await getActiveTokenForClient(clientId, locationId)
+  if ('error' in tok) return { ok: false, error: tok.error }
+  const url = `${V1_BASE}/${tok.resourceName}?updateMask=${encodeURIComponent('categories')}`
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${tok.accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      categories: {
+        primaryCategory: { name: value.primary },
+        additionalCategories: value.additional.map(name => ({ name })),
+      },
+    }),
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) return { ok: false, error: body?.error?.message || `HTTP ${res.status}` }
+  return { ok: true }
+}
+
 /* ── Write listing changes ─────────────────────────────────────── */
 
 export async function updateClientListing(

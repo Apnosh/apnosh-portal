@@ -19,13 +19,13 @@ import 'server-only'
  * harness-testable with zero network: scripts/verify-gbp-apply.ts.
  */
 import { getActiveTokenForClient } from '@/lib/gbp-menu'
-import { updateClientListing, getClientListing, updateClientAttributes, getClientAttributes, type ListingFields, type WeeklyHours, type DayKey, type AttributeValues } from '@/lib/gbp-listing'
+import { updateClientListing, getClientListing, updateClientAttributes, getClientAttributes, updateClientCategories, getClientCategories, type ListingFields, type WeeklyHours, type DayKey, type AttributeValues } from '@/lib/gbp-listing'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { acquireWriteSlot } from './pace'
-import { validateDescription, validateWebsite, validatePhone, validateHoursWeek, validateAttributes, type HoursDayInput, type AttributeWriteItem } from './validate'
+import { validateDescription, validateWebsite, validatePhone, validateHoursWeek, validateAttributes, validateCategories, type HoursDayInput, type AttributeWriteItem, type CategoriesWriteValue } from './validate'
 
-export type FieldKind = 'description' | 'hours' | 'website' | 'phone' | 'attributes'
-export const FIELD_KINDS: readonly FieldKind[] = ['description', 'hours', 'website', 'phone', 'attributes'] as const
+export type FieldKind = 'description' | 'hours' | 'website' | 'phone' | 'attributes' | 'categories'
+export const FIELD_KINDS: readonly FieldKind[] = ['description', 'hours', 'website', 'phone', 'attributes', 'categories'] as const
 
 /** Same shape as dispatch.ts PushOutcome, plus a machine-readable code so callers
  *  (the owner endpoint) can map refusals to honest HTTP statuses (e.g. 429). */
@@ -38,8 +38,14 @@ export type FieldWriteOutcome = {
 }
 
 export type ValidatedField =
-  | { ok: true; kind: FieldKind; patch: ListingFields; sent: string; weekly?: WeeklyHours; attrs?: AttributeValues }
+  | { ok: true; kind: FieldKind; patch: ListingFields; sent: string; weekly?: WeeklyHours; attrs?: AttributeValues; cats?: CategoriesWriteValue }
   | { ok: false; error: string }
+
+/** Canonical categories: primary + additional sorted, so `sent` and the
+ *  read-back proof compare order-independently on the additional set. */
+function canonCats(v: CategoriesWriteValue): CategoriesWriteValue {
+  return { primary: v.primary, additional: [...v.additional].sort() }
+}
 
 /** Canonical id → boolean map (ids sorted) so `sent` and the read-back proof
  *  compare order-independently. */
@@ -86,6 +92,15 @@ export function validateField(kind: FieldKind, value: unknown): ValidatedField {
       /* patch stays empty: attributes write through their own v1 endpoint
          (updateClientAttributes with an attributeMask), not the listing PATCH. */
       return { ok: true, kind, patch: {}, sent: JSON.stringify(attrs), attrs }
+    }
+    case 'categories': {
+      const check = validateCategories(value)
+      if (!check.ok) return check
+      const cats = canonCats(check.value)
+      /* patch stays empty: categories write through their own dedicated
+         updateClientCategories PATCH (updateMask=categories), not the generic
+         listing PATCH. */
+      return { ok: true, kind, patch: {}, sent: JSON.stringify(cats), cats }
     }
     default:
       return { ok: false, error: `"${String(kind)}" is not a field this save supports.` }
@@ -137,8 +152,9 @@ function weeklyEqual(a: WeeklyHours | null | undefined, b: WeeklyHours | null | 
 }
 
 /** The kinds that write through the listing PATCH + listing read-back.
- *  'attributes' has its own endpoint pair and is branched before these. */
-type ListingFieldKind = Exclude<FieldKind, 'attributes'>
+ *  'attributes' and 'categories' each have their own endpoint pair and are
+ *  branched before these. */
+type ListingFieldKind = Exclude<FieldKind, 'attributes' | 'categories'>
 
 /** Pull the just-written field out of a fresh listing read, as a display string. */
 function readBackFor(kind: ListingFieldKind, fields: ListingFields): string | null {
@@ -188,6 +204,11 @@ const KIND_TEXT: Record<FieldKind, { confirmed: string; pending: string; readFai
     pending: 'Submitted to Google, but the profile is not showing the new answers yet (Google may still be processing or reviewing them). Check again shortly.',
     readFail: 'Saved to Google, but the read-back to confirm failed. Open the live profile and verify it shows the new answers.',
   },
+  categories: {
+    confirmed: 'The categories are confirmed live on the Google profile.',
+    pending: 'Submitted to Google, but the profile is not showing the new categories yet (Google may still be processing or reviewing them). Check again shortly.',
+    readFail: 'Saved to Google, but the read-back to confirm failed. Open the live profile and verify it shows the new categories.',
+  },
 }
 
 /* ── Injectable collaborators ── */
@@ -204,6 +225,11 @@ export interface FieldWriteDeps {
    *  the sent ids, so a save never clears other attributes. */
   updateAttributes?: (clientId: string, values: AttributeValues) => Promise<{ ok: true } | { ok: false; error: string }>
   getAttributes?: (clientId: string) => Promise<{ ok: true; values: AttributeValues } | { ok: false; error: string }>
+  /** Categories rail (kind 'categories'). Optional so existing callers keep
+   *  compiling; defaults are the real dedicated category helpers. The PATCH is
+   *  updateMask=categories so a save never touches another listing field. */
+  updateCategories?: (clientId: string, value: CategoriesWriteValue) => Promise<{ ok: true } | { ok: false; error: string }>
+  getCategories?: (clientId: string) => Promise<{ ok: true; primary: string | null; additional: string[] } | { ok: false; error: string }>
 }
 
 const defaultDeps: FieldWriteDeps = {
@@ -218,6 +244,8 @@ const defaultDeps: FieldWriteDeps = {
   getListing: (clientId) => getClientListing(clientId, null),
   updateAttributes: (clientId, values) => updateClientAttributes(clientId, values, null),
   getAttributes: (clientId) => getClientAttributes(clientId, null),
+  updateCategories: (clientId, value) => updateClientCategories(clientId, value, null),
+  getCategories: (clientId) => getClientCategories(clientId, null),
 }
 
 /** Write ONE supported field to the live profile, with the full honesty pipeline. */
@@ -273,6 +301,28 @@ export async function pushFieldWrite(
       : { ok: true, summary: KIND_TEXT.attributes.pending, detail: { sent: checked.sent, readBack, verified: false } }
   }
 
+  if (kind === 'categories') {
+    const sent = checked.cats as CategoriesWriteValue
+    const updateCats = deps.updateCategories ?? defaultDeps.updateCategories!
+    const getCats = deps.getCategories ?? defaultDeps.getCategories!
+    const res = await updateCats(clientId, sent)
+    if (!res.ok) return { ok: false, error: res.error, code: 'google_error' }
+    const live = await getCats(clientId)
+    if (!live.ok) {
+      return { ok: true, summary: KIND_TEXT.categories.readFail, detail: { sent: checked.sent, readBack: null, verified: false } }
+    }
+    /* Proof = the live primary equals the sent primary AND the live additional
+       SET equals the sent additional set (order-independent). Any missing or
+       extra category is a mismatch, never claimed live. */
+    const readCanon = canonCats({ primary: live.primary ?? '', additional: live.additional })
+    const sentCanon = canonCats(sent)
+    const match = JSON.stringify(readCanon) === JSON.stringify(sentCanon)
+    const readBack = JSON.stringify(readCanon)
+    return match
+      ? { ok: true, summary: KIND_TEXT.categories.confirmed, detail: { sent: checked.sent, readBack, verified: true } }
+      : { ok: true, summary: KIND_TEXT.categories.pending, detail: { sent: checked.sent, readBack, verified: false } }
+  }
+
   const res = await deps.updateListing(clientId, checked.patch)
   if (!res.ok) return { ok: false, error: res.error, code: 'google_error' }
   const live = await deps.getListing(clientId)
@@ -285,4 +335,4 @@ export async function pushFieldWrite(
     : { ok: true, summary: KIND_TEXT[kind].pending, detail: { sent: checked.sent, readBack, verified: false } }
 }
 
-export type { HoursDayInput, AttributeWriteItem }
+export type { HoursDayInput, AttributeWriteItem, CategoriesWriteValue }
