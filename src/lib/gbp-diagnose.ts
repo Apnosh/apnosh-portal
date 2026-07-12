@@ -31,6 +31,7 @@ import 'server-only'
 
 import { getClientListing, type DayKey } from '@/lib/gbp-listing'
 import { getClientMenus, getClientMenuLink, getActiveTokenForClient } from '@/lib/gbp-menu'
+import { readGbpAttributes, type GbpAttributeItem, type GbpAttributeGroupKey } from '@/lib/gbp-attributes'
 import { getListingHealth } from '@/lib/dashboard/get-listing-health'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -74,6 +75,11 @@ export type GbpSectionDetail =
       menuLink?: string | null
     }
   | { kind: 'links'; website: string | null; phone: string | null }
+  | {
+      kind: 'attrs'
+      /** Yes/no listing options in this group. value null = never answered. */
+      items: Array<{ id: string; label: string; value: boolean | null }>
+    }
 
 export interface GbpDiagnosisSection {
   key: string
@@ -86,6 +92,11 @@ export interface GbpDiagnosisSection {
   why: string
   /** Can the premium AI lane draft a fix for this section? */
   aiFixable: boolean
+  /** One deterministic sentence or two of plain advice, computed ONLY from
+   *  the real read data: good sections get a confirmation plus one concrete
+   *  idea, weak sections get a direct fix suggestion. Never invented facts,
+   *  never a guessed number. */
+  advice?: string
   /** The actual content on Google (see GbpSectionDetail). Absent when the
    *  read failed — the UI falls back to `current`. */
   detail?: GbpSectionDetail
@@ -230,10 +241,82 @@ const WHY = {
   photos: 'Fresh photos help people pick you over the place next door.',
   menu: 'People want to see what you serve before they come in.',
   links: 'Your website and phone number let people order, book, and call.',
+  getting: 'People check parking and access before they head over.',
+  seating: 'People want to know if they can sit outside, bring a laptop, or find a restroom.',
+  service: 'People check how they can order and pay before they come.',
 } as const
 
-function unknownSection(key: string, label: string, why: string, aiFixable: boolean, current: string): GbpDiagnosisSection {
-  return { key, label, status: 'unknown', current, why, aiFixable }
+function unknownSection(key: string, label: string, why: string, aiFixable: boolean, current: string, advice: string): GbpDiagnosisSection {
+  return { key, label, status: 'unknown', current, why, aiFixable, advice }
+}
+
+/* ── Attribute groups (getting here / seating / service) ────────────
+   Built from readGbpAttributes: only attributes Google says are valid
+   for THIS location, with the owner's current yes/no or null = never
+   answered. Status: good when every shown option has an answer,
+   needs-work when any is blank, unknown when the read failed. */
+
+const ATTR_GROUP_META: Record<GbpAttributeGroupKey, { label: string; why: string; goodIdea: string }> = {
+  getting: {
+    label: 'Getting here',
+    why: WHY.getting,
+    goodIdea: 'One idea: add a photo of your entrance so people spot you from the street.',
+  },
+  seating: {
+    label: 'Seating and space',
+    why: WHY.seating,
+    goodIdea: 'One idea: add a photo of your seating so people can picture the space.',
+  },
+  service: {
+    label: 'Service and payments',
+    why: WHY.service,
+    goodIdea: 'One idea: post an update when you add a new way to order or pay.',
+  },
+}
+
+const ATTR_GROUP_ORDER: GbpAttributeGroupKey[] = ['getting', 'seating', 'service']
+
+/** "A", "A and B", "A, B, and C", "A, B, C, and 2 more" — real labels only. */
+function joinLabels(labels: string[], cap = 3): string {
+  const shown = labels.slice(0, cap)
+  const rest = labels.length - shown.length
+  if (rest > 0) return `${shown.join(', ')}, and ${rest} more`
+  if (shown.length === 1) return shown[0]
+  if (shown.length === 2) return `${shown[0]} and ${shown[1]}`
+  return `${shown.slice(0, -1).join(', ')}, and ${shown[shown.length - 1]}`
+}
+
+function attrSection(key: GbpAttributeGroupKey, items: GbpAttributeItem[]): GbpDiagnosisSection {
+  const meta = ATTR_GROUP_META[key]
+  if (items.length === 0) {
+    /* Google's metadata offers no matching options for this location's
+       category — nothing to set, and claiming "missing" would be false. */
+    return {
+      key,
+      label: meta.label,
+      status: 'unknown',
+      current: 'Google does not offer these options for your listing.',
+      why: meta.why,
+      aiFixable: false,
+      advice: 'Google does not offer these options for your business type, so there is nothing to set here.',
+    }
+  }
+  const unset = items.filter((it) => it.value === null)
+  const setCount = items.length - unset.length
+  const good = unset.length === 0
+  const advice = good
+    ? `All ${items.length} ${items.length === 1 ? 'answer is' : 'answers are'} set. ${meta.goodIdea}`
+    : `${joinLabels(unset.map((it) => it.label))} ${unset.length === 1 ? 'is' : 'are'} blank. Blank reads as a mystery. Yes or No both help.`
+  return {
+    key,
+    label: meta.label,
+    status: good ? 'good' : 'needs-work',
+    current: `${setCount} of ${items.length} set.`,
+    why: meta.why,
+    aiFixable: false,
+    advice,
+    detail: { kind: 'attrs', items: items.map((it) => ({ id: it.id, label: it.label, value: it.value })) },
+  }
 }
 
 /* ── The engine ─────────────────────────────────────────────────── */
@@ -265,17 +348,23 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
     const why = hasConnection
       ? 'Google did not let us read your profile just now. Try again in a bit.'
       : 'Connect your Google Business Profile so we can check this.'
+    const adv = hasConnection
+      ? 'We could not read this right now. Try again in a bit.'
+      : 'Connect your Google profile, then run this check again.'
     return {
       connected: hasConnection,
       ...(hasConnection ? { readFailed: true } : {}),
       score: null,
       sections: [
-        unknownSection('hours', 'Your hours', why, false, cur),
-        unknownSection('categories', 'Your categories', why, true, cur),
-        unknownSection('description', 'Your description', why, true, cur),
-        unknownSection('photos', 'Your photos', why, false, cur),
-        unknownSection('menu', 'Your menu', why, true, cur),
-        unknownSection('links', 'Website and phone', why, false, cur),
+        unknownSection('hours', 'Your hours', why, false, cur, adv),
+        unknownSection('categories', 'Your categories', why, true, cur, adv),
+        unknownSection('description', 'Your description', why, true, cur, adv),
+        unknownSection('photos', 'Your photos', why, false, cur, adv),
+        unknownSection('menu', 'Your menu', why, true, cur, adv),
+        unknownSection('links', 'Website and phone', why, false, cur, adv),
+        unknownSection('getting', ATTR_GROUP_META.getting.label, why, false, cur, adv),
+        unknownSection('seating', ATTR_GROUP_META.seating.label, why, false, cur, adv),
+        unknownSection('service', ATTR_GROUP_META.service.label, why, false, cur, adv),
       ],
       notes: [...notes, hasConnection
         ? `Google connection exists but reading failed: ${tok.error}`
@@ -286,12 +375,13 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
 
   /* Every read is best-effort and independent — one failed call turns
      its sections "unknown", never the whole diagnosis. */
-  const [listingRes, photosRes, menusRes, menuLinkRes, health] = await Promise.all([
+  const [listingRes, photosRes, menusRes, menuLinkRes, health, attrsRes] = await Promise.all([
     getClientListing(clientId).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'read failed' })),
     listGbpPhotos(clientId).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'read failed' })),
     getClientMenus(clientId).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'read failed' })),
     getClientMenuLink(clientId).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'read failed' })),
     getListingHealth(clientId).catch(() => null),
+    readGbpAttributes(clientId).catch((e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : 'read failed' })),
   ])
 
   const sections: GbpDiagnosisSection[] = []
@@ -311,6 +401,11 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
     const specialNote = specialCount > 0
       ? ` You also set special hours for ${specialCount} ${specialCount === 1 ? 'date' : 'dates'}.`
       : ''
+    const hoursAdvice = days === 0
+      ? 'No days have hours yet. Set all 7 days. If you are closed a day, mark it closed so people know.'
+      : days >= 5
+        ? `${days === 7 ? 'All 7 days are set' : `Hours are set for ${days} of 7 days`}. One idea: add special hours before the next holiday so nobody shows up to a closed door.`
+        : `Only ${days} of 7 days have hours. Fill in the other ${7 - days}. If you are closed a day, mark it closed so people know.`
     sections.push({
       key: 'hours',
       label: 'Your hours',
@@ -320,6 +415,7 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
         : `Hours set for ${days} of 7 days.${specialNote}`,
       why: WHY.hours,
       aiFixable: false,
+      advice: hoursAdvice,
       detail: {
         kind: 'hours',
         days: DAY_ORDER.map(d => ({ day: DAY_LABEL[d], hours: dayHoursWords(hours[d] ?? []) })),
@@ -327,13 +423,18 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
       },
     })
   } else {
-    sections.push(unknownSection('hours', 'Your hours', WHY.hours, false, 'We could not read your hours right now.'))
+    sections.push(unknownSection('hours', 'Your hours', WHY.hours, false, 'We could not read your hours right now.', 'We could not read your hours right now. Try again in a bit.'))
   }
 
   /* Categories. */
   if (fields) {
     const primary = fields.categories?.primary ?? null
     const extra = fields.categories?.additional?.length ?? 0
+    const catAdvice = !primary
+      ? 'Pick a main category. Google cannot show you in searches without one.'
+      : extra >= 1
+        ? `You have ${1 + extra} categories set. If you serve a cuisine that is not listed, add it. Categories decide which searches show you.`
+        : `Your main category is ${primary.displayName}, but there are no extra ones. Add 2 or 3 that fit what you serve. Each one is another search you can show up in.`
     sections.push({
       key: 'categories',
       label: 'Your categories',
@@ -345,6 +446,7 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
           : `Main category is ${primary.displayName}. No extra categories yet.`,
       why: WHY.categories,
       aiFixable: true,
+      advice: catAdvice,
       detail: {
         kind: 'categories',
         primary: primary?.displayName ?? null,
@@ -352,7 +454,7 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
       },
     })
   } else {
-    sections.push(unknownSection('categories', 'Your categories', WHY.categories, true, 'We could not read your categories right now.'))
+    sections.push(unknownSection('categories', 'Your categories', WHY.categories, true, 'We could not read your categories right now.', 'We could not read your categories right now. Try again in a bit.'))
   }
 
   /* Description. Google allows up to 750 characters. */
@@ -372,10 +474,15 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
             : `Your description is ${len} characters. Google gives you room for 750.`,
       why: WHY.description,
       aiFixable: true,
+      advice: len === 0
+        ? 'Write a description. Three or four plain sentences about what you serve and what makes it special is enough to start.'
+        : len >= 250
+          ? `Your description is ${len} characters. One idea: read it once a season and swap in your newest dishes so it stays true.`
+          : `Your description is ${len} characters, and Google gives you room for 750. Use more of it: what you serve, what makes it special, and the feel of the place.`,
       detail: { kind: 'description', text: len > 0 ? desc : null },
     })
   } else {
-    sections.push(unknownSection('description', 'Your description', WHY.description, true, 'We could not read your description right now.'))
+    sections.push(unknownSection('description', 'Your description', WHY.description, true, 'We could not read your description right now.', 'We could not read your description right now. Try again in a bit.'))
   }
 
   /* Photos. Counts photos the business uploaded; customer photos live
@@ -384,6 +491,20 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
     const { count, newestDays, partial } = photosRes
     const countWords = partial ? `At least ${count} photos` : `${count} photos`
     const freshEnough = newestDays != null && newestDays <= 90
+    /* Advice built only from the real count + the real newest-photo age. */
+    const have = partial ? `You have at least ${count} photos` : `You have ${count} photos`
+    let photosAdvice: string
+    if (count === 0) {
+      photosAdvice = 'Add your first photos. Start with three: one dish, one drink, one of the space.'
+    } else if (newestDays == null) {
+      photosAdvice = `${have}, but Google did not say how old they are. Add a fresh one: one dish, one drink, one of the space.`
+    } else if (!freshEnough) {
+      photosAdvice = `${have}, but the newest is ${ageWords(newestDays)}. Fresh photos get more taps. Add one dish, one drink, one of the space.`
+    } else if (count < 10) {
+      photosAdvice = `${have} and the newest is ${ageWords(newestDays)}. Get to 10 or more: one dish, one drink, one of the space.`
+    } else {
+      photosAdvice = `${have} and the newest is ${ageWords(newestDays)}. One idea: add one new dish photo each week to stay fresh.`
+    }
     sections.push({
       key: 'photos',
       label: 'Your photos',
@@ -395,6 +516,7 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
           : `${countWords}. Newest is ${ageWords(newestDays)}.`,
       why: WHY.photos,
       aiFixable: false,
+      advice: photosAdvice,
       detail: {
         kind: 'photos',
         count,
@@ -403,7 +525,7 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
       },
     })
   } else {
-    sections.push(unknownSection('photos', 'Your photos', WHY.photos, false, 'We could not read your photos right now.'))
+    sections.push(unknownSection('photos', 'Your photos', WHY.photos, false, 'We could not read your photos right now.', 'We could not read your photos right now. Try again in a bit.'))
     notes.push(`Photo read failed: ${photosRes.error}`)
   }
 
@@ -464,7 +586,20 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
         menuLink: menuLinkRes.ok ? (menuLink || null) : null,
       }
     }
-    sections.push({ key: 'menu', label: 'Your menu', status, current, why: WHY.menu, aiFixable: true, ...(detail ? { detail } : {}) })
+    /* Advice from the real item count + link state only. */
+    let menuAdvice: string
+    if (menusRes.ok && itemCount > 0) {
+      menuAdvice = menuLink
+        ? `Your menu on Google shows ${itemCount} items and your menu link is set. One idea: when a price changes, update it here the same day.`
+        : `Your menu on Google shows ${itemCount} items. One idea: add your menu link too so the Menu button works everywhere.`
+    } else if (menuLink) {
+      menuAdvice = 'Your menu link is set. One idea: add a few best sellers as menu items on Google so they show right in search.'
+    } else if (status === 'missing') {
+      menuAdvice = 'Add a menu link or a few menu items. People pick where to eat by the menu.'
+    } else {
+      menuAdvice = 'We could not read your menu right now. Try again in a bit.'
+    }
+    sections.push({ key: 'menu', label: 'Your menu', status, current, why: WHY.menu, aiFixable: true, advice: menuAdvice, ...(detail ? { detail } : {}) })
   }
 
   /* Links: website + phone. */
@@ -484,10 +619,33 @@ export async function diagnoseGbp(clientId: string): Promise<GbpDiagnosis> {
             : 'No website and no phone number.',
       why: WHY.links,
       aiFixable: false,
+      advice: website && phone
+        ? 'Website and phone are both set. One idea: tap the website link once a month to make sure it still works.'
+        : website
+          ? 'Your website is set, but there is no phone number. Add it so people can call.'
+          : phone
+            ? 'Your phone number is set, but there is no website. Add it so people can see your menu and book.'
+            : 'Add your website and phone number. People use them to order, book, and call.',
       detail: { kind: 'links', website: website || null, phone: phone || null },
     })
   } else {
-    sections.push(unknownSection('links', 'Website and phone', WHY.links, false, 'We could not read your website and phone right now.'))
+    sections.push(unknownSection('links', 'Website and phone', WHY.links, false, 'We could not read your website and phone right now.', 'We could not read your website and phone right now. Try again in a bit.'))
+  }
+
+  /* Getting here / Seating and space / Service and payments — the Google
+     listing ATTRIBUTES the owner can answer yes or no. Best-effort like
+     every other read: a failed attributes read turns these three unknown
+     and never blocks the rest of the diagnosis. */
+  if (attrsRes.ok) {
+    for (const key of ATTR_GROUP_ORDER) {
+      sections.push(attrSection(key, attrsRes.groups[key]))
+    }
+  } else {
+    for (const key of ATTR_GROUP_ORDER) {
+      const meta = ATTR_GROUP_META[key]
+      sections.push(unknownSection(key, meta.label, meta.why, false, 'We could not read these right now.', 'We could not read these right now. Try again in a bit.'))
+    }
+    notes.push(`Attributes read failed: ${attrsRes.error}`)
   }
 
   /* Overall score: reuse the existing listing-health score. It only

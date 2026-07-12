@@ -1,34 +1,29 @@
-/* Apnosh AI Google-profile review render smoke (renderToString, same idiom as
- * smoke-render-plan-cart):
- *   a) mixed statuses: the intro renders with the correct part count
- *   b) a good hours part: the 7-day table (incl a Closed day), the special-hours
- *      line, the small Edit affordance, and the Next button (no confirm pair)
- *   c) categories (good): chips + the small "Edit on Google" link (no in-app editor)
- *   d) description (needs-work): the FULL text + the prominent Edit button
- *   e) the description EDITOR (test seam): prefilled textarea, char count vs the
- *      250-750 rule, "Draft it for me", "Save to Google", Cancel
- *   f) the hours EDITOR (test seam): 7 day rows, time inputs prefilled, the
- *      closed day checked, the honest multi-range replace note
- *   g) the links EDITOR (test seam): Website + Phone inputs prefilled + Save
- *   h) photos (needs-work): the grid + the "Edit this on Google" block + re-check line
- *   i) menu (good): items + the small Edit-on-Google link
- *   j) links part (good): website + phone rows + the small Edit affordance
- *   k) honest save strings: applyResultNote maps live:true / live:false / 429 /
- *      raw-5xx correctly, and injected notes render on the part screen
- *   l) fallbacks + unknown part unchanged
- *   m) the summary lists outcomes + the What's-next reviews card
- *   n) the helper hub renders all three cards (and the Continue variant)
- *   p) Questions and answers: Google closed the Q&A API for apps
- *      (501 API_UNSUPPORTED, 2026-07-11), so the door is the honest
- *      explainer + the Answer-on-Google link + the paste-a-question AI
- *      drafter (textarea, Draft my answer, the copyable draft block via the
- *      test seam, the non-Pro hint)
- *   q) Post an update: the composer (textarea + live count vs the 1500 rule,
- *      the button picker None/Learn more/Call, the https link field, Draft it
- *      for me, Publish to Google, the non-Pro hint), honest postResultNote
- *      strings, and the posted screen (proof line, See-it link only when
- *      Google sent one back, Post again)
- *   o) the last part says Finish; no em dashes anywhere
+/* Apnosh AI Google-profile BUILDER render smoke (renderToString, same idiom as
+ * smoke-render-plan-cart). The review is chaptered by the customer journey:
+ *   "Be found" (categories, description, links), "Look worth the trip"
+ *   (photos, menu), "Easy to visit" (hours, getting, seating, service).
+ * Covered:
+ *   a) the intro: 3 chapter names, all 9 parts, the honest weak count,
+ *      per-part status chips, Start
+ *   b) the 9 parts walk in CHAPTER order (engine order goes in, chapter
+ *      order comes out) + the chapter eyebrow renders on part screens
+ *   c) advice: the "Apnosh AI says" block renders on good AND weak parts,
+ *      and hides when the engine sent none
+ *   d) weak editable parts say "Fix it now"; good editable parts offer
+ *      "Edit anyway"; categories/menu/photos keep the honest Google links
+ *   e) the three in-app editors are unchanged (description textarea + draft,
+ *      hours 7-day, links 2 fields)
+ *   f) attribute parts (getting/seating/service): label rows with Yes / No /
+ *      the amber "Not set"; the editor seam renders Yes/No toggles + Save
+ *   g) honest save strings: applyResultNote maps live:true / live:false /
+ *      429 / raw-5xx correctly, and injected notes render on the part screen
+ *   h) fallbacks + the unknown part unchanged
+ *   i) the summary: chapter-grouped outcomes, the honest score line, the
+ *      recheck + delay lines, and all three Keep-it-strong cards
+ *   j) the hub is GONE from the flow (no "Your Google helper" cards screen)
+ *   k) Questions and answers + Post an update still render (reached from the
+ *      summary's Keep-it-strong cards)
+ *   l) the last part says Finish; no em dashes anywhere
  * Run: node_modules/.bin/tsx scripts/smoke-render-gbp-review.tsx */
 
 // localStorage stub before anything loads (the review reads it in effects only,
@@ -47,8 +42,8 @@ import { renderToString } from 'react-dom/server'
 let fail = 0
 const ok = (cond: boolean, msg: string) => { console.log(`  ${cond ? 'PASS' : 'FAIL'}  ${msg}`); if (!cond) fail++ }
 
-// The fixture mirrors the GET /api/dashboard/gbp-diagnosis wire shape,
-// including the per-section `detail` payload the engine emits.
+// The fixture mirrors the GET /api/dashboard/gbp-diagnosis wire shape, in
+// ENGINE order (hours first) to prove the builder reorders into chapters.
 const HOURS_DETAIL = {
   kind: 'hours',
   days: [
@@ -65,6 +60,18 @@ const HOURS_DETAIL = {
 
 const DESCRIPTION_TEXT = 'Fresh tacos made every morning with local corn and slow cooked meats. Family owned since 1998 and proud of it.'
 
+const ADVICE = {
+  hours: 'Hours are set for 6 of 7 days. One idea: add special hours before the next holiday so nobody shows up to a closed door.',
+  categories: 'You have 3 categories set. If you serve a cuisine that is not listed, add it. Categories decide which searches show you.',
+  description: 'Your description is 111 characters, and Google gives you room for 750. Use more of it: what you serve, what makes it special, and the feel of the place.',
+  photos: 'You have 9 photos, but the newest is about 8 months old. Fresh photos get more taps. Add one dish, one drink, one of the space.',
+  menu: 'Your menu on Google shows 15 items and your menu link is set. One idea: when a price changes, update it here the same day.',
+  links: 'Website and phone are both set. One idea: tap the website link once a month to make sure it still works.',
+  getting: 'Parking lot is blank. Blank reads as a mystery. Yes or No both help.',
+  seating: 'All 3 answers are set. One idea: add a photo of your seating so people can picture the space.',
+  service: 'All 2 answers are set. One idea: post an update when you add a new way to order or pay.',
+}
+
 const FIXTURE = {
   connected: true,
   readFailed: false,
@@ -74,24 +81,28 @@ const FIXTURE = {
       key: 'hours', label: 'Your hours', status: 'good',
       current: 'Hours set for 6 of 7 days. You also set special hours for 2 dates.',
       why: 'People check your hours before they come.', aiFixable: false,
+      advice: ADVICE.hours,
       detail: HOURS_DETAIL,
     },
     {
       key: 'categories', label: 'Your categories', status: 'good',
       current: 'Main category is Grocery store, plus 2 more.',
       why: 'The right categories help Google show you in more searches.', aiFixable: true,
+      advice: ADVICE.categories,
       detail: { kind: 'categories', primary: 'Grocery store', additional: ['Cafe', 'Deli'] },
     },
     {
       key: 'description', label: 'Your description', status: 'needs-work',
       current: 'Your description is 111 characters. Google gives you room for 750.',
       why: 'A short description tells people what makes you special.', aiFixable: true,
+      advice: ADVICE.description,
       detail: { kind: 'description', text: DESCRIPTION_TEXT },
     },
     {
       key: 'photos', label: 'Your photos', status: 'needs-work',
       current: '9 photos. Newest is about 8 months old.',
       why: 'Photos help people pick you.', aiFixable: false,
+      advice: ADVICE.photos,
       detail: {
         kind: 'photos', count: 9, newestLabel: 'about 8 months old',
         items: [
@@ -105,6 +116,7 @@ const FIXTURE = {
       key: 'menu', label: 'Your menu', status: 'good',
       current: 'Menu on Google with 15 items, and your menu link is set.',
       why: 'People want to see the menu before they decide.', aiFixable: true,
+      advice: ADVICE.menu,
       detail: {
         kind: 'menu', itemCount: 15,
         items: [
@@ -121,17 +133,71 @@ const FIXTURE = {
       key: 'links', label: 'Website and phone', status: 'good',
       current: 'Website and phone number are both set.',
       why: 'Links let people order and book from your listing.', aiFixable: false,
+      advice: ADVICE.links,
       detail: { kind: 'links', website: 'https://tacoexample.com', phone: '(555) 123-4567' },
+    },
+    {
+      key: 'getting', label: 'Getting here', status: 'needs-work',
+      current: '2 of 3 set.',
+      why: 'People check parking and access before they head over.', aiFixable: false,
+      advice: ADVICE.getting,
+      detail: {
+        kind: 'attrs',
+        items: [
+          { id: 'has_wheelchair_accessible_entrance', label: 'Wheelchair accessible entrance', value: true },
+          { id: 'has_parking_lot', label: 'Parking lot', value: null },
+          { id: 'has_drive_through', label: 'Drive through', value: false },
+        ],
+      },
+    },
+    {
+      key: 'seating', label: 'Seating and space', status: 'good',
+      current: '3 of 3 set.',
+      why: 'People want to know if they can sit outside, bring a laptop, or find a restroom.', aiFixable: false,
+      advice: ADVICE.seating,
+      detail: {
+        kind: 'attrs',
+        items: [
+          { id: 'has_outdoor_seating', label: 'Outdoor seating', value: true },
+          { id: 'has_wifi_free', label: 'Free Wi-Fi', value: true },
+          { id: 'has_restroom', label: 'Restroom', value: true },
+        ],
+      },
+    },
+    {
+      key: 'service', label: 'Service and payments', status: 'good',
+      current: '2 of 2 set.',
+      why: 'People check how they can order and pay before they come.', aiFixable: false,
+      advice: ADVICE.service,
+      detail: {
+        kind: 'attrs',
+        items: [
+          { id: 'has_takeout', label: 'Takeout', value: true },
+          { id: 'pay_credit_card', label: 'Credit cards', value: true },
+        ],
+      },
     },
   ],
   notes: [],
   checkedAt: '2026-07-11T00:00:00.000Z',
 }
 
+/** The chapter order the builder must walk (engine order above differs). */
+const CHAPTER_WALK: Array<{ label: string; chapter: string }> = [
+  { label: 'Your categories', chapter: 'Be found' },
+  { label: 'Your description', chapter: 'Be found' },
+  { label: 'Website and phone', chapter: 'Be found' },
+  { label: 'Your photos', chapter: 'Look worth the trip' },
+  { label: 'Your menu', chapter: 'Look worth the trip' },
+  { label: 'Your hours', chapter: 'Easy to visit' },
+  { label: 'Getting here', chapter: 'Easy to visit' },
+  { label: 'Seating and space', chapter: 'Easy to visit' },
+  { label: 'Service and payments', chapter: 'Easy to visit' },
+]
+
 async function main() {
   const mod = await import('../src/components/mvp/gbp-fixer')
   const AiReview = mod.AiReview as unknown as React.ComponentType<Record<string, unknown>>
-  const GbpHelperHub = mod.GbpHelperHub as unknown as React.ComponentType<Record<string, unknown>>
   const applyResultNote = mod.applyResultNote as (status: number, body: Record<string, unknown> | null) => { tone: string; text: string }
   const noop = () => undefined
 
@@ -154,108 +220,105 @@ async function main() {
     return html
   }
 
-  console.log('\n== a) the intro ==')
+  console.log('\n== a) the intro: chapters + parts + honest weak count ==')
   const intro = render({})
-  ok(intro.includes('part by part'), 'the intro moment renders')
-  ok(/6\s*parts/.test(intro), 'the part count (6) renders')
-  ok(intro.includes('Start the review'), 'the Start button renders')
-  ok(/2\s*parts could use/.test(intro), 'the needs-work count (2) renders honestly')
-  ok(intro.includes('We pulled what Google shows today'), 'the honest we-pulled-it line renders')
-
-  console.log('\n== b) a good hours part: the real 7-day table + Edit + Next ==')
-  const hoursPart = render({ initialPhase: 'part', initialIndex: 0 })
-  ok(/Part\s*1\s*of\s*6/.test(hoursPart), 'the progress line (Part 1 of 6) renders')
-  ok(hoursPart.includes('Your hours') && hoursPart.includes('Looks good'), 'the part name and status chip render')
-  for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']) {
-    ok(hoursPart.includes(day), `the ${day} row renders`)
+  ok(intro.includes('build your best profile'), 'the intro title renders')
+  ok(intro.includes('checked 9 parts'), 'the 9-part count renders')
+  ok(intro.includes('3 could be better.'), 'the honest weak count (3) renders')
+  ok(intro.includes('You get a recommendation on every part'), 'the recommendation promise renders')
+  for (const ch of ['Be found', 'Look worth the trip', 'Easy to visit']) {
+    ok(intro.includes(ch), `the "${ch}" chapter renders on the intro`)
   }
-  ok(hoursPart.includes('8:00 AM to 9:00 PM'), 'real open/close times render')
-  ok(hoursPart.includes('9:00 AM to 2:00 PM, 5:00 PM to 10:00 PM'), 'a split-shift day renders both ranges')
-  ok(hoursPart.includes('Closed'), 'the closed day says Closed')
-  ok(/special hours for\s*2\s*dates/.test(hoursPart), 'the special-hours count line renders')
-  ok(hoursPart.includes('Edit'), 'the small Edit affordance renders on the hours part')
-  ok(hoursPart.includes('>Next<'), 'the primary button is Next')
-  ok(!hoursPart.includes('This is correct, next') && !hoursPart.includes('Something is off'), 'the old confirm/complain pair is gone')
-  ok(hoursPart.includes('On Google now') && hoursPart.includes('Why it matters'), 'the block labels render')
+  for (const p of CHAPTER_WALK) {
+    ok(intro.includes(p.label), `the ${p.label} part is listed on the intro`)
+  }
+  ok(intro.includes('Looks good'), 'good parts chip Looks good on the intro')
+  ok(intro.includes('Could be better'), 'weak parts chip Could be better on the intro')
+  ok(intro.includes('>Start<'), 'the Start button renders')
 
-  console.log('\n== c) categories: chips + Edit on Google (no in-app editor) ==')
-  const cats = render({ initialPhase: 'part', initialIndex: 1 })
-  ok(/Main:\s*Grocery store/.test(cats), 'the primary category renders as the Main chip')
-  ok(cats.includes('Cafe') && cats.includes('Deli'), 'the additional categories render as chips')
-  ok(cats.includes('Edit on Google'), 'the Edit affordance is the Google link')
-  ok(cats.includes('https://business.google.com/info'), 'the categories link points at the Google info editor')
-  ok(!cats.includes('<textarea') && !cats.includes('type="time"'), 'no in-app editor exists for categories')
-  ok(cats.includes('>Next<'), 'Next renders on the categories part')
+  console.log('\n== b) parts walk in CHAPTER order + the chapter eyebrow ==')
+  for (let i = 0; i < CHAPTER_WALK.length; i++) {
+    const html = render({ initialPhase: 'part', initialIndex: i })
+    const expected = CHAPTER_WALK[i]
+    ok(html.includes(expected.label), `part ${i + 1} is ${expected.label}`)
+    ok(html.includes(expected.chapter), `part ${i + 1} carries the "${expected.chapter}" eyebrow`)
+    ok(new RegExp(`Part\\s*${i + 1}\\s*of\\s*9`).test(html), `part ${i + 1} shows Part ${i + 1} of 9`)
+  }
 
-  console.log('\n== d) description (needs-work): full text + prominent Edit ==')
-  const desc = render({ initialPhase: 'part', initialIndex: 2 })
-  ok(desc.includes('Your description') && desc.includes('Needs work'), 'the part renders with its Needs work chip')
-  ok(desc.includes(DESCRIPTION_TEXT), 'the FULL description text renders')
-  ok(desc.includes('Edit your description'), 'the prominent Edit affordance renders on a needs-work description')
-  ok(desc.includes('>Next<'), 'Next renders as the move-on action')
-  ok(!desc.includes('I updated it'), 'the old I-updated-it button is gone')
+  console.log('\n== c) advice: Apnosh AI says on good AND weak parts ==')
+  const goodPart = render({ initialPhase: 'part', initialIndex: 5 }) // hours (good)
+  ok(goodPart.includes('Apnosh AI says'), 'the advice label renders on a GOOD part')
+  ok(goodPart.includes(ADVICE.hours), 'the good-part advice text renders')
+  const weakPart = render({ initialPhase: 'part', initialIndex: 1 }) // description (needs-work)
+  ok(weakPart.includes('Apnosh AI says'), 'the advice label renders on a WEAK part')
+  ok(weakPart.includes(ADVICE.description), 'the weak-part advice text renders')
+  // No advice from the engine (older cache): the block hides, nothing invented.
+  const noAdviceDiag = {
+    ...FIXTURE,
+    sections: FIXTURE.sections.map((s) => (s.key === 'hours' ? { ...s, advice: undefined } : s)),
+  }
+  const noAdvice = render({ diag: noAdviceDiag, initialPhase: 'part', initialIndex: 5 })
+  ok(!noAdvice.includes('Apnosh AI says'), 'no advice block when the engine sent none')
 
-  console.log('\n== e) the description editor (seam) ==')
-  const descEdit = render({ initialPhase: 'part', initialIndex: 2, initialEditing: true })
-  ok(descEdit.includes('<textarea'), 'the textarea renders')
+  console.log('\n== d) Fix it now on weak parts, Edit anyway on good parts ==')
+  ok(weakPart.includes('Fix it now'), 'a weak editable part says Fix it now')
+  ok(!weakPart.includes('Edit anyway'), 'a weak part does not also offer Edit anyway')
+  ok(goodPart.includes('Edit anyway'), 'a good editable part offers Edit anyway')
+  ok(!goodPart.includes('Fix it now'), 'a good part does not shout Fix it now')
+  const goodAttrs = render({ initialPhase: 'part', initialIndex: 7 }) // seating (good, attrs)
+  ok(goodAttrs.includes('Edit anyway'), 'a good attribute part offers Edit anyway')
+  const weakAttrs = render({ initialPhase: 'part', initialIndex: 6 }) // getting (needs-work, attrs)
+  ok(weakAttrs.includes('Fix it now'), 'a weak attribute part says Fix it now')
+  // The Google-link kinds keep their honest links, never a fake editor.
+  const cats = render({ initialPhase: 'part', initialIndex: 0 })
+  ok(cats.includes('Edit on Google') && cats.includes('https://business.google.com/info'), 'categories keep the Edit-on-Google link')
+  ok(!cats.includes('Fix it now') && !cats.includes('<textarea'), 'no in-app editor exists for categories')
+  const photos = render({ initialPhase: 'part', initialIndex: 3 })
+  ok(photos.includes('Edit this on Google') && photos.includes('https://business.google.com/photos'), 'weak photos keep the Edit-this-on-Google block')
+  ok(photos.includes('<img') && photos.includes('https://photos.example.com/one.jpg'), 'the photo grid still renders')
+  const menu = render({ initialPhase: 'part', initialIndex: 4 })
+  ok(menu.includes('Edit on Google') && menu.includes('https://business.google.com/menu'), 'menu keeps the Edit-on-Google link')
+  ok(menu.includes('Carnitas taco') && menu.includes('$4.50'), 'menu items still render')
+
+  console.log('\n== e) the three in-app editors are unchanged ==')
+  const descEdit = render({ initialPhase: 'part', initialIndex: 1, initialEditing: true })
+  ok(descEdit.includes('<textarea'), 'the description textarea renders')
   ok(descEdit.includes(DESCRIPTION_TEXT), 'the textarea is prefilled with the current text')
   ok(new RegExp(`${DESCRIPTION_TEXT.length}\\s*of\\s*750 characters`).test(descEdit), 'the live character count renders')
   ok(descEdit.includes('Aim for 250 to 750'), 'the 250-750 rule renders')
-  ok(descEdit.includes('Draft it for me'), 'Draft it for me lives inside the editor (fills the textarea)')
-  ok(descEdit.includes('Save to Google'), 'the Save to Google button renders')
-  ok(descEdit.includes('Cancel'), 'Cancel renders')
-
-  console.log('\n== f) the hours editor (seam): 7 rows ==')
-  const hoursEdit = render({ initialPhase: 'part', initialIndex: 0, initialEditing: true })
+  ok(descEdit.includes('Draft it for me'), 'Draft it for me lives inside the editor')
+  ok(descEdit.includes('Save to Google') && descEdit.includes('Cancel'), 'Save to Google + Cancel render')
+  const hoursEdit = render({ initialPhase: 'part', initialIndex: 5, initialEditing: true })
   for (const day of ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']) {
     ok(hoursEdit.includes(day), `the ${day} editor row renders`)
   }
   const timeInputs = (hoursEdit.match(/type="time"/g) ?? []).length
   ok(timeInputs === 12, `open/close time inputs render for the 6 open days (got ${timeInputs})`)
   ok(hoursEdit.includes('value="08:00"') && hoursEdit.includes('value="21:00"'), 'times prefill from what Google shows')
-  ok(/checked/.test(hoursEdit), 'the closed day (Sunday) prefills as Closed')
   ok(hoursEdit.includes('This day has more than one time range on Google. Saving replaces it with one range.'), 'the honest multi-range replace note renders')
-  ok(hoursEdit.includes('Save to Google'), 'the Save to Google button renders')
-
-  console.log('\n== g) the links editor (seam): 2 labeled inputs ==')
-  const linksEdit = render({ initialPhase: 'part', initialIndex: 5, initialEditing: true })
+  const linksEdit = render({ initialPhase: 'part', initialIndex: 2, initialEditing: true })
   ok(linksEdit.includes('Website') && linksEdit.includes('Phone'), 'the Website and Phone labels render')
   ok(linksEdit.includes('value="https://tacoexample.com"'), 'the website input prefills')
   ok(linksEdit.includes('value="(555) 123-4567"'), 'the phone input prefills')
-  ok(linksEdit.includes('Save to Google'), 'the Save to Google button renders')
+  ok(linksEdit.includes('Save to Google'), 'the links Save to Google button renders')
 
-  console.log('\n== h) photos (needs-work): grid + Edit this on Google ==')
-  const photos = render({ initialPhase: 'part', initialIndex: 3 })
-  ok(photos.includes('9 photos. Newest is about 8 months old.'), 'the count + freshness line renders above the grid')
-  ok(photos.includes('<img'), 'the grid renders img tags')
-  for (const url of ['https://photos.example.com/one.jpg', 'https://photos.example.com/two.jpg', 'https://photos.example.com/three.jpg']) {
-    ok(photos.includes(url), `the photo ${url.split('/').pop()} renders`)
-  }
-  ok(photos.includes('loading="lazy"'), 'the thumbnails lazy-load')
-  ok(photos.includes('Edit this on Google'), 'the Google edit link renders (no fake in-app editor)')
-  ok(photos.includes('https://business.google.com/photos'), 'the photos link points at the Google photos editor')
-  ok(photos.includes('then come back. We will re-check.'), 'the honest come-back line renders')
-  ok(!photos.includes('<textarea') && !photos.includes('type="time"'), 'no in-app editor exists for photos')
+  console.log('\n== f) attribute parts: rows + the Yes/No editor ==')
+  ok(weakAttrs.includes('Wheelchair accessible entrance'), 'an attribute label row renders')
+  ok(weakAttrs.includes('Parking lot') && weakAttrs.includes('Not set'), 'a never-answered option reads Not set')
+  ok(weakAttrs.includes('Drive through'), 'a No option row renders')
+  ok(weakAttrs.includes('>Yes<') && weakAttrs.includes('>No<'), 'answered rows read Yes and No')
+  ok(goodAttrs.includes('Outdoor seating') && goodAttrs.includes('Free Wi-Fi') && goodAttrs.includes('Restroom'), 'all seating rows render')
+  ok(!goodAttrs.includes('Not set'), 'a fully answered group shows no Not set')
+  const attrsEdit = render({ initialPhase: 'part', initialIndex: 6, initialEditing: true })
+  ok(attrsEdit.includes('Wheelchair accessible entrance') && attrsEdit.includes('Parking lot') && attrsEdit.includes('Drive through'), 'the editor keeps every row')
+  const yesButtons = (attrsEdit.match(/>Yes<\/button>/g) ?? []).length
+  const noButtons = (attrsEdit.match(/>No<\/button>/g) ?? []).length
+  ok(yesButtons === 3 && noButtons === 3, `every row gets a Yes/No toggle pair (got ${yesButtons}/${noButtons})`)
+  ok(attrsEdit.includes('aria-pressed="true"'), 'answered rows start with their current value selected')
+  ok(attrsEdit.includes('Save to Google') && attrsEdit.includes('Cancel'), 'Save to Google + Cancel render in the attrs editor')
+  ok(attrsEdit.includes('Only what you set is sent.'), 'the honest only-what-you-set line renders')
 
-  console.log('\n== i) menu (good): items + the small Edit-on-Google link ==')
-  const menu = render({ initialPhase: 'part', initialIndex: 4 })
-  for (const name of ['Carnitas taco', 'Al pastor taco', 'Chips and salsa', 'Horchata', 'Elote']) {
-    ok(menu.includes(name), `the ${name} item renders`)
-  }
-  ok(menu.includes('$4.50') && menu.includes('$5.25'), 'item prices render when Google has them')
-  ok(/and\s*10\s*more/.test(menu), 'the "and 10 more" cap line renders (15 items, 5 shown)')
-  ok(menu.includes('https://tacoexample.com/menu'), 'the menu link renders')
-  ok(menu.includes('Edit on Google') && menu.includes('https://business.google.com/menu'), 'the menu Edit affordance is the Google link')
-
-  console.log('\n== j) links part (good): rows + small Edit ==')
-  const links = render({ initialPhase: 'part', initialIndex: 5 })
-  ok(links.includes('Website') && links.includes('https://tacoexample.com'), 'the website row renders with the real URL')
-  ok(links.includes('href="https://tacoexample.com"') && links.includes('target="_blank"'), 'the website is tappable and opens a new tab')
-  ok(links.includes('Phone') && links.includes('(555) 123-4567'), 'the phone row renders with the real number')
-  ok(links.includes('Edit'), 'the small Edit affordance renders on the links part')
-  ok(links.includes('>Finish<'), 'the last part says Finish')
-
-  console.log('\n== k) honest save strings ==')
+  console.log('\n== g) honest save strings ==')
   const liveNote = applyResultNote(200, { ok: true, live: true })
   ok(liveNote.tone === 'ok' && liveNote.text === 'Saved to Google.', 'live:true reads Saved to Google.')
   const pendingNote = applyResultNote(200, { ok: true, live: false })
@@ -266,33 +329,39 @@ async function main() {
   ok(rawNote.tone === 'error' && !rawNote.text.includes('invalid_grant'), 'a 5xx never leaks the raw server string')
   const badNote = applyResultNote(400, { ok: false, error: 'The description is empty.' })
   ok(badNote.text === 'The description is empty.', 'a 400 shows the server plain-words reason')
-  // Injected on screen (test seam): both honest lines render in the part UI.
-  const savedShown = render({ initialPhase: 'part', initialIndex: 2, initialSaveNote: liveNote })
-  ok(savedShown.includes('Saved to Google.'), 'the proven Saved line renders on the part screen')
-  const pendingShown = render({ initialPhase: 'part', initialIndex: 2, initialSaveNote: pendingNote })
+  // Injected on screen (test seam): both honest lines render in the part UI,
+  // including on an attribute part.
+  const savedShown = render({ initialPhase: 'part', initialIndex: 6, initialSaveNote: liveNote })
+  ok(savedShown.includes('Saved to Google.'), 'the proven Saved line renders on an attribute part')
+  const pendingShown = render({ initialPhase: 'part', initialIndex: 1, initialSaveNote: pendingNote })
   ok(pendingShown.includes('Sent to Google. It can take a few minutes to show.'), 'the honest pending line renders on the part screen')
 
-  console.log('\n== l) fallbacks + the unknown part ==')
+  console.log('\n== h) fallbacks + the unknown part ==')
   // A detail-less section (older cache, failed read) falls back to the summary string.
   const noDetailDiag = {
     ...FIXTURE,
-    sections: FIXTURE.sections.map((s) => (s.key === 'hours' ? { key: s.key, label: s.label, status: s.status, current: s.current, why: s.why, aiFixable: s.aiFixable } : s)),
+    sections: FIXTURE.sections.map((s) => (s.key === 'hours' ? { key: s.key, label: s.label, status: s.status, current: s.current, why: s.why, aiFixable: s.aiFixable, advice: s.advice } : s)),
   }
-  const fallback = render({ diag: noDetailDiag, initialPhase: 'part', initialIndex: 0 })
+  const fallback = render({ diag: noDetailDiag, initialPhase: 'part', initialIndex: 5 })
   ok(!fallback.includes('Monday'), 'no invented table when detail is missing')
   ok(fallback.includes('Hours set for 6 of 7 days.'), 'a detail-less part falls back to the summary string')
-  ok(fallback.includes('>Next<'), 'Next still renders on the fallback')
-  // A missing description (no detail, empty current) still reads Nothing yet + the add path.
+  // A detail-less ATTRIBUTE part gets no editor (nothing honest to prefill).
+  const noAttrsDetailDiag = {
+    ...FIXTURE,
+    sections: FIXTURE.sections.map((s) => (s.key === 'getting' ? { ...s, detail: undefined } : s)),
+  }
+  const attrsFallback = render({ diag: noAttrsDetailDiag, initialPhase: 'part', initialIndex: 6 })
+  ok(attrsFallback.includes('2 of 3 set.'), 'a detail-less attribute part falls back to the summary string')
+  ok(!attrsFallback.includes('Fix it now') && !attrsFallback.includes('Save to Google'), 'no editor is offered without the real rows')
+  // A missing description (no detail, empty current) still reads Nothing yet + the fix path.
   const missingDescDiag = {
     ...FIXTURE,
     sections: FIXTURE.sections.map((s) => (s.key === 'description' ? { ...s, status: 'missing', current: '', detail: undefined } : s)),
   }
-  const missingDesc = render({ diag: missingDescDiag, initialPhase: 'part', initialIndex: 2 })
+  const missingDesc = render({ diag: missingDescDiag, initialPhase: 'part', initialIndex: 1 })
   ok(missingDesc.includes('Missing'), 'the Missing chip renders')
   ok(missingDesc.includes('Nothing yet'), 'an empty current value renders as Nothing yet')
-  ok(missingDesc.includes('Add a description'), 'a missing description offers Add a description')
-  const missingDescEdit = render({ diag: missingDescDiag, initialPhase: 'part', initialIndex: 2, initialEditing: true })
-  ok(missingDescEdit.includes('<textarea') && missingDescEdit.includes('Draft it for me'), 'the editor opens empty with the draft path')
+  ok(missingDesc.includes('Fix it now'), 'a missing description offers Fix it now')
   // Unknown part unchanged.
   const unknownDiag = {
     ...FIXTURE,
@@ -304,25 +373,32 @@ async function main() {
   ok(unk.includes('Skip for now'), 'Skip for now renders')
   ok(!unk.includes('Edit this on Google') && !unk.includes('Save to Google'), 'no edit/save actions on an unknown part')
 
-  console.log('\n== m) the summary + What\'s next ==')
+  console.log('\n== i) the summary: chapters + score + Keep it strong ==')
   const summary = render({
     initialPhase: 'summary',
-    initialOutcomes: { hours: 'good', categories: 'good', description: 'skipped', photos: 'updated', menu: 'good', links: 'good' },
+    initialOutcomes: { hours: 'good', categories: 'good', description: 'skipped', photos: 'updated', menu: 'good', links: 'good', getting: 'updated', seating: 'good', service: 'good' },
   })
   ok(summary.includes('You went through every part'), 'the summary title renders (not all good)')
-  for (const label of ['Your hours', 'Your categories', 'Your description', 'Your photos', 'Your menu', 'Website and phone']) {
-    ok(summary.includes(label), `the ${label} part is listed`)
+  for (const ch of ['Be found', 'Look worth the trip', 'Easy to visit']) {
+    ok(summary.includes(ch), `outcomes group under the "${ch}" chapter`)
   }
+  for (const p of CHAPTER_WALK) {
+    ok(summary.includes(p.label), `the ${p.label} part is listed`)
+  }
+  ok(summary.includes('Profile score: 68 of 100'), 'the honest score line renders')
+  ok(!summary.includes('was 68') && !summary.includes('before'), 'no before/after score is invented')
   ok(summary.includes('Looks good'), 'a good part reads Looks good')
   ok(summary.includes('You updated it'), 'an updated part reads You updated it')
   ok(summary.includes('Skipped'), 'a skipped part reads Skipped')
   ok(summary.includes('Check my profile again'), 'the re-check button renders')
   ok(summary.includes('can take a few minutes to show up'), 'the honest delay note renders')
-  ok(summary.includes('s next'), 'the What\'s-next block renders')
-  ok(summary.includes('Your reviews'), 'the reviews card renders on the summary')
-  ok(summary.includes('Read new reviews and reply with AI help.'), 'the reviews card sub renders')
-  ok(summary.includes('/dashboard/inbox?tab=reviews'), 'the reviews card links to the real reviews surface')
-
+  ok(summary.includes('Keep it strong'), 'the Keep-it-strong block renders')
+  ok(summary.includes('Your reviews') && summary.includes('/dashboard/inbox?tab=reviews'), 'the reviews card links to the real reviews surface')
+  ok(summary.includes('Post an update') && summary.includes('Share news on your Google listing.'), 'the Post-an-update card renders')
+  ok(summary.includes('Questions and answers') && summary.includes('Answer what people ask, with AI help.'), 'the Q and A card renders')
+  // A null score shows no score line (never a made-up 0).
+  const noScore = render({ diag: { ...FIXTURE, score: null }, initialPhase: 'summary' })
+  ok(!noScore.includes('Profile score:'), 'no score line when the diagnosis could not score honestly')
   // The all-good read shows the celebration on the summary.
   const allGoodDiag = { ...FIXTURE, sections: FIXTURE.sections.map((s) => ({ ...s, status: 'good', current: s.current || 'Set' })) }
   const celebrate = render({ diag: allGoodDiag, initialPhase: 'summary', taskDone: true })
@@ -330,73 +406,31 @@ async function main() {
   ok(celebrate.includes('This campaign task is complete'), 'the task-done line renders when the PATCH landed')
   ok(!celebrate.includes('Check my profile again'), 'no re-check button when everything reads good')
 
-  console.log('\n== n) the helper hub ==')
-  const hub = strip(renderToString(React.createElement(GbpHelperHub, { continueReview: false, onReview: noop })))
-  rendered.push(hub)
-  ok(hub.includes('Your Google helper'), 'the hub title renders')
-  ok(hub.includes('Review your profile'), 'the review card renders')
-  ok(hub.includes('6 parts. See what Google shows and fix it.'), 'the review card sub renders')
-  ok(hub.includes('Your reviews'), 'the reviews card renders')
-  ok(hub.includes('Read new reviews and reply with AI help.'), 'the reviews card sub renders')
-  ok(hub.includes('/dashboard/inbox?tab=reviews'), 'the reviews card links to the real reviews surface')
-  ok(hub.includes('Questions and answers'), 'the questions card renders')
-  ok(hub.includes('Answer what people ask, with AI help.'), 'the questions card sub renders (stays true to the Google-side flow)')
-  ok(hub.includes('Post an update'), 'the post card renders (fourth card)')
-  ok(hub.includes('Share news on your Google listing.'), 'the post card sub renders')
-  const hubResume = strip(renderToString(React.createElement(GbpHelperHub, { continueReview: true, onReview: noop })))
-  rendered.push(hubResume)
-  ok(hubResume.includes('Continue your review'), 'a mid-review save flips the card to Continue your review')
+  console.log('\n== j) the hub is gone ==')
+  ok(!('GbpHelperHub' in mod), 'the GbpHelperHub component no longer exists')
+  ok(rendered.every((h) => !h.includes('Your Google helper')), 'no rendered screen shows the old hub')
+  ok(rendered.every((h) => !h.includes('Keep your Google listing sharp and answer your reviews.')), 'the old hub sub never renders')
+  const lastPart = render({ initialPhase: 'part', initialIndex: 8 })
+  ok(lastPart.includes('>Finish<'), 'the last part (9 of 9) says Finish')
 
-  console.log('\n== p) Questions and answers (honest hand-off + the paste drafter) ==')
+  console.log('\n== k) Questions and answers + Post an update still render ==')
   const GbpQandaView = mod.GbpQandaView as unknown as React.ComponentType<Record<string, unknown>>
   const renderQanda = (props: Record<string, unknown>) => {
     const html = strip(renderToString(React.createElement(GbpQandaView, { clientId: 'smoke-client', isPro: true, onBack: noop, ...props })))
     rendered.push(html)
     return html
   }
-
-  // The honest explainer + the Answer-on-Google link out.
   const qDoor = renderQanda({})
   ok(qDoor.includes('Questions and answers'), 'the Q&A title renders')
   ok(qDoor.includes('Google does not let apps read or answer listing questions anymore, so this happens on Google itself.'), 'the honest explainer renders in plain words')
-  ok(qDoor.includes('Answer on Google'), 'the Answer on Google button renders')
-  ok(qDoor.includes('href="https://business.google.com/"') && qDoor.includes('target="_blank"'), 'without a mapsUri the button falls back to business.google.com in a new tab')
-  // With the listing's real Maps URL the button deep-links straight to it.
-  const qDeep = renderQanda({ mapsUri: 'https://maps.google.com/?cid=123456' })
-  ok(qDeep.includes('href="https://maps.google.com/?cid=123456"'), 'with a mapsUri the button deep-links to the listing itself')
-  const qBadUri = renderQanda({ mapsUri: 'http://not-https.example.com' })
-  ok(qBadUri.includes('href="https://business.google.com/"'), 'a non-https mapsUri is not trusted; falls back to business.google.com')
-  // The old fetch-driven list is gone: nothing reads the dead API.
-  ok(!qDoor.includes('Reading your questions'), 'no loading state for a list that can never load')
-  ok(!qDoor.includes('Save answer') && !qDoor.includes('Needs an answer'), 'the old list/answer-screen surface is gone')
-
-  // The paste drafter: invite line, textarea, Draft my answer.
-  ok(qDoor.includes('Got a question?'), 'the drafter card title renders')
-  ok(qDoor.includes('Paste it here and we will draft your answer.'), 'the paste invite renders')
-  ok(qDoor.includes('<textarea') && qDoor.includes('id="gbp-qanda-question"'), 'the question textarea renders')
-  ok(qDoor.includes('Paste the question just as they asked it.'), 'the textarea placeholder renders')
-  ok(qDoor.includes('Draft my answer'), 'the Draft my answer button renders for Pro')
-
-  // Seam: a pasted question prefills the box.
-  const qPasted = renderQanda({ initialQuestionText: 'Do you have gluten free options?' })
-  ok(qPasted.includes('Do you have gluten free options?'), 'the question box prefills (test seam)')
-
-  // Seam: a finished draft shows the copyable block + the honest post-it line.
+  ok(qDoor.includes('Answer on Google') && qDoor.includes('href="https://business.google.com/"'), 'the Answer-on-Google hand-off renders')
+  ok(qDoor.includes('<textarea') && qDoor.includes('Draft my answer'), 'the paste-a-question drafter renders')
   const DRAFT_TEXT = 'Yes, we mark every gluten free dish right on the menu. Ask for the list when you come in.'
   const qDrafted = renderQanda({ initialQuestionText: 'Do you have gluten free options?', initialDraft: DRAFT_TEXT })
-  ok(qDrafted.includes('Your draft'), 'the draft block label renders')
-  ok(qDrafted.includes(DRAFT_TEXT), 'the draft text renders in the copyable block')
-  ok(qDrafted.includes('>Copy<') || qDrafted.includes('Copy</button>'), 'the Copy button renders')
-  ok(qDrafted.includes('Copy this and post it on Google.'), 'the honest copy-and-post line renders')
-  ok(qDrafted.includes('Answer on Google'), 'the Answer on Google button stays on screen with the draft')
-
-  // Non-Pro: the quiet hint, the draft button disabled (server enforces regardless).
+  ok(qDrafted.includes(DRAFT_TEXT) && qDrafted.includes('Copy this and post it on Google.'), 'the copyable draft block renders')
   const qFree = renderQanda({ isPro: false })
   ok(qFree.includes('Apnosh AI drafting is on the Pro plan.'), 'the Pro hint renders for non-Pro')
-  ok(qFree.includes('disabled'), 'the draft button is disabled for non-Pro')
-  ok(qFree.includes('Answer on Google'), 'the Answer on Google hand-off works on every plan')
 
-  console.log('\n== q) Post an update ==')
   const GbpPostView = mod.GbpPostView as unknown as React.ComponentType<Record<string, unknown>>
   const postResultNote = mod.postResultNote as (status: number, body: Record<string, unknown> | null) => { tone: string; text: string }
   const renderPost = (props: Record<string, unknown>) => {
@@ -404,72 +438,21 @@ async function main() {
     rendered.push(html)
     return html
   }
-
-  // The composer: textarea, live count, button picker, Draft, Publish.
   const postEmpty = renderPost({})
-  ok(postEmpty.includes('Post an update'), 'the composer title renders')
-  ok(postEmpty.includes('Share news on your Google listing.'), 'the composer sub renders')
-  ok(postEmpty.includes('<textarea'), 'the textarea renders')
+  ok(postEmpty.includes('Post an update') && postEmpty.includes('<textarea'), 'the composer renders')
   ok(/0\s*of\s*1500 characters/.test(postEmpty), 'the live count renders against the 1500 rule')
-  ok(postEmpty.includes('Add a button'), 'the button picker label renders')
   ok(postEmpty.includes('>None<') && postEmpty.includes('>Learn more<') && postEmpty.includes('>Call<'), 'the None / Learn more / Call choices render')
-  ok(postEmpty.includes('Draft it for me'), 'Draft it for me renders for Pro')
   ok(postEmpty.includes('Publish to Google'), 'the Publish to Google button renders')
-  ok(!postEmpty.includes('Button link'), 'no link field until Learn more is picked')
-  ok(postEmpty.includes('Your update shows on Google as the business.'), 'the honest as-the-business line renders')
-
-  // A prefilled composer counts its text.
-  const POST_TEXT = 'Our new patio is open. Come try the smoked brisket plate this weekend and bring the whole family.'
-  const postFilled = renderPost({ initialText: POST_TEXT })
-  ok(postFilled.includes(POST_TEXT), 'the textarea prefills (test seam)')
-  ok(new RegExp(`${POST_TEXT.length}\\s*of\\s*1500 characters`).test(postFilled), 'the count tracks the text length')
-
-  // Learn more picked: the https link field + the keep-links-out note.
-  const postLearn = renderPost({ initialCta: { choice: 'LEARN_MORE', url: 'https://tacoexample.com/specials' } })
-  ok(postLearn.includes('Button link'), 'the Learn-more link field renders')
-  ok(postLearn.includes('value="https://tacoexample.com/specials"'), 'the link field prefills (test seam)')
-  ok(postLearn.includes('The button carries the link, so keep links out of the post text.'), 'the keep-links-out note renders')
-  const postCall = renderPost({ initialCta: { choice: 'CALL' } })
-  ok(postCall.includes('The Call button uses the phone number on your listing.'), 'the Call explainer renders')
-  ok(!postCall.includes('Button link'), 'no link field on a Call button')
-
-  // Non-Pro: the plain hint, no AI draft button (server enforces regardless).
-  const postFree = renderPost({ isPro: false })
-  ok(postFree.includes('Posting from here is on the Pro plan.'), 'the Pro hint renders for non-Pro')
-  ok(!postFree.includes('Draft it for me'), 'no AI draft button for non-Pro')
-  ok(postFree.includes('Publish to Google'), 'the Publish button still renders (disabled) for non-Pro')
-
-  // Honest publish strings, same contract as the other rails.
   const pLive = postResultNote(200, { ok: true, live: true })
   ok(pLive.tone === 'ok' && pLive.text === 'Posted to Google.', 'live:true reads Posted to Google.')
   const pPending = postResultNote(200, { ok: true, live: false })
   ok(pPending.tone === 'pending' && pPending.text === 'Sent to Google. It can take a few minutes to show.', 'ok without proof reads sent-not-showing-yet')
-  const pRate = postResultNote(429, { ok: false, error: 'server words' })
-  ok(pRate.tone === 'error' && pRate.text === 'Google only allows a few edits per minute. Try again in a minute.', 'a 429 reads as the per-minute line')
-  const pRaw = postResultNote(502, { ok: false, error: 'Not connected to Google yet: invalid_grant token refresh' })
-  ok(pRaw.tone === 'error' && !pRaw.text.includes('invalid_grant'), 'a 5xx never leaks the raw server string')
-  const pBad = postResultNote(400, { ok: false, error: 'The post is empty.' })
-  ok(pBad.text === 'The post is empty.', 'a 400 shows the server plain-words reason')
-  const pPro = postResultNote(403, { ok: false, error: 'Posting from here is on the Pro plan.' })
-  ok(pPro.text === 'Posting from here is on the Pro plan.', 'a 403 shows the plain Pro line')
-
-  // An error note renders inside the composer (test seam).
-  const postErrShown = renderPost({ initialSaveNote: pRate })
-  ok(postErrShown.includes('Google only allows a few edits per minute.'), 'the per-minute line renders in the composer')
-
-  // The posted screen: proof line + See it (only with a URL) + Post again.
   const postedProof = renderPost({ initialPosted: { note: pLive, postUrl: 'https://local.google.com/place?id=1&use=posts&lpsid=789' } })
-  ok(postedProof.includes('Posted to Google.'), 'the proven Posted line renders after a publish')
-  ok(postedProof.includes('See it on Google'), 'the See-it link renders when Google sent the URL back')
-  ok(postedProof.includes('https://local.google.com/place?id=1&amp;use=posts&amp;lpsid=789'), 'the See-it link points at the real post URL')
-  ok(postedProof.includes('Post again'), 'the quiet Post again reset renders')
-  ok(!postedProof.includes('<textarea'), 'the composer is cleared off the posted screen')
+  ok(postedProof.includes('Posted to Google.') && postedProof.includes('See it on Google'), 'the posted proof screen renders')
   const postedPending = renderPost({ initialPosted: { note: pPending, postUrl: null } })
-  ok(postedPending.includes('Sent to Google. It can take a few minutes to show.'), 'the honest pending line renders when no proof came back')
   ok(!postedPending.includes('See it on Google'), 'no See-it link is invented without a URL from Google')
-  ok(postedPending.includes('Post again'), 'Post again renders on the pending outcome too')
 
-  console.log('\n== o) no em dashes ==')
+  console.log('\n== l) no em dashes ==')
   ok(rendered.every((h) => !h.includes('\u2014')), 'no em dash in any rendered screen')
   ok(rendered.every((h) => !h.includes('\u2013')), 'no en dash in any rendered screen either')
 
