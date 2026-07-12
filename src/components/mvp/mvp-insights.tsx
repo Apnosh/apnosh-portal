@@ -29,7 +29,7 @@ import {
   Search, ExternalLink, Image as ImageIcon, Check,
   Share2, ArrowRight,
   Footprints, ShoppingBag, Repeat, Lock, SlidersHorizontal,
-  Route, Heart, Megaphone,
+  Route, Heart, Megaphone, Sparkles,
 } from 'lucide-react'
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
@@ -256,6 +256,8 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
           <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.1 }}>Insights</div>
           {data?.businessName && <div style={{ fontSize: 12, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{data.businessName}</div>}
         </div>
+        {/* one button, reads the WHOLE funnel (the drop-off is cross-stage) */}
+        <Link href="/dashboard/insights/analyst" aria-label="AI Analyst" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, background: C.greenSoft, color: C.greenDk, border: `1px solid ${C.greenLine}`, borderRadius: 99, padding: '7px 13px', fontSize: 12.5, fontWeight: 700, textDecoration: 'none', flexShrink: 0 }}><Sparkles size={14} /> AI Analyst</Link>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
