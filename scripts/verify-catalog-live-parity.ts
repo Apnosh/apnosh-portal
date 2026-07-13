@@ -10,6 +10,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { createClient } from '@supabase/supabase-js'
 import { rowToService, renderGeneratedSnapshot, type CatalogRow } from '../src/lib/campaigns/data/catalog-db-shape'
+import { buildPricedCatalog, PRICED_CATALOG } from '../src/lib/campaigns/data/priced-catalog'
 
 function envVal(key: string): string {
   const raw = fs.readFileSync(path.join(process.cwd(), '.env.local'), 'utf8')
@@ -26,10 +27,22 @@ async function main() {
   const rendered = renderGeneratedSnapshot(rows.map(rowToService))
   const committed = fs.readFileSync(path.join(process.cwd(), 'src/lib/campaigns/data/catalog.generated.ts'), 'utf8')
 
-  if (rendered === committed) {
-    console.log(`PASS — ${rows.length} active services; DB renders byte-identical to catalog.generated.ts.`)
-    console.log('The database is already the faithful source of the live catalog. Safe to read from it at runtime.')
+  // Check 2 (the one that matters for the flip): the ASSEMBLED live catalog — the exact
+  // PricedService[] the composer consumes — deep-equals the frozen PRICED_CATALOG. Since the
+  // composer is a pure function of this array, identical input guarantees identical plans.
+  const live = buildPricedCatalog(rows.map(rowToService))
+  const assembledMatch = JSON.stringify(live) === JSON.stringify(PRICED_CATALOG)
+
+  if (rendered === committed && assembledMatch) {
+    console.log(`PASS — ${rows.length} active services.`)
+    console.log('  · DB renders byte-identical to catalog.generated.ts.')
+    console.log(`  · Assembled live catalog (${live.length}) deep-equals PRICED_CATALOG (${PRICED_CATALOG.length}) — the exact input the composer uses.`)
+    console.log('The database is a faithful source of the live catalog. Safe to read from it at runtime.')
     return
+  }
+  if (rendered === committed && !assembledMatch) {
+    console.log(`SNAPSHOT MATCHES but ASSEMBLED catalog differs (live ${live.length} vs PRICED_CATALOG ${PRICED_CATALOG.length}). Investigate buildPricedCatalog / EXTRA_SERVICES.`)
+    process.exit(2)
   }
 
   // Not identical — surface where they diverge so we can reconcile before any live read.
