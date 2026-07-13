@@ -107,6 +107,21 @@ export async function updateService(id: string, patch: ServicePatch): Promise<{ 
   return { ok: true }
 }
 
+/** Delete a card. Refuses if it's referenced by any campaign line — archive it instead so live
+ *  and past campaigns keep resolving. */
+export async function deleteService(id: string): Promise<{ ok: boolean; error?: string }> {
+  const a = await requireAdmin()
+  if (!a.ok) return { ok: false, error: a.error }
+  const { count, error: cErr } = await a.supabase
+    .from('campaign_line_items').select('id', { count: 'exact', head: true }).eq('service_id', id)
+  if (cErr) return { ok: false, error: cErr.message }
+  if ((count ?? 0) > 0) return { ok: false, error: `This card is used in ${count} campaign line${count === 1 ? '' : 's'}. Set it to Archived instead of deleting.` }
+  const { error } = await a.supabase.from('catalog_services').delete().eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admin/catalog')
+  return { ok: true }
+}
+
 /** Publish: regenerate catalog.generated.ts from the live ACTIVE rows so edits reach the plan
  *  builder. Writes the snapshot file (dev: HMR picks it up; prod: a deploy ships it). */
 export async function publishCatalog(): Promise<{ ok: boolean; error?: string; count?: number }> {

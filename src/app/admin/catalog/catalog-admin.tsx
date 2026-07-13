@@ -10,7 +10,7 @@ import Link from 'next/link'
 import { marginOf, costOf, OVERHEAD_MULT, MARGIN_FLOOR, HANDLERS, type PricedService, type PricePoint, type GoalPlay, type SystemGoal, type Tier, type Handler } from '@/lib/campaigns/data/priced-catalog'
 import type { CatalogRow } from '@/lib/campaigns/data/catalog-db-shape'
 import { rowToService } from '@/lib/campaigns/data/catalog-db-shape'
-import { updateService, createService, publishCatalog, type ServicePatch, type NewService } from './actions'
+import { updateService, createService, deleteService, publishCatalog, type ServicePatch, type NewService } from './actions'
 
 const SECTION_LABEL: Record<string, string> = {
   foundation: 'Foundations', awareness: 'Get discovered', capture: 'Capture guests', convert: 'Turn into visits',
@@ -43,6 +43,7 @@ export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: 
   const [rows, setRows] = useState<CatalogRow[]>(initial)
   const [editId, setEditId] = useState<string | null>(initialOpenId ?? null)
   const [creating, setCreating] = useState(false)
+  const [createSeed, setCreateSeed] = useState<CatalogRow | null>(null)
   const [dirty, setDirty] = useState(false)
   const [toast, setToast] = useState<{ msg: string; bad?: boolean } | null>(null)
   const [pending, start] = useTransition()
@@ -57,8 +58,19 @@ export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: 
   }
   function onCreated(row: CatalogRow) {
     setRows((rs) => [row, ...rs])
-    setDirty(true); setCreating(false)
+    setDirty(true); setCreating(false); setCreateSeed(null)
     flash(`Created "${row.plain_name || row.name}". Publish to make it live.`)
+  }
+  function onDeleted(id: string) {
+    setRows((rs) => rs.filter((r) => r.id !== id))
+    setDirty(true); setEditId(null); flash('Card deleted.')
+  }
+  // Duplicate = open the create builder pre-filled from a card, with a fresh id.
+  const startNew = () => { setCreateSeed(null); setCreating(true) }
+  const startDuplicate = (r: CatalogRow) => {
+    setEditId(null)
+    setCreateSeed({ ...r, id: '', name: r.name + ' copy', plain_name: r.plain_name ? r.plain_name + ' copy' : '', status: 'draft' })
+    setCreating(true)
   }
 
   const editing = editId ? byId[editId] : null
@@ -76,7 +88,7 @@ export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: 
             <span className="text-[12.5px] font-semibold rounded-md px-3 py-1.5 bg-white text-ink shadow-sm">Services</span>
             <Link href="/admin/catalog/campaigns" className="text-[12.5px] font-medium rounded-md px-3 py-1.5 text-ink-3 hover:text-ink">Campaigns</Link>
           </div>
-          <button onClick={() => setCreating(true)} disabled={preview} className="inline-flex items-center gap-1.5 text-[13px] font-semibold rounded-lg px-3.5 py-2 bg-brand text-white disabled:opacity-50">＋ New card</button>
+          <button onClick={startNew} disabled={preview} className="inline-flex items-center gap-1.5 text-[13px] font-semibold rounded-lg px-3.5 py-2 bg-brand text-white disabled:opacity-50">＋ New card</button>
           {dirty && <span className="text-[12px] text-amber-600 font-medium">Unpublished changes</span>}
           <button
             disabled={pending || preview}
@@ -115,8 +127,8 @@ export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: 
         </section>
       ))}
 
-      {editing && <EditDrawer key={editing.id} mode="edit" row={editing} existingIds={rows.map((r) => r.id)} preview={preview} onClose={() => setEditId(null)} onSaved={onSaved} onCreated={onCreated} flash={flash} />}
-      {creating && <EditDrawer key="__new" mode="create" row={blankRow()} existingIds={rows.map((r) => r.id)} preview={preview} onClose={() => setCreating(false)} onSaved={onSaved} onCreated={onCreated} flash={flash} />}
+      {editing && <EditDrawer key={editing.id} mode="edit" row={editing} existingIds={rows.map((r) => r.id)} preview={preview} onClose={() => setEditId(null)} onSaved={onSaved} onCreated={onCreated} onDeleted={onDeleted} onDuplicate={startDuplicate} flash={flash} />}
+      {creating && <EditDrawer key={createSeed?.id ?? '__new'} mode="create" row={createSeed ?? blankRow()} existingIds={rows.map((r) => r.id)} preview={preview} onClose={() => { setCreating(false); setCreateSeed(null) }} onSaved={onSaved} onCreated={onCreated} onDeleted={onDeleted} onDuplicate={startDuplicate} flash={flash} />}
       {toast && <div className={'fixed bottom-5 left-1/2 -translate-x-1/2 z-50 text-[13px] font-medium text-white rounded-lg px-4 py-2.5 shadow-lg ' + (toast.bad ? 'bg-rose-600' : 'bg-ink')}>{toast.msg}</div>}
     </div>
   )
@@ -134,7 +146,7 @@ function toPricePoint(e: EPrice): PricePoint {
   return { ...e.orig, kind: e.kind, amount: e.amount, unit: e.kind === 'per-unit' ? (e.unit.trim() || 'unit') : undefined, cost }
 }
 
-function EditDrawer({ mode, row, existingIds, preview, onClose, onSaved, onCreated, flash }: { mode: 'create' | 'edit'; row: CatalogRow; existingIds: string[]; preview: boolean; onClose: () => void; onSaved: (id: string, patch: ServicePatch) => void; onCreated: (row: CatalogRow) => void; flash: (m: string, bad?: boolean) => void }) {
+function EditDrawer({ mode, row, existingIds, preview, onClose, onSaved, onCreated, onDeleted, onDuplicate, flash }: { mode: 'create' | 'edit'; row: CatalogRow; existingIds: string[]; preview: boolean; onClose: () => void; onSaved: (id: string, patch: ServicePatch) => void; onCreated: (row: CatalogRow) => void; onDeleted: (id: string) => void; onDuplicate: (row: CatalogRow) => void; flash: (m: string, bad?: boolean) => void }) {
   const creating = mode === 'create'
   const [id, setId] = useState(row.id)
   const [idTouched, setIdTouched] = useState(!creating)
@@ -195,17 +207,54 @@ function EditDrawer({ mode, row, existingIds, preview, onClose, onSaved, onCreat
     })
   }
 
+  function del() {
+    if (preview) { flash('Preview mode: deleting is off'); return }
+    if (typeof window !== 'undefined' && !window.confirm(`Delete "${plain || name || row.id}"? This can't be undone.`)) return
+    start(async () => {
+      const r = await deleteService(row.id)
+      if (r.ok) onDeleted(row.id); else flash(r.error || 'Delete failed', true)
+    })
+  }
+
   const field = 'w-full text-[13px] text-ink border border-ink-6 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-brand'
   const lbl = 'text-[11px] font-semibold uppercase tracking-wide text-ink-3'
+  // a customer-facing snapshot of the card, straight from the form state
+  const previewPrice = prices.length
+    ? prices.map((e) => '$' + (e.amount || 0).toLocaleString() + (e.kind === 'monthly' ? '/mo' : e.kind === 'per-unit' ? '/' + (e.unit.trim() || 'unit') : '')).join(' + ')
+    : 'No price'
+  const previewInc = included.map((x) => x.trim()).filter(Boolean).slice(0, 4)
   return (
     <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-ink/30" />
       <div className="relative w-full max-w-[460px] h-full bg-white shadow-xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 z-10 bg-white border-b border-ink-6 px-5 py-3 flex items-center justify-between">
-          <div className="text-[14px] font-semibold text-ink">{creating ? 'New card' : (plain || name || row.id)}</div>
-          <button onClick={onClose} className="text-ink-3 text-[13px]">Close</button>
+        <div className="sticky top-0 z-10 bg-white border-b border-ink-6 px-5 py-3 flex items-center justify-between gap-3">
+          <div className="text-[14px] font-semibold text-ink truncate">{creating ? 'New card' : (plain || name || row.id)}</div>
+          <div className="flex items-center gap-3 shrink-0">
+            {!creating && <button onClick={() => onDuplicate(row)} className="text-[12px] text-ink-3 hover:text-ink">Duplicate</button>}
+            {!creating && <button onClick={del} disabled={saving} className="text-[12px] text-rose-600 hover:text-rose-700">Delete</button>}
+            <button onClick={onClose} className="text-ink-3 text-[13px]">Close</button>
+          </div>
         </div>
         <div className="p-5 space-y-4">
+          {/* live customer-facing preview */}
+          <div className="rounded-xl bg-bg-2/50 p-3">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-ink-4 mb-1.5">How the card looks</div>
+            <div className="rounded-xl bg-white border border-ink-6 p-3.5 shadow-sm">
+              <div className="text-[15px] font-semibold text-ink">{plain || name || 'Untitled card'}</div>
+              {desc.trim() && <div className="text-[12.5px] text-ink-3 mt-1 leading-snug">{desc.trim()}</div>}
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <span className="text-[15px] font-bold text-ink">{previewPrice}</span>
+                <span className="text-[11px] text-ink-4">· {HANDLERS[handler as Handler]?.label ?? handler}</span>
+              </div>
+              {previewInc.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {previewInc.map((it, i) => <li key={i} className="text-[12px] text-ink-2 flex gap-1.5"><span className="text-emerald-600">✓</span>{it}</li>)}
+                  {included.filter((x) => x.trim()).length > previewInc.length && <li className="text-[11px] text-ink-4">+ {included.filter((x) => x.trim()).length - previewInc.length} more</li>}
+                </ul>
+              )}
+            </div>
+          </div>
+
           {/* identity */}
           <label className="block"><span className={lbl}>Card name</span><input className={field} value={name} onChange={(e) => onName(e.target.value)} placeholder="e.g. Menu photo refresh" /></label>
           <div className="grid grid-cols-2 gap-3">
