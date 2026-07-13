@@ -83,6 +83,8 @@ export interface StageGroup {
   label: string
   total: number | null
   state: 'has' | 'connect' | 'soon'
+  /** the by-source ids that roll up into this group (the specifics under it) */
+  sourceIds: string[]
 }
 
 export interface ComputedStage {
@@ -350,7 +352,7 @@ export function computeStagesFrom(
         total != null ? 'has'
           : gs.some(s => s.status === 'AVAILABLE_NOT_CONNECTED' || s.status === 'ERROR') ? 'connect'
             : 'soon'
-      return { key: g.key, label: g.label, total, state }
+      return { key: g.key, label: g.label, total, state, sourceIds: gs.map(s => s.id) }
     })
 
     stages.push({
