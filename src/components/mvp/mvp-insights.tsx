@@ -20,7 +20,7 @@
  * from /api/dashboard/insights-detail, keyed on clientId, so the home stays lean.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -29,11 +29,13 @@ import {
   Search, ExternalLink, Image as ImageIcon, Check,
   Share2, ArrowRight,
   Footprints, ShoppingBag, Repeat, Lock, SlidersHorizontal,
-  Route, Heart, Megaphone,
+  Route, Heart, Megaphone, Sparkles,
 } from 'lucide-react'
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
-import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
+import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
+import type { ComputedStage, StageSourceView } from '@/lib/insights/compute-stages'
+import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
@@ -92,6 +94,15 @@ interface InsightsDetail {
   profileVisits?: number
   followersGained?: number
   socialEngagement?: number
+  // Phase 2: the honest outcome-funnel stages (headline == sum of CONNECTED
+  // sources). When present, the stage breakdowns are driven by these so the
+  // boxes reconcile by construction.
+  stages?: ComputedStage[]
+}
+
+// Pull one computed stage out of the detail payload by its funnel stage number.
+function computedStage(detail: InsightsDetail | null, n: number): ComputedStage | undefined {
+  return detail?.stages?.find((s) => s.stage === n)
 }
 
 // Map the lazy-loaded InsightsDetail into the pure FeedInput the breakdown
@@ -245,6 +256,8 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
           <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.1 }}>Insights</div>
           {data?.businessName && <div style={{ fontSize: 12, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{data.businessName}</div>}
         </div>
+        {/* one button, reads the WHOLE funnel (the drop-off is cross-stage) */}
+        <Link href="/dashboard/insights/analyst" aria-label="AI Analyst" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, background: C.greenSoft, color: C.greenDk, border: `1px solid ${C.greenLine}`, borderRadius: 99, padding: '7px 13px', fontSize: 12.5, fontWeight: 700, textDecoration: 'none', flexShrink: 0 }}><Sparkles size={14} /> AI Analyst</Link>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -263,41 +276,215 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
   )
 }
 
-function Body({ data, focusKey, detail, campaigns }: { data: InsightsData; focusKey?: string; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null; clientId?: string; campaigns: Record<string, StageCampaign[]> | null }) {
+// The five funnel stages, in funnel order — the swipeable header moves through
+// these, so every stage is reachable from every stage and a deep-link lands on
+// exactly the stage that was tapped.
+const STAGE_ORDER: Array<{ key: string; label: string }> = [
+  { key: 'shown', label: 'Awareness' },
+  { key: 'engaged', label: 'Interest' },
+  { key: 'moved', label: 'Customer actions' },
+  { key: 'camein', label: 'Orders' },
+  { key: 'back', label: 'Retention' },
+]
+
+function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsData; focusKey?: string; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null; clientId?: string; campaigns: Record<string, StageCampaign[]> | null }) {
   const metrics = data.metrics
   const byKey = new Map(metrics.map((m) => [m.key, m]))
-  // one tapped funnel stage drives the whole page (no in-page selector). Each stage
-  // shows the SAME clean graph the home uses (MetricCard) for its metric; Interest
-  // has no Google metric, so it shows the social/content engagement view instead.
-  const focus = resolveFocus(focusKey)
-  const mv = byKey.get(focus.metric)
+  // The tapped funnel stage seeds the view; SWIPING the graph block moves
+  // between stages (dots sit below the histogram) and the source cards below
+  // re-render to match. The URL follows (replaceState) so a refresh or share
+  // keeps the same stage.
+  const [sel, setSel] = useState<string | undefined>(focusKey)
+  useEffect(() => { if (focusKey) setSel(focusKey) }, [focusKey])
+  const focus = resolveFocus(sel)
+  const idx = Math.max(0, STAGE_ORDER.findIndex((s) => s.key === focus.stageKey))
+
+  // each slide's chart reports its picked range up, so the source cards below
+  // the dots stay scoped to the SAME window the visible chart shows
+  const [ranges, setRanges] = useState<Record<string, string>>({})
+  const rangeFor = (k: string) => (r: string) => setRanges((prev) => (prev[k] === r ? prev : { ...prev, [k]: r }))
+
+  const swipeRef = useRef<HTMLDivElement>(null)
+  const progRef = useRef(false) // true while WE scroll it (deep-link) — don't re-pick
+  const pick = (k: string) => {
+    setSel(k)
+    try { window.history.replaceState(null, '', `/dashboard/insights?stage=${k}`) } catch { /* ignore */ }
+  }
+  // keep the carousel on the selected stage (mount + deep-link arriving late)
+  useEffect(() => {
+    const el = swipeRef.current
+    if (!el) return
+    const want = idx * el.clientWidth
+    if (Math.abs(el.scrollLeft - want) < 2) return
+    progRef.current = true
+    el.scrollTo({ left: want, behavior: 'auto' })
+    const t = setTimeout(() => { progRef.current = false }, 120)
+    return () => clearTimeout(t)
+  }, [idx])
+  // a finished swipe picks the stage it landed on
+  const onSwipe = () => {
+    const el = swipeRef.current
+    if (!el || progRef.current) return
+    const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
+    const k = STAGE_ORDER[i]?.key
+    if (k && k !== focus.stageKey) pick(k)
+  }
 
   return (
-    <div style={{ padding: '14px 18px 44px' }}>
+    <div style={{ padding: '14px 0 44px' }}>
 
-      {/* the tapped stage's own name — reflects the funnel stage you came from */}
-      <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1 }}>{focus.title}</div>
-      {focus.sub && <div style={{ fontSize: 13, color: C.faint, margin: '5px 0 18px' }}>{focus.sub}</div>}
+      {/* SWIPEABLE GRAPHS — each slide is a stage's title + number + trend +
+          histogram; swipe the graph left/right to change stages */}
+      <div ref={swipeRef} onScroll={onSwipe} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', alignItems: 'flex-start' }}>
+        {STAGE_ORDER.map((s) => {
+          const smv = byKey.get(resolveFocus(s.key).metric)
+          return (
+            <div key={s.key} style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'center', padding: '0 18px' }}>
+              <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1, marginBottom: 14 }}>{s.label}</div>
+              <StageTop stageKey={s.key} detail={detail} mv={smv} clientId={clientId} onRange={rangeFor(s.key)} />
+            </div>
+          )
+        })}
+      </div>
 
-      <StageView stageKey={focus.stageKey} title={focus.title} detail={detail} mv={mv} />
+      {/* the swipe dots — BELOW the histogram; tappable to jump */}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center', margin: '14px 18px 18px' }}>
+        {STAGE_ORDER.map((s, i) => (
+          <button key={s.key} aria-label={s.label} onClick={() => pick(s.key)} style={{ width: i === idx ? 18 : 6, height: 6, borderRadius: 99, border: 'none', padding: 0, cursor: 'pointer', background: i === idx ? C.green : C.line, transition: 'width .2s, background .2s' }} />
+        ))}
+      </div>
 
-      {/* the live campaigns pushing on THIS stage's number */}
-      <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
+      {/* everything below the dots follows the ACTIVE stage: its by-source
+          cards (scoped to the chart's picked range), extras, and campaigns */}
+      <div style={{ padding: '0 18px' }}>
+        <StageBottom stageKey={focus.stageKey} detail={detail} clientId={clientId} range={ranges[focus.stageKey] ?? '30d'} />
+        <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
+      </div>
     </div>
   )
 }
 
-// Route each funnel stage to its reconciling view. Awareness / Interest /
-// Customer actions each show a headline that EQUALS the sum of clearly-labeled
-// source pieces (built by the tested insights-feed helpers). Orders + Retention
-// keep the trusted metric graph.
-function StageView({ stageKey, title, detail, mv }: { stageKey: string; title: string; detail: InsightsDetail | null; mv: MetricView | undefined }) {
+// ── The swipeable TOP of a stage: number + trend + histogram (no cards). ──
+function StageTop({ stageKey, detail, mv, clientId, onRange }: { stageKey: string; detail: InsightsDetail | null; mv?: MetricView; clientId?: string; onRange?: (r: string) => void }) {
+  if (!detail) return <FeedLoading />
   switch (stageKey) {
-    case 'shown': return <AwarenessStage detail={detail} mv={mv} />
-    case 'engaged': return <InterestStage detail={detail} />
-    case 'moved': return <ActionsStage detail={detail} mv={mv} />
-    default: return mv ? <MetricCard mv={mv} /> : <NoMetricYet title={title} />
+    case 'shown': {
+      const cs = computedStage(detail, 1)
+      const feed = cs ? stageFeedFrom(cs) : buildAwarenessFeed(toFeedInput(detail))
+      return mv && cs
+        ? <StageWithChart mv={mv} label="Times you showed up" cs={cs} stageNumber={1} clientId={clientId} unit="Times you showed up" showBreakdown={false} onRange={onRange} />
+        : <StageHero total={feed.headline} label="Times you showed up" caption={feed.caption} />
+    }
+    case 'engaged': {
+      const cs = computedStage(detail, 2)
+      if (cs?.isEmpty) return <EmptyStageHero label="People who looked closer" note="Connect Instagram (or add your menu link) to measure this." />
+      const feed = cs ? stageFeedFrom(cs) : buildInterestFeed(toFeedInput(detail))
+      return mv && cs
+        ? <StageWithChart mv={mv} label="People who looked closer" cs={cs} stageNumber={2} clientId={clientId} unit="Looked closer" showBreakdown={false} onRange={onRange} />
+        : <StageHero total={feed.headline} label="People who looked closer" caption={feed.caption} />
+    }
+    case 'moved': {
+      const cs = computedStage(detail, 3)
+      const feed = cs ? stageFeedFrom(cs) : buildActionsFeed(toFeedInput(detail))
+      return mv && cs
+        ? <StageWithChart mv={mv} label="Moves people made" cs={cs} stageNumber={3} clientId={clientId} unit="Moves people made" showBreakdown={false} onRange={onRange} />
+        : <StageHero total={feed.headline} label="Moves people made" caption={feed.caption} />
+    }
+    case 'camein': {
+      const cs = computedStage(detail, 4)
+      if (cs?.isEmpty) return <SalesLocked note={cs.note} />
+      if (cs) { const feed = stageFeedFrom(cs); return <StageHero total={feed.headline} label="Guests served" caption={feed.caption} /> }
+      return mv ? <MetricCard mv={mv} /> : <NoMetricYet title="Orders" />
+    }
+    case 'back': {
+      const cs = computedStage(detail, 5)
+      if (cs && !cs.isEmpty) {
+        const registerLive = cs.sources.some((s) => s.id === 'pos_repeat_customers' && s.counted)
+        if (mv && !registerLive) return <StageWithChart mv={mv} label="New reviews" cs={cs} stageNumber={5} clientId={clientId} unit="Came back" showBreakdown={false} onRange={onRange} />
+        const feed = stageFeedFrom(cs)
+        return <StageHero total={feed.headline} label="Guests who came back" caption={feed.caption} />
+      }
+      return mv ? <MetricCard mv={mv} /> : <NoMetricYet title="Retention" />
+    }
+    default: return null
   }
+}
+
+// ── The BOTTOM of a stage (under the dots): by-source cards scoped to the
+//    visible chart's range, plus the stage's extras. ──
+function StageBottom({ stageKey, detail, clientId, range }: { stageKey: string; detail: InsightsDetail | null; clientId?: string; range: string }) {
+  if (!detail) return null
+  switch (stageKey) {
+    case 'shown': {
+      const cs = computedStage(detail, 1)
+      return (
+        <>
+          {cs
+            ? <RangeSources cs={cs} stageNumber={1} clientId={clientId} unit="Times you showed up" title="Views by source" range={range} />
+            : <WhatFeedsThis feed={buildAwarenessFeed(toFeedInput(detail))} unit="Times you showed up" />}
+          {detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
+        </>
+      )
+    }
+    case 'engaged': {
+      const cs = computedStage(detail, 2)
+      return (
+        <>
+          {cs
+            ? <RangeSources cs={cs} stageNumber={2} clientId={clientId} unit="Looked closer" title="Interest by source" range={range} />
+            : <WhatFeedsThis feed={buildInterestFeed(toFeedInput(detail))} unit="Looked closer" />}
+          {detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} />}
+          {!detail.socialConnected && <ConnectSocial connected={false} />}
+        </>
+      )
+    }
+    case 'moved': {
+      const cs = computedStage(detail, 3)
+      return cs
+        ? <RangeSources cs={cs} stageNumber={3} clientId={clientId} unit="Moves people made" title="Actions by source" range={range} />
+        : <WhatFeedsThis feed={buildActionsFeed(toFeedInput(detail))} unit="Moves people made" />
+    }
+    case 'camein': {
+      const cs = computedStage(detail, 4)
+      return cs ? <SourceBreakdown stage={cs} unit="Guests served" showReconcile={!cs.isEmpty} /> : null
+    }
+    case 'back': {
+      const cs = computedStage(detail, 5)
+      return cs ? <RangeSources cs={cs} stageNumber={5} clientId={clientId} unit="Came back" title="Retention by source" range={range} /> : null
+    }
+    default: return null
+  }
+}
+
+// A stage with genuinely nothing to measure yet: a dash, never a fake 0.
+function EmptyStageHero({ label, note }: { label: string; note: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>{label}</div>
+      <div style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.faint, marginTop: 2 }}>{DASH}</div>
+      <div style={{ fontSize: 13, color: C.faint, marginTop: 6, lineHeight: 1.45 }}>{note}</div>
+    </div>
+  )
+}
+
+// The by-source cards, re-scoped to the chart's picked range (driven by the
+// range the visible slide reported up — never its own separate state).
+function RangeSources({ cs, stageNumber, clientId, unit, title, range }: { cs: ComputedStage; stageNumber: number; clientId?: string; unit: string; title: string; range: string }) {
+  const { stage, sub } = useRangeStage(cs, stageNumber, clientId, range)
+  return <SourceBreakdown stage={stage ?? cs} unit={unit} title={title} sub={sub} showReconcile={false} showExtras={false} />
+}
+
+// The graceful Sales collapse: honest about what we cannot see yet, with the one
+// door that unlocks it. Actions remains the visible endpoint of the funnel.
+function SalesLocked({ note }: { note?: string }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '44px 24px' }}>
+      <div style={{ width: 52, height: 52, borderRadius: 14, background: C.bg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Lock size={22} color={C.faint} /></div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginTop: 14 }}>We cannot see sales yet</div>
+      <div style={{ fontSize: 12.5, color: C.faint, marginTop: 6, lineHeight: 1.5, maxWidth: 280, margin: '6px auto 0' }}>{note || 'Connect your register to measure guests and revenue.'}</div>
+      <Link href="/dashboard/connect-accounts" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 16, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, borderRadius: 99, padding: '10px 16px', textDecoration: 'none' }}>Connect your register <ArrowRight size={15} /></Link>
+    </div>
+  )
 }
 
 // ── The stage hero: one big reconciling number + a plain caption of what it's
@@ -352,66 +539,249 @@ function WhatFeedsThis({ feed, unit }: { feed: StageFeed; unit: string }) {
   )
 }
 
-// A trend graph for a stage (per-day bars over a range). Reuses the home chart so
-// the two surfaces match. It's a TREND under its own "over time" heading, kept
-// separate from the reconciling headline above it.
-function StageTrend({ mv, noun }: { mv: MetricView; noun: string }) {
-  const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
+// en-dash placeholder for an absent number. Deliberately NOT an em dash (house
+// style bans em dashes); it reads as "no number here", never a real 0.
+const DASH = '–'
+
+// Friendly "Jul 3, 2026" for a manual entry's timestamp; '' when unknown/invalid.
+function friendlyDate(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+// ── One STATE-AWARE source card. Every source in a stage renders one of these, so
+//    the client always sees exactly which sources make up the number and what is
+//    missing. Six looks, one per state:
+//     CONNECTED+data → the value (hero gets a green accent)
+//     CONNECTED+NO_DATA → a calm dash + "no activity yet" (connected, truly zero)
+//     AVAILABLE_NOT_CONNECTED → dimmed + "Connect to see" (or the exact config hint)
+//     ERROR → alert-tinted + "Reconnect" (never "Connect", never raw error text)
+//     COMING_SOON → ghost card + "Coming soon" (never a number)
+//     MANUAL_ENTRY → value + a distinct dashed-amber MANUAL tag + who/when line
+//    `small` (context / more-detail cards) drops the NO_DATA subline to stay tidy. ──
+export function SourceStateCard({ s, hero, small }: { s: StageSourceView; hero?: boolean; small?: boolean }) {
+  const base: React.CSSProperties = {
+    borderRadius: 13, padding: small ? '11px 6px' : '13px 6px', textAlign: 'center',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    gap: 4, minHeight: small ? 70 : 80,
+  }
+  const numFs = small ? 19 : 22
+  const label = <span style={{ fontSize: small ? 11 : 11.5, color: C.mute, lineHeight: 1.3 }}>{s.shortLabel || s.displayName}</span>
+  const num = (v: number, color = C.ink) => <span style={{ fontFamily: DISPLAY, fontSize: numFs, fontWeight: 600, color, letterSpacing: '-.01em' }}>{v.toLocaleString()}</span>
+  const dash = <span style={{ fontFamily: DISPLAY, fontSize: numFs, fontWeight: 600, color: C.faint }}>{DASH}</span>
+
+  // MANUAL_ENTRY — a human typed it. DISTINCT on purpose so a client can tell a
+  // hand-entered number from a platform one at a glance: dashed amber border, a
+  // MANUAL tag, and a subtle who/when line.
+  if (s.status === 'MANUAL_ENTRY') {
+    const who = s.manualBy ? `entered by ${s.manualBy}` : 'entered by hand'
+    const when = friendlyDate(s.manualAt)
+    return (
+      <div style={{ ...base, background: '#fffdf5', border: `1px dashed ${C.amber}` }}>
+        <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.07em', color: '#976a12', background: '#fbeecb', borderRadius: 99, padding: '2px 7px' }}>MANUAL</span>
+        {s.value != null ? num(s.value) : dash}
+        {label}
+        <span style={{ fontSize: 9, color: C.faint, lineHeight: 1.3 }}>{who}{when ? ` on ${when}` : ''}</span>
+      </div>
+    )
+  }
+
+  // ERROR — the connection is broken (not absent). Calm alert tint, always
+  // "Reconnect", never a raw error string (the reason lives in admin).
+  if (s.status === 'ERROR') {
+    return (
+      <div style={{ ...base, background: C.coralBg, border: `1px solid ${C.coral}44` }}>
+        {dash}
+        {label}
+        <span style={{ fontSize: 10, fontWeight: 700, color: C.coral }}>{sourceActionVerb(s.status) ?? 'Reconnect'}</span>
+      </div>
+    )
+  }
+
+  // COMING_SOON — no adapter yet. Ghost card, never a number.
+  if (s.status === 'COMING_SOON') {
+    return (
+      <div style={{ ...base, background: '#fbfcfb', border: `1px dashed ${C.line}`, opacity: 0.75 }}>
+        {label}
+        <span style={{ fontSize: 10, color: C.faint }}>Coming soon</span>
+      </div>
+    )
+  }
+
+  // AVAILABLE_NOT_CONNECTED — the integration exists but isn't flowing. Dimmed,
+  // with a Connect affordance (or the exact config hint when one is needed, e.g.
+  // GA4 menu/order sources that need a path/domain set in settings).
+  if (s.status === 'AVAILABLE_NOT_CONNECTED') {
+    const cfg = SOURCE_BY_ID[s.id]?.configMissingReason
+    return (
+      <div style={{ ...base, background: '#fff', border: `0.5px solid ${C.line}`, opacity: 0.6 }}>
+        {label}
+        <span style={{ fontSize: 10, color: C.greenDk, fontWeight: 600, lineHeight: 1.3 }}>{cfg ?? `${sourceActionVerb(s.status) ?? 'Connect'} to see`}</span>
+      </div>
+    )
+  }
+
+  // CONNECTED + data — a genuine queried number. Hero (the stage's primary
+  // sub-metric) gets a light green accent.
+  if (s.status === 'CONNECTED' && s.hasData && s.value != null) {
+    return (
+      <div style={{ ...base, background: hero ? C.greenSoft : '#fff', border: hero ? `1px solid ${C.greenLine}` : `0.5px solid ${C.line}` }}>
+        {num(s.value, hero ? C.greenDk : C.ink)}
+        {label}
+      </div>
+    )
+  }
+
+  // CONNECTED + NO_DATA — connected and genuinely zero. A dash (never a real 0)
+  // plus a calm hint so it never reads as broken.
   return (
-    <Section title="Over time">
-      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={noun} />
+    <div style={{ ...base, background: '#fff', border: `0.5px solid ${C.line}` }}>
+      {dash}
+      {label}
+      {!small && <span style={{ fontSize: 9.5, color: C.faint }}>no activity yet</span>}
+    </div>
+  )
+}
+
+// A clearly-separated group of source cards that are NOT in the headline sum
+// (context / drill-downs). Its own heading keeps them from implying they feed it.
+function SeparatedSources({ title, sources }: { title: string; sources: StageSourceView[] }) {
+  const cols = Math.min(3, Math.max(2, sources.length))
+  return (
+    <>
+      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, margin: '16px 0 8px' }}>{title}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
+        {sources.map((s) => <SourceStateCard key={s.id} s={s} small />)}
+      </div>
+    </>
+  )
+}
+
+// ── State-aware "What feeds this": ONE card per source, straight from the honest
+//    computed stage (headline == sum of CONNECTED/counted sources). The counted
+//    sources sit in the sum group and add up to the headline in plain sight;
+//    context (audience growth, revenue) and drill-downs are shown but clearly
+//    separated so they never imply they feed the number. No source is dropped. ──
+export function SourceBreakdown({ stage, unit, showReconcile = true, showExtras = true, title = 'What feeds this', sub = 'last 30 days' }: { stage: ComputedStage; unit: string; showReconcile?: boolean; showExtras?: boolean; title?: string; sub?: string }) {
+  const sums = stage.sources.filter((s) => s.feedRole === 'sum')
+  const context = stage.sources.filter((s) => s.feedRole === 'context')
+  const drills = stage.sources.filter((s) => s.feedRole === 'drilldown')
+  const headline = stage.headline ?? 0
+  const cols = Math.min(4, Math.max(2, sums.length))
+  return (
+    <Section title={title} sub={sub}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
+        {sums.map((s) => <SourceStateCard key={s.id} s={s} hero={s.isHero} />)}
+      </div>
+      {showReconcile && (
+        <div style={{ fontSize: 12.5, color: C.faint, marginTop: 10, textAlign: 'center' }}>Adds up to <b style={{ color: C.greenDk, fontFamily: DISPLAY, fontSize: 14 }}>{headline.toLocaleString()}</b> {unit.toLowerCase()}</div>
+      )}
+      {showExtras && context.length > 0 && <SeparatedSources title="Also tracked · not part of this number" sources={context} />}
+      {showExtras && drills.length > 0 && <SeparatedSources title="More detail · not part of this number" sources={drills} />}
     </Section>
+  )
+}
+
+// chart range chip -> the funnel window computeStages supports (+ owner label).
+// A custom range has no fixed window, so it keeps the 30-day snapshot.
+const RANGE_WINDOW: Record<string, { w: string; label: string } | null> = {
+  '7d': { w: '7d', label: 'last 7 days' },
+  '30d': { w: '30d', label: 'last 30 days' },
+  '1y': { w: '12m', label: 'last year' },
+  custom: null,
+}
+
+// ── Re-scope a computed stage to a picked chart range: refetch from the light
+//    insights-stages endpoint and swap it in (falling back to the 30-day `cs`
+//    while loading or on any hiccup — never a blank). ──
+function useRangeStage(cs: ComputedStage | undefined, stageNumber: number | undefined, clientId: string | undefined, range: string): { stage: ComputedStage | undefined; sub: string } {
+  const [rangeStage, setRangeStage] = useState<ComputedStage | undefined>(cs)
+  const [sub, setSub] = useState('last 30 days')
+  useEffect(() => {
+    const picked = RANGE_WINDOW[range] ?? null
+    // 30 days, custom, or no way to fetch → the snapshot we already have
+    if (!picked || picked.w === '30d' || !clientId || stageNumber == null) {
+      setRangeStage(cs)
+      setSub(range === 'custom' ? 'recent' : 'last 30 days')
+      return
+    }
+    let live = true
+    setSub(picked.label)
+    fetch(`/api/dashboard/insights-stages?clientId=${clientId}&window=${picked.w}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!live) return
+        const found = (j?.stages as ComputedStage[] | undefined)?.find((s) => s.stage === stageNumber)
+        setRangeStage(found ?? cs)
+      })
+      .catch(() => { if (live) setRangeStage(cs) })
+    return () => { live = false }
+  }, [range, clientId, stageNumber, cs])
+  return { stage: rangeStage ?? cs, sub }
+}
+
+// ── A charted stage, in the shape the owner trusts (the home MetricCard): the big
+//    number + an up/down trend on TOP, the histogram under it. ONE useChartRange
+//    drives the number, the delta AND the bars, so the range chips move ALL of
+//    them together. The trend is honest about staleness: when the freshest data
+//    is too old for a real "this period vs last" claim, it shows "Updated <when>"
+//    instead of a frozen arrow. In the swipeable layout the source cards live
+//    BELOW the dots (showBreakdown=false + onRange reports the picked range up so
+//    the cards outside stay scoped to this chart's window). ──
+function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNumber, showBreakdown = true, onRange }: { mv: MetricView; label: string; cs: ComputedStage | undefined; unit: string; breakdownTitle?: string; clientId?: string; stageNumber?: number; showBreakdown?: boolean; onRange?: (r: string) => void }) {
+  const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
+  const fresh = isFresh(mv.lastDataDate, summary.periodDays)
+  const dn = summary.deltaPct < 0
+  const ac = dn ? C.coral : C.green
+  const acbg = dn ? C.coralBg : C.greenSoft
+  // The headline is the total of the selected range — moves with the chips.
+  const total = summary.total
+  // report the picked range up (the external cards follow it)
+  useEffect(() => { onRange?.(range) }, [range, onRange])
+  // only re-scope the inline breakdown when we actually render one
+  const { stage: rangeStage, sub } = useRangeStage(cs, showBreakdown ? stageNumber : undefined, clientId, range)
+
+  return (
+    <>
+      {/* number + trend on top */}
+      <div>
+        <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>{label}</div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
+          <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{total.toLocaleString()}</span>
+          {total > 0 && fresh && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, color: ac, background: acbg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
+              <span style={{ fontSize: 11 }}>{dn ? '▼' : '▲'}</span>{Math.abs(summary.deltaPct)}% {summary.cmpFrame}
+            </span>
+          )}
+          {total > 0 && !fresh && mv.lastDataDate && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: C.mute, background: C.bg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
+              Updated {relDate(mv.lastDataDate)}
+            </span>
+          )}
+        </div>
+        {/* year-over-year: same window a year ago. Shows only when we can honestly
+            make the claim (fresh data + a real prior-year number). */}
+        {fresh && summary.yoyPct != null && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: summary.yoyPct > 0 ? C.greenDk : summary.yoyPct < 0 ? C.coral : C.mute }}>
+            {summary.yoyPct > 0 ? <TrendingUp size={14} /> : summary.yoyPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
+            {summary.yoyPct > 0 ? `Up ${summary.yoyPct}% ${summary.yoyLabel}` : summary.yoyPct < 0 ? `Down ${Math.abs(summary.yoyPct)}% ${summary.yoyLabel}` : `Even with last year`}
+          </div>
+        )}
+      </div>
+      {/* histogram — the same series as the number + arrow above */}
+      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} />
+      {/* inline source cards (legacy single-column layout only — the swipeable
+          layout renders them below the dots instead via RangeSources) */}
+      {showBreakdown && (rangeStage ?? cs) ? <SourceBreakdown stage={(rangeStage ?? cs)!} unit={unit} title={breakdownTitle} sub={sub} showReconcile={false} showExtras={false} /> : null}
+    </>
   )
 }
 
 // Calm placeholder while the breakdown data is still loading in.
 function FeedLoading() {
   return <div style={{ fontSize: 13, color: C.faint, padding: '24px 0' }}>Adding up your sources&hellip;</div>
-}
-
-// ── Awareness — who saw you. Headline = Google Maps + Google Search + Social
-//    reach, shown as three labeled pieces that add up to it. ──
-function AwarenessStage({ detail, mv }: { detail: InsightsDetail | null; mv: MetricView | undefined }) {
-  if (!detail) return <FeedLoading />
-  const feed = buildAwarenessFeed(toFeedInput(detail))
-  return (
-    <>
-      {mv && <StageTrend mv={mv} noun="saw you" />}
-      <StageHero total={feed.headline} label="Times you showed up" caption={feed.caption} />
-      <WhatFeedsThis feed={feed} unit="Times you showed up" />
-      {detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
-      {!detail.socialConnected && <ConnectSocial connected={false} />}
-    </>
-  )
-}
-
-// ── Interest — who looked closer. Headline = Profile visits + Post engagement.
-//    New followers rides along as clearly-separated audience growth. ──
-function InterestStage({ detail }: { detail: InsightsDetail | null }) {
-  if (!detail) return <FeedLoading />
-  const feed = buildInterestFeed(toFeedInput(detail))
-  return (
-    <>
-      <StageHero total={feed.headline} label="People who looked closer" caption={feed.caption} />
-      <WhatFeedsThis feed={feed} unit="Looked closer" />
-      {detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} />}
-      {!detail.socialConnected && <ConnectSocial connected={false} />}
-    </>
-  )
-}
-
-// ── Customer actions — the moves people made on Google (directions, calls,
-//    website taps). One source, still labeled per action. ──
-function ActionsStage({ detail, mv }: { detail: InsightsDetail | null; mv: MetricView | undefined }) {
-  if (!detail) return <FeedLoading />
-  const feed = buildActionsFeed(toFeedInput(detail))
-  return (
-    <>
-      {mv && <StageTrend mv={mv} noun="took action" />}
-      <StageHero total={feed.headline} label="Moves people made" caption={feed.caption} />
-      <WhatFeedsThis feed={feed} unit="Moves people made" />
-    </>
-  )
 }
 
 // ── "Campaigns working on this" — the shipped campaigns whose live pieces push on

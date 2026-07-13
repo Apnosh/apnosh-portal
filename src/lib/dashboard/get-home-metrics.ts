@@ -46,7 +46,7 @@ export interface HomeInstance {
 }
 
 export interface HomeMetric {
-  key: 'reach' | 'interactions' | 'bookings' | 'loyalty' | 'reputation'
+  key: 'reach' | 'engagement' | 'interactions' | 'bookings' | 'loyalty' | 'reputation'
   label: string
   sub: string
   fmt: HomeFmt
@@ -267,12 +267,14 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     return { data: out }
   }
 
-  const [gbp, social, reviews, localReviews, email] = await Promise.all([
+  const [gbp, social, reviews, localReviews, email, website] = await Promise.all([
     fetchAll('gbp_metrics', 'date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks', 'date', bound),
     fetchAll('social_metrics', 'date, reach, engagement, posts_published, followers_gained, profile_visits', 'date', bound),
     fetchAll('reviews', 'rating, response_text, posted_at', 'posted_at', bound + 'T00:00:00'),
     fetchAll('local_reviews', 'rating, reply_text, created_at_platform', 'created_at_platform', bound + 'T00:00:00'),
     fetchAll('email_metrics', 'sent_date, sent_count, open_count, click_count, revenue_attributed', 'sent_date', bound),
+    // website visits (sessions) + menu page views. A missing column/table just yields no rows.
+    fetchAll('website_metrics', 'date, sessions, menu_views', 'date', bound),
   ])
 
   /* Per-day source maps. We only create+populate a map when the source
@@ -293,6 +295,16 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     gMenu.set(d, (gMenu.get(d) ?? 0) + num(r.food_menu_clicks))
     gBook.set(d, (gBook.get(d) ?? 0) + num(r.bookings))
     gFood.set(d, (gFood.get(d) ?? 0) + num(r.food_orders))
+  }
+  // Website (GA4) — visits (sessions, always ingested when GA4 connected) +
+  // menu page views (only when the owner configured the menu path)
+  const wVisits: Maps = new Map(), wMenu: Maps = new Map()
+  for (const r of (website.data ?? []) as Record<string, unknown>[]) {
+    const d = String(r.date).slice(0, 10)
+    const sv = num(r.sessions)
+    if (sv > 0) wVisits.set(d, (wVisits.get(d) ?? 0) + sv)
+    const mv = num(r.menu_views)
+    if (mv > 0) wMenu.set(d, (wMenu.get(d) ?? 0) + mv)
   }
   // Social
   const sReach: Maps = new Map(), sEng: Maps = new Map(), sFol: Maps = new Map(), sVis: Maps = new Map()
@@ -327,16 +339,34 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     ],
   }, today, earliestOf(reachMain), frontierFor(reachMain, today, SETTLE.gbp))
 
-  /* ── 2. Interactions — people who engaged ── */
-  const interMain = addInto(gDir, gCall, gClick, gConv, gMenu, sEng, sVis)
+  /* ── 1b. Interest — people who TOOK AN INTEREST (owner definition): website
+     clicks + menu page views + IG profile visits + IG post engagement. The SAME
+     sources the honest funnel's Interest stage counts, so the insights chart
+     total matches the stage's source cards. ── */
+  const engMain = addInto(wVisits, gClick, sVis, sEng, wMenu)
+  const engagement = buildMetric({
+    key: 'engagement', label: 'Interest', sub: 'Website visits, site clicks, and profile looks', fmt: 'num',
+    mainMap: engMain,
+    comps: [
+      { label: 'Website visits', icon: 'eye', map: wVisits },
+      { label: 'Site clicks', icon: 'cursor', map: gClick },
+      { label: 'Profile visits', icon: 'user', map: sVis },
+      { label: 'Engaged', icon: 'heart', map: sEng },
+    ],
+  }, today, earliestOf(engMain), frontierFor(engMain, today, SETTLE.gbp))
+
+  /* ── 2. Interactions — people who actually DID something (owner definition):
+     calls + directions + bookings. The SAME GBP actions the funnel's Actions
+     stage counts (site clicks moved to Interest above), so the chart total
+     matches the stage's source cards. ── */
+  const interMain = addInto(gDir, gCall, gBook)
   const interactions = buildMetric({
-    key: 'interactions', label: 'Interactions', sub: 'Calls, directions, clicks and likes', fmt: 'num',
+    key: 'interactions', label: 'Interactions', sub: 'Calls, directions and bookings', fmt: 'num',
     mainMap: interMain,
     comps: [
       { label: 'Calls', icon: 'phone', map: gCall },
       { label: 'Directions', icon: 'pin', map: gDir },
-      { label: 'Site clicks', icon: 'cursor', map: gClick },
-      { label: 'Engaged', icon: 'heart', map: sEng },
+      { label: 'Bookings', icon: 'calendar', map: gBook },
     ],
   }, today, earliestOf(interMain), frontierFor(interMain, today, SETTLE.gbp))
 
@@ -403,5 +433,5 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     rate: { count: repCount, ratingSum: repRating, replied: repReplied, five: repFive },
   }, today, earliestOf(repCount), today)
 
-  return { metrics: [reach, interactions, bookings, loyalty, reputation] }
+  return { metrics: [reach, engagement, interactions, bookings, loyalty, reputation] }
 }

@@ -104,6 +104,8 @@ export interface HomeFunnelProps {
   period?: string
   views?: Views
   actions?: Actions
+  /** honest per-stage headlines (Interest/Actions/Retention) from computeStages */
+  counts?: StageCounts
   initialWalkInRate?: number
   initialAvgTicket?: number | null
   currency?: string
@@ -207,7 +209,12 @@ function drawEmblem(ctx: CanvasRenderingContext2D, ox: number, oy: number, r: nu
 }
 
 /* Recompute the whole funnel from the real signals + the owner's two dials. */
-export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null) {
+/** The honest per-stage headlines, straight from computeStages, so the animated
+ *  funnel shows the SAME numbers as the Insights page. When absent (older payload)
+ *  computeHome falls back to deriving them from the raw actions. */
+export interface StageCounts { interest?: number; actions?: number; retention?: number }
+
+export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null, counts?: StageCounts) {
   const total = Math.max(0, views.total)
   // Awareness folds SOCIAL reach into the Google views (top of funnel = "people who saw you").
   // When social is 0/undefined the labels stay exactly as before (Google-only accounts see no
@@ -219,19 +226,24 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
   const awareSub = hasSocial ? 'times you showed up on Google and social' : 'times you showed up on Google'
   const awareSplit = hasSocial ? `Google ${google.toLocaleString()} · Social ${social.toLocaleString()}` : undefined
   const { directions, calls, websiteClicks } = actions
-  const engaged = directions + calls + websiteClicks // any interaction with the listing
-  const acted = directions + calls                    // the come-or-contact steps (a subset of engaged)
+  // Interest + Actions come STRAIGHT from the honest Insights stage headlines
+  // (counts), so the animation and the Insights page always show the same
+  // numbers. Fallback (older payload with no counts): Interest = website
+  // clicks, Actions = directions + calls.
+  const engaged = counts?.interest ?? websiteClicks
+  const acted = counts?.actions ?? (directions + calls)
   const cameIn = Math.round(directions * walkInRate)
   const revenue = avgTicket != null && avgTicket > 0 ? round100(cameIn * avgTicket) : null
   const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0)
   const ratePct = Math.round(walkInRate * 100)
-  // repeat visits — Google can't see these; it's 0 until a register/POS feeds a real
-  // number, and a plain 0 (not a lock) is honest: nobody we can see has come back yet.
-  const retention = 0
+  // Retention = the Insights Retention headline (repeat guests once a register
+  // connects, else new reviews this month). Falls back to 0 (a plain 0, never a
+  // lock) when no count is provided.
+  const retention = counts?.retention ?? 0
 
   const stages: HStage[] = [
     { key: 'shown', label: 'Awareness', sub: awareSub, count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: `${pct(engaged, total)} in 100 engaged`, emblem: 'eye', deltaYoY: yoy?.awareness ?? null, insightsStage: 'discovery' },
-    { key: 'engaged', label: 'Interest', sub: 'clicks · calls · directions', count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, insightsStage: 'intent' },
+    { key: 'engaged', label: 'Interest', sub: 'website visits & clicks', count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, insightsStage: 'intent' },
     { key: 'moved', label: 'Customer actions', sub: 'directions & calls', count: acted, zone: 'measured', tag: 'Real · Google', conv: `~${ratePct}% of directions ordered`, emblem: 'tap', deltaYoY: yoy?.actions ?? null, insightsStage: 'intent' },
     { key: 'camein', label: 'Orders', sub: 'walk-in orders from Google', count: cameIn, zone: 'estimate', tag: '~ about · your math', emblem: 'door', deltaYoY: yoy?.orders ?? null, insightsStage: 'conversion' },
     { key: 'back', label: 'Retention', sub: 'came back for more', count: retention, zone: 'measured', tag: 'Repeat visits', emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },
@@ -263,6 +275,7 @@ export default function HomeFunnel({
   period = 'Last 30 days',
   views = MOCK_VIEWS,
   actions = MOCK_ACTIONS,
+  counts,
   initialWalkInRate = 0.5,
   initialAvgTicket = 24,
   currency = '$',
@@ -360,7 +373,7 @@ export default function HomeFunnel({
     try { if (t) localStorage.setItem(audKey, t); else localStorage.removeItem(audKey) } catch { /* ignore */ }
   }
 
-  const { stages } = useMemo(() => computeHome(views, actions, walkInRate, avgTicket, currency, yoy ?? null), [views, actions, walkInRate, avgTicket, currency, yoy])
+  const { stages } = useMemo(() => computeHome(views, actions, walkInRate, avgTicket, currency, yoy ?? null, counts), [views, actions, walkInRate, avgTicket, currency, yoy, counts])
 
   const geom = useRef({ W: 400 })
 
@@ -998,19 +1011,11 @@ export default function HomeFunnel({
     if (i < 0) return
     const key = stages[i].key
     if (!key) return
-    // Weak leg → the create-page shelf that moves this exact number (the store's
-    // rows use the funnel's own stage words); healthy or ungraded → the stage's
-    // own insights graph. Mirrors the drawn pill: only a leg the eye sees as
-    // red/orange re-routes, so the tap always matches what the owner is seeing.
-    const a = i > 0 ? stages[i].count : null
-    const b = i > 0 ? stages[i - 1].count : null
-    const band = a != null && b != null && a > 0 && b > 0 ? bandFor(a / b, key) : null
-    const lens = STAGE_LENS[key]
-    if ((band === 'veryLow' || band === 'low') && lens) {
-      router.push(`/dashboard/campaigns/new?lens=${lens}`)
-      return
-    }
-    router.push(`/dashboard/insights?stage=${key}`) // straight to THIS stage's own named graph (funnel key → focused insights view)
+    // ALWAYS the tapped stage's own insights — Awareness to Awareness, Interest
+    // to Interest. (The old weak-leg reroute to the campaign store made taps
+    // land somewhere other than the stage the owner tapped; the insights page
+    // has its own paths into fixing a weak number.)
+    router.push(`/dashboard/insights?stage=${key}`)
   }
   const onCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const p = ptFrom(e); if (p) pressRef.current.i = hitStage(p.mx, p.my)
@@ -1114,8 +1119,47 @@ export default function HomeFunnel({
  * (and nothing at all if the business has no Google data yet), so Home falls
  * back gracefully to the rest of the feed.
  */
+/** A computed-stage source as it arrives in the insights-detail JSON. */
+interface WireStageSource { id: string; value: number | null; counted: boolean }
+interface WireStage { stage: number; headline: number | null; sources: WireStageSource[] }
+
+/** Derive the funnel's Views + Actions from the honest computed stages (Phase 2):
+ *  Awareness = the CONNECTED-sum (headline), split into its Google vs Social parts
+ *  from the same counted sources, and Actions from the counted GBP action sources.
+ *  Returns null when Awareness has no connected source (so Home falls back / hides). */
+function fromStages(stages: WireStage[] | undefined): { views: Views; actions: Actions; counts: StageCounts } | null {
+  if (!stages || !stages.length) return null
+  const aw = stages.find((s) => s.stage === 1)
+  const it = stages.find((s) => s.stage === 2)
+  const ac = stages.find((s) => s.stage === 3)
+  const rt = stages.find((s) => s.stage === 5)
+  if (!aw || aw.headline == null) return null
+  const val = (st: WireStage | undefined, id: string): number => {
+    const s = st?.sources.find((x) => x.id === id)
+    return s && s.counted && s.value != null ? s.value : 0
+  }
+  const search = val(aw, 'gbp_impressions_search')
+  const maps = val(aw, 'gbp_impressions_maps')
+  const social = val(aw, 'ig_reach')
+  const google = search + maps
+  const views: Views = { total: aw.headline, google, social, maps, search }
+  const actions: Actions = {
+    directions: val(ac, 'gbp_direction_requests'),
+    calls: val(ac, 'gbp_calls'),
+    websiteClicks: val(it, 'gbp_website_clicks'), // moved to Interest (stage 2)
+  }
+  // the animated Interest / Actions / Retention counts ARE the Insights stage
+  // headlines, so the two surfaces never disagree
+  const counts: StageCounts = {
+    interest: it?.headline ?? undefined,
+    actions: ac?.headline ?? undefined,
+    retention: rt?.headline ?? undefined, // null headline (empty stage) → undefined → falls back to 0
+  }
+  return { views, actions, counts }
+}
+
 export function HomeFunnelLive({ clientId, height, fill }: { clientId?: string; height?: number; fill?: boolean }) {
-  const [data, setData] = useState<{ views: Views | null; actions: Actions | null; asOf: string | null; windowStart: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
+  const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
   const [loading, setLoading] = useState(false)
   useEffect(() => {
@@ -1124,13 +1168,25 @@ export function HomeFunnelLive({ clientId, height, fill }: { clientId?: string; 
     setLoading(true)
     fetch(`/api/dashboard/insights-detail?clientId=${clientId}&range=${range}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (alive && d) setData({ views: d.views ?? null, actions: d.actions ?? null, asOf: d.asOf ?? null, windowStart: d.windowStart ?? null, audience: d.audience ?? null, yoy: d.yoy ?? null }) })
+      .then((d) => {
+        if (!alive || !d) return
+        // Phase 2: the honest computed stages are the source of truth for the
+        // funnel numbers (Awareness = connected-sum). Fall back to the legacy
+        // views/actions only if stages are absent (older payloads).
+        const derived = fromStages(d.stages)
+        setData({
+          views: derived?.views ?? d.views ?? null,
+          actions: derived?.actions ?? d.actions ?? null,
+          counts: derived?.counts,
+          asOf: d.asOf ?? null, windowStart: d.windowStart ?? null, audience: d.audience ?? null, yoy: d.yoy ?? null,
+        })
+      })
       .catch(() => { /* Home stays lean if this fails */ })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [clientId, range])
   if (!data?.views || !data?.actions || data.views.total <= 0) return null
-  return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnel views={data.views} actions={data.actions} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} loading={loading} /></div>
+  return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} loading={loading} /></div>
 }
 
 /* truncate text with an ellipsis to fit maxW at the ctx's current font */

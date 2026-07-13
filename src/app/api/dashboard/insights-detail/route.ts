@@ -16,6 +16,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getGbpAnalytics, type AnalyticsRange } from '@/lib/dashboard/get-gbp-analytics'
 import { getSocialPosts } from '@/lib/dashboard/get-social-posts'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { computeStages, type ComputedStage } from '@/lib/insights/compute-stages'
 
 export const maxDuration = 15
 
@@ -50,12 +51,16 @@ export async function GET(req: NextRequest) {
   const range: AnalyticsRange = rp === '7d' || rp === '90d' || rp === '12m' ? rp : '30d'
 
   const admin = createAdminClient()
-  const [gbp, posts, primaryLoc] = await Promise.allSettled([
+  const [gbp, posts, primaryLoc, stagesRes] = await Promise.allSettled([
     getGbpAnalytics(clientId, range),
     getSocialPosts(clientId, 90),
     // the business's primary city → the funnel's "target audience" label
     admin.from('client_locations').select('city, state').eq('client_id', clientId).eq('is_primary', true).maybeSingle(),
+    // the honest outcome-funnel stages: every headline is the SUM of its CONNECTED
+    // sources only (Phase 2). Best-effort; never throws.
+    computeStages(clientId, range),
   ])
+  const stages: ComputedStage[] = stagesRes.status === 'fulfilled' ? stagesRes.value : []
 
   let findYou: FindYou | null = null
   let topQueries: { query: string; impressions: number }[] = []
@@ -179,5 +184,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ findYou, topQueries, topPosts, views, actions, socialReach, socialConnected, googleConnected, profileVisits, followersGained, socialEngagement, asOf, windowStart, audience, yoy })
+  return NextResponse.json({ findYou, topQueries, topPosts, views, actions, socialReach, socialConnected, googleConnected, profileVisits, followersGained, socialEngagement, asOf, windowStart, audience, yoy, stages })
 }

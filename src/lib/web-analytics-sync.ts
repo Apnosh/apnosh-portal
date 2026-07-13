@@ -15,10 +15,14 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import {
   refreshGoogleToken,
   runGA4DailyReport,
+  runGA4EventReport,
+  isMissingColumnError,
   runGSCDailyQuery,
   type GA4DailyMetrics,
+  type GA4EventConfig,
   type GSCDailyMetrics,
 } from '@/lib/google'
+import { loadClientAnalyticsConfig } from '@/lib/insights/client-analytics-config'
 import { serviceAccountEnabled, getServiceAccountToken, GSC_SCOPE, GA_SCOPE } from '@/lib/google-service-account'
 
 type Channel = 'google_analytics' | 'google_search_console'
@@ -91,6 +95,7 @@ async function ingestGA4DayForClient(
   propertyId: string,
   accessToken: string,
   date: string,
+  eventConfig: GA4EventConfig,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const m: GA4DailyMetrics = await runGA4DailyReport(propertyId, accessToken, date)
@@ -108,9 +113,55 @@ async function ingestGA4DayForClient(
       top_pages: m.topPages,
     }, { onConflict: 'client_id,date' })
     if (error) return { ok: false, error: error.message }
+    /* Phase 1.5 outcome-funnel event sources. Best-effort and isolated: it
+       runs only after the main upsert succeeds, and its own failures never
+       fail the day's core sync. */
+    await ingestGA4EventsForDay(admin, clientId, propertyId, accessToken, date, eventConfig)
     return { ok: true }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
+  }
+}
+
+/**
+ * Ingest the two GA4 event sources (menu_views + order_clicks) for one day.
+ * GRACEFUL by design:
+ *   - No config for either metric → skip entirely. We NEVER write 0 for a
+ *     metric we didn't actually query.
+ *   - Only queries the metric whose exact config value is present; the other
+ *     stays untouched (its column keeps whatever it had, null by default).
+ *   - If the new columns don't exist yet (owner hasn't applied migration 206)
+ *     the update returns 42703 / PGRST204 — we catch it and skip silently.
+ *   - Any GA4 fetch error is swallowed so the main daily sync is unaffected.
+ */
+async function ingestGA4EventsForDay(
+  admin: ReturnType<typeof createAdminClient>,
+  clientId: string,
+  propertyId: string,
+  accessToken: string,
+  date: string,
+  config: GA4EventConfig,
+): Promise<void> {
+  // No config at all → nothing honest to write.
+  if (!config.menuPath && !config.orderDomain) return
+  try {
+    const ev = await runGA4EventReport(propertyId, accessToken, date, config)
+    const patch: Record<string, number> = {}
+    // null = not queried; a real query (even 0) is written truthfully.
+    if (ev.menuViews !== null) patch.menu_views = ev.menuViews
+    if (ev.orderClicks !== null) patch.order_clicks = ev.orderClicks
+    if (Object.keys(patch).length === 0) return
+    const { error } = await admin
+      .from('website_metrics')
+      .update(patch)
+      .eq('client_id', clientId)
+      .eq('date', date)
+    if (error && !isMissingColumnError(error)) {
+      // A non-missing-column DB error: still best-effort, but leave a trace.
+      console.warn(`[ga4-events] write failed for ${clientId} ${date}: ${error.message}`)
+    }
+  } catch (err) {
+    console.warn(`[ga4-events] fetch failed for ${clientId} ${date}: ${(err as Error).message}`)
   }
 }
 
@@ -134,6 +185,11 @@ export async function syncGoogleAnalyticsForClient(
   const token = await ensureToken(conn)
   if (!token || !conn.platform_account_id) return { daysWritten: 0, error: 'token refresh failed' }
 
+  /* Owner-set per-client config for the two GA4 event sources. Absent config
+     means those two writes are skipped (see ingestGA4EventsForDay). */
+  const cfg = await loadClientAnalyticsConfig(clientId)
+  const eventConfig: GA4EventConfig = { menuPath: cfg.menuPath, orderDomain: cfg.orderDomain }
+
   /* Anchor end at TODAY (not yesterday). GA's core reporting API
      returns partial today-data with a small (~1-4h) lag, but having
      a "0" sit there ALL DAY while traffic accumulates is worse than
@@ -145,7 +201,7 @@ export async function syncGoogleAnalyticsForClient(
   let written = 0
   let lastError: string | null = null
   for (const date of daysRange(start, end)) {
-    const r = await ingestGA4DayForClient(clientId, conn.platform_account_id, token, date)
+    const r = await ingestGA4DayForClient(clientId, conn.platform_account_id, token, date, eventConfig)
     if (r.ok) written++
     else if (r.error) lastError = r.error
   }

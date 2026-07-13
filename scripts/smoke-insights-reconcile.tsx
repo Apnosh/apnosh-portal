@@ -16,9 +16,11 @@
  * Run: node_modules/.bin/tsx scripts/smoke-insights-reconcile.tsx */
 
 import {
-  buildAwarenessFeed, buildInterestFeed, buildActionsFeed,
+  buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom,
   NOT_CONNECTED, type FeedInput, type StageFeed,
 } from '../src/lib/dashboard/insights-feed'
+import { computeStagesFrom } from '../src/lib/insights/compute-stages'
+import { resolveSourceStatusesFrom } from '../src/lib/insights/source-registry'
 
 let fail = 0
 function ok(cond: boolean, msg: string) {
@@ -90,6 +92,19 @@ function main() {
   const acts = buildActionsFeed(BASE)
   ok(acts.headline === 34, `actions headline = 34 (${acts.headline})`)
   ok(sumPieces(acts) === acts.headline, `actions pieces sum (${sumPieces(acts)}) == headline`)
+
+  console.log('\n== f) stageFeedFrom (computeStages -> boxes) reconciles by construction ==')
+  // The Phase 2 path: the boxes now come from the honest computed stages. For a
+  // GBP-only client the connected boxes must still sum to the stage headline.
+  const gbpStatuses = resolveSourceStatusesFrom({ google_business_profile: { status: 'active', sync_error: null, last_sync_at: '2026-07-10T00:00:00Z' } })
+  const gbpValues = { gbp_impressions_search: 1000, gbp_impressions_maps: 500, gbp_photo_views: 80, gbp_direction_requests: 40, gbp_calls: 10, gbp_website_clicks: 25, gbp_booking_clicks: 5, gbp_review_count: 7 }
+  const computed = computeStagesFrom(gbpStatuses, gbpValues)
+  for (const cs of computed) {
+    if (cs.isEmpty) continue
+    const f = stageFeedFrom(cs)
+    ok(sumPieces(f) === f.headline, `stage ${cs.stage} boxes sum (${sumPieces(f)}) == headline (${f.headline})`)
+    ok(f.headline === cs.headline, `stage ${cs.stage} feed headline mirrors the computed headline (${cs.headline})`)
+  }
 
   console.log('\n== e) no em dashes in any produced copy ==')
   const all = [aware, interest, acts, awareNS].map(feedStrings).join(' | ') + ' | ' + NOT_CONNECTED

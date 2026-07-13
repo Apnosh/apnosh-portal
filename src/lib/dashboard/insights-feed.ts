@@ -12,6 +12,8 @@
  * (scripts/smoke-insights-reconcile.tsx).
  */
 
+import type { ComputedStage } from '@/lib/insights/compute-stages'
+
 export type FeedPiece = { key: string; label: string; value: number; connected: boolean }
 
 export interface StageFeed {
@@ -104,6 +106,41 @@ export function buildActionsFeed(d: FeedInput): StageFeed {
     headline: sumConnected(pieces),
     pieces,
     note: [],
-    caption: 'Calls, directions, and website taps on Google.',
+    caption: 'Calls, directions, and bookings on Google.',
+  }
+}
+
+/** Plain per-stage caption for the reconciling headline. */
+const STAGE_CAPTION: Record<number, string> = {
+  1: 'Times you showed up on Google and social.',
+  2: 'Site clicks, menu views, and profile looks.',
+  3: 'Calls, directions, bookings, and orders.',
+  4: 'Guests you served, once your register connects.',
+  5: 'Guests who came back, or new reviews this month.',
+}
+
+/**
+ * The Phase 2 bridge: turn a ComputedStage (the honest source-of-truth math,
+ * headline == sum of CONNECTED sources) into the StageFeed the "What feeds this"
+ * boxes already render. The 'sum' sources become the boxes (connected ones carry
+ * their real value, others read "Not connected" but stay visible), and the
+ * headline is the stage's own honest headline. Because computeStages already
+ * guarantees headline === sum(counted), the boxes reconcile BY CONSTRUCTION.
+ * Context sources (rating trend, follower growth) ride along as a note, never
+ * summed. A drill-down is never shown here.
+ */
+export function stageFeedFrom(stage: ComputedStage): StageFeed {
+  const pieces: FeedPiece[] = stage.sources
+    .filter((s) => s.feedRole === 'sum')
+    .map((s) => ({ key: s.id, label: s.displayName, value: s.value ?? 0, connected: s.counted }))
+  const note: FeedPiece[] = stage.sources
+    .filter((s) => s.feedRole === 'context')
+    .map((s) => ({ key: s.id, label: s.displayName, value: s.value ?? 0, connected: s.status === 'CONNECTED' && s.value != null }))
+  return {
+    // headline mirrors the stage's honest number (0 when empty, so the boxes still add up)
+    headline: stage.headline ?? sumConnected(pieces),
+    pieces,
+    note,
+    caption: STAGE_CAPTION[stage.stage] ?? '',
   }
 }
