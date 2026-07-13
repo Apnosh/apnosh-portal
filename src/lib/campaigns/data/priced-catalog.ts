@@ -277,7 +277,13 @@ function withSendInfra(catalog: PricedService[]): PricedService[] {
   })
 }
 
-export const PRICED_CATALOG: PricedService[] = [...withSendInfra(GENERATED_CATALOG), ...EXTRA_SERVICES]
+/** Assemble the full runtime catalog from a base list of services (the generated
+ *  snapshot today, or the live DB rows once runtime reads land). Pure — same base
+ *  in, same catalog out — so a live-DB path can reproduce PRICED_CATALOG exactly. */
+export function buildPricedCatalog(base: PricedService[]): PricedService[] {
+  return [...withSendInfra(base), ...EXTRA_SERVICES]
+}
+export const PRICED_CATALOG: PricedService[] = buildPricedCatalog(GENERATED_CATALOG)
 
 // "Perfect" stays machine-checked: in dev, warn on any line under the margin floor or carrying a
 // placeholder price (surfaced, never auto-changed — pricing is an owner decision).
