@@ -36,6 +36,16 @@ function blankRow(): CatalogRow {
 }
 const LANE_KINDS: LaneKind[] = ['diy', 'ai', 'team', 'creator']
 const LANE_KIND_LABEL: Record<LaneKind, string> = { diy: 'They do it (DIY)', ai: 'Apnosh AI', team: 'Apnosh does it', creator: 'Contractor does it' }
+// exact tokens from the real store product page (apnosh-campaign.jsx TOKENS) so the preview matches
+const PV = {
+  mint: '#4abd98', mintDark: '#2e9a78', mintTint: '#eaf7f3', ink: '#1c2620', sub: '#6b736d', faint: '#a6aca7', line: '#e7e9e6',
+  heroGrad: 'linear-gradient(168deg,#fbfaf4 0%,#f2f8f4 54%,#e7f3ed 100%)',
+  head: "'Cal Sans','Poppins',system-ui,sans-serif", body: "'Inter',system-ui,sans-serif",
+}
+const Check = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={PV.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+function PvLabel({ children }: { children: string }) {
+  return <div style={{ fontFamily: PV.body, fontSize: 10.5, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: PV.faint, marginBottom: 9 }}>{children}</div>
+}
 const GOAL_OPTS: SystemGoal[] = ['firstvisit', 'nights', 'regulars', 'reviews']
 const TIER_OPTS: Tier[] = ['lean', 'standard', 'aggressive']
 const TIER_LABEL: Record<Tier, string> = { lean: 'Lean+', standard: 'Standard+', aggressive: 'Aggressive only' }
@@ -174,6 +184,7 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
   const [plays, setPlays] = useState<GoalPlay[]>(() => (row.goal_plays ?? []).map((p) => ({ ...p })))
   const [lanes, setLanes] = useState<CardLane[]>(() => (row.lanes ?? []).map((l) => ({ ...l, requirements: [...(l.requirements ?? [])], addOns: (l.addOns ?? []).map((a) => ({ ...a })) })))
   const [pvLane, setPvLane] = useState(0)
+  const [hl, setHl] = useState<string | null>(null) // which preview region the hovered panel edits
   const [saving, start] = useTransition()
 
   const onName = (v: string) => { setName(v); if (creating && !idTouched) setId(kebab(v)) }
@@ -268,6 +279,12 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
   const pvLanes = lanes.filter((l) => l.label.trim())
   const pvSel = pvLanes[Math.min(pvLane, Math.max(0, pvLanes.length - 1))]
   const laneChip = (l: CardLane) => (!l.price ? (l.kind === 'ai' && l.proOnly ? 'Pro' : 'Free') : '$' + l.price.amount.toLocaleString() + (l.price.kind === 'monthly' ? '/mo' : ''))
+  const shownLanes = pvLanes.length > 0
+    ? pvLanes.map((l) => ({ label: l.label, price: laneChip(l), pro: l.kind === 'ai' && !!l.proOnly }))
+    : [{ label: "I'll do it", price: 'Free', pro: false }, { label: 'Apnosh AI', price: 'Included', pro: true }, { label: 'Apnosh does it', price: previewPrice, pro: false }]
+  const pvIdx = Math.min(pvLane, Math.max(0, shownLanes.length - 1))
+  // a highlight ring on the preview region the hovered form panel edits
+  const ringOf = (k: string) => (hl === k ? { outline: `2px solid ${PV.mint}`, outlineOffset: '-2px' } : {})
   return (
     <div className="fixed inset-0 z-[60] bg-bg-2 overflow-y-auto">
       {/* top bar with the actions — full-screen takeover above the admin sidebar (z-50) */}
@@ -287,75 +304,73 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
       {/* two columns: the form on the left, a sticky live preview on the right */}
       <div className="max-w-[1120px] mx-auto px-5 lg:px-8 py-6 grid lg:grid-cols-[minmax(0,1fr)_400px] gap-6 lg:gap-10 items-start">
         <aside className="space-y-4 order-1 lg:order-2 lg:sticky lg:top-[70px]">
-          {/* full-page preview — how the customer's product page reads, from the form data */}
-          <div className="rounded-xl bg-bg-2/50 p-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-ink-4">How the customer sees it</div>
-              <div className="text-[10px] text-ink-5">preview</div>
-            </div>
-            <div className="rounded-2xl bg-white border border-ink-6 overflow-hidden shadow-sm">
-              {/* hero */}
-              <div className="px-4 pt-4 pb-3">
-                <div className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-emerald-700">{SECTION_LABEL[section] ?? section}</div>
-                <div className="text-[17px] font-semibold text-ink leading-tight mt-1">{plain || name || 'Untitled card'}</div>
-                {desc.trim() && <div className="text-[12.5px] text-ink-3 mt-1 leading-snug">{desc.trim()}</div>}
+          {/* live preview — a faithful replica of the customer product page (apnosh-campaign.jsx) */}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-ink-4 mb-2">Live preview · how the customer sees it</div>
+            <div style={{ borderRadius: 22, overflow: 'hidden', background: '#fff', border: `1px solid ${PV.line}`, boxShadow: '0 10px 34px rgba(20,45,33,0.10)', fontFamily: PV.body }}>
+              {/* HERO */}
+              <div style={{ background: PV.heroGrad, padding: '18px 18px 22px', position: 'relative', ...ringOf('hero') }}>
+                <div style={{ fontFamily: PV.body, fontSize: 12, fontWeight: 700, color: PV.mintDark, marginBottom: 6 }}>{SECTION_LABEL[section] ?? section}</div>
+                <div style={{ fontFamily: PV.head, fontSize: 22, fontWeight: 700, color: PV.ink, lineHeight: 1.16, letterSpacing: '-0.4px' }}>{plain || name || 'Untitled card'}</div>
+                {desc.trim() && <div style={{ fontFamily: PV.body, fontSize: 13.5, color: '#4c554f', lineHeight: 1.5, marginTop: 10 }}>{desc.trim()}</div>}
               </div>
-              {/* choose how it's done — the lanes */}
-              <div className="px-4 py-3 border-t border-ink-6">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-ink-4 mb-1.5">Choose how it&apos;s done</div>
-                {pvLanes.length > 0 ? (
-                  <>
-                    <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(pvLanes.length, 3)}, minmax(0,1fr))` }}>
-                      {pvLanes.map((l, i) => {
-                        const on = i === Math.min(pvLane, pvLanes.length - 1)
-                        return (
-                          <button key={i} onClick={() => setPvLane(i)} className={'rounded-lg border px-2 py-1.5 text-center ' + (on ? 'border-brand bg-brand/5' : 'border-ink-6')}>
-                            <div className="text-[11px] font-semibold text-ink leading-tight">{l.label}</div>
-                            <div className={'text-[10.5px] mt-0.5 ' + (on ? 'text-brand-dark font-semibold' : 'text-ink-4')}>{laneChip(l)}</div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                    {pvSel && (
-                      <div className="mt-2 space-y-1.5">
-                        {pvSel.note?.trim() && <div className="text-[11.5px] text-ink-3">{pvSel.note.trim()}</div>}
-                        {(pvSel.requirements ?? []).filter((r) => r.trim()).length > 0 && (
-                          <div><div className="text-[9.5px] font-bold uppercase tracking-wide text-ink-4">You provide</div>{(pvSel.requirements ?? []).filter((r) => r.trim()).map((r, x) => <div key={x} className="text-[11.5px] text-ink-2">• {r}</div>)}</div>
-                        )}
-                        {(pvSel.addOns ?? []).filter((a) => a.label.trim()).length > 0 && (
-                          <div><div className="text-[9.5px] font-bold uppercase tracking-wide text-ink-4">Add-ons</div>{(pvSel.addOns ?? []).filter((a) => a.label.trim()).map((a, x) => <div key={x} className="text-[11.5px] text-ink-2 flex justify-between gap-2"><span>+ {a.label}</span><span className="text-ink-4">${(a.amount || 0).toLocaleString()}</span></div>)}</div>
-                        )}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {[{ t: "I'll do it", p: 'Free' }, { t: 'Apnosh AI', p: 'Pro' }, { t: 'Apnosh does it', p: previewPrice }].map((ln, i) => (
-                        <div key={i} className={'rounded-lg border px-2 py-1.5 text-center ' + (i === 2 ? 'border-brand bg-brand/5' : 'border-ink-6')}>
-                          <div className="text-[11px] font-semibold text-ink leading-tight">{ln.t}</div>
-                          <div className={'text-[10.5px] mt-0.5 ' + (i === 2 ? 'text-brand-dark font-semibold' : 'text-ink-4')}>{ln.p}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="text-[10px] text-ink-5 mt-1.5">Default lanes. Add your own below to customize this per card.</div>
-                  </>
+              {/* CHOOSE HOW IT'S DONE */}
+              <div style={{ padding: '16px 18px 0', ...ringOf('lanes') }}>
+                <PvLabel>Choose how it&apos;s done</PvLabel>
+                <div style={{ display: 'flex', gap: 7 }}>
+                  {shownLanes.map((l, i) => {
+                    const on = i === pvIdx
+                    return (
+                      <button key={i} onClick={() => setPvLane(i)} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, textAlign: 'center', background: on ? PV.mint : '#fff', border: `1.5px solid ${on ? PV.mint : PV.line}`, borderRadius: 14, padding: '11px 6px', cursor: 'pointer', boxShadow: on ? '0 4px 14px rgba(74,189,152,0.30)' : '0 1px 2px rgba(20,40,30,0.03)' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                          <span style={{ fontFamily: PV.head, fontSize: 12.5, fontWeight: 600, color: on ? '#fff' : PV.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.label}</span>
+                          {l.pro && <span style={{ background: on ? 'rgba(255,255,255,0.24)' : '#eaf7f3', color: on ? '#fff' : '#2e9a78', fontSize: 8, fontWeight: 800, letterSpacing: '0.4px', borderRadius: 5, padding: '1.5px 4px' }}>PRO</span>}
+                        </span>
+                        <span style={{ fontFamily: PV.body, fontSize: 11.5, fontWeight: 700, color: on ? 'rgba(255,255,255,0.92)' : PV.mintDark }}>{l.price || 'Free'}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                {pvSel && (pvSel.requirements ?? []).filter((r) => r.trim()).length > 0 && (
+                  <div style={{ marginTop: 12, background: '#f7f9f8', borderRadius: 12, padding: '10px 12px' }}>
+                    <div style={{ fontFamily: PV.body, fontSize: 9.5, fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase', color: PV.faint, marginBottom: 5 }}>What we&apos;ll need from you</div>
+                    {(pvSel.requirements ?? []).filter((r) => r.trim()).map((r, x) => <div key={x} style={{ fontFamily: PV.body, fontSize: 12.5, color: PV.ink, marginTop: x ? 3 : 0 }}>• {r}</div>)}
+                  </div>
                 )}
               </div>
-              {/* what you get */}
+              {/* WHAT YOU GET */}
               {previewInc.length > 0 && (
-                <div className="px-4 py-3 border-t border-ink-6">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-ink-4 mb-1.5">What you get</div>
-                  <ul className="space-y-1">
-                    {previewInc.map((it, i) => <li key={i} className="text-[12px] text-ink-2 flex gap-1.5"><span className="text-emerald-600">✓</span>{it}</li>)}
-                    {included.filter((x) => x.trim()).length > previewInc.length && <li className="text-[11px] text-ink-4 pl-4">+ {included.filter((x) => x.trim()).length - previewInc.length} more</li>}
-                  </ul>
+                <div style={{ padding: '18px 18px 0', ...ringOf('get') }}>
+                  <PvLabel>What you get</PvLabel>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {previewInc.map((it, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>
+                        <span style={{ width: 22, height: 22, borderRadius: 11, background: PV.mintTint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}><Check /></span>
+                        <span style={{ fontFamily: PV.body, fontSize: 13.5, color: PV.ink, lineHeight: 1.45 }}>{it}</span>
+                      </div>
+                    ))}
+                    {included.filter((x) => x.trim()).length > previewInc.length && <div style={{ fontFamily: PV.body, fontSize: 12, color: PV.faint, paddingLeft: 33 }}>+ {included.filter((x) => x.trim()).length - previewInc.length} more</div>}
+                  </div>
                 </div>
               )}
-              {/* buy footer */}
-              <div className="px-4 py-3 border-t border-ink-6 flex items-center gap-3 bg-bg-2/40">
-                <div className="flex-1 min-w-0"><div className="text-[15px] font-bold text-ink">{previewPrice}</div></div>
-                <div className="rounded-full bg-brand text-white text-[12.5px] font-semibold px-4 py-2">Add to plan</div>
+              {/* lane add-ons */}
+              {pvSel && (pvSel.addOns ?? []).filter((a) => a.label.trim()).length > 0 && (
+                <div style={{ padding: '18px 18px 0', ...ringOf('lanes') }}>
+                  <PvLabel>Add-ons</PvLabel>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {(pvSel.addOns ?? []).filter((a) => a.label.trim()).map((a, x) => (
+                      <div key={x} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: `1.5px solid ${PV.line}`, borderRadius: 12, padding: '10px 12px' }}>
+                        <span style={{ fontFamily: PV.body, fontSize: 13, color: PV.ink }}>{a.label}</span>
+                        <span style={{ fontFamily: PV.head, fontSize: 13, fontWeight: 600, color: PV.mintDark }}>+${(a.amount || 0).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* BUY FOOTER */}
+              <div style={{ marginTop: 20, padding: '14px 18px', borderTop: `1px solid ${PV.line}`, display: 'flex', alignItems: 'center', gap: 12, ...ringOf('footer') }}>
+                <div style={{ flex: 1, minWidth: 0, fontFamily: PV.head, fontSize: 19, fontWeight: 700, color: PV.ink }}>{previewPrice}</div>
+                <div style={{ background: PV.mint, color: '#fff', borderRadius: 99, padding: '11px 22px', fontFamily: PV.head, fontSize: 14, fontWeight: 600, boxShadow: '0 8px 20px rgba(74,189,152,0.4)' }}>Add to plan</div>
               </div>
             </div>
           </div>
@@ -373,7 +388,7 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
 
         </aside>
         <div className="space-y-5 order-2 lg:order-1">
-          <section className={panel}>
+          <section className={panel} onMouseEnter={() => setHl('hero')} onMouseLeave={() => setHl(null)}>
           <div className={panelHead}>The basics</div>
           {/* identity */}
           <label className="block"><span className={lbl}>Card name</span><input className={field} value={name} onChange={(e) => onName(e.target.value)} placeholder="e.g. Menu photo refresh" /></label>
@@ -403,7 +418,7 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
           </section>
 
           {/* pricing */}
-          <section className={panel}>
+          <section className={panel} onMouseEnter={() => setHl('footer')} onMouseLeave={() => setHl(null)}>
           <div>
             <div className="flex items-center justify-between"><span className={panelHead}>Price</span><button onClick={addPrice} className="text-[12.5px] text-brand font-semibold">+ Add a price</button></div>
             <div className="space-y-2 mt-1.5">
@@ -434,7 +449,7 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
           </section>
 
           {/* what's included */}
-          <section className={panel}>
+          <section className={panel} onMouseEnter={() => setHl('get')} onMouseLeave={() => setHl(null)}>
           <div>
             <span className={panelHead}>What&apos;s included</span>
             <input className={field + ' mt-1'} value={delivSummary} onChange={(e) => setDelivSummary(e.target.value)} placeholder="One-line summary of what this is" />
@@ -486,7 +501,7 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
           </section>
 
           {/* who can do it — per-card lanes (Fiverr-style) */}
-          <section className={panel}>
+          <section className={panel} onMouseEnter={() => setHl('lanes')} onMouseLeave={() => setHl(null)}>
           <div>
             <div className="flex items-center justify-between">
               <span className={panelHead}>Who can do it</span>
