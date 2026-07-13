@@ -54,6 +54,7 @@ const stage: ComputedStage = {
   stage: 1,
   label: 'Awareness',
   headline: HEADLINE,
+  groups: [],
   unit: 'views',
   sources: SUMS,
   heroSourceId: 'gbp_impressions_search',
