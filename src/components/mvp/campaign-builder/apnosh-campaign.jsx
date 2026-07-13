@@ -4164,8 +4164,8 @@ export function PlanBar({ items, onOpen }) {
   const anyCreative = items.some((it) => isCreativeCard(catGet(it.itemId)));
   const n = items.length;
   return (
-    <div style={{ flexShrink: 0, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.08)", padding: "9px 16px 10px" }}>
-      <button onClick={onOpen} className="apnpress" style={{ width: "100%", height: 46, borderRadius: 23, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.38)", WebkitTapHighlightColor: "transparent" }}>
+    <div style={{ flexShrink: 0, background: "transparent", padding: "0 16px 12px", pointerEvents: "none" }}>
+      <button onClick={onOpen} className="apnpress" style={{ width: "100%", height: 48, borderRadius: 24, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 10px 30px rgba(74,189,152,0.5)", pointerEvents: "auto", WebkitTapHighlightColor: "transparent" }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1.6" /><circle cx="19" cy="21" r="1.6" /><path d="M2 3h3l2.6 13.4a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 2-1.6L22 8H6" /></svg>
         View your plan · {n} {n === 1 ? "item" : "items"} · {planMoneyLabel(t, anyCreative)}
       </button>

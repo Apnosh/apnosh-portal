@@ -39,6 +39,7 @@ import { useClient } from '@/lib/client-context'
 import { campaignCardVM, type SavedCampaign, type CampaignProgress, type CampaignCharges, type CampCard } from '@/lib/campaigns/view'
 import { summarize, type BillingSummary } from '@/lib/campaigns/types'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
+import { readPlanDraft, subscribePlanDraft, type PlanDraftItem } from '@/lib/campaigns/builder/plan-draft'
 import { producerAwareBill } from '@/components/campaigns/content-menu/campaign-review-body'
 import { GOALS } from '@/lib/campaigns/data/profiles'
 
@@ -101,6 +102,14 @@ export default function MvpOrders() {
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [rowError, setRowError] = useState<Record<string, string>>({})
+
+  // The store's local "View your plan" cart (collect-only, before it becomes a
+  // real ordered campaign). Surfaced here as pending so the two carts are linked.
+  const [planDraft, setPlanDraft] = useState<PlanDraftItem[]>([])
+  useEffect(() => {
+    setPlanDraft(readPlanDraft())
+    return subscribePlanDraft(() => setPlanDraft(readPlanDraft()))
+  }, [])
 
   // DoorDash-style order tabs: Cart (planned) · Ordered (billing now) · History (closed).
   const [tab, setTab] = useState<'cart' | 'ordered' | 'history'>('cart')
@@ -226,7 +235,7 @@ export default function MvpOrders() {
         <>
           {/* Order tabs: Cart (planned) · Ordered (billing now) · History (closed) */}
           <div style={{ display: 'flex', gap: 7, marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>
-            {([['cart', 'Cart', cart.length], ['ordered', 'Ordered', paying.length], ['history', 'History', receipts.length]] as const).map(([k, l, n]) => {
+            {([['cart', 'Cart', cart.length + planDraft.length], ['ordered', 'Ordered', paying.length], ['history', 'History', receipts.length]] as const).map(([k, l, n]) => {
               const on = tab === k
               return (
                 <button key={k} type="button" onClick={() => setTab(k)} style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 7, border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '7px 14px', fontSize: 13, fontWeight: on ? 700 : 500, cursor: 'pointer', transition: 'all .15s' }}>
@@ -238,8 +247,19 @@ export default function MvpOrders() {
 
           {/* ── CART — planned, not ordered yet ─────────────────────── */}
           {tab === 'cart' && (<>
+          {planDraft.length > 0 && (
+            <Link href="/dashboard/campaigns/new" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '13px 15px', marginBottom: 14, textDecoration: 'none', color: 'inherit', position: 'relative', overflow: 'hidden' }}>
+              <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: C.amber }} />
+              <span style={{ width: 36, height: 36, borderRadius: 11, background: C.amberBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShoppingBag size={17} color={C.amber} /></span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: C.ink }}>In your plan · {planDraft.length} {planDraft.length === 1 ? 'item' : 'items'}</span>
+                <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>Not ordered yet. Review and check out to start it.</span>
+              </span>
+              <ChevronRight size={17} color={C.faint} />
+            </Link>
+          )}
           {cartParts.length > 0 && <SectionHead label="When you launch" right={cartParts.join(' + ')} />}
-          {cart.length === 0 ? (
+          {cart.length === 0 && planDraft.length === 0 ? (
             <Link href="/dashboard/campaigns/new" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '13px 15px', marginBottom: 22, textDecoration: 'none', color: 'inherit' }}>
               <span style={{ width: 36, height: 36, borderRadius: 11, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShoppingBag size={17} color={C.greenDk} /></span>
               <span style={{ flex: 1, fontSize: 13.5, color: C.mute }}>Cart&apos;s empty. Plan something new.</span>
