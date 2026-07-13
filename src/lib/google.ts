@@ -287,6 +287,7 @@ export interface GA4DailyMetrics {
   mobilePct: number         // 0..100
   trafficSources: Record<string, number> // { direct: 500, organic: 300, ... }
   topPages: Array<{ path: string; views: number }>
+  raw?: unknown             // full API responses, kept per day for durability
 }
 
 /**
@@ -397,6 +398,7 @@ export async function runGA4DailyReport(
     mobilePct,
     trafficSources,
     topPages,
+    raw: { core, sources, pages, devices },
   }
 }
 
@@ -603,6 +605,7 @@ export interface GSCDailyMetrics {
   avgPosition: number
   topQueries: Array<{ query: string; impressions: number; clicks: number; ctr: number; position: number }>
   topPages: Array<{ page: string; impressions: number; clicks: number; ctr: number; position: number }>
+  raw?: unknown             // full API responses, kept per day for durability
 }
 
 export async function runGSCDailyQuery(
@@ -679,6 +682,7 @@ export async function runGSCDailyQuery(
     avgPosition: totalsRow.position || 0,
     topQueries,
     topPages,
+    raw: { queries, pages, totals },
   }
 }
 
