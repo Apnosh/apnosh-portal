@@ -7,6 +7,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { rowToService, renderGeneratedSnapshot, type CatalogRow } from '@/lib/campaigns/data/catalog-db-shape'
+import type { GoalPlay } from '@/lib/campaigns/data/priced-catalog'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -26,6 +27,7 @@ export interface ServicePatch {
   status?: 'active' | 'draft' | 'archived' | 'coming_soon'
   prices?: unknown // PricePoint[]
   deliverables?: { summary: string; included: string[] } | null
+  goal_plays?: GoalPlay[] | null // which campaigns/goals this item belongs to (the plan recipe)
 }
 
 /** Save edits to one service. Returns ok or a plain error. */
@@ -33,7 +35,7 @@ export async function updateService(id: string, patch: ServicePatch): Promise<{ 
   const a = await requireAdmin()
   if (!a.ok) return { ok: false, error: a.error }
   const fields: Record<string, unknown> = { updated_at: new Date().toISOString(), updated_by: a.userId }
-  for (const k of ['name', 'plain_name', 'description', 'status', 'prices', 'deliverables'] as const) {
+  for (const k of ['name', 'plain_name', 'description', 'status', 'prices', 'deliverables', 'goal_plays'] as const) {
     if (k in patch) fields[k] = (patch as Record<string, unknown>)[k]
   }
   const { error } = await a.supabase.from('catalog_services').update(fields).eq('id', id)
