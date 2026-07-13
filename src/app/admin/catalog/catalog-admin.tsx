@@ -269,6 +269,8 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
               <div><div className="text-[18px] font-semibold text-emerald-700 leading-none">{usage?.live ?? 0}</div><div className="text-[10.5px] text-ink-4 mt-0.5">in live campaigns</div></div>
               <div className="w-px h-7 bg-ink-6" />
               <div><div className="text-[18px] font-semibold text-ink leading-none">{usage?.total ?? 0}</div><div className="text-[10.5px] text-ink-4 mt-0.5">sold all-time</div></div>
+              <div className="w-px h-7 bg-ink-6" />
+              <div title="Units sold × today's price. Gross list value, not collected revenue."><div className="text-[18px] font-semibold text-ink leading-none">${((usage?.total ?? 0) * prices.reduce((s, e) => s + (e.amount || 0), 0)).toLocaleString()}</div><div className="text-[10.5px] text-ink-4 mt-0.5">gross value</div></div>
             </div>
           )}
 
