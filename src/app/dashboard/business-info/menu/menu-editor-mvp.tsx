@@ -168,7 +168,8 @@ export default function MvpMenuEditor({ initial }: { initial: MenuItem[] }) {
       </div>
 
       {editing && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 70, background: C.bg, display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 70, background: '#f0f0f3', display: 'flex', justifyContent: 'center', fontFamily: "'Inter',system-ui,sans-serif" }}>
+          <div style={{ width: '100%', maxWidth: 480, background: C.bg, display: 'flex', flexDirection: 'column', minHeight: 0, boxShadow: '0 0 40px rgba(0,0,0,0.06)' }}>
           <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#fff', borderBottom: `0.5px solid ${C.line}` }}>
             <button type="button" onClick={() => setEditing(null)} style={{ background: 'none', border: 'none', color: C.mute, fontSize: 15, fontFamily: 'inherit', cursor: 'pointer', padding: '4px 2px' }}>Cancel</button>
             <span style={{ fontSize: 16, fontWeight: 600, color: C.ink, fontFamily: DISPLAY }}>{editing.id ? 'Edit item' : 'Add item'}</span>
@@ -195,6 +196,7 @@ export default function MvpMenuEditor({ initial }: { initial: MenuItem[] }) {
             )}
 
             {error && <p style={{ fontSize: 13, color: C.coral, textAlign: 'center', margin: '14px 4px 0' }}>{error}</p>}
+          </div>
           </div>
         </div>
       )}
