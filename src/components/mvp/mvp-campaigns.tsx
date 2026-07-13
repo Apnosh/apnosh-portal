@@ -74,12 +74,9 @@ export default function MvpCampaigns() {
       <style>{ANIM}</style>
       <div style={{ position: 'sticky', top: 0, zIndex: 20, background: '#fff', padding: '14px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 15, color: C.ink, fontWeight: 600 }}>Campaigns</div>
-        <Link href="/dashboard/campaigns/new" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 99, padding: '8px 14px', fontWeight: 700, fontSize: 13.5 }}><Plus size={16} strokeWidth={2.5} /> New</Link>
       </div>
 
       <div style={{ padding: '16px 18px 0' }}>
-        <p style={{ fontSize: 13.5, color: C.mute, margin: '0 0 16px' }}>How each campaign is doing. Costs and receipts live in <Link href="/dashboard/orders" style={{ color: C.greenDk, fontWeight: 600, textDecoration: 'none' }}>Orders</Link>.</p>
-
         {!empty && (
           <div style={{ display: 'inline-flex', background: '#f1f3f2', borderRadius: 10, padding: 3, marginBottom: 18 }}>
             {([['list', 'List'], ['calendar', 'Calendar']] as const).map(([k, l]) => {

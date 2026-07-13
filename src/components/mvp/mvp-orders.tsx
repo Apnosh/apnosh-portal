@@ -210,11 +210,7 @@ export default function MvpOrders() {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '2px 2px 14px' }}>
         <div style={{ minWidth: 0 }}>
           <h1 style={{ fontFamily: DISPLAY, fontSize: 23, fontWeight: 600, color: C.ink, lineHeight: 1.1 }}>Orders</h1>
-          <p style={{ fontSize: 13, color: C.mute, marginTop: 3 }}>What you&apos;re paying, in one place.</p>
         </div>
-        <Link href="/dashboard/campaigns/new" className="mvp-press" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, background: C.ink, color: '#fff', borderRadius: 99, padding: '8px 14px 8px 12px', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
-          <Plus size={15} /> New
-        </Link>
       </div>
 
       {error && (
