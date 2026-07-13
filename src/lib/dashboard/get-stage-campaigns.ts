@@ -24,6 +24,8 @@ const FUNNEL_TO_INSIGHTS: Record<string, string> = {
 export interface StageCampaign {
   id: string
   name: string
+  /** When the campaign actually went live (campaigns.shipped_at). Null if unknown. */
+  shippedAt: string | null
 }
 
 /** Active campaigns grouped by the insights stage key their live pieces work on. */
@@ -49,7 +51,7 @@ export async function getStageCampaigns(clientId: string): Promise<StageCampaign
       const ins = fk ? FUNNEL_TO_INSIGHTS[fk] : undefined
       if (ins) hit.add(ins)
     }
-    for (const ins of hit) out[ins]?.push({ id: c.draft.id, name: c.draft.name })
+    for (const ins of hit) out[ins]?.push({ id: c.draft.id, name: c.draft.name, shippedAt: c.shippedAt })
   }
 
   return out
