@@ -4548,13 +4548,14 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             />
           )}
 
-        </div>
+          {/* The persistent plan bar floats over the store content, above the bottom
+              nav (it lives inside this relative content area so bottom:0 sits just
+              above the nav, not over it). Store views only, when the plan has items. */}
+          {(route.name === "browse" || route.name === "catall") && planItems.length > 0 && (
+            <PlanBar items={planItems} onOpen={openPlan} />
+          )}
 
-        {/* The persistent plan bar: store views only (the PDP keeps its own buy footer,
-            and the plan view is the destination), whenever the plan holds anything. */}
-        {(route.name === "browse" || route.name === "catall") && planItems.length > 0 && (
-          <PlanBar items={planItems} onOpen={openPlan} />
-        )}
+        </div>
 
         <BottomNav active="campaigns" />
       </div>
