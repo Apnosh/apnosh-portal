@@ -34,7 +34,7 @@ import {
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
-import type { ComputedStage, StageSourceView, StageExplore } from '@/lib/insights/compute-stages'
+import type { ComputedStage, StageSourceView } from '@/lib/insights/compute-stages'
 import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
 
 const C = {
@@ -471,59 +471,7 @@ function EmptyStageHero({ label, note }: { label: string; note: string }) {
 // range the visible slide reported up — never its own separate state).
 function RangeSources({ cs, stageNumber, clientId, unit, title, range }: { cs: ComputedStage; stageNumber: number; clientId?: string; unit: string; title: string; range: string }) {
   const { stage, sub } = useRangeStage(cs, stageNumber, clientId, range)
-  const s = stage ?? cs
-  return (
-    <>
-      {stageNumber === 2 && s.explore && <ExplorePanel explore={s.explore} sub={sub} />}
-      <SourceBreakdown stage={s} unit={unit} title={title} sub={sub} showReconcile={false} showExtras={false} />
-    </>
-  )
-}
-
-// Interest enrichment: the real GA4 detail behind the headline — WHAT people
-// looked at (top pages) + HOW deeply (pages/visit, time on site, unique people).
-// Every number comes from the grounded payload; nothing is summed into the
-// headline. Hidden entirely when there's no real website data.
-function ExplorePanel({ explore, sub }: { explore: StageExplore; sub: string }) {
-  const max = Math.max(1, ...explore.topPages.map(p => p.views))
-  const fmtTime = (s: number | null): string | null => {
-    if (s == null) return null
-    const m = Math.floor(s / 60), sec = s % 60
-    return m > 0 ? `${m}m ${sec}s` : `${sec}s`
-  }
-  const stats: { label: string; value: string }[] = []
-  if (explore.pagesPerVisit != null) stats.push({ label: 'Pages per visit', value: String(explore.pagesPerVisit) })
-  const t = fmtTime(explore.avgSeconds)
-  if (t) stats.push({ label: 'Time on site', value: t })
-  if (explore.visitors != null) stats.push({ label: 'Unique people', value: explore.visitors.toLocaleString() })
-  if (explore.topPages.length === 0 && stats.length === 0) return null
-  return (
-    <Section title="What they explored" sub={sub}>
-      {explore.topPages.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: stats.length ? 16 : 0 }}>
-          {explore.topPages.map((p) => (
-            <div key={p.path} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 13, color: C.ink, width: 92, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.label}</span>
-              <div style={{ flex: 1, height: 8, background: C.bg, borderRadius: 99, overflow: 'hidden' }}>
-                <div style={{ width: `${Math.round((p.views / max) * 100)}%`, height: '100%', background: C.green, borderRadius: 99 }} />
-              </div>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, width: 40, textAlign: 'right', flexShrink: 0 }}>{p.views.toLocaleString()}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {stats.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${stats.length}, 1fr)`, gap: 8 }}>
-          {stats.map((s) => (
-            <div key={s.label} style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '12px 6px', textAlign: 'center' }}>
-              <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: C.ink }}>{s.value}</div>
-              <div style={{ fontSize: 11.5, color: C.mute, marginTop: 3 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </Section>
-  )
+  return <SourceBreakdown stage={stage ?? cs} unit={unit} title={title} sub={sub} showReconcile={false} showExtras={false} />
 }
 
 // The graceful Sales collapse: honest about what we cannot see yet, with the one
