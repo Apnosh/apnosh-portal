@@ -145,6 +145,29 @@ export interface GoalPlay {
   because?: string
 }
 
+/* ── Per-card delivery lanes (Fiverr-style) ────────────────────────────
+ * A card can offer its own "who does it" lanes, each with its OWN price, requirements, and add-ons.
+ * kind drives fulfillment + pricing: diy (owner runs it, free) / ai (Apnosh AI, often Pro-gated) /
+ * team (Apnosh does it, paid) / creator (a contractor does it). Absent = the card's default behavior.
+ * Stored on catalog_services.lanes (jsonb); the store renders the picker from it (wiring pending). */
+export type LaneKind = 'diy' | 'ai' | 'team' | 'creator'
+export interface CardLaneAddOn { label: string; amount: number; kind?: 'one-time' | 'monthly' }
+export interface CardLane {
+  id: string
+  label: string
+  kind: LaneKind
+  /** Lane price. null/absent = free. */
+  price?: { amount: number; kind: 'one-time' | 'monthly' | 'per-unit' } | null
+  /** AI lane included for Pro subscribers. */
+  proOnly?: boolean
+  /** What the restaurant must provide for THIS lane. */
+  requirements?: string[]
+  /** Optional paid extras for THIS lane. */
+  addOns?: CardLaneAddOn[]
+  /** Short owner-facing note under the lane. */
+  note?: string
+}
+
 export interface PricedService {
   id: string
   section: CatalogSection
@@ -178,6 +201,9 @@ export interface PricedService {
   /** Concrete "what's included" the client is paying for: a plain one-line summary + the deliverable
    *  bullets. Stored on catalog_services (deliverables jsonb); shown on the service card, editable. */
   deliverables?: { summary: string; included: string[] }
+  /** Per-card delivery lanes (see CardLane). Absent = default lane behavior. Stored on
+   *  catalog_services.lanes; admin-editable; store rendering pending. */
+  lanes?: CardLane[]
 }
 
 export function costOf(c: CostModel): number {
