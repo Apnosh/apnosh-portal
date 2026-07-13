@@ -7,7 +7,7 @@
  */
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { marginOf, MARGIN_FLOOR, type PricedService, type PricePoint } from '@/lib/campaigns/data/priced-catalog'
+import { marginOf, MARGIN_FLOOR, type PricedService, type PricePoint, type GoalPlay, type SystemGoal, type Tier } from '@/lib/campaigns/data/priced-catalog'
 import type { CatalogRow } from '@/lib/campaigns/data/catalog-db-shape'
 import { rowToService } from '@/lib/campaigns/data/catalog-db-shape'
 import { updateService, publishCatalog, type ServicePatch } from './actions'
@@ -22,6 +22,9 @@ const GOAL_CHIP: Record<string, { l: string; c: string }> = {
   regulars: { l: 'Regulars', c: '#7b5bd6' }, reviews: { l: 'Rating', c: '#c98a1a' },
 }
 const STATUSES: CatalogRow['status'][] = ['active', 'draft', 'archived', 'coming_soon']
+const GOAL_OPTS: SystemGoal[] = ['firstvisit', 'nights', 'regulars', 'reviews']
+const TIER_OPTS: Tier[] = ['lean', 'standard', 'aggressive']
+const TIER_LABEL: Record<Tier, string> = { lean: 'Lean+', standard: 'Standard+', aggressive: 'Aggressive only' }
 const priceLabel = (p: PricePoint) => p.kind === 'monthly' ? '/mo' : p.kind === 'per-unit' ? '/' + (p.unit || 'unit') : ' one-time'
 const minMargin = (svc: PricedService) => Math.min(...svc.prices.map((p) => marginOf(p).pct))
 
@@ -108,14 +111,22 @@ function EditDrawer({ row, preview, onClose, onSaved, flash }: { row: CatalogRow
   const [prices, setPrices] = useState<PricePoint[]>(() => row.prices.map((p) => ({ ...p })))
   const [delivSummary, setDelivSummary] = useState(row.deliverables?.summary ?? '')
   const [included, setIncluded] = useState<string[]>(() => [...(row.deliverables?.included ?? [])])
+  const [plays, setPlays] = useState<GoalPlay[]>(() => (row.goal_plays ?? []).map((p) => ({ ...p })))
   const [saving, start] = useTransition()
   const setAmount = (i: number, v: number) => setPrices((ps) => ps.map((p, j) => (j === i ? { ...p, amount: v } : p)))
   const setItem = (i: number, v: string) => setIncluded((xs) => xs.map((x, j) => (j === i ? v : x)))
+  const setPlay = (i: number, patch: Partial<GoalPlay>) => setPlays((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)))
+  const addPlay = () => setPlays((ps) => [...ps, { goal: 'firstvisit', stage: '', minTier: 'lean', role: '' }])
+  const removePlay = (i: number) => setPlays((ps) => ps.filter((_, j) => j !== i))
 
   function save() {
     const inc = included.map((x) => x.trim()).filter(Boolean)
     const deliverables = (delivSummary.trim() || inc.length) ? { summary: delivSummary.trim(), included: inc } : null
-    const patch: ServicePatch = { name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), status, prices, deliverables }
+    // a recipe row only counts if it names the campaign (goal), where it lands (stage), and its job (role)
+    const cleanPlays = plays
+      .map((p) => ({ goal: p.goal, stage: p.stage.trim(), minTier: p.minTier, weight: p.weight, role: p.role.trim(), because: p.because?.trim() || undefined }))
+      .filter((p) => p.stage && p.role)
+    const patch: ServicePatch = { name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), status, prices, deliverables, goal_plays: cleanPlays.length ? cleanPlays : null }
     if (preview) { flash('Preview mode: saving is off'); return }
     start(async () => {
       const r = await updateService(row.id, patch)
@@ -170,6 +181,38 @@ function EditDrawer({ row, preview, onClose, onSaved, flash }: { row: CatalogRow
             </div>
             <button onClick={() => setIncluded((xs) => [...xs, ''])} className="text-[12px] text-brand font-medium mt-2">+ Add an item</button>
             <p className="text-[11px] text-ink-4 mt-1.5">The concrete things the client is paying for. Shown on the service card.</p>
+          </div>
+
+          {/* Campaign recipe — the goal_plays that drive auto-composition. This is
+              the metadata that lets a plan be built for any restaurant without hand-
+              assembly: which campaign(s) this item belongs to, from which budget tier,
+              where it lands in the plan, and how it ranks. */}
+          <div>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">In these campaigns</span>
+            <p className="text-[11px] text-ink-4 mt-0.5 mb-2">Which goals this item is part of, and how it ranks. This is what auto-builds a restaurant&apos;s plan — no AI needed.</p>
+            <div className="space-y-2">
+              {plays.map((p, i) => (
+                <div key={i} className="rounded-lg border border-ink-6 p-2.5 space-y-2 bg-bg-2/40">
+                  <div className="flex items-center gap-2">
+                    <select className={field} value={p.goal} onChange={(e) => setPlay(i, { goal: e.target.value as SystemGoal })}>
+                      {GOAL_OPTS.map((g) => <option key={g} value={g}>{GOAL_CHIP[g]?.l ?? g}</option>)}
+                    </select>
+                    <select className={field} value={p.minTier} onChange={(e) => setPlay(i, { minTier: e.target.value as Tier })} title="Cheapest budget tier that includes this">
+                      {TIER_OPTS.map((t) => <option key={t} value={t}>{TIER_LABEL[t]}</option>)}
+                    </select>
+                    <button onClick={() => removePlay(i)} className="text-ink-4 text-[14px] px-1 shrink-0" title="Remove from this campaign">✕</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input className={field} value={p.stage} onChange={(e) => setPlay(i, { stage: e.target.value })} placeholder="Stage label (e.g. Be findable)" />
+                    <input type="number" className={field + ' w-20 shrink-0'} value={p.weight ?? ''} onChange={(e) => setPlay(i, { weight: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="Order" title="Higher sorts first within its stage" />
+                  </div>
+                  <input className={field} value={p.role} onChange={(e) => setPlay(i, { role: e.target.value })} placeholder="Its job in this campaign (owner-facing)" />
+                  <input className={field} value={p.because ?? ''} onChange={(e) => setPlay(i, { because: e.target.value })} placeholder="Why it matters (optional)" />
+                </div>
+              ))}
+              {plays.length === 0 && <p className="text-[12px] text-ink-4">Not in any campaign yet. Add it to one so it can appear in auto-built plans.</p>}
+            </div>
+            <button onClick={addPlay} className="text-[12px] text-brand font-medium mt-2">+ Add to a campaign</button>
           </div>
         </div>
         <div className="sticky bottom-0 bg-white border-t border-ink-6 px-5 py-3 flex gap-2">
