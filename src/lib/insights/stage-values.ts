@@ -22,7 +22,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { InsightsWindow } from './compute-stages'
+import type { InsightsWindow, StageExplore } from './compute-stages'
 
 /** source id -> real value for the window (null = unavailable, excluded from sums). */
 export type StageValueMap = Record<string, number | null>
@@ -188,4 +188,65 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
   } catch { /* GSC unavailable */ }
 
   return out
+}
+
+/** Interest enrichment: the real GA4 "what they explored" + engagement depth for
+ *  the window. Best-effort; returns null when there's no real website data, so
+ *  the Interest panel simply hides rather than inventing an empty state. Every
+ *  number is a real sum/weighted-average of rows — nothing estimated. */
+export async function loadInterestExplore(clientId: string, w: InsightsWindow = '30d'): Promise<StageExplore | null> {
+  const { otherBound } = windowBounds(w)
+  const admin = createAdminClient()
+  try {
+    const { data, error } = await admin
+      .from('website_metrics')
+      .select('sessions, page_views, visitors, avg_session_duration, top_pages')
+      .eq('client_id', clientId)
+      .gte('date', otherBound)
+    if (error || !data || data.length === 0) return null
+    let sessions = 0, pageViews = 0, visitors = 0, durSum = 0, durWeight = 0
+    let sawSessions = false, sawVisitors = false, sawDur = false
+    const pageViewsByPath = new Map<string, number>()
+    for (const r of data as Record<string, unknown>[]) {
+      if (r.sessions != null) { sessions += num(r.sessions); sawSessions = true }
+      pageViews += num(r.page_views)
+      if (r.visitors != null) { visitors += num(r.visitors); sawVisitors = true }
+      if (r.avg_session_duration != null) {
+        const s = num(r.sessions) || 1
+        durSum += num(r.avg_session_duration) * s
+        durWeight += s
+        sawDur = true
+      }
+      const tp = r.top_pages
+      if (Array.isArray(tp)) {
+        for (const p of tp as Array<{ path?: unknown; views?: unknown }>) {
+          const path = typeof p?.path === 'string' ? p.path : null
+          if (!path) continue
+          pageViewsByPath.set(path, (pageViewsByPath.get(path) ?? 0) + num(p.views))
+        }
+      }
+    }
+    if (!sawSessions || sessions === 0) return null  // no real website data -> hide the panel
+    const topPages = [...pageViewsByPath.entries()]
+      .map(([path, views]) => ({ path, label: labelForPath(path), views }))
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 6)
+    return {
+      topPages,
+      pagesPerVisit: sessions > 0 ? Math.round((pageViews / sessions) * 10) / 10 : null,
+      avgSeconds: sawDur && durWeight > 0 ? Math.round(durSum / durWeight) : null,
+      visitors: sawVisitors ? visitors : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** "/menu/" -> "Menu", "/" -> "Home", "/about-us/#team" -> "About us". */
+function labelForPath(path: string): string {
+  const clean = path.split('#')[0].split('?')[0].replace(/^\/+|\/+$/g, '')
+  if (!clean) return 'Home'
+  const seg = clean.split('/').pop() || clean
+  const words = seg.replace(/[-_]+/g, ' ').trim()
+  return words.charAt(0).toUpperCase() + words.slice(1)
 }
