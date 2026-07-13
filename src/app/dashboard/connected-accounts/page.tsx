@@ -218,7 +218,8 @@ function DetailSheet({ conn, connectHref, onClose, onChanged }: { conn: UnifiedC
   const actionBtn: React.CSSProperties = { width: '100%', height: 46, borderRadius: 13, border: `1px solid ${C.line}`, background: '#fff', color: C.ink, fontSize: 15, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10, textDecoration: 'none' }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 70, background: C.bg, display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 70, background: '#f0f0f3', display: 'flex', justifyContent: 'center', fontFamily: "'Inter',system-ui,sans-serif" }}>
+      <div style={{ width: '100%', maxWidth: 480, background: C.bg, display: 'flex', flexDirection: 'column', minHeight: 0, boxShadow: '0 0 40px rgba(0,0,0,0.06)' }}>
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: '#fff', borderBottom: `0.5px solid ${C.line}` }}>
         <button type="button" onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: C.mute, cursor: 'pointer', display: 'flex', padding: 4 }}><X size={20} /></button>
         <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>{conn.label}</span>
@@ -267,6 +268,7 @@ function DetailSheet({ conn, connectHref, onClose, onChanged }: { conn: UnifiedC
             <button type="button" onClick={() => setConfirmDisc(true)} style={{ ...actionBtn, color: C.coral, border: `1px solid ${C.coralSoft}` }}>Disconnect</button>
           )
         )}
+      </div>
       </div>
     </div>
   )
