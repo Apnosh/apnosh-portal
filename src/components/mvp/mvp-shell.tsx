@@ -26,12 +26,12 @@ const SHELL_CSS = `
 
 // `header` replaces the default AppHeader — detail pages reached from a tab
 // pass an MvpDetailHeader (back + title) instead of the full app header.
-export default function MvpShell({ active, unread, header, children }: { active: NavKey; unread?: boolean; header?: React.ReactNode; children: React.ReactNode }) {
+export default function MvpShell({ active, unread, header, children }: { active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="mvp-shell">
       <style>{SHELL_CSS}</style>
       <div className="mvp-frame">
-        {header ?? <AppHeader unread={unread} />}
+        {header ?? <AppHeader count={unread} />}
         <div className="mvp-frame-scroll">{children}</div>
         <BottomNav active={active} />
       </div>
