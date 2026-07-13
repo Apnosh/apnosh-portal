@@ -250,8 +250,10 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
     })
   }
 
-  const field = 'w-full text-[13px] text-ink border border-ink-6 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-brand'
-  const lbl = 'text-[11px] font-semibold uppercase tracking-wide text-ink-3'
+  const field = 'w-full text-[13.5px] text-ink bg-white border border-ink-6 rounded-xl px-3 py-2.5 placeholder:text-ink-4 focus:outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 transition'
+  const lbl = 'block text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-3 mb-1'
+  const panel = 'bg-white rounded-2xl border border-ink-6 shadow-[0_1px_2px_rgba(16,24,40,0.04)] p-5 space-y-4'
+  const panelHead = 'text-[14.5px] font-semibold text-ink'
   // a customer-facing snapshot of the card, straight from the form state
   const previewPrice = prices.length
     ? prices.map((e) => '$' + (e.amount || 0).toLocaleString() + (e.kind === 'monthly' ? '/mo' : e.kind === 'per-unit' ? '/' + (e.unit.trim() || 'unit') : '')).join(' + ')
@@ -263,15 +265,17 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
   return (
     <div className="fixed inset-0 z-[60] bg-bg-2 overflow-y-auto">
       {/* top bar with the actions — full-screen takeover above the admin sidebar (z-50) */}
-      <div className="sticky top-0 z-10 bg-white border-b border-ink-6 px-5 lg:px-8 py-3 flex items-center justify-between gap-3">
+      <div className="sticky top-0 z-10 bg-white/85 backdrop-blur-md border-b border-ink-6 px-5 lg:px-8 py-2.5 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={onClose} className="text-[13px] font-medium text-ink-3 hover:text-ink shrink-0">&larr; Back to catalog</button>
+          <button onClick={onClose} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-3 hover:text-ink shrink-0"><span className="text-[15px] leading-none">&larr;</span> Catalog</button>
+          <div className="w-px h-5 bg-ink-6 hidden sm:block" />
           <div className="text-[15px] font-semibold text-ink truncate hidden sm:block">{creating ? 'New card' : (plain || name || row.id)}</div>
+          {!creating && <span className={'text-[9.5px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 shrink-0 ' + (status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-ink-7 text-ink-3')}>{status}</span>}
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          {!creating && <button onClick={() => onDuplicate(row)} className="text-[12.5px] font-medium text-ink-3 hover:text-ink">Duplicate</button>}
-          {!creating && <button onClick={del} disabled={saving} className="text-[12.5px] font-medium text-rose-600 hover:text-rose-700">Delete</button>}
-          <button onClick={save} disabled={saving} className="bg-brand text-white text-[13px] font-semibold rounded-lg px-5 py-2 disabled:opacity-60">{saving ? (creating ? 'Creating…' : 'Saving…') : (creating ? 'Create card' : 'Save')}</button>
+        <div className="flex items-center gap-1 shrink-0">
+          {!creating && <button onClick={() => onDuplicate(row)} className="text-[12.5px] font-medium text-ink-3 hover:text-ink rounded-lg px-3 py-2 hover:bg-bg-2">Duplicate</button>}
+          {!creating && <button onClick={del} disabled={saving} className="text-[12.5px] font-medium text-rose-600 hover:text-rose-700 rounded-lg px-3 py-2 hover:bg-rose-50">Delete</button>}
+          <button onClick={save} disabled={saving} className="ml-1 bg-brand text-white text-[13px] font-semibold rounded-xl px-5 py-2 shadow-sm hover:brightness-105 disabled:opacity-60 transition">{saving ? (creating ? 'Creating…' : 'Saving…') : (creating ? 'Create card' : 'Save')}</button>
         </div>
       </div>
       {/* two columns: the form on the left, a sticky live preview on the right */}
@@ -362,7 +366,9 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
           )}
 
         </aside>
-        <div className="space-y-4 order-2 lg:order-1">
+        <div className="space-y-5 order-2 lg:order-1">
+          <section className={panel}>
+          <div className={panelHead}>The basics</div>
           {/* identity */}
           <label className="block"><span className={lbl}>Card name</span><input className={field} value={name} onChange={(e) => onName(e.target.value)} placeholder="e.g. Menu photo refresh" /></label>
           <div className="grid grid-cols-2 gap-3">
@@ -388,9 +394,12 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
           </div>
           <label className="block"><span className={lbl}>Why they do it (optional)</span><input className={field} value={handlerWhy} onChange={(e) => setHandlerWhy(e.target.value)} placeholder="e.g. Needs a pro camera and editing." /></label>
 
+          </section>
+
           {/* pricing */}
+          <section className={panel}>
           <div>
-            <div className="flex items-center justify-between"><span className={lbl}>Price</span><button onClick={addPrice} className="text-[12px] text-brand font-medium">+ Add a price</button></div>
+            <div className="flex items-center justify-between"><span className={panelHead}>Price</span><button onClick={addPrice} className="text-[12.5px] text-brand font-semibold">+ Add a price</button></div>
             <div className="space-y-2 mt-1.5">
               {prices.map((e, i) => {
                 const m = marginOf(toPricePoint(e))
@@ -416,9 +425,12 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
             <p className="text-[11px] text-ink-4 mt-1.5">Set your price and your cost. Margin updates live; red is under your {Math.round(MARGIN_FLOOR * 100)}% floor.</p>
           </div>
 
+          </section>
+
           {/* what's included */}
+          <section className={panel}>
           <div>
-            <span className={lbl}>What&apos;s included</span>
+            <span className={panelHead}>What&apos;s included</span>
             <input className={field + ' mt-1'} value={delivSummary} onChange={(e) => setDelivSummary(e.target.value)} placeholder="One-line summary of what this is" />
             <div className="space-y-1.5 mt-2">
               {included.map((item, i) => (
@@ -433,9 +445,12 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
             <p className="text-[11px] text-ink-4 mt-1.5">The concrete things the client is paying for. Shown on the card.</p>
           </div>
 
+          </section>
+
           {/* campaign recipe (goal_plays) */}
+          <section className={panel}>
           <div>
-            <span className={lbl}>In these campaigns</span>
+            <span className={panelHead}>In these campaigns</span>
             <p className="text-[11px] text-ink-4 mt-0.5 mb-2">Which goals this card is part of, and how it ranks. This is what auto-builds a restaurant&apos;s plan — no AI needed. Optional.</p>
             <div className="space-y-2">
               {plays.map((p, i) => (
@@ -462,11 +477,14 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
             <button onClick={addPlay} className="text-[12px] text-brand font-medium mt-2">+ Add to a campaign</button>
           </div>
 
+          </section>
+
           {/* who can do it — per-card lanes (Fiverr-style) */}
+          <section className={panel}>
           <div>
             <div className="flex items-center justify-between">
-              <span className={lbl}>Who can do it</span>
-              <button onClick={addLane} className="text-[12px] text-brand font-medium">+ Add a lane</button>
+              <span className={panelHead}>Who can do it</span>
+              <button onClick={addLane} className="text-[12.5px] text-brand font-semibold">+ Add a lane</button>
             </div>
             <p className="text-[11px] text-ink-4 mt-0.5 mb-2">The options the customer picks between. Each lane has its own price, requirements, and add-ons. Leave empty to use the default.</p>
             <div className="space-y-3">
@@ -508,6 +526,7 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
               {lanes.length === 0 && <p className="text-[12px] text-ink-4">No custom lanes — this card uses the default. Add lanes to offer DIY / Apnosh AI / done-for-you your own way, each with its own price.</p>}
             </div>
           </div>
+          </section>
         </div>
       </div>
     </div>
