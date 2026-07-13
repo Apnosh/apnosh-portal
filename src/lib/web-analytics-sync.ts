@@ -111,6 +111,7 @@ async function ingestGA4DayForClient(
       mobile_pct: m.mobilePct,
       traffic_sources: m.trafficSources,
       top_pages: m.topPages,
+      raw_data: m.raw ?? null,
     }, { onConflict: 'client_id,date' })
     if (error) return { ok: false, error: error.message }
     /* Phase 1.5 outcome-funnel event sources. Best-effort and isolated: it
@@ -236,6 +237,7 @@ async function ingestGSCDayForClient(
       avg_position: m.avgPosition,
       top_queries: m.topQueries,
       top_pages: m.topPages,
+      raw_data: m.raw ?? null,
     }, { onConflict: 'client_id,date' })
     if (error) return { ok: false, error: error.message }
     return { ok: true }
