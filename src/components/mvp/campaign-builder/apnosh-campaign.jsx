@@ -2306,6 +2306,28 @@ const LENS_CHIPS = [
 // card answers "which of my numbers does this move" at a glance.
 const ITEM_STAGES = Object.fromEntries(CREATE_CATALOG.map((c) => [c.id, c.stages || []]));
 
+// "Analytics to track" — the real Insights metrics a campaign is built to lift,
+// so the owner knows exactly what to watch grow. Derived from the funnel stages
+// the campaign moves (STAGE_ANALYTICS), with per-item overrides for channel-
+// specific work (e.g. a Google-profile campaign tracks the Google metrics).
+const STAGE_ANALYTICS = {
+  aware: ["Google search views", "Google map views", "Social reach"],
+  interest: ["Website visits", "Menu views", "Profile visits"],
+  actions: ["Direction requests", "Calls", "Website clicks"],
+  orders: ["Online orders", "Guests"],
+  back: ["New reviews", "Repeat guests"],
+};
+const ITEM_ANALYTICS = {
+  gbp: ["Google search views", "Google map views", "Direction requests", "Calls", "Website clicks"],
+};
+function analyticsToTrack(p) {
+  const id = p && p.id;
+  if (id && ITEM_ANALYTICS[id]) return ITEM_ANALYTICS[id];
+  const out = [];
+  for (const s of ITEM_STAGES[id] || []) for (const m of STAGE_ANALYTICS[s] || []) if (!out.includes(m)) out.push(m);
+  return out.slice(0, 6);
+}
+
 function planTags(p) {
   const t = [];
   // Price split into plain parts instead of one dense "$X + $Y/mo" string (the owner's
@@ -3081,6 +3103,10 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   // The "Add extras" block at the bottom only exists when this card has REAL add-ons or a
   // Pro AI row to offer. When it has neither, the whole block is hidden (renders nothing).
   const hasExtras = optServices.length > 0 || (doerCfg && !!aiOpt);
+  // Add-ons are paused for now (owner) — the bottom section shows the Insights
+  // metrics this campaign is built to lift instead ("Analytics to track").
+  const showAddOns = false;
+  const analytics = analyticsToTrack(p);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
@@ -3282,7 +3308,23 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
               its deliverables show inline here. Toggling one genuinely adds/removes its serviceId
               from the composed draft (svcLines), so the live total AND the "What you get" list above
               both update. Hidden entirely when there are no real options and no AI row. ── */}
-        {hasExtras && (
+        {analytics.length > 0 && (
+          <div style={{ padding: "28px 20px 0" }}>
+            <BlockLabel label="Analytics to track" hint="Watch these grow" />
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {analytics.map((a) => (
+                <div key={a} style={{ display: "flex", alignItems: "center", gap: 11, border: `1.5px solid ${TOKENS.line}`, borderRadius: 14, background: "#fff", padding: "12px 14px" }}>
+                  <span style={{ width: 26, height: 26, borderRadius: 8, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="M7 14l4-4 3 3 5-6" /></svg>
+                  </span>
+                  <span style={{ flex: 1, fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink }}>{a}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, marginTop: 10, lineHeight: 1.45 }}>The numbers this campaign is built to lift. Watch them grow in your Insights.</div>
+          </div>
+        )}
+        {showAddOns && hasExtras && (
           <div style={{ padding: "28px 20px 0" }}>
             <BlockLabel label="Add ons" hint="Optional" />
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
