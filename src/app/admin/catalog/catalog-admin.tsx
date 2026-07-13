@@ -261,18 +261,22 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
   const pvSel = pvLanes[Math.min(pvLane, Math.max(0, pvLanes.length - 1))]
   const laneChip = (l: CardLane) => (!l.price ? (l.kind === 'ai' && l.proOnly ? 'Pro' : 'Free') : '$' + l.price.amount.toLocaleString() + (l.price.kind === 'monthly' ? '/mo' : ''))
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-ink/30" />
-      <div className="relative w-full max-w-[460px] h-full bg-white shadow-xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 z-10 bg-white border-b border-ink-6 px-5 py-3 flex items-center justify-between gap-3">
-          <div className="text-[14px] font-semibold text-ink truncate">{creating ? 'New card' : (plain || name || row.id)}</div>
-          <div className="flex items-center gap-3 shrink-0">
-            {!creating && <button onClick={() => onDuplicate(row)} className="text-[12px] text-ink-3 hover:text-ink">Duplicate</button>}
-            {!creating && <button onClick={del} disabled={saving} className="text-[12px] text-rose-600 hover:text-rose-700">Delete</button>}
-            <button onClick={onClose} className="text-ink-3 text-[13px]">Close</button>
-          </div>
+    <div className="fixed inset-0 z-40 bg-bg-2 overflow-y-auto">
+      {/* top bar with the actions */}
+      <div className="sticky top-0 z-10 bg-white border-b border-ink-6 px-5 lg:px-8 py-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={onClose} className="text-[13px] font-medium text-ink-3 hover:text-ink shrink-0">&larr; Back to catalog</button>
+          <div className="text-[15px] font-semibold text-ink truncate hidden sm:block">{creating ? 'New card' : (plain || name || row.id)}</div>
         </div>
-        <div className="p-5 space-y-4">
+        <div className="flex items-center gap-3 shrink-0">
+          {!creating && <button onClick={() => onDuplicate(row)} className="text-[12.5px] font-medium text-ink-3 hover:text-ink">Duplicate</button>}
+          {!creating && <button onClick={del} disabled={saving} className="text-[12.5px] font-medium text-rose-600 hover:text-rose-700">Delete</button>}
+          <button onClick={save} disabled={saving} className="bg-brand text-white text-[13px] font-semibold rounded-lg px-5 py-2 disabled:opacity-60">{saving ? (creating ? 'Creating…' : 'Saving…') : (creating ? 'Create card' : 'Save')}</button>
+        </div>
+      </div>
+      {/* two columns: the form on the left, a sticky live preview on the right */}
+      <div className="max-w-[1120px] mx-auto px-5 lg:px-8 py-6 grid lg:grid-cols-[minmax(0,1fr)_400px] gap-6 lg:gap-10 items-start">
+        <aside className="space-y-4 order-1 lg:order-2 lg:sticky lg:top-[70px]">
           {/* full-page preview — how the customer's product page reads, from the form data */}
           <div className="rounded-xl bg-bg-2/50 p-3">
             <div className="flex items-center justify-between mb-1.5">
@@ -357,6 +361,8 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
             </div>
           )}
 
+        </aside>
+        <div className="space-y-4 order-2 lg:order-1">
           {/* identity */}
           <label className="block"><span className={lbl}>Card name</span><input className={field} value={name} onChange={(e) => onName(e.target.value)} placeholder="e.g. Menu photo refresh" /></label>
           <div className="grid grid-cols-2 gap-3">
@@ -502,10 +508,6 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
               {lanes.length === 0 && <p className="text-[12px] text-ink-4">No custom lanes — this card uses the default. Add lanes to offer DIY / Apnosh AI / done-for-you your own way, each with its own price.</p>}
             </div>
           </div>
-        </div>
-        <div className="sticky bottom-0 bg-white border-t border-ink-6 px-5 py-3 flex gap-2">
-          <button onClick={save} disabled={saving} className="flex-1 bg-brand text-white text-[13px] font-semibold rounded-lg py-2 disabled:opacity-60">{saving ? (creating ? 'Creating…' : 'Saving…') : (creating ? 'Create card' : 'Save')}</button>
-          <button onClick={onClose} className="text-[13px] text-ink-3 px-3">Cancel</button>
         </div>
       </div>
     </div>
