@@ -7,10 +7,10 @@
  */
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { marginOf, MARGIN_FLOOR, type PricedService, type PricePoint, type GoalPlay, type SystemGoal, type Tier } from '@/lib/campaigns/data/priced-catalog'
+import { marginOf, costOf, OVERHEAD_MULT, MARGIN_FLOOR, HANDLERS, type PricedService, type PricePoint, type GoalPlay, type SystemGoal, type Tier, type Handler } from '@/lib/campaigns/data/priced-catalog'
 import type { CatalogRow } from '@/lib/campaigns/data/catalog-db-shape'
 import { rowToService } from '@/lib/campaigns/data/catalog-db-shape'
-import { updateService, publishCatalog, type ServicePatch } from './actions'
+import { updateService, createService, publishCatalog, type ServicePatch, type NewService } from './actions'
 
 const SECTION_LABEL: Record<string, string> = {
   foundation: 'Foundations', awareness: 'Get discovered', capture: 'Capture guests', convert: 'Turn into visits',
@@ -22,15 +22,27 @@ const GOAL_CHIP: Record<string, { l: string; c: string }> = {
   regulars: { l: 'Regulars', c: '#7b5bd6' }, reviews: { l: 'Rating', c: '#c98a1a' },
 }
 const STATUSES: CatalogRow['status'][] = ['active', 'draft', 'archived', 'coming_soon']
+const HANDLER_OPTS = Object.keys(HANDLERS) as Handler[]
+const PRICE_KINDS: PricePoint['kind'][] = ['one-time', 'monthly', 'per-unit']
+const kebab = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48)
+/** A blank card to author from scratch. */
+function blankRow(): CatalogRow {
+  return {
+    id: '', section: 'awareness', name: '', plain_name: '', description: '', essential: false,
+    handler: 'apnosh', handler_why: '', evidence: null, compliance: null, metric: null,
+    prices: [{ kind: 'one-time', amount: 0, cost: {} }], goal_plays: null, fit: null, pieces: null,
+    deliverables: null, status: 'draft', sort_order: 0,
+  }
+}
 const GOAL_OPTS: SystemGoal[] = ['firstvisit', 'nights', 'regulars', 'reviews']
 const TIER_OPTS: Tier[] = ['lean', 'standard', 'aggressive']
 const TIER_LABEL: Record<Tier, string> = { lean: 'Lean+', standard: 'Standard+', aggressive: 'Aggressive only' }
-const priceLabel = (p: PricePoint) => p.kind === 'monthly' ? '/mo' : p.kind === 'per-unit' ? '/' + (p.unit || 'unit') : ' one-time'
 const minMargin = (svc: PricedService) => Math.min(...svc.prices.map((p) => marginOf(p).pct))
 
 export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: { rows: CatalogRow[]; preview?: boolean; initialOpenId?: string }) {
   const [rows, setRows] = useState<CatalogRow[]>(initial)
   const [editId, setEditId] = useState<string | null>(initialOpenId ?? null)
+  const [creating, setCreating] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [toast, setToast] = useState<{ msg: string; bad?: boolean } | null>(null)
   const [pending, start] = useTransition()
@@ -43,6 +55,11 @@ export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: 
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } as CatalogRow : r)))
     setDirty(true); setEditId(null)
   }
+  function onCreated(row: CatalogRow) {
+    setRows((rs) => [row, ...rs])
+    setDirty(true); setCreating(false)
+    flash(`Created "${row.plain_name || row.name}". Publish to make it live.`)
+  }
 
   const editing = editId ? byId[editId] : null
 
@@ -51,14 +68,15 @@ export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: 
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">Admin</p>
-          <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1">Service catalog</h1>
-          <p className="text-[13px] text-ink-3 mt-1">{rows.length} services · click a row to edit{preview ? ' · preview (saving off)' : ''}</p>
+          <h1 className="text-[26px] font-semibold text-ink leading-tight mt-1">Catalog</h1>
+          <p className="text-[13px] text-ink-3 mt-1">{rows.length} cards · click one to edit, or make a new card. Publish when you&apos;re ready{preview ? ' · preview (saving off)' : ''}.</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 rounded-lg bg-bg-2 p-1 mr-1">
             <span className="text-[12.5px] font-semibold rounded-md px-3 py-1.5 bg-white text-ink shadow-sm">Services</span>
             <Link href="/admin/catalog/campaigns" className="text-[12.5px] font-medium rounded-md px-3 py-1.5 text-ink-3 hover:text-ink">Campaigns</Link>
           </div>
+          <button onClick={() => setCreating(true)} disabled={preview} className="inline-flex items-center gap-1.5 text-[13px] font-semibold rounded-lg px-3.5 py-2 bg-brand text-white disabled:opacity-50">＋ New card</button>
           {dirty && <span className="text-[12px] text-amber-600 font-medium">Unpublished changes</span>}
           <button
             disabled={pending || preview}
@@ -67,7 +85,7 @@ export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: 
               const r = await publishCatalog()
               if (r.ok) { setDirty(false); flash(`Published — ${r.count} services live in plans`) } else flash(r.error || 'Publish failed', true)
             })}
-            className={'text-[13px] font-semibold rounded-lg px-3.5 py-2 ' + (dirty && !preview ? 'bg-brand text-white' : 'bg-bg-2 text-ink-3')}
+            className={'text-[13px] font-semibold rounded-lg px-3.5 py-2 border border-ink-6 ' + (dirty && !preview ? 'bg-ink text-white border-ink' : 'bg-white text-ink-3')}
           >{pending ? 'Working…' : 'Publish to live'}</button>
         </div>
       </div>
@@ -97,37 +115,80 @@ export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: 
         </section>
       ))}
 
-      {editing && <EditDrawer key={editing.id} row={editing} preview={preview} onClose={() => setEditId(null)} onSaved={onSaved} flash={flash} />}
+      {editing && <EditDrawer key={editing.id} mode="edit" row={editing} existingIds={rows.map((r) => r.id)} preview={preview} onClose={() => setEditId(null)} onSaved={onSaved} onCreated={onCreated} flash={flash} />}
+      {creating && <EditDrawer key="__new" mode="create" row={blankRow()} existingIds={rows.map((r) => r.id)} preview={preview} onClose={() => setCreating(false)} onSaved={onSaved} onCreated={onCreated} flash={flash} />}
       {toast && <div className={'fixed bottom-5 left-1/2 -translate-x-1/2 z-50 text-[13px] font-medium text-white rounded-lg px-4 py-2.5 shadow-lg ' + (toast.bad ? 'bg-rose-600' : 'bg-ink')}>{toast.msg}</div>}
     </div>
   )
 }
 
-function EditDrawer({ row, preview, onClose, onSaved, flash }: { row: CatalogRow; preview: boolean; onClose: () => void; onSaved: (id: string, patch: ServicePatch) => void; flash: (m: string, bad?: boolean) => void }) {
+// A price the admin is editing. We keep the original PricePoint so note/market/etc.
+// survive, and only override kind/amount/unit/cost. Cost is a plain "our cost $"
+// the admin types; we store it back so costOf() reproduces it exactly (÷ overhead).
+type EPrice = { kind: PricePoint['kind']; amount: number; unit: string; costDollars: number; costTouched: boolean; orig: PricePoint }
+function toEPrice(p: PricePoint): EPrice {
+  return { kind: p.kind, amount: p.amount, unit: p.unit ?? '', costDollars: Math.round(costOf(p.cost)), costTouched: false, orig: p }
+}
+function toPricePoint(e: EPrice): PricePoint {
+  const cost = e.costTouched ? { tools: Math.round((e.costDollars / OVERHEAD_MULT) * 100) / 100 } : e.orig.cost
+  return { ...e.orig, kind: e.kind, amount: e.amount, unit: e.kind === 'per-unit' ? (e.unit.trim() || 'unit') : undefined, cost }
+}
+
+function EditDrawer({ mode, row, existingIds, preview, onClose, onSaved, onCreated, flash }: { mode: 'create' | 'edit'; row: CatalogRow; existingIds: string[]; preview: boolean; onClose: () => void; onSaved: (id: string, patch: ServicePatch) => void; onCreated: (row: CatalogRow) => void; flash: (m: string, bad?: boolean) => void }) {
+  const creating = mode === 'create'
+  const [id, setId] = useState(row.id)
+  const [idTouched, setIdTouched] = useState(!creating)
+  const [section, setSection] = useState<string>(row.section)
   const [name, setName] = useState(row.name)
   const [plain, setPlain] = useState(row.plain_name ?? '')
   const [desc, setDesc] = useState(row.description)
   const [status, setStatus] = useState<CatalogRow['status']>(row.status)
-  const [prices, setPrices] = useState<PricePoint[]>(() => row.prices.map((p) => ({ ...p })))
+  const [handler, setHandler] = useState<string>(row.handler)
+  const [handlerWhy, setHandlerWhy] = useState(row.handler_why)
+  const [essential, setEssential] = useState(row.essential)
+  const [prices, setPrices] = useState<EPrice[]>(() => row.prices.map(toEPrice))
   const [delivSummary, setDelivSummary] = useState(row.deliverables?.summary ?? '')
   const [included, setIncluded] = useState<string[]>(() => [...(row.deliverables?.included ?? [])])
   const [plays, setPlays] = useState<GoalPlay[]>(() => (row.goal_plays ?? []).map((p) => ({ ...p })))
   const [saving, start] = useTransition()
-  const setAmount = (i: number, v: number) => setPrices((ps) => ps.map((p, j) => (j === i ? { ...p, amount: v } : p)))
+
+  const onName = (v: string) => { setName(v); if (creating && !idTouched) setId(kebab(v)) }
+  const setPrice = (i: number, patch: Partial<EPrice>) => setPrices((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)))
+  const addPrice = () => setPrices((ps) => [...ps, toEPrice({ kind: 'one-time', amount: 0, cost: {} })])
+  const removePrice = (i: number) => setPrices((ps) => ps.filter((_, j) => j !== i))
   const setItem = (i: number, v: string) => setIncluded((xs) => xs.map((x, j) => (j === i ? v : x)))
   const setPlay = (i: number, patch: Partial<GoalPlay>) => setPlays((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)))
   const addPlay = () => setPlays((ps) => [...ps, { goal: 'firstvisit', stage: '', minTier: 'lean', role: '' }])
   const removePlay = (i: number) => setPlays((ps) => ps.filter((_, j) => j !== i))
 
   function save() {
+    if (preview) { flash('Preview mode: saving is off'); return }
+    const finalId = id.trim().toLowerCase()
+    if (creating) {
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(finalId)) return flash('Give it an ID: lowercase words joined by dashes.', true)
+      if (existingIds.includes(finalId)) return flash(`ID "${finalId}" is taken. Pick another.`, true)
+    }
+    if (!name.trim()) return flash('A name is required.', true)
+    const pricePoints = prices.map(toPricePoint)
+    if (pricePoints.length === 0) return flash('Add at least one price.', true)
     const inc = included.map((x) => x.trim()).filter(Boolean)
     const deliverables = (delivSummary.trim() || inc.length) ? { summary: delivSummary.trim(), included: inc } : null
-    // a recipe row only counts if it names the campaign (goal), where it lands (stage), and its job (role)
     const cleanPlays = plays
       .map((p) => ({ goal: p.goal, stage: p.stage.trim(), minTier: p.minTier, weight: p.weight, role: p.role.trim(), because: p.because?.trim() || undefined }))
       .filter((p) => p.stage && p.role)
-    const patch: ServicePatch = { name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), status, prices, deliverables, goal_plays: cleanPlays.length ? cleanPlays : null }
-    if (preview) { flash('Preview mode: saving is off'); return }
+    const goal_plays = cleanPlays.length ? cleanPlays : null
+
+    if (creating) {
+      const newSvc: NewService = { id: finalId, section, name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, status }
+      start(async () => {
+        const r = await createService(newSvc)
+        if (r.ok) {
+          onCreated({ ...row, id: finalId, section, name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, status })
+        } else flash(r.error || 'Create failed', true)
+      })
+      return
+    }
+    const patch: ServicePatch = { name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), status, section, handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays }
     start(async () => {
       const r = await updateService(row.id, patch)
       if (r.ok) { onSaved(row.id, patch); flash('Saved. Publish to make it live.') } else flash(r.error || 'Save failed', true)
@@ -135,40 +196,72 @@ function EditDrawer({ row, preview, onClose, onSaved, flash }: { row: CatalogRow
   }
 
   const field = 'w-full text-[13px] text-ink border border-ink-6 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-brand'
+  const lbl = 'text-[11px] font-semibold uppercase tracking-wide text-ink-3'
   return (
     <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-ink/30" />
-      <div className="relative w-full max-w-[440px] h-full bg-white shadow-xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-ink-6 px-5 py-3 flex items-center justify-between">
-          <div className="font-mono text-[11px] text-ink-3">{row.id}</div>
+      <div className="relative w-full max-w-[460px] h-full bg-white shadow-xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 z-10 bg-white border-b border-ink-6 px-5 py-3 flex items-center justify-between">
+          <div className="text-[14px] font-semibold text-ink">{creating ? 'New card' : (plain || name || row.id)}</div>
           <button onClick={onClose} className="text-ink-3 text-[13px]">Close</button>
         </div>
         <div className="p-5 space-y-4">
-          <label className="block"><span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">Owner-facing name</span><input className={field} value={plain} onChange={(e) => setPlain(e.target.value)} placeholder={row.name} /></label>
-          <label className="block"><span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">Internal name</span><input className={field} value={name} onChange={(e) => setName(e.target.value)} /></label>
-          <label className="block"><span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">What you get</span><textarea className={field + ' h-20 resize-none'} value={desc} onChange={(e) => setDesc(e.target.value)} /></label>
-          <label className="block"><span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">Status</span>
-            <select className={field} value={status} onChange={(e) => setStatus(e.target.value as CatalogRow['status'])}>{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+          {/* identity */}
+          <label className="block"><span className={lbl}>Card name</span><input className={field} value={name} onChange={(e) => onName(e.target.value)} placeholder="e.g. Menu photo refresh" /></label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block"><span className={lbl}>Section</span>
+              <select className={field} value={section} onChange={(e) => setSection(e.target.value)}>{ORDER.map((s) => <option key={s} value={s}>{SECTION_LABEL[s] ?? s}</option>)}</select>
+            </label>
+            <label className="block"><span className={lbl}>Status</span>
+              <select className={field} value={status} onChange={(e) => setStatus(e.target.value as CatalogRow['status'])}>{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+            </label>
+          </div>
+          <label className="block"><span className={lbl}>ID {creating ? '' : '(fixed)'}</span>
+            <input className={field + ' font-mono ' + (creating ? '' : 'bg-bg-2 text-ink-3')} value={id} disabled={!creating} onChange={(e) => { setIdTouched(true); setId(e.target.value) }} placeholder="menu-photo-refresh" />
           </label>
+          <label className="block"><span className={lbl}>Owner-facing name (optional)</span><input className={field} value={plain} onChange={(e) => setPlain(e.target.value)} placeholder={name || 'Shown to restaurants'} /></label>
+          <label className="block"><span className={lbl}>What it is</span><textarea className={field + ' h-20 resize-none'} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="One or two plain sentences." /></label>
+
+          {/* who does it */}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block"><span className={lbl}>Who does it</span>
+              <select className={field} value={handler} onChange={(e) => setHandler(e.target.value)}>{HANDLER_OPTS.map((h) => <option key={h} value={h}>{HANDLERS[h].label}</option>)}</select>
+            </label>
+            <label className="flex items-center gap-2 mt-5"><input type="checkbox" checked={essential} onChange={(e) => setEssential(e.target.checked)} /><span className="text-[12.5px] text-ink-2">Essential</span></label>
+          </div>
+          <label className="block"><span className={lbl}>Why they do it (optional)</span><input className={field} value={handlerWhy} onChange={(e) => setHandlerWhy(e.target.value)} placeholder="e.g. Needs a pro camera and editing." /></label>
+
+          {/* pricing */}
           <div>
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">Prices</span>
-            <div className="space-y-2 mt-1">
-              {prices.map((p, i) => {
-                const m = marginOf(p)
+            <div className="flex items-center justify-between"><span className={lbl}>Price</span><button onClick={addPrice} className="text-[12px] text-brand font-medium">+ Add a price</button></div>
+            <div className="space-y-2 mt-1.5">
+              {prices.map((e, i) => {
+                const m = marginOf(toPricePoint(e))
                 return (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-ink-3 text-[13px]">$</span>
-                    <input type="number" className={field + ' w-28'} value={p.amount} onChange={(e) => setAmount(i, Number(e.target.value) || 0)} />
-                    <span className="text-[12px] text-ink-4 flex-1">{priceLabel(p)}</span>
-                    <span className={'text-[11px] font-bold ' + (m.pct < MARGIN_FLOOR ? 'text-rose-600' : 'text-emerald-600')}>{Math.round(m.pct * 100)}%</span>
+                  <div key={i} className="rounded-lg border border-ink-6 p-2.5 space-y-2 bg-bg-2/40">
+                    <div className="flex items-center gap-2">
+                      <span className="text-ink-3 text-[13px]">$</span>
+                      <input type="number" className={field + ' w-24'} value={e.amount} onChange={(ev) => setPrice(i, { amount: Number(ev.target.value) || 0 })} placeholder="Price" />
+                      <select className={field + ' w-28'} value={e.kind} onChange={(ev) => setPrice(i, { kind: ev.target.value as PricePoint['kind'] })}>{PRICE_KINDS.map((k) => <option key={k} value={k}>{k === 'monthly' ? 'per month' : k === 'per-unit' ? 'per unit' : 'one-time'}</option>)}</select>
+                      {e.kind === 'per-unit' && <input className={field + ' w-20'} value={e.unit} onChange={(ev) => setPrice(i, { unit: ev.target.value })} placeholder="unit" />}
+                      {prices.length > 1 && <button onClick={() => removePrice(i)} className="text-ink-4 text-[14px] px-1 shrink-0" title="Remove price">✕</button>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-ink-4 shrink-0">Our cost $</span>
+                      <input type="number" className={field + ' w-24'} value={e.costDollars} onChange={(ev) => setPrice(i, { costDollars: Number(ev.target.value) || 0, costTouched: true })} />
+                      <span className="flex-1" />
+                      <span className={'text-[11px] font-bold ' + (m.pct < MARGIN_FLOOR ? 'text-rose-600' : 'text-emerald-600')}>{Math.round(m.pct * 100)}% margin</span>
+                    </div>
                   </div>
                 )
               })}
             </div>
-            <p className="text-[11px] text-ink-4 mt-1.5">Margin updates live from the cost model. Red is under your {Math.round(MARGIN_FLOOR * 100)}% floor.</p>
+            <p className="text-[11px] text-ink-4 mt-1.5">Set your price and your cost. Margin updates live; red is under your {Math.round(MARGIN_FLOOR * 100)}% floor.</p>
           </div>
+
+          {/* what's included */}
           <div>
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">What&apos;s included</span>
+            <span className={lbl}>What&apos;s included</span>
             <input className={field + ' mt-1'} value={delivSummary} onChange={(e) => setDelivSummary(e.target.value)} placeholder="One-line summary of what this is" />
             <div className="space-y-1.5 mt-2">
               {included.map((item, i) => (
@@ -180,16 +273,13 @@ function EditDrawer({ row, preview, onClose, onSaved, flash }: { row: CatalogRow
               ))}
             </div>
             <button onClick={() => setIncluded((xs) => [...xs, ''])} className="text-[12px] text-brand font-medium mt-2">+ Add an item</button>
-            <p className="text-[11px] text-ink-4 mt-1.5">The concrete things the client is paying for. Shown on the service card.</p>
+            <p className="text-[11px] text-ink-4 mt-1.5">The concrete things the client is paying for. Shown on the card.</p>
           </div>
 
-          {/* Campaign recipe — the goal_plays that drive auto-composition. This is
-              the metadata that lets a plan be built for any restaurant without hand-
-              assembly: which campaign(s) this item belongs to, from which budget tier,
-              where it lands in the plan, and how it ranks. */}
+          {/* campaign recipe (goal_plays) */}
           <div>
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">In these campaigns</span>
-            <p className="text-[11px] text-ink-4 mt-0.5 mb-2">Which goals this item is part of, and how it ranks. This is what auto-builds a restaurant&apos;s plan — no AI needed.</p>
+            <span className={lbl}>In these campaigns</span>
+            <p className="text-[11px] text-ink-4 mt-0.5 mb-2">Which goals this card is part of, and how it ranks. This is what auto-builds a restaurant&apos;s plan — no AI needed. Optional.</p>
             <div className="space-y-2">
               {plays.map((p, i) => (
                 <div key={i} className="rounded-lg border border-ink-6 p-2.5 space-y-2 bg-bg-2/40">
@@ -210,13 +300,13 @@ function EditDrawer({ row, preview, onClose, onSaved, flash }: { row: CatalogRow
                   <input className={field} value={p.because ?? ''} onChange={(e) => setPlay(i, { because: e.target.value })} placeholder="Why it matters (optional)" />
                 </div>
               ))}
-              {plays.length === 0 && <p className="text-[12px] text-ink-4">Not in any campaign yet. Add it to one so it can appear in auto-built plans.</p>}
+              {plays.length === 0 && <p className="text-[12px] text-ink-4">Not in any campaign yet.</p>}
             </div>
             <button onClick={addPlay} className="text-[12px] text-brand font-medium mt-2">+ Add to a campaign</button>
           </div>
         </div>
         <div className="sticky bottom-0 bg-white border-t border-ink-6 px-5 py-3 flex gap-2">
-          <button onClick={save} disabled={saving} className="flex-1 bg-brand text-white text-[13px] font-semibold rounded-lg py-2">{saving ? 'Saving…' : 'Save'}</button>
+          <button onClick={save} disabled={saving} className="flex-1 bg-brand text-white text-[13px] font-semibold rounded-lg py-2 disabled:opacity-60">{saving ? (creating ? 'Creating…' : 'Saving…') : (creating ? 'Create card' : 'Save')}</button>
           <button onClick={onClose} className="text-[13px] text-ink-3 px-3">Cancel</button>
         </div>
       </div>

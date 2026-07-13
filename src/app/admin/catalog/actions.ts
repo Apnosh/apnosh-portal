@@ -7,7 +7,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { rowToService, renderGeneratedSnapshot, type CatalogRow } from '@/lib/campaigns/data/catalog-db-shape'
-import type { GoalPlay } from '@/lib/campaigns/data/priced-catalog'
+import type { GoalPlay, PricePoint } from '@/lib/campaigns/data/priced-catalog'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -25,9 +25,72 @@ export interface ServicePatch {
   plain_name?: string | null
   description?: string
   status?: 'active' | 'draft' | 'archived' | 'coming_soon'
+  section?: string
+  handler?: string
+  handler_why?: string
+  essential?: boolean
   prices?: unknown // PricePoint[]
   deliverables?: { summary: string; included: string[] } | null
   goal_plays?: GoalPlay[] | null // which campaigns/goals this item belongs to (the plan recipe)
+}
+
+const SERVICE_FIELDS = ['name', 'plain_name', 'description', 'status', 'section', 'handler', 'handler_why', 'essential', 'prices', 'deliverables', 'goal_plays'] as const
+
+/** A brand-new catalog card, authored from scratch in the admin builder. */
+export interface NewService {
+  id: string
+  section: string
+  name: string
+  plain_name: string | null
+  description: string
+  handler: string
+  handler_why: string
+  essential: boolean
+  prices: PricePoint[]
+  deliverables: { summary: string; included: string[] } | null
+  goal_plays: GoalPlay[] | null
+  status: 'active' | 'draft' | 'archived' | 'coming_soon'
+}
+
+const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+/** Create a new catalog card. Validates a unique, url-safe id and at least one price. */
+export async function createService(row: NewService): Promise<{ ok: boolean; error?: string; id?: string }> {
+  const a = await requireAdmin()
+  if (!a.ok) return { ok: false, error: a.error }
+  const id = row.id.trim().toLowerCase()
+  if (!ID_RE.test(id)) return { ok: false, error: 'ID must be lowercase words joined by dashes (e.g. "menu-refresh").' }
+  if (!row.name.trim()) return { ok: false, error: 'A name is required.' }
+  if (!Array.isArray(row.prices) || row.prices.length === 0) return { ok: false, error: 'Add at least one price.' }
+
+  const { data: existing } = await a.supabase.from('catalog_services').select('id').eq('id', id).maybeSingle()
+  if (existing) return { ok: false, error: `A card with id "${id}" already exists.` }
+
+  // put new cards at the end of their section by default
+  const { data: maxRow } = await a.supabase.from('catalog_services').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle()
+  const sortOrder = ((maxRow?.sort_order as number | undefined) ?? 0) + 10
+
+  const insert = {
+    id,
+    section: row.section,
+    name: row.name.trim(),
+    plain_name: row.plain_name?.trim() || null,
+    description: row.description.trim(),
+    essential: row.essential,
+    handler: row.handler,
+    handler_why: row.handler_why.trim(),
+    prices: row.prices,
+    goal_plays: row.goal_plays,
+    deliverables: row.deliverables,
+    status: row.status,
+    sort_order: sortOrder,
+    updated_at: new Date().toISOString(),
+    updated_by: a.userId,
+  }
+  const { error } = await a.supabase.from('catalog_services').insert(insert)
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/admin/catalog')
+  return { ok: true, id }
 }
 
 /** Save edits to one service. Returns ok or a plain error. */
@@ -35,7 +98,7 @@ export async function updateService(id: string, patch: ServicePatch): Promise<{ 
   const a = await requireAdmin()
   if (!a.ok) return { ok: false, error: a.error }
   const fields: Record<string, unknown> = { updated_at: new Date().toISOString(), updated_by: a.userId }
-  for (const k of ['name', 'plain_name', 'description', 'status', 'prices', 'deliverables', 'goal_plays'] as const) {
+  for (const k of SERVICE_FIELDS) {
     if (k in patch) fields[k] = (patch as Record<string, unknown>)[k]
   }
   const { error } = await a.supabase.from('catalog_services').update(fields).eq('id', id)
