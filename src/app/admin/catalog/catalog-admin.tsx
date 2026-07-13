@@ -180,6 +180,12 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
   const setLane = (i: number, patch: Partial<CardLane>) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)))
   const addLane = () => setLanes((ls) => [...ls, { id: 'lane' + (ls.length + 1), label: '', kind: 'team', price: { amount: 0, kind: 'one-time' }, requirements: [], addOns: [] }])
   const removeLane = (i: number) => setLanes((ls) => ls.filter((_, j) => j !== i))
+  // seed the three standard lanes as EDITABLE rows so the owner can rename / reprice / remove them
+  const seedStandardLanes = () => setLanes([
+    { id: 'diy', label: "I'll do it myself", kind: 'diy', price: null, requirements: [], addOns: [] },
+    { id: 'ai', label: 'Apnosh AI', kind: 'ai', price: null, proOnly: true, requirements: [], addOns: [] },
+    { id: 'team', label: 'Apnosh does it', kind: 'team', price: prices[0] ? { amount: prices[0].amount, kind: prices[0].kind } : { amount: 0, kind: 'one-time' }, requirements: [], addOns: [] },
+  ])
   const laneReqAdd = (i: number) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, requirements: [...(l.requirements ?? []), ''] } : l)))
   const laneReqSet = (i: number, k: number, v: string) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, requirements: (l.requirements ?? []).map((r, x) => (x === k ? v : r)) } : l)))
   const laneReqDel = (i: number, k: number) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, requirements: (l.requirements ?? []).filter((_, x) => x !== k) } : l)))
@@ -523,7 +529,13 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
                   <input className={field} value={l.note ?? ''} onChange={(e) => setLane(i, { note: e.target.value })} placeholder="Short note shown under the lane (optional)" />
                 </div>
               ))}
-              {lanes.length === 0 && <p className="text-[12px] text-ink-4">No custom lanes — this card uses the default. Add lanes to offer DIY / Apnosh AI / done-for-you your own way, each with its own price.</p>}
+              {lanes.length === 0 && (
+                <div className="rounded-xl border border-dashed border-ink-6 bg-bg-2/40 p-4 text-center">
+                  <div className="text-[12.5px] text-ink-3 mb-2">This card shows the default 3 lanes (I&apos;ll do it · Apnosh AI · Apnosh does it). To rename them, set your own prices, or change how many there are:</div>
+                  <button onClick={seedStandardLanes} className="text-[12.5px] font-semibold rounded-lg px-3.5 py-2 bg-brand text-white">Start from the 3 standard lanes</button>
+                  <div className="text-[11px] text-ink-4 mt-2">…then edit each one, remove any you don&apos;t offer, or use &ldquo;+ Add a lane&rdquo; for more.</div>
+                </div>
+              )}
             </div>
           </div>
           </section>
