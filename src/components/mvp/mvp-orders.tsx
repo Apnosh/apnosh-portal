@@ -111,8 +111,9 @@ export default function MvpOrders() {
     return subscribePlanDraft(() => setPlanDraft(readPlanDraft()))
   }, [])
 
-  // DoorDash-style order tabs: Cart (planned) · Ordered (billing now) · History (closed).
-  const [tab, setTab] = useState<'cart' | 'ordered' | 'history'>('cart')
+  // Order tabs: Ordered (billing now) · History (closed). The "Cart" (planned) tab
+  // was removed — the plan lives in the campaign store's "View your plan" now.
+  const [tab, setTab] = useState<'cart' | 'ordered' | 'history'>('ordered')
   const tabDefaulted = useRef(false)
 
   useEffect(() => {
@@ -187,12 +188,12 @@ export default function MvpOrders() {
 
   // First load only: land on the tab that has something in it (cart wins ties,
   // like every delivery app). Never re-jump after that — the owner owns the tab.
-  const cartLen = cart.length, payingLen = paying.length, receiptsLen = receipts.length
+  const payingLen = paying.length, receiptsLen = receipts.length
   useEffect(() => {
     if (loading || tabDefaulted.current) return
     tabDefaulted.current = true
-    if (cartLen === 0) setTab(payingLen > 0 ? 'ordered' : receiptsLen > 0 ? 'history' : 'cart')
-  }, [loading, cartLen, payingLen, receiptsLen])
+    setTab(receiptsLen > 0 && payingLen === 0 ? 'history' : 'ordered')
+  }, [loading, payingLen, receiptsLen])
 
   const cartParts = (() => {
     let perMonth = 0, oneTime = 0
@@ -235,7 +236,7 @@ export default function MvpOrders() {
         <>
           {/* Order tabs: Cart (planned) · Ordered (billing now) · History (closed) */}
           <div style={{ display: 'flex', gap: 7, marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>
-            {([['cart', 'Cart', cart.length + planDraft.length], ['ordered', 'Ordered', paying.length], ['history', 'History', receipts.length]] as const).map(([k, l, n]) => {
+            {([['ordered', 'Ordered', paying.length], ['history', 'History', receipts.length]] as const).map(([k, l, n]) => {
               const on = tab === k
               return (
                 <button key={k} type="button" onClick={() => setTab(k)} style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 7, border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '7px 14px', fontSize: 13, fontWeight: on ? 700 : 500, cursor: 'pointer', transition: 'all .15s' }}>
