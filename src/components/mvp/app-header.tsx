@@ -14,7 +14,7 @@ import { useClient } from '@/lib/client-context'
 const C = { green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)', ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea' }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
-export default function AppHeader({ unread }: { unread?: boolean }) {
+export default function AppHeader({ count }: { count?: number }) {
   const { client, availableClients, switchClient } = useClient()
   const name = client?.name?.trim() || 'Your restaurant'
   const initial = (name[0] ?? '🍽').toUpperCase()
@@ -32,7 +32,7 @@ export default function AppHeader({ unread }: { unread?: boolean }) {
 
       {/* right: alerts (notifications) · messages */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-        <IconLink href="/dashboard/inbox" label="Alerts" dot={unread}><Bell size={19} /></IconLink>
+        <IconLink href="/dashboard/inbox" label="Alerts" count={count}><Bell size={19} /></IconLink>
         <IconLink href="/dashboard/messages" label="Messages"><MessageCircle size={19} /></IconLink>
       </div>
 
@@ -60,11 +60,14 @@ export default function AppHeader({ unread }: { unread?: boolean }) {
   )
 }
 
-function IconLink({ href, label, dot, children }: { href: string; label: string; dot?: boolean; children: React.ReactNode }) {
+function IconLink({ href, label, count, children }: { href: string; label: string; count?: number; children: React.ReactNode }) {
+  const n = count ?? 0
   return (
-    <Link href={href} aria-label={label} style={{ position: 'relative', width: 36, height: 36, borderRadius: '50%', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <Link href={href} aria-label={n > 0 ? `${label} (${n})` : label} style={{ position: 'relative', width: 36, height: 36, borderRadius: '50%', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {children}
-      {dot && <span style={{ position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: 99, background: C.green, border: '1.5px solid #fff' }} />}
+      {n > 0 && (
+        <span style={{ position: 'absolute', top: 3, right: 3, minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #fff' }}>{n > 9 ? '9+' : n}</span>
+      )}
     </Link>
   )
 }

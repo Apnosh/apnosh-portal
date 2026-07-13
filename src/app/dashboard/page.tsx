@@ -69,7 +69,7 @@ export default function DashboardHomePage() {
   const view = data ? (aiSuggestions !== null ? { ...data, suggestions: aiSuggestions } : data) : null
 
   return (
-    <MvpShell active="home" unread={(data?.approvals?.length ?? 0) > 0}>
+    <MvpShell active="home" unread={data?.approvals?.length ?? 0}>
       {clientLoading || (!data && !error) ? (
         <Centered>Loading your numbers…</Centered>
       ) : error ? (

@@ -183,7 +183,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
       <div style={{ position: 'sticky', top: 0, zIndex: 20, background: C.card, padding: '14px 18px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${C.line}` }}>
         <div style={{ fontSize: 15, color: C.mute }}>{data.greeting}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ position: 'relative' }}><Bell size={20} color={C.ink} /><div style={{ position: 'absolute', top: -1, right: -1, width: 7, height: 7, borderRadius: 4, background: C.green }} /></div>
+          <div style={{ position: 'relative' }}><Bell size={20} color={C.ink} />{(data.approvals?.length ?? 0) > 0 && <div style={{ position: 'absolute', top: -5, right: -6, minWidth: 15, height: 15, padding: '0 3px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 9.5, fontWeight: 700, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{data.approvals.length > 9 ? '9+' : data.approvals.length}</div>}</div>
           <div style={{ width: 34, height: 34, borderRadius: '50%', background: C.greenSoft, border: `1px solid ${C.greenLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 600, color: C.greenDk, position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
             {data.avatarEmoji || data.avatarText}
             {data.avatarImage && <img src={data.avatarImage} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
