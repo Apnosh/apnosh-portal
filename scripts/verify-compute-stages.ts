@@ -72,13 +72,15 @@ ok(src(aw, 'tiktok_video_views').status === 'COMING_SOON', 'tiktok_video_views i
 ok(src(aw, 'tiktok_video_views').counted === false, 'COMING_SOON tiktok excluded from the sum')
 ok(src(aw, 'gbp_search_keywords').feedRole === 'drilldown', 'gbp_search_keywords is a drilldown (not summed)')
 
-// Interest (owner definition): people who TOOK AN INTEREST — website clicks +
-// menu views + profile looks. A GBP-only client counts just its site clicks.
+// Interest (owner def 2026-07-13): people EXPLORING you — website visits, menu
+// looks, profile taps. A GBP-only client (no GA4) falls back to its GBP website
+// clicks as the one website signal.
 const inte = stage(gbpStages, 2)
-ok(inte.headline === 25, `Interest = website clicks 25 for a GBP-only client (${inte.headline})`)
+ok(inte.headline === 25, `Interest = GBP website clicks 25 for a GBP-only client (${inte.headline})`)
+ok(src(inte, 'gbp_website_clicks').counted === true, 'gbp_website_clicks IS counted for a GBP-only client (no GA4 to dedupe against)')
 ok(inte.headline === sumCounted(inte), `Interest headline == sum(counted) (${sumCounted(inte)})`)
 ok(src(inte, 'ig_profile_visits').counted === false, 'ig_profile_visits NOT counted (IG not connected) despite value 70 present')
-ok(src(inte, 'ig_engaged').counted === false, 'ig_engaged NOT counted (IG not connected) despite value 130 present')
+ok(src(inte, 'ig_engaged').counted === false, 'ig_engaged never summed — engagement is context, not interest')
 ok(src(inte, 'ga4_menu_views').counted === false, 'ga4_menu_views NOT counted (GA4 not connected)')
 ok(src(inte, 'ga4_website_visits').counted === false, 'ga4_website_visits NOT counted (GA4 not connected) despite value 900 present')
 
@@ -138,8 +140,9 @@ ok(src(awFull, 'ig_reach').counted === true, 'ig_reach counted once IG is connec
 ok(awFull.headline === 1000 + 500 + VALUES.ig_reach!, `Awareness folds ig_reach when IG connected (${awFull.headline})`)
 const inteFull = stage(full, 2)
 ok(src(inteFull, 'ig_profile_visits').counted === true, 'ig_profile_visits counted once IG is connected')
-ok(src(inteFull, 'ig_engaged').counted === true, 'ig_engaged counted once IG is connected')
-ok(inteFull.headline === 25 + 900 + 70 + 130 + 300, `Interest = clicks 25 + web visits 900 + profile 70 + engaged 130 + menu 300 = 1425 (${inteFull.headline})`)
+ok(src(inteFull, 'ig_engaged').counted === false, 'ig_engaged NOT summed even when IG connected — engagement is context, not interest')
+ok(src(inteFull, 'gbp_website_clicks').counted === false, 'gbp_website_clicks deduped when GA website visits are counted (no double count)')
+ok(inteFull.headline === 900 + 300 + 70, `Interest = web visits 900 + menu 300 + profile 70 = 1270; GBP clicks 25 deduped against GA visits (${inteFull.headline})`)
 
 // ── 3. Empty / disconnected client ─────────────────────────────────────────
 console.log('\n== 3. No connections at all ==')
