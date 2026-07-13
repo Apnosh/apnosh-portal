@@ -84,10 +84,15 @@ export type ManualStore = Record<string, ManualEntry>
 // excluded). Stage 4 and 5 have preference rules layered on top (see below).
 const SUMMABLE: Record<FunnelStage, string[]> = {
   1: ['gbp_impressions_search', 'gbp_impressions_maps', 'ig_reach', 'tiktok_video_views', 'facebook_reach', 'yelp_views'],
-  // Owner redefinition (2026-07-12): Interest = people who TOOK AN INTEREST
-  // (website clicks, menu views, profile looks, post engagement); Actions =
-  // people who actually DID something (calls, directions, bookings, orders).
-  2: ['ga4_website_visits', 'gbp_website_clicks', 'ig_profile_visits', 'ig_engaged', 'ig_saves', 'ig_shares', 'ig_link_clicks', 'ga4_menu_views'],
+  // Owner redefinition (2026-07-13): Interest = people EXPLORING you but not yet
+  // trying to come/buy — website visits, menu looks, profile taps. Website
+  // visits (GA sessions) count every arrival ONCE; gbp_website_clicks is the
+  // Google path to the site and is deduped against GA visits below (only counts
+  // for GBP-only clients with no GA4). Dropped from the number as double-counts
+  // or vanity: ig_link_clicks (same arrival), ig_engaged/ig_saves/ig_shares
+  // (likes/shares aren't intent, and saves/shares have no data source). Those
+  // stay in the registry as context, never summed. Actions (stage 3) unchanged.
+  2: ['ga4_website_visits', 'gbp_website_clicks', 'ga4_menu_views', 'ig_profile_visits'],
   3: ['gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
   4: ['pos_covers', 'delivery_orders'],
   5: ['pos_repeat_customers'],
@@ -230,6 +235,16 @@ export function computeStagesFrom(
       for (const id of SUMMABLE[stage]) {
         const v = byId(id)
         if (v && usable(v)) v.counted = true
+      }
+      // Interest dedupe: GA website visits already count every arrival, and GBP
+      // website-clicks are mostly those same people arriving via Google. When GA
+      // visits are counted, drop the GBP-clicks overlap so we don't count the
+      // same visit twice. GBP-only clients (no GA4) keep GBP clicks as their one
+      // website signal.
+      if (stage === 2) {
+        const web = byId('ga4_website_visits')
+        const gClicks = byId('gbp_website_clicks')
+        if (web?.counted && gClicks?.counted) gClicks.counted = false
       }
       if (stage === 3) heroSourceId = 'gbp_direction_requests'
     }
