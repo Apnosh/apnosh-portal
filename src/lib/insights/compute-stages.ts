@@ -277,6 +277,15 @@ export function computeStagesFrom(
       if (s.isDrilldown) { s.feedRole = 'drilldown'; continue }
       s.feedRole = s.counted || summableIds.includes(s.id) ? 'sum' : 'context'
     }
+    // Interest: GBP website-clicks overlaps GA website-visits (same arrivals).
+    // When GA visits are the counted website number, demote the GBP-clicks card
+    // to context so it isn't shown as a SECOND website box (looks like double
+    // counting). GBP-only clients (no GA) keep it as their one website card.
+    if (stage === 2) {
+      const gc = byId('gbp_website_clicks')
+      const web = byId('ga4_website_visits')
+      if (gc && !gc.counted && web?.counted) gc.feedRole = 'context'
+    }
 
     const anyCounted = sources.some(s => s.counted)
     const headline = anyCounted ? sumCounted(sources) : null
