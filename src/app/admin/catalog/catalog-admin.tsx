@@ -7,7 +7,7 @@
  */
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { marginOf, costOf, OVERHEAD_MULT, MARGIN_FLOOR, HANDLERS, type PricedService, type PricePoint, type GoalPlay, type SystemGoal, type Tier, type Handler } from '@/lib/campaigns/data/priced-catalog'
+import { marginOf, costOf, OVERHEAD_MULT, MARGIN_FLOOR, HANDLERS, type PricedService, type PricePoint, type GoalPlay, type SystemGoal, type Tier, type Handler, type CardLane, type LaneKind } from '@/lib/campaigns/data/priced-catalog'
 import type { CatalogRow } from '@/lib/campaigns/data/catalog-db-shape'
 import { rowToService } from '@/lib/campaigns/data/catalog-db-shape'
 import { updateService, createService, deleteService, publishCatalog, type ServicePatch, type NewService } from './actions'
@@ -31,9 +31,11 @@ function blankRow(): CatalogRow {
     id: '', section: 'awareness', name: '', plain_name: '', description: '', essential: false,
     handler: 'apnosh', handler_why: '', evidence: null, compliance: null, metric: null,
     prices: [{ kind: 'one-time', amount: 0, cost: {} }], goal_plays: null, fit: null, pieces: null,
-    deliverables: null, status: 'draft', sort_order: 0,
+    deliverables: null, lanes: null, status: 'draft', sort_order: 0,
   }
 }
+const LANE_KINDS: LaneKind[] = ['diy', 'ai', 'team', 'creator']
+const LANE_KIND_LABEL: Record<LaneKind, string> = { diy: 'They do it (DIY)', ai: 'Apnosh AI', team: 'Apnosh does it', creator: 'Contractor does it' }
 const GOAL_OPTS: SystemGoal[] = ['firstvisit', 'nights', 'regulars', 'reviews']
 const TIER_OPTS: Tier[] = ['lean', 'standard', 'aggressive']
 const TIER_LABEL: Record<Tier, string> = { lean: 'Lean+', standard: 'Standard+', aggressive: 'Aggressive only' }
@@ -170,9 +172,20 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
   const [delivSummary, setDelivSummary] = useState(row.deliverables?.summary ?? '')
   const [included, setIncluded] = useState<string[]>(() => [...(row.deliverables?.included ?? [])])
   const [plays, setPlays] = useState<GoalPlay[]>(() => (row.goal_plays ?? []).map((p) => ({ ...p })))
+  const [lanes, setLanes] = useState<CardLane[]>(() => (row.lanes ?? []).map((l) => ({ ...l, requirements: [...(l.requirements ?? [])], addOns: (l.addOns ?? []).map((a) => ({ ...a })) })))
+  const [pvLane, setPvLane] = useState(0)
   const [saving, start] = useTransition()
 
   const onName = (v: string) => { setName(v); if (creating && !idTouched) setId(kebab(v)) }
+  const setLane = (i: number, patch: Partial<CardLane>) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)))
+  const addLane = () => setLanes((ls) => [...ls, { id: 'lane' + (ls.length + 1), label: '', kind: 'team', price: { amount: 0, kind: 'one-time' }, requirements: [], addOns: [] }])
+  const removeLane = (i: number) => setLanes((ls) => ls.filter((_, j) => j !== i))
+  const laneReqAdd = (i: number) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, requirements: [...(l.requirements ?? []), ''] } : l)))
+  const laneReqSet = (i: number, k: number, v: string) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, requirements: (l.requirements ?? []).map((r, x) => (x === k ? v : r)) } : l)))
+  const laneReqDel = (i: number, k: number) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, requirements: (l.requirements ?? []).filter((_, x) => x !== k) } : l)))
+  const laneAddAdd = (i: number) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, addOns: [...(l.addOns ?? []), { label: '', amount: 0 }] } : l)))
+  const laneAddSet = (i: number, k: number, patch: Partial<{ label: string; amount: number }>) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, addOns: (l.addOns ?? []).map((a, x) => (x === k ? { ...a, ...patch } : a)) } : l)))
+  const laneAddDel = (i: number, k: number) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, addOns: (l.addOns ?? []).filter((_, x) => x !== k) } : l)))
   const setPrice = (i: number, patch: Partial<EPrice>) => setPrices((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)))
   const addPrice = () => setPrices((ps) => [...ps, toEPrice({ kind: 'one-time', amount: 0, cost: {} })])
   const removePrice = (i: number) => setPrices((ps) => ps.filter((_, j) => j !== i))
@@ -197,18 +210,31 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
       .map((p) => ({ goal: p.goal, stage: p.stage.trim(), minTier: p.minTier, weight: p.weight, role: p.role.trim(), because: p.because?.trim() || undefined }))
       .filter((p) => p.stage && p.role)
     const goal_plays = cleanPlays.length ? cleanPlays : null
+    const cleanLanes: CardLane[] = lanes
+      .map((l) => ({
+        id: (l.id || '').trim() || l.kind,
+        label: l.label.trim(),
+        kind: l.kind,
+        price: l.price && l.price.amount > 0 ? { amount: l.price.amount, kind: l.price.kind } : null,
+        proOnly: l.proOnly || undefined,
+        requirements: (l.requirements ?? []).map((r) => r.trim()).filter(Boolean),
+        addOns: (l.addOns ?? []).map((a) => ({ label: (a.label || '').trim(), amount: a.amount || 0, kind: a.kind })).filter((a) => a.label),
+        note: l.note?.trim() || undefined,
+      }))
+      .filter((l) => l.label)
+    const lanesOut = cleanLanes.length ? cleanLanes : null
 
     if (creating) {
-      const newSvc: NewService = { id: finalId, section, name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, status }
+      const newSvc: NewService = { id: finalId, section, name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, lanes: lanesOut, status }
       start(async () => {
         const r = await createService(newSvc)
         if (r.ok) {
-          onCreated({ ...row, id: finalId, section, name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, status })
+          onCreated({ ...row, id: finalId, section, name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, lanes: lanesOut, status })
         } else flash(r.error || 'Create failed', true)
       })
       return
     }
-    const patch: ServicePatch = { name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), status, section, handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays }
+    const patch: ServicePatch = { name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), status, section, handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, lanes: lanesOut }
     start(async () => {
       const r = await updateService(row.id, patch)
       if (r.ok) { onSaved(row.id, patch); flash('Saved. Publish to make it live.') } else flash(r.error || 'Save failed', true)
@@ -231,6 +257,9 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
     ? prices.map((e) => '$' + (e.amount || 0).toLocaleString() + (e.kind === 'monthly' ? '/mo' : e.kind === 'per-unit' ? '/' + (e.unit.trim() || 'unit') : '')).join(' + ')
     : 'No price'
   const previewInc = included.map((x) => x.trim()).filter(Boolean).slice(0, 4)
+  const pvLanes = lanes.filter((l) => l.label.trim())
+  const pvSel = pvLanes[Math.min(pvLane, Math.max(0, pvLanes.length - 1))]
+  const laneChip = (l: CardLane) => (!l.price ? (l.kind === 'ai' && l.proOnly ? 'Pro' : 'Free') : '$' + l.price.amount.toLocaleString() + (l.price.kind === 'monthly' ? '/mo' : ''))
   return (
     <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-ink/30" />
@@ -257,18 +286,47 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
                 <div className="text-[17px] font-semibold text-ink leading-tight mt-1">{plain || name || 'Untitled card'}</div>
                 {desc.trim() && <div className="text-[12.5px] text-ink-3 mt-1 leading-snug">{desc.trim()}</div>}
               </div>
-              {/* choose how it's done — the three lanes */}
+              {/* choose how it's done — the lanes */}
               <div className="px-4 py-3 border-t border-ink-6">
                 <div className="text-[10px] font-bold uppercase tracking-wide text-ink-4 mb-1.5">Choose how it&apos;s done</div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[{ k: 'diy', t: "I'll do it", p: 'Free' }, { k: 'ai', t: 'Apnosh AI', p: 'Pro' }, { k: 'team', t: 'Apnosh does it', p: previewPrice }].map((ln, i) => (
-                    <div key={ln.k} className={'rounded-lg border px-2 py-1.5 text-center ' + (i === 2 ? 'border-brand bg-brand/5' : 'border-ink-6')}>
-                      <div className="text-[11px] font-semibold text-ink leading-tight">{ln.t}</div>
-                      <div className={'text-[10.5px] mt-0.5 ' + (i === 2 ? 'text-brand-dark font-semibold' : 'text-ink-4')}>{ln.p}</div>
+                {pvLanes.length > 0 ? (
+                  <>
+                    <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(pvLanes.length, 3)}, minmax(0,1fr))` }}>
+                      {pvLanes.map((l, i) => {
+                        const on = i === Math.min(pvLane, pvLanes.length - 1)
+                        return (
+                          <button key={i} onClick={() => setPvLane(i)} className={'rounded-lg border px-2 py-1.5 text-center ' + (on ? 'border-brand bg-brand/5' : 'border-ink-6')}>
+                            <div className="text-[11px] font-semibold text-ink leading-tight">{l.label}</div>
+                            <div className={'text-[10.5px] mt-0.5 ' + (on ? 'text-brand-dark font-semibold' : 'text-ink-4')}>{laneChip(l)}</div>
+                          </button>
+                        )
+                      })}
                     </div>
-                  ))}
-                </div>
-                <div className="text-[10px] text-ink-5 mt-1.5">Lanes are the same on every card for now — making them per-card is the next step.</div>
+                    {pvSel && (
+                      <div className="mt-2 space-y-1.5">
+                        {pvSel.note?.trim() && <div className="text-[11.5px] text-ink-3">{pvSel.note.trim()}</div>}
+                        {(pvSel.requirements ?? []).filter((r) => r.trim()).length > 0 && (
+                          <div><div className="text-[9.5px] font-bold uppercase tracking-wide text-ink-4">You provide</div>{(pvSel.requirements ?? []).filter((r) => r.trim()).map((r, x) => <div key={x} className="text-[11.5px] text-ink-2">• {r}</div>)}</div>
+                        )}
+                        {(pvSel.addOns ?? []).filter((a) => a.label.trim()).length > 0 && (
+                          <div><div className="text-[9.5px] font-bold uppercase tracking-wide text-ink-4">Add-ons</div>{(pvSel.addOns ?? []).filter((a) => a.label.trim()).map((a, x) => <div key={x} className="text-[11.5px] text-ink-2 flex justify-between gap-2"><span>+ {a.label}</span><span className="text-ink-4">${(a.amount || 0).toLocaleString()}</span></div>)}</div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[{ t: "I'll do it", p: 'Free' }, { t: 'Apnosh AI', p: 'Pro' }, { t: 'Apnosh does it', p: previewPrice }].map((ln, i) => (
+                        <div key={i} className={'rounded-lg border px-2 py-1.5 text-center ' + (i === 2 ? 'border-brand bg-brand/5' : 'border-ink-6')}>
+                          <div className="text-[11px] font-semibold text-ink leading-tight">{ln.t}</div>
+                          <div className={'text-[10.5px] mt-0.5 ' + (i === 2 ? 'text-brand-dark font-semibold' : 'text-ink-4')}>{ln.p}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-[10px] text-ink-5 mt-1.5">Default lanes. Add your own below to customize this per card.</div>
+                  </>
+                )}
               </div>
               {/* what you get */}
               {previewInc.length > 0 && (
@@ -396,6 +454,53 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
               {plays.length === 0 && <p className="text-[12px] text-ink-4">Not in any campaign yet.</p>}
             </div>
             <button onClick={addPlay} className="text-[12px] text-brand font-medium mt-2">+ Add to a campaign</button>
+          </div>
+
+          {/* who can do it — per-card lanes (Fiverr-style) */}
+          <div>
+            <div className="flex items-center justify-between">
+              <span className={lbl}>Who can do it</span>
+              <button onClick={addLane} className="text-[12px] text-brand font-medium">+ Add a lane</button>
+            </div>
+            <p className="text-[11px] text-ink-4 mt-0.5 mb-2">The options the customer picks between. Each lane has its own price, requirements, and add-ons. Leave empty to use the default.</p>
+            <div className="space-y-3">
+              {lanes.map((l, i) => (
+                <div key={i} className="rounded-xl border border-ink-6 p-3 space-y-2 bg-bg-2/40">
+                  <div className="flex items-center gap-2">
+                    <input className={field} value={l.label} onChange={(e) => setLane(i, { label: e.target.value })} placeholder="Lane name (e.g. I'll do it myself)" />
+                    <button onClick={() => removeLane(i)} className="text-ink-4 text-[14px] px-1 shrink-0" title="Remove lane">✕</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select className={field} value={l.kind} onChange={(e) => setLane(i, { kind: e.target.value as LaneKind })}>{LANE_KINDS.map((k) => <option key={k} value={k}>{LANE_KIND_LABEL[k]}</option>)}</select>
+                    <label className="flex items-center gap-1.5 text-[12px] text-ink-2 shrink-0"><input type="checkbox" checked={!l.price} onChange={(e) => setLane(i, { price: e.target.checked ? null : { amount: 0, kind: 'one-time' } })} />Free</label>
+                  </div>
+                  {l.price && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-ink-3 text-[13px]">$</span>
+                      <input type="number" className={field + ' w-24'} value={l.price.amount} onChange={(e) => setLane(i, { price: { amount: Number(e.target.value) || 0, kind: l.price!.kind } })} />
+                      <select className={field + ' w-28'} value={l.price.kind} onChange={(e) => setLane(i, { price: { amount: l.price!.amount, kind: e.target.value as PricePoint['kind'] } })}>{PRICE_KINDS.map((k) => <option key={k} value={k}>{k === 'monthly' ? 'per month' : k === 'per-unit' ? 'per unit' : 'one-time'}</option>)}</select>
+                    </div>
+                  )}
+                  {l.kind === 'ai' && <label className="flex items-center gap-1.5 text-[12px] text-ink-2"><input type="checkbox" checked={!!l.proOnly} onChange={(e) => setLane(i, { proOnly: e.target.checked })} />Included for Pro members</label>}
+                  <div>
+                    <div className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-4">What you need from them</div>
+                    {(l.requirements ?? []).map((r, k) => (
+                      <div key={k} className="flex items-center gap-2 mt-1"><span className="text-ink-4 text-[12px]">•</span><input className={field} value={r} onChange={(e) => laneReqSet(i, k, e.target.value)} placeholder="e.g. Connect your Google profile" /><button onClick={() => laneReqDel(i, k)} className="text-ink-4 text-[13px] px-1">✕</button></div>
+                    ))}
+                    <button onClick={() => laneReqAdd(i)} className="text-[11.5px] text-brand font-medium mt-1">+ Requirement</button>
+                  </div>
+                  <div>
+                    <div className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-4">Add-ons</div>
+                    {(l.addOns ?? []).map((a, k) => (
+                      <div key={k} className="flex items-center gap-2 mt-1"><input className={field} value={a.label} onChange={(e) => laneAddSet(i, k, { label: e.target.value })} placeholder="Extra" /><span className="text-ink-3 text-[12px]">$</span><input type="number" className={field + ' w-20'} value={a.amount} onChange={(e) => laneAddSet(i, k, { amount: Number(e.target.value) || 0 })} /><button onClick={() => laneAddDel(i, k)} className="text-ink-4 text-[13px] px-1">✕</button></div>
+                    ))}
+                    <button onClick={() => laneAddAdd(i)} className="text-[11.5px] text-brand font-medium mt-1">+ Add-on</button>
+                  </div>
+                  <input className={field} value={l.note ?? ''} onChange={(e) => setLane(i, { note: e.target.value })} placeholder="Short note shown under the lane (optional)" />
+                </div>
+              ))}
+              {lanes.length === 0 && <p className="text-[12px] text-ink-4">No custom lanes — this card uses the default. Add lanes to offer DIY / Apnosh AI / done-for-you your own way, each with its own price.</p>}
+            </div>
           </div>
         </div>
         <div className="sticky bottom-0 bg-white border-t border-ink-6 px-5 py-3 flex gap-2">
