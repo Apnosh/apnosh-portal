@@ -311,6 +311,18 @@ export const SOURCES: SourceDef[] = [
     requiresClientConfig: 'ga4_menu_path',
     configMissingReason: 'Add your menu page path in settings',
   },
+  {
+    id: 'gbp_menu_clicks',
+    displayName: 'People who opened your menu on Google',
+    provider: 'google_business_profile',
+    stage: 2,
+    metricKeys: ['food_menu_clicks'],
+    baseStatus: 'CONNECTED',
+    authType: 'oauth',
+    docsUrl: null,
+    notes: 'Real GBP metric (BUSINESS_FOOD_MENU_CLICKS) — taps on the menu link in your Google listing. Pulled daily into gbp_metrics.food_menu_clicks (added to the sync 2026-07-13). Zero until Google records menu taps.',
+    wired: true,
+  },
 
   // ─────────────────────────────── STAGE 3 · ACTIONS ───────────────────────────────
   {
@@ -566,6 +578,7 @@ export const SHORT_LABELS: Record<string, string> = {
   ig_saves: 'Post saves',
   ig_shares: 'Post shares',
   ga4_menu_views: 'Menu page views',
+  gbp_menu_clicks: 'Menu opens on Google',
   // Stage 3 · Actions
   gbp_direction_requests: 'Directions',
   gbp_calls: 'Calls',

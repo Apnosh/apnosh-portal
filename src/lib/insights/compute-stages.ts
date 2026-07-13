@@ -92,7 +92,7 @@ const SUMMABLE: Record<FunnelStage, string[]> = {
   // or vanity: ig_link_clicks (same arrival), ig_engaged/ig_saves/ig_shares
   // (likes/shares aren't intent, and saves/shares have no data source). Those
   // stay in the registry as context, never summed. Actions (stage 3) unchanged.
-  2: ['ga4_website_visits', 'gbp_website_clicks', 'ga4_menu_views', 'ig_profile_visits'],
+  2: ['ga4_website_visits', 'gbp_website_clicks', 'ga4_menu_views', 'gbp_menu_clicks', 'ig_profile_visits'],
   3: ['gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
   4: ['pos_covers', 'delivery_orders'],
   5: ['pos_repeat_customers'],
