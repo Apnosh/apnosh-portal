@@ -869,14 +869,28 @@ function FeedLoading() {
 // data — no invented comparison line, no fake "before us" region. Campaigns
 // without a known go-live date (or shipped after our last data day) simply don't
 // pin, because we can't honestly show their effect yet.
-type TrendRange = 'month' | 'quarter' | 'all'
-const TREND_LABEL: Record<TrendRange, string> = { month: 'Month', quarter: 'Quarter', all: 'Since start' }
-const TREND_DAYS: Record<'month' | 'quarter', number> = { month: 30, quarter: 90 }
+type TrendRange = 'month' | 'quarter' | 'year' | 'all'
+const TREND_LABEL: Record<TrendRange, string> = { month: 'Month', quarter: 'Quarter', year: 'Year', all: 'All time' }
+const TREND_DAYS: Record<'month' | 'quarter' | 'year', number> = { month: 30, quarter: 90, year: 365 }
 const DAY_MS = 86400000
 
 function trendDayMs(iso: string): number { return Date.parse(iso.length <= 10 ? `${iso}T00:00:00Z` : iso) }
 function fmtPinDate(ms: number): string { return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
 function trendCompact(n: number): string { const v = Math.round(n); return v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1).replace(/\.0$/, '')}k` : String(v) }
+// a smooth (Catmull-Rom → bézier) curve through the points, so the line reads as
+// a trend instead of a jagged connect-the-dots.
+function trendSmoothPath(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return ''
+  if (pts.length === 2) return `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)} L${pts[1].x.toFixed(1)},${pts[1].y.toFixed(1)}`
+  let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] ?? p2
+    const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6
+    const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6
+    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
+  }
+  return d
+}
 
 // mean of the daily series in [a, b) — the honest before/after read on a launch
 function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): { mean: number; n: number } {
@@ -896,10 +910,21 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
   const startMs = range === 'all' ? firstMs : Math.max(firstMs, endMs - TREND_DAYS[range] * DAY_MS)
   const spanMs = Math.max(DAY_MS, endMs - startMs)
 
-  // daily points inside the window → a smooth line straight off the real series
   const win = dayMs.filter((d) => d.t >= startMs && d.t <= endMs)
   if (win.length < 2) return null
-  const maxV = Math.max(...win.map((d) => d.v))
+
+  // Resample the daily series into a handful of evenly-spaced buckets (mean per
+  // bucket), then draw a smooth curve through them — so the line reads as a real
+  // trend instead of jagged day-to-day noise. Fewer, cleaner points at wider ranges.
+  const nB = range === 'month' ? 10 : range === 'all' ? 16 : 12
+  const agg = Array.from({ length: nB }, () => ({ sum: 0, n: 0 }))
+  for (const d of win) {
+    const bi = Math.min(nB - 1, Math.max(0, Math.floor(((d.t - startMs) / spanMs) * nB)))
+    agg[bi].sum += d.v; agg[bi].n++
+  }
+  const filled = agg.map((b, i) => ({ i, mean: b.n ? b.sum / b.n : null })).filter((b): b is { i: number; mean: number } => b.mean != null)
+  if (filled.length < 2) return null
+  const maxV = Math.max(...filled.map((b) => b.mean))
   if (maxV <= 0) return null // an all-zero window → don't draw a flat fake line
   const avgV = win.reduce((s, d) => s + d.v, 0) / win.length
 
@@ -908,13 +933,13 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
   // when markers crowd together. Full-width, comfortable height.
   const W = 344, H = 202, padL = 32, padR = 14, padT = 24, padB = 44
   const plotW = W - padL - padR, yTop = padT, yBot = H - padB
-  const head = maxV * 1.15
+  const head = maxV * 1.2
   const xAt = (t: number) => padL + ((t - startMs) / spanMs) * plotW
   const yAt = (v: number) => yBot - (v / head) * (yBot - yTop)
   const clampX = (x: number) => Math.max(padL + 11, Math.min(W - padR - 11, x))
   const yTicks = [maxV, maxV / 2, 0]
-  const pts = win.map((d) => ({ x: xAt(d.t), y: yAt(d.v) }))
-  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+  const pts = filled.map((b) => ({ x: padL + ((b.i + 0.5) / nB) * plotW, y: yAt(b.mean) }))
+  const line = trendSmoothPath(pts)
   const area = `${line} L${pts[pts.length - 1].x.toFixed(1)},${yBot} L${pts[0].x.toFixed(1)},${yBot} Z`
 
   const yOnLine = (x: number) => {
@@ -968,16 +993,14 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
   const gid = `trendfill-${mv?.key ?? 'x'}`
   return (
     <div style={{ marginTop: 28 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Did it move?</div>
-        <div style={{ display: 'inline-flex', background: '#f1f3f2', borderRadius: 9, padding: 3 }}>
-          {(['month', 'quarter', 'all'] as TrendRange[]).map((r) => {
-            const on = range === r
-            return <button key={r} onClick={() => setRange(r)} style={{ border: 'none', borderRadius: 7, padding: '5px 11px', fontSize: 11.5, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 2px rgba(0,0,0,.08)' : 'none', cursor: 'pointer' }}>{TREND_LABEL[r]}</button>
-          })}
-        </div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 4 }}>Did it move?</div>
+      <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.4, marginBottom: 12 }}>Each pin marks a day a campaign went live. The dashed line is a typical day, so you can see when you ran above it.</div>
+      <div style={{ display: 'flex', background: '#f1f3f2', borderRadius: 9, padding: 3, marginBottom: 14 }}>
+        {(['month', 'quarter', 'year', 'all'] as TrendRange[]).map((r) => {
+          const on = range === r
+          return <button key={r} onClick={() => setRange(r)} style={{ flex: 1, border: 'none', borderRadius: 7, padding: '6px 0', fontSize: 12, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 2px rgba(0,0,0,.08)' : 'none', cursor: 'pointer' }}>{TREND_LABEL[r]}</button>
+        })}
       </div>
-      <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.4, marginBottom: 10 }}>Each pin marks a day a campaign went live. The dashed line is a typical day, so you can see when you ran above it.</div>
 
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }} role="img" aria-label="Stage trend with campaign go-live markers">
         <defs>
