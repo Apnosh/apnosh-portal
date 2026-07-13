@@ -4164,7 +4164,7 @@ export function PlanBar({ items, onOpen }) {
   const anyCreative = items.some((it) => isCreativeCard(catGet(it.itemId)));
   const n = items.length;
   return (
-    <div style={{ flexShrink: 0, background: "transparent", padding: "0 16px 12px", pointerEvents: "none" }}>
+    <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, background: "transparent", padding: "0 16px 12px", pointerEvents: "none", zIndex: 6 }}>
       <button onClick={onOpen} className="apnpress" style={{ width: "100%", height: 48, borderRadius: 24, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 10px 30px rgba(74,189,152,0.5)", pointerEvents: "auto", WebkitTapHighlightColor: "transparent" }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1.6" /><circle cx="19" cy="21" r="1.6" /><path d="M2 3h3l2.6 13.4a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 2-1.6L22 8H6" /></svg>
         View your plan · {n} {n === 1 ? "item" : "items"} · {planMoneyLabel(t, anyCreative)}
@@ -4483,7 +4483,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           {route.name === "browse" && (
             <>
               <AppHeader />
-              <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: planItems.length > 0 ? 76 : 0 }}>
                 <PlanBrowse restaurant={restaurant} recommended={recommended} recsLoading={recsLoading} initialLens={initialLens} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
               </div>
             </>
