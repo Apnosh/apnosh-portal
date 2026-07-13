@@ -104,6 +104,7 @@ const MVP_PREFIX = [
   '/dashboard/insights', // insights + its sub-routes (e.g. /insights/analyst) own their full-screen chrome
   '/dashboard/campaigns', '/dashboard/reviews', '/dashboard/business-info',
   '/dashboard/agreements', '/dashboard/settings', '/dashboard/connected-accounts',
+  '/dashboard/connect-accounts', // the reconnect pickers (GA property / GSC site) — keep them full-screen mobile, not legacy desktop chrome
   '/dashboard/billing', // billing + its sub-routes (e.g. /billing/orders/[id]) own their full-screen chrome
 ]
 function isMvpRoute(path: string): boolean {
