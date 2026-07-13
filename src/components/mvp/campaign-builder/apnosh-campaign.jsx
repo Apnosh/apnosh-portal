@@ -3089,6 +3089,10 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   const onAddToPlan = () => {
     addToPlan({ itemId, doer: doerCfg ? doer : null, options: selected });
     setAdded(true);
+    // Owner: adding IS the final step for these catalog campaigns — collect it
+    // into the plan and close back to the store (the persistent plan bar shows
+    // it landed). Checkout is the one door that sends the plan to production.
+    if (onBack) onBack();
   };
   // Changing the config after adding re-arms the button: re-adding replaces this
   // item's saved config (the cart is keyed by itemId), so the label stays honest.
@@ -3414,17 +3418,11 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
           </div>
           {/* After adding, the button STAYS confirmed and becomes the door to the plan —
               the add never again looks like nothing happened. Changing the config re-arms it. */}
-          <button onClick={added ? (onOpenPlan || (() => {})) : onAddToPlan} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: added ? TOKENS.mintDark : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
-            {added ? (
-              <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>Added · View your plan</>
-            ) : (
-              <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Add to plan</>
-            )}
+          <button onClick={onAddToPlan} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Add to plan
           </button>
-          {upsellAi ? (
+          {upsellAi && (
             <a href="/dashboard/billing" className="apnpress" style={{ display: "block", textAlign: "center", textDecoration: "none", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 10 }}>Upgrade to Pro to use Apnosh AI</a>
-          ) : (
-            <button onClick={() => onContinue(buildPreset())} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Buy now instead</button>
           )}
         </div>
     </div>
