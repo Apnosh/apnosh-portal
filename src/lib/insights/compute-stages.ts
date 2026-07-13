@@ -61,11 +61,27 @@ export interface StageSourceView {
   manualAt?: string | null
 }
 
+/** Interest-only enrichment: the real, already-collected GA4 detail behind the
+ *  headline — WHAT people looked at + HOW deeply. Never fabricated; only present
+ *  when GA4 has real website data for the window. Not part of any sum. */
+export interface StageExplore {
+  /** most-viewed pages over the window, friendly-labelled, biggest first */
+  topPages: { path: string; label: string; views: number }[]
+  /** page views ÷ visits, 1 decimal (null when no visits) */
+  pagesPerVisit: number | null
+  /** average time on site, seconds (null when unavailable) */
+  avgSeconds: number | null
+  /** unique people (null when unavailable) */
+  visitors: number | null
+}
+
 export interface ComputedStage {
   stage: FunnelStage
   label: string
   /** the stage headline == sum of counted source values; null when the stage is empty */
   headline: number | null
+  /** Interest only: real GA4 "what they explored" detail (never summed) */
+  explore?: StageExplore
   /** the word for the number (e.g. Awareness = "views", never "people") */
   unit?: string
   sources: StageSourceView[]
@@ -283,10 +299,18 @@ export function computeStagesFrom(
  */
 export async function computeStages(clientId: string, window: InsightsWindow = '30d'): Promise<ComputedStage[]> {
   const { resolveSourceStatuses } = await import('./resolve-source-statuses')
-  const { loadStageValues } = await import('./stage-values')
-  const [statuses, values] = await Promise.all([
+  const { loadStageValues, loadInterestExplore } = await import('./stage-values')
+  const [statuses, values, explore] = await Promise.all([
     resolveSourceStatuses(clientId),
     loadStageValues(clientId, window),
+    loadInterestExplore(clientId, window),
   ])
-  return computeStagesFrom(statuses, values, {})
+  const stages = computeStagesFrom(statuses, values, {})
+  // Interest (stage 2) carries the real "what they explored" GA4 detail. Never
+  // enters any sum — the headline stays the honest sum of counted sources.
+  if (explore) {
+    const s2 = stages.find(s => s.stage === 2)
+    if (s2) s2.explore = explore
+  }
+  return stages
 }
