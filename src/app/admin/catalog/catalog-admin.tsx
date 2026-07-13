@@ -39,7 +39,10 @@ const TIER_OPTS: Tier[] = ['lean', 'standard', 'aggressive']
 const TIER_LABEL: Record<Tier, string> = { lean: 'Lean+', standard: 'Standard+', aggressive: 'Aggressive only' }
 const minMargin = (svc: PricedService) => Math.min(...svc.prices.map((p) => marginOf(p).pct))
 
-export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: { rows: CatalogRow[]; preview?: boolean; initialOpenId?: string }) {
+/** Per-card usage counts: how many campaigns include the card, and how many are live (shipped). */
+export type ServiceUsage = Record<string, { total: number; live: number }>
+
+export function CatalogAdmin({ rows: initial, preview = false, initialOpenId, usage = {} }: { rows: CatalogRow[]; preview?: boolean; initialOpenId?: string; usage?: ServiceUsage }) {
   const [rows, setRows] = useState<CatalogRow[]>(initial)
   const [editId, setEditId] = useState<string | null>(initialOpenId ?? null)
   const [creating, setCreating] = useState(false)
@@ -118,6 +121,11 @@ export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: 
                   <div className="hidden sm:flex gap-1 flex-wrap justify-end max-w-[160px]">
                     {goals.map((g) => <span key={g} className="text-[9.5px] font-semibold text-white rounded-full px-1.5 py-px" style={{ background: GOAL_CHIP[g]?.c ?? '#888' }}>{GOAL_CHIP[g]?.l ?? g}</span>)}
                   </div>
+                  <div className="hidden md:block text-right min-w-[70px] whitespace-nowrap">
+                    {usage[r.id]?.live ? <span className="text-[10.5px] font-semibold text-emerald-700 bg-emerald-50 rounded px-1.5 py-0.5">{usage[r.id].live} live</span>
+                      : usage[r.id]?.total ? <span className="text-[10.5px] text-ink-4">{usage[r.id].total} sold</span>
+                      : <span className="text-[10.5px] text-ink-5">—</span>}
+                  </div>
                   <div className="text-[11px] text-ink-2 whitespace-nowrap text-right min-w-[92px]">{svc.prices.map((p) => '$' + p.amount.toLocaleString()).join(' + ')}</div>
                   <div className={'text-[10px] font-bold text-right min-w-[34px] ' + (low ? 'text-rose-600' : 'text-emerald-600')}>{Math.round(m * 100)}%</div>
                 </button>
@@ -127,7 +135,7 @@ export function CatalogAdmin({ rows: initial, preview = false, initialOpenId }: 
         </section>
       ))}
 
-      {editing && <EditDrawer key={editing.id} mode="edit" row={editing} existingIds={rows.map((r) => r.id)} preview={preview} onClose={() => setEditId(null)} onSaved={onSaved} onCreated={onCreated} onDeleted={onDeleted} onDuplicate={startDuplicate} flash={flash} />}
+      {editing && <EditDrawer key={editing.id} mode="edit" row={editing} existingIds={rows.map((r) => r.id)} usage={usage[editing.id]} preview={preview} onClose={() => setEditId(null)} onSaved={onSaved} onCreated={onCreated} onDeleted={onDeleted} onDuplicate={startDuplicate} flash={flash} />}
       {creating && <EditDrawer key={createSeed?.id ?? '__new'} mode="create" row={createSeed ?? blankRow()} existingIds={rows.map((r) => r.id)} preview={preview} onClose={() => { setCreating(false); setCreateSeed(null) }} onSaved={onSaved} onCreated={onCreated} onDeleted={onDeleted} onDuplicate={startDuplicate} flash={flash} />}
       {toast && <div className={'fixed bottom-5 left-1/2 -translate-x-1/2 z-50 text-[13px] font-medium text-white rounded-lg px-4 py-2.5 shadow-lg ' + (toast.bad ? 'bg-rose-600' : 'bg-ink')}>{toast.msg}</div>}
     </div>
@@ -146,7 +154,7 @@ function toPricePoint(e: EPrice): PricePoint {
   return { ...e.orig, kind: e.kind, amount: e.amount, unit: e.kind === 'per-unit' ? (e.unit.trim() || 'unit') : undefined, cost }
 }
 
-function EditDrawer({ mode, row, existingIds, preview, onClose, onSaved, onCreated, onDeleted, onDuplicate, flash }: { mode: 'create' | 'edit'; row: CatalogRow; existingIds: string[]; preview: boolean; onClose: () => void; onSaved: (id: string, patch: ServicePatch) => void; onCreated: (row: CatalogRow) => void; onDeleted: (id: string) => void; onDuplicate: (row: CatalogRow) => void; flash: (m: string, bad?: boolean) => void }) {
+function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, onCreated, onDeleted, onDuplicate, flash }: { mode: 'create' | 'edit'; row: CatalogRow; existingIds: string[]; usage?: { total: number; live: number }; preview: boolean; onClose: () => void; onSaved: (id: string, patch: ServicePatch) => void; onCreated: (row: CatalogRow) => void; onDeleted: (id: string) => void; onDuplicate: (row: CatalogRow) => void; flash: (m: string, bad?: boolean) => void }) {
   const creating = mode === 'create'
   const [id, setId] = useState(row.id)
   const [idTouched, setIdTouched] = useState(!creating)
@@ -254,6 +262,15 @@ function EditDrawer({ mode, row, existingIds, preview, onClose, onSaved, onCreat
               )}
             </div>
           </div>
+
+          {/* sales / usage */}
+          {!creating && (
+            <div className="flex items-center gap-4 rounded-xl border border-ink-6 px-3.5 py-2.5">
+              <div><div className="text-[18px] font-semibold text-emerald-700 leading-none">{usage?.live ?? 0}</div><div className="text-[10.5px] text-ink-4 mt-0.5">in live campaigns</div></div>
+              <div className="w-px h-7 bg-ink-6" />
+              <div><div className="text-[18px] font-semibold text-ink leading-none">{usage?.total ?? 0}</div><div className="text-[10.5px] text-ink-4 mt-0.5">sold all-time</div></div>
+            </div>
+          )}
 
           {/* identity */}
           <label className="block"><span className={lbl}>Card name</span><input className={field} value={name} onChange={(e) => onName(e.target.value)} placeholder="e.g. Menu photo refresh" /></label>
