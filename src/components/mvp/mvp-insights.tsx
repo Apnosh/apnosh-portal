@@ -296,6 +296,8 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
   // keeps the same stage.
   const [sel, setSel] = useState<string | undefined>(focusKey)
   useEffect(() => { if (focusKey) setSel(focusKey) }, [focusKey])
+  // Warm the other range windows up front so switching tabs is instant.
+  useEffect(() => { prewarmStageWindows(clientId) }, [clientId])
   const focus = resolveFocus(sel)
   const idx = Math.max(0, STAGE_ORDER.findIndex((s) => s.key === focus.stageKey))
 
@@ -490,7 +492,7 @@ function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
     .filter((x) => x.srcs.length > 0)
   if (rows.length === 0) return null
   return (
-    <Section title="How much by source" sub={sub}>
+    <Section title="Breakdown by source" sub={sub}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         {rows.map(({ g, srcs }) => (
           <div key={g.key}>
@@ -742,9 +744,32 @@ const RANGE_WINDOW: Record<string, { w: string; label: string } | null> = {
   custom: null,
 }
 
-// ── Re-scope a computed stage to a picked chart range: refetch from the light
-//    insights-stages endpoint and swap it in (falling back to the 30-day `cs`
-//    while loading or on any hiccup — never a blank). ──
+// Session cache of the light insights-stages payload, keyed by client+window, so
+// switching ranges/tabs is INSTANT once a window is warm (no refetch). The
+// non-default windows are prewarmed on mount (prewarmStageWindows), so even the
+// first click is instant.
+const STAGES_CACHE = new Map<string, ComputedStage[]>()
+async function loadStagesWindow(clientId: string, w: string): Promise<ComputedStage[] | null> {
+  const key = `${clientId}:${w}`
+  const hit = STAGES_CACHE.get(key)
+  if (hit) return hit
+  try {
+    const r = await fetch(`/api/dashboard/insights-stages?clientId=${clientId}&window=${w}`)
+    if (!r.ok) return null
+    const stages = ((await r.json())?.stages as ComputedStage[] | undefined) ?? []
+    STAGES_CACHE.set(key, stages)
+    return stages
+  } catch { return null }
+}
+// Warm the windows the range chips can pick (30d is already in `detail`).
+function prewarmStageWindows(clientId: string | undefined) {
+  if (!clientId) return
+  for (const w of ['7d', '12m']) void loadStagesWindow(clientId, w)
+}
+
+// ── Re-scope a computed stage to a picked chart range: served INSTANTLY from the
+//    session cache when the window is warm, else fetched once and cached (falling
+//    back to the 30-day `cs` while loading — never a blank). ──
 function useRangeStage(cs: ComputedStage | undefined, stageNumber: number | undefined, clientId: string | undefined, range: string): { stage: ComputedStage | undefined; sub: string } {
   const [rangeStage, setRangeStage] = useState<ComputedStage | undefined>(cs)
   const [sub, setSub] = useState('last 30 days')
@@ -756,16 +781,14 @@ function useRangeStage(cs: ComputedStage | undefined, stageNumber: number | unde
       setSub(range === 'custom' ? 'recent' : 'last 30 days')
       return
     }
-    let live = true
     setSub(picked.label)
-    fetch(`/api/dashboard/insights-stages?clientId=${clientId}&window=${picked.w}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!live) return
-        const found = (j?.stages as ComputedStage[] | undefined)?.find((s) => s.stage === stageNumber)
-        setRangeStage(found ?? cs)
-      })
-      .catch(() => { if (live) setRangeStage(cs) })
+    const cached = STAGES_CACHE.get(`${clientId}:${picked.w}`)
+    if (cached) { setRangeStage(cached.find((s) => s.stage === stageNumber) ?? cs); return } // instant
+    let live = true
+    loadStagesWindow(clientId, picked.w).then((stages) => {
+      if (!live) return
+      setRangeStage(stages?.find((s) => s.stage === stageNumber) ?? cs)
+    })
     return () => { live = false }
   }, [range, clientId, stageNumber, cs])
   return { stage: rangeStage ?? cs, sub }
