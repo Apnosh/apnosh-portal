@@ -19,7 +19,7 @@ export const GENERATED_CATALOG: PricedService[] = [
           "offshore": 2
         },
         "kind": "one-time",
-        "amount": 365,
+        "amount": 100,
         "market": {
           "low": 300,
           "high": 500,
