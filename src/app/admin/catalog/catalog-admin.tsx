@@ -244,22 +244,47 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
           </div>
         </div>
         <div className="p-5 space-y-4">
-          {/* live customer-facing preview */}
+          {/* full-page preview — how the customer's product page reads, from the form data */}
           <div className="rounded-xl bg-bg-2/50 p-3">
-            <div className="text-[10px] font-bold uppercase tracking-wide text-ink-4 mb-1.5">How the card looks</div>
-            <div className="rounded-xl bg-white border border-ink-6 p-3.5 shadow-sm">
-              <div className="text-[15px] font-semibold text-ink">{plain || name || 'Untitled card'}</div>
-              {desc.trim() && <div className="text-[12.5px] text-ink-3 mt-1 leading-snug">{desc.trim()}</div>}
-              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                <span className="text-[15px] font-bold text-ink">{previewPrice}</span>
-                <span className="text-[11px] text-ink-4">· {HANDLERS[handler as Handler]?.label ?? handler}</span>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-ink-4">How the customer sees it</div>
+              <div className="text-[10px] text-ink-5">preview</div>
+            </div>
+            <div className="rounded-2xl bg-white border border-ink-6 overflow-hidden shadow-sm">
+              {/* hero */}
+              <div className="px-4 pt-4 pb-3">
+                <div className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-emerald-700">{SECTION_LABEL[section] ?? section}</div>
+                <div className="text-[17px] font-semibold text-ink leading-tight mt-1">{plain || name || 'Untitled card'}</div>
+                {desc.trim() && <div className="text-[12.5px] text-ink-3 mt-1 leading-snug">{desc.trim()}</div>}
               </div>
+              {/* choose how it's done — the three lanes */}
+              <div className="px-4 py-3 border-t border-ink-6">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-ink-4 mb-1.5">Choose how it&apos;s done</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[{ k: 'diy', t: "I'll do it", p: 'Free' }, { k: 'ai', t: 'Apnosh AI', p: 'Pro' }, { k: 'team', t: 'Apnosh does it', p: previewPrice }].map((ln, i) => (
+                    <div key={ln.k} className={'rounded-lg border px-2 py-1.5 text-center ' + (i === 2 ? 'border-brand bg-brand/5' : 'border-ink-6')}>
+                      <div className="text-[11px] font-semibold text-ink leading-tight">{ln.t}</div>
+                      <div className={'text-[10.5px] mt-0.5 ' + (i === 2 ? 'text-brand-dark font-semibold' : 'text-ink-4')}>{ln.p}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-[10px] text-ink-5 mt-1.5">Lanes are the same on every card for now — making them per-card is the next step.</div>
+              </div>
+              {/* what you get */}
               {previewInc.length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {previewInc.map((it, i) => <li key={i} className="text-[12px] text-ink-2 flex gap-1.5"><span className="text-emerald-600">✓</span>{it}</li>)}
-                  {included.filter((x) => x.trim()).length > previewInc.length && <li className="text-[11px] text-ink-4">+ {included.filter((x) => x.trim()).length - previewInc.length} more</li>}
-                </ul>
+                <div className="px-4 py-3 border-t border-ink-6">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-ink-4 mb-1.5">What you get</div>
+                  <ul className="space-y-1">
+                    {previewInc.map((it, i) => <li key={i} className="text-[12px] text-ink-2 flex gap-1.5"><span className="text-emerald-600">✓</span>{it}</li>)}
+                    {included.filter((x) => x.trim()).length > previewInc.length && <li className="text-[11px] text-ink-4 pl-4">+ {included.filter((x) => x.trim()).length - previewInc.length} more</li>}
+                  </ul>
+                </div>
               )}
+              {/* buy footer */}
+              <div className="px-4 py-3 border-t border-ink-6 flex items-center gap-3 bg-bg-2/40">
+                <div className="flex-1 min-w-0"><div className="text-[15px] font-bold text-ink">{previewPrice}</div></div>
+                <div className="rounded-full bg-brand text-white text-[12.5px] font-semibold px-4 py-2">Add to plan</div>
+              </div>
             </div>
           </div>
 
