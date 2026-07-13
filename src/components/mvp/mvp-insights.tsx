@@ -34,7 +34,7 @@ import {
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
-import type { ComputedStage, StageSourceView } from '@/lib/insights/compute-stages'
+import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
 import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
 
 const C = {
@@ -471,7 +471,31 @@ function EmptyStageHero({ label, note }: { label: string; note: string }) {
 // range the visible slide reported up — never its own separate state).
 function RangeSources({ cs, stageNumber, clientId, unit, title, range }: { cs: ComputedStage; stageNumber: number; clientId?: string; unit: string; title: string; range: string }) {
   const { stage, sub } = useRangeStage(cs, stageNumber, clientId, range)
-  return <SourceBreakdown stage={stage ?? cs} unit={unit} title={title} sub={sub} showReconcile={false} showExtras={false} />
+  const s = stage ?? cs
+  return (
+    <>
+      {s.groups && s.groups.length > 0 && <GroupCards groups={s.groups} />}
+      <SourceBreakdown stage={s} unit={unit} title={title} sub={sub} showReconcile={false} showExtras={false} />
+    </>
+  )
+}
+
+// The 4 grouped highlight cards (2x2): the "best 4" rollups for the stage. Each
+// shows its total, or an honest "Connect"/"Soon" when nothing's counted yet. The
+// by-source detail sits below these as the specifics.
+function GroupCards({ groups }: { groups: StageGroup[] }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 18 }}>
+      {groups.map((g) => (
+        <div key={g.key} style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '14px 15px', minHeight: 70 }}>
+          <div style={{ fontSize: 12.5, color: C.mute, fontWeight: 500 }}>{g.label}</div>
+          {g.state === 'has'
+            ? <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: C.ink, letterSpacing: '-.01em', marginTop: 3, lineHeight: 1 }}>{(g.total ?? 0).toLocaleString()}</div>
+            : <div style={{ fontSize: 12, color: C.faint, marginTop: 8 }}>{g.state === 'connect' ? 'Connect to see' : 'Coming soon'}</div>}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // The graceful Sales collapse: honest about what we cannot see yet, with the one

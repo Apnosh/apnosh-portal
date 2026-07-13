@@ -75,11 +75,23 @@ export interface StageExplore {
   visitors: number | null
 }
 
+/** A grouped rollup card: the "best 4" highlights per stage. total = sum of the
+ *  group's COUNTED sources (so the 4 group totals reconcile to the headline).
+ *  state tells the card whether to show a number, "connect", or "coming soon". */
+export interface StageGroup {
+  key: string
+  label: string
+  total: number | null
+  state: 'has' | 'connect' | 'soon'
+}
+
 export interface ComputedStage {
   stage: FunnelStage
   label: string
   /** the stage headline == sum of counted source values; null when the stage is empty */
   headline: number | null
+  /** the 4 grouped highlight cards (rollups of the by-source detail below them) */
+  groups: StageGroup[]
   /** Interest only: real GA4 "what they explored" detail (never summed) */
   explore?: StageExplore
   /** the word for the number (e.g. Awareness = "views", never "people") */
@@ -116,6 +128,43 @@ const SUMMABLE: Record<FunnelStage, string[]> = {
   3: ['gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
   4: ['pos_covers', 'delivery_orders'],
   5: ['pos_repeat_customers'],
+}
+
+/** The "best 4" grouped highlight cards per stage. Each group rolls up a set of
+ *  by-source ids; its total is the sum of the group's COUNTED sources, so the 4
+ *  totals reconcile to the stage headline. The by-source cards below the groups
+ *  stay the specifics (e.g. Google = Maps + Search; Calls = Google + website). */
+const STAGE_GROUPS: Record<FunnelStage, { key: string; label: string; sourceIds: string[] }[]> = {
+  1: [
+    { key: 'google', label: 'Google', sourceIds: ['gbp_impressions_search', 'gbp_impressions_maps'] },
+    { key: 'social', label: 'Social media', sourceIds: ['ig_reach', 'facebook_reach', 'tiktok_video_views'] },
+    { key: 'yelp', label: 'Yelp', sourceIds: ['yelp_views'] },
+    { key: 'other', label: 'Other', sourceIds: [] },
+  ],
+  2: [
+    { key: 'website', label: 'Website visits', sourceIds: ['ga4_website_visits', 'gbp_website_clicks'] },
+    { key: 'menu', label: 'Menu views', sourceIds: ['ga4_menu_views', 'gbp_menu_clicks'] },
+    { key: 'profile', label: 'Profile visits', sourceIds: ['ig_profile_visits', 'facebook_page_visits', 'tiktok_profile_views'] },
+    { key: 'other', label: 'Other', sourceIds: ['ig_engaged', 'ig_saves', 'ig_shares', 'ig_link_clicks'] },
+  ],
+  3: [
+    { key: 'calls', label: 'Calls', sourceIds: ['gbp_calls', 'ga4_phone_taps'] },
+    { key: 'directions', label: 'Directions', sourceIds: ['gbp_direction_requests'] },
+    { key: 'orders', label: 'Online orders', sourceIds: ['ga4_order_clicks'] },
+    { key: 'bookings', label: 'Bookings', sourceIds: ['gbp_booking_clicks', 'reservations', 'ig_profile_actions', 'facebook_cta_clicks', 'tiktok_link_clicks'] },
+  ],
+  4: [
+    { key: 'guests', label: 'Guests', sourceIds: ['pos_covers'] },
+    { key: 'revenue', label: 'Revenue', sourceIds: ['pos_revenue'] },
+    { key: 'delivery', label: 'Delivery', sourceIds: ['delivery_orders'] },
+    { key: 'ticket', label: 'Avg ticket', sourceIds: ['pos_avg_ticket'] },
+  ],
+  5: [
+    { key: 'repeat', label: 'Repeat guests', sourceIds: ['pos_repeat_customers'] },
+    { key: 'reviews', label: 'New reviews', sourceIds: ['gbp_review_count'] },
+    { key: 'returning', label: 'Returning visits', sourceIds: ['ga4_returning_users'] },
+    { key: 'loyalty', label: 'Loyalty', sourceIds: ['loyalty_redemptions', 'ig_follower_growth'] },
+  ],
 }
 
 const STAGE_UNIT: Partial<Record<FunnelStage, string>> = {
@@ -290,10 +339,25 @@ export function computeStagesFrom(
     const anyCounted = sources.some(s => s.counted)
     const headline = anyCounted ? sumCounted(sources) : null
 
+    // The 4 grouped highlight cards: each total is the sum of that group's
+    // COUNTED sources, so the four reconcile to the headline. A group with no
+    // counted source shows "connect" (some source is connectable) or "soon".
+    const groups: StageGroup[] = (STAGE_GROUPS[stage] || []).map(g => {
+      const gs = g.sourceIds.map(id => byId(id)).filter((v): v is StageSourceView => !!v)
+      const counted = gs.filter(s => s.counted)
+      const total = counted.length ? counted.reduce((a, s) => a + (s.value ?? 0), 0) : null
+      const state: StageGroup['state'] =
+        total != null ? 'has'
+          : gs.some(s => s.status === 'AVAILABLE_NOT_CONNECTED' || s.status === 'ERROR') ? 'connect'
+            : 'soon'
+      return { key: g.key, label: g.label, total, state }
+    })
+
     stages.push({
       stage,
       label: STAGE_NAMES[stage],
       headline,
+      groups,
       unit: STAGE_UNIT[stage],
       sources,
       heroSourceId,
