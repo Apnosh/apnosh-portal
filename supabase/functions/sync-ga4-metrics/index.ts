@@ -205,9 +205,15 @@ async function ensureFreshToken(supabase, conn: Connection): Promise<string> {
   }
 
   const newExpiry = new Date(Date.now() + (data.expires_in ?? 3600) * 1000).toISOString()
+  // Google rotates the refresh_token on some refreshes. If we keep using the
+  // OLD one it works during a grace window then gets revoked -> the connection
+  // dies with "invalid_grant" and the owner is forced to reconnect (over and
+  // over). Persist the rotated value whenever Google returns one.
+  const update: Record<string, unknown> = { access_token: data.access_token, token_expires_at: newExpiry }
+  if (data.refresh_token && data.refresh_token !== conn.refresh_token) update.refresh_token = data.refresh_token
   await supabase
     .from('channel_connections')
-    .update({ access_token: data.access_token, token_expires_at: newExpiry })
+    .update(update)
     .eq('id', conn.id)
 
   return data.access_token as string

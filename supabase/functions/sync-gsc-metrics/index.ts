@@ -148,9 +148,13 @@ async function ensureFreshToken(supabase, conn: Connection): Promise<string> {
   }
 
   const newExpiry = new Date(Date.now() + (data.expires_in ?? 3600) * 1000).toISOString()
+  // Persist a rotated refresh_token so the old one can't get revoked out from
+  // under us and force an endless reconnect loop (see sync-ga4-metrics).
+  const update: Record<string, unknown> = { access_token: data.access_token, token_expires_at: newExpiry }
+  if (data.refresh_token && data.refresh_token !== conn.refresh_token) update.refresh_token = data.refresh_token
   await supabase
     .from('channel_connections')
-    .update({ access_token: data.access_token, token_expires_at: newExpiry })
+    .update(update)
     .eq('id', conn.id)
 
   return data.access_token as string
