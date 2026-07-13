@@ -475,8 +475,33 @@ function RangeSources({ cs, stageNumber, clientId, unit, title, range }: { cs: C
   return (
     <>
       {s.groups && s.groups.length > 0 && <GroupCards groups={s.groups} />}
-      <SourceBreakdown stage={s} unit={unit} title={title} sub={sub} showReconcile={false} showExtras={false} />
+      <GroupedSources stage={s} sub={sub} />
     </>
+  )
+}
+
+// The by-source detail: the individual sources nested UNDER their group, so it
+// reads as the drill-down of the 4 cards above (Google -> Maps + Search; Calls
+// -> Google + website) instead of a flat repeat of them. Groups with no source
+// are skipped.
+function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
+  const rows = (stage.groups ?? [])
+    .map((g) => ({ g, srcs: g.sourceIds.map((id) => stage.sources.find((x) => x.id === id)).filter((v): v is StageSourceView => !!v) }))
+    .filter((x) => x.srcs.length > 0)
+  if (rows.length === 0) return null
+  return (
+    <Section title="How much by source" sub={sub}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {rows.map(({ g, srcs }) => (
+          <div key={g.key}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 8 }}>{g.label}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+              {srcs.map((s) => <SourceStateCard key={s.id} s={s} small />)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
   )
 }
 
@@ -760,12 +785,15 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
   const dn = summary.deltaPct < 0
   const ac = dn ? C.coral : C.green
   const acbg = dn ? C.coralBg : C.greenSoft
-  // The headline is the total of the selected range — moves with the chips.
-  const total = summary.total
   // report the picked range up (the external cards follow it)
   useEffect(() => { onRange?.(range) }, [range, onRange])
-  // only re-scope the inline breakdown when we actually render one
-  const { stage: rangeStage, sub } = useRangeStage(cs, showBreakdown ? stageNumber : undefined, clientId, range)
+  // The big number IS the sum of the by-source breakdown (the computeStages
+  // headline), scoped to the picked range — so the total ALWAYS equals the cards
+  // below it and can never drift. The histogram shows the trend/shape from the
+  // metric series; the delta pill describes that trend.
+  const { stage: rangeStage, sub } = useRangeStage(cs, stageNumber, clientId, range)
+  const csTotal = rangeStage?.headline ?? cs?.headline
+  const total = csTotal != null ? csTotal : summary.total
 
   return (
     <>
