@@ -633,7 +633,7 @@ export const SHORT_LABELS: Record<string, string> = {
   ig_nonfollower_reach_pct: 'New-audience reach',
   gsc_site_impressions: 'Website in Google',
   // Stage 2 · Interest
-  ig_profile_visits: 'Profile visits',
+  ig_profile_visits: 'Instagram visits',
   ig_engaged: 'Post engagement',
   ig_saves: 'Post saves',
   ig_shares: 'Post shares',
