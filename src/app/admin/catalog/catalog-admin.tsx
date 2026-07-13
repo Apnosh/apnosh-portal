@@ -261,8 +261,8 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
   const pvSel = pvLanes[Math.min(pvLane, Math.max(0, pvLanes.length - 1))]
   const laneChip = (l: CardLane) => (!l.price ? (l.kind === 'ai' && l.proOnly ? 'Pro' : 'Free') : '$' + l.price.amount.toLocaleString() + (l.price.kind === 'monthly' ? '/mo' : ''))
   return (
-    <div className="fixed inset-0 z-40 bg-bg-2 overflow-y-auto">
-      {/* top bar with the actions */}
+    <div className="fixed inset-0 z-[60] bg-bg-2 overflow-y-auto">
+      {/* top bar with the actions — full-screen takeover above the admin sidebar (z-50) */}
       <div className="sticky top-0 z-10 bg-white border-b border-ink-6 px-5 lg:px-8 py-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={onClose} className="text-[13px] font-medium text-ink-3 hover:text-ink shrink-0">&larr; Back to catalog</button>
