@@ -360,6 +360,7 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
           cards (scoped to the chart's picked range), extras, and campaigns */}
       <div style={{ padding: '0 18px' }}>
         <StageBottom stageKey={focus.stageKey} detail={detail} clientId={clientId} range={ranges[focus.stageKey] ?? '30d'} />
+        <CampaignTrend mv={byKey.get(focus.metric)} list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
         <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
       </div>
     </div>
@@ -861,6 +862,134 @@ function FeedLoading() {
 
 // ── "Campaigns working on this" — the shipped campaigns whose live pieces push on
 //    this stage's number, each a tap into its campaign. A calm prompt when none. ──
+// ── Campaign impact trend ──────────────────────────────────────────────────
+// A separate line chart for the active stage: the stage's real daily series with
+// a numbered pin at each campaign's real go-live date, so the owner can see
+// whether launching a campaign actually moved this line. Everything here is real
+// data — no invented comparison line, no fake "before us" region. Campaigns
+// without a known go-live date (or shipped after our last data day) simply don't
+// pin, because we can't honestly show their effect yet.
+type TrendRange = 'month' | 'quarter' | 'all'
+const TREND_LABEL: Record<TrendRange, string> = { month: 'Month', quarter: 'Quarter', all: 'Since start' }
+const TREND_DAYS: Record<'month' | 'quarter', number> = { month: 30, quarter: 90 }
+const DAY_MS = 86400000
+
+function trendDayMs(iso: string): number { return Date.parse(iso.length <= 10 ? `${iso}T00:00:00Z` : iso) }
+function fmtPinDate(ms: number): string { return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
+
+function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | null }) {
+  const [range, setRange] = useState<TrendRange>('quarter')
+  const daily = (mv?.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0)
+  if (daily.length < 2) return null // no series → nothing honest to draw
+
+  const dayMs = daily.map((d) => ({ t: trendDayMs(d.date), v: d.value }))
+  const firstMs = dayMs[0].t
+  const lastMs = dayMs[dayMs.length - 1].t
+  const endMs = lastMs
+  const startMs = range === 'all' ? firstMs : Math.max(firstMs, endMs - TREND_DAYS[range] * DAY_MS)
+  const spanMs = Math.max(DAY_MS, endMs - startMs)
+
+  // weekly buckets across the window (a clean line + a natural "which week" grain)
+  const WEEK = 7 * DAY_MS
+  const nB = Math.max(2, Math.min(16, Math.ceil(spanMs / WEEK) + 1))
+  const buckets = Array.from({ length: nB }, (_, i) => ({ center: startMs + (i + 0.5) * (spanMs / nB), v: 0 }))
+  for (const d of dayMs) {
+    if (d.t < startMs || d.t > endMs) continue
+    const bi = Math.min(nB - 1, Math.max(0, Math.floor(((d.t - startMs) / spanMs) * nB)))
+    buckets[bi].v += d.v
+  }
+  const maxV = Math.max(...buckets.map((b) => b.v))
+  if (maxV <= 0) return null // an all-zero window → don't draw a flat fake line
+
+  // SVG geometry (uniform-scaled so pins stay round). y grows downward.
+  const W = 340, H = 150, padX = 8, padT = 22, padB = 10
+  const plotW = W - padX * 2, yTop = padT, yBot = H - padB
+  const head = maxV * 1.12
+  const xAt = (t: number) => padX + ((t - startMs) / spanMs) * plotW
+  const yAt = (v: number) => yBot - (v / head) * (yBot - yTop)
+  const pts = buckets.map((b) => ({ x: xAt(b.center), y: yAt(b.v) }))
+  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+  const area = `${line} L${pts[pts.length - 1].x.toFixed(1)},${yBot} L${pts[0].x.toFixed(1)},${yBot} Z`
+
+  // y on the line at an arbitrary x (lerp between bucket points), so pins sit on it
+  const yOnLine = (x: number) => {
+    if (x <= pts[0].x) return pts[0].y
+    if (x >= pts[pts.length - 1].x) return pts[pts.length - 1].y
+    for (let i = 0; i < pts.length - 1; i++) {
+      if (x >= pts[i].x && x <= pts[i + 1].x) {
+        const f = (x - pts[i].x) / Math.max(1e-6, pts[i + 1].x - pts[i].x)
+        return pts[i].y + f * (pts[i + 1].y - pts[i].y)
+      }
+    }
+    return pts[pts.length - 1].y
+  }
+
+  // campaigns with a real go-live date inside the window → numbered pins, in order
+  const pins = (list ?? [])
+    .map((c) => ({ c, ms: c.shippedAt ? trendDayMs(c.shippedAt) : NaN }))
+    .filter((p) => Number.isFinite(p.ms) && p.ms >= startMs && p.ms <= endMs)
+    .sort((a, b) => a.ms - b.ms)
+    .map((p, i) => ({ ...p, n: i + 1, x: xAt(p.ms), y: yOnLine(xAt(p.ms)) }))
+
+  const gid = `trendfill-${mv?.key ?? 'x'}`
+  return (
+    <div style={{ marginTop: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Did it move?</div>
+        <div style={{ display: 'inline-flex', background: '#f1f3f2', borderRadius: 9, padding: 3 }}>
+          {(['month', 'quarter', 'all'] as TrendRange[]).map((r) => {
+            const on = range === r
+            return <button key={r} onClick={() => setRange(r)} style={{ border: 'none', borderRadius: 7, padding: '5px 11px', fontSize: 11.5, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 2px rgba(0,0,0,.08)' : 'none', cursor: 'pointer' }}>{TREND_LABEL[r]}</button>
+          })}
+        </div>
+      </div>
+      <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.4, marginBottom: 10 }}>Each pin is a campaign going live. Watch the line after it.</div>
+
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', overflow: 'visible' }} role="img" aria-label="Stage trend with campaign go-live markers">
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={C.green} stopOpacity="0.18" />
+            <stop offset="100%" stopColor={C.green} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill={`url(#${gid})`} />
+        <path d={line} fill="none" stroke={C.green} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
+        {pins.map((p) => (
+          <g key={p.c.id}>
+            <line x1={p.x} y1={p.y} x2={p.x} y2={yBot} stroke={C.greenLine} strokeWidth={1} strokeDasharray="3 3" />
+            <circle cx={p.x} cy={p.y} r={10} fill="#fff" stroke={C.green} strokeWidth={2} />
+            <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700} fill={C.greenDk}>{p.n}</text>
+          </g>
+        ))}
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.faint, margin: '4px 2px 0' }}>
+        <span>{fmtPinDate(startMs)}</span>
+        <span>{fmtPinDate(endMs)}</span>
+      </div>
+
+      {pins.length > 0 ? (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 10 }}>What we did</div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {pins.map((p, i) => (
+              <Link key={p.c.id} href={`/dashboard/campaigns/${p.c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', textDecoration: 'none', color: 'inherit', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+                <div style={{ width: 26, height: 26, borderRadius: 99, border: `1.5px solid ${C.green}`, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{p.n}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint }}>{fmtPinDate(p.ms)}</div>
+                  <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.c.name}</div>
+                </div>
+                <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginTop: 14, fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>No campaign went live in this window yet. Launch one and its date will pin here so you can see the effect.</div>
+      )}
+    </div>
+  )
+}
+
 function StageCampaigns({ list }: { list: StageCampaign[] | null }) {
   if (list === null) return null // stay quiet until the fetch lands
   const MAX = 3
