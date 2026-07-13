@@ -225,6 +225,8 @@ export async function syncAgencyMetricsForDate(date?: string): Promise<{
         directions: m.businessDirectionRequests,
         calls: m.callClicks,
         website_clicks: m.websiteClicks,
+        food_menu_clicks: m.foodMenuClicks,
+        food_orders: m.foodOrders,
         search_views: total, // legacy column
         impressions_search_mobile: m.businessImpressionsMobileSearch,
         impressions_search_desktop: m.businessImpressionsDesktopSearch,

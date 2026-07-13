@@ -72,13 +72,13 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
   try {
     const { data, error } = await admin
       .from('gbp_metrics')
-      .select('impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, search_views, impressions_total, directions, calls, website_clicks, bookings')
+      .select('impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, search_views, impressions_total, directions, calls, website_clicks, bookings, food_menu_clicks')
       .eq('client_id', clientId)
       .gte('date', gbpStart)
       .lte('date', gbpEnd)
     if (!error && data) {
       let searchSplit = 0, searchFallback = 0, maps = 0
-      let directions = 0, calls = 0, clicks = 0, bookings = 0
+      let directions = 0, calls = 0, clicks = 0, bookings = 0, menuClicks = 0
       for (const r of data as Record<string, unknown>[]) {
         searchSplit += num(r.impressions_search_mobile) + num(r.impressions_search_desktop)
         // fallback per legacy rows with no split columns: search_views mirrors the total
@@ -88,6 +88,7 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
         calls += num(r.calls)
         clicks += num(r.website_clicks)
         bookings += num(r.bookings)
+        menuClicks += num(r.food_menu_clicks)
       }
       // prefer the real split; only fall back to search_views/total when the split is empty
       out.gbp_impressions_search = searchSplit > 0 ? searchSplit : searchFallback
@@ -96,6 +97,7 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
       out.gbp_calls = calls
       out.gbp_website_clicks = clicks
       out.gbp_booking_clicks = bookings
+      out.gbp_menu_clicks = menuClicks
     }
   } catch { /* GBP unavailable -> its sources stay null */ }
 

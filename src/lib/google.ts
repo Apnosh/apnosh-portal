@@ -892,6 +892,8 @@ export interface GBPDailyMetrics {
   businessDirectionRequests: number
   callClicks: number
   websiteClicks: number
+  foodMenuClicks: number
+  foodOrders: number
 }
 
 /**
@@ -914,6 +916,8 @@ export async function runGBPDailyMetrics(
     'BUSINESS_DIRECTION_REQUESTS',
     'CALL_CLICKS',
     'WEBSITE_CLICKS',
+    'BUSINESS_FOOD_MENU_CLICKS',
+    'BUSINESS_FOOD_ORDERS',
   ]
 
   const params = new URLSearchParams()
@@ -946,6 +950,8 @@ export async function runGBPDailyMetrics(
     businessDirectionRequests: 0,
     callClicks: 0,
     websiteClicks: 0,
+    foodMenuClicks: 0,
+    foodOrders: 0,
   }
 
   /* Google's actual response shape: multiDailyMetricTimeSeries is an
@@ -983,6 +989,8 @@ export async function runGBPDailyMetrics(
       case 'BUSINESS_DIRECTION_REQUESTS': result.businessDirectionRequests = value; break
       case 'CALL_CLICKS': result.callClicks = value; break
       case 'WEBSITE_CLICKS': result.websiteClicks = value; break
+      case 'BUSINESS_FOOD_MENU_CLICKS': result.foodMenuClicks = value; break
+      case 'BUSINESS_FOOD_ORDERS': result.foodOrders = value; break
     }
   }
 

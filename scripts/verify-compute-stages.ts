@@ -44,6 +44,7 @@ const VALUES: Record<string, number | null> = {
   gbp_direction_requests: 40,
   gbp_calls: 10,
   gbp_website_clicks: 25,
+  gbp_menu_clicks: 40,
   gbp_booking_clicks: 5,
   gbp_review_count: 7,
   gbp_rating_trend: 4.5,
@@ -76,8 +77,9 @@ ok(src(aw, 'gbp_search_keywords').feedRole === 'drilldown', 'gbp_search_keywords
 // looks, profile taps. A GBP-only client (no GA4) falls back to its GBP website
 // clicks as the one website signal.
 const inte = stage(gbpStages, 2)
-ok(inte.headline === 25, `Interest = GBP website clicks 25 for a GBP-only client (${inte.headline})`)
+ok(inte.headline === 65, `Interest = GBP website clicks 25 + menu opens 40 = 65 for a GBP-only client (${inte.headline})`)
 ok(src(inte, 'gbp_website_clicks').counted === true, 'gbp_website_clicks IS counted for a GBP-only client (no GA4 to dedupe against)')
+ok(src(inte, 'gbp_menu_clicks').counted === true, 'gbp_menu_clicks (Google menu opens) counts in Interest when GBP is connected')
 ok(inte.headline === sumCounted(inte), `Interest headline == sum(counted) (${sumCounted(inte)})`)
 ok(src(inte, 'ig_profile_visits').counted === false, 'ig_profile_visits NOT counted (IG not connected) despite value 70 present')
 ok(src(inte, 'ig_engaged').counted === false, 'ig_engaged never summed — engagement is context, not interest')
@@ -142,7 +144,7 @@ const inteFull = stage(full, 2)
 ok(src(inteFull, 'ig_profile_visits').counted === true, 'ig_profile_visits counted once IG is connected')
 ok(src(inteFull, 'ig_engaged').counted === false, 'ig_engaged NOT summed even when IG connected — engagement is context, not interest')
 ok(src(inteFull, 'gbp_website_clicks').counted === false, 'gbp_website_clicks deduped when GA website visits are counted (no double count)')
-ok(inteFull.headline === 900 + 300 + 70, `Interest = web visits 900 + menu 300 + profile 70 = 1270; GBP clicks 25 deduped against GA visits (${inteFull.headline})`)
+ok(inteFull.headline === 900 + 300 + 40 + 70, `Interest = web visits 900 + site menu 300 + Google menu opens 40 + profile 70 = 1310; GBP clicks 25 deduped against GA visits (${inteFull.headline})`)
 
 // ── 3. Empty / disconnected client ─────────────────────────────────────────
 console.log('\n== 3. No connections at all ==')
