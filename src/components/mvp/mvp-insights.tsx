@@ -876,6 +876,7 @@ const DAY_MS = 86400000
 
 function trendDayMs(iso: string): number { return Date.parse(iso.length <= 10 ? `${iso}T00:00:00Z` : iso) }
 function fmtPinDate(ms: number): string { return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }
+function trendCompact(n: number): string { const v = Math.round(n); return v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1).replace(/\.0$/, '')}k` : String(v) }
 
 // mean of the daily series in [a, b) — the honest before/after read on a launch
 function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): { mean: number; n: number } {
@@ -902,14 +903,16 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
   if (maxV <= 0) return null // an all-zero window → don't draw a flat fake line
   const avgV = win.reduce((s, d) => s + d.v, 0) / win.length
 
-  // SVG geometry (uniform-scaled so pins stay round). y grows downward. Generous
-  // side padding so edge pins never clip; full-width, comfortable height.
-  const W = 344, H = 176, padX = 16, padT = 26, padB = 14
-  const plotW = W - padX * 2, yTop = padT, yBot = H - padB
+  // SVG geometry (uniform-scaled so pins stay round). y grows downward. A left
+  // gutter holds the y-axis numbers; a taller bottom holds per-pin date labels
+  // when markers crowd together. Full-width, comfortable height.
+  const W = 344, H = 202, padL = 32, padR = 14, padT = 24, padB = 44
+  const plotW = W - padL - padR, yTop = padT, yBot = H - padB
   const head = maxV * 1.15
-  const xAt = (t: number) => padX + ((t - startMs) / spanMs) * plotW
+  const xAt = (t: number) => padL + ((t - startMs) / spanMs) * plotW
   const yAt = (v: number) => yBot - (v / head) * (yBot - yTop)
-  const clampX = (x: number) => Math.max(padX + 11, Math.min(W - padX - 11, x))
+  const clampX = (x: number) => Math.max(padL + 11, Math.min(W - padR - 11, x))
+  const yTicks = [maxV, maxV / 2, 0]
   const pts = win.map((d) => ({ x: xAt(d.t), y: yAt(d.v) }))
   const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
   const area = `${line} L${pts[pts.length - 1].x.toFixed(1)},${yBot} L${pts[0].x.toFixed(1)},${yBot} Z`
@@ -950,6 +953,18 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
     return { ...g, n: i + 1, cx, cy: yOnLine(cx), delta }
   })
 
+  // When markers sit close enough that the numbers touch, show each one's date
+  // beneath its pin so they can be told apart. Stagger crowded labels across rows
+  // so the dates themselves don't collide.
+  const CROWD = 24, LBL_GAP = 34
+  const rowLastX: number[] = []
+  const marksUi = marks.map((m, i) => {
+    const crowded = marks.some((o, j) => j !== i && Math.abs(o.cx - m.cx) < CROWD)
+    let row = -1
+    if (crowded) { row = 0; while (rowLastX[row] != null && m.cx - rowLastX[row] < LBL_GAP) row++; rowLastX[row] = m.cx }
+    return { ...m, crowded, row }
+  })
+
   const gid = `trendfill-${mv?.key ?? 'x'}`
   return (
     <div style={{ marginTop: 28 }}>
@@ -971,21 +986,30 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
             <stop offset="100%" stopColor={C.green} stopOpacity="0.02" />
           </linearGradient>
         </defs>
+        {/* y-axis: gridlines + numbers (a day's worth for this stage) */}
+        {yTicks.map((v, i) => (
+          <g key={i}>
+            <line x1={padL} y1={yAt(v)} x2={W - padR} y2={yAt(v)} stroke={C.line} strokeWidth={0.5} opacity={v === 0 ? 0.9 : 0.5} />
+            <text x={padL - 6} y={yAt(v)} textAnchor="end" dominantBaseline="central" fontSize={9} fill={C.faint}>{trendCompact(v)}</text>
+          </g>
+        ))}
         {/* typical-day baseline for context */}
-        <line x1={padX} y1={yAt(avgV)} x2={W - padX} y2={yAt(avgV)} stroke={C.line} strokeWidth={1} strokeDasharray="4 4" />
-        <text x={W - padX} y={yAt(avgV) - 4} textAnchor="end" fontSize={9.5} fontWeight={600} fill={C.faint}>typical day</text>
+        <line x1={padL} y1={yAt(avgV)} x2={W - padR} y2={yAt(avgV)} stroke={C.greenLine} strokeWidth={1} strokeDasharray="4 4" />
+        <text x={W - padR} y={yAt(avgV) - 4} textAnchor="end" fontSize={9.5} fontWeight={600} fill={C.greenDk}>typical day</text>
         <path d={area} fill={`url(#${gid})`} />
         <path d={line} fill="none" stroke={C.green} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
-        {marks.map((m) => (
+        {marksUi.map((m) => (
           <g key={m.ms}>
             <line x1={m.cx} y1={m.cy} x2={m.cx} y2={yBot} stroke={C.greenLine} strokeWidth={1} strokeDasharray="3 3" />
             <circle cx={m.cx} cy={m.cy} r={10.5} fill="#fff" stroke={C.green} strokeWidth={2} />
             <text x={m.cx} y={m.cy} textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700} fill={C.greenDk}>{m.n}</text>
+            {m.crowded && <text x={m.cx} y={yBot + 12 + m.row * 10} textAnchor="middle" fontSize={8.5} fontWeight={700} fill={C.greenDk}>{fmtPinDate(m.ms)}</text>}
           </g>
         ))}
       </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.faint, margin: '2px 4px 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.faint, margin: '2px 4px 0', paddingLeft: 18 }}>
         <span>{fmtPinDate(startMs)}</span>
+        <span>{fmtPinDate((startMs + endMs) / 2)}</span>
         <span>{fmtPinDate(endMs)}</span>
       </div>
 
@@ -1037,7 +1061,7 @@ function StageCampaigns({ list }: { list: StageCampaign[] | null }) {
   const extra = list.length - shown.length
   return (
     <div style={{ marginTop: 28 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 12 }}>Campaigns working on this</div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 12 }}>Active campaigns</div>
       {list.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {shown.map((c) => (
