@@ -59,6 +59,8 @@ export interface ProductPagePreviewProps {
   interactive?: boolean
   active?: string | null
   onSection?: (key: string) => void
+  /** When set, the lane tabs become clickable and call this with the tapped index. */
+  onSelectLane?: (i: number) => void
 }
 
 /** today + n business-ish days → "Mon, Jul 20". Runs at render (app runtime, not a workflow). */
@@ -98,7 +100,7 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
     priceLabel, whatYouGet, requirements, analytics, heroImage,
     howItsDone = 'The Apnosh team does this for you.',
     googleTile, businessName, rating, lanes, selectedLane, laneDetail, timeline,
-    interactive, active, onSection,
+    interactive, active, onSection, onSelectLane,
   } = props
   const [hover, setHover] = useState<string | null>(null)
   const selLane = selectedLane ?? (lanes ? lanes.length - 1 : 0)
@@ -163,15 +165,19 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
             <div style={{ display: 'flex', gap: 7 }}>
               {lanes.map((l, i) => {
                 const on = i === selLane
-                return (
-                  <div key={i} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, textAlign: 'center', background: on ? PV.mint : '#fff', border: `1.5px solid ${on ? PV.mint : PV.line}`, borderRadius: 14, padding: '11px 6px', boxShadow: on ? '0 4px 14px rgba(74,189,152,0.30)' : '0 1px 2px rgba(20,40,30,0.03)' }}>
+                const tabStyle: CSSProperties = { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, textAlign: 'center', background: on ? PV.mint : '#fff', border: `1.5px solid ${on ? PV.mint : PV.line}`, borderRadius: 14, padding: '11px 6px', boxShadow: on ? '0 4px 14px rgba(74,189,152,0.30)' : '0 1px 2px rgba(20,40,30,0.03)', cursor: onSelectLane ? 'pointer' : 'default' }
+                const inner = (
+                  <>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
                       <span style={{ fontFamily: PV.head, fontSize: 13, fontWeight: 600, color: on ? '#fff' : PV.ink, whiteSpace: 'nowrap' }}>{l.label}</span>
                       {l.pro && <span style={{ background: on ? 'rgba(255,255,255,0.24)' : '#eaf7f3', color: on ? '#fff' : '#2e9a78', fontSize: 8.5, fontWeight: 800, letterSpacing: '0.4px', borderRadius: 5, padding: '1.5px 4px' }}>PRO</span>}
                     </span>
                     <span style={{ fontFamily: PV.body, fontSize: 12, fontWeight: 700, color: on ? 'rgba(255,255,255,0.92)' : PV.mintDark }}>{l.price || 'Free'}</span>
-                  </div>
+                  </>
                 )
+                return onSelectLane
+                  ? <button key={i} type="button" onClick={() => onSelectLane(i)} style={{ ...tabStyle, font: 'inherit' }}>{inner}</button>
+                  : <div key={i} style={tabStyle}>{inner}</div>
               })}
             </div>
             {laneDetail && <div style={{ fontFamily: PV.body, fontSize: 12.5, color: PV.sub, lineHeight: 1.45, marginTop: 10 }}>{laneDetail}</div>}
@@ -183,6 +189,21 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
           </>
         )}
       </div>
+      {/* WHAT YOU GET — first under the tabs (owner-requested order) */}
+      {inc.length > 0 && (
+        <div {...si('get', { padding: '18px 20px 0' })}>
+          <BlockLabel>What you get</BlockLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {inc.map((it, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>
+                <span style={{ width: 22, height: 22, borderRadius: 11, background: PV.mintTint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}><Check /></span>
+                <span style={{ fontFamily: PV.body, fontSize: 14, color: PV.ink, lineHeight: 1.45 }}>{it}</span>
+              </div>
+            ))}
+            {whatYouGet.filter((x) => x && x.trim()).length > inc.length && <div style={{ fontFamily: PV.body, fontSize: 12, color: PV.faint, paddingLeft: 33 }}>+ {whatYouGet.filter((x) => x && x.trim()).length - inc.length} more</div>}
+          </div>
+        </div>
+      )}
       {/* WHEN YOU'LL HAVE IT */}
       {timeline && timeline.length > 0 && (
         <div {...si('timeline', { padding: '20px 20px 0' })}>
@@ -218,21 +239,6 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
                 <span style={{ fontFamily: PV.body, fontSize: 13.5, color: PV.ink, lineHeight: 1.4 }}>{r}</span>
               </div>
             ))}
-          </div>
-        </div>
-      )}
-      {/* WHAT YOU GET */}
-      {inc.length > 0 && (
-        <div {...si('get', { padding: '18px 20px 0' })}>
-          <BlockLabel>What you get</BlockLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {inc.map((it, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>
-                <span style={{ width: 22, height: 22, borderRadius: 11, background: PV.mintTint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}><Check /></span>
-                <span style={{ fontFamily: PV.body, fontSize: 14, color: PV.ink, lineHeight: 1.45 }}>{it}</span>
-              </div>
-            ))}
-            {whatYouGet.filter((x) => x && x.trim()).length > inc.length && <div style={{ fontFamily: PV.body, fontSize: 12, color: PV.faint, paddingLeft: 33 }}>+ {whatYouGet.filter((x) => x && x.trim()).length - inc.length} more</div>}
           </div>
         </div>
       )}

@@ -1025,6 +1025,7 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   interactive
                   active={activeSection}
                   onSection={gotoSection}
+                  onSelectLane={setLaneTab}
                 />
               )}
             </aside>

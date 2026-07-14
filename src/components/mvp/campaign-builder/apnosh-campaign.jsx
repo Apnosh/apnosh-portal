@@ -3236,9 +3236,41 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
           )}
         </div>
 
-        {/* When you'll have it — a clear, dated section right under the version tabs. Recomputes from
-              the selected version (real, under-promised dates for the done-for-you lane; "at your own
-              pace" for the free lanes). Rush is a click, never an invented price. ── */}
+        {/* What you get — FIRST under the version pick (owner-requested order: what you get, then
+              when, then what we need). Recomposes LIVE from the chosen version + toggled options.
+              Base group first, then one titled sub-group per selected add-on with its REAL bullets. ── */}
+        <div style={{ padding: "18px 20px 0" }}>
+          <BlockLabel label="What you get" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {(getSections[0] ? getSections[0].rows : []).map((g, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+                <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                </span>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{g}</span>
+              </div>
+            ))}
+          </div>
+          {getSections.slice(1).map((sec, si) => (
+            <div key={si} style={{ marginTop: 15, background: TOKENS.mintTint, borderRadius: 14, padding: "12px 14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 9 }}>
+                <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.mintDark }}>{sec.title}</span>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, color: TOKENS.mintDark, textTransform: "uppercase" }}>{sec.recurring ? "Added /mo" : "Added"}</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                {sec.rows.map((r, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 3 }}><path d="M20 6L9 17l-5-5" /></svg>
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink, lineHeight: 1.45 }}>{r}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* When you'll have it — under What you get. Recomputes from the selected version (real,
+              under-promised dates for the done-for-you lane; "at your own pace" for the free lanes). ── */}
         <div style={{ padding: "20px 20px 0" }}>
           <BlockLabel label="When you'll have it" />
           <div style={{ background: "#f7f9f8", borderRadius: 14, padding: "13px 15px" }}>
@@ -3281,42 +3313,6 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             </div>
           </div>
         )}
-        {/* What you get — flows directly under the version pick as part of the SAME product block
-              (minimal separation, no numbered step). Recomposes LIVE from the chosen version +
-              toggled options (the same state that drives the price, and that the extras block below
-              also feeds). Base group first, then one titled sub-group per selected add-on with its
-              REAL catalog bullets. The honest delivery estimate folds in at the end — rush is a
-              click, never an invented price. ── */}
-        <div style={{ padding: "18px 20px 0" }}>
-          <BlockLabel label="What you get" />
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {(getSections[0] ? getSections[0].rows : []).map((g, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
-                <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-                </span>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{g}</span>
-              </div>
-            ))}
-          </div>
-          {getSections.slice(1).map((sec, si) => (
-            <div key={si} style={{ marginTop: 15, background: TOKENS.mintTint, borderRadius: 14, padding: "12px 14px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 9 }}>
-                <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.mintDark }}>{sec.title}</span>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, color: TOKENS.mintDark, textTransform: "uppercase" }}>{sec.recurring ? "Added /mo" : "Added"}</span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                {sec.rows.map((r, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 3 }}><path d="M20 6L9 17l-5-5" /></svg>
-                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink, lineHeight: 1.45 }}>{r}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
         {/* ── ADD EXTRAS (grouping two) — a distinct OPTIONAL block at the BOTTOM, above the buy box.
               Real add-on services + the Pro AI row, each keeps its "See what's included" expander so
               its deliverables show inline here. Toggling one genuinely adds/removes its serviceId
