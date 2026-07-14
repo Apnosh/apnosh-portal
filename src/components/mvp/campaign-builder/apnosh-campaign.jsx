@@ -3106,7 +3106,9 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   // beats → turnaround gates). Hidden when nothing is genuinely needed. On a versioned card's
   // self-serve (diy) lane the owner IS the worker, so the asks don't apply — hidden there too
   // (the team and AI lanes keep it: someone else needs these things from the owner).
-  const requirements = requirementsFor(itemId);
+  // Admin can override the "what we'll need from you" list (content.requirements); else it
+  // derives from the card's services. Still hidden on a versioned diy lane (owner does it).
+  const requirements = (content && Array.isArray(content.requirements) && content.requirements.length) ? content.requirements : requirementsFor(itemId);
   const showRequirements = requirements.length > 0 && !(doerCfg && gbpLane === "diy");
   // The "Add extras" block at the bottom only exists when this card has REAL add-ons or a
   // Pro AI row to offer. When it has neither, the whole block is hidden (renders nothing).

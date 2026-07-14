@@ -19,7 +19,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CAMPAIGN_CONTENT } from '@/lib/campaigns/data/campaign-content'
 import { rowToOverride, cleanStages, type ContentOverrideRow } from '@/lib/campaigns/content-overrides-server'
-import { cleanLanes } from '@/lib/campaigns/data/content-overrides'
+import { cleanLanes, cleanStringList } from '@/lib/campaigns/data/content-overrides'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -79,6 +79,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const stages = cleanStages(b.stages)
   const lanes = cleanLanes(b.lanes)
+  const requirements = cleanStringList(b.requirements)
   const row = {
     title: clean(b.title),
     tagline: clean(b.tagline),
@@ -91,6 +92,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     faq: faq.length ? faq : null,
     stages: stages.length ? stages : null,
     lanes: lanes.length ? lanes : null,
+    requirements: requirements.length ? requirements : null,
   }
 
   // Same copy rule the code records live under: no em dashes reach the store.
@@ -114,9 +116,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   let { data, error } = await admin.from('catalog_content_overrides').upsert(payload).select('*').maybeSingle()
   // If the draft columns (210 stages / 211 lanes) are not applied yet, save everything else so the
   // CMS still works — those fields just won't persist until the owner runs the migration.
-  if (error && (error.code === '42703' || /column .*(stages|lanes)|(stages|lanes).* does not exist/i.test(error.message || ''))) {
-    const { stages: _stages, lanes: _lanes, ...rest } = payload
-    void _stages; void _lanes
+  if (error && (error.code === '42703' || /column .*(stages|lanes|requirements)|(stages|lanes|requirements).* does not exist/i.test(error.message || ''))) {
+    const { stages: _stages, lanes: _lanes, requirements: _reqs, ...rest } = payload
+    void _stages; void _lanes; void _reqs
     ;({ data, error } = await admin.from('catalog_content_overrides').upsert(rest).select('*').maybeSingle())
   }
   if (error) {

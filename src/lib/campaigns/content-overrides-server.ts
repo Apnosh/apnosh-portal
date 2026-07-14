@@ -14,7 +14,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CAMPAIGN_CONTENT, type CampaignContent } from './data/campaign-content'
-import { contentFor, cleanLanes, type ContentOverride, type ContentOverrideMap } from './data/content-overrides'
+import { contentFor, cleanLanes, cleanStringList, type ContentOverride, type ContentOverrideMap } from './data/content-overrides'
 import { FUNNEL_STAGES, type CreateCatalogId, type FunnelStage } from './data/create-catalog'
 
 /** Keep only real funnel-stage ids, in order, no dupes — the store contract for chips. */
@@ -38,6 +38,7 @@ export interface ContentOverrideRow {
   faq: unknown
   stages?: unknown
   lanes?: unknown
+  requirements?: unknown
   updated_at?: string | null
   updated_by?: string | null
 }
@@ -67,6 +68,8 @@ export function rowToOverride(row: ContentOverrideRow): ContentOverride {
   if (stages.length) o.stages = stages
   const lanes = cleanLanes(row.lanes)
   if (lanes.length) o.lanes = lanes
+  const requirements = cleanStringList(row.requirements)
+  if (requirements.length) o.requirements = requirements
   return o
 }
 

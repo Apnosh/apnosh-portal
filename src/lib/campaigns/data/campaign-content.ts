@@ -48,6 +48,8 @@ export interface CampaignContent {
   stages?: FunnelStage[]
   /** Admin-edited "how it's done" lanes. Draft/display only; not wired to billing. */
   lanes?: CampaignLane[]
+  /** Admin-edited "what we'll need from you" list. Absent = derived from services. */
+  requirements?: string[]
 }
 
 export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {

@@ -41,7 +41,7 @@ const DUR_CADENCE: Record<string, string> = { setup: 'Setup', once: 'One-time', 
 type Faq = { q: string; a: string }
 type FormState = {
   title: string; tagline: string; description: string; promise: string; why: string;
-  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]; lanes: CampaignLane[]
+  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]; lanes: CampaignLane[]; requirements: string[]
 }
 
 type TextKey = 'title' | 'tagline' | 'description' | 'promise' | 'why' | 'expectation' | 'bestFor'
@@ -63,6 +63,7 @@ function formFromOverride(o: ContentOverride | undefined): FormState {
     faq: (o?.faq ?? []).map((f) => ({ q: f.q, a: f.a })),
     stages: [...(o?.stages ?? [])],
     lanes: (o?.lanes ?? []).map((l) => ({ ...l })),
+    requirements: [...(o?.requirements ?? [])],
   }
 }
 
@@ -82,7 +83,7 @@ type DbForm = FormState & {
 function emptyDbForm(): DbForm {
   return {
     id: '', title: '', tagline: '', description: '', promise: '', why: '',
-    expectation: '', heroImage: '', bestFor: '', faq: [], lanes: [],
+    expectation: '', heroImage: '', bestFor: '', faq: [], lanes: [], requirements: [],
     type: 'task', cad: 'once', shelf: 'aware', stages: [],
     serviceIds: [], addonServiceIds: [], status: 'draft',
   }
@@ -94,7 +95,7 @@ function dbFormFrom(c: DbCampaign): DbForm {
     promise: c.promise, why: c.why, expectation: c.expectation,
     heroImage: c.heroImage ?? '', bestFor: c.bestFor ?? '',
     faq: (c.faq ?? []).map((f) => ({ q: f.q, a: f.a })),
-    lanes: [],
+    lanes: [], requirements: [],
     type: c.type, cad: c.cad, shelf: c.shelf, stages: [...c.stages],
     serviceIds: [...c.serviceIds], addonServiceIds: [...c.addonServiceIds],
     status: c.status,
@@ -351,8 +352,14 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
   const addLane = () => { const arr = [...laneList, { label: 'New way', price: 'Free', pro: false, detail: '' }]; set({ lanes: arr }); setLaneTab(arr.length - 1) }
   const deleteLane = (i: number) => { const arr = laneList.filter((_, j) => j !== i); set({ lanes: arr }); setLaneTab(Math.max(0, i - 1)) }
 
+  // ── "what we'll need from you": the saved override, else seeded from the derived list ──
+  const reqList: string[] = form ? (form.requirements.length ? form.requirements : (builtinFacts?.requirements ?? [])) : []
+  const setReq = (i: number, v: string) => set({ requirements: reqList.map((r, j) => (j === i ? v : r)) })
+  const addReq = () => set({ requirements: [...reqList, ''] })
+  const delReq = (i: number) => set({ requirements: reqList.filter((_, j) => j !== i) })
+
   // ── page-builder: map a clicked preview section to its left-hand editor panel + scroll to it ──
-  const EDITABLE_PANELS = ['hero', 'description', 'why', 'lanes']
+  const EDITABLE_PANELS = ['hero', 'description', 'why', 'lanes', 'requirements']
   const panelOf = (section: string | null) => (section && EDITABLE_PANELS.includes(section) ? section : section ? 'derived' : null)
   const activePanel = panelOf(activeSection)
   const gotoSection = (key: string) => {
@@ -362,7 +369,6 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
   const panelCls = (id: string) => 'rounded-xl border p-4 lg:p-5 scroll-mt-24 transition ' + (activePanel === id ? 'border-brand ring-4 ring-brand/10 bg-white' : 'border-ink-6 bg-white')
   const DERIVED_NOTE: Record<string, string> = {
     timeline: 'The delivery dates come from how long this campaign’s services take. Change the services to change the dates.',
-    requirements: 'What we need from the owner is derived from the services this campaign includes.',
     get: 'What you get is built from the services this campaign includes.',
     analytics: 'The tracked metrics come from the funnel stages this campaign moves.',
     footer: 'The price is the total of the services this campaign includes.',
@@ -858,6 +864,28 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                 <p className="text-[11px] text-ink-4 mt-3">Saved with the campaign. These don&apos;t change what the store charges yet.</p>
               </div>
 
+              {/* What we'll need from you — an editable list */}
+              <div id="sec-requirements" className={panelCls('requirements')}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[13.5px] font-semibold text-ink">What we&apos;ll need from you</span>
+                  <button type="button" onClick={addReq} className="text-[12.5px] text-brand-dark font-semibold hover:underline">+ Add</button>
+                </div>
+                <div className="space-y-1.5">
+                  {reqList.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" />
+                      <input type="text" value={r} onChange={(e) => setReq(i, e.target.value)} placeholder="e.g. Connect your Google profile" className={inputCls} />
+                      <button type="button" onClick={() => delReq(i)} className="text-ink-4 text-[13px] px-1 shrink-0" title="Remove">✕</button>
+                    </div>
+                  ))}
+                  {reqList.length === 0 && <p className="text-[12.5px] text-ink-4">Nothing needed from the owner. Add a line if there is.</p>}
+                </div>
+                <div className="mt-2 flex items-center gap-3">
+                  {form.requirements.length > 0 && <button type="button" onClick={() => set({ requirements: [] })} className="text-[12px] text-ink-3 hover:text-ink">Reset to built-in</button>}
+                  <span className="text-[11px] text-ink-4">Empty keeps the list derived from the services.</span>
+                </div>
+              </div>
+
               {/* Derived sections — what each non-editable part comes from */}
               <div id="sec-derived" className={panelCls('derived')}>
                 <div className="text-[13.5px] font-semibold text-ink mb-1">Set by the campaign&apos;s services</div>
@@ -914,7 +942,7 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   cadenceLabel={builtinFacts.cadence}
                   priceLabel={builtinFacts.price}
                   whatYouGet={builtinFacts.rows}
-                  requirements={builtinFacts.requirements}
+                  requirements={form.requirements.length ? form.requirements : builtinFacts.requirements}
                   analytics={builtinFacts.analytics}
                   heroImage={(form.heroImage || base.heroImage) || null}
                   googleTile={builtinFacts.googleTile}

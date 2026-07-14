@@ -40,6 +40,24 @@ export interface ContentOverride {
   stages?: FunnelStage[]
   /** Edited "how it's done" lanes. Absent = the card's built-in lanes. Draft/display only. */
   lanes?: CampaignLane[]
+  /** Edited "what we'll need from you" list. Absent = the list derived from services. */
+  requirements?: string[]
+}
+
+/** Trim, drop empties + dupes, cap — the store contract for a plain string list. */
+export function cleanStringList(v: unknown, cap = 8): string[] {
+  if (!Array.isArray(v)) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of v) {
+    if (typeof raw !== 'string') continue
+    const s = raw.trim()
+    if (!s || seen.has(s)) continue
+    seen.add(s)
+    out.push(s)
+    if (out.length >= cap) break
+  }
+  return out
 }
 
 /** Keep only well-formed lanes (a real label), trimmed, capped — the store contract. */
@@ -89,5 +107,6 @@ export function contentFor(itemId: string, overrides?: ContentOverrideMap | null
   }
   if (Array.isArray(o.stages) && o.stages.length) merged.stages = o.stages
   if (Array.isArray(o.lanes) && o.lanes.length) merged.lanes = o.lanes
+  if (Array.isArray(o.requirements) && o.requirements.length) merged.requirements = o.requirements
   return merged
 }
