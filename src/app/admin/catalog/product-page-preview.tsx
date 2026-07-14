@@ -8,6 +8,7 @@
  */
 import type { FunnelStage } from '@/lib/campaigns/data/create-catalog'
 import { STAGE_TAG_LABEL } from '@/lib/campaigns/data/create-catalog'
+import type { TimelineStep } from '@/lib/campaigns/data/campaign-timeline'
 
 const PV = {
   mint: '#4abd98', mintDark: '#2e9a78', mintTint: '#eaf7f3', ink: '#1c2620', sub: '#6b736d', faint: '#a6aca7', line: '#e7e9e6',
@@ -37,8 +38,49 @@ export interface ProductPagePreviewProps {
   requirements: string[]
   analytics: string[]
   heroImage?: string | null
-  /** The "How it's done" detail line. */
+  /** The "How it's done" detail line (used when `lanes` is not given). */
   howItsDone?: string
+  /** gbp-style: show a Google-listing card as the product shot instead of the art tile. */
+  googleTile?: boolean
+  businessName?: string
+  rating?: { value: number; count: number } | null
+  /** When set, render the 3-tab "Choose how it's done" picker instead of the single line. */
+  lanes?: { label: string; price: string; pro?: boolean }[]
+  selectedLane?: number
+  laneDetail?: string
+  /** When set, render the "When you'll have it" section with computed dates. */
+  timeline?: TimelineStep[]
+}
+
+/** today + n business-ish days → "Mon, Jul 20". Runs at render (app runtime, not a workflow). */
+function fmtDate(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+function GoogleTile({ name, rating }: { name: string; rating?: { value: number; count: number } | null }) {
+  return (
+    <div style={{ width: '100%', background: '#fff', borderRadius: 18, padding: '15px 16px 14px', boxShadow: '0 14px 34px rgba(20,45,33,0.14), 0 2px 6px rgba(20,45,33,0.05)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 9 }}>
+        <svg width="15" height="15" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" /><path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06L5.84 9.9C6.71 7.3 9.14 5.38 12 5.38z" /></svg>
+        <span style={{ fontFamily: PV.body, fontSize: 11, fontWeight: 600, color: PV.faint, letterSpacing: '0.2px' }}>Your Google listing</span>
+      </div>
+      <div style={{ fontFamily: PV.head, fontSize: 18, fontWeight: 700, color: PV.ink, lineHeight: 1.2 }}>{name || 'Your business'}</div>
+      {rating && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 6 }}>
+          <span style={{ fontFamily: PV.body, fontSize: 13.5, fontWeight: 700, color: '#a5670a' }}>{rating.value.toFixed(1)}</span>
+          <span style={{ color: '#f5b301', fontSize: 13, letterSpacing: '1px' }}>{'★★★★★'.slice(0, Math.round(rating.value))}<span style={{ color: '#e2e5e1' }}>{'★★★★★'.slice(Math.round(rating.value))}</span></span>
+          <span style={{ fontFamily: PV.body, fontSize: 12.5, color: PV.sub }}>({rating.count.toLocaleString()})</span>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 13 }}>
+        {['Directions', 'Call', 'Website'].map((l) => (
+          <span key={l} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: '#f4f7fb', borderRadius: 12, padding: '9px 4px', fontFamily: PV.body, fontSize: 10.5, fontWeight: 600, color: '#4a7fd0' }}>{l}</span>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export function ProductPagePreview(props: ProductPagePreviewProps) {
@@ -46,7 +88,9 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
     eyebrow, headline, description, why, stages, cadenceLabel,
     priceLabel, whatYouGet, requirements, analytics, heroImage,
     howItsDone = 'The Apnosh team does this for you.',
+    googleTile, businessName, rating, lanes, selectedLane, laneDetail, timeline,
   } = props
+  const selLane = selectedLane ?? (lanes ? lanes.length - 1 : 0)
   const inc = whatYouGet.filter((x) => x && x.trim()).slice(0, 6)
   const reqs = requirements.filter((x) => x && x.trim())
   const metrics = analytics.filter((x) => x && x.trim())
@@ -66,7 +110,9 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
           <div style={{ fontFamily: PV.body, fontSize: 13, fontWeight: 700, color: PV.mintDark, marginBottom: 6 }}>{eyebrow || 'Untitled'}</div>
           <div style={{ fontFamily: PV.head, fontSize: 26, fontWeight: 700, color: PV.ink, lineHeight: 1.16, letterSpacing: '-0.5px' }}>{headline || eyebrow || 'Your headline goes here'}</div>
           <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}>
-            {heroImage ? (
+            {googleTile ? (
+              <GoogleTile name={businessName ?? 'Your business'} rating={rating} />
+            ) : heroImage ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={heroImage} alt="" style={{ width: 112, height: 112, borderRadius: 28, objectFit: 'cover', boxShadow: '0 16px 34px rgba(20,45,33,0.24), 0 3px 8px rgba(20,40,30,0.12)' }} />
             ) : (
@@ -84,11 +130,58 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
           {why?.trim() && <p style={{ margin: '10px 0 0', fontFamily: PV.body, fontSize: 13.5, color: PV.sub, lineHeight: 1.55 }}>{why.trim()}</p>}
         </div>
       )}
-      {/* HOW IT'S DONE */}
+      {/* HOW IT'S DONE — 3-lane picker when lanes are given, else the single quiet line */}
       <div style={{ padding: '22px 20px 0' }}>
-        <BlockLabel>How it&apos;s done</BlockLabel>
-        <div style={{ fontFamily: PV.body, fontSize: 13.5, color: PV.sub, lineHeight: 1.45 }}>{howItsDone}</div>
+        {lanes && lanes.length > 0 ? (
+          <>
+            <BlockLabel>Choose how it&apos;s done</BlockLabel>
+            <div style={{ display: 'flex', gap: 7 }}>
+              {lanes.map((l, i) => {
+                const on = i === selLane
+                return (
+                  <div key={i} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, textAlign: 'center', background: on ? PV.mint : '#fff', border: `1.5px solid ${on ? PV.mint : PV.line}`, borderRadius: 14, padding: '11px 6px', boxShadow: on ? '0 4px 14px rgba(74,189,152,0.30)' : '0 1px 2px rgba(20,40,30,0.03)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                      <span style={{ fontFamily: PV.head, fontSize: 13, fontWeight: 600, color: on ? '#fff' : PV.ink, whiteSpace: 'nowrap' }}>{l.label}</span>
+                      {l.pro && <span style={{ background: on ? 'rgba(255,255,255,0.24)' : '#eaf7f3', color: on ? '#fff' : '#2e9a78', fontSize: 8.5, fontWeight: 800, letterSpacing: '0.4px', borderRadius: 5, padding: '1.5px 4px' }}>PRO</span>}
+                    </span>
+                    <span style={{ fontFamily: PV.body, fontSize: 12, fontWeight: 700, color: on ? 'rgba(255,255,255,0.92)' : PV.mintDark }}>{l.price || 'Free'}</span>
+                  </div>
+                )
+              })}
+            </div>
+            {laneDetail && <div style={{ fontFamily: PV.body, fontSize: 12.5, color: PV.sub, lineHeight: 1.45, marginTop: 10 }}>{laneDetail}</div>}
+          </>
+        ) : (
+          <>
+            <BlockLabel>How it&apos;s done</BlockLabel>
+            <div style={{ fontFamily: PV.body, fontSize: 13.5, color: PV.sub, lineHeight: 1.45 }}>{howItsDone}</div>
+          </>
+        )}
       </div>
+      {/* WHEN YOU'LL HAVE IT */}
+      {timeline && timeline.length > 0 && (
+        <div style={{ padding: '20px 20px 0' }}>
+          <BlockLabel>When you&apos;ll have it</BlockLabel>
+          <div style={{ background: '#f7f9f8', borderRadius: 14, padding: '13px 15px' }}>
+            {timeline.map((s, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: i ? 12 : 0 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 4, background: PV.mint, flexShrink: 0, marginTop: 6 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: PV.body, fontSize: 13.5, color: PV.ink, lineHeight: 1.4 }}>{s.text}{typeof s.whenDays === 'number' ? <> by around <span style={{ fontWeight: 700 }}>{fmtDate(s.whenDays)}</span></> : null}</div>
+                  {s.sub && <div style={{ fontFamily: PV.body, fontSize: 12, color: PV.sub, lineHeight: 1.45, marginTop: 2 }}>{s.sub}</div>}
+                </div>
+              </div>
+            ))}
+            {timeline.some((s) => typeof s.whenDays === 'number') && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 13, paddingTop: 11, borderTop: `1px solid ${PV.line}` }}>
+                <span style={{ fontFamily: PV.body, fontSize: 11, color: PV.faint }}>These are estimates.</span>
+                <span style={{ color: '#c7ccc8' }}>·</span>
+                <span style={{ fontFamily: PV.body, fontSize: 12.5, fontWeight: 600, color: PV.mintDark }}>Need it faster?</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* WHAT WE'LL NEED FROM YOU */}
       {reqs.length > 0 && (
         <div style={{ padding: '20px 20px 0' }}>
