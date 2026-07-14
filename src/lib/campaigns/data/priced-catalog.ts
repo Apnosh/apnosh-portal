@@ -204,6 +204,11 @@ export interface PricedService {
   /** Per-card delivery lanes (see CardLane). Absent = default lane behavior. Stored on
    *  catalog_services.lanes; admin-editable; store rendering pending. */
   lanes?: CardLane[]
+  /** Customer-facing "Analytics to track" list (the metrics this card is built to lift).
+   *  Stored on catalog_services.analytics; admin-editable. */
+  analytics?: string[]
+  /** Card-level add-ons shown in the "Add ons" block. Stored on catalog_services.add_ons. */
+  addOns?: CardLaneAddOn[]
 }
 
 export function costOf(c: CostModel): number {

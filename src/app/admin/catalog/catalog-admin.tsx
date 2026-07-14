@@ -7,7 +7,7 @@
  */
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { marginOf, costOf, OVERHEAD_MULT, MARGIN_FLOOR, HANDLERS, type PricedService, type PricePoint, type GoalPlay, type SystemGoal, type Tier, type Handler, type CardLane, type LaneKind } from '@/lib/campaigns/data/priced-catalog'
+import { marginOf, costOf, OVERHEAD_MULT, MARGIN_FLOOR, HANDLERS, type PricedService, type PricePoint, type GoalPlay, type SystemGoal, type Tier, type Handler, type CardLane, type CardLaneAddOn, type LaneKind } from '@/lib/campaigns/data/priced-catalog'
 import type { CatalogRow } from '@/lib/campaigns/data/catalog-db-shape'
 import { rowToService } from '@/lib/campaigns/data/catalog-db-shape'
 import { updateService, createService, deleteService, publishCatalog, type ServicePatch, type NewService } from './actions'
@@ -31,7 +31,7 @@ function blankRow(): CatalogRow {
     id: '', section: 'awareness', name: '', plain_name: '', description: '', essential: false,
     handler: 'apnosh', handler_why: '', evidence: null, compliance: null, metric: null,
     prices: [{ kind: 'one-time', amount: 0, cost: {} }], goal_plays: null, fit: null, pieces: null,
-    deliverables: null, lanes: null, status: 'draft', sort_order: 0,
+    deliverables: null, lanes: null, analytics: null, add_ons: null, status: 'draft', sort_order: 0,
   }
 }
 const LANE_KINDS: LaneKind[] = ['diy', 'ai', 'team', 'creator']
@@ -185,6 +185,9 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
   const [lanes, setLanes] = useState<CardLane[]>(() => (row.lanes ?? []).map((l) => ({ ...l, requirements: [...(l.requirements ?? [])], addOns: (l.addOns ?? []).map((a) => ({ ...a })) })))
   const [pvLane, setPvLane] = useState(0)
   const [hl, setHl] = useState<string | null>(null) // which preview region the hovered panel edits
+  const [analytics, setAnalytics] = useState<string[]>(() => [...(row.analytics ?? [])])
+  const [cardAddOns, setCardAddOns] = useState<CardLaneAddOn[]>(() => (row.add_ons ?? []).map((a) => ({ ...a })))
+  const [advOpen, setAdvOpen] = useState(false)
   const [saving, start] = useTransition()
 
   const onName = (v: string) => { setName(v); if (creating && !idTouched) setId(kebab(v)) }
@@ -203,6 +206,12 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
   const laneAddAdd = (i: number) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, addOns: [...(l.addOns ?? []), { label: '', amount: 0 }] } : l)))
   const laneAddSet = (i: number, k: number, patch: Partial<{ label: string; amount: number }>) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, addOns: (l.addOns ?? []).map((a, x) => (x === k ? { ...a, ...patch } : a)) } : l)))
   const laneAddDel = (i: number, k: number) => setLanes((ls) => ls.map((l, j) => (j === i ? { ...l, addOns: (l.addOns ?? []).filter((_, x) => x !== k) } : l)))
+  const anSet = (i: number, v: string) => setAnalytics((xs) => xs.map((x, j) => (j === i ? v : x)))
+  const anAdd = () => setAnalytics((xs) => [...xs, ''])
+  const anDel = (i: number) => setAnalytics((xs) => xs.filter((_, j) => j !== i))
+  const caSet = (i: number, patch: Partial<CardLaneAddOn>) => setCardAddOns((xs) => xs.map((a, j) => (j === i ? { ...a, ...patch } : a)))
+  const caAdd = () => setCardAddOns((xs) => [...xs, { label: '', amount: 0 }])
+  const caDel = (i: number) => setCardAddOns((xs) => xs.filter((_, j) => j !== i))
   const setPrice = (i: number, patch: Partial<EPrice>) => setPrices((ps) => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)))
   const addPrice = () => setPrices((ps) => [...ps, toEPrice({ kind: 'one-time', amount: 0, cost: {} })])
   const removePrice = (i: number) => setPrices((ps) => ps.filter((_, j) => j !== i))
@@ -240,18 +249,22 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
       }))
       .filter((l) => l.label)
     const lanesOut = cleanLanes.length ? cleanLanes : null
+    const cleanAnalytics = analytics.map((a) => a.trim()).filter(Boolean)
+    const analyticsOut = cleanAnalytics.length ? cleanAnalytics : null
+    const cleanAddOns: CardLaneAddOn[] = cardAddOns.map((a) => ({ label: (a.label || '').trim(), amount: a.amount || 0, kind: a.kind })).filter((a) => a.label)
+    const addOnsOut = cleanAddOns.length ? cleanAddOns : null
 
     if (creating) {
-      const newSvc: NewService = { id: finalId, section, name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, lanes: lanesOut, status }
+      const newSvc: NewService = { id: finalId, section, name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, lanes: lanesOut, analytics: analyticsOut, add_ons: addOnsOut, status }
       start(async () => {
         const r = await createService(newSvc)
         if (r.ok) {
-          onCreated({ ...row, id: finalId, section, name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, lanes: lanesOut, status })
+          onCreated({ ...row, id: finalId, section, name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, lanes: lanesOut, analytics: analyticsOut, add_ons: addOnsOut, status })
         } else flash(r.error || 'Create failed', true)
       })
       return
     }
-    const patch: ServicePatch = { name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), status, section, handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, lanes: lanesOut }
+    const patch: ServicePatch = { name: name.trim(), plain_name: plain.trim() || null, description: desc.trim(), status, section, handler, handler_why: handlerWhy.trim(), essential, prices: pricePoints, deliverables, goal_plays, lanes: lanesOut, analytics: analyticsOut, add_ons: addOnsOut }
     start(async () => {
       const r = await updateService(row.id, patch)
       if (r.ok) { onSaved(row.id, patch); flash('Saved. Publish to make it live.') } else flash(r.error || 'Save failed', true)
@@ -350,6 +363,34 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
                       </div>
                     ))}
                     {included.filter((x) => x.trim()).length > previewInc.length && <div style={{ fontFamily: PV.body, fontSize: 12, color: PV.faint, paddingLeft: 33 }}>+ {included.filter((x) => x.trim()).length - previewInc.length} more</div>}
+                  </div>
+                </div>
+              )}
+              {/* ANALYTICS TO TRACK */}
+              {analytics.filter((a) => a.trim()).length > 0 && (
+                <div style={{ padding: '18px 18px 0', ...ringOf('analytics') }}>
+                  <PvLabel>Analytics to track</PvLabel>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {analytics.filter((a) => a.trim()).map((a, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                        <span style={{ width: 22, height: 22, borderRadius: 11, background: PV.mintTint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: PV.mintDark, fontSize: 13, fontWeight: 700 }}>↗</span>
+                        <span style={{ fontFamily: PV.body, fontSize: 13.5, color: PV.ink, lineHeight: 1.45 }}>{a}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* CARD ADD-ONS */}
+              {cardAddOns.filter((a) => a.label.trim()).length > 0 && (
+                <div style={{ padding: '18px 18px 0', ...ringOf('addons') }}>
+                  <PvLabel>Add-ons</PvLabel>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {cardAddOns.filter((a) => a.label.trim()).map((a, x) => (
+                      <div key={x} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: `1.5px solid ${PV.line}`, borderRadius: 12, padding: '10px 12px' }}>
+                        <span style={{ fontFamily: PV.body, fontSize: 13, color: PV.ink }}>{a.label}</span>
+                        <span style={{ fontFamily: PV.head, fontSize: 13, fontWeight: 600, color: PV.mintDark }}>+${(a.amount || 0).toLocaleString()}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -468,11 +509,39 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
 
           </section>
 
-          {/* campaign recipe (goal_plays) — internal, not on the customer page, so it sits last */}
-          <section className={panel + ' order-5'}>
-          <div>
-            <span className={panelHead}>In these campaigns <span className="text-[10px] font-medium text-ink-4 normal-case tracking-normal">· internal, not shown to customers</span></span>
-            <p className="text-[11px] text-ink-4 mt-0.5 mb-2">Which goals this card is part of, and how it ranks. This is what auto-builds a restaurant&apos;s plan — no AI needed. Optional.</p>
+          {/* analytics to track (customer-facing) */}
+          <section className={panel + ' order-5'} onMouseEnter={() => setHl('analytics')} onMouseLeave={() => setHl(null)}>
+            <div className="flex items-center justify-between"><span className={panelHead}>Analytics to track</span><button onClick={anAdd} className="text-[12.5px] text-brand font-semibold">+ Add a metric</button></div>
+            <p className="text-[11px] text-ink-4 mt-0.5">The numbers this card is built to lift. Shown on the product page under &ldquo;Analytics to track.&rdquo;</p>
+            <div className="space-y-1.5 mt-2">
+              {analytics.map((a, i) => (
+                <div key={i} className="flex items-center gap-2"><span className="text-emerald-600 text-[12px]">↗</span><input className={field} value={a} onChange={(e) => anSet(i, e.target.value)} placeholder="e.g. Google search views" /><button onClick={() => anDel(i)} className="text-ink-4 text-[13px] px-1" title="Remove">✕</button></div>
+              ))}
+              {analytics.length === 0 && <p className="text-[12px] text-ink-4">No metrics yet. Add the ones this card moves so customers see what to watch.</p>}
+            </div>
+          </section>
+
+          {/* add-ons (card-level, customer-facing) */}
+          <section className={panel + ' order-6'} onMouseEnter={() => setHl('addons')} onMouseLeave={() => setHl(null)}>
+            <div className="flex items-center justify-between"><span className={panelHead}>Add-ons</span><button onClick={caAdd} className="text-[12.5px] text-brand font-semibold">+ Add an add-on</button></div>
+            <p className="text-[11px] text-ink-4 mt-0.5">Optional extras a customer can tack on, each with its own price.</p>
+            <div className="space-y-2 mt-2">
+              {cardAddOns.map((a, i) => (
+                <div key={i} className="flex items-center gap-2"><input className={field} value={a.label} onChange={(e) => caSet(i, { label: e.target.value })} placeholder="Extra (e.g. Extra photo set)" /><span className="text-ink-3 text-[12px]">$</span><input type="number" className={field + ' w-24'} value={a.amount} onChange={(e) => caSet(i, { amount: Number(e.target.value) || 0 })} /><button onClick={() => caDel(i)} className="text-ink-4 text-[13px] px-1" title="Remove">✕</button></div>
+              ))}
+              {cardAddOns.length === 0 && <p className="text-[12px] text-ink-4">No add-ons yet.</p>}
+            </div>
+          </section>
+
+          {/* campaign recipe (goal_plays) — internal, collapsed by default */}
+          <section className={panel + ' order-7'}>
+          <button onClick={() => setAdvOpen((o) => !o)} className="w-full flex items-center justify-between text-left">
+            <span className={panelHead}>Advanced · in these campaigns <span className="text-[10px] font-medium text-ink-4 normal-case tracking-normal">internal, not shown to customers</span></span>
+            <span className="text-[12px] font-medium text-ink-3">{advOpen ? 'Hide' : 'Show'}</span>
+          </button>
+          {advOpen && (
+          <div className="mt-3">
+            <p className="text-[11px] text-ink-4 mb-2">Which goals this card is part of, and how it ranks. This is what auto-builds a restaurant&apos;s plan — no AI needed. Optional.</p>
             <div className="space-y-2">
               {plays.map((p, i) => (
                 <div key={i} className="rounded-lg border border-ink-6 p-2.5 space-y-2 bg-bg-2/40">
@@ -497,7 +566,7 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
             </div>
             <button onClick={addPlay} className="text-[12px] text-brand font-medium mt-2">+ Add to a campaign</button>
           </div>
-
+          )}
           </section>
 
           {/* who can do it — per-card lanes (Fiverr-style) */}
