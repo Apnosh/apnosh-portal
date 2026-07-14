@@ -25,7 +25,7 @@ import {
   type DbCadence, type DbCampaign, type DbCardType, type DbShelf,
 } from '@/lib/campaigns/data/db-campaigns'
 import type { FunnelStage } from '@/lib/campaigns/data/create-catalog'
-import { STAGE_TAG_LABEL, CREATE_CATALOG } from '@/lib/campaigns/data/create-catalog'
+import { STAGE_TAG_LABEL, CREATE_CATALOG, FUNNEL_STAGES } from '@/lib/campaigns/data/create-catalog'
 import { PRICED_CATALOG, type PricedService } from '@/lib/campaigns/data/priced-catalog'
 import { cadenceOf, plainNameOf } from '@/lib/campaigns/catalog'
 import { whatYouGetForServices, whatYouGet } from '@/lib/campaigns/builder/what-you-get'
@@ -41,7 +41,7 @@ const DUR_CADENCE: Record<string, string> = { setup: 'Setup', once: 'One-time', 
 type Faq = { q: string; a: string }
 type FormState = {
   title: string; tagline: string; description: string; promise: string; why: string;
-  expectation: string; heroImage: string; bestFor: string; faq: Faq[]
+  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]
 }
 
 const FIELDS: { key: keyof Omit<FormState, 'faq' | 'heroImage'>; label: string; hint: string; rows?: number }[] = [
@@ -60,6 +60,7 @@ function formFromOverride(o: ContentOverride | undefined): FormState {
     promise: o?.promise ?? '', why: o?.why ?? '', expectation: o?.expectation ?? '',
     heroImage: o?.heroImage ?? '', bestFor: o?.bestFor ?? '',
     faq: (o?.faq ?? []).map((f) => ({ q: f.q, a: f.a })),
+    stages: [...(o?.stages ?? [])],
   }
 }
 
@@ -741,6 +742,27 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   <span className="text-[10px] font-bold uppercase tracking-wide text-brand-dark bg-brand/10 rounded px-1.5 py-0.5">Top of the page</span>
                 </div>
                 <div className="space-y-3.5">
+                  {/* Tags — the funnel chips at the top of the page */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[12px] font-semibold text-ink">Tags</label>
+                      {form.stages.length > 0 && <button onClick={() => set({ stages: [] })} className="text-[11px] text-ink-3 hover:text-ink">Use default</button>}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {FUNNEL_STAGES.map((s) => {
+                        const cur = form.stages.length ? form.stages : (builtinFacts?.stages ?? [])
+                        const on = cur.includes(s)
+                        return (
+                          <button key={s} type="button"
+                            onClick={() => { const next = cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]; set({ stages: FUNNEL_STAGES.filter((x) => next.includes(x)) }) }}
+                            className={chipCls(on)}>
+                            {STAGE_TAG_LABEL[s]}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <p className="text-[11px] text-ink-4 mt-1">Click to add or remove. Empty keeps the campaign&apos;s built-in tags.</p>
+                  </div>
                   {renderField('title')}
                   {renderField('promise')}
                   {/* Photo */}
@@ -830,7 +852,7 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   headline={form.promise || base.promise}
                   description={form.description || base.description}
                   why={form.why || base.why}
-                  stages={builtinFacts.stages}
+                  stages={form.stages.length ? form.stages : builtinFacts.stages}
                   cadenceLabel={builtinFacts.cadence}
                   priceLabel={builtinFacts.price}
                   whatYouGet={builtinFacts.rows}
