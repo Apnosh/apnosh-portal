@@ -389,7 +389,13 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
 
   // ── page-builder: map a clicked preview section to its left-hand editor panel + scroll to it ──
   const EDITABLE_PANELS = ['hero', 'description', 'why', 'lanes', 'requirements', 'get', 'timeline']
-  const panelOf = (section: string | null) => (section && EDITABLE_PANELS.includes(section) ? section : section ? 'derived' : null)
+  // when the campaign has lanes, these three sections live inside the "How it's done" card
+  const LANE_ABSORBED = ['get', 'timeline', 'requirements']
+  const panelOf = (section: string | null) => {
+    if (!section) return null
+    if (hasLanes && LANE_ABSORBED.includes(section)) return 'lanes'
+    return EDITABLE_PANELS.includes(section) ? section : 'derived'
+  }
   const activePanel = panelOf(activeSection)
   const gotoSection = (key: string) => {
     setActiveSection(key)
@@ -914,9 +920,62 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                       <label className="text-[12px] font-semibold text-ink block mb-1.5">Description</label>
                       <textarea rows={2} value={laneList[laneIdx].detail ?? ''} onChange={(e) => setLane(laneIdx, { detail: e.target.value })} placeholder="The line shown under the tabs when this one is picked." className={inputCls} />
                     </div>
-                    <div className="flex items-center justify-between">
+
+                    {/* This tab's page sections — all in one card */}
+                    <div className="pt-3 mt-1 border-t border-ink-6 space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[12px] font-semibold text-ink">What you get</label>
+                          <button type="button" onClick={getEd.add} className="text-[11.5px] text-brand-dark font-semibold hover:underline">+ Add</button>
+                        </div>
+                        <div className="space-y-1.5">
+                          {getEd.cur.map((r, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2e9a78" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M20 6L9 17l-5-5" /></svg>
+                              <input type="text" value={r} onChange={(e) => getEd.setItem(i, e.target.value)} placeholder="e.g. We fix all 6 parts of your profile" className={inputCls} />
+                              <button type="button" onClick={() => getEd.del(i)} className="text-ink-4 text-[13px] px-1 shrink-0" title="Remove">✕</button>
+                            </div>
+                          ))}
+                        </div>
+                        {getEd.custom && <button type="button" onClick={getEd.reset} className="text-[11px] text-ink-3 hover:text-ink mt-1.5">Use the default</button>}
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[12px] font-semibold text-ink">When you&apos;ll have it</label>
+                          <button type="button" onClick={tlEd.add} className="text-[11.5px] text-brand-dark font-semibold hover:underline">+ Add</button>
+                        </div>
+                        <div className="space-y-1.5">
+                          {tlEd.cur.map((r, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" />
+                              <input type="text" value={r} onChange={(e) => tlEd.setItem(i, e.target.value)} placeholder="e.g. Most of your profile is fixed in about a week" className={inputCls} />
+                              <button type="button" onClick={() => tlEd.del(i)} className="text-ink-4 text-[13px] px-1 shrink-0" title="Remove">✕</button>
+                            </div>
+                          ))}
+                        </div>
+                        {tlEd.custom ? <button type="button" onClick={tlEd.reset} className="text-[11px] text-ink-3 hover:text-ink mt-1.5">Use auto dates</button> : <p className="text-[11px] text-ink-4 mt-1">Empty uses the automatic dates.</p>}
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[12px] font-semibold text-ink">What we&apos;ll need from you</label>
+                          <button type="button" onClick={reqEd.add} className="text-[11.5px] text-brand-dark font-semibold hover:underline">+ Add</button>
+                        </div>
+                        <div className="space-y-1.5">
+                          {reqEd.cur.map((r, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" />
+                              <input type="text" value={r} onChange={(e) => reqEd.setItem(i, e.target.value)} placeholder="e.g. Connect your Google profile" className={inputCls} />
+                              <button type="button" onClick={() => reqEd.del(i)} className="text-ink-4 text-[13px] px-1 shrink-0" title="Remove">✕</button>
+                            </div>
+                          ))}
+                        </div>
+                        {reqEd.custom && <button type="button" onClick={reqEd.reset} className="text-[11px] text-ink-3 hover:text-ink mt-1.5">Use the default</button>}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-3 border-t border-ink-6">
                       <button type="button" onClick={() => deleteLane(laneIdx)} disabled={laneList.length <= 1} className="text-[12px] font-medium text-red-700 hover:underline disabled:opacity-40 disabled:no-underline">Delete this tab</button>
-                      {form.lanes.length > 0 && <button type="button" onClick={() => { set({ lanes: [] }); setLaneTab(0) }} className="text-[12px] text-ink-3 hover:text-ink">Reset to built-in</button>}
+                      {form.lanes.length > 0 && <button type="button" onClick={() => { set({ lanes: [] }); setLaneTab(0) }} className="text-[12px] text-ink-3 hover:text-ink">Reset all tabs to built-in</button>}
                     </div>
                   </div>
                 ) : <p className="text-[12.5px] text-ink-4">No lanes. Add one to offer a way to get it done.</p>}
@@ -924,7 +983,10 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
               </div>
 
               {/* What we'll need from you — an editable list */}
-              {/* What you get — per-tab list when the campaign has lanes */}
+              {/* Campaign-level sections — only for lane-less campaigns; when there are lanes these
+                  live inside the "How it's done" card, per tab. */}
+              {!hasLanes && (<>
+              {/* What you get */}
               <div id="sec-get" className={panelCls('get')}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -1004,6 +1066,7 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   <span className="text-[11px] text-ink-4">{hasLanes ? 'This tab’s list. Empty uses the default.' : 'Empty keeps the list derived from the services.'}</span>
                 </div>
               </div>
+              </>)}
 
               {/* Derived sections — what each non-editable part comes from */}
               <div id="sec-derived" className={panelCls('derived')}>
