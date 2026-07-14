@@ -4204,6 +4204,11 @@ function PlanItemCard({ it, tier, leaving, onOpen, onRemove }) {
             <span style={{ display: "block", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.25 }}>{p.title}</span>
             {/* Per-item price summary — planItemMoney, the same math the PDP buy footer shows. */}
             <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 3 }}>{planMoneyLabel(money, isCreativeCard(p))}</span>
+            {/* Per-item delivery — this item's own turnaround, Amazon-style. */}
+            <span style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub }}>{itemDeliveryLabel(it)}</span>
+            </span>
           </span>
         </span>
         {(d || opts.length > 0) && (
@@ -4234,14 +4239,32 @@ function PlanItemCard({ it, tier, leaving, onOpen, onRemove }) {
   );
 }
 
-/** The whole plan's delivery estimate as a critical PATH (services run in parallel, so the
- *  max window, never a sum). Real turnarounds only (gbp-setup + each item's add-on services);
- *  items with no dated data fall to an honest word range. Self-serve lanes are owner-paced. */
+/** One item's own delivery window, from its real service turnarounds (gbp-setup + its add-on
+ *  services), as the max window incl. the worst external gate. Self-serve lanes are owner-paced. */
+function itemDeliveryLabel(it) {
+  const lane = doerSlotFor(it.itemId) ? gbpLaneOf(it.doer) : null;
+  if (lane === "diy" || lane === "ai") return "You do it, at your own pace";
+  let workMax = 0, gate = null, recurring = false;
+  const svcs = it.itemId === "gbp" ? ["gbp-setup", ...it.options] : [...it.options];
+  for (const id of svcs) {
+    const t = SERVICE_TURNAROUND[id];
+    if (!t) continue;
+    if (t.class === "setup") { workMax = Math.max(workMax, t.business.max); if (t.gate && t.gate.addDays && (!gate || t.gate.addDays.max > gate.addDays.max)) gate = t.gate; }
+    else if (t.class === "creative") workMax = Math.max(workMax, t.business.max);
+    else if (t.class === "recurring") recurring = true;
+  }
+  if (workMax > 0) return `Ready by around ${etaDateLabel(workMax + (gate ? gate.addDays.max : 0))}`;
+  if (recurring) return "Starts within about a week, then monthly";
+  return "About 1 to 2 weeks";
+}
+
+/** The whole plan's delivery as a critical PATH (services run in parallel, so the max window,
+ *  never a sum). Used for the order summary's single "estimated delivery" line + the rush ask. */
 function planDelivery(items) {
-  let workMax = 0, gate = null, anyRecurring = false, anyDoneForYou = false, anySelfServe = false;
+  let workMax = 0, gate = null, anyRecurring = false, anyDoneForYou = false;
   for (const it of items) {
     const lane = doerSlotFor(it.itemId) ? gbpLaneOf(it.doer) : null;
-    if (lane === "diy" || lane === "ai") { anySelfServe = true; continue; }
+    if (lane === "diy" || lane === "ai") continue;
     anyDoneForYou = true;
     const svcs = it.itemId === "gbp" ? ["gbp-setup", ...it.options] : [...it.options];
     for (const id of svcs) {
@@ -4252,16 +4275,8 @@ function planDelivery(items) {
       else if (t.class === "recurring") anyRecurring = true;
     }
   }
-  const steps = [];
-  if (!anyDoneForYou && anySelfServe) return { steps: [{ text: "Start today and go at your own pace." }], dated: false };
-  if (workMax > 0) {
-    steps.push({ text: "Most of your plan is done", when: etaDateLabel(workMax), sub: "The team starts right after you confirm." });
-    if (gate) steps.push({ text: "Fully live, once outside checks finish", when: etaDateLabel(workMax + gate.addDays.max), sub: gate.note });
-  } else {
-    steps.push({ text: "Your plan comes together over about 1 to 2 weeks after you approve." });
-  }
-  if (anyRecurring) steps.push({ text: "Your monthly pieces start within about a week, then keep running." });
-  return { steps, dated: workMax > 0 };
+  const totalDays = workMax > 0 ? workMax + (gate ? gate.addDays.max : 0) : 0;
+  return { dated: workMax > 0, readyBy: totalDays > 0 ? etaDateLabel(totalDays) : null, recurring: anyRecurring, doneForYou: anyDoneForYou };
 }
 
 /** The plan view (route {name:"plan"}): the collected items, the running total, and the
@@ -4382,46 +4397,16 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
             {items.map((it) => (
               <PlanItemCard key={it.itemId} it={it} tier={tier} leaving={leaving.has(it.itemId)} onOpen={() => onOpenItem(it.itemId, { doer: it.doer || undefined, options: it.options.length ? it.options : undefined })} onRemove={() => slideOut(it.itemId)} />
             ))}
-            {/* When you'll have it — the plan's critical-path delivery estimate + an honest rush ask. */}
+            {/* Order summary — Amazon-style: items count, price lines, total, estimated delivery + rush. */}
             <div style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 18, padding: "14px 16px 13px", marginTop: 16 }}>
-              <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, marginBottom: 11 }}>When you&apos;ll have it</div>
-              <div style={{ background: "#f7f9f8", borderRadius: 14, padding: "13px 15px" }}>
-                {delivery.steps.map((s, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: i === 0 ? 0 : 12 }}>
-                    <span style={{ width: 7, height: 7, borderRadius: 4, background: TOKENS.mint, flexShrink: 0, marginTop: 6 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.4 }}>{s.text}{s.when ? <> by around <span style={{ fontWeight: 700 }}>{s.when}</span></> : null}</div>
-                      {s.sub && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, lineHeight: 1.45, marginTop: 2 }}>{s.sub}</div>}
-                    </div>
-                  </div>
-                ))}
-                {delivery.dated && (
-                  <>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 13, paddingTop: 11, borderTop: `1px solid ${TOKENS.line}` }}>
-                      <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>These are estimates.</span>
-                      <span style={{ color: TOKENS.dash }}>·</span>
-                      <button onClick={() => setRushOpen((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Need it faster?</button>
-                    </div>
-                    {rushOpen && (
-                      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.5, marginTop: 8 }}>Rush timing depends on the work. Confirm your plan, then tell your team you need it sooner and they will confirm what is possible. No rush fee is added automatically.</div>
-                    )}
-                  </>
-                )}
+              <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, marginBottom: 11 }}>Order summary</div>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink }}>Items ({items.length})</span>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap" }}>{totals.oneTime > 0 ? `${anyCreative ? "From " : ""}$${totals.oneTime.toLocaleString()}` : "Free"}</span>
               </div>
-            </div>
-            {/* Price details — the order-summary card. Every number comes from planTotals
-                (the PDP-exact math), never recomputed here. */}
-            <div style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 18, padding: "14px 16px 13px", marginTop: 16 }}>
-              <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, marginBottom: 11 }}>Price details</div>
-              {(totals.oneTime > 0 || totals.perMonth === 0) && (
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink }}>One-time work</span>
-                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap" }}>{totals.oneTime > 0 ? `${anyCreative ? "From " : ""}$${totals.oneTime.toLocaleString()}` : "Free"}</span>
-                </div>
-              )}
               {totals.perMonth > 0 && (
                 <>
-                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginTop: totals.oneTime > 0 ? 8 : 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginTop: 8 }}>
                     <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink }}>Monthly services</span>
                     <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap" }}>{`$${totals.perMonth.toLocaleString()}/mo`}</span>
                   </div>
@@ -4429,9 +4414,31 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
                 </>
               )}
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, borderTop: `1px solid ${TOKENS.line}`, marginTop: 12, paddingTop: 11 }}>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
-                <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 17, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.3, whiteSpace: "nowrap" }}>{planMoneyLabel(totals, anyCreative)}</span>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.ink }}>Order total</span>
+                <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.3, whiteSpace: "nowrap" }}>{planMoneyLabel(totals, anyCreative)}</span>
               </div>
+              {/* Estimated delivery — the plan's critical-path date + the honest rush ask. */}
+              {(delivery.readyBy || delivery.doneForYou) && (
+                <div style={{ borderTop: `1px solid ${TOKENS.line}`, marginTop: 12, paddingTop: 11 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><path d="M5 18a2 2 0 1 0 4 0M15 18a2 2 0 1 0 4 0" /><path d="M3 6h11v9H3zM14 9h4l3 3v3h-3" /></svg>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.4 }}>
+                        {delivery.readyBy ? <>Estimated delivery <span style={{ fontWeight: 700 }}>by around {delivery.readyBy}</span></> : "Delivery about 1 to 2 weeks after you confirm"}
+                      </div>
+                      {delivery.recurring && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 2 }}>Monthly pieces start within about a week, then keep running.</div>}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                        <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>These are estimates.</span>
+                        <span style={{ color: TOKENS.dash }}>·</span>
+                        <button onClick={() => setRushOpen((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Need it faster?</button>
+                      </div>
+                      {rushOpen && (
+                        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.5, marginTop: 7 }}>Rush timing depends on the work. Confirm your plan, then tell your team you need it sooner and they will confirm what is possible. No rush fee is added automatically.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             {blocked && (
               <div style={{ background: "#fdf6e9", border: "1px solid #f0dfb8", borderRadius: 14, padding: "12px 14px", marginTop: 14, fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#854f0b", lineHeight: 1.55 }}>
