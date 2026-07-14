@@ -127,6 +127,8 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
   const [overrides, setOverrides] = useState<ContentOverrideMap>(initialOverrides)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
+  // page-builder: which preview section the owner clicked, so its editor panel highlights + scrolls
+  const [activeSection, setActiveSection] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [drafting, setDrafting] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -334,6 +336,44 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
 
   const inputCls = 'w-full text-[13.5px] text-ink rounded-lg border border-ink-6 bg-white px-3 py-2 placeholder:text-ink-4 focus:outline-none focus:border-brand'
   const chipCls = (on: boolean) => 'text-[12px] font-medium rounded-full px-3 py-1.5 border ' + (on ? 'bg-brand text-white border-brand' : 'bg-white text-ink-2 border-ink-6 hover:border-ink-4')
+
+  // ── page-builder: map a clicked preview section to its left-hand editor panel + scroll to it ──
+  const EDITABLE_PANELS = ['hero', 'description', 'why']
+  const panelOf = (section: string | null) => (section && EDITABLE_PANELS.includes(section) ? section : section ? 'derived' : null)
+  const activePanel = panelOf(activeSection)
+  const gotoSection = (key: string) => {
+    setActiveSection(key)
+    if (typeof document !== 'undefined') document.getElementById('sec-' + panelOf(key))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+  const panelCls = (id: string) => 'rounded-xl border p-4 lg:p-5 scroll-mt-24 transition ' + (activePanel === id ? 'border-brand ring-4 ring-brand/10 bg-white' : 'border-ink-6 bg-white')
+  const DERIVED_NOTE: Record<string, string> = {
+    lanes: 'The three ways it can be done (I’ll do it / Apnosh AI / Apnosh) and their prices are built in. Not editable here yet.',
+    timeline: 'The delivery dates come from how long this campaign’s services take. Change the services to change the dates.',
+    requirements: 'What we need from the owner is derived from the services this campaign includes.',
+    get: 'What you get is built from the services this campaign includes.',
+    analytics: 'The tracked metrics come from the funnel stages this campaign moves.',
+    footer: 'The price is the total of the services this campaign includes.',
+  }
+  // one content-field editor (label, reset-to-default, ghost default), reused across panels
+  const renderField = (key: keyof Omit<FormState, 'faq' | 'heroImage'>) => {
+    if (!form || !base) return null
+    const meta = FIELDS.find((f) => f.key === key)!
+    const defaultVal = (base[key] ?? '') as string
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-[12px] font-semibold text-ink">{meta.label}</label>
+          {form[key] !== '' && <button onClick={() => set({ [key]: '' } as Partial<FormState>)} className="text-[11px] text-ink-3 hover:text-ink">Use default</button>}
+        </div>
+        {meta.rows ? (
+          <textarea rows={meta.rows} value={form[key]} placeholder={defaultVal || meta.hint} onChange={(e) => set({ [key]: e.target.value } as Partial<FormState>)} className={inputCls} />
+        ) : (
+          <input type="text" value={form[key]} placeholder={defaultVal || meta.hint} onChange={(e) => set({ [key]: e.target.value } as Partial<FormState>)} className={inputCls} />
+        )}
+        <p className="text-[11px] text-ink-4 mt-1">{meta.hint}</p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-[980px] mx-auto px-4 lg:px-6 pt-6 pb-24 space-y-5">
@@ -666,12 +706,12 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
         </div>
       )}
 
-      {/* ── Phase C1: the built-in override editor (unchanged) ── */}
+      {/* ── Phase C1: the built-in override editor — a two-pane page builder ── */}
       {editId && form && base && (
-        <div className="bg-white rounded-xl border border-ink-6 p-4 lg:p-6 space-y-5">
+        <div className="space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <button onClick={close} className="text-[12px] font-medium text-ink-3 hover:text-ink">&larr; All campaigns</button>
+              <button onClick={() => { close(); setActiveSection(null) }} className="text-[12px] font-medium text-ink-3 hover:text-ink">&larr; All campaigns</button>
               <h2 className="text-[19px] font-semibold text-ink mt-1">{base.title}</h2>
               <p className="text-[12px] text-ink-4 font-mono">{editId}</p>
             </div>
@@ -687,19 +727,104 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
               </button>
             </div>
           </div>
-          <p className="text-[12px] text-ink-3 -mt-2">
-            The gray ghost text is the code default. Leave a field empty to keep it. Clear a field to go back to it.
+          <p className="text-[12px] text-ink-3 -mt-1">
+            Click any part of the page on the right to edit it here. Empty fields keep the code default.
           </p>
 
-          {/* Faithful product-page preview — words from the form (falling back to the code default),
-              the rest derived exactly like the live store. */}
-          {builtinFacts && (
-            <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
-              <div className="flex items-baseline justify-between mb-3">
-                <div className="text-[12px] font-bold uppercase tracking-wide text-brand-dark">Live preview · how the customer sees it</div>
-                <div className="text-[13px] font-medium text-ink-3">Updates as you edit</div>
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_400px] gap-6 items-start">
+            {/* LEFT — the section editors */}
+            <div className="space-y-4 order-2 lg:order-1">
+              {/* Hero: eyebrow (name), headline (promise), photo */}
+              <div id="sec-hero" className={panelCls('hero')}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[13.5px] font-semibold text-ink">Hero</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-brand-dark bg-brand/10 rounded px-1.5 py-0.5">Top of the page</span>
+                </div>
+                <div className="space-y-3.5">
+                  {renderField('title')}
+                  {renderField('promise')}
+                  {/* Photo */}
+                  <div>
+                    <div className="text-[12px] font-semibold text-ink mb-1.5">Photo</div>
+                    <div className="flex items-center gap-3">
+                      {form.heroImage ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={form.heroImage} alt="Hero" className="w-20 h-20 rounded-2xl object-cover border border-ink-6" />
+                      ) : (
+                        <div className="w-20 h-20 rounded-2xl bg-bg-2 border border-ink-6 flex items-center justify-center text-[10px] text-ink-4 text-center px-2">
+                          {base.heroImage ? 'Default photo' : 'Drawn art'}
+                        </div>
+                      )}
+                      <div className="space-y-1.5">
+                        <label className={'inline-block text-[12.5px] font-semibold rounded-lg px-3 py-2 cursor-pointer ' + (uploading ? 'bg-bg-2 text-ink-3' : 'bg-bg-2 text-ink hover:bg-ink-7')}>
+                          {uploading ? 'Uploading…' : 'Upload photo'}
+                          <input type="file" accept="image/*" className="hidden" disabled={uploading}
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadHero(f); e.target.value = '' }} />
+                        </label>
+                        {form.heroImage && <button onClick={() => set({ heroImage: '' })} className="block text-[12px] text-ink-3 hover:text-ink">Use default</button>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="max-w-[420px] mx-auto">
+
+              {/* Description */}
+              <div id="sec-description" className={panelCls('description')}>
+                {renderField('description')}
+              </div>
+
+              {/* Why it matters */}
+              <div id="sec-why" className={panelCls('why')}>
+                {renderField('why')}
+              </div>
+
+              {/* Derived sections — what each non-editable part comes from */}
+              <div id="sec-derived" className={panelCls('derived')}>
+                <div className="text-[13.5px] font-semibold text-ink mb-1">Set by the campaign&apos;s services</div>
+                {activeSection && DERIVED_NOTE[activeSection]
+                  ? <p className="text-[12.5px] text-ink-3 leading-relaxed">{DERIVED_NOTE[activeSection]}</p>
+                  : <p className="text-[12.5px] text-ink-4 leading-relaxed">Click the lanes, timeline, &ldquo;what you get,&rdquo; analytics, or the price on the page to see where each one comes from.</p>}
+              </div>
+
+              {/* More details: tagline, expectation, best for, FAQ */}
+              <div className="rounded-xl border border-ink-6 bg-white p-4 lg:p-5 space-y-3.5">
+                <div className="text-[13.5px] font-semibold text-ink">More details</div>
+                {renderField('tagline')}
+                {renderField('expectation')}
+                {renderField('bestFor')}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[12px] font-semibold text-ink">FAQ</label>
+                    <button onClick={() => set({ faq: [...form.faq, { q: '', a: '' }] })} className="text-[11px] font-medium text-brand-dark hover:underline">Add a question</button>
+                  </div>
+                  {form.faq.length === 0 && (
+                    <p className="text-[12px] text-ink-4">
+                      {base.faq?.length ? `Using the ${base.faq.length} code-default question${base.faq.length === 1 ? '' : 's'}.` : 'No questions yet.'}
+                    </p>
+                  )}
+                  <div className="space-y-2">
+                    {form.faq.map((f, i) => (
+                      <div key={i} className="rounded-lg border border-ink-6 p-2.5 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <input type="text" value={f.q} placeholder="Question"
+                            onChange={(e) => set({ faq: form.faq.map((x, j) => (j === i ? { ...x, q: e.target.value } : x)) })}
+                            className="flex-1 text-[13px] text-ink rounded-md border border-ink-6 px-2.5 py-1.5 placeholder:text-ink-4 focus:outline-none focus:border-brand" />
+                          <button onClick={() => set({ faq: form.faq.filter((_, j) => j !== i) })} className="text-[11px] text-red-700 hover:underline shrink-0">Remove</button>
+                        </div>
+                        <textarea rows={2} value={f.a} placeholder="Answer"
+                          onChange={(e) => set({ faq: form.faq.map((x, j) => (j === i ? { ...x, a: e.target.value } : x)) })}
+                          className="w-full text-[13px] text-ink rounded-md border border-ink-6 px-2.5 py-1.5 placeholder:text-ink-4 focus:outline-none focus:border-brand" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT — the live, clickable page */}
+            <aside className="order-1 lg:order-2 lg:sticky lg:top-4">
+              <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-ink-4 mb-2">Live preview · click a section to edit it</div>
+              {builtinFacts && (
                 <ProductPagePreview
                   eyebrow={form.title || base.title}
                   headline={form.promise || base.promise}
@@ -716,89 +841,12 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   lanes={builtinFacts.lanes}
                   laneDetail={builtinFacts.laneDetail}
                   timeline={builtinFacts.timeline}
+                  interactive
+                  active={activeSection}
+                  onSection={gotoSection}
                 />
-              </div>
-              <p className="text-[11px] text-ink-4 mt-3 text-center">The words update live. Price, what you get, and analytics come from this campaign&apos;s services.</p>
-            </div>
-          )}
-
-          {/* Hero image */}
-          <div>
-            <div className="text-[12px] font-semibold text-ink mb-1.5">Hero image</div>
-            <div className="flex items-center gap-3">
-              {form.heroImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={form.heroImage} alt="Hero" className="w-24 h-24 rounded-2xl object-cover border border-ink-6" />
-              ) : (
-                <div className="w-24 h-24 rounded-2xl bg-bg-2 border border-ink-6 flex items-center justify-center text-[11px] text-ink-4 text-center px-2">
-                  {base.heroImage ? 'Code default photo' : 'No photo (drawn art shows)'}
-                </div>
               )}
-              <div className="space-y-1.5">
-                <label className={'inline-block text-[12.5px] font-semibold rounded-lg px-3 py-2 cursor-pointer ' + (uploading ? 'bg-bg-2 text-ink-3' : 'bg-bg-2 text-ink hover:bg-ink-7')}>
-                  {uploading ? 'Uploading…' : 'Upload photo'}
-                  <input type="file" accept="image/*" className="hidden" disabled={uploading}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadHero(f); e.target.value = '' }} />
-                </label>
-                {form.heroImage && (
-                  <button onClick={() => set({ heroImage: '' })} className="block text-[12px] text-ink-3 hover:text-ink">Use default</button>
-                )}
-                <p className="text-[11px] text-ink-4">JPG, PNG or WebP, up to 8MB.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Text fields */}
-          {FIELDS.map(({ key, label, hint, rows }) => {
-            const defaultVal = (base[key] ?? '') as string
-            return (
-              <div key={key}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[12px] font-semibold text-ink">{label}</label>
-                  {form[key] !== '' && (
-                    <button onClick={() => set({ [key]: '' } as Partial<FormState>)} className="text-[11px] text-ink-3 hover:text-ink">Use default</button>
-                  )}
-                </div>
-                {rows ? (
-                  <textarea rows={rows} value={form[key]} placeholder={defaultVal || hint}
-                    onChange={(e) => set({ [key]: e.target.value } as Partial<FormState>)}
-                    className={inputCls} />
-                ) : (
-                  <input type="text" value={form[key]} placeholder={defaultVal || hint}
-                    onChange={(e) => set({ [key]: e.target.value } as Partial<FormState>)}
-                    className={inputCls} />
-                )}
-                <p className="text-[11px] text-ink-4 mt-1">{hint}</p>
-              </div>
-            )
-          })}
-
-          {/* FAQ */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[12px] font-semibold text-ink">FAQ</label>
-              <button onClick={() => set({ faq: [...form.faq, { q: '', a: '' }] })} className="text-[11px] font-medium text-brand-dark hover:underline">Add a question</button>
-            </div>
-            {form.faq.length === 0 && (
-              <p className="text-[12px] text-ink-4">
-                {base.faq?.length ? `Using the ${base.faq.length} code-default question${base.faq.length === 1 ? '' : 's'}.` : 'No questions yet.'}
-              </p>
-            )}
-            <div className="space-y-2">
-              {form.faq.map((f, i) => (
-                <div key={i} className="rounded-lg border border-ink-6 p-2.5 space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <input type="text" value={f.q} placeholder="Question"
-                      onChange={(e) => set({ faq: form.faq.map((x, j) => (j === i ? { ...x, q: e.target.value } : x)) })}
-                      className="flex-1 text-[13px] text-ink rounded-md border border-ink-6 px-2.5 py-1.5 placeholder:text-ink-4 focus:outline-none focus:border-brand" />
-                    <button onClick={() => set({ faq: form.faq.filter((_, j) => j !== i) })} className="text-[11px] text-red-700 hover:underline shrink-0">Remove</button>
-                  </div>
-                  <textarea rows={2} value={f.a} placeholder="Answer"
-                    onChange={(e) => set({ faq: form.faq.map((x, j) => (j === i ? { ...x, a: e.target.value } : x)) })}
-                    className="w-full text-[13px] text-ink rounded-md border border-ink-6 px-2.5 py-1.5 placeholder:text-ink-4 focus:outline-none focus:border-brand" />
-                </div>
-              ))}
-            </div>
+            </aside>
           </div>
         </div>
       )}
